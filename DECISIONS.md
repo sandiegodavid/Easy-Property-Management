@@ -5,6 +5,7 @@
 | Serve independent landlords and property managers with approximately 1–50 rentable spaces. | Agreed | Keeps workflows practical and avoids enterprise-first complexity. |
 | Run the MVP locally for one operator without authentication. | Agreed | The initial product should validate the core property-management workflows without SaaS account, hosting, or collaboration complexity. |
 | Store MVP records and attachments locally with backup/export and restore. | Agreed | Local operation needs a clear durability and recovery path. |
+| Provide operator-run local setup scripts for each MVP user rather than a self-service installer or updater. | Agreed | The product owner will perform setup, keeping the first release focused on management workflows rather than end-user deployment. |
 | Defer authentication, cloud workspaces, and remote user access to a future SaaS offering. | Agreed | Identity and multi-tenancy are unnecessary for the single-user local MVP. |
 | Support guided migration from local storage to the future SaaS offering. | Agreed | Users must be able to adopt the cloud product without re-entering records or losing financial history, attachments, or relationships. |
 | Ingest issue messages from Gmail, Outlook.com/Hotmail, and SMS sources in the MVP. | Agreed | Owners and tenants often report issues through existing communication channels, so the local operator needs one review queue. |

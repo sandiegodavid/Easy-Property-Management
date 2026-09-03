@@ -6,7 +6,7 @@ Each item has a stable identifier, phase, delivery sequence, outcome, and ordere
 
 The sequence column gives the recommended delivery order. The dependency column contains only hard prerequisites and lists them from left to right in the preferred implementation order; it does not imply that each prerequisite depends on the one before it. `None` marks a true starting point.
 
-The MVP is a single-user application that runs locally. It has no application authentication, cloud account, remote portal, or shared workspace. Connections to Gmail, Outlook.com/Hotmail, and an SMS provider use provider authorization stored on the local device; they do not create application users. Voice notes are recorded or imported locally and do not require an external account.
+The MVP is a single-user application that runs locally. It has no application authentication, cloud account, remote portal, or shared workspace. The product owner runs setup scripts for each MVP user; self-service installation and update flows are out of scope. Connections to Gmail, Outlook.com/Hotmail, and an SMS provider use provider authorization stored on the local device; they do not create application users. Voice notes are recorded or imported locally and do not require an external account.
 
 ## MVP — Local single-user
 
@@ -56,73 +56,74 @@ The MVP is a single-user application that runs locally. It has no application au
 | 42 | OUTLOOK-001 | Outlook ingestion | Read selected Outlook.com/Hotmail messages and attachments into the local issue inbox using a connected Microsoft account. | CONN-001, INGEST-001, INGEST-002 |
 | 43 | SMS-001 | SMS ingestion | Poll a connected SMS provider or import forwarded text messages into the local issue inbox without requiring an application-hosted inbound endpoint. | CONN-001, INGEST-001, INGEST-002 |
 | 44 | DASH-003 | Dashboard | Surface unprocessed sources, AI drafts awaiting review, low-confidence transcripts or matches, and ingestion failures on the local dashboard. | DASH-001, INGEST-002, VOICE-AI-001, GMAIL-001, OUTLOOK-001, SMS-001 |
+| 45 | LOCAL-003 | Local setup | Provide product-owner-run scripts and a checklist to initialize or restore an MVP user's local workspace, select data and backup locations, and verify readiness; this is not a self-service installer or updater. | LOCAL-001, LOCAL-002, FILE-001 |
 
 ## Next — Connected local features
 
 | Sequence | ID | Area | Outcome | Ordered hard dependencies |
 | ---: | --- | --- | --- | --- |
-| 45 | PAY-001 | Payments | Accept online rent payments and autopay through an external payment provider. | AUDIT-001, FIN-001 |
-| 46 | FIN-004 | Money | Connect bank feeds and reconcile them against manually recorded or online transactions. | AUDIT-001, FIN-001, FIN-002, FIN-003 |
-| 47 | FIN-005 | Money | Create recurring expenses and payable reminders. | TASK-001, FIN-002 |
-| 48 | COM-002 | Communications | Send scheduled email/SMS reminders through connected accounts and track delivery. | TASK-001, COM-001, CONN-001 |
-| 49 | COM-003 | Communications | Sync calendar availability for showings and maintenance appointments. | CONN-001, MAINT-001, LEAD-002 |
-| 50 | OWNER-001 | Owner management | Generate owner statements from verified income, expenses, balances, and disbursements. | FIN-003, OWNER-002 |
-| 51 | OWNER-005 | Owner management | Calculate management fees using configurable agreements and rules. | AUDIT-001, FIN-003, OWNER-002 |
-| 52 | LIST-002 | Listings | Syndicate listings to rental marketplaces. | LIST-001 |
-| 53 | LEAD-004 | Applications | Record and manage rental applications connected to existing leads. | FILE-001, COM-001, LEAD-001 |
-| 54 | SCREEN-001 | Screening | Request, receive, and record tenant-screening decisions. | AUDIT-001, LEAD-004 |
-| 55 | SIGN-001 | E-signature | Send lease documents for signature and preserve the signed version and audit evidence. | AUDIT-001, FILE-001, LEASE-001, LEAD-004 |
-| 56 | DOC-001 | Documents | Maintain approved, versioned document templates with jurisdiction and usage metadata. | AUDIT-001, FILE-001, LEASE-001 |
-| 57 | DOC-AI-001 | AI documents | Draft leases, addenda, notices, and other documents from approved templates. | AI-GOV-001, DOC-001 |
-| 58 | DOC-AI-002 | AI documents | Summarize contracts, leases, obligations, dates, and missing information. | FILE-001, LEASE-001, AI-GOV-001 |
-| 59 | DOC-AI-003 | AI documents | Compare document versions and explain material changes. | FILE-001, DOC-AI-002 |
-| 60 | MKT-AI-001 | AI marketing | Draft rental-listing copy from verified property details. | LIST-001, AI-GOV-001 |
-| 61 | SHOW-AI-001 | AI scheduling | Suggest showing times and draft confirmations or rescheduling messages. | LEAD-002, COM-002, COM-003, AI-GOV-001 |
-| 62 | NEG-AI-001 | AI negotiation | Draft offers and counteroffers within user-defined rent, term, and concession limits. | AUDIT-001, LEAD-003, AI-GOV-001 |
-| 63 | NEG-AI-002 | AI negotiation | Summarize negotiation history and compare human- or AI-authored proposals. | LEAD-003, AI-GOV-001 |
-| 64 | VEND-003 | Providers | Send quote requests directly to selected providers. | VEND-001, MAINT-001, MAINT-002, COM-002 |
-| 65 | VEND-005 | Provider discovery | Find external providers by trade and service area and save candidates to a shortlist. | VEND-001 |
-| 66 | OFFICE-001 | Commercial | Allocate office-specific operating expenses and track contractual rent adjustments. | PORT-002, LEASE-001, FIN-002, ADJ-001 |
+| 46 | PAY-001 | Payments | Accept online rent payments and autopay through an external payment provider. | AUDIT-001, FIN-001 |
+| 47 | FIN-004 | Money | Connect bank feeds and reconcile them against manually recorded or online transactions. | AUDIT-001, FIN-001, FIN-002, FIN-003 |
+| 48 | FIN-005 | Money | Create recurring expenses and payable reminders. | TASK-001, FIN-002 |
+| 49 | COM-002 | Communications | Send scheduled email/SMS reminders through connected accounts and track delivery. | TASK-001, COM-001, CONN-001 |
+| 50 | COM-003 | Communications | Sync calendar availability for showings and maintenance appointments. | CONN-001, MAINT-001, LEAD-002 |
+| 51 | OWNER-001 | Owner management | Generate owner statements from verified income, expenses, balances, and disbursements. | FIN-003, OWNER-002 |
+| 52 | OWNER-005 | Owner management | Calculate management fees using configurable agreements and rules. | AUDIT-001, FIN-003, OWNER-002 |
+| 53 | LIST-002 | Listings | Syndicate listings to rental marketplaces. | LIST-001 |
+| 54 | LEAD-004 | Applications | Record and manage rental applications connected to existing leads. | FILE-001, COM-001, LEAD-001 |
+| 55 | SCREEN-001 | Screening | Request, receive, and record tenant-screening decisions. | AUDIT-001, LEAD-004 |
+| 56 | SIGN-001 | E-signature | Send lease documents for signature and preserve the signed version and audit evidence. | AUDIT-001, FILE-001, LEASE-001, LEAD-004 |
+| 57 | DOC-001 | Documents | Maintain approved, versioned document templates with jurisdiction and usage metadata. | AUDIT-001, FILE-001, LEASE-001 |
+| 58 | DOC-AI-001 | AI documents | Draft leases, addenda, notices, and other documents from approved templates. | AI-GOV-001, DOC-001 |
+| 59 | DOC-AI-002 | AI documents | Summarize contracts, leases, obligations, dates, and missing information. | FILE-001, LEASE-001, AI-GOV-001 |
+| 60 | DOC-AI-003 | AI documents | Compare document versions and explain material changes. | FILE-001, DOC-AI-002 |
+| 61 | MKT-AI-001 | AI marketing | Draft rental-listing copy from verified property details. | LIST-001, AI-GOV-001 |
+| 62 | SHOW-AI-001 | AI scheduling | Suggest showing times and draft confirmations or rescheduling messages. | LEAD-002, COM-002, COM-003, AI-GOV-001 |
+| 63 | NEG-AI-001 | AI negotiation | Draft offers and counteroffers within user-defined rent, term, and concession limits. | AUDIT-001, LEAD-003, AI-GOV-001 |
+| 64 | NEG-AI-002 | AI negotiation | Summarize negotiation history and compare human- or AI-authored proposals. | LEAD-003, AI-GOV-001 |
+| 65 | VEND-003 | Providers | Send quote requests directly to selected providers. | VEND-001, MAINT-001, MAINT-002, COM-002 |
+| 66 | VEND-005 | Provider discovery | Find external providers by trade and service area and save candidates to a shortlist. | VEND-001 |
+| 67 | OFFICE-001 | Commercial | Allocate office-specific operating expenses and track contractual rent adjustments. | PORT-002, LEASE-001, FIN-002, ADJ-001 |
 
 ## Later — Local product extensions
 
 | Sequence | ID | Area | Outcome | Ordered hard dependencies |
 | ---: | --- | --- | --- | --- |
-| 67 | APT-001 | Apartments | Model multi-unit apartment buildings and units. | PORT-002 |
-| 68 | APT-002 | Apartments | Support building-wide rent rolls, renewals, and bulk actions. | PORT-003, LEASE-001, FIN-001, APT-001 |
-| 69 | APT-003 | Apartments | Manage common areas, shared assets, parking, storage, utilities, and amenities. | FIN-002, MAINT-001, APT-001 |
-| 70 | APT-004 | Apartments | Handle unit turnovers and make-ready workflows. | TASK-001, FIN-002, MAINT-001, APT-001 |
-| 71 | APT-005 | Apartments | Send building-wide or selected-group tenant communications and notices. | TEN-001, COM-002, APT-001 |
-| 72 | APT-006 | Apartments | Add apartment-specific vacancy, rent-roll, and renewal dashboards. | RPT-002, DASH-002, APT-001, APT-002 |
-| 73 | APT-007 | Apartments | Allocate shared building expenses across units, owners, or leases. | FIN-002, FIN-003, APT-001 |
-| 74 | APT-008 | Apartments | Add apartment listing syndication and route leads by building and unit. | LEAD-001, LIST-002, APT-001 |
-| 75 | ACCT-001 | Accounting | Add trust accounting, automated owner fund transfers, and full bookkeeping. | AUDIT-001, FIN-004, OWNER-002 |
-| 76 | OFFICE-002 | Commercial | Add CAM/NNN reconciliation, escalations, and advanced lease options. | FIN-004, OFFICE-001 |
-| 77 | VEND-004 | Providers | Integrate live external review sources and reputation monitoring. | VEND-002 |
-| 78 | RPT-003 | Reports | Build custom reports and saved report views. | RPT-002 |
-| 79 | RPT-004 | Reports | Schedule report generation and delivery. | TASK-001, COM-002, RPT-003 |
-| 80 | DATA-001 | Data | Import properties, contacts, leases, balances, and history from structured files into the local workspace. | AUDIT-001, FILE-001, PORT-002, TEN-001, LEASE-001, FIN-001 |
-| 81 | BEGIN-001 | Beginner experience | Guide users with little accounting or property-management experience through initial setup. | LOCAL-001, PORT-001, PORT-002, TEN-001 |
-| 82 | BEGIN-002 | Beginner experience | Explain accounting and property-management concepts contextually without removing professional detail. | BEGIN-001 |
-| 83 | BEGIN-003 | Beginner experience | Provide step-by-step checklists, safe defaults, validation, and recovery guidance. | AUDIT-001, TASK-001, BEGIN-001 |
-| 84 | AI-REC-001 | AI recommendations | Recommend rent adjustments and renewals from approved inputs. | ADJ-001, RPT-002, FIN-004, AI-GOV-001 |
-| 85 | AI-REC-002 | AI recommendations | Assist with maintenance triage and vendor selection using internal history and recorded reputation data. | VEND-002, MAINT-003, AI-GOV-001 |
-| 86 | AI-REC-003 | AI recommendations | Flag vacancy and delinquency risk from financial, occupancy, and lead history. | LEAD-001, RPT-002, FIN-004, AI-GOV-001 |
+| 68 | APT-001 | Apartments | Model multi-unit apartment buildings and units. | PORT-002 |
+| 69 | APT-002 | Apartments | Support building-wide rent rolls, renewals, and bulk actions. | PORT-003, LEASE-001, FIN-001, APT-001 |
+| 70 | APT-003 | Apartments | Manage common areas, shared assets, parking, storage, utilities, and amenities. | FIN-002, MAINT-001, APT-001 |
+| 71 | APT-004 | Apartments | Handle unit turnovers and make-ready workflows. | TASK-001, FIN-002, MAINT-001, APT-001 |
+| 72 | APT-005 | Apartments | Send building-wide or selected-group tenant communications and notices. | TEN-001, COM-002, APT-001 |
+| 73 | APT-006 | Apartments | Add apartment-specific vacancy, rent-roll, and renewal dashboards. | RPT-002, DASH-002, APT-001, APT-002 |
+| 74 | APT-007 | Apartments | Allocate shared building expenses across units, owners, or leases. | FIN-002, FIN-003, APT-001 |
+| 75 | APT-008 | Apartments | Add apartment listing syndication and route leads by building and unit. | LEAD-001, LIST-002, APT-001 |
+| 76 | ACCT-001 | Accounting | Add trust accounting, automated owner fund transfers, and full bookkeeping. | AUDIT-001, FIN-004, OWNER-002 |
+| 77 | OFFICE-002 | Commercial | Add CAM/NNN reconciliation, escalations, and advanced lease options. | FIN-004, OFFICE-001 |
+| 78 | VEND-004 | Providers | Integrate live external review sources and reputation monitoring. | VEND-002 |
+| 79 | RPT-003 | Reports | Build custom reports and saved report views. | RPT-002 |
+| 80 | RPT-004 | Reports | Schedule report generation and delivery. | TASK-001, COM-002, RPT-003 |
+| 81 | DATA-001 | Data | Import properties, contacts, leases, balances, and history from structured files into the local workspace. | AUDIT-001, FILE-001, PORT-002, TEN-001, LEASE-001, FIN-001 |
+| 82 | BEGIN-001 | Beginner experience | Guide users with little accounting or property-management experience through initial setup. | LOCAL-001, PORT-001, PORT-002, TEN-001 |
+| 83 | BEGIN-002 | Beginner experience | Explain accounting and property-management concepts contextually without removing professional detail. | BEGIN-001 |
+| 84 | BEGIN-003 | Beginner experience | Provide step-by-step checklists, safe defaults, validation, and recovery guidance. | AUDIT-001, TASK-001, BEGIN-001 |
+| 85 | AI-REC-001 | AI recommendations | Recommend rent adjustments and renewals from approved inputs. | ADJ-001, RPT-002, FIN-004, AI-GOV-001 |
+| 86 | AI-REC-002 | AI recommendations | Assist with maintenance triage and vendor selection using internal history and recorded reputation data. | VEND-002, MAINT-003, AI-GOV-001 |
+| 87 | AI-REC-003 | AI recommendations | Flag vacancy and delinquency risk from financial, occupancy, and lead history. | LEAD-001, RPT-002, FIN-004, AI-GOV-001 |
 
 ## Future SaaS — Cloud, identity, and collaboration
 
 | Sequence | ID | Area | Outcome | Ordered hard dependencies |
 | ---: | --- | --- | --- | --- |
-| 87 | SAAS-001 | Cloud platform | Host tenant-isolated cloud workspaces for the SaaS offering. | LOCAL-001 |
-| 88 | SEC-001 | Authentication | Authenticate SaaS users and manage account recovery and sessions. | SAAS-001 |
-| 89 | SEC-002 | Authorization | Enforce workspace roles and permissions for administrators, managers, accounting users, maintenance users, owners, tenants, and read-only users. | PORT-001, SEC-001 |
-| 90 | SAAS-002 | Migration | Analyze a local workspace, verify its format, map it to a cloud account, and provide a dry-run migration plan that excludes external-account credentials. | LOCAL-002, SAAS-001, SEC-001 |
-| 91 | SAAS-003 | Migration | Migrate local records, attachments, ingested-message history, voice-note transcripts and summaries, and AI review decisions while preserving stable IDs, relationships, audit history, and financial totals. | AUDIT-001, FILE-001, SAAS-002 |
-| 92 | SAAS-004 | Migration | Validate migrated totals and record counts, support safe retry or rollback, and require external-account reauthorization. | SAAS-003 |
-| 93 | SEC-003 | Secure intake | Issue expiring, scoped submission links and protect public intake with validation, rate limits, and an audit trail. | AUDIT-001, FILE-001, SEC-001, SEC-002 |
-| 94 | INTAKE-001 | Intake | Let owners and tenants directly report rent receipts, rental concerns, and property issues without a full portal. | MAINT-004, OWNER-003, OWNER-004, SEC-003 |
-| 95 | PORTAL-001 | Tenant portal | Give tenants a self-service portal for leases, balances, messages, and issues. | TEN-001, LEASE-001, FIN-001, COM-001, SEC-001, SEC-002, INTAKE-001 |
-| 96 | PORTAL-002 | Owner portal | Give owners a portal for statements, balances, disbursements, fees, messages, receipts, and issues. | PORT-001, COM-001, OWNER-001, OWNER-005, SEC-001, SEC-002, INTAKE-001 |
-| 97 | RPT-005 | Reports | Publish authenticated owner-facing dashboards. | RPT-002, OWNER-001, PORTAL-002 |
-| 98 | PLATFORM-001 | Platform | Add advanced roles and configurable approval workflows. | AUDIT-001, SEC-002 |
-| 99 | API-001 | Platform | Provide a secured public API and event webhooks. | AUDIT-001, SAAS-001, SEC-002, PLATFORM-001 |
+| 88 | SAAS-001 | Cloud platform | Host tenant-isolated cloud workspaces for the SaaS offering. | LOCAL-001 |
+| 89 | SEC-001 | Authentication | Authenticate SaaS users and manage account recovery and sessions. | SAAS-001 |
+| 90 | SEC-002 | Authorization | Enforce workspace roles and permissions for administrators, managers, accounting users, maintenance users, owners, tenants, and read-only users. | PORT-001, SEC-001 |
+| 91 | SAAS-002 | Migration | Analyze a local workspace, verify its format, map it to a cloud account, and provide a dry-run migration plan that excludes external-account credentials. | LOCAL-002, SAAS-001, SEC-001 |
+| 92 | SAAS-003 | Migration | Migrate local records, attachments, ingested-message history, voice-note transcripts and summaries, and AI review decisions while preserving stable IDs, relationships, audit history, and financial totals. | AUDIT-001, FILE-001, SAAS-002 |
+| 93 | SAAS-004 | Migration | Validate migrated totals and record counts, support safe retry or rollback, and require external-account reauthorization. | SAAS-003 |
+| 94 | SEC-003 | Secure intake | Issue expiring, scoped submission links and protect public intake with validation, rate limits, and an audit trail. | AUDIT-001, FILE-001, SEC-001, SEC-002 |
+| 95 | INTAKE-001 | Intake | Let owners and tenants directly report rent receipts, rental concerns, and property issues without a full portal. | MAINT-004, OWNER-003, OWNER-004, SEC-003 |
+| 96 | PORTAL-001 | Tenant portal | Give tenants a self-service portal for leases, balances, messages, and issues. | TEN-001, LEASE-001, FIN-001, COM-001, SEC-001, SEC-002, INTAKE-001 |
+| 97 | PORTAL-002 | Owner portal | Give owners a portal for statements, balances, disbursements, fees, messages, receipts, and issues. | PORT-001, COM-001, OWNER-001, OWNER-005, SEC-001, SEC-002, INTAKE-001 |
+| 98 | RPT-005 | Reports | Publish authenticated owner-facing dashboards. | RPT-002, OWNER-001, PORTAL-002 |
+| 99 | PLATFORM-001 | Platform | Add advanced roles and configurable approval workflows. | AUDIT-001, SEC-002 |
+| 100 | API-001 | Platform | Provide a secured public API and event webhooks. | AUDIT-001, SAAS-001, SEC-002, PLATFORM-001 |

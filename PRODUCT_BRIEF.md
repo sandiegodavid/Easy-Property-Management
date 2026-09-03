@@ -27,7 +27,7 @@ They may manage:
 
 From one dashboard, a user can see what money is due, what is vacant, what needs attention, and drill into the underlying property, tenant, transaction, lead, or repair.
 
-The MVP is a single-user application that runs locally for the operator. It requires no account or login, stores its records and attachments locally, and provides backup/export and restore. Authentication, shared cloud workspaces, and remote user access belong to a future SaaS offering.
+The MVP is a single-user application that runs locally for the operator. It requires no account or login, stores its records and attachments locally, and provides backup/export and restore. The product owner sets up each MVP user's local instance with operator-run setup scripts; self-service installation and update flows are not required. Authentication, shared cloud workspaces, and remote user access belong to a future SaaS offering.
 
 ## Design principles
 

@@ -6,6 +6,7 @@ Deliver complete, understandable workflows for:
 
 - A single local operator with no account or login.
 - Local record and attachment storage with backup/export and restore.
+- Operator-run setup scripts to initialize or restore each user's local workspace, set data and backup locations, and verify readiness.
 - Portfolio setup for self-owned and client-managed properties.
 - Single-family homes, condos, townhomes, and offices.
 - Tenants, leases, rent tracking, expenses, and basic communication history.
