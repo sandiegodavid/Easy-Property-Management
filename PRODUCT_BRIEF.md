@@ -41,6 +41,10 @@ The MVP is a single-user application that runs locally for the operator. It requ
 - AI may draft and summarize, but users must approve anything sent, signed, or committed.
 - AI-created issue records remain drafts until the local operator reviews and approves them against the original message.
 - Voice-note audio is an input to transcription rather than a required permanent record; retain the editable transcript, AI summary, and operator review history.
+- Residential lease decisions use consistent, documented criteria and must not use familial status or another protected characteristic. Household information is limited to lawful occupancy and lease-administration needs.
+- Applicant credit and financial evidence is collected for a stated purpose with consent, redacted where practical, and assigned a retention or deletion date.
+- Jurisdiction-based notice alerts show the rule source, effective date, and last verification and require operator confirmation; they are planning aids, not legal advice.
+- AI issue diagnosis and provider suggestions are advisory, surface possible safety or emergency escalation, and never contact or assign a provider without operator approval.
 
 ## Future accessibility for complete beginners
 
@@ -50,16 +54,17 @@ Later phases may support users with little or no accounting or property-manageme
 
 1. **Home** — overdue rent, urgent repairs, upcoming showings, expiring leases, and money summary.
 2. **Properties** — owned versus managed relationship, property type, spaces, occupancy, and history.
-3. **Tenants and leases** — contacts, terms, deposits, balances, dates, and document storage.
-4. **Payments and expenses** — expected, received, partial, late, and outstanding rent; owner-reported rent receipts; expenses, vendors, categories, and receipts.
+3. **Tenants and leases** — contacts, terms, deposits, balances, dates, document storage, rent-adjustment notice deadlines, and effective-dated changes.
+4. **Payments and expenses** — expected, received, partial, late, and outstanding rent; payment methods and prepaid-check deposit reminders; owner-reported rent receipts; expenses, vendors, categories, and receipts.
 5. **Owner management** — owner balances, funds due, manual disbursement approval and recording, and owner-raised rental concerns.
-6. **Listings and leads** — manual listing creation, lead pipeline, showing schedule, offers, and counteroffers.
+6. **Listings, leads, and applicants** — manual listing creation, lead pipeline, showing schedule, offers and counteroffers, applications, lawful applicant qualification records, supporting financial evidence, and human approval decisions.
 7. **Communications and reminders** — owner and tenant interaction history, rent reminders, renewal follow-up, and completion status.
 8. **Issue inbox** — ingest issue messages and attachments from connected Gmail, Outlook.com/Hotmail, and SMS sources, plus locally recorded or imported voice notes, into a local review queue.
-9. **AI-assisted issue intake** — transcribe and summarize voice notes; detect likely property issues; extract the description and reporter; suggest the property, tenant, category, urgency, and next action; and flag possible duplicates for operator review.
+9. **AI-assisted issue intake and maintenance guidance** — transcribe and summarize voice notes; detect likely property issues; extract the description and reporter; suggest the property, tenant, category, urgency, likely causes, clarifying questions, and next action; flag possible duplicates; assist with maintenance triage and vendor selection; and improve recommendations from internal history, repair outcomes, response times, costs, and recorded reputation data. Live reputation data may enrich recommendations when a later integration is available.
 10. **Repairs** — operator-approved owner- or tenant-raised issues, reporter attribution, priority, quotes, assignment, cost, and work journals.
-11. **Service providers** — services, past work, preferred/avoid status, references, and external-review links.
+11. **Service providers** — configurable service categories, past work, preferred/avoid status, references, and external-review links.
 12. **Reports** — occupancy, rent roll, delinquency, income/expenses, owner balances/disbursements, leasing funnel, and repair cost, all with drill-down.
+13. **AI-assisted documents and marketing** — maintain approved document templates; draft leases, addenda, notices, and listing copy; summarize obligations and missing information; and compare document versions, always subject to operator review.
 
 Because the MVP is local and single-user, the operator records or approves rent receipts and rental/property issues reported by owners or tenants and identifies who raised each item. Messages may arrive through connected external accounts, but owners and tenants do not sign in to the application. Direct application forms and portals belong to the future SaaS offering.
 
@@ -67,15 +72,17 @@ Connecting Gmail, Outlook.com/Hotmail, or an SMS provider uses that provider's a
 
 Standalone voice notes may be recorded in the application or imported as audio files. The MVP does not record phone calls. After successful transcription, the source audio does not need to be retained. The application keeps the recording or import metadata, editable transcript, AI summary, confidence information, and operator decision.
 
+The MVP records payment methods, including externally arranged automatic bank payments, but does not initiate transfers or store online-banking credentials. Future-dated prepaid checks are tracked as a schedule and are not counted as received income until deposit is confirmed.
+
 ## Explicit MVP boundaries
 
 The MVP does not include:
 
-- Online rent payments, autopay, bank feeds, or reconciliation.
+- Initiating online rent payments or autopay, bank feeds, or reconciliation. The MVP may record an externally arranged automatic-payment method.
 - Application authentication, multiple application users, shared cloud workspaces, application-hosted remote intake, or tenant/owner portals. External mailbox and SMS-provider authorization is permitted for ingestion.
 - Automated email/SMS sending.
-- Listing syndication, applications, screening, or e-signature.
-- AI-generated contracts, leases, listing copy, schedules, or negotiation messages.
+- Listing syndication, automated or third-party tenant-screening integrations, or e-signature. Manual application and approval records are included.
+- AI-assisted showing coordination, negotiation drafting, rent or renewal recommendations, and vacancy or delinquency risk scoring. AI-assisted documents and listing drafts are included with operator approval.
 - Live reputation aggregation from Google, Yelp, Angi, or other third parties.
 - Multi-unit apartment-building operations.
 - Trust accounting, automated bank movement for owner disbursements, full bookkeeping, or commercial CAM reconciliation. The MVP calculates, approves, and records disbursements but does not initiate the transfer.
@@ -90,6 +97,12 @@ The MVP does not include:
 - Owner-reported rent receipts record who reported them, when they were reported, how the owner received the funds, supporting evidence, and verification status so income is not counted twice.
 - Owner disbursements retain the property, accounting period, amount, approval, payment date, method/reference, and status.
 - Rent changes are effective-dated; historical rent is not overwritten.
+- Applicant records distinguish lawful occupancy and lease-administration information from protected characteristics, which are not approval criteria.
+- Applicant financial records retain the stated purpose, consent, source, received and verified dates, redaction status, decision use, and retention or deletion date.
+- Lease-approval decisions retain the criteria applied, reviewer, decision, reasons, conditions, and any consumer-report adverse-action follow-up.
+- Rent-adjustment rules are versioned by jurisdiction, effective date, source, and last verification; alerts retain the rule version and operator confirmation used for the calculation.
+- Rent receipts retain expected and actual payment methods. Future-dated checks remain scheduled instruments until their deposit is confirmed.
+- Providers may have multiple configurable service categories, and AI suggestions retain their rationale, evidence, confidence, safety flags, and operator decision.
 - Every rental or property issue records the reporter and reporter role—owner, tenant, manager, or staff—along with its category and communication history.
 - Every ingested message retains its source, source identifier, sender, received time, attachments, sync state, and link to the original source; deduplication prevents the same message from creating multiple issues.
 - Voice-note intake retains the recorder, recorded or imported time, processing status, and editable transcript without requiring the source audio to remain after successful transcription.

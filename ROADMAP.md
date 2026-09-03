@@ -9,14 +9,16 @@ Deliver complete, understandable workflows for:
 - Operator-run setup scripts to initialize or restore each user's local workspace, set data and backup locations, and verify readiness.
 - Portfolio setup for self-owned and client-managed properties.
 - Single-family homes, condos, townhomes, and offices.
-- Tenants, leases, rent tracking, expenses, and basic communication history.
+- Tenants, leases, rent tracking, recorded payment methods, prepaid-check deposit reminders, expenses, and basic communication history.
+- Jurisdiction-sourced notice-deadline alerts and effective-dated rent adjustments with operator confirmation.
 - Owner-reported rent receipts, owner balances, and manual owner-disbursement tracking.
 - Operator-recorded owner/tenant reports with clear attribution for rental and property issues.
 - Local ingestion of issue messages and attachments from connected Gmail, Outlook.com/Hotmail, and SMS sources.
-- AI-assisted issue detection, structured field extraction, property/reporter matching, urgency suggestions, duplicate detection, and operator approval.
+- AI-assisted issue detection, structured field extraction, property/reporter matching, urgency suggestions, duplicate detection, advisory diagnosis, maintenance triage, and provider recommendations informed by internal history, outcomes, response times, costs, and recorded reputation data.
 - Local voice-note recording/import with AI transcription, concise issue summaries, editable results, and review history.
-- Listing, lead, showing, and offer tracking.
-- Repair intake, quotes, vendor history, and work journals.
+- Listing, lead, showing, offer, application, applicant-financial, and human lease-approval tracking.
+- Approved document templates plus AI-assisted document drafting, summarization, comparison, and rental-listing drafts with operator approval.
+- Repair intake, quotes, configurable provider categories, vendor history, and work journals.
 - Action dashboard and drill-down reporting.
 
 Success means a small operator can complete the monthly rent, vacancy-to-lease, and repair-to-completion workflows without a spreadsheet.
@@ -26,8 +28,9 @@ Success means a small operator can complete the monthly rent, vacancy-to-lease, 
 - Online payments, autopay, bank feeds, and recurring expenses.
 - Email/SMS reminders, two-way communication, and calendar connections.
 - Owner statements and management fees.
-- Listing syndication, applications, screening, and e-signatures.
-- AI-assisted document drafting/review, listing drafting, showing coordination, and negotiation drafting with user approval.
+- Listing syndication, third-party tenant-screening integrations, and e-signatures.
+- AI-assisted showing coordination and negotiation drafting with user approval.
+- AI recommendations for rent adjustments, renewals, vacancy risk, and delinquency risk.
 - Vendor quote requests and manually managed external reputation links.
 - Basic commercial rent-adjustment planning and office operating-expense support.
 
@@ -37,7 +40,6 @@ Success means a small operator can complete the monthly rent, vacancy-to-lease, 
 - Trust accounting, automated owner fund transfers, advanced commercial leases, CAM/NNN reconciliation, and accounting integrations.
 - Live reputation integrations and vendor monitoring.
 - Custom reports, scheduled exports, advanced permissions, public API, and bulk imports.
-- AI recommendations for renewals, rent adjustments, maintenance triage, vendor selection, vacancy risk, and delinquency risk.
 
 ## Future SaaS — Share and collaborate
 
