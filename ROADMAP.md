@@ -4,22 +4,27 @@
 
 Deliver complete, understandable workflows for:
 
+- A single local operator with no account or login.
+- Local record and attachment storage with backup/export and restore.
 - Portfolio setup for self-owned and client-managed properties.
 - Single-family homes, condos, townhomes, and offices.
 - Tenants, leases, rent tracking, expenses, and basic communication history.
 - Owner-reported rent receipts, owner balances, and manual owner-disbursement tracking.
-- Lightweight owner/tenant intake with clear attribution for rental and property issues.
+- Operator-recorded owner/tenant reports with clear attribution for rental and property issues.
+- Local ingestion of issue messages and attachments from connected Gmail, Outlook.com/Hotmail, and SMS sources.
+- AI-assisted issue detection, structured field extraction, property/reporter matching, urgency suggestions, duplicate detection, and operator approval.
+- Local voice-note recording/import with AI transcription, concise issue summaries, editable results, and review history.
 - Listing, lead, showing, and offer tracking.
 - Repair intake, quotes, vendor history, and work journals.
 - Action dashboard and drill-down reporting.
 
 Success means a small operator can complete the monthly rent, vacancy-to-lease, and repair-to-completion workflows without a spreadsheet.
 
-## Next — Connect and assist
+## Next — Connect and assist locally
 
 - Online payments, autopay, bank feeds, and recurring expenses.
 - Email/SMS reminders, two-way communication, and calendar connections.
-- Full tenant and owner portals, owner statements, and management fees.
+- Owner statements and management fees.
 - Listing syndication, applications, screening, and e-signatures.
 - AI-assisted document drafting/review, listing drafting, showing coordination, and negotiation drafting with user approval.
 - Vendor quote requests and manually managed external reputation links.
@@ -32,3 +37,13 @@ Success means a small operator can complete the monthly rent, vacancy-to-lease, 
 - Live reputation integrations and vendor monitoring.
 - Custom reports, scheduled exports, advanced permissions, public API, and bulk imports.
 - AI recommendations for renewals, rent adjustments, maintenance triage, vendor selection, vacancy risk, and delinquency risk.
+
+## Future SaaS — Share and collaborate
+
+- Cloud-hosted, tenant-isolated workspaces with authentication and user roles.
+- A guided migration that moves local records and attachments to the cloud while preserving stable IDs, history, and financial totals.
+- Migration of ingested-message history, voice-note transcripts and summaries, and AI review decisions, followed by explicit reauthorization of external accounts.
+- Migration validation, retry, and rollback safeguards.
+- Secure direct intake from owners and tenants.
+- Full tenant and owner portals.
+- Advanced approval workflows, public API access, and event webhooks.
