@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.modules.workspace.application.service import WorkspaceError, WorkspaceNotInitializedError, WorkspaceService
+from app.modules.workspace.infrastructure.sqlite_store import SQLiteWorkspaceStore
 from app.platform.config import LocalConfig, LocalConfigError, load_local_config, repository_root
 
 
@@ -98,9 +99,40 @@ class WorkspaceServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(WorkspaceError, "Workspace database is invalid"):
             self.service.open()
 
+    def test_normal_workspace_open_skips_full_integrity_scan(self) -> None:
+        self.service.initialize()
+        with patch.object(SQLiteWorkspaceStore, "verify", autospec=True) as verify:
+            self.service.open()
+
+        self.assertFalse(verify.call_args.kwargs["integrity_check"])
+
     def test_config_requires_an_absolute_workspace_path(self) -> None:
         config_path = self.root / "bad-config.json"
         config_path.write_text('{"localWorkspacePath": "relative-workspace"}', encoding="utf-8")
 
         with self.assertRaises(LocalConfigError):
             load_local_config(config_path)
+
+    def test_config_requires_a_json_object(self) -> None:
+        config_path = self.root / "array-config.json"
+        config_path.write_text("[]", encoding="utf-8")
+
+        with self.assertRaisesRegex(LocalConfigError, "JSON object"):
+            load_local_config(config_path)
+
+    def test_config_accepts_an_optional_absolute_backup_destination(self) -> None:
+        config_path = self.root / "backup-config.json"
+        backup_destination = self.root / "separate-backups"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "localWorkspacePath": str(self.workspace_path),
+                    "backupDestinationPath": str(backup_destination),
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        config = load_local_config(config_path)
+
+        self.assertEqual(config.backup_destination_path, backup_destination.resolve())

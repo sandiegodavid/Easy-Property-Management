@@ -50,17 +50,20 @@ class SQLiteWorkspaceStore:
         except sqlite3.Error as error:
             raise WorkspaceDatabaseError(f"Unable to initialize SQLite workspace database: {error}") from error
 
-    def verify(self, manifest: WorkspaceManifest) -> None:
+    def verify(self, manifest: WorkspaceManifest, *, integrity_check: bool = False) -> None:
         if not self.database_path.is_file():
             raise WorkspaceDatabaseError(f"Workspace database is missing: {self.database_path}")
         database_uri = f"{self.database_path.resolve().as_uri()}?mode=ro"
         try:
             with closing(sqlite3.connect(database_uri, uri=True)) as connection:
+                integrity = connection.execute("PRAGMA integrity_check").fetchone() if integrity_check else ("ok",)
                 metadata = connection.execute(
                     "SELECT workspace_id, format_version, created_at FROM workspace_metadata WHERE singleton = 1"
                 ).fetchone()
         except sqlite3.Error as error:
             raise WorkspaceDatabaseError(f"Unable to validate SQLite workspace database: {error}") from error
+        if integrity != ("ok",):
+            raise WorkspaceDatabaseError("Workspace SQLite integrity check failed.")
         expected = (manifest.workspace_id, manifest.format_version, manifest.created_at.isoformat())
         if metadata != expected:
             raise WorkspaceDatabaseError("Workspace database identity does not match its manifest.")

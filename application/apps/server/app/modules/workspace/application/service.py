@@ -87,7 +87,7 @@ class WorkspaceService:
             raise WorkspaceError(f"Unable to initialize workspace at {self.paths.root}: {error}") from error
         return self.open()
 
-    def open(self) -> WorkspaceManifest:
+    def open(self, *, integrity_check: bool = False) -> WorkspaceManifest:
         """Validate an existing workspace and enforce private local permissions."""
         self._validate_external_location()
         if not self.paths.manifest.is_file():
@@ -110,7 +110,7 @@ class WorkspaceService:
             raise WorkspaceError("Workspace manifest points to an unsupported database location.")
 
         try:
-            SQLiteWorkspaceStore(self.paths.database).verify(manifest)
+            SQLiteWorkspaceStore(self.paths.database).verify(manifest, integrity_check=integrity_check)
         except WorkspaceDatabaseError as error:
             raise WorkspaceError(f"Workspace database is invalid: {error}") from error
         try:

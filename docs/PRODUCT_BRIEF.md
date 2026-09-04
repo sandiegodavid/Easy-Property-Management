@@ -75,7 +75,7 @@ Later phases may support users with little or no accounting or property-manageme
 
 ## MVP modules
 
-1. **Home** — overdue rent, urgent repairs, upcoming showings, expiring leases, and money summary.
+1. **Home** — overdue rent, urgent repairs, upcoming showings, expiring leases, money summary, and a simple value snapshot showing tracked income, estimated cost avoided and time saved, retention, and issue-resolution speed. Metrics show their source records and clearly label estimates and operator-configured baselines.
 2. **Properties** — owned versus managed relationship, property type, spaces, occupancy, and history.
 3. **Tenants and leases** — contacts, terms, deposits, balances, dates, document storage, rent-adjustment notice deadlines, and effective-dated changes.
 4. **Payments and expenses** — expected, received, partial, late, and outstanding rent; payment methods and prepaid-check deposit reminders; owner-reported rent receipts; expenses, vendors, categories, and receipts.

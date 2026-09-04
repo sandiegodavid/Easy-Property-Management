@@ -4,7 +4,7 @@ Easy Property Management is a local-first, AI-assisted property-management appli
 
 ## Current status
 
-`LOCAL-001` is implemented: the application can explicitly initialize and validate one persistent, configurable external workspace with a stable manifest and SQLite identity store. The remaining product work is planned in the feature backlog.
+`LOCAL-001` is implemented. `LOCAL-002` is in progress: its encrypted local backup, export, validation, and restore foundation is available while the remaining acceptance work is tracked in the feature backlog.
 
 ## Repository layout
 
@@ -22,6 +22,7 @@ The planned stack is React/Vite/TypeScript for the interface, with Python/FastAP
 - [Product roadmap](docs/ROADMAP.md)
 - [Product decisions](docs/DECISIONS.md)
 - [Architecture and technology plan](docs/ARCHITECTURE.md)
+- [LOCAL-002 backup, export, and restore design](docs/LOCAL-002_DESIGN.md)
 
 ## Local workspace configuration
 
@@ -59,3 +60,17 @@ python -m app workspace-status
 ```
 
 The workspace command validates the Git-ignored `config.local.json`, rejects paths inside the application checkout, creates `workspace.json` and the initial SQLite identity store, and creates the `database/`, `files/`, `exports/`, and `backups/` directories. It does not overwrite a nonempty folder without a valid workspace manifest.
+
+## Encrypted backup and restore
+
+Choose a separate external destination before routine backups. The command saves only that location in the Git-ignored configuration; it never stores a backup passphrase there.
+
+```bash
+python -m app configure-backup-destination /absolute/path/to/encrypted-backups
+python -m app backup
+python -m app export /absolute/path/to/portable-export
+python -m app validate-archive /absolute/path/to/archive.epm-backup
+python -m app restore /absolute/path/to/archive.epm-backup /absolute/path/to/new-workspace
+```
+
+Each backup and export prompts for a passphrase of at least 12 characters, uses authenticated encryption, and is validated before it is published. Restore requires a new or empty external destination and never changes the configured live workspace. Automatic daily backups are optional: `python -m app enable-automatic-backups` stores the passphrase in the operating-system credential store only after the operator explicitly opts in.

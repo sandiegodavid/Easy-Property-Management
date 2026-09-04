@@ -12,6 +12,7 @@ __pycache__/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+*.epm-backup
 application/data/
 application/files/
 application/imports/

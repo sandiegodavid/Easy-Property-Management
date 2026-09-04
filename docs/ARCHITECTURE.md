@@ -32,7 +32,7 @@ The navigation should use familiar, task-oriented language. Each module has one 
 
 | Navigation module | Main responsibility | MVP capabilities |
 | --- | --- | --- |
-| Home & Inbox | Answer “what needs attention now?” | Action dashboard, overdue rent, expiring leases, owner actions, showings, urgent repairs, source-message and AI-review queues. |
+| Home & Inbox | Answer “what needs attention now?” | Action dashboard, overdue rent, expiring leases, owner actions, showings, urgent repairs, source-message and AI-review queues, plus a simple value snapshot. The snapshot surfaces tracked income, estimated cost avoided and time saved, retention, and issue-resolution speed; every value identifies its period, calculation, source records, and any operator-configured baseline. |
 | Portfolio | Represent the physical portfolio and its ownership context | Properties, spaces, self-owned versus managed relationships, occupancy, contacts, and property history. |
 | Leasing | Move a vacancy from listing to approved lease | Listings, leads, showings, offers/counteroffers, applications, applicant evidence, human approval decisions, leases, and rent adjustments. |
 | Money | Make expected, received, spent, and due money understandable | Rent expectations and receipts, payment methods, prepaid checks, expenses, owner-reported rent, owner balances, and recorded owner disbursements. |
@@ -181,6 +181,8 @@ SQLite is sufficient for the MVP target: a single local operator managing approx
 Use WAL mode for responsive reads while the application writes, but design around SQLite's single-writer model: short transactions, one local application writer, and a durable job/outbox queue. Do not attempt shared multi-machine editing, simultaneous network writers, or a cloud-sync folder as the live database. Those are future SaaS concerns.
 
 Backups of an active workspace use SQLite's backup facility or an equivalent consistent snapshot, then package the associated attachment files. Do not copy only the main `.sqlite` file while the application is running. Restore, relocation, and SaaS-export workflows verify both records and file references before they switch to the result.
+
+`LOCAL-002` uses one versioned portable archive format for both backups and exports. It includes a consistent database snapshot, workspace-relative files, a manifest, and cryptographic hashes; it excludes connection credentials, live SQLite journal files, and nested backups. Archives require passphrase-based authenticated encryption and are written atomically to a separately selected backup destination. Manual backups are always available. Automatic backups use a sensible default schedule once a destination exists, without requiring user scheduling, and run before risky workspace operations. A restore validates the archive into a new staging workspace and never overwrites the active workspace in place.
 
 ## AI and connector architecture
 
