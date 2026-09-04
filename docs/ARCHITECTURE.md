@@ -106,38 +106,36 @@ Use a feature-first monorepo. Source code, migrations, test fixtures, and operat
 
 ```text
 easy-property-management/                 # Git repository; no user data
-├── apps/
-│   ├── web/
-│   │   └── src/
-│   │       ├── app/                       # routing, application shell, providers
-│   │       ├── features/                  # home, portfolio, leasing, money, maintenance…
-│   │       └── shared/                    # reusable UI, API client, formatting, accessibility
-│   └── server/
-│       └── app/
-│           ├── bootstrap/                 # application startup and composition
-│           ├── modules/                   # domain modules listed above
-│           └── platform/                  # database, files, jobs, credentials, configuration
-├── packages/
-│   ├── contracts/                         # OpenAPI contract, generated browser client, shared fixtures
-│   ├── ui/                                # shared presentational components
-│   └── test-support/                      # fixtures and workspace test helpers
-├── database/
-│   ├── sqlite-migrations/
-│   └── postgres-migrations/               # introduced when SaaS work begins
-├── scripts/
-│   ├── setup/                             # product-owner workspace initialization/restore
-│   ├── backup/
-│   ├── restore/
-│   └── health-check/
 ├── docs/
-│   ├── decisions/
-│   ├── data-model/
-│   └── workflows/
-├── PRODUCT_BRIEF.md
-├── FEATURE_BACKLOG.md
-├── ROADMAP.md
-├── DECISIONS.md
-└── ARCHITECTURE.md
+│   ├── ARCHITECTURE.md
+│   ├── DECISIONS.md
+│   ├── FEATURE_BACKLOG.md
+│   ├── PRODUCT_BRIEF.md
+│   └── ROADMAP.md
+└── application/                           # future source-code root
+    ├── apps/
+    │   ├── web/
+    │   │   └── src/
+    │   │       ├── app/                   # routing, application shell, providers
+    │   │       ├── features/              # home, portfolio, leasing, money, maintenance…
+    │   │       └── shared/                # reusable UI, API client, formatting, accessibility
+    │   └── server/
+    │       └── app/
+    │           ├── bootstrap/             # application startup and composition
+    │           ├── modules/               # domain modules listed above
+    │           └── platform/              # database, files, jobs, credentials, configuration
+    ├── packages/
+    │   ├── contracts/                     # OpenAPI contract, generated browser client, shared fixtures
+    │   ├── ui/                            # shared presentational components
+    │   └── test-support/                  # fixtures and workspace test helpers
+    ├── database/
+    │   ├── sqlite-migrations/
+    │   └── postgres-migrations/           # introduced when SaaS work begins
+    └── scripts/
+        ├── setup/                         # product-owner workspace initialization/restore
+        ├── backup/
+        ├── restore/
+        └── health-check/
 ```
 
 Each server module follows the same internal shape where useful:
