@@ -154,7 +154,9 @@ Do not create a single generic `services/` or `utils/` dumping ground for busine
 
 ## Local workspace and Git boundary
 
-The live user workspace is configurable and must be external to the repository. It contains the SQLite database, its `-wal` and `-shm` companions while active, attachments, exports, and backups. The application discovers it through a small machine-local locator stored in the operating system's application-settings location.
+The live user workspace is configurable and must be external to the repository. It contains the SQLite database, its `-wal` and `-shm` companions while active, attachments, exports, and backups. For the MVP, the application discovers it through a small local locator at `application/config.local.json`; that file is explicitly excluded from Git.
+
+The live locator sets `localWorkspacePath` to the chosen external data folder. It is not committed even though it sits under the application source root; only [application/config.example.json](../application/config.example.json), which deliberately uses a fake path, is tracked. A packaged future version may relocate this small locator to operating-system application settings without moving the workspace itself.
 
 ```text
 chosen-workspace/
