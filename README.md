@@ -4,7 +4,7 @@ Easy Property Management is a local-first, AI-assisted property-management appli
 
 ## Current status
 
-This repository currently contains the agreed product, architecture, and delivery plan. Application implementation has not started.
+`LOCAL-001` is implemented: the application can explicitly initialize and validate one persistent, configurable external workspace with a stable manifest and SQLite identity store. The remaining product work is planned in the feature backlog.
 
 ## Repository layout
 
@@ -45,3 +45,17 @@ When implementation begins, work starts in [application](application) using the 
 - `scripts` — operator setup, backup, restore, and health checks
 
 Follow the feature backlog sequence and preserve the local workspace, approval, audit, and migration requirements documented in `docs/`.
+
+## Local workspace foundation
+
+From `application/`, install the Python dependencies and explicitly initialize the configured workspace:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e '.[dev]'
+python -m app initialize-workspace
+python -m app workspace-status
+```
+
+The workspace command validates the Git-ignored `config.local.json`, rejects paths inside the application checkout, creates `workspace.json` and the initial SQLite identity store, and creates the `database/`, `files/`, `exports/`, and `backups/` directories. It does not overwrite a nonempty folder without a valid workspace manifest.

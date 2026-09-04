@@ -1,3 +1,20 @@
 # Local runtime configuration must remain outside version control.
 application/config.local.json
 
+# Python environments and generated artifacts.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# Defensive protection if local workspace data is accidentally placed in this checkout.
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+application/data/
+application/files/
+application/imports/
+application/exports/
+application/backups/
+application/logs/
