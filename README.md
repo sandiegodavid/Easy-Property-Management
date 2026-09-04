@@ -23,6 +23,7 @@ The planned stack is React/Vite/TypeScript for the interface, with Python/FastAP
 - [Product decisions](docs/DECISIONS.md)
 - [Architecture and technology plan](docs/ARCHITECTURE.md)
 - [LOCAL-002 backup, export, and restore design](docs/LOCAL-002_DESIGN.md)
+- [AUDIT-001 local audit ledger design](docs/AUDIT-001_DESIGN.md)
 
 ## Local workspace configuration
 

@@ -10,6 +10,10 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.bootstrap.api import create_app
+from app.modules.workspace.application.runtime import WorkspaceRuntime
+from app.modules.workspace.application.service import WorkspaceService
+from app.platform.config import LocalConfig
+from app.platform.migrations import build_bootstrap_migration_runner
 
 
 class WorkspaceApiTests(unittest.TestCase):
@@ -72,3 +76,16 @@ class WorkspaceApiTests(unittest.TestCase):
         response = client.post("/api/workspace/initialize")
 
         self.assertEqual(response.status_code, 503)
+
+    def test_migration_backup_filesystem_failure_sets_runtime_error(self) -> None:
+        self.client.__exit__(None, None, None)
+        service = WorkspaceService(LocalConfig(self.config_path, self.workspace_path), build_bootstrap_migration_runner)
+        service.initialize()
+        with sqlite3.connect(service.paths.database) as connection:
+            connection.execute("DROP TABLE platform_schema_migrations")
+        runtime = WorkspaceRuntime(service)
+        with patch("app.platform.migrations.BootstrapMigrationRunner._backup_before_migration", side_effect=PermissionError("denied")):
+            runtime.start()
+        self.assertFalse(runtime.ready)
+        self.assertIn("denied", str(runtime.error))
+        runtime.stop()

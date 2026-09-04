@@ -110,7 +110,10 @@ class WorkspaceArchiveService:
         if extracted != contents.manifest["files"]:
             raise BackupError("Restored files do not match the validated archive inventory.")
         self._create_runtime_directories(workspace_root)
-        service = WorkspaceService(LocalConfig(config_path=self.workspace_service.config.config_path, workspace_path=workspace_root))
+        service = WorkspaceService(
+            LocalConfig(config_path=self.workspace_service.config.config_path, workspace_path=workspace_root),
+            self.workspace_service.migration_runner_factory,
+        )
         try:
             manifest = service.open(integrity_check=True)
         except WorkspaceError as error:

@@ -39,7 +39,7 @@ class WorkspaceRuntime:
             self.error = WorkspaceError("This server does not hold the workspace writer lock.")
             return
         try:
-            self.service.open(integrity_check=True)
+            self.service.open(integrity_check=True, migrate=True)
         except WorkspaceError as error:
             self.error = error
         else:

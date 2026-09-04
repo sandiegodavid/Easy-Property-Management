@@ -13,6 +13,7 @@ from app.modules.workspace.application.backup_service import BackupError, Backup
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.infrastructure.encrypted_archive import decrypt_archive_to_zip, make_header, write_encrypted_archive
 from app.platform.config import LocalConfig
+from app.platform.migrations import build_bootstrap_migration_runner
 from app.platform.locking import WorkspaceOperationLock
 from app.platform.secrets import BackupSecretStore
 
@@ -48,7 +49,7 @@ class BackupServiceTests(unittest.TestCase):
             workspace_path=self.workspace_path,
             backup_destination_path=self.backup_path,
         )
-        self.workspace = WorkspaceService(config)
+        self.workspace = WorkspaceService(config, build_bootstrap_migration_runner)
         self.manifest = self.workspace.initialize()
         self.secrets = MemorySecretStore()
         self.backups = BackupService(self.workspace, self.secrets)
@@ -69,7 +70,7 @@ class BackupServiceTests(unittest.TestCase):
         restored = self.backups.restore(result.archive_path, PASSPHRASE, restored_path)
         self.assertEqual(restored.workspace_path, restored_path.resolve())
         self.assertEqual((restored_path / "files" / "receipts" / "january.txt").read_text(encoding="utf-8"), "rent receipt")
-        restored_service = WorkspaceService(LocalConfig(self.config_path, restored_path))
+        restored_service = WorkspaceService(LocalConfig(self.config_path, restored_path), build_bootstrap_migration_runner)
         self.assertEqual(restored_service.open().workspace_id, self.manifest.workspace_id)
 
     def test_wrong_passphrase_or_tampered_archive_is_rejected(self) -> None:

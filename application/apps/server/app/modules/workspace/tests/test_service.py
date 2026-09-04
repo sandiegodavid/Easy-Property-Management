@@ -10,6 +10,8 @@ from unittest.mock import patch
 from app.modules.workspace.application.service import WorkspaceError, WorkspaceNotInitializedError, WorkspaceService
 from app.modules.workspace.infrastructure.sqlite_store import SQLiteWorkspaceStore
 from app.platform.config import LocalConfig, LocalConfigError, load_local_config, repository_root
+from app.platform.migrations import PlatformMigrationError
+from app.platform.migrations import build_bootstrap_migration_runner
 
 
 class WorkspaceServiceTests(unittest.TestCase):
@@ -19,7 +21,8 @@ class WorkspaceServiceTests(unittest.TestCase):
         self.root = Path(self.temporary_directory.name)
         self.workspace_path = self.root / "operator-workspace"
         self.service = WorkspaceService(
-            LocalConfig(config_path=self.root / "config.local.json", workspace_path=self.workspace_path)
+            LocalConfig(config_path=self.root / "config.local.json", workspace_path=self.workspace_path),
+            build_bootstrap_migration_runner,
         )
 
     def test_initialize_creates_a_stable_manifest_and_persistent_sqlite_store(self) -> None:
@@ -49,9 +52,19 @@ class WorkspaceServiceTests(unittest.TestCase):
         with self.assertRaises(WorkspaceError):
             self.service.initialize()
 
+    def test_initialize_cleans_staging_workspace_when_migration_fails(self) -> None:
+        class FailingRunner:
+            def apply(self, manifest):
+                raise PlatformMigrationError("snapshot unavailable")
+
+        service = WorkspaceService(self.service.config, lambda database, backups: FailingRunner())
+        with self.assertRaisesRegex(WorkspaceError, "snapshot unavailable"):
+            service.initialize()
+        self.assertFalse(any(self.root.glob(".operator-workspace.initializing.*")))
+
     def test_initialize_rejects_the_application_checkout(self) -> None:
         unsafe_service = WorkspaceService(
-            LocalConfig(config_path=self.root / "config.local.json", workspace_path=Path.cwd())
+            LocalConfig(config_path=self.root / "config.local.json", workspace_path=Path.cwd()), build_bootstrap_migration_runner
         )
         with self.assertRaises(WorkspaceError):
             unsafe_service.initialize()
@@ -61,7 +74,7 @@ class WorkspaceServiceTests(unittest.TestCase):
             LocalConfig(
                 config_path=self.root / "config.local.json",
                 workspace_path=repository_root() / "workspace-data-must-not-live-here",
-            )
+            ), build_bootstrap_migration_runner
         )
         with self.assertRaises(WorkspaceError):
             unsafe_service.initialize()

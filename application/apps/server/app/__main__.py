@@ -46,7 +46,8 @@ def main() -> None:
     args = parser.parse_args()
 
     config_path = _config_path(args.config)
-    service = WorkspaceService.from_local_config(config_path)
+    from app.platform.migrations import build_bootstrap_migration_runner
+    service = WorkspaceService.from_local_config(config_path, build_bootstrap_migration_runner)
 
     if args.command == "initialize-workspace":
         manifest = service.initialize()

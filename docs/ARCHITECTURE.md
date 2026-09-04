@@ -80,7 +80,7 @@ The server separates domain responsibilities from user-interface screens. This s
 | API application | FastAPI | Typed validation, OpenAPI support, asynchronous integrations, and a clear, testable Python application structure. |
 | API contract | REST with OpenAPI | Clear contracts for the web UI, local scripts, testing, and later SaaS migration; avoids premature GraphQL complexity. |
 | Local database | SQLite in WAL mode | Embedded, portable, reliable single-operator data store with no database server to administer. |
-| Database access and migrations | SQLAlchemy with Alembic | Mature Python data access and explicit, reviewable migrations for SQLite now and PostgreSQL later. |
+| Database access and migrations | SQLAlchemy with Alembic for ORM-owned product schemas; one native transactional SQLite bootstrap migration for workspace metadata/audit ledger | Alembic remains the sole migration authority once SQLAlchemy domain models begin. The narrowly scoped bootstrap migration is needed to safely introduce that foundation into existing local workspaces. |
 | API/data validation | Pydantic | Shared validation approach for API requests, AI-structured output, and configuration. |
 | Attachments | Filesystem inside the external workspace | Keeps lease files, receipts, photos, and exports portable with the local record set. |
 | Background work | SQLite-backed jobs/outbox table run by the application | Handles ingestion, transcription, AI review preparation, reminders, and backup jobs without Redis or a message broker. |
