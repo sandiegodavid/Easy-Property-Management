@@ -12,8 +12,8 @@ The MVP is a single-user application that runs locally. It has no application au
 
 | Sequence | ID | Area | Outcome | Ordered hard dependencies |
 | ---: | --- | --- | --- | --- |
-| 1 | LOCAL-001 | Local data | Create one persistent local workspace for the operator's structured records. | None |
-| 2 | LOCAL-002 | Local data | Back up, export, validate, and restore local records and attachments in a versioned portable package that excludes external-account credentials. | LOCAL-001 |
+| 1 | LOCAL-001 | Local data | Create one persistent, configurable external workspace for the operator's structured records, separate from the Git-maintained application checkout, with a stable ID and versioned non-secret manifest. | None |
+| 2 | LOCAL-002 | Local data | Back up, export, validate, and restore the complete local workspace—SQLite data, live journal state where applicable, and workspace-relative attachments—in a versioned portable package that excludes external-account credentials. | LOCAL-001 |
 | 3 | AUDIT-001 | Audit | Preserve when sensitive financial, lease, owner, vendor, issue, and ingestion records changed and retain their prior values. | LOCAL-001 |
 | 4 | FILE-001 | Files | Store lease documents, receipts, issue photos, quotes, message attachments, and other files locally with portable references. | LOCAL-001 |
 | 5 | TASK-001 | Tasks | Create local tasks and reminders with due dates, statuses, and related records. | LOCAL-001 |
@@ -56,7 +56,7 @@ The MVP is a single-user application that runs locally. It has no application au
 | 42 | OUTLOOK-001 | Outlook ingestion | Read selected Outlook.com/Hotmail messages and attachments into the local issue inbox using a connected Microsoft account. | CONN-001, INGEST-001, INGEST-002 |
 | 43 | SMS-001 | SMS ingestion | Poll a connected SMS provider or import forwarded text messages into the local issue inbox without requiring an application-hosted inbound endpoint. | CONN-001, INGEST-001, INGEST-002 |
 | 44 | DASH-003 | Dashboard | Surface unprocessed sources, AI drafts awaiting review, low-confidence transcripts or matches, and ingestion failures on the local dashboard. | DASH-001, INGEST-002, VOICE-AI-001, GMAIL-001, OUTLOOK-001, SMS-001 |
-| 45 | LOCAL-003 | Local setup | Provide product-owner-run scripts and a checklist to initialize or restore an MVP user's local workspace, select data and backup locations, and verify readiness; this is not a self-service installer or updater. | LOCAL-001, LOCAL-002, FILE-001 |
+| 45 | LOCAL-003 | Local setup | Provide product-owner-run scripts and a checklist to initialize or restore an MVP user's external workspace, select and validate its location, save a machine-local workspace locator, and verify readiness; warn against the Git checkout and unsupported cloud-sync locations. This is not a self-service installer or updater. | LOCAL-001, LOCAL-002, FILE-001 |
 | 46 | LEAD-004 | Applications | Record applications connected to leads, including lawful employment or business information, rental references, intended occupants, and occupancy needs; protected familial-status information must not be used as an approval criterion. | AUDIT-001, FILE-001, COM-001, LEAD-001 |
 | 47 | APP-FIN-001 | Applicant financials | Record applicant-provided income, recurring obligations, credit score with source and date, and asset summaries; attach bank, brokerage, or other supporting statements with consent, redacted account identifiers, verification status, and a retention or deletion date. | AUDIT-001, FILE-001, LEAD-004 |
 | 48 | APP-DEC-001 | Lease approval | Record consistent approval criteria, the human decision and reasons, reviewer, date, conditions, and any required consumer-report adverse-action follow-up without using protected characteristics. | AUDIT-001, LEAD-004, APP-FIN-001 |

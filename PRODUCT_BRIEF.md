@@ -29,6 +29,29 @@ From one dashboard, a user can see what money is due, what is vacant, what needs
 
 The MVP is a single-user application that runs locally for the operator. It requires no account or login, stores its records and attachments locally, and provides backup/export and restore. The product owner sets up each MVP user's local instance with operator-run setup scripts; self-service installation and update flows are not required. Authentication, shared cloud workspaces, and remote user access belong to a future SaaS offering.
 
+## Local workspace design
+
+Application code is Git-maintained separately from each user's workspace. A workspace is an operator-selected external folder, never a subfolder of the application checkout, that contains the SQLite database, attachments, exports, and backups. This keeps real records out of Git while allowing the application, migrations, templates, and setup tools to be versioned normally.
+
+The application stores only a small machine-local workspace locator in the operating system's application-settings location. It records the selected workspace path and recent workspaces; it does not contain the user's operating records. On first launch, or when the configured workspace is unavailable, the application offers **Create workspace** or **Open workspace** with an operating-system folder picker rather than silently creating a new empty database.
+
+Each workspace has a small non-secret manifest and a portable layout:
+
+```text
+chosen-workspace/
+├── workspace.json              # workspace ID, display name, format version
+├── database/property-management.sqlite
+├── files/                      # documents and attachments
+├── exports/
+└── backups/
+```
+
+Database references to attachments use workspace-relative paths so the whole workspace can be moved, restored, exported, or later migrated to SaaS without rewriting machine-specific absolute paths. Provider credentials and tokens remain in the operating system credential store, keyed to the workspace ID; they are not written to the manifest, database export, or backup.
+
+The product-owner setup workflow selects the external location, validates that it is writable and not inside the Git checkout, initializes or restores the workspace, and records the selected path in the machine-local locator. It should warn against using a cloud-sync folder for a live SQLite database unless that configuration has been explicitly supported and tested.
+
+Users can inspect, back up, open, or move the workspace through **Settings → Data & Backup**. Moving it is a guided copy-and-verify operation: pause writes, make a consistent backup, copy database and files, validate the new location, update the locator, reopen, and retain the old copy until the operator confirms it may be removed. While the database is live, backups use SQLite's consistent-backup mechanism rather than copying only the main database file.
+
 ## Design principles
 
 - Prefer plain language: “Money received,” “Still due,” “Needs attention,” and “Service providers.”
@@ -91,6 +114,9 @@ The MVP does not include:
 
 - A property may be self-owned, client-managed, or both through an explicit relationship record.
 - The MVP has one local workspace and one operator, with no authentication or cloud dependency.
+- The selected workspace path lives in a machine-local locator outside both Git and the workspace; the workspace itself has a stable ID and versioned, non-secret manifest.
+- User data is stored in a configurable external workspace, with the SQLite database, its live journal files, attachments, exports, and backups kept together; application code must not infer this path from its Git checkout.
+- Attachment references are workspace-relative. Workspace relocation and restore verify the complete database-and-files set before switching the locator.
 - A shared “space” concept supports homes, condos, townhomes, office suites, and later apartment units.
 - One party/contact model supports owners, tenants, prospects, vendors, and companies in different roles.
 - Financial entries use dated source records and drill-down allocations; settled records are voided/reversed rather than deleted.
