@@ -6,7 +6,7 @@ This is the agreed implementation direction for the local, single-operator MVP. 
 
 ## Architecture in one view
 
-Use a **modular monolith**: one locally run application with a React user interface, a TypeScript API, a SQLite workspace database, and a workspace file store. Modules are independently organized and tested but deploy together. This is the right fit for one operator and roughly 1–50 rentable spaces: it keeps installation, data ownership, backup, and support understandable while leaving clean seams for a future hosted product.
+Use a **modular monolith**: one locally run application with a React/TypeScript user interface, a Python API, a SQLite workspace database, and a workspace file store. Modules are independently organized and tested but deploy together. This is the right fit for one operator and roughly 1–50 rentable spaces: it keeps installation, data ownership, backup, and support understandable while leaving clean seams for a future hosted product.
 
 ```text
 Local browser or optional desktop shell
@@ -15,7 +15,7 @@ Local browser or optional desktop shell
 React + TypeScript user interface
                 │  REST / OpenAPI on the local machine
                 ▼
-NestJS application (Fastify adapter)
+FastAPI application (Python)
   domain modules · jobs/outbox · connector and AI adapters
                 │
        ┌────────┴────────┐
@@ -74,26 +74,28 @@ The server separates domain responsibilities from user-interface screens. This s
 
 | Layer | Recommendation | Why |
 | --- | --- | --- |
-| Language/runtime | TypeScript on the current Node.js LTS release | One language across interface, API, scripts, schemas, and tests. |
+| User-interface language/runtime | TypeScript on the current Node.js LTS release | A mature, type-safe ecosystem for the React interface, UI components, and browser tooling. |
 | User interface | React with Vite | Mature component ecosystem, rapid local development, and a clean boundary from backend rules. |
-| API application | NestJS using the Fastify adapter | Feature modules, dependency injection, validation, testability, and a structured local API without heavy operational cost. |
+| Server language/runtime | Python on a supported release | Best-fit ecosystem for the product's expanding AI, document, transcription, evaluation, analysis, and potential model-serving work. |
+| API application | FastAPI | Typed validation, OpenAPI support, asynchronous integrations, and a clear, testable Python application structure. |
 | API contract | REST with OpenAPI | Clear contracts for the web UI, local scripts, testing, and later SaaS migration; avoids premature GraphQL complexity. |
 | Local database | SQLite in WAL mode | Embedded, portable, reliable single-operator data store with no database server to administer. |
-| Database access | Evaluate Drizzle ORM and Prisma in a small reporting/migration prototype before committing | Both support TypeScript and SQLite/PostgreSQL. Drizzle favors close-to-SQL control; Prisma favors a more guided schema/client workflow. Complex financial reports, migrations, and portability are the decision criteria. |
+| Database access and migrations | SQLAlchemy with Alembic | Mature Python data access and explicit, reviewable migrations for SQLite now and PostgreSQL later. |
+| API/data validation | Pydantic | Shared validation approach for API requests, AI-structured output, and configuration. |
 | Attachments | Filesystem inside the external workspace | Keeps lease files, receipts, photos, and exports portable with the local record set. |
 | Background work | SQLite-backed jobs/outbox table run by the application | Handles ingestion, transcription, AI review preparation, reminders, and backup jobs without Redis or a message broker. |
 | Secrets | Operating-system credential store | Keeps external connection credentials out of Git, the workspace database, exports, and backups. |
-| Testing | Unit tests for domain rules; integration tests against a temporary SQLite workspace; end-to-end tests for critical operator workflows | Financial totals, records, approvals, migrations, and intake review are higher risk than screen styling. |
+| Testing | Pytest unit/integration tests against a temporary SQLite workspace; browser end-to-end tests for critical operator workflows | Financial totals, records, approvals, migrations, and intake review are higher risk than screen styling. |
 | Future cloud database | PostgreSQL | Suitable future destination for tenant-isolated SaaS workspaces, concurrent users, and central operations. |
 
 ## Viable alternatives
 
-There is no single mandatory web stack. The recommendation above is strongest when the implementation team is comfortable with TypeScript.
+The backend recommendation is Python because AI is the product's largest planned growth surface—not because Python is required to call a model API. TypeScript can call the same services effectively. Python is preferred because document extraction, transcription pipelines, evaluation, retrieval, ranking, data analysis, and potential future model work can remain in the primary backend rather than becoming a second AI service later.
 
 | Option | When it is a good fit | Trade-off |
 | --- | --- | --- |
-| React + NestJS/Fastify + TypeScript | Recommended default; shared language and strong modular conventions. | More application structure than a very small prototype needs. |
-| React + FastAPI + SQLAlchemy | Strong choice if the team is materially more productive in Python or expects Python-centric document/AI processing. | Two primary languages and type systems across UI and API. |
+| React + FastAPI + SQLAlchemy | Recommended default; AI-intensive backend work stays in the primary application. | The interface and server use different languages, so the OpenAPI contract and browser client must be maintained deliberately. |
+| React + NestJS/Fastify + TypeScript | Good choice for a strongly Node-oriented team with limited planned AI/data-processing complexity. | A growing Python AI service may become necessary later, creating two backend stacks and a more complex deployment model. |
 | Rails + Hotwire + Active Job | Strong choice for a Rails-experienced team wanting a cohesive, convention-led product. | Less natural if the team expects a separate rich React interface. |
 
 The stack choice should not change the core design: modular monolith, external workspace, SQLite for the MVP, filesystem attachments, OS-managed secrets, and a portable migration path.
@@ -111,12 +113,12 @@ easy-property-management/                 # Git repository; no user data
 │   │       ├── features/                  # home, portfolio, leasing, money, maintenance…
 │   │       └── shared/                    # reusable UI, API client, formatting, accessibility
 │   └── server/
-│       └── src/
+│       └── app/
 │           ├── bootstrap/                 # application startup and composition
 │           ├── modules/                   # domain modules listed above
 │           └── platform/                  # database, files, jobs, credentials, configuration
 ├── packages/
-│   ├── contracts/                         # shared API/data contracts and validation schemas
+│   ├── contracts/                         # OpenAPI contract, generated browser client, shared fixtures
 │   ├── ui/                                # shared presentational components
 │   └── test-support/                      # fixtures and workspace test helpers
 ├── database/
