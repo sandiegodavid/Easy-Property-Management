@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import warnings
 from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
@@ -31,16 +32,21 @@ class BackupDestinationPolicy:
             destination.mkdir(parents=True, exist_ok=True)
             if created:
                 secure_directory(destination)
+            _require_atomic_archive_publication(destination)
             updated = save_backup_destination(self.workspace_service.config, destination)
         except (OSError, LocalConfigError) as error:
             raise BackupError(f"Backup destination is not writable: {error}") from error
         self.workspace_service.config = updated
+        if _same_volume(destination, self.paths.root):
+            warnings.warn("Backup destination is on the same volume as the live workspace.", RuntimeWarning, stacklevel=2)
         return updated
 
     def resolve_output(self, workspace_id: str, package_type: PackageType, output_path: Path | None) -> Path:
         if output_path is not None:
             destination = output_path.expanduser().resolve()
             self.validate_external(destination.parent)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            _require_atomic_archive_publication(destination.parent)
             if destination.suffix != ".epm-backup":
                 destination = destination.with_suffix(".epm-backup")
             if destination.exists():
@@ -62,6 +68,7 @@ class BackupDestinationPolicy:
         destination.mkdir(parents=True, exist_ok=True)
         if created:
             secure_directory(destination)
+        _require_atomic_archive_publication(destination)
         return destination
 
     def validate_external(self, destination: Path) -> None:
@@ -123,3 +130,27 @@ def secure_directory(directory: Path) -> None:
 def secure_file(file_path: Path) -> None:
     if os.name == "posix":
         file_path.chmod(0o600)
+
+
+def _same_volume(first: Path, second: Path) -> bool:
+    try:
+        return os.stat(first).st_dev == os.stat(second).st_dev
+    except OSError:
+        return False
+
+
+def _require_atomic_archive_publication(destination: Path) -> None:
+    """Reject destinations that cannot atomically publish a completed archive."""
+    source = destination / f".epm-publication-probe-{os.urandom(8).hex()}"
+    target = destination / f".epm-publication-probe-{os.urandom(8).hex()}"
+    try:
+        source.write_bytes(b"probe")
+        os.link(source, target)
+    except OSError as error:
+        raise BackupError(
+            "Backup destination does not support required atomic archive publication; "
+            "choose a filesystem with hard-link support."
+        ) from error
+    finally:
+        target.unlink(missing_ok=True)
+        source.unlink(missing_ok=True)

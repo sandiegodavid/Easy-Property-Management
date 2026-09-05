@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.modules.workspace.application.service import WorkspaceError, WorkspaceNotInitializedError, WorkspaceService
+from app.modules.workspace.application.service import WorkspaceError, WorkspaceService
 from app.platform.locking import WorkspaceOperationInProgressError, WorkspaceOperationLock
 
 
@@ -39,7 +39,7 @@ class WorkspaceRuntime:
             self.error = WorkspaceError("This server does not hold the workspace writer lock.")
             return
         try:
-            self.service.open(integrity_check=True, migrate=True)
+            self.service.open(integrity_check=True)
         except WorkspaceError as error:
             self.error = error
         else:

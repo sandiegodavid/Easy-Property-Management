@@ -1,19 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import sqlite3
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app.bootstrap.api import create_app
-from app.modules.workspace.application.runtime import WorkspaceRuntime
+from app.bootstrap.api import _automatic_backup_scheduler, create_app
 from app.modules.workspace.application.service import WorkspaceService
 from app.platform.config import LocalConfig
-from app.platform.migrations import build_bootstrap_migration_runner
 
 
 class WorkspaceApiTests(unittest.TestCase):
@@ -77,15 +77,60 @@ class WorkspaceApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 503)
 
-    def test_migration_backup_filesystem_failure_sets_runtime_error(self) -> None:
-        self.client.__exit__(None, None, None)
-        service = WorkspaceService(LocalConfig(self.config_path, self.workspace_path), build_bootstrap_migration_runner)
-        service.initialize()
-        with sqlite3.connect(service.paths.database) as connection:
-            connection.execute("DROP TABLE platform_schema_migrations")
-        runtime = WorkspaceRuntime(service)
-        with patch("app.platform.migrations.BootstrapMigrationRunner._backup_before_migration", side_effect=PermissionError("denied")):
-            runtime.start()
-        self.assertFalse(runtime.ready)
-        self.assertIn("denied", str(runtime.error))
-        runtime.stop()
+    def test_task_create_requires_a_json_boolean_for_is_all_day(self) -> None:
+        self.assertEqual(self.client.post("/api/workspace/initialize").status_code, 201)
+        for invalid_value in ("false", "yes", 0, 1):
+            response = self.client.post("/api/tasks", json={"title": "Inspection", "isAllDay": invalid_value})
+            self.assertEqual(response.status_code, 422)
+
+    def test_scheduler_cancellation_waits_for_an_inflight_backup_worker(self) -> None:
+        started = threading.Event()
+        release = threading.Event()
+
+        class Runtime:
+            writer_lock_acquired = True
+            ready = True
+
+        class Backups:
+            def run_due_automatic_backup(self) -> None:
+                started.set()
+                release.wait(timeout=5)
+
+        async def exercise() -> None:
+            scheduler = asyncio.create_task(_automatic_backup_scheduler(Backups(), Runtime()))
+            while not started.is_set():
+                await asyncio.sleep(0.01)
+            scheduler.cancel()
+            await asyncio.sleep(0.05)
+            self.assertFalse(scheduler.done())
+            release.set()
+            with self.assertRaises(asyncio.CancelledError):
+                await scheduler
+
+        asyncio.run(exercise())
+
+    def test_scheduler_records_unexpected_worker_failure_and_keeps_running(self) -> None:
+        recorded = threading.Event()
+
+        class Runtime:
+            writer_lock_acquired = True
+            ready = True
+
+        class Backups:
+            def run_due_automatic_backup(self) -> None:
+                raise RuntimeError("unexpected worker failure")
+
+            def record_scheduler_failure(self, error: Exception) -> None:
+                self.error = error
+                recorded.set()
+
+        async def exercise() -> None:
+            scheduler = asyncio.create_task(_automatic_backup_scheduler(Backups(), Runtime()))
+            while not recorded.is_set():
+                await asyncio.sleep(0.01)
+            self.assertFalse(scheduler.done())
+            scheduler.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await scheduler
+
+        asyncio.run(exercise())

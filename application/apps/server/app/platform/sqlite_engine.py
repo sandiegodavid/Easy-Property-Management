@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from contextlib import contextmanager
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
@@ -16,17 +17,28 @@ def create_sqlite_engine(database: Path) -> Engine:
 
     @event.listens_for(engine, "connect")
     def enable_foreign_keys(dbapi_connection, _connection_record) -> None:
-        # sqlite3 legacy transaction control autocommits DDL. Explicit BEGIN restores
-        # atomic schema changes across supported Python/SQLite combinations.
+        # Explicit BEGIN keeps schema changes atomic across supported Python/SQLite
+        # combinations while ordinary reads remain deferred and concurrent.
         dbapi_connection.isolation_level = None
         cursor = dbapi_connection.cursor()
         try:
             cursor.execute("PRAGMA foreign_keys = ON")
+            cursor.execute("PRAGMA busy_timeout = 5000")
         finally:
             cursor.close()
 
     @event.listens_for(engine, "begin")
     def begin_transaction(connection) -> None:
-        connection.exec_driver_sql("BEGIN")
+        statement = "BEGIN IMMEDIATE" if connection.info.pop("sqlite_immediate", False) else "BEGIN"
+        connection.exec_driver_sql(statement)
 
     return engine
+
+
+@contextmanager
+def immediate_transaction(engine: Engine):
+    """Acquire SQLite's write reservation without penalizing ordinary reads."""
+    with engine.connect() as connection:
+        connection.info["sqlite_immediate"] = True
+        with connection.begin():
+            yield connection

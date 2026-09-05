@@ -18,14 +18,20 @@ from typing import Any, Callable
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+from app.modules.workspace.domain.models import WORKSPACE_FORMAT_VERSION
+from app.platform.product_migrations import current_revision
+from app.platform.version import application_version
 
 
 ARCHIVE_MAGIC = b"EPMB"
 ARCHIVE_FORMAT_VERSION = 1
+APPLICATION_VERSION = application_version()
 AUTH_TAG_LENGTH = 16
 MAX_HEADER_BYTES = 64 * 1024
 MAX_ARCHIVE_ENTRIES = 100_000
 MAX_UNCOMPRESSED_BYTES = 10 * 1024 * 1024 * 1024
+MAX_ENCRYPTED_PAYLOAD_BYTES = MAX_UNCOMPRESSED_BYTES
+MAX_MANIFEST_BYTES = 1024 * 1024
 CHUNK_SIZE = 1024 * 1024
 
 
@@ -104,8 +110,8 @@ def write_encrypted_archive(
             validator(temporary_path)
         else:
             validate_archive(temporary_path, passphrase)
-        temporary_path.replace(output_path)
-        _secure_file(output_path)
+        _publish_no_replace(temporary_path, output_path)
+        temporary_path.unlink()
         return output_path
     except (ArchiveError, OSError, ValueError, InvalidTag) as error:
         temporary_path.unlink(missing_ok=True)
@@ -113,6 +119,20 @@ def write_encrypted_archive(
     except Exception:
         temporary_path.unlink(missing_ok=True)
         raise
+
+
+def _publish_no_replace(temporary_path: Path, output_path: Path) -> None:
+    """Publish a completed archive atomically without replacing a final path."""
+    try:
+        os.link(temporary_path, output_path)
+        return
+    except FileExistsError as error:
+        raise ArchiveError("Refusing to overwrite an existing backup archive.") from error
+    except OSError as error:
+        raise ArchiveError(
+            "Backup destination does not support required atomic no-replace publication. "
+            "Choose a filesystem that supports hard links."
+        ) from error
 
 
 def validate_archive(archive_path: Path, passphrase: str) -> ArchiveContents:
@@ -127,6 +147,8 @@ def decrypt_archive_to_zip(archive_path: Path, passphrase: str, zip_path: Path) 
     """Decrypt an archive into a caller-owned temporary ZIP path and authenticate its contents."""
     passphrase_bytes = require_passphrase(passphrase)
     header, ciphertext_offset, ciphertext_length, tag = _read_archive_layout(archive_path)
+    if ciphertext_length > MAX_ENCRYPTED_PAYLOAD_BYTES:
+        raise ArchiveError("Archive encrypted payload exceeds the supported size limit.")
     key = _derive_key(passphrase_bytes, header)
     nonce = _decode_nonce(header)
     header_bytes = _serialize_header(header)
@@ -165,9 +187,14 @@ def inspect_payload_zip(zip_path: Path, header: dict[str, Any]) -> ArchiveConten
                 raise ArchiveError("Archive contains duplicate paths.")
             for info in infos:
                 _validate_zip_info(info)
+            if sum(info.file_size for info in infos) > MAX_UNCOMPRESSED_BYTES + MAX_MANIFEST_BYTES:
+                raise ArchiveError("Archive expands beyond the supported size limit.")
             if "backup-manifest.json" not in names:
                 raise ArchiveError("Archive is missing backup-manifest.json.")
-            manifest = json.loads(package.read("backup-manifest.json"))
+            manifest_info = package.getinfo("backup-manifest.json")
+            if manifest_info.file_size > MAX_MANIFEST_BYTES:
+                raise ArchiveError("Backup manifest exceeds the supported size limit.")
+            manifest = json.loads(package.read(manifest_info))
             declared_files = manifest.get("files")
             if not isinstance(declared_files, list):
                 raise ArchiveError("Backup manifest has no valid file inventory.")
@@ -175,27 +202,29 @@ def inspect_payload_zip(zip_path: Path, header: dict[str, Any]) -> ArchiveConten
             expected = {"backup-manifest.json"}
             byte_count = 0
             for item in declared_files:
-                if not isinstance(item, dict):
+                if not isinstance(item, dict) or set(item) != {"path", "sha256", "bytes"}:
                     raise ArchiveError("Backup manifest contains an invalid file entry.")
                 path = item.get("path")
                 digest = item.get("sha256")
                 byte_size = item.get("bytes")
-                if not isinstance(path, str) or not isinstance(digest, str) or not isinstance(byte_size, int):
+                if not isinstance(path, str) or not isinstance(digest, str) or not _exact_int(byte_size):
                     raise ArchiveError("Backup manifest contains an invalid file entry.")
                 _validate_relative_path(path)
+                if path in expected:
+                    raise ArchiveError("Backup manifest contains duplicate file paths.")
                 expected.add(path)
                 if path not in names:
                     raise ArchiveError(f"Archive is missing declared file: {path}")
-                actual_digest, actual_size = _digest_zip_entry(package, path)
+                actual_digest, actual_size = _digest_zip_entry(package, path, MAX_UNCOMPRESSED_BYTES - byte_count)
                 if actual_digest != digest or actual_size != byte_size:
                     raise ArchiveError(f"Archive file integrity check failed: {path}")
                 byte_count += actual_size
+                if byte_count > MAX_UNCOMPRESSED_BYTES:
+                    raise ArchiveError("Archive expands beyond the supported size limit.")
 
             archive_files = {info.filename for info in infos if not info.is_dir()}
             if archive_files != expected:
                 raise ArchiveError("Archive contains files that are absent from its manifest.")
-            if byte_count > MAX_UNCOMPRESSED_BYTES:
-                raise ArchiveError("Archive expands beyond the supported size limit.")
             _validate_manifest_consistency(manifest, header)
             return ArchiveContents(header=header, manifest=manifest, file_count=len(declared_files), byte_count=byte_count)
     except (OSError, zipfile.BadZipFile, json.JSONDecodeError) as error:
@@ -216,8 +245,12 @@ def extract_payload_zip(zip_path: Path, destination_root: Path, contents: Archiv
                 if destination_root.resolve() not in resolved_target.parents and resolved_target != destination_root.resolve():
                     raise ArchiveError("Archive extraction path escapes its destination.")
                 target.parent.mkdir(parents=True, exist_ok=True)
+                remaining = MAX_UNCOMPRESSED_BYTES
                 with package.open(archive_path) as source, target.open("wb") as destination:
                     while chunk := source.read(CHUNK_SIZE):
+                        remaining -= len(chunk)
+                        if remaining < 0:
+                            raise ArchiveError("Archive expands beyond the supported size limit.")
                         destination.write(chunk)
                 _secure_file(target)
     except (OSError, zipfile.BadZipFile) as error:
@@ -275,38 +308,66 @@ def _read_archive_layout(archive_path: Path) -> tuple[dict[str, Any], int, int, 
 def _validate_header(header: object) -> None:
     if not isinstance(header, dict):
         raise ArchiveError("Archive header is not a JSON object.")
-    if header.get("archiveFormatVersion") != ARCHIVE_FORMAT_VERSION:
+    if set(header) != {"archiveFormatVersion", "createdAt", "encryption", "kdf", "nonce", "packageType", "sourceWorkspaceId"}:
+        raise ArchiveError("Archive header has unsupported fields.")
+    if not _exact_int(header.get("archiveFormatVersion")) or header["archiveFormatVersion"] != ARCHIVE_FORMAT_VERSION:
         raise ArchiveError("Archive format version is unsupported.")
     if header.get("encryption") != "AES-256-GCM" or header.get("packageType") not in {"backup", "export"}:
         raise ArchiveError("Archive header uses unsupported encryption or package type.")
     kdf = header.get("kdf")
-    if not isinstance(kdf, dict) or kdf.get("name") != "scrypt":
+    if not isinstance(kdf, dict) or set(kdf) != {"name", "length", "n", "p", "r", "salt"} or kdf.get("name") != "scrypt":
         raise ArchiveError("Archive header uses an unsupported key derivation method.")
     if not isinstance(header.get("sourceWorkspaceId"), str) or not isinstance(header.get("nonce"), str):
         raise ArchiveError("Archive header is missing required fields.")
     if not isinstance(header.get("createdAt"), str):
         raise ArchiveError("Archive header is missing its creation time.")
-    if not isinstance(kdf.get("length"), int) or kdf["length"] != 32:
+    try:
+        created_at = datetime.fromisoformat(header["createdAt"])
+    except ValueError as error:
+        raise ArchiveError("Archive header has an invalid creation time.") from error
+    if created_at.tzinfo is None or created_at.utcoffset() is None:
+        raise ArchiveError("Archive header creation time must include a timezone offset.")
+    if not _exact_int(kdf.get("length")) or kdf["length"] != 32:
         raise ArchiveError("Archive header has invalid key derivation parameters.")
-    if (kdf.get("n"), kdf.get("r"), kdf.get("p")) != (32768, 8, 1) or not isinstance(kdf.get("salt"), str):
+    if (not all(_exact_int(kdf.get(key)) for key in ("n", "r", "p"))
+            or (kdf.get("n"), kdf.get("r"), kdf.get("p")) != (32768, 8, 1)
+            or not isinstance(kdf.get("salt"), str)):
         raise ArchiveError("Archive header has invalid key derivation parameters.")
 
 
 def _validate_manifest_consistency(manifest: object, header: dict[str, Any]) -> None:
     if not isinstance(manifest, dict):
         raise ArchiveError("Backup manifest is not a JSON object.")
-    if manifest.get("packageFormatVersion") != ARCHIVE_FORMAT_VERSION:
+    if set(manifest) != {"applicationVersion", "credentialsExcluded", "createdAt", "databaseSchemaRevision", "files", "liveJournalFilesExcluded", "packageFormatVersion", "packageType", "sourceWorkspaceId", "workspaceFormatVersion"}:
+        raise ArchiveError("Backup manifest has unsupported fields.")
+    if not isinstance(manifest.get("applicationVersion"), str) or not manifest["applicationVersion"]:
+        raise ArchiveError("Backup manifest is missing producer application metadata.")
+    try:
+        created_at = datetime.fromisoformat(manifest["createdAt"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ArchiveError("Backup manifest has an invalid creation time.") from error
+    if created_at.tzinfo is None or created_at.utcoffset() is None:
+        raise ArchiveError("Backup manifest creation time must include a timezone offset.")
+    if not _exact_int(manifest.get("packageFormatVersion")) or manifest["packageFormatVersion"] != ARCHIVE_FORMAT_VERSION:
         raise ArchiveError("Backup package format is unsupported.")
     if manifest.get("sourceWorkspaceId") != header["sourceWorkspaceId"]:
         raise ArchiveError("Archive header does not match the encrypted backup manifest.")
     if manifest.get("packageType") != header["packageType"]:
         raise ArchiveError("Archive package type does not match its backup manifest.")
+    if not _exact_int(manifest.get("workspaceFormatVersion")) or manifest["workspaceFormatVersion"] != WORKSPACE_FORMAT_VERSION:
+        raise ArchiveError("Archive workspace format is unsupported.")
+    if manifest.get("databaseSchemaRevision") != current_revision():
+        raise ArchiveError("Archive database schema revision is unsupported.")
     if manifest.get("credentialsExcluded") is not True or manifest.get("liveJournalFilesExcluded") is not True:
         raise ArchiveError("Backup manifest does not provide required exclusion guarantees.")
 
 
 def _serialize_header(header: dict[str, Any]) -> bytes:
     return json.dumps(header, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+
+def _exact_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _derive_key(passphrase: bytes, header: dict[str, Any]) -> bytes:
@@ -361,13 +422,15 @@ def _digest_file(file_path: Path) -> tuple[str, int]:
     return digest.hexdigest(), byte_size
 
 
-def _digest_zip_entry(package: zipfile.ZipFile, path: str) -> tuple[str, int]:
+def _digest_zip_entry(package: zipfile.ZipFile, path: str, remaining_limit: int) -> tuple[str, int]:
     digest = hashlib.sha256()
     byte_size = 0
     with package.open(path) as source:
         while chunk := source.read(CHUNK_SIZE):
             digest.update(chunk)
             byte_size += len(chunk)
+            if byte_size > remaining_limit:
+                raise ArchiveError("Archive expands beyond the supported size limit.")
     return digest.hexdigest(), byte_size
 
 

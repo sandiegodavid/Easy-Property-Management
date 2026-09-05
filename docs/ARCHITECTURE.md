@@ -70,6 +70,10 @@ The server separates domain responsibilities from user-interface screens. This s
 
 `platform` code supplies cross-cutting capabilities such as database access, file storage, auditing, logging, error handling, background job execution, and configuration. It must not become a substitute for domain rules.
 
+Task lifecycle rules live in the task application/domain layer. A task unit of work provides one immediate SQLite write transaction for the application service to load state, apply a transition, persist task and reminder changes, and append the corresponding audit events atomically; it contains persistence mechanics rather than task policy.
+
+Backup status is represented by typed state, operation history, failure records, and a separate active validated-backup retention inventory before it is serialized to `backup-state.json`. Retention uses only an inventory record whose digest still matches the archive in its recorded destination; it never removes the bounded operational history itself, and removes terminal inventory records once an archive is deleted or unavailable.
+
 ## Recommended stack
 
 | Layer | Recommendation | Why |
@@ -80,13 +84,16 @@ The server separates domain responsibilities from user-interface screens. This s
 | API application | FastAPI | Typed validation, OpenAPI support, asynchronous integrations, and a clear, testable Python application structure. |
 | API contract | REST with OpenAPI | Clear contracts for the web UI, local scripts, testing, and later SaaS migration; avoids premature GraphQL complexity. |
 | Local database | SQLite in WAL mode | Embedded, portable, reliable single-operator data store with no database server to administer. |
-| Database access and migrations | SQLAlchemy with Alembic for ORM-owned product schemas; one native transactional SQLite bootstrap migration for workspace metadata/audit ledger | Alembic remains the sole migration authority once SQLAlchemy domain models begin. The narrowly scoped bootstrap migration is needed to safely introduce that foundation into existing local workspaces. |
+| Database access and migrations | SQLAlchemy with Alembic | Alembic is the sole schema authority. The greenfield baseline creates the complete current workspace schema; later revisions begin only after customer data exists. |
 | API/data validation | Pydantic | Shared validation approach for API requests, AI-structured output, and configuration. |
 | Attachments | Filesystem inside the external workspace | Keeps lease files, receipts, photos, and exports portable with the local record set. |
 | Background work | SQLite-backed jobs/outbox table run by the application | Handles ingestion, transcription, AI review preparation, reminders, and backup jobs without Redis or a message broker. |
+
 | Secrets | Operating-system credential store | Keeps external connection credentials out of Git, the workspace database, exports, and backups. |
 | Testing | Pytest unit/integration tests against a temporary SQLite workspace; browser end-to-end tests for critical operator workflows | Financial totals, records, approvals, migrations, and intake review are higher risk than screen styling. |
 | Future cloud database | PostgreSQL | Suitable future destination for tenant-isolated SaaS workspaces, concurrent users, and central operations. |
+
+TASK-001 initially exposes reminders through the in-app action summary while the application is running. Durable outbox delivery and background execution are deferred until a connected notification or background-runner feature requires them.
 
 ## Viable alternatives
 
@@ -112,7 +119,7 @@ easy-property-management/                 # Git repository; no user data
 │   ├── FEATURE_BACKLOG.md
 │   ├── PRODUCT_BRIEF.md
 │   └── ROADMAP.md
-└── application/                           # future source-code root
+└── application/                           # active application source root
     ├── apps/
     │   ├── web/
     │   │   └── src/
@@ -172,7 +179,7 @@ chosen-workspace/
 
 Git tracks only application code, schema migrations, scripts, templates, documentation, and sanitized fixtures. `.gitignore` must defensively exclude databases and their WAL/SHM files, workspace folders, attachments, imports, exports, backups, logs, and environment files. Production paths are never inferred from the current Git checkout.
 
-On startup, the application resolves the locator, validates the workspace manifest and permissions, obtains the single-writer lock, creates a consistent pre-migration backup when needed, runs transactional schema migrations, and checks workspace integrity. A missing configured workspace presents **Retry**, **Locate workspace**, or **Restore backup**—never an unnoticed empty database.
+On startup, the application resolves the locator and obtains the workspace's single-writer lock before validating the manifest, exact Alembic head, current module schemas, permissions, and integrity. A missing configured workspace presents **Retry**, **Locate workspace**, or **Restore backup**—never an unnoticed empty database.
 
 ## SQLite suitability and operating limits
 
@@ -182,7 +189,7 @@ Use WAL mode for responsive reads while the application writes, but design aroun
 
 Backups of an active workspace use SQLite's backup facility or an equivalent consistent snapshot, then package the associated attachment files. Do not copy only the main `.sqlite` file while the application is running. Restore, relocation, and SaaS-export workflows verify both records and file references before they switch to the result.
 
-`LOCAL-002` uses one versioned portable archive format for both backups and exports. It includes a consistent database snapshot, workspace-relative files, a manifest, and cryptographic hashes; it excludes connection credentials, live SQLite journal files, and nested backups. Archives require passphrase-based authenticated encryption and are written atomically to a separately selected backup destination. Manual backups are always available. Automatic backups use a sensible default schedule once a destination exists, without requiring user scheduling, and run before risky workspace operations. A restore validates the archive into a new staging workspace and never overwrites the active workspace in place.
+`LOCAL-002` uses one versioned portable archive format for both backups and exports. It includes a consistent database snapshot, workspace-relative files, a manifest, and cryptographic hashes; it excludes connection credentials, live SQLite journal files, and nested backups. Archive compatibility is determined by archive, workspace, and database-schema format markers; the producer application release version is traceability metadata only. Archives require passphrase-based authenticated encryption and are written atomically to a separately selected backup destination. Manual backups are always available. Automatic backups use a sensible default schedule once a destination exists, without requiring user scheduling, and run before risky workspace operations. A restore validates the archive into a new staging workspace and never overwrites the active workspace in place.
 
 ## AI and connector architecture
 

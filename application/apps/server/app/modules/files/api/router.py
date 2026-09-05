@@ -5,7 +5,8 @@ import tempfile
 from pathlib import Path
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
-from app.modules.files.application.service import FileError, FileService, MAX_FILE_BYTES
+from app.modules.files.application.errors import MAX_FILE_BYTES
+from app.modules.files.application.service import FileError, FileService
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 
 

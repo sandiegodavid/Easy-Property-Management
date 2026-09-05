@@ -1,25 +1,24 @@
 """SQLAlchemy adapter for FILE-001 metadata and its audit transaction."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
+from app.modules.files.application.ports import FileAuditChange, FileLink
 from app.modules.files.domain.models import StoredFile
 from app.modules.files.infrastructure.sqlalchemy_models import FileLinkModel, FileRecordModel
 from app.platform.sqlite_engine import create_sqlite_engine
 
 
-class SQLiteFileMetadataRepository:
+class SQLiteFileUnitOfWork:
     def __init__(self, database: Path, recorder: AuditRecorder) -> None:
         self.engine = create_sqlite_engine(database)
         self.recorder = recorder
 
-    def create(self, item: StoredFile, entity_type: str | None, entity_id: str | None, purpose: str) -> None:
+    def write(self, item: StoredFile, link: FileLink | None, audit_changes: list[FileAuditChange]) -> None:
         with self.engine.begin() as connection:
             connection.execute(FileRecordModel.__table__.insert().values(
                 id=item.id, original_name=item.original_name, media_type=item.media_type,
@@ -27,17 +26,15 @@ class SQLiteFileMetadataRepository:
                 relative_path=item.relative_path, created_at=item.created_at,
             ))
             raw = connection.connection.driver_connection
-            self.recorder.record_change(raw, entity_type="file", entity_id=item.id, action="created",
-                                        before=None, after=item.to_dict(), reason="file_stored")
-            if entity_type:
-                link_id = str(uuid4()); now = datetime.now(UTC).isoformat()
+            if link is not None:
                 connection.execute(FileLinkModel.__table__.insert().values(
-                    id=link_id, file_id=item.id, entity_type=entity_type, entity_id=entity_id,
-                    purpose=purpose, created_at=now,
+                    id=link.id, file_id=item.id, entity_type=link.entity_type, entity_id=link.entity_id,
+                    purpose=link.purpose, created_at=link.created_at,
                 ))
-                self.recorder.record_change(raw, entity_type="file_link", entity_id=link_id, action="created",
-                                            before=None, after={"fileId": item.id, "entityType": entity_type,
-                                            "entityId": entity_id, "purpose": purpose}, reason="file_linked")
+            for change in audit_changes:
+                self.recorder.record_change(raw, entity_type=change.entity_type, entity_id=change.entity_id,
+                                            action=change.action, before=None, after=change.after,
+                                            reason=change.reason, correlation_id=change.correlation_id)
 
     def get(self, file_id: str) -> StoredFile | None:
         with Session(self.engine) as session:

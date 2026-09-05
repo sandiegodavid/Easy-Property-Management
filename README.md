@@ -1,19 +1,15 @@
 # Easy Property Management
 
-Easy Property Management is a local-first, AI-assisted property-management application planned for independent landlords and managers with roughly 1–50 rentable spaces. It will support self-owned and client-managed residential and office properties, with a future path to SaaS collaboration.
-
-## Current status
-
-`LOCAL-001` is implemented. `LOCAL-002` is in progress: its encrypted local backup, export, validation, and restore foundation is available while the remaining acceptance work is tracked in the feature backlog.
+Easy Property Management is a local-first, AI-assisted property-management application for independent landlords and managers with roughly 1–50 rentable spaces. Its implemented foundation supports a private local workspace, encrypted backup/restore, append-only audit history, managed files, and tasks/reminders; property-management workflows build on this foundation.
 
 ## Repository layout
 
 ```text
 docs/           Product brief, decisions, backlog, roadmap, and architecture
-application/    Reserved source-code root and local configuration template
+application/    FastAPI application, Alembic baseline, tests, and local configuration template
 ```
 
-The planned stack is React/Vite/TypeScript for the interface, with Python/FastAPI, SQLAlchemy, Alembic, SQLite, and a future PostgreSQL SaaS path. See [the architecture plan](docs/ARCHITECTURE.md) for modules, folder structure, AI boundaries, workspace design, and stack rationale.
+The planned stack is React/Vite/TypeScript for the interface, with Python/FastAPI, SQLAlchemy, Alembic, SQLite, and a future PostgreSQL SaaS path. A new workspace is initialized from one current Alembic baseline; this greenfield build accepts only the latest workspace and archive formats. See [the architecture plan](docs/ARCHITECTURE.md) for modules, folder structure, AI boundaries, workspace design, and stack rationale.
 
 ## Planning documents
 
@@ -36,17 +32,15 @@ application/config.example.json     # Git-tracked template with a fake path
 
 Set `localWorkspacePath` in the live file to the chosen external data folder. The live configuration file, SQLite database, attachments, backups, exports, and connection credentials must never be committed. The configuration template is safe to commit because it contains no live path or user data.
 
-## Implementation starting point
+## Implemented foundation
 
-When implementation begins, work starts in [application](application) using the existing skeleton:
+[application](application) contains the implemented local backend and schema baseline:
 
-- `apps/web` — React interface
-- `apps/server` — FastAPI application
-- `packages` — API contracts, reusable UI, and test support
-- `database` — SQLite and future PostgreSQL migrations
-- `scripts` — operator setup, backup, restore, and health checks
+- `apps/server` — FastAPI application, feature modules, API routes, and tests
+- `database` — current SQLite Alembic baseline and future migration location
+- `config.example.json` — safe, Git-tracked local-workspace configuration template
 
-Follow the feature backlog sequence and preserve the local workspace, approval, audit, and migration requirements documented in `docs/`.
+The React interface and shared web packages are planned follow-on work. Follow the feature backlog sequence and preserve the local workspace, approval, audit, and migration requirements documented in `docs/`.
 
 ## Local workspace foundation
 
@@ -64,7 +58,7 @@ The workspace command validates the Git-ignored `config.local.json`, rejects pat
 
 ## Encrypted backup and restore
 
-Choose a separate external destination before routine backups. The command saves only that location in the Git-ignored configuration; it never stores a backup passphrase there.
+Choose a separate external destination before routine backups. Its filesystem must support atomic hard-link publication; configuration checks this and rejects unsupported destinations, including many FAT/exFAT removable drives. This preserves the guarantee that only complete encrypted archives appear in synchronized folders. The command saves only that location in the Git-ignored configuration; it never stores a backup passphrase there.
 
 ```bash
 python -m app configure-backup-destination /absolute/path/to/encrypted-backups

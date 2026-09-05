@@ -20,7 +20,7 @@ Routine non-sensitive presentation preferences and temporary client-side form st
 
 ## Data model
 
-Create an append-only `audit_events` table in the workspace database. It is independent of individual domain tables so every MVP module can use one consistent history format. The initial platform migration is versioned, records its applied version, takes a SQLite-consistent private migration-safety snapshot before changing the schema, and writes an audit migration outcome. It runs as one explicit SQLite transaction; failed validation or migration leaves the live schema unchanged.
+Create an append-only `audit_events` table in the workspace database. It is independent of individual domain tables so every MVP module can use one consistent history format. The current Alembic baseline creates it with its append-only triggers; opening accepts only that exact current schema.
 
 | Field | Meaning |
 | --- | --- |

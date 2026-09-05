@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 
 WORKSPACE_FORMAT_VERSION = 1
@@ -28,6 +28,8 @@ class WorkspaceManifest:
     def from_dict(cls, raw: object) -> "WorkspaceManifest":
         if not isinstance(raw, dict):
             raise ValueError("Workspace manifest must be a JSON object.")
+        if set(raw) != {"workspaceId", "formatVersion", "createdAt", "databasePath"}:
+            raise ValueError("Workspace manifest has unsupported fields.")
         try:
             workspace_id = raw["workspaceId"]
             format_version = raw["formatVersion"]
@@ -47,10 +49,12 @@ class WorkspaceManifest:
             parsed_created_at = datetime.fromisoformat(created_at)
         except ValueError as error:
             raise ValueError("createdAt must be an ISO-8601 timestamp.") from error
+        if parsed_created_at.tzinfo is None or parsed_created_at.utcoffset() is None:
+            raise ValueError("createdAt must include a timezone offset.")
 
         return cls(
             workspace_id=workspace_id,
             format_version=format_version,
-            created_at=parsed_created_at,
+            created_at=parsed_created_at.astimezone(UTC),
             database_path=database_path,
         )

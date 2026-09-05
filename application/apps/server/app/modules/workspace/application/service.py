@@ -12,11 +12,9 @@ from uuid import uuid4
 
 from app.modules.workspace.domain.models import WORKSPACE_FORMAT_VERSION, WorkspaceManifest
 from app.modules.workspace.infrastructure.sqlite_store import SQLiteWorkspaceStore, WorkspaceDatabaseError
+from app.modules.workspace.infrastructure.store_factory import create_workspace_store
 from app.platform.config import LocalConfig, load_local_config, repository_root
-from app.platform.migrations import PlatformMigrationError
-from app.platform.file_migrations import FileMigrationError, upgrade_file_schema
-from sqlalchemy.exc import SQLAlchemyError
-from typing import Callable, Protocol
+from app.platform.product_migrations import ProductSchemaError, initialize_latest_schema, validate_latest_schema
 
 
 class WorkspaceError(RuntimeError):
@@ -52,22 +50,15 @@ class WorkspacePaths:
         return self.root / "backups"
 
 
-class MigrationRunner(Protocol):
-    def apply(self, manifest: WorkspaceManifest) -> None: ...
-
-
-MigrationRunnerFactory = Callable[[Path, Path], MigrationRunner]
-
-
 class WorkspaceService:
-    def __init__(self, config: LocalConfig, migration_runner_factory: MigrationRunnerFactory) -> None:
+    def __init__(self, config: LocalConfig, workspace_store_factory=create_workspace_store) -> None:
         self.config = config
         self.paths = WorkspacePaths(root=config.workspace_path)
-        self.migration_runner_factory = migration_runner_factory
+        self.workspace_store_factory = workspace_store_factory
 
     @classmethod
-    def from_local_config(cls, config_path: Path | None, migration_runner_factory: MigrationRunnerFactory) -> "WorkspaceService":
-        return cls(load_local_config(config_path), migration_runner_factory)
+    def from_local_config(cls, config_path: Path | None) -> "WorkspaceService":
+        return cls(load_local_config(config_path))
 
     def initialize(self) -> WorkspaceManifest:
         """Explicitly create a new workspace or validate the one already at this path."""
@@ -90,19 +81,21 @@ class WorkspaceService:
         staging_paths = WorkspacePaths(root=self._staging_root())
         try:
             self._create_workspace_layout(staging_paths)
-            SQLiteWorkspaceStore(staging_paths.database).initialize(manifest)
-            self._apply_platform_migrations(staging_paths, manifest)
+            initialize_latest_schema(staging_paths.database)
+            self.workspace_store_factory(staging_paths.database).persist_identity(manifest)
             self._secure_file(staging_paths.database)
             self._write_manifest(staging_paths, manifest)
+            self._validate_workspace_database(staging_paths, manifest, integrity_check=True)
             self._publish_staging_workspace(staging_paths)
-        except (OSError, WorkspaceDatabaseError, PlatformMigrationError, FileMigrationError, SQLAlchemyError) as error:
+        except (OSError, WorkspaceDatabaseError, ProductSchemaError) as error:
             self._discard_staging_workspace(staging_paths)
             raise WorkspaceError(f"Unable to initialize workspace at {self.paths.root}: {error}") from error
         return self.open()
 
-    def open(self, *, integrity_check: bool = False, migrate: bool = False) -> WorkspaceManifest:
+    def open(self, *, integrity_check: bool = False) -> WorkspaceManifest:
         """Validate an existing workspace and enforce private local permissions."""
         self._validate_external_location()
+        self._validate_workspace_paths()
         if not self.paths.manifest.is_file():
             raise WorkspaceNotInitializedError(
                 f"No workspace manifest found at {self.paths.manifest}. "
@@ -123,10 +116,8 @@ class WorkspaceService:
             raise WorkspaceError("Workspace manifest points to an unsupported database location.")
 
         try:
-            SQLiteWorkspaceStore(self.paths.database).verify(manifest, integrity_check=integrity_check)
-            if migrate:
-                self._apply_platform_migrations(self.paths, manifest)
-        except (WorkspaceDatabaseError, PlatformMigrationError, FileMigrationError, SQLAlchemyError) as error:
+            self._validate_workspace_database(self.paths, manifest, integrity_check=integrity_check)
+        except (WorkspaceDatabaseError, ProductSchemaError) as error:
             raise WorkspaceError(f"Workspace database is invalid: {error}") from error
         try:
             self._secure_existing_workspace_paths()
@@ -134,17 +125,33 @@ class WorkspaceService:
             raise WorkspaceError(f"Unable to secure workspace permissions: {error}") from error
         return manifest
 
-    def _apply_platform_migrations(self, paths: WorkspacePaths, manifest: WorkspaceManifest) -> None:
-        self.migration_runner_factory(paths.database, paths.backups).apply(manifest)
-        upgrade_file_schema(paths.database, paths.backups)
+    @staticmethod
+    def _validate_workspace_database(paths: WorkspacePaths, manifest: WorkspaceManifest, *, integrity_check: bool) -> None:
+        SQLiteWorkspaceStore(paths.database).verify(manifest, integrity_check=integrity_check)
+        validate_latest_schema(paths.database)
 
     def _validate_external_location(self) -> None:
+        if self.paths.root.is_symlink():
+            raise WorkspaceError("localWorkspacePath must not be a symbolic link.")
         repository_path = repository_root().resolve()
         workspace_path = self.paths.root.resolve()
         if workspace_path == repository_path or repository_path in workspace_path.parents:
             raise WorkspaceError(
                 "localWorkspacePath must point outside the Git repository to keep user data out of version control."
             )
+
+    def _validate_workspace_paths(self) -> None:
+        """Required workspace paths must be real entries contained by the workspace root."""
+        root = self.paths.root.resolve()
+        for path in (self.paths.manifest, self.paths.database.parent, self.paths.database,
+                     self.paths.files, self.paths.exports, self.paths.backups):
+            if not path.exists():
+                continue
+            if path.is_symlink():
+                raise WorkspaceError(f"Workspace path must not be a symbolic link: {path}")
+            resolved = path.resolve()
+            if resolved != root and root not in resolved.parents:
+                raise WorkspaceError(f"Workspace path escapes its configured root: {path}")
 
     def _staging_root(self) -> Path:
         return self.paths.root.parent / f".{self.paths.root.name}.initializing.{uuid4().hex}"
@@ -164,6 +171,7 @@ class WorkspaceService:
             shutil.rmtree(staging_paths.root, ignore_errors=True)
 
     def _secure_existing_workspace_paths(self) -> None:
+        self._validate_workspace_paths()
         self._secure_directory(self.paths.root)
         for directory in (self.paths.database.parent, self.paths.files, self.paths.exports, self.paths.backups):
             if directory.exists():

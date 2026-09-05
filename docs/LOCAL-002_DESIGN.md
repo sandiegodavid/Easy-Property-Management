@@ -125,7 +125,7 @@ Restore cannot delete, overwrite, or mutate the active workspace. The operator m
 
 ## Backup destination and retention
 
-The backup destination is configured separately from the live workspace. It may be a secondary local disk, removable drive, or synchronized folder. The application warns if it is the same volume as the live workspace and explains that synchronized folders are appropriate only for completed encrypted archives, never for the live SQLite database.
+The backup destination is configured separately from the live workspace. It may be a secondary local disk, removable drive, or synchronized folder **only when its filesystem supports atomic hard-link publication**. Configuration performs a capability check and rejects unsupported destinations (including many exFAT/FAT removable drives), because an incomplete archive must never appear at its final filename. The application warns if it is the same volume as the live workspace and explains that synchronized folders are appropriate only for completed encrypted archives, never for the live SQLite database.
 
 The default retention policy should be understandable and conservative:
 

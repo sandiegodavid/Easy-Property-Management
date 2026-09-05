@@ -1,11 +1,10 @@
 """SQLAlchemy-owned FILE-001 schema."""
 from __future__ import annotations
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column
+from app.platform.sqlalchemy_models import LocalBase
 
-class FileBase(DeclarativeBase): pass
-
-class FileRecordModel(FileBase):
+class FileRecordModel(LocalBase):
     __tablename__ = "file_records"
     id: Mapped[str] = mapped_column(String, primary_key=True)
     original_name: Mapped[str] = mapped_column(String, nullable=False)
@@ -16,7 +15,7 @@ class FileRecordModel(FileBase):
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (Index("file_records_content", "content_sha256"),)
 
-class FileLinkModel(FileBase):
+class FileLinkModel(LocalBase):
     __tablename__ = "file_links"
     id: Mapped[str] = mapped_column(String, primary_key=True)
     file_id: Mapped[str] = mapped_column(ForeignKey("file_records.id"), nullable=False)

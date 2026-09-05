@@ -3,18 +3,15 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, Mapping, Protocol, Sequence
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 ActorKind = Literal["local_operator", "system", "connector", "ai_assistant"]
 ACTOR_KINDS = frozenset({"local_operator", "system", "connector", "ai_assistant"})
-AUDIT_ACTIONS = frozenset({
-    "created", "updated", "deleted", "restored", "status_changed", "approved", "rejected", "imported",
-    "ingested", "ai_draft_created", "ai_reviewed", "migration_applied", "operation_summary",
-})
 _SENSITIVE_FIELD = re.compile(r"(?:access|refresh|client)?_?(?:token|secret)|password|passphrase|api_?key|account_?number|credentials?", re.I)
 _MISSING = object()
 
@@ -38,7 +35,7 @@ class DefaultAuditSnapshotPolicy:
         _validate_value(snapshot, "$")
         if snapshot is not None:
             try:
-                json.dumps(snapshot, sort_keys=True, separators=(",", ":"))
+                json.dumps(snapshot, sort_keys=True, separators=(",", ":"), allow_nan=False)
             except (TypeError, ValueError) as error:
                 raise ValueError("Audit snapshots must be portable JSON values.") from error
 
@@ -87,11 +84,13 @@ class AuditEvent:
     @classmethod
     def change(cls, *, entity_type: str, entity_id: str, action: str, before_snapshot: dict[str, Any] | None,
                after_snapshot: dict[str, Any] | None, actor_kind: ActorKind = "local_operator", reason: str | None = None,
-               actor_reference: str | None = None, correlation_id: str | None = None,
+               actor_reference: str | None = None, correlation_id: str | None = None, event_id: str | None = None,
+               occurred_at: datetime | None = None,
                snapshot_policy: AuditSnapshotPolicy = DEFAULT_SNAPSHOT_POLICY) -> "AuditEvent":
         _validate_classification(entity_type, entity_id, action, actor_kind)
         snapshot_policy.validate(before_snapshot); snapshot_policy.validate(after_snapshot)
-        return cls(str(uuid4()), datetime.now(UTC), entity_type, entity_id, action, before_snapshot, after_snapshot,
+        event_time = datetime.now(UTC) if occurred_at is None else _utc_datetime(occurred_at)
+        return cls(_canonical_event_id(event_id), event_time, entity_type, entity_id, action, before_snapshot, after_snapshot,
                    changed_paths(before_snapshot, after_snapshot), reason, actor_kind, actor_reference,
                    correlation_id or str(uuid4()), snapshot_policy.schema_version)
 
@@ -112,18 +111,30 @@ def changed_paths(before: Any, after: Any, prefix: str = "") -> tuple[str, ...]:
     return (prefix or "$",)
 
 
-def validate_snapshot(snapshot: dict[str, Any] | None, path: str = "") -> None:
-    """Compatibility wrapper for the default domain policy."""
-    DEFAULT_SNAPSHOT_POLICY.validate(snapshot)
-
-
 def _validate_classification(entity_type: str, entity_id: str, action: str, actor_kind: str) -> None:
     if not all(isinstance(value, str) and value.strip() for value in (entity_type, entity_id, action)):
         raise ValueError("Audit entity type, entity ID, and action must be non-empty strings.")
     if actor_kind not in ACTOR_KINDS:
         raise ValueError(f"Unsupported audit actor kind: {actor_kind}")
-    if action not in AUDIT_ACTIONS and not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", action):
+    if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", action):
         raise ValueError(f"Unsupported audit action: {action}")
+
+
+def _canonical_event_id(event_id: str | None) -> str:
+    if event_id is None:
+        return str(uuid4())
+    if not isinstance(event_id, str):
+        raise ValueError("Audit event ID must be a UUID string.")
+    try:
+        return str(UUID(event_id))
+    except (ValueError, AttributeError) as error:
+        raise ValueError("Audit event ID must be a UUID string.") from error
+
+
+def _utc_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("Audit event time must be timezone-aware.")
+    return value.astimezone(UTC)
 
 
 def _validate_value(value: Any, path: str) -> None:
@@ -132,16 +143,22 @@ def _validate_value(value: Any, path: str) -> None:
             if not isinstance(key, str):
                 raise ValueError(f"Audit snapshot key must be a string at {path}")
             child_path = f"{path}.{key}"
-            normalized = re.sub(r"[^a-z0-9]", "", key.lower())
-            if _SENSITIVE_FIELD.fullmatch(normalized) or normalized.endswith(("token", "secret", "apikey", "accountnumber")):
+            if _is_sensitive_key(key):
                 raise ValueError(f"Audit snapshots must not contain secret field: {child_path}")
             _validate_value(child, child_path)
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         for index, child in enumerate(value): _validate_value(child, f"{path}[{index}]")
+    elif isinstance(value, float) and not math.isfinite(value):
+        raise ValueError(f"Audit snapshots must not contain non-finite numbers at {path}")
 
 
 def _redact_value(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return {str(key): ("[redacted]" if _SENSITIVE_FIELD.fullmatch(re.sub(r"[^a-z0-9]", "", str(key).lower())) else _redact_value(child)) for key, child in value.items()}
+        return {str(key): ("[redacted]" if _is_sensitive_key(str(key)) else _redact_value(child)) for key, child in value.items()}
     if isinstance(value, list): return [_redact_value(child) for child in value]
     return value
+
+
+def _is_sensitive_key(key: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]", "", key.lower())
+    return bool(_SENSITIVE_FIELD.fullmatch(normalized) or normalized.endswith(("token", "secret", "apikey", "accountnumber")))

@@ -6,6 +6,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
+from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.workspace.domain.models import WorkspaceManifest
 
 
@@ -14,26 +15,17 @@ class WorkspaceDatabaseError(RuntimeError):
 
 
 class SQLiteWorkspaceStore:
-    def __init__(self, database_path: Path) -> None:
+    def __init__(self, database_path: Path, audit_recorder: AuditRecorder | None = None) -> None:
         self.database_path = database_path
+        self.audit_recorder = audit_recorder
 
-    def initialize(self, manifest: WorkspaceManifest) -> None:
-        """Create only immutable workspace identity metadata, not product tables."""
-        self.database_path.parent.mkdir(parents=True, exist_ok=True)
+    def persist_identity(self, manifest: WorkspaceManifest) -> None:
+        """Persist identity into the Alembic-created baseline schema."""
         try:
+            self._reject_symlink()
             with closing(sqlite3.connect(self.database_path)) as connection:
                 connection.execute("PRAGMA journal_mode = WAL")
                 connection.execute("PRAGMA foreign_keys = ON")
-                connection.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS workspace_metadata (
-                        singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-                        workspace_id TEXT NOT NULL UNIQUE,
-                        format_version INTEGER NOT NULL,
-                        created_at TEXT NOT NULL
-                    )
-                    """
-                )
                 existing = connection.execute(
                     "SELECT workspace_id, format_version, created_at FROM workspace_metadata WHERE singleton = 1"
                 ).fetchone()
@@ -44,13 +36,26 @@ class SQLiteWorkspaceStore:
                         "VALUES (1, ?, ?, ?)",
                         expected,
                     )
+                    if self.audit_recorder is None:
+                        raise WorkspaceDatabaseError("Workspace identity auditing is not configured.")
+                    self.audit_recorder.record_change(
+                        connection,
+                        entity_type="workspace",
+                        entity_id=manifest.workspace_id,
+                        action="created",
+                        before=None,
+                        after=manifest.to_dict(),
+                        actor_kind="system",
+                        reason="workspace_initialized",
+                    )
                 elif existing != expected:
                     raise WorkspaceDatabaseError("Workspace database identity does not match its manifest.")
                 connection.commit()
         except sqlite3.Error as error:
-            raise WorkspaceDatabaseError(f"Unable to initialize SQLite workspace database: {error}") from error
+            raise WorkspaceDatabaseError(f"Unable to persist SQLite workspace identity: {error}") from error
 
     def verify(self, manifest: WorkspaceManifest, *, integrity_check: bool = False) -> None:
+        self._reject_symlink()
         if not self.database_path.is_file():
             raise WorkspaceDatabaseError(f"Workspace database is missing: {self.database_path}")
         database_uri = f"{self.database_path.resolve().as_uri()}?mode=ro"
@@ -67,3 +72,7 @@ class SQLiteWorkspaceStore:
         expected = (manifest.workspace_id, manifest.format_version, manifest.created_at.isoformat())
         if metadata != expected:
             raise WorkspaceDatabaseError("Workspace database identity does not match its manifest.")
+
+    def _reject_symlink(self) -> None:
+        if self.database_path.is_symlink() or self.database_path.parent.is_symlink():
+            raise WorkspaceDatabaseError("Workspace database paths must not be symbolic links.")

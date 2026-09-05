@@ -17,6 +17,7 @@ from app.modules.workspace.application.service import WorkspaceError, WorkspaceP
 from app.modules.workspace.domain.models import WorkspaceManifest
 from app.modules.workspace.infrastructure.encrypted_archive import (
     ARCHIVE_FORMAT_VERSION,
+    APPLICATION_VERSION,
     ArchiveContents,
     ArchiveError,
     create_payload_zip,
@@ -28,6 +29,7 @@ from app.modules.workspace.infrastructure.encrypted_archive import (
     write_encrypted_archive,
 )
 from app.platform.config import LocalConfig
+from app.platform.product_migrations import current_revision
 
 
 class WorkspaceArchiveService:
@@ -112,10 +114,7 @@ class WorkspaceArchiveService:
         if extracted != contents.manifest["files"]:
             raise BackupError("Restored files do not match the validated archive inventory.")
         self._create_runtime_directories(workspace_root)
-        service = WorkspaceService(
-            LocalConfig(config_path=self.workspace_service.config.config_path, workspace_path=workspace_root),
-            self.workspace_service.migration_runner_factory,
-        )
+        service = WorkspaceService(LocalConfig(config_path=self.workspace_service.config.config_path, workspace_path=workspace_root))
         try:
             manifest = service.open(integrity_check=True)
         except WorkspaceError as error:
@@ -132,7 +131,7 @@ class WorkspaceArchiveService:
         with closing(sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro", uri=True)) as connection:
             table = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='file_records'").fetchone()
             if not table:
-                return
+                raise BackupError("Archive database is missing the required file_records table.")
             records = connection.execute("SELECT relative_path, content_sha256, size_bytes FROM file_records").fetchall()
         files_root = WorkspacePaths(workspace_root).files.resolve()
         expected_paths: set[Path] = set()
@@ -148,11 +147,9 @@ class WorkspaceArchiveService:
                     size += len(chunk); digest.update(chunk)
             if size != expected_size or digest.hexdigest() != expected_hash:
                 raise BackupError("A managed file does not match its recorded size or content hash.")
-        managed_root = files_root / "managed"
-        if managed_root.exists():
-            actual_paths = {path.resolve() for path in managed_root.rglob("*") if path.is_file()}
-            if actual_paths != expected_paths:
-                raise BackupError("Managed file storage contains temporary or unreferenced content.")
+        actual_paths = {path.resolve() for path in files_root.rglob("*") if path.is_file()}
+        if actual_paths != expected_paths:
+            raise BackupError("Workspace file storage contains temporary or unreferenced content.")
 
     def _stage_live_workspace(self, payload: Path) -> None:
         workspace = payload / "workspace"
@@ -202,7 +199,8 @@ class WorkspaceArchiveService:
     @staticmethod
     def _package_manifest(manifest: WorkspaceManifest, package_type: PackageType, payload: Path) -> dict[str, object]:
         return {
-            "applicationVersion": "0.1.0", "credentialsExcluded": True, "createdAt": datetime.now(UTC).isoformat(),
+            "applicationVersion": APPLICATION_VERSION, "credentialsExcluded": True, "createdAt": datetime.now(UTC).isoformat(),
             "files": file_inventory(payload), "liveJournalFilesExcluded": True, "packageFormatVersion": ARCHIVE_FORMAT_VERSION,
-            "packageType": package_type, "schemaVersion": manifest.format_version, "sourceWorkspaceId": manifest.workspace_id,
+            "packageType": package_type, "workspaceFormatVersion": manifest.format_version,
+            "databaseSchemaRevision": current_revision(), "sourceWorkspaceId": manifest.workspace_id,
         }

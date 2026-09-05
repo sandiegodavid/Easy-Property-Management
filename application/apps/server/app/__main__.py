@@ -8,6 +8,8 @@ from pathlib import Path
 
 from app.modules.workspace.application.backup_service import BackupError, BackupService
 from app.modules.workspace.application.service import WorkspaceService
+from app.modules.audit.application.recorder import AuditRecorder
+from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 
 
 def _config_path(value: str | None) -> Path | None:
@@ -46,8 +48,7 @@ def main() -> None:
     args = parser.parse_args()
 
     config_path = _config_path(args.config)
-    from app.platform.migrations import build_bootstrap_migration_runner
-    service = WorkspaceService.from_local_config(config_path, build_bootstrap_migration_runner)
+    service = WorkspaceService.from_local_config(config_path)
 
     if args.command == "initialize-workspace":
         manifest = service.initialize()
@@ -62,7 +63,8 @@ def main() -> None:
         print(f"Format version: {manifest.format_version}")
         return
 
-    backups = BackupService(service)
+    backups = BackupService(service, AuditRecorder(SQLiteAuditRepository(service.paths.database)),
+                            lambda database: AuditRecorder(SQLiteAuditRepository(database)))
     if args.command == "configure-backup-destination":
         updated = backups.configure_destination(Path(args.destination))
         print(f"Backup destination ready: {updated.backup_destination_path}")

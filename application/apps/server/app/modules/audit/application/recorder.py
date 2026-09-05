@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Protocol
 
 from app.modules.audit.domain.models import ActorKind, AuditEvent, AuditSnapshotPolicy, DEFAULT_SNAPSHOT_POLICY
@@ -36,11 +37,14 @@ class AuditRecorder:
         reason: str | None = None,
         actor_reference: str | None = None,
         correlation_id: str | None = None,
+        event_id: str | None = None,
+        occurred_at: datetime | None = None,
     ) -> AuditEvent:
         event = AuditEvent.change(
             entity_type=entity_type, entity_id=entity_id, action=action, before_snapshot=before,
             after_snapshot=after, actor_kind=actor_kind, reason=reason, actor_reference=actor_reference,
             correlation_id=correlation_id, snapshot_policy=self.snapshot_policy,
+            event_id=event_id, occurred_at=occurred_at,
         )
         self.repository.append(connection, event)
         return event

@@ -10,8 +10,7 @@ from unittest.mock import patch
 from app.modules.workspace.application.service import WorkspaceError, WorkspaceNotInitializedError, WorkspaceService
 from app.modules.workspace.infrastructure.sqlite_store import SQLiteWorkspaceStore
 from app.platform.config import LocalConfig, LocalConfigError, load_local_config, repository_root
-from app.platform.migrations import PlatformMigrationError
-from app.platform.migrations import build_bootstrap_migration_runner
+from app.platform.product_migrations import ProductSchemaError
 
 
 class WorkspaceServiceTests(unittest.TestCase):
@@ -20,10 +19,7 @@ class WorkspaceServiceTests(unittest.TestCase):
         self.addCleanup(self.temporary_directory.cleanup)
         self.root = Path(self.temporary_directory.name)
         self.workspace_path = self.root / "operator-workspace"
-        self.service = WorkspaceService(
-            LocalConfig(config_path=self.root / "config.local.json", workspace_path=self.workspace_path),
-            build_bootstrap_migration_runner,
-        )
+        self.service = WorkspaceService(LocalConfig(config_path=self.root / "config.local.json", workspace_path=self.workspace_path))
 
     def test_initialize_creates_a_stable_manifest_and_persistent_sqlite_store(self) -> None:
         manifest = self.service.initialize()
@@ -52,30 +48,13 @@ class WorkspaceServiceTests(unittest.TestCase):
         with self.assertRaises(WorkspaceError):
             self.service.initialize()
 
-    def test_initialize_cleans_staging_workspace_when_migration_fails(self) -> None:
-        class FailingRunner:
-            def apply(self, manifest):
-                raise PlatformMigrationError("snapshot unavailable")
-
-        service = WorkspaceService(self.service.config, lambda database, backups: FailingRunner())
-        with self.assertRaisesRegex(WorkspaceError, "snapshot unavailable"):
-            service.initialize()
-        self.assertFalse(any(self.root.glob(".operator-workspace.initializing.*")))
-
     def test_initialize_rejects_the_application_checkout(self) -> None:
-        unsafe_service = WorkspaceService(
-            LocalConfig(config_path=self.root / "config.local.json", workspace_path=Path.cwd()), build_bootstrap_migration_runner
-        )
+        unsafe_service = WorkspaceService(LocalConfig(config_path=self.root / "config.local.json", workspace_path=Path.cwd()))
         with self.assertRaises(WorkspaceError):
             unsafe_service.initialize()
 
     def test_initialize_rejects_a_repository_sibling(self) -> None:
-        unsafe_service = WorkspaceService(
-            LocalConfig(
-                config_path=self.root / "config.local.json",
-                workspace_path=repository_root() / "workspace-data-must-not-live-here",
-            ), build_bootstrap_migration_runner
-        )
+        unsafe_service = WorkspaceService(LocalConfig(config_path=self.root / "config.local.json", workspace_path=repository_root() / "workspace-data-must-not-live-here"))
         with self.assertRaises(WorkspaceError):
             unsafe_service.initialize()
 
@@ -103,6 +82,13 @@ class WorkspaceServiceTests(unittest.TestCase):
         self.assertFalse(self.workspace_path.exists())
         self.assertEqual(list(self.root.glob(".operator-workspace.initializing.*")), [])
 
+    def test_failed_staging_validation_does_not_publish_workspace(self) -> None:
+        with patch("app.modules.workspace.application.service.validate_latest_schema", side_effect=ProductSchemaError("invalid baseline")):
+            with self.assertRaisesRegex(WorkspaceError, "invalid baseline"):
+                self.service.initialize()
+        self.assertFalse(self.workspace_path.exists())
+        self.assertEqual(list(self.root.glob(".operator-workspace.initializing.*")), [])
+
     def test_corrupt_database_is_reported_as_a_workspace_error(self) -> None:
         self.service.initialize()
         self.service.paths.database.write_bytes(b"not a sqlite database")
@@ -110,6 +96,16 @@ class WorkspaceServiceTests(unittest.TestCase):
         self.service.paths.database.with_name(f"{self.service.paths.database.name}-shm").unlink(missing_ok=True)
 
         with self.assertRaisesRegex(WorkspaceError, "Workspace database is invalid"):
+            self.service.open()
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "symbolic links are not supported")
+    def test_open_rejects_a_workspace_database_symbolic_link(self) -> None:
+        self.service.initialize()
+        external_database = self.root / "external.sqlite"
+        external_database.write_bytes(self.service.paths.database.read_bytes())
+        self.service.paths.database.unlink()
+        self.service.paths.database.symlink_to(external_database)
+        with self.assertRaisesRegex(WorkspaceError, "symbolic link"):
             self.service.open()
 
     def test_normal_workspace_open_skips_full_integrity_scan(self) -> None:
