@@ -14,6 +14,8 @@ from app.modules.workspace.domain.models import WORKSPACE_FORMAT_VERSION, Worksp
 from app.modules.workspace.infrastructure.sqlite_store import SQLiteWorkspaceStore, WorkspaceDatabaseError
 from app.platform.config import LocalConfig, load_local_config, repository_root
 from app.platform.migrations import PlatformMigrationError
+from app.platform.file_migrations import FileMigrationError, upgrade_file_schema
+from sqlalchemy.exc import SQLAlchemyError
 from typing import Callable, Protocol
 
 
@@ -93,7 +95,7 @@ class WorkspaceService:
             self._secure_file(staging_paths.database)
             self._write_manifest(staging_paths, manifest)
             self._publish_staging_workspace(staging_paths)
-        except (OSError, WorkspaceDatabaseError, PlatformMigrationError) as error:
+        except (OSError, WorkspaceDatabaseError, PlatformMigrationError, FileMigrationError, SQLAlchemyError) as error:
             self._discard_staging_workspace(staging_paths)
             raise WorkspaceError(f"Unable to initialize workspace at {self.paths.root}: {error}") from error
         return self.open()
@@ -124,7 +126,7 @@ class WorkspaceService:
             SQLiteWorkspaceStore(self.paths.database).verify(manifest, integrity_check=integrity_check)
             if migrate:
                 self._apply_platform_migrations(self.paths, manifest)
-        except (WorkspaceDatabaseError, PlatformMigrationError) as error:
+        except (WorkspaceDatabaseError, PlatformMigrationError, FileMigrationError, SQLAlchemyError) as error:
             raise WorkspaceError(f"Workspace database is invalid: {error}") from error
         try:
             self._secure_existing_workspace_paths()
@@ -134,6 +136,7 @@ class WorkspaceService:
 
     def _apply_platform_migrations(self, paths: WorkspacePaths, manifest: WorkspaceManifest) -> None:
         self.migration_runner_factory(paths.database, paths.backups).apply(manifest)
+        upgrade_file_schema(paths.database, paths.backups)
 
     def _validate_external_location(self) -> None:
         repository_path = repository_root().resolve()

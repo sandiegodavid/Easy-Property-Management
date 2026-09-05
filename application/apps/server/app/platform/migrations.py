@@ -27,28 +27,32 @@ class BootstrapMigrationRunner:
     def apply(self, manifest: WorkspaceManifest) -> None:
         try:
             with closing(sqlite3.connect(self.database_path)) as connection:
-                if self._applied(connection):
+                if self._applied(connection, 1):
                     return
                 self._backup_before_migration(manifest)
                 connection.execute("BEGIN IMMEDIATE")
                 try:
                     connection.execute("CREATE TABLE IF NOT EXISTS platform_schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)")
+                    audit_applied = self._applied(connection, 1)
                     legacy = self._table_exists(connection, "audit_events")
-                    if legacy:
+                    if legacy and not audit_applied:
                         self._validate_legacy_rows(connection)
                         for name in ("audit_events_no_update", "audit_events_no_delete"):
                             connection.execute(f"DROP TRIGGER IF EXISTS {name}")
                         for name in ("audit_events_entity_time", "audit_events_correlation", "audit_events_activity"):
                             connection.execute(f"DROP INDEX IF EXISTS {name}")
                         connection.execute("ALTER TABLE audit_events RENAME TO audit_events_legacy")
-                    install_audit_schema(connection)
-                    if legacy:
+                    if not audit_applied:
+                        install_audit_schema(connection)
+                    if legacy and not audit_applied:
                         connection.execute("INSERT INTO audit_events (id, occurred_at, entity_type, entity_id, action, before_snapshot, after_snapshot, changed_fields, reason, actor_kind, actor_reference, correlation_id, schema_version) SELECT id, occurred_at, entity_type, entity_id, action, before_snapshot, after_snapshot, changed_fields, reason, actor_kind, actor_reference, correlation_id, schema_version FROM audit_events_legacy")
                         connection.execute("DROP TABLE audit_events_legacy")
-                    connection.execute("INSERT INTO platform_schema_migrations (version, applied_at) VALUES (1, datetime('now'))")
-                    if not legacy:
+                    if not audit_applied:
+                        connection.execute("INSERT INTO platform_schema_migrations (version, applied_at) VALUES (1, datetime('now'))")
+                    if not audit_applied and not legacy:
                         self.recorder.record_change(connection, entity_type="workspace", entity_id=manifest.workspace_id, action="created", before=None, after=manifest.to_dict(), actor_kind="system", reason="workspace_initialized")
-                    self.recorder.record_change(connection, entity_type="platform_migration", entity_id="1", action="migration_applied", before=None, after={"version": 1}, actor_kind="system", reason="audit_schema_installed")
+                    if not audit_applied:
+                        self.recorder.record_change(connection, entity_type="platform_migration", entity_id="1", action="migration_applied", before=None, after={"version": 1}, actor_kind="system", reason="audit_schema_installed")
                     connection.commit()
                 except Exception:
                     connection.rollback()
@@ -89,8 +93,8 @@ class BootstrapMigrationRunner:
     def _table_exists(connection: sqlite3.Connection, name: str) -> bool:
         return connection.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)).fetchone() is not None
 
-    def _applied(self, connection: sqlite3.Connection) -> bool:
-        return self._table_exists(connection, "platform_schema_migrations") and connection.execute("SELECT 1 FROM platform_schema_migrations WHERE version = 1").fetchone() is not None
+    def _applied(self, connection: sqlite3.Connection, version: int) -> bool:
+        return self._table_exists(connection, "platform_schema_migrations") and connection.execute("SELECT 1 FROM platform_schema_migrations WHERE version = ?", (version,)).fetchone() is not None
 
     @staticmethod
     def _validate_legacy_rows(connection: sqlite3.Connection) -> None:

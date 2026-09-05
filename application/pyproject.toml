@@ -8,8 +8,10 @@ version = "0.1.0"
 description = "Local-first, AI-assisted property management"
 requires-python = ">=3.12"
 dependencies = [
+  "alembic>=1.13,<2.0",
   "cryptography>=45,<47",
   "fastapi>=0.115,<1.0",
+  "python-multipart>=0.0.9,<1.0",
   "keyring>=25,<27",
   "pydantic>=2.7,<3.0",
   "SQLAlchemy>=2.0,<3.0",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import shutil
 import sqlite3
 import tempfile
@@ -40,6 +41,7 @@ class WorkspaceArchiveService:
     def validate_workspace(self) -> WorkspaceManifest:
         manifest = self.workspace_service.open(integrity_check=True)
         self.assert_safe_file_tree(self.paths.files)
+        self._validate_managed_file_records(self.paths.root)
         return manifest
 
     def create(
@@ -121,7 +123,36 @@ class WorkspaceArchiveService:
         if manifest.workspace_id != contents.header["sourceWorkspaceId"]:
             raise BackupError("Archive workspace identity does not match its encrypted package.")
         self.assert_safe_file_tree(WorkspacePaths(workspace_root).files)
+        self._validate_managed_file_records(workspace_root)
         return manifest
+
+    @staticmethod
+    def _validate_managed_file_records(workspace_root: Path) -> None:
+        database = WorkspacePaths(workspace_root).database
+        with closing(sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro", uri=True)) as connection:
+            table = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='file_records'").fetchone()
+            if not table:
+                return
+            records = connection.execute("SELECT relative_path, content_sha256, size_bytes FROM file_records").fetchall()
+        files_root = WorkspacePaths(workspace_root).files.resolve()
+        expected_paths: set[Path] = set()
+        for relative_path, expected_hash, expected_size in records:
+            path = (files_root / relative_path).resolve()
+            if (files_root not in path.parents or not path.is_file() or
+                    str(relative_path) != f"managed/{expected_hash}"):
+                raise BackupError("A file record points outside the managed workspace file store.")
+            expected_paths.add(path)
+            digest = hashlib.sha256(); size = 0
+            with path.open("rb") as content:
+                while chunk := content.read(1024 * 1024):
+                    size += len(chunk); digest.update(chunk)
+            if size != expected_size or digest.hexdigest() != expected_hash:
+                raise BackupError("A managed file does not match its recorded size or content hash.")
+        managed_root = files_root / "managed"
+        if managed_root.exists():
+            actual_paths = {path.resolve() for path in managed_root.rglob("*") if path.is_file()}
+            if actual_paths != expected_paths:
+                raise BackupError("Managed file storage contains temporary or unreferenced content.")
 
     def _stage_live_workspace(self, payload: Path) -> None:
         workspace = payload / "workspace"
