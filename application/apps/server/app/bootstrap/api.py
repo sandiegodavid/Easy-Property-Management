@@ -24,6 +24,9 @@ from app.modules.files.api.router import build_router as build_files_router
 from app.modules.tasks.api.router import build_router as build_tasks_router
 from app.modules.tasks.application.service import TaskService
 from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork
+from app.modules.portfolio.api.router import build_router as build_portfolio_router
+from app.modules.portfolio.application.service import PortfolioService
+from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
 from app.platform.version import application_version
 
 logger = logging.getLogger(__name__)
@@ -39,6 +42,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     files = FileService(service, FilesystemContentStore(service.paths.files),
                         SQLiteFileUnitOfWork(service.paths.database, recorder))
     tasks = TaskService(SQLiteTaskUnitOfWork(service.paths.database, recorder))
+    portfolio = PortfolioService(SQLitePortfolioUnitOfWork(service.paths.database, recorder))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -68,6 +72,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.workspace_runtime = runtime
     app.state.file_service = files
     app.state.task_service = tasks
+    app.state.portfolio_service = portfolio
     app.include_router(build_router(service, runtime))
     policies = AuditSnapshotPolicyRegistry({
         ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -75,6 +80,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("file_link", 1): DEFAULT_SNAPSHOT_POLICY,
         ("task", 1): DEFAULT_SNAPSHOT_POLICY,
         ("task_reminder", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("property", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("party", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("property_ownership", 1): DEFAULT_SNAPSHOT_POLICY,
         ("backup_operation", 1): DEFAULT_SNAPSHOT_POLICY,
         ("backup_retention", 1): DEFAULT_SNAPSHOT_POLICY,
         ("workspace_restore", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -82,6 +90,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime))
     app.include_router(build_tasks_router(tasks, runtime))
+    app.include_router(build_portfolio_router(portfolio, runtime))
     return app
 
 
