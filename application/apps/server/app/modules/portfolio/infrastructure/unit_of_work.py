@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.portfolio.application.ports import PortfolioTransaction
-from app.modules.portfolio.domain.models import Party, Property, PropertyOwnership
-from app.modules.portfolio.infrastructure.sqlalchemy_models import PartyModel, PropertyModel, PropertyOwnershipModel
+from app.modules.portfolio.domain.models import Party, Property, PropertyOwnership, Space
+from app.modules.portfolio.infrastructure.sqlalchemy_models import PartyModel, PropertyModel, PropertyOwnershipModel, SpaceModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 Result = TypeVar("Result")
@@ -36,6 +36,13 @@ class SQLitePortfolioUnitOfWork:
             query = select(PropertyOwnershipModel).where(PropertyOwnershipModel.property_id == property_id).order_by(PropertyOwnershipModel.created_at)
             return [_ownership(row) for row in session.execute(query).scalars()]
 
+    def spaces(self, property_id: str, *, active_only: bool = False) -> list[Space]:
+        with Session(self.engine) as session:
+            query = select(SpaceModel).where(SpaceModel.property_id == property_id).order_by(SpaceModel.created_at)
+            if active_only:
+                query = query.where(SpaceModel.status == "active")
+            return [_space(row) for row in session.execute(query).scalars()]
+
     def parties(self, *, active_only: bool = False) -> list[Party]:
         with Session(self.engine) as session:
             query = select(PartyModel).order_by(PartyModel.display_name)
@@ -48,7 +55,7 @@ class SQLitePortfolioUnitOfWork:
         with Session(self.engine) as session:
             return {item.id: _party(item) for item in session.execute(select(PartyModel).where(PartyModel.id.in_(party_ids))).scalars()}
 
-    def property_views(self, *, status: str | None = None) -> list[tuple[Property, list[PropertyOwnership], dict[str, Party]]]:
+    def property_views(self, *, status: str | None = None) -> list[tuple[Property, list[PropertyOwnership], dict[str, Party], list[Space]]]:
         with Session(self.engine) as session:
             query = select(PropertyModel).order_by(PropertyModel.display_name)
             if status is not None: query = query.where(PropertyModel.status == status)
@@ -56,12 +63,16 @@ class SQLitePortfolioUnitOfWork:
             property_ids = [item.id for item in properties]
             if not property_ids: return []
             ownerships = [_ownership(row) for row in session.execute(select(PropertyOwnershipModel).where(PropertyOwnershipModel.property_id.in_(property_ids)).order_by(PropertyOwnershipModel.created_at)).scalars()]
+            spaces = [_space(row) for row in session.execute(select(SpaceModel).where(SpaceModel.property_id.in_(property_ids)).order_by(SpaceModel.created_at)).scalars()]
             party_ids = {item.party_id for item in ownerships if item.party_id is not None}
             parties = {} if not party_ids else {item.id: _party(item) for item in session.execute(select(PartyModel).where(PartyModel.id.in_(party_ids))).scalars()}
             by_property: dict[str, list[PropertyOwnership]] = defaultdict(list)
             for ownership in ownerships:
                 by_property[ownership.property_id].append(ownership)
-            return [(item, by_property[item.id], parties) for item in properties]
+            spaces_by_property: dict[str, list[Space]] = defaultdict(list)
+            for space in spaces:
+                spaces_by_property[space.property_id].append(space)
+            return [(item, by_property[item.id], parties, spaces_by_property[item.id]) for item in properties]
 
 
 class _SQLitePortfolioTransaction:
@@ -75,6 +86,17 @@ class _SQLitePortfolioTransaction:
     def get_party(self, party_id: str) -> Party | None:
         row = self.connection.execute(PartyModel.__table__.select().where(PartyModel.id == party_id)).mappings().first()
         return Party(**dict(row)) if row else None
+
+    def get_space(self, space_id: str) -> Space | None:
+        row = self.connection.execute(SpaceModel.__table__.select().where(SpaceModel.id == space_id)).mappings().first()
+        return Space(**dict(row)) if row else None
+
+    def spaces(self, property_id: str, *, active_only: bool = False) -> list[Space]:
+        query = SpaceModel.__table__.select().where(SpaceModel.property_id == property_id)
+        if active_only:
+            query = query.where(SpaceModel.status == "active")
+        rows = self.connection.execute(query).mappings().all()
+        return [Space(**dict(row)) for row in rows]
 
     def ownerships_at(self, property_id: str, when: str) -> list[PropertyOwnership]:
         rows = self.connection.execute(PropertyOwnershipModel.__table__.select().where(
@@ -117,6 +139,12 @@ class _SQLitePortfolioTransaction:
             ends_on=ownership.ends_on, ended_at=ownership.ended_at
         ))
 
+    def insert_space(self, space: Space) -> None:
+        self.connection.execute(SpaceModel.__table__.insert().values(**space.__dict__))
+
+    def replace_space(self, space: Space) -> None:
+        self.connection.execute(SpaceModel.__table__.update().where(SpaceModel.id == space.id).values(**space.__dict__))
+
     def record_change(self, *, entity_type: str, entity_id: str, action: str,
                       before: dict[str, Any] | None, after: dict[str, Any] | None,
                       reason: str, correlation_id: str) -> None:
@@ -136,3 +164,7 @@ def _property(row: PropertyModel) -> Property:
 
 def _ownership(row: PropertyOwnershipModel) -> PropertyOwnership:
     return PropertyOwnership(**{name: getattr(row, name) for name in PropertyOwnership.__dataclass_fields__})
+
+
+def _space(row: SpaceModel) -> Space:
+    return Space(**{name: getattr(row, name) for name in Space.__dataclass_fields__})

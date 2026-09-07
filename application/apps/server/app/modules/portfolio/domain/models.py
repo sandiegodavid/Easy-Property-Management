@@ -45,6 +45,8 @@ class Property:
     created_at: str
     updated_at: str
     archived_at: str | None
+    property_type: str
+    inventory_layout: str
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -61,6 +63,8 @@ class Property:
             "createdAt": self.created_at,
             "updatedAt": self.updated_at,
             "archivedAt": self.archived_at,
+            "propertyType": self.property_type,
+            "inventoryLayout": self.inventory_layout,
         }
 
 
@@ -86,6 +90,36 @@ class PropertyOwnership:
             "endsOn": self.ends_on,
             "createdAt": self.created_at,
             "endedAt": self.ended_at,
+        }
+
+
+@dataclass(frozen=True)
+class Space:
+    id: str
+    property_id: str
+    space_kind: str
+    display_name: str
+    normalized_name: str
+    suite_or_floor: str | None
+    notes: str | None
+    status: str
+    created_at: str
+    updated_at: str
+    archived_at: str | None
+    archived_by_property_operation_id: str | None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "propertyId": self.property_id,
+            "spaceKind": self.space_kind,
+            "displayName": self.display_name,
+            "suiteOrFloor": self.suite_or_floor,
+            "notes": self.notes,
+            "status": self.status,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+            "archivedAt": self.archived_at,
         }
 
 

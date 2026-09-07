@@ -83,6 +83,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("property", 1): DEFAULT_SNAPSHOT_POLICY,
         ("party", 1): DEFAULT_SNAPSHOT_POLICY,
         ("property_ownership", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("space", 1): DEFAULT_SNAPSHOT_POLICY,
         ("backup_operation", 1): DEFAULT_SNAPSHOT_POLICY,
         ("backup_retention", 1): DEFAULT_SNAPSHOT_POLICY,
         ("workspace_restore", 1): DEFAULT_SNAPSHOT_POLICY,

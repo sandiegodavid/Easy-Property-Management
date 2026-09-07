@@ -14,6 +14,7 @@ from app.modules.portfolio.application.service import (
     PortfolioNotFoundError,
     PortfolioService,
     PropertyCreateCommand,
+    SpaceCreateCommand,
 )
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 
@@ -61,6 +62,21 @@ class PropertyCreateRequest(ContractModel):
     countryCode: str = Field(min_length=2, max_length=2)
     notes: str | None = Field(None, max_length=4000)
     ownerships: list[OwnershipRequest] = Field(min_length=1)
+    propertyType: Literal["single_family_home", "condo", "townhome", "office"]
+    inventoryLayout: Literal["single_space", "whole_office", "office_suites"] | None = None
+    spaces: list["SpaceCreateRequest"] | None = None
+
+
+class SpaceCreateRequest(ContractModel):
+    displayName: str = Field(min_length=1, max_length=120)
+    suiteOrFloor: str | None = Field(None, max_length=80)
+    notes: str | None = Field(None, max_length=4000)
+
+
+class SpacePatchRequest(ContractModel):
+    displayName: str | None = Field(None, min_length=1, max_length=120)
+    suiteOrFloor: str | None = Field(None, max_length=80)
+    notes: str | None = Field(None, max_length=4000)
 
 
 class PropertyPatchRequest(ContractModel):
@@ -81,6 +97,19 @@ class OwnershipReplaceRequest(ContractModel):
 
 class ConfirmationRequest(ContractModel):
     confirmed: StrictBool
+
+
+class SpaceResponse(ContractModel):
+    id: str
+    propertyId: str
+    spaceKind: Literal["whole_home", "whole_office", "office_suite"]
+    displayName: str
+    suiteOrFloor: str | None
+    notes: str | None
+    status: Literal["active", "archived"]
+    createdAt: str
+    updatedAt: str
+    archivedAt: str | None
 
 
 class PartyResponse(ContractModel):
@@ -120,8 +149,11 @@ class PropertyResponse(ContractModel):
     createdAt: str
     updatedAt: str
     archivedAt: str | None
+    propertyType: Literal["single_family_home", "condo", "townhome", "office"]
+    inventoryLayout: Literal["single_space", "whole_office", "office_suites"]
     ownershipContext: Literal["self_owned", "managed_for_owner", "mixed"]
     ownerships: list[OwnershipResponse]
+    spaces: list[SpaceResponse]
 
 
 def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRouter:
@@ -219,6 +251,31 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
         require_ready(write=True)
         return invoke(lambda: service.replace_ownerships(property_id, _ownerships(data.ownerships), data.effectiveOn))
 
+    @router.post("/api/properties/{property_id}/spaces", response_model=SpaceResponse, status_code=status.HTTP_201_CREATED)
+    def add_space(property_id: str, data: SpaceCreateRequest):
+        require_ready(write=True)
+        return invoke(lambda: service.add_space(property_id, _space(data)).to_dict())
+
+    @router.post("/api/spaces/{space_id}/archive", response_model=SpaceResponse)
+    def archive_space(space_id: str, data: ConfirmationRequest):
+        require_ready(write=True)
+        return invoke(lambda: service.archive_space(space_id, confirmed=data.confirmed).to_dict())
+
+    @router.patch("/api/spaces/{space_id}", response_model=SpaceResponse)
+    def patch_space(space_id: str, data: SpacePatchRequest):
+        require_ready(write=True)
+        return invoke(
+            lambda: service.patch_space(
+                space_id,
+                data.model_dump(exclude_unset=True),
+            ).to_dict()
+        )
+
+    @router.post("/api/spaces/{space_id}/restore", response_model=SpaceResponse)
+    def restore_space(space_id: str):
+        require_ready(write=True)
+        return invoke(lambda: service.restore_space(space_id).to_dict())
+
     return router
 
 
@@ -243,9 +300,16 @@ def _create(data: PropertyCreateRequest) -> PropertyCreateCommand:
         data.addressLine1,
         data.city,
         data.countryCode,
+        data.propertyType,
         _ownerships(data.ownerships),
         data.addressLine2,
         data.region,
         data.postalCode,
         data.notes,
+        data.inventoryLayout,
+        None if data.spaces is None else tuple(_space(item) for item in data.spaces),
     )
+
+
+def _space(data: SpaceCreateRequest) -> SpaceCreateCommand:
+    return SpaceCreateCommand(data.displayName, data.suiteOrFloor, data.notes)

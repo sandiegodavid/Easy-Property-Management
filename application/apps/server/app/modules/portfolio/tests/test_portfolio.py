@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from app.bootstrap.api import create_app
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
-from app.modules.portfolio.application.service import OwnershipInput, PartyCreateCommand, PortfolioError, PortfolioService, PropertyCreateCommand
+from app.modules.portfolio.application.service import OwnershipInput, PartyCreateCommand, PortfolioError, PortfolioService, PropertyCreateCommand, SpaceCreateCommand
 from app.modules.portfolio.infrastructure.schema_validation import _normalise_sql, validate_portfolio_schema
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
@@ -35,7 +35,8 @@ class PortfolioTests(unittest.TestCase):
 
     def _property(self, ownerships):
         return self.service.create_property(PropertyCreateCommand(
-            "Maple duplex", "10 Maple Street", "Portland", "US", tuple(ownerships), region="OR", postal_code="97201",
+            "Maple duplex", "10 Maple Street", "Portland", "US", "single_family_home",
+            tuple(ownerships), region="OR", postal_code="97201",
         ))
 
     def test_ownership_contexts_are_derived_from_relationships(self) -> None:
@@ -84,7 +85,7 @@ class PortfolioTests(unittest.TestCase):
             self.assertEqual(party.status_code, 201)
             property = client.post("/api/properties", json={
                 "displayName": "Pine office", "addressLine1": "1 Pine Avenue", "city": "Portland",
-                "countryCode": "US", "ownerships": [{"ownerKind": "client_owner", "partyId": party.json()["id"]}],
+                "countryCode": "US", "propertyType": "office", "ownerships": [{"ownerKind": "client_owner", "partyId": party.json()["id"]}],
             })
             self.assertEqual(property.status_code, 201)
             self.assertEqual(property.json()["ownershipContext"], "managed_for_owner")
@@ -92,18 +93,21 @@ class PortfolioTests(unittest.TestCase):
             self.assertEqual([item["id"] for item in records.json()], [property.json()["id"]])
             invalid = client.post("/api/properties", json={
                 "displayName": "Bad", "addressLine1": "1 Test", "city": "Portland", "countryCode": "US",
-                "ownerships": [{"ownerKind": "client_owner"}],
+                "propertyType": "single_family_home", "ownerships": [{"ownerKind": "client_owner"}],
             })
             self.assertEqual(invalid.status_code, 422)
             inline = client.post("/api/properties", json={
                 "displayName": "Cedar home", "addressLine1": "2 Cedar", "city": "Portland", "countryCode": "US",
-                "ownerships": [{"ownerKind": "client_owner", "inlineParty": {"partyKind": "individual", "displayName": "Casey Owner"}}],
+                "propertyType": "single_family_home", "ownerships": [{"ownerKind": "client_owner", "inlineParty": {"partyKind": "individual", "displayName": "Casey Owner"}}],
             })
             self.assertEqual(inline.status_code, 201)
             self.assertEqual(inline.json()["ownerships"][0]["party"]["displayName"], "Casey Owner")
+            space_id = inline.json()["spaces"][0]["id"]
+            self.assertEqual(client.get("/api/audit/events").status_code, 200)
+            self.assertEqual(client.get(f"/api/audit/events/space/{space_id}").status_code, 200)
             self.assertEqual(client.post("/api/properties", json={
                 "displayName": "Ignored", "addressLine1": "3 Cedar", "city": "Portland", "countryCode": "US",
-                "ownershipContext": "mixed", "ownerships": [{"ownerKind": "local_operator"}],
+                "propertyType": "single_family_home", "ownershipContext": "mixed", "ownerships": [{"ownerKind": "local_operator"}],
             }).status_code, 422)
 
     def test_party_archiving_requires_no_active_ownership(self) -> None:
@@ -138,6 +142,7 @@ class PortfolioTests(unittest.TestCase):
                 "10 Maple Street",
                 "Portland",
                 "US",
+                "single_family_home",
                 (object(),),
             )
 
@@ -182,10 +187,151 @@ class PortfolioTests(unittest.TestCase):
             with self.assertRaises(MigrationSchemaError):
                 validate_portfolio_schema(connection)
 
+    def test_schema_validation_rejects_missing_spaces_foreign_key(self) -> None:
+        with sqlite3.connect(self.workspace.paths.database) as connection:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            connection.execute("ALTER TABLE spaces RENAME TO spaces_with_foreign_key")
+            connection.execute(
+                "CREATE TABLE spaces ("
+                "id TEXT PRIMARY KEY, property_id TEXT NOT NULL, space_kind TEXT NOT NULL, "
+                "display_name TEXT NOT NULL, normalized_name TEXT NOT NULL, suite_or_floor TEXT, "
+                "notes TEXT, status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, "
+                "archived_at TEXT, archived_by_property_operation_id TEXT, "
+                "CHECK(space_kind IN ('whole_home', 'whole_office', 'office_suite')), "
+                "CHECK(status IN ('active', 'archived')), CHECK(length(trim(display_name)) > 0))"
+            )
+            connection.execute(
+                "INSERT INTO spaces SELECT * FROM spaces_with_foreign_key"
+            )
+            connection.execute("DROP TABLE spaces_with_foreign_key")
+            connection.execute(
+                "CREATE INDEX spaces_property_status_name "
+                "ON spaces(property_id, status, display_name)"
+            )
+            connection.execute(
+                "CREATE UNIQUE INDEX spaces_one_active_name "
+                "ON spaces(property_id, normalized_name) WHERE status = 'active'"
+            )
+        engine = create_sqlite_engine(self.workspace.paths.database)
+        with engine.connect() as connection:
+            with self.assertRaises(MigrationSchemaError):
+                validate_portfolio_schema(connection)
+
     def test_sql_normalization_preserves_constraint_grouping(self) -> None:
         expected = "(owner_kind = 'local_operator' AND party_id IS NULL) OR (owner_kind = 'client_owner' AND party_id IS NOT NULL)"
         incompatible = "owner_kind = 'local_operator' AND (party_id IS NULL OR owner_kind = 'client_owner') AND party_id IS NOT NULL"
         self.assertNotEqual(_normalise_sql(expected), _normalise_sql(incompatible))
+
+    def test_residential_property_creates_one_whole_home_space(self) -> None:
+        property = self._property([OwnershipInput("local_operator")])
+        detail = self.service.get_property(property.id)
+        self.assertEqual(detail["propertyType"], "single_family_home")
+        self.assertEqual(detail["inventoryLayout"], "single_space")
+        self.assertEqual(
+            [(space["spaceKind"], space["displayName"]) for space in detail["spaces"]],
+            [("whole_home", "Whole home")],
+        )
+
+    def test_office_suites_are_created_and_can_add_a_suite(self) -> None:
+        office = self.service.create_property(
+            PropertyCreateCommand(
+                "Pine offices",
+                "1 Pine Avenue",
+                "Portland",
+                "US",
+                "office",
+                (OwnershipInput("local_operator"),),
+                inventory_layout="office_suites",
+                spaces=(SpaceCreateCommand("Suite 100"), SpaceCreateCommand("Suite 200")),
+            )
+        )
+        added = self.service.add_space(office.id, SpaceCreateCommand("Suite 300"))
+        detail = self.service.get_property(office.id)
+        self.assertEqual(added.space_kind, "office_suite")
+        self.assertEqual([space["displayName"] for space in detail["spaces"]], ["Suite 100", "Suite 200", "Suite 300"])
+        events = self.audit.history("space")
+        self.assertEqual(len(events), 3)
+        with self.assertRaises(PortfolioError):
+            self.service.create_property(
+                PropertyCreateCommand(
+                    "Invalid office",
+                    "2 Pine Avenue",
+                    "Portland",
+                    "US",
+                    "office",
+                    (OwnershipInput("local_operator"),),
+                    inventory_layout="office_suites",
+                )
+            )
+
+    def test_archiving_a_property_archives_its_spaces_atomically(self) -> None:
+        property = self._property([OwnershipInput("local_operator")])
+        archived = self.service.archive_property(property.id, confirmed=True)
+        self.assertEqual(archived.status, "archived")
+        self.assertEqual(self.service.get_property(property.id)["spaces"][0]["status"], "archived")
+        restored = self.service.restore_property(property.id)
+        self.assertEqual(restored.status, "active")
+        self.assertEqual(self.service.get_property(property.id)["spaces"][0]["status"], "active")
+
+    def test_space_names_are_case_insensitively_unique_and_retired_spaces_stay_archived(self) -> None:
+        office = self.service.create_property(
+            PropertyCreateCommand(
+                "Pine offices", "1 Pine Avenue", "Portland", "US", "office",
+                (OwnershipInput("local_operator"),),
+                inventory_layout="office_suites",
+                spaces=(SpaceCreateCommand("Suite 100"), SpaceCreateCommand("Suite 200")),
+            )
+        )
+        spaces = self.service.get_property(office.id)["spaces"]
+        with self.assertRaises(PortfolioError):
+            self.service.add_space(office.id, SpaceCreateCommand("suite 100"))
+
+        retired = self.service.archive_space(spaces[0]["id"], confirmed=True)
+        replacement = self.service.add_space(office.id, SpaceCreateCommand("suite 100"))
+        with self.assertRaises(PortfolioError):
+            self.service.restore_space(retired.id)
+        with self.assertRaises(PortfolioError):
+            self.service.patch_space(spaces[1]["id"], {"displayName": "SUITE 100"})
+
+        self.service.archive_property(office.id, confirmed=True)
+        self.service.restore_property(office.id)
+        all_spaces = {item.id: item for item in self.service.unit_of_work.spaces(office.id)}
+        self.assertEqual(all_spaces[retired.id].status, "archived")
+        self.assertEqual(all_spaces[replacement.id].status, "active")
+
+    def test_space_patch_archive_and_restore_api(self) -> None:
+        config = Path(self.temp.name) / "space-api-config.json"
+        config.write_text(
+            json.dumps({"localWorkspacePath": str(self.workspace.paths.root)}),
+            encoding="utf-8",
+        )
+        with TestClient(create_app(config)) as client:
+            created = client.post(
+                "/api/properties",
+                json={
+                    "displayName": "Oak offices",
+                    "addressLine1": "10 Oak Road",
+                    "city": "Portland",
+                    "countryCode": "US",
+                    "propertyType": "office",
+                    "inventoryLayout": "office_suites",
+                    "ownerships": [{"ownerKind": "local_operator"}],
+                    "spaces": [{"displayName": "Suite A"}, {"displayName": "Suite B"}],
+                },
+            )
+            self.assertEqual(created.status_code, 201)
+            space_id = created.json()["spaces"][0]["id"]
+            patched = client.patch(
+                f"/api/spaces/{space_id}",
+                json={"displayName": "Suite 101", "notes": "North wing"},
+            )
+            self.assertEqual(patched.status_code, 200)
+            self.assertEqual(patched.json()["displayName"], "Suite 101")
+            self.assertEqual(
+                client.post(f"/api/spaces/{space_id}/archive", json={"confirmed": True}).status_code,
+                200,
+            )
+            self.assertEqual(client.post(f"/api/spaces/{space_id}/restore").status_code, 200)
 
     def test_partial_property_patch_normalizes_values_and_preserves_archival_time(self) -> None:
         property = self._property([OwnershipInput("local_operator")])

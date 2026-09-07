@@ -15,12 +15,16 @@ def validate_portfolio_schema(connection) -> None:
             {"email", "phone", "archived_at"},
         ),
         "properties": (
-            {"id", "display_name", "address_line_1", "address_line_2", "city", "region", "postal_code", "country_code", "notes", "status", "created_at", "updated_at", "archived_at"},
+            {"id", "display_name", "address_line_1", "address_line_2", "city", "region", "postal_code", "country_code", "notes", "status", "created_at", "updated_at", "archived_at", "property_type", "inventory_layout"},
             {"address_line_2", "region", "postal_code", "notes", "archived_at"},
         ),
         "property_ownerships": (
             {"id", "property_id", "owner_kind", "party_id", "starts_on", "ends_on", "created_at", "ended_at"},
             {"party_id", "ends_on", "ended_at"},
+        ),
+        "spaces": (
+            {"id", "property_id", "space_kind", "display_name", "normalized_name", "suite_or_floor", "notes", "status", "created_at", "updated_at", "archived_at", "archived_by_property_operation_id"},
+            {"suite_or_floor", "notes", "archived_at", "archived_by_property_operation_id"},
         ),
     }
     _validate_columns(inspector, expected_columns)
@@ -66,6 +70,10 @@ def _validate_indexes(connection, inspector, expected_columns) -> None:
             "property_ownerships_one_active_operator": (("property_id",), True),
             "property_ownerships_one_active_client": (("property_id", "party_id"), True),
         },
+        "spaces": {
+            "spaces_property_status_name": (("property_id", "status", "display_name"), False),
+            "spaces_one_active_name": (("property_id", "normalized_name"), True),
+        },
     }
     if indexes != required:
         raise MigrationSchemaError("PORT-001 indexes are incompatible.")
@@ -74,7 +82,7 @@ def _validate_indexes(connection, inspector, expected_columns) -> None:
         "SELECT name, sql FROM sqlite_master "
         "WHERE type = 'index' AND name IN "
         "('property_ownerships_one_active_operator', "
-        "'property_ownerships_one_active_client')"
+        "'property_ownerships_one_active_client', 'spaces_one_active_name')"
     ).all()
     predicates = {
         name: _normalise_sql(sql.partition("WHERE")[2])
@@ -84,6 +92,7 @@ def _validate_indexes(connection, inspector, expected_columns) -> None:
     expected_predicates = {
         "property_ownerships_one_active_operator": "owner_kind='local_operator'andends_onisnull",
         "property_ownerships_one_active_client": "owner_kind='client_owner'andends_onisnull",
+        "spaces_one_active_name": "status='active'",
     }
     if predicates != expected_predicates:
         raise MigrationSchemaError("PORT-001 partial-index predicates are incompatible.")
@@ -91,12 +100,20 @@ def _validate_indexes(connection, inspector, expected_columns) -> None:
 
 def _validate_foreign_keys(inspector) -> None:
     expected = {
-        (("property_id",), "properties", ("id",)),
-        (("party_id",), "parties", ("id",)),
+        "property_ownerships": {
+            (("property_id",), "properties", ("id",)),
+            (("party_id",), "parties", ("id",)),
+        },
+        "spaces": {
+            (("property_id",), "properties", ("id",)),
+        },
     }
     found = {
-        (tuple(key["constrained_columns"]), key["referred_table"], tuple(key["referred_columns"]))
-        for key in inspector.get_foreign_keys("property_ownerships")
+        table: {
+            (tuple(key["constrained_columns"]), key["referred_table"], tuple(key["referred_columns"]))
+            for key in inspector.get_foreign_keys(table)
+        }
+        for table in expected
     }
     if found != expected:
         raise MigrationSchemaError("PORT-001 foreign keys are incompatible.")
@@ -114,11 +131,18 @@ def _validate_checks(inspector, expected_columns) -> None:
             "length(trim(address_line_1))>0",
             "length(trim(city))>0",
             "length(trim(country_code))=2",
+            "property_typein('single_family_home','condo','townhome','office')",
+            "inventory_layoutin('single_space','whole_office','office_suites')",
         },
         "property_ownerships": {
             "owner_kindin('local_operator','client_owner')",
             "(owner_kind='local_operator'andparty_idisnull)or(owner_kind='client_owner'andparty_idisnotnull)",
             "ends_onisnullorends_on>=starts_on",
+        },
+        "spaces": {
+            "space_kindin('whole_home','whole_office','office_suite')",
+            "statusin('active','archived')",
+            "length(trim(display_name))>0",
         },
     }
     found = {
