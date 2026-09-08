@@ -27,6 +27,12 @@ from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork
 from app.modules.portfolio.api.router import build_router as build_portfolio_router
 from app.modules.portfolio.application.service import PortfolioService
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
+from app.modules.tenants.api.router import build_router as build_tenant_router
+from app.modules.tenants.application.service import TenantService
+from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantUnitOfWork
+from app.modules.tenants.domain.audit_policy import TENANT_CONTACT_SNAPSHOT_POLICY
+from app.modules.parties.application.service import SharedPartyFactory
+from app.modules.parties.domain.audit_policy import PARTY_ACTIVITY_SNAPSHOT_POLICY
 from app.platform.version import application_version
 
 logger = logging.getLogger(__name__)
@@ -43,6 +49,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
                         SQLiteFileUnitOfWork(service.paths.database, recorder))
     tasks = TaskService(SQLiteTaskUnitOfWork(service.paths.database, recorder))
     portfolio = PortfolioService(SQLitePortfolioUnitOfWork(service.paths.database, recorder))
+    tenants = TenantService(SQLiteTenantUnitOfWork(service.paths.database, recorder), SharedPartyFactory())
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -73,6 +80,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.file_service = files
     app.state.task_service = tasks
     app.state.portfolio_service = portfolio
+    app.state.tenant_service = tenants
     app.include_router(build_router(service, runtime))
     policies = AuditSnapshotPolicyRegistry({
         ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -86,14 +94,20 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("space", 1): DEFAULT_SNAPSHOT_POLICY,
         ("space_occupancy", 1): DEFAULT_SNAPSHOT_POLICY,
         ("space_availability", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("tenant_profile", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("tenant_contact_method", 1): DEFAULT_SNAPSHOT_POLICY,
         ("backup_operation", 1): DEFAULT_SNAPSHOT_POLICY,
         ("backup_retention", 1): DEFAULT_SNAPSHOT_POLICY,
         ("workspace_restore", 1): DEFAULT_SNAPSHOT_POLICY,
+    }, activity_policies={
+        ("party", 1): PARTY_ACTIVITY_SNAPSHOT_POLICY,
+        ("tenant_contact_method", 1): TENANT_CONTACT_SNAPSHOT_POLICY,
     })
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime))
     app.include_router(build_tasks_router(tasks, runtime))
     app.include_router(build_portfolio_router(portfolio, runtime))
+    app.include_router(build_tenant_router(tenants, runtime))
     return app
 
 

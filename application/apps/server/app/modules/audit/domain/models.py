@@ -53,8 +53,10 @@ class AuditPresentationPolicyError(RuntimeError):
 class AuditSnapshotPolicyRegistry:
     """Selects the owning domain's presentation policy for persisted snapshots."""
 
-    def __init__(self, policies: Mapping[tuple[str, int], AuditSnapshotPolicy] | None = None) -> None:
+    def __init__(self, policies: Mapping[tuple[str, int], AuditSnapshotPolicy] | None = None,
+                 activity_policies: Mapping[tuple[str, int], AuditSnapshotPolicy] | None = None) -> None:
         self._policies = dict(policies or {})
+        self._activity_policies = dict(activity_policies or {})
 
     def policy_for(self, entity_type: str, schema_version: int) -> AuditSnapshotPolicy:
         try:
@@ -63,6 +65,12 @@ class AuditSnapshotPolicyRegistry:
             raise AuditPresentationPolicyError(
                 f"No audit presentation policy is registered for {entity_type} schema version {schema_version}."
             ) from error
+
+    def activity_policy_for(self, entity_type: str, schema_version: int) -> AuditSnapshotPolicy:
+        return self._activity_policies.get(
+            (entity_type, schema_version),
+            self.policy_for(entity_type, schema_version),
+        )
 
 
 @dataclass(frozen=True)

@@ -20,6 +20,7 @@ from app.modules.portfolio.application.service import (
     SpaceClassificationCommand,
     SpaceCreateCommand,
 )
+from app.modules.parties.application.service import PartyValidationError
 from app.modules.portfolio.application.ports import PortfolioConflictError
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 
@@ -271,6 +272,8 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
         except PortfolioConflictError as error:
             raise HTTPException(409, str(error)) from error
         except PortfolioError as error:
+            raise HTTPException(400, str(error)) from error
+        except PartyValidationError as error:
             raise HTTPException(400, str(error)) from error
 
     @router.post("/api/parties", response_model=PartyResponse, status_code=status.HTTP_201_CREATED)

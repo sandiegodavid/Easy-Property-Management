@@ -46,7 +46,7 @@ def build_router(runtime: WorkspaceRuntime, repository: AuditHistoryRepository,
         except ValueError as error:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
         try:
-            return {"events": [event.to_dict(policy_registry.policy_for(event.entity_type, event.schema_version)) for event in events]}
+            return {"events": [event.to_dict(policy_registry.activity_policy_for(event.entity_type, event.schema_version)) for event in events]}
         except AuditPresentationPolicyError as error:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
 

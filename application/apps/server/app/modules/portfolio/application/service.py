@@ -22,6 +22,7 @@ from app.modules.portfolio.domain.models import (
     active_on,
     ownership_context,
 )
+from app.modules.parties.application.service import PartyCreateCommand, PartyFactory, SharedPartyFactory
 
 
 class PortfolioError(RuntimeError):
@@ -51,21 +52,6 @@ class OwnershipInput:
             raise PortfolioError("Inline client owner must be a valid party command.")
         if isinstance(self.party_id, str) and self.party_id != self.party_id.strip():
             object.__setattr__(self, "party_id", self.party_id.strip())
-
-
-@dataclass(frozen=True)
-class PartyCreateCommand:
-    party_kind: str
-    display_name: str
-    email: str | None = None
-    phone: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.party_kind not in {"individual", "organization"}:
-            raise PortfolioError("Party kind must be individual or organization.")
-        object.__setattr__(self, "display_name", _required(self.display_name, "Display name", 240))
-        object.__setattr__(self, "email", _optional(self.email, "Email", 320))
-        object.__setattr__(self, "phone", _optional(self.phone, "Phone", 80))
 
 
 @dataclass(frozen=True)
@@ -199,21 +185,13 @@ class PropertyUpdateCommand:
 
 
 class PortfolioService:
-    def __init__(self, unit_of_work: PortfolioUnitOfWork) -> None:
+    def __init__(self, unit_of_work: PortfolioUnitOfWork, party_factory: PartyFactory | None = None) -> None:
         self.unit_of_work = unit_of_work
+        self.party_factory = party_factory or SharedPartyFactory()
 
     def create_party(self, command: PartyCreateCommand) -> Party:
         now, correlation_id = _now(), str(uuid4())
-        party = Party(
-            id=str(uuid4()),
-            party_kind=command.party_kind,
-            display_name=command.display_name,
-            email=command.email,
-            phone=command.phone,
-            created_at=now,
-            updated_at=now,
-            archived_at=None,
-        )
+        party = self.party_factory.create(command, now)
         def write(transaction: PortfolioTransaction) -> Party:
             transaction.insert_party(party)
             transaction.record_change(entity_type="party", entity_id=party.id, action="created", before=None,
@@ -1063,21 +1041,11 @@ class PortfolioService:
         ):
             raise PortfolioError("An active space with this name already exists in the property.")
 
-    @staticmethod
-    def _resolve_ownership_inputs(transaction: PortfolioTransaction, ownerships: tuple[OwnershipInput, ...], correlation_id: str, now: str) -> tuple[OwnershipInput, ...]:
+    def _resolve_ownership_inputs(self, transaction: PortfolioTransaction, ownerships: tuple[OwnershipInput, ...], correlation_id: str, now: str) -> tuple[OwnershipInput, ...]:
         resolved = []
         for item in ownerships:
             if item.inline_party is not None:
-                party = Party(
-                    id=str(uuid4()),
-                    party_kind=item.inline_party.party_kind,
-                    display_name=item.inline_party.display_name,
-                    email=item.inline_party.email,
-                    phone=item.inline_party.phone,
-                    created_at=now,
-                    updated_at=now,
-                    archived_at=None,
-                )
+                party = self.party_factory.create(item.inline_party, now)
                 transaction.insert_party(party)
                 transaction.record_change(entity_type="party", entity_id=party.id, action="created", before=None,
                                           after=party.to_dict(), reason="party_created", correlation_id=correlation_id)

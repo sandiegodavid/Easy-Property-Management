@@ -10,6 +10,7 @@ from sqlalchemy import text
 from app.modules.audit.infrastructure.schema_validation import validate_audit_schema
 from app.modules.files.infrastructure.schema_validation import validate_file_schema
 from app.modules.tasks.infrastructure.schema_validation import validate_task_schema
+from app.modules.tenants.infrastructure.schema_validation import validate_tenant_schema
 from app.modules.portfolio.infrastructure.schema_validation import validate_portfolio_schema
 from app.modules.workspace.infrastructure.schema_validation import validate_workspace_schema
 from app.platform.migration_errors import MigrationSchemaError
@@ -55,14 +56,14 @@ def validate_latest_schema(database_path: Path) -> None:
             expected_tables = {
                 "alembic_version", "workspace_metadata", "audit_events", "file_records",
                 "file_links", "tasks", "task_reminders", "parties", "properties", "property_ownerships", "spaces",
-                "space_occupancy_periods", "space_availability",
+                "space_occupancy_periods", "space_availability", "tenant_profiles", "tenant_contact_methods",
             }
             if actual_tables != expected_tables:
                 raise ProductSchemaError("Workspace database contains unsupported application tables.")
             revisions = connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
             if revisions != [current_revision()]:
                 raise ProductSchemaError("Workspace database is not at the current schema revision.")
-            for validator in (validate_workspace_schema, validate_audit_schema, validate_file_schema, validate_task_schema, validate_portfolio_schema):
+            for validator in (validate_workspace_schema, validate_audit_schema, validate_file_schema, validate_task_schema, validate_portfolio_schema, validate_tenant_schema):
                 validator(connection)
     except ProductSchemaError:
         raise
