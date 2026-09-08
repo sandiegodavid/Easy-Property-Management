@@ -105,38 +105,43 @@ The completed foundation items below currently expose safe local CLI/API capabil
 
 | Sequence | ID | Area | Outcome | Ordered hard dependencies | Status |
 | ---: | --- | --- | --- | --- | --- |
-| 80 | APT-001 | Apartments | Model multi-unit apartment buildings and units. | PORT-002 |  |
-| 81 | APT-002 | Apartments | Support building-wide rent rolls, renewals, and bulk actions. | PORT-003, LEASE-001, FIN-001, APT-001 |  |
-| 82 | APT-003 | Apartments | Manage common areas, shared assets, parking, storage, utilities, and amenities. | FIN-002, MAINT-001, APT-001 |  |
-| 83 | APT-004 | Apartments | Handle unit turnovers and make-ready workflows. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">TASK-001</span>, FIN-002, MAINT-001, APT-001 |  |
-| 84 | APT-005 | Apartments | Send building-wide or selected-group tenant communications and notices. | TEN-001, COM-002, APT-001 |  |
-| 85 | APT-006 | Apartments | Add apartment-specific vacancy, rent-roll, and renewal dashboards. | RPT-002, DASH-002, APT-001, APT-002 |  |
-| 86 | APT-007 | Apartments | Allocate shared building expenses across units, owners, or leases. | FIN-002, FIN-003, APT-001 |  |
-| 87 | APT-008 | Apartments | Add apartment listing syndication and route leads by building and unit. | LEAD-001, LIST-002, APT-001 |  |
-| 88 | ACCT-001 | Accounting | Add trust accounting, automated owner fund transfers, and full bookkeeping. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">AUDIT-001</span>, FIN-004, OWNER-002 |  |
-| 89 | OFFICE-002 | Commercial | Add CAM/NNN reconciliation, escalations, and advanced lease options. | FIN-004, OFFICE-001 |  |
-| 90 | VEND-004 | Providers | Integrate live external review sources and reputation monitoring. | VEND-002 |  |
-| 91 | RPT-003 | Reports | Build custom reports and saved report views. | RPT-002 |  |
-| 92 | RPT-004 | Reports | Schedule report generation and delivery. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">TASK-001</span>, COM-002, RPT-003 |  |
-| 93 | DATA-001 | Data | Import properties, contacts, leases, balances, and history from structured files into the local workspace. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">AUDIT-001</span>, <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">FILE-001</span>, PORT-002, TEN-001, LEASE-001, FIN-001 |  |
-| 94 | BEGIN-001 | Beginner experience | Guide users with little accounting or property-management experience through initial setup. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">LOCAL-001</span>, <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">PORT-001</span>, PORT-002, TEN-001 |  |
-| 95 | BEGIN-002 | Beginner experience | Explain accounting and property-management concepts contextually without removing professional detail. | BEGIN-001 |  |
-| 96 | BEGIN-003 | Beginner experience | Provide step-by-step checklists, safe defaults, validation, and recovery guidance. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">AUDIT-001</span>, <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">TASK-001</span>, BEGIN-001 |  |
+| 80 | ACCT-001 | Accounting | Add trust accounting, automated owner fund transfers, and full bookkeeping. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">AUDIT-001</span>, FIN-004, OWNER-002 |  |
+| 81 | OFFICE-002 | Commercial | Add CAM/NNN reconciliation, escalations, and advanced lease options. | FIN-004, OFFICE-001 |  |
+| 82 | VEND-004 | Providers | Integrate live external review sources and reputation monitoring. | VEND-002 |  |
+| 83 | RPT-003 | Reports | Build custom reports and saved report views. | RPT-002 |  |
+| 84 | RPT-004 | Reports | Schedule report generation and delivery. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">TASK-001</span>, COM-002, RPT-003 |  |
+| 85 | DATA-001 | Data | Import properties, contacts, leases, balances, and history from structured files into the local workspace. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">AUDIT-001</span>, <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">FILE-001</span>, PORT-002, TEN-001, LEASE-001, FIN-001 |  |
+| 86 | BEGIN-001 | Beginner experience | Guide users with little accounting or property-management experience through initial setup. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">LOCAL-001</span>, <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">PORT-001</span>, PORT-002, TEN-001 |  |
+| 87 | BEGIN-002 | Beginner experience | Explain accounting and property-management concepts contextually without removing professional detail. | BEGIN-001 |  |
+| 88 | BEGIN-003 | Beginner experience | Provide step-by-step checklists, safe defaults, validation, and recovery guidance. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">AUDIT-001</span>, <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">TASK-001</span>, BEGIN-001 |  |
 
 ## Future SaaS — Cloud, identity, and collaboration
 
 | Sequence | ID | Area | Outcome | Ordered hard dependencies | Status |
 | ---: | --- | --- | --- | --- | --- |
-| 97 | SAAS-001 | Cloud platform | Host tenant-isolated cloud workspaces for the SaaS offering. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">LOCAL-001</span> |  |
-| 98 | SEC-001 | Authentication | Authenticate SaaS users and manage account recovery and sessions. | SAAS-001 |  |
-| 99 | SEC-002 | Authorization | Enforce workspace roles and permissions for administrators, managers, accounting users, maintenance users, owners, tenants, and read-only users. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">PORT-001</span>, SEC-001 |  |
-| 100 | SAAS-002 | Migration | Analyze a local workspace, verify its format, map it to a cloud account, and provide a dry-run migration plan that excludes external-account credentials. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">LOCAL-002</span>, SAAS-001, SEC-001 |  |
-| 101 | SAAS-003 | Migration | Migrate local records, attachments, ingested-message history, voice-note transcripts and summaries, and AI review decisions while preserving stable IDs, relationships, audit history, and financial totals. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">AUDIT-001</span>, <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">FILE-001</span>, SAAS-002 |  |
-| 102 | SAAS-004 | Migration | Validate migrated totals and record counts, support safe retry or rollback, and require external-account reauthorization. | SAAS-003 |  |
-| 103 | SEC-003 | Secure intake | Issue expiring, scoped submission links and protect public intake with validation, rate limits, and an audit trail. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">AUDIT-001</span>, <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">FILE-001</span>, SEC-001, SEC-002 |  |
-| 104 | INTAKE-001 | Intake | Let owners and tenants directly report rent receipts, rental concerns, and property issues without a full portal. | MAINT-004, OWNER-003, OWNER-004, SEC-003 |  |
-| 105 | PORTAL-001 | Tenant portal | Give tenants a self-service portal for leases, balances, messages, and issues. | TEN-001, LEASE-001, FIN-001, COM-001, SEC-001, SEC-002, INTAKE-001 |  |
-| 106 | PORTAL-002 | Owner portal | Give owners a portal for statements, balances, disbursements, fees, messages, receipts, and issues. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">PORT-001</span>, COM-001, OWNER-001, OWNER-005, SEC-001, SEC-002, INTAKE-001 |  |
-| 107 | RPT-005 | Reports | Publish authenticated owner-facing dashboards. | RPT-002, OWNER-001, PORTAL-002 |  |
-| 108 | PLATFORM-001 | Platform | Add advanced roles and configurable approval workflows. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">AUDIT-001</span>, SEC-002 |  |
-| 109 | API-001 | Platform | Provide a secured public API and event webhooks. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">AUDIT-001</span>, SAAS-001, SEC-002, PLATFORM-001 |  |
+| 89 | SAAS-001 | Cloud platform | Host tenant-isolated cloud workspaces for the SaaS offering. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">LOCAL-001</span> |  |
+| 90 | SEC-001 | Authentication | Authenticate SaaS users and manage account recovery and sessions. | SAAS-001 |  |
+| 91 | SEC-002 | Authorization | Enforce workspace roles and permissions for administrators, managers, accounting users, maintenance users, owners, tenants, and read-only users. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">PORT-001</span>, SEC-001 |  |
+| 92 | SAAS-002 | Migration | Analyze a local workspace, verify its format, map it to a cloud account, and provide a dry-run migration plan that excludes external-account credentials. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">LOCAL-002</span>, SAAS-001, SEC-001 |  |
+| 93 | SAAS-003 | Migration | Migrate local records, attachments, ingested-message history, voice-note transcripts and summaries, and AI review decisions while preserving stable IDs, relationships, audit history, and financial totals. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">AUDIT-001</span>, <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">FILE-001</span>, SAAS-002 |  |
+| 94 | SAAS-004 | Migration | Validate migrated totals and record counts, support safe retry or rollback, and require external-account reauthorization. | SAAS-003 |  |
+| 95 | SEC-003 | Secure intake | Issue expiring, scoped submission links and protect public intake with validation, rate limits, and an audit trail. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">AUDIT-001</span>, <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">FILE-001</span>, SEC-001, SEC-002 |  |
+| 96 | INTAKE-001 | Intake | Let owners and tenants directly report rent receipts, rental concerns, and property issues without a full portal. | MAINT-004, OWNER-003, OWNER-004, SEC-003 |  |
+| 97 | PORTAL-001 | Tenant portal | Give tenants a self-service portal for leases, balances, messages, and issues. | TEN-001, LEASE-001, FIN-001, COM-001, SEC-001, SEC-002, INTAKE-001 |  |
+| 98 | PORTAL-002 | Owner portal | Give owners a portal for statements, balances, disbursements, fees, messages, receipts, and issues. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">PORT-001</span>, COM-001, OWNER-001, OWNER-005, SEC-001, SEC-002, INTAKE-001 |  |
+| 99 | RPT-005 | Reports | Publish authenticated owner-facing dashboards. | RPT-002, OWNER-001, PORTAL-002 |  |
+| 100 | PLATFORM-001 | Platform | Add advanced roles and configurable approval workflows. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">AUDIT-001</span>, SEC-002 |  |
+| 101 | API-001 | Platform | Provide a secured public API and event webhooks. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">AUDIT-001</span>, SAAS-001, SEC-002, PLATFORM-001 |  |
+
+## Later — Apartment extensions
+
+| Sequence | ID | Area | Outcome | Ordered hard dependencies | Status |
+| ---: | --- | --- | --- | --- | --- |
+| 102 | APT-001 | Apartments | Model multi-unit apartment buildings and units. | PORT-002 |  |
+| 103 | APT-002 | Apartments | Support building-wide rent rolls, renewals, and bulk actions. | PORT-003, LEASE-001, FIN-001, APT-001 |  |
+| 104 | APT-003 | Apartments | Manage common areas, shared assets, parking, storage, utilities, and amenities. | FIN-002, MAINT-001, APT-001 |  |
+| 105 | APT-004 | Apartments | Handle unit turnovers and make-ready workflows. | <span style="background-color: #dcfce7; color: #166534; border-radius: 999px; padding: 0 0.35em;">TASK-001</span>, FIN-002, MAINT-001, APT-001 |  |
+| 106 | APT-005 | Apartments | Send building-wide or selected-group tenant communications and notices. | TEN-001, COM-002, APT-001 |  |
+| 107 | APT-006 | Apartments | Add apartment-specific vacancy, rent-roll, and renewal dashboards. | RPT-002, DASH-002, APT-001, APT-002 |  |
+| 108 | APT-007 | Apartments | Allocate shared building expenses across units, owners, or leases. | FIN-002, FIN-003, APT-001 |  |
+| 109 | APT-008 | Apartments | Add apartment listing syndication and route leads by building and unit. | LEAD-001, LIST-002, APT-001 |  |
