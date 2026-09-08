@@ -4,7 +4,7 @@
 
 `PORT-002` turns the property identity established by `PORT-001` into usable rental inventory. An operator can classify a property as a single-family home, condo, townhome, or office, then describe the rentable space or spaces within it.
 
-The result is a stable, plain-language place to attach later leases, listings, maintenance, payments, and occupancy. It deliberately stops before deciding whether a space is vacant or occupied; that belongs to `PORT-003` after leases exist.
+The result is a stable, plain-language place to attach leases, listings, maintenance, payments, and occupancy. PORT-002's own delivery boundary stopped before deciding whether a space was vacant, occupied, or available; PORT-003 subsequently added those independent status records without requiring leases.
 
 ## Scope
 
@@ -67,7 +67,7 @@ Spaces are retained rather than deleted. An archived space remains visible in hi
 - A space may be archived only with explicit confirmation.
 - A property may be archived only after all of its spaces are archived, or through a confirmed **Archive property and its spaces** action that archives every active space in the same transaction.
 - A space cannot be restored while its property is archived.
-- PORT-003 and LEASE-001 will add occupancy and lease guards before a space may be archived.
+- PORT-003 now prevents archival of occupied spaces and spaces with scheduled occupancy transitions. `LEASE-001` will add guards for active lease records.
 
 ## Data model
 
@@ -80,7 +80,7 @@ PORT-002 extends the existing `properties` table and adds `spaces`. All identifi
 | `property_type` | Required enum: `single_family_home`, `condo`, `townhome`, or `office`. It is an operational classification, not a legal conclusion. |
 | `inventory_layout` | Required enum: `single_space` for residential properties; `whole_office` or `office_suites` for offices. It preserves the original intended space structure. |
 
-Existing properties must be classified by an operator during the migration workflow before they can receive spaces. The migration must never infer a residential or commercial type from an address or name.
+Because this is a greenfield product, new properties are classified explicitly when created. The application must never infer a residential or commercial type from an address or name.
 
 ### `spaces`
 
@@ -140,7 +140,7 @@ All endpoints require a ready workspace. Request models reject unknown fields, a
 | `POST` | `/api/spaces/{spaceId}/restore` | Restore a space only under an active compatible property. |
 | `POST` | `/api/properties/{propertyId}/archive` | Require confirmation; optionally archive all active spaces in the same operation. |
 
-Responses use stable UUIDs and expose server-derived, non-writeable fields. They do not expose occupancy or availability yet.
+PORT-002 introduced stable UUIDs and server-derived, non-writeable inventory fields. The current property-detail response is extended by PORT-003 with occupancy, availability, scheduled-transition, and status-summary fields.
 
 ## Audit, safety, and portability
 
@@ -153,7 +153,7 @@ Audit snapshots contain IDs, type/layout, lifecycle fields, and operator-entered
 1. Add portfolio SQLAlchemy models and one Alembic revision for property classification/layout and `spaces`, including exact module-owned schema validation.
 2. Extend portfolio domain values with typed property-type, layout, and space commands; enforce cross-row layout invariants in the application service.
 3. Extend the portfolio unit of work to load and mutate property inventory and append explicit correlated audit events atomically.
-4. Extend typed FastAPI contracts and build the Property type and Rentable spaces UI sections.
+4. Extend typed FastAPI contracts; defer the Property type and Rentable spaces UI sections until `DASH-001`.
 5. Update workspace/archive schema validation and add regression coverage for constraints, atomic audit rollback, archive/restore, and cross-row inventory rules.
 
 ## Acceptance criteria

@@ -7,12 +7,13 @@ from collections import defaultdict
 from typing import Any, TypeVar
 
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.portfolio.application.ports import PortfolioTransaction
-from app.modules.portfolio.domain.models import Party, Property, PropertyOwnership, Space
-from app.modules.portfolio.infrastructure.sqlalchemy_models import PartyModel, PropertyModel, PropertyOwnershipModel, SpaceModel
+from app.modules.portfolio.application.ports import PortfolioConflictError, PortfolioTransaction
+from app.modules.portfolio.domain.models import Party, Property, PropertyOwnership, Space, SpaceAvailability, SpaceOccupancyPeriod
+from app.modules.portfolio.infrastructure.sqlalchemy_models import PartyModel, PropertyModel, PropertyOwnershipModel, SpaceAvailabilityModel, SpaceModel, SpaceOccupancyPeriodModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 Result = TypeVar("Result")
@@ -23,13 +24,25 @@ class SQLitePortfolioUnitOfWork:
         self.engine = create_sqlite_engine(database); self.recorder = recorder
 
     def write(self, operation: Callable[[PortfolioTransaction], Result]) -> Result:
-        with immediate_transaction(self.engine) as connection:
-            return operation(_SQLitePortfolioTransaction(connection, self.recorder))
+        try:
+            with immediate_transaction(self.engine) as connection:
+                return operation(_SQLitePortfolioTransaction(connection, self.recorder))
+        except OperationalError as error:
+            if "locked" in str(error).casefold():
+                raise PortfolioConflictError(
+                    "The portfolio changed concurrently; reload it and try again."
+                ) from error
+            raise
 
     def get_property(self, property_id: str) -> Property | None:
         with Session(self.engine) as session:
             row = session.get(PropertyModel, property_id)
             return _property(row) if row else None
+
+    def get_space(self, space_id: str) -> Space | None:
+        with Session(self.engine) as session:
+            row = session.get(SpaceModel, space_id)
+            return _space(row) if row else None
 
     def ownerships(self, property_id: str) -> list[PropertyOwnership]:
         with Session(self.engine) as session:
@@ -74,6 +87,17 @@ class SQLitePortfolioUnitOfWork:
                 spaces_by_property[space.property_id].append(space)
             return [(item, by_property[item.id], parties, spaces_by_property[item.id]) for item in properties]
 
+    def space_statuses(self, space_ids: list[str]) -> tuple[dict[str, list[SpaceOccupancyPeriod]], dict[str, SpaceAvailability]]:
+        if not space_ids:
+            return {}, {}
+        with Session(self.engine) as session:
+            periods = [_period(row) for row in session.execute(select(SpaceOccupancyPeriodModel).where(SpaceOccupancyPeriodModel.space_id.in_(space_ids)).order_by(SpaceOccupancyPeriodModel.starts_on)).scalars()]
+            availability = [_availability(row) for row in session.execute(select(SpaceAvailabilityModel).where(SpaceAvailabilityModel.space_id.in_(space_ids))).scalars()]
+        by_space: dict[str, list[SpaceOccupancyPeriod]] = defaultdict(list)
+        for period in periods:
+            by_space[period.space_id].append(period)
+        return by_space, {item.space_id: item for item in availability}
+
 
 class _SQLitePortfolioTransaction:
     def __init__(self, connection: Any, recorder: AuditRecorder) -> None:
@@ -97,6 +121,16 @@ class _SQLitePortfolioTransaction:
             query = query.where(SpaceModel.status == "active")
         rows = self.connection.execute(query).mappings().all()
         return [Space(**dict(row)) for row in rows]
+
+    def occupancy_periods(self, space_id: str) -> list[SpaceOccupancyPeriod]:
+        rows = self.connection.execute(
+            SpaceOccupancyPeriodModel.__table__.select().where(SpaceOccupancyPeriodModel.space_id == space_id).order_by(SpaceOccupancyPeriodModel.starts_on)
+        ).mappings().all()
+        return [SpaceOccupancyPeriod(**dict(row)) for row in rows]
+
+    def availability(self, space_id: str) -> SpaceAvailability | None:
+        row = self.connection.execute(SpaceAvailabilityModel.__table__.select().where(SpaceAvailabilityModel.space_id == space_id)).mappings().first()
+        return SpaceAvailability(**dict(row)) if row else None
 
     def ownerships_at(self, property_id: str, when: str) -> list[PropertyOwnership]:
         rows = self.connection.execute(PropertyOwnershipModel.__table__.select().where(
@@ -145,6 +179,18 @@ class _SQLitePortfolioTransaction:
     def replace_space(self, space: Space) -> None:
         self.connection.execute(SpaceModel.__table__.update().where(SpaceModel.id == space.id).values(**space.__dict__))
 
+    def insert_occupancy_period(self, period: SpaceOccupancyPeriod) -> None:
+        self.connection.execute(SpaceOccupancyPeriodModel.__table__.insert().values(**period.__dict__))
+
+    def replace_occupancy_period(self, period: SpaceOccupancyPeriod) -> None:
+        self.connection.execute(SpaceOccupancyPeriodModel.__table__.update().where(SpaceOccupancyPeriodModel.id == period.id).values(**period.__dict__))
+
+    def insert_availability(self, availability: SpaceAvailability) -> None:
+        self.connection.execute(SpaceAvailabilityModel.__table__.insert().values(**availability.__dict__))
+
+    def replace_availability(self, availability: SpaceAvailability) -> None:
+        self.connection.execute(SpaceAvailabilityModel.__table__.update().where(SpaceAvailabilityModel.space_id == availability.space_id).values(**availability.__dict__))
+
     def record_change(self, *, entity_type: str, entity_id: str, action: str,
                       before: dict[str, Any] | None, after: dict[str, Any] | None,
                       reason: str, correlation_id: str) -> None:
@@ -168,3 +214,11 @@ def _ownership(row: PropertyOwnershipModel) -> PropertyOwnership:
 
 def _space(row: SpaceModel) -> Space:
     return Space(**{name: getattr(row, name) for name in Space.__dataclass_fields__})
+
+
+def _period(row: SpaceOccupancyPeriodModel) -> SpaceOccupancyPeriod:
+    return SpaceOccupancyPeriod(**{name: getattr(row, name) for name in SpaceOccupancyPeriod.__dataclass_fields__})
+
+
+def _availability(row: SpaceAvailabilityModel) -> SpaceAvailability:
+    return SpaceAvailability(**{name: getattr(row, name) for name in SpaceAvailability.__dataclass_fields__})

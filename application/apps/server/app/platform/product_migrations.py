@@ -55,6 +55,7 @@ def validate_latest_schema(database_path: Path) -> None:
             expected_tables = {
                 "alembic_version", "workspace_metadata", "audit_events", "file_records",
                 "file_links", "tasks", "task_reminders", "parties", "properties", "property_ownerships", "spaces",
+                "space_occupancy_periods", "space_availability",
             }
             if actual_tables != expected_tables:
                 raise ProductSchemaError("Workspace database contains unsupported application tables.")

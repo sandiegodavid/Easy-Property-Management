@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
@@ -14,8 +15,12 @@ from app.modules.portfolio.application.service import (
     PortfolioNotFoundError,
     PortfolioService,
     PropertyCreateCommand,
+    OccupancyCommand,
+    AvailabilityCommand,
+    SpaceClassificationCommand,
     SpaceCreateCommand,
 )
+from app.modules.portfolio.application.ports import PortfolioConflictError
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 
 
@@ -71,6 +76,41 @@ class SpaceCreateRequest(ContractModel):
     displayName: str = Field(min_length=1, max_length=120)
     suiteOrFloor: str | None = Field(None, max_length=80)
     notes: str | None = Field(None, max_length=4000)
+    occupancy: "OccupancyRequest | None" = None
+    availability: "AvailabilityRequest | None" = None
+
+
+class OccupancyRequest(ContractModel):
+    occupancyStatus: Literal["occupied", "vacant", "unknown"]
+    effectiveOn: date
+    note: str | None = Field(None, max_length=1000)
+
+
+class AvailabilityRequest(ContractModel):
+    availabilityStatus: Literal["available_now", "available_on", "not_available", "unknown"]
+    availableOn: date | None = None
+    note: str | None = Field(None, max_length=1000)
+
+    @model_validator(mode="after")
+    def validate_date(self) -> "AvailabilityRequest":
+        if (self.availabilityStatus == "available_on") != (self.availableOn is not None):
+            raise ValueError("availableOn is required only with available_on")
+        return self
+
+
+class SpaceClassificationRequest(ContractModel):
+    occupancy: OccupancyRequest | None = None
+    availability: AvailabilityRequest | None = None
+
+    @model_validator(mode="after")
+    def require_status(self) -> "SpaceClassificationRequest":
+        if self.occupancy is None and self.availability is None:
+            raise ValueError("occupancy or availability is required")
+        if self.occupancy is not None and self.occupancy.occupancyStatus == "unknown":
+            raise ValueError("classification occupancy must be occupied or vacant")
+        if self.availability is not None and self.availability.availabilityStatus == "unknown":
+            raise ValueError("classification availability must select a known status")
+        return self
 
 
 class SpacePatchRequest(ContractModel):
@@ -110,6 +150,63 @@ class SpaceResponse(ContractModel):
     createdAt: str
     updatedAt: str
     archivedAt: str | None
+
+
+class OccupancyPeriodResponse(ContractModel):
+    id: str
+    spaceId: str
+    occupancyStatus: Literal["occupied", "vacant", "unknown"]
+    startsOn: date
+    endsOn: date | None
+    recordState: Literal["valid", "cancelled", "superseded"]
+    supersededById: str | None
+    sourceKind: Literal["manual", "lease"]
+    sourceId: str | None
+    note: str | None
+    createdAt: datetime
+    endedAt: datetime | None
+    cancelledAt: datetime | None
+
+
+class AvailabilityResponse(ContractModel):
+    spaceId: str
+    availabilityStatus: Literal["available_now", "available_on", "not_available", "unknown"]
+    availableOn: date | None
+    sourceKind: Literal["manual", "listing", "lease"]
+    sourceId: str | None
+    note: str | None
+    updatedAt: datetime
+
+
+class SpaceStatusResponse(SpaceResponse):
+    currentOccupancy: OccupancyPeriodResponse
+    scheduledOccupancy: OccupancyPeriodResponse | None
+    scheduledOccupancyTimeline: list[OccupancyPeriodResponse]
+    availability: AvailabilityResponse
+
+
+class PropertyStatusSummaryResponse(ContractModel):
+    activeSpaceCount: int
+    occupiedCount: int
+    vacantCount: int
+    unknownOccupancyCount: int
+    availableNowCount: int
+    availableLaterCount: int
+    nearestAvailableOn: date | None
+    needsAttentionCount: int
+
+
+class PortfolioStatusSummaryResponse(ContractModel):
+    activePropertyCount: int
+    activeSpaceCount: int
+    occupiedCount: int
+    vacantCount: int
+    unknownOccupancyCount: int
+    availableNowCount: int
+    availableLaterCount: int
+    nearestAvailableOn: date | None
+    needsAttentionSpaceCount: int
+    needsAttentionPropertyCount: int
 
 
 class PartyResponse(ContractModel):
@@ -153,7 +250,8 @@ class PropertyResponse(ContractModel):
     inventoryLayout: Literal["single_space", "whole_office", "office_suites"]
     ownershipContext: Literal["self_owned", "managed_for_owner", "mixed"]
     ownerships: list[OwnershipResponse]
-    spaces: list[SpaceResponse]
+    spaces: list[SpaceStatusResponse]
+    statusSummary: PropertyStatusSummaryResponse
 
 
 def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRouter:
@@ -170,6 +268,8 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
             return operation()
         except PortfolioNotFoundError as error:
             raise HTTPException(404, str(error)) from error
+        except PortfolioConflictError as error:
+            raise HTTPException(409, str(error)) from error
         except PortfolioError as error:
             raise HTTPException(400, str(error)) from error
 
@@ -207,14 +307,28 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
     def list_properties(
         status: Literal["active", "archived"] | None = None,
         ownershipContext: Literal["self_owned", "managed_for_owner", "mixed"] | None = None,
+        occupancy: Literal["occupied", "vacant", "unknown"] | None = None,
+        availability: Literal["available_now", "available_on", "not_available", "unknown"] | None = None,
+        needsAttention: bool | None = None,
     ):
         require_ready()
-        return invoke(lambda: service.list_properties(status=status, ownership_context_filter=ownershipContext))
+        return invoke(lambda: service.list_properties(
+            status=status,
+            ownership_context_filter=ownershipContext,
+            occupancy_filter=occupancy,
+            availability_filter=availability,
+            needs_attention=needsAttention,
+        ))
 
     @router.get("/api/properties/{property_id}", response_model=PropertyResponse)
     def get_property(property_id: str):
         require_ready()
         return invoke(lambda: service.get_property(property_id))
+
+    @router.get("/api/portfolio/status-summary", response_model=PortfolioStatusSummaryResponse)
+    def get_portfolio_status_summary():
+        require_ready()
+        return invoke(service.portfolio_status_summary)
 
     @router.patch("/api/properties/{property_id}", response_model=PropertyResponse)
     def patch_property(property_id: str, data: PropertyPatchRequest):
@@ -276,6 +390,52 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
         require_ready(write=True)
         return invoke(lambda: service.restore_space(space_id).to_dict())
 
+    @router.get("/api/spaces/{space_id}/status", response_model=SpaceStatusResponse)
+    def get_space_status(space_id: str):
+        require_ready()
+        return invoke(lambda: service.get_space_status(space_id))
+
+    @router.put("/api/spaces/{space_id}/occupancy", response_model=SpaceStatusResponse)
+    def change_occupancy(space_id: str, data: OccupancyRequest):
+        require_ready(write=True)
+        return invoke(lambda: service.change_occupancy(space_id, _occupancy(data)))
+
+    @router.post("/api/spaces/{space_id}/occupancy/scheduled/{period_id}/cancel", response_model=SpaceStatusResponse)
+    def cancel_scheduled_occupancy(space_id: str, period_id: str):
+        require_ready(write=True)
+        return invoke(lambda: service.cancel_scheduled_occupancy(space_id, period_id))
+
+    @router.put("/api/spaces/{space_id}/occupancy/scheduled/{period_id}/replace", response_model=SpaceStatusResponse)
+    def replace_scheduled_occupancy(
+        space_id: str,
+        period_id: str,
+        data: OccupancyRequest,
+    ):
+        require_ready(write=True)
+        return invoke(
+            lambda: service.replace_scheduled_occupancy(
+                space_id,
+                period_id,
+                _occupancy(data),
+            )
+        )
+
+    @router.put("/api/spaces/{space_id}/availability", response_model=SpaceStatusResponse)
+    def change_availability(space_id: str, data: AvailabilityRequest):
+        require_ready(write=True)
+        return invoke(lambda: service.change_availability(space_id, _availability(data)))
+
+    @router.put("/api/spaces/{space_id}/classification", response_model=SpaceStatusResponse)
+    def classify_space(space_id: str, data: SpaceClassificationRequest):
+        require_ready(write=True)
+        return invoke(lambda: service.classify_space(
+            space_id,
+            SpaceClassificationCommand(
+                None if data.occupancy is None else _occupancy(data.occupancy),
+                None if data.availability is None else _availability(data.availability),
+            ),
+        ))
+
     return router
 
 
@@ -312,4 +472,22 @@ def _create(data: PropertyCreateRequest) -> PropertyCreateCommand:
 
 
 def _space(data: SpaceCreateRequest) -> SpaceCreateCommand:
-    return SpaceCreateCommand(data.displayName, data.suiteOrFloor, data.notes)
+    return SpaceCreateCommand(
+        data.displayName,
+        data.suiteOrFloor,
+        data.notes,
+        None if data.occupancy is None else _occupancy(data.occupancy),
+        None if data.availability is None else _availability(data.availability),
+    )
+
+
+def _occupancy(data: OccupancyRequest) -> OccupancyCommand:
+    return OccupancyCommand(data.occupancyStatus, data.effectiveOn.isoformat(), data.note)
+
+
+def _availability(data: AvailabilityRequest) -> AvailabilityCommand:
+    return AvailabilityCommand(
+        data.availabilityStatus,
+        None if data.availableOn is None else data.availableOn.isoformat(),
+        data.note,
+    )

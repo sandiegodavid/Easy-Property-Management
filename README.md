@@ -41,7 +41,7 @@ Set `localWorkspacePath` in the live file to the chosen external data folder. Th
 - `database` — current SQLite Alembic baseline and future migration location
 - `config.example.json` — safe, Git-tracked local-workspace configuration template
 
-The React interface and shared web packages are planned follow-on work. Follow the feature backlog sequence and preserve the local workspace, approval, audit, and migration requirements documented in `docs/`.
+The React interface and shared web packages are planned follow-on work. No UI development begins until `DASH-001`; before then, work is limited to backend capabilities, APIs, CLI/setup tooling, tests, and documentation. Follow the feature backlog sequence and preserve the local workspace, approval, audit, and migration requirements documented in `docs/`.
 
 ## Local workspace foundation
 

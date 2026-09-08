@@ -65,3 +65,45 @@ class SpaceModel(LocalBase):
             sqlite_where=text("status = 'active'"),
         ),
     )
+
+
+class SpaceOccupancyPeriodModel(LocalBase):
+    __tablename__ = "space_occupancy_periods"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    space_id: Mapped[str] = mapped_column(ForeignKey("spaces.id"), nullable=False)
+    occupancy_status: Mapped[str] = mapped_column(String, nullable=False)
+    starts_on: Mapped[str] = mapped_column(String, nullable=False)
+    ends_on: Mapped[str | None] = mapped_column(String)
+    record_state: Mapped[str] = mapped_column(String, nullable=False)
+    superseded_by_id: Mapped[str | None] = mapped_column(ForeignKey("space_occupancy_periods.id"))
+    source_kind: Mapped[str] = mapped_column(String, nullable=False)
+    source_id: Mapped[str | None] = mapped_column(String)
+    note: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    ended_at: Mapped[str | None] = mapped_column(String)
+    cancelled_at: Mapped[str | None] = mapped_column(String)
+    __table_args__ = (
+        CheckConstraint("occupancy_status IN ('occupied', 'vacant', 'unknown')"),
+        CheckConstraint("record_state IN ('valid', 'cancelled', 'superseded')"),
+        CheckConstraint("ends_on IS NULL OR ends_on > starts_on"),
+        CheckConstraint("(source_kind = 'manual' AND source_id IS NULL) OR (source_kind = 'lease' AND source_id IS NOT NULL)"),
+        Index("space_occupancy_periods_space_dates", "space_id", "starts_on", "ends_on"),
+        Index("space_occupancy_periods_one_open", "space_id", unique=True, sqlite_where=text("record_state = 'valid' AND ends_on IS NULL")),
+    )
+
+
+class SpaceAvailabilityModel(LocalBase):
+    __tablename__ = "space_availability"
+    space_id: Mapped[str] = mapped_column(ForeignKey("spaces.id"), primary_key=True)
+    availability_status: Mapped[str] = mapped_column(String, nullable=False)
+    available_on: Mapped[str | None] = mapped_column(String)
+    source_kind: Mapped[str] = mapped_column(String, nullable=False)
+    source_id: Mapped[str | None] = mapped_column(String)
+    note: Mapped[str | None] = mapped_column(String)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint("availability_status IN ('available_now', 'available_on', 'not_available', 'unknown')"),
+        CheckConstraint("(availability_status = 'available_on' AND available_on IS NOT NULL) OR (availability_status != 'available_on' AND available_on IS NULL)"),
+        CheckConstraint("(source_kind = 'manual' AND source_id IS NULL) OR (source_kind IN ('listing', 'lease') AND source_id IS NOT NULL)"),
+        Index("space_availability_status_date", "availability_status", "available_on"),
+    )

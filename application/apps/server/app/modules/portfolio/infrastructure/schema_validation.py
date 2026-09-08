@@ -26,6 +26,14 @@ def validate_portfolio_schema(connection) -> None:
             {"id", "property_id", "space_kind", "display_name", "normalized_name", "suite_or_floor", "notes", "status", "created_at", "updated_at", "archived_at", "archived_by_property_operation_id"},
             {"suite_or_floor", "notes", "archived_at", "archived_by_property_operation_id"},
         ),
+        "space_occupancy_periods": (
+            {"id", "space_id", "occupancy_status", "starts_on", "ends_on", "record_state", "superseded_by_id", "source_kind", "source_id", "note", "created_at", "ended_at", "cancelled_at"},
+            {"ends_on", "superseded_by_id", "source_id", "note", "ended_at", "cancelled_at"},
+        ),
+        "space_availability": (
+            {"space_id", "availability_status", "available_on", "source_kind", "source_id", "note", "updated_at"},
+            {"available_on", "source_id", "note"},
+        ),
     }
     _validate_columns(inspector, expected_columns)
     _validate_indexes(connection, inspector, expected_columns)
@@ -40,7 +48,8 @@ def _validate_columns(inspector, expected_columns) -> None:
         columns = inspector.get_columns(table)
         if {column["name"] for column in columns} != names:
             raise MigrationSchemaError(f"{table} columns are incompatible with PORT-001.")
-        if {column["name"] for column in columns if column["primary_key"]} != {"id"}:
+        expected_primary_key = {"space_id"} if table == "space_availability" else {"id"}
+        if {column["name"] for column in columns if column["primary_key"]} != expected_primary_key:
             raise MigrationSchemaError(f"{table} primary key is incompatible with PORT-001.")
         for column in columns:
             if not column["primary_key"] and bool(column["nullable"]) != (column["name"] in nullable):
@@ -74,6 +83,13 @@ def _validate_indexes(connection, inspector, expected_columns) -> None:
             "spaces_property_status_name": (("property_id", "status", "display_name"), False),
             "spaces_one_active_name": (("property_id", "normalized_name"), True),
         },
+        "space_occupancy_periods": {
+            "space_occupancy_periods_space_dates": (("space_id", "starts_on", "ends_on"), False),
+            "space_occupancy_periods_one_open": (("space_id",), True),
+        },
+        "space_availability": {
+            "space_availability_status_date": (("availability_status", "available_on"), False),
+        },
     }
     if indexes != required:
         raise MigrationSchemaError("PORT-001 indexes are incompatible.")
@@ -82,7 +98,7 @@ def _validate_indexes(connection, inspector, expected_columns) -> None:
         "SELECT name, sql FROM sqlite_master "
         "WHERE type = 'index' AND name IN "
         "('property_ownerships_one_active_operator', "
-        "'property_ownerships_one_active_client', 'spaces_one_active_name')"
+        "'property_ownerships_one_active_client', 'spaces_one_active_name', 'space_occupancy_periods_one_open')"
     ).all()
     predicates = {
         name: _normalise_sql(sql.partition("WHERE")[2])
@@ -93,6 +109,7 @@ def _validate_indexes(connection, inspector, expected_columns) -> None:
         "property_ownerships_one_active_operator": "owner_kind='local_operator'andends_onisnull",
         "property_ownerships_one_active_client": "owner_kind='client_owner'andends_onisnull",
         "spaces_one_active_name": "status='active'",
+        "space_occupancy_periods_one_open": "record_state='valid'andends_onisnull",
     }
     if predicates != expected_predicates:
         raise MigrationSchemaError("PORT-001 partial-index predicates are incompatible.")
@@ -106,6 +123,13 @@ def _validate_foreign_keys(inspector) -> None:
         },
         "spaces": {
             (("property_id",), "properties", ("id",)),
+        },
+        "space_occupancy_periods": {
+            (("space_id",), "spaces", ("id",)),
+            (("superseded_by_id",), "space_occupancy_periods", ("id",)),
+        },
+        "space_availability": {
+            (("space_id",), "spaces", ("id",)),
         },
     }
     found = {
@@ -143,6 +167,17 @@ def _validate_checks(inspector, expected_columns) -> None:
             "space_kindin('whole_home','whole_office','office_suite')",
             "statusin('active','archived')",
             "length(trim(display_name))>0",
+        },
+        "space_occupancy_periods": {
+            "occupancy_statusin('occupied','vacant','unknown')",
+            "record_statein('valid','cancelled','superseded')",
+            "ends_onisnullorends_on>starts_on",
+            "(source_kind='manual'andsource_idisnull)or(source_kind='lease'andsource_idisnotnull)",
+        },
+        "space_availability": {
+            "availability_statusin('available_now','available_on','not_available','unknown')",
+            "(availability_status='available_on'andavailable_onisnotnull)or(availability_status!='available_on'andavailable_onisnull)",
+            "(source_kind='manual'andsource_idisnull)or(source_kindin('listing','lease')andsource_idisnotnull)",
         },
     }
     found = {

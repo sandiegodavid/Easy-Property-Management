@@ -4,6 +4,8 @@
 
 This is the agreed implementation direction for the local, single-operator MVP. It records architecture decisions and options only; it does not authorize or include application code. Detailed product outcomes and dependencies remain in [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md), and the product scope remains in [PRODUCT_BRIEF.md](PRODUCT_BRIEF.md).
 
+UI development is deferred until `DASH-001`. Until that backlog item is implemented, build only backend domain logic, persistence, migrations, APIs, CLI/setup capabilities, tests, and documentation; React screens, shared web packages, and other operator-interface surfaces are out of scope.
+
 ## Architecture in one view
 
 Use a **modular monolith**: one locally run application with a React/TypeScript user interface, a Python API, a SQLite workspace database, and a workspace file store. Modules are independently organized and tested but deploy together. This is the right fit for one operator and roughly 1–50 rentable spaces: it keeps installation, data ownership, backup, and support understandable while leaving clean seams for a future hosted product.

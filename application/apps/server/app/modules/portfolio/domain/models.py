@@ -123,6 +123,62 @@ class Space:
         }
 
 
+@dataclass(frozen=True)
+class SpaceOccupancyPeriod:
+    id: str
+    space_id: str
+    occupancy_status: str
+    starts_on: str
+    ends_on: str | None
+    record_state: str
+    superseded_by_id: str | None
+    source_kind: str
+    source_id: str | None
+    note: str | None
+    created_at: str
+    ended_at: str | None
+    cancelled_at: str | None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "spaceId": self.space_id,
+            "occupancyStatus": self.occupancy_status,
+            "startsOn": self.starts_on,
+            "endsOn": self.ends_on,
+            "recordState": self.record_state,
+            "supersededById": self.superseded_by_id,
+            "sourceKind": self.source_kind,
+            "sourceId": self.source_id,
+            "note": self.note,
+            "createdAt": self.created_at,
+            "endedAt": self.ended_at,
+            "cancelledAt": self.cancelled_at,
+        }
+
+
+@dataclass(frozen=True)
+class SpaceAvailability:
+    space_id: str
+    availability_status: str
+    available_on: str | None
+    source_kind: str
+    source_id: str | None
+    note: str | None
+    updated_at: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "spaceId": self.space_id,
+            "availabilityStatus": self.availability_status,
+            "availableOn": self.available_on,
+            "sourceKind": self.source_kind,
+            "sourceId": self.source_id,
+            "note": self.note,
+            "updatedAt": self.updated_at,
+        }
+
+
 def ownership_context(ownerships: list[PropertyOwnership]) -> str:
     local = any(item.owner_kind == "local_operator" for item in ownerships)
     client = any(item.owner_kind == "client_owner" for item in ownerships)
