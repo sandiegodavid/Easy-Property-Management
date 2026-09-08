@@ -11,7 +11,7 @@ It is an audit and recovery aid, not a substitute for legal record-retention adv
 The ledger is required for sensitive records, including:
 
 - Rent expectations, payments, payment methods, expenses, owner balances, owner-reported receipts, and owner disbursements.
-- Leases, deposits, renewal/rent-adjustment terms, notices, approvals, and important documents.
+- Leases, deposits, move-in/move-out condition reports, comparison decisions, renewal/rent-adjustment terms, notices, approvals, and important documents.
 - Owner, tenant, applicant, provider, issue, quote, work-journal, and communication records where later modules designate fields as sensitive.
 - Ingested messages, attachments, voice-note transcripts, AI output, and operator review or approval decisions.
 - System actions that materially affect data, such as import, restore, migration, retention/deletion, connector reconciliation, and automatic backup outcome.

@@ -34,10 +34,11 @@ class BackupService:
     """Coordinates focused archive, state, policy, and restore collaborators."""
 
     def __init__(self, workspace_service: WorkspaceService, audit_recorder: AuditRecorder,
-                 restored_audit_recorder: Callable[[Path], AuditRecorder], secret_store: BackupSecretStore | None = None) -> None:
+                 restored_audit_recorder: Callable[[Path], AuditRecorder], secret_store: BackupSecretStore | None = None,
+                 remote_materializer=None) -> None:
         self.workspace_service = workspace_service
         self.secret_store = secret_store or KeyringBackupSecretStore()
-        self.archives = WorkspaceArchiveService(workspace_service)
+        self.archives = WorkspaceArchiveService(workspace_service, remote_materializer)
         self.destinations = BackupDestinationPolicy(workspace_service)
         self.locks = WorkspaceLockCoordinator(workspace_service.paths)
         self.state = BackupStateStore(workspace_service.paths.backups)

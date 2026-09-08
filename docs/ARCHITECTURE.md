@@ -36,8 +36,8 @@ The navigation should use familiar, task-oriented language. Each module has one 
 | --- | --- | --- |
 | Home & Inbox | Answer “what needs attention now?” | Action dashboard, overdue rent, expiring leases, owner actions, showings, urgent repairs, source-message and AI-review queues, plus a simple value snapshot. The snapshot surfaces tracked income, estimated cost avoided and time saved, retention, and issue-resolution speed; every value identifies its period, calculation, source records, and any operator-configured baseline. |
 | Portfolio | Represent the physical portfolio and its ownership context | Properties, spaces, self-owned versus managed relationships, occupancy, contacts, and property history. |
-| Leasing | Move a vacancy from listing to approved lease | Listings, leads, showings, offers/counteroffers, applications, applicant evidence, human approval decisions, leases, and rent adjustments. |
-| Money | Make expected, received, spent, and due money understandable | Rent expectations and receipts, payment methods, prepaid checks, expenses, owner-reported rent, owner balances, and recorded owner disbursements. |
+| Leasing | Move a vacancy from listing to approved lease and documented turnover | Listings, leads, showings, offers/counteroffers, applications, applicant evidence, human approval decisions, leases, condition reports, and rent adjustments. |
+| Money | Make expected, received, spent, and due money understandable | Rent expectations and receipts, security-deposit receipt and settlement, payment methods, prepaid checks, expenses, owner-reported rent, owner balances, and recorded owner disbursements. |
 | Maintenance | Move a reported issue to a documented outcome | Owner/tenant/manager/staff-reported issues, triage, quotes, assignments, work journals, costs, and provider recommendations. |
 | Service providers | Retain local provider knowledge | Categories, coverage, past work, references, preferred/avoid status, and manually recorded external-review links. |
 | Communications | Preserve follow-up context | Tenant and owner communication history, reminders, task completion, and source attribution. |
@@ -57,7 +57,8 @@ The server separates domain responsibilities from user-interface screens. This s
 | `workspace` | Open, validate, migrate, back up, restore, relocate, and export a local workspace. |
 | `parties` | Owners, tenants, prospects, vendors, companies, contacts, and their roles. |
 | `portfolio` | Property, space, ownership/management relationships, availability, and occupancy. |
-| `leasing` | Listings, leads, showings, offers, applications, approvals, leases, deposits, renewals, and rent changes. |
+| `leasing` | Listings, leads, showings, offers, applications, approvals, leases, renewals, and rent changes. |
+| `inspections` | Lease-linked move-in/move-out condition reports, observations, evidence links, acknowledgment state, and reviewed comparisons. |
 | `finance` | Rent expectations, receipts, payment methods, prepaid checks, expenses, categories, and financial allocations. |
 | `owner-accounting` | Owner-reported receipts, balances, disbursement approvals, and disbursement history. |
 | `maintenance` | Issue intake, reporter attribution, appointments, quotes, assignments, status, costs, and work journals. |
@@ -71,6 +72,8 @@ The server separates domain responsibilities from user-interface screens. This s
 | `connectors` | External provider authorization, OS credential-store access, adapter lifecycle, and connection health. |
 
 `platform` code supplies cross-cutting capabilities such as database access, file storage, auditing, logging, error handling, background job execution, and configuration. It must not become a substitute for domain rules.
+
+The lease, inspection, maintenance, and finance boundaries are deliberate. `leasing` owns contractual dates and participants; `inspections` owns condition evidence; `maintenance` owns repair work and cost records; `finance` owns any security-deposit receipt, approved deduction, refund, and settlement. References connect these records without allowing a condition classification to create a financial deduction automatically.
 
 Task lifecycle rules live in the task application/domain layer. A task unit of work provides one immediate SQLite write transaction for the application service to load state, apply a transition, persist task and reminder changes, and append the corresponding audit events atomically; it contains persistence mechanics rather than task policy.
 
@@ -88,7 +91,7 @@ Backup status is represented by typed state, operation history, failure records,
 | Local database | SQLite in WAL mode | Embedded, portable, reliable single-operator data store with no database server to administer. |
 | Database access and migrations | SQLAlchemy with Alembic | Alembic is the sole schema authority. The greenfield baseline creates the complete current workspace schema; later revisions begin only after customer data exists. |
 | API/data validation | Pydantic | Shared validation approach for API requests, AI-structured output, and configuration. |
-| Attachments | Filesystem inside the external workspace | Keeps lease files, receipts, photos, and exports portable with the local record set. |
+| Attachments | Storage-neutral FILE-001 records and links; local workspace filesystem by default, with optional AWS S3 adapter | Keeps domain associations stable across storage backends. Local files remain portable with the workspace; S3 objects use durable locators and application-owned hashes, never persisted presigned URLs. Portable backups embed verified referenced content. |
 | Background work | SQLite-backed jobs/outbox table run by the application | Handles ingestion, transcription, AI review preparation, reminders, and backup jobs without Redis or a message broker. |
 
 | Secrets | Operating-system credential store | Keeps external connection credentials out of Git, the workspace database, exports, and backups. |

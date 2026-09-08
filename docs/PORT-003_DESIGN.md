@@ -36,7 +36,7 @@ All new spaces begin with **Unknown** occupancy and **Unknown** availability unl
 
 PORT-003 does not provide:
 
-- Tenants, occupants, lease participants, lease dates, move-in or move-out workflows, rent, deposits, or notices. These belong to `TEN-001` and `LEASE-001`.
+- Tenants, occupants, lease participants, lease dates, move-in or move-out workflows, rent, deposits, condition reports, or notices. These belong to `TEN-001`, `LEASE-001`, `INSP-001`, and finance modules.
 - Rental listings or publication. `LIST-001` consumes availability but owns marketing status.
 - Apartment buildings or apartment units. Apartment support remains a future extension.
 - Reservations, leads, showings, applicant holds, cleaning turns, repair schedules, or detailed vacancy reasons.
@@ -279,4 +279,4 @@ PORT-003 reaches overall **Done** only after both the backend/API and operator U
 
 PORT-003 requires `PORT-002`. It supplies the inventory-status foundation for `LEASE-001`, `LIST-001`, `DASH-001`, `RPT-001`, and later vacancy-risk features.
 
-`TEN-001` adds people and lease participants. `LEASE-001` introduces lease-owned occupancy periods and move-in/move-out rules. `LIST-001` introduces listing-owned availability context. Those modules must use the source fields and transaction boundary defined here rather than maintaining competing status flags.
+`TEN-001` adds people and lease participants. `LEASE-001` introduces lease-owned occupancy periods and move-in/move-out rules. `INSP-001` records condition evidence at those milestones without becoming another occupancy source. `LIST-001` introduces listing-owned availability context. Those modules must use the source fields and transaction boundary defined here rather than maintaining competing status flags.

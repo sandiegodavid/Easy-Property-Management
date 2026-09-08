@@ -1,4 +1,7 @@
 {
   "localWorkspacePath": "/Users/your-name/Property-Management-Data",
-  "backupDestinationPath": "/Users/your-name/Property-Management-Backups"
+  "backupDestinationPath": "/Users/your-name/Property-Management-Backups",
+  "fileStorageProvider": "local",
+  "s3Bucket": null,
+  "s3Prefix": "managed"
 }

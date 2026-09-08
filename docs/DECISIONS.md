@@ -29,6 +29,8 @@
 | Exclude external account credentials from backup and SaaS migration. | Agreed | Provider tokens are device-sensitive secrets; restored or migrated workspaces must reauthorize each external account. |
 | Support self-owned, client-managed, and mixed portfolios. | Agreed | Both relationships are central to the target customer. |
 | Include owner balances and manual owner-disbursement tracking in the MVP. | Agreed | Managers need to account for funds due and paid to client owners from the beginning. Electronic fund movement remains a later integration. |
+| Put pre-move-in and post-move-out condition reports in a dedicated inspection workflow after LEASE-001. | Agreed | The lease supplies space and timing context, while condition observations, photos, acknowledgment, and comparison have an independent evidence lifecycle. |
+| Keep condition classifications separate from security-deposit settlement. | Agreed | An inspection can identify possible damage, but only a later operator-reviewed finance workflow may approve a deduction, refund, deadline, or settlement. |
 | Include owner-reported rent receipts in the MVP. | Agreed | Owners may receive rent directly; source and verification tracking prevent omissions and duplicate income. |
 | Include manual rental applications, applicant financial evidence, and human lease-approval decisions in the MVP. | Agreed | Small operators need the qualification record connected to the lead and eventual lease even before third-party screening integrations are added. |
 | Record lawful household occupancy needs, but never use protected familial status as an approval criterion. | Agreed | Residential screening must support lease administration without enabling discriminatory decisions. |

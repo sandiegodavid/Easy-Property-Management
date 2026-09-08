@@ -77,8 +77,8 @@ Later phases may support users with little or no accounting or property-manageme
 
 1. **Home** — overdue rent, urgent repairs, upcoming showings, expiring leases, money summary, and a simple value snapshot showing tracked income, estimated cost avoided and time saved, retention, and issue-resolution speed. Metrics show their source records and clearly label estimates and operator-configured baselines.
 2. **Properties** — owned versus managed relationship, property type, spaces, occupancy, and history.
-3. **Tenants and leases** — contacts, terms, deposits, balances, dates, document storage, rent-adjustment notice deadlines, and effective-dated changes.
-4. **Payments and expenses** — expected, received, partial, late, and outstanding rent; payment methods and prepaid-check deposit reminders; owner-reported rent receipts; expenses, vendors, categories, and receipts.
+3. **Tenants, leases, and condition reports** — contacts, terms, agreed deposits, dates, document storage, effective-dated changes, and evidence-backed pre-move-in/post-move-out walkthroughs.
+4. **Payments, deposits, and expenses** — expected, received, partial, late, and outstanding rent; payment methods and prepaid-check deposit reminders; security-deposit receipt and operator-approved settlement; owner-reported rent receipts; expenses, vendors, categories, and receipts.
 5. **Owner management** — owner balances, funds due, manual disbursement approval and recording, and owner-raised rental concerns.
 6. **Listings, leads, and applicants** — manual listing creation, lead pipeline, showing schedule, offers and counteroffers, applications, lawful applicant qualification records, supporting financial evidence, and human approval decisions.
 7. **Communications and reminders** — owner and tenant interaction history, rent reminders, renewal follow-up, and completion status.
@@ -128,6 +128,7 @@ The MVP does not include:
 - Lease-approval decisions retain the criteria applied, reviewer, decision, reasons, conditions, and any consumer-report adverse-action follow-up.
 - Rent-adjustment rules are versioned by jurisdiction, effective date, source, and last verification; alerts retain the rule version and operator confirmation used for the calculation.
 - Rent receipts retain expected and actual payment methods. Future-dated checks remain scheduled instruments until their deposit is confirmed.
+- Move-in and move-out condition reports preserve separate observations and supporting files for the lease's space. Comparisons may identify possible damage or maintenance needs, but only a separate operator-reviewed financial workflow may approve a security-deposit deduction or refund.
 - Providers may have multiple configurable service categories, and AI suggestions retain their rationale, evidence, confidence, safety flags, and operator decision.
 - Every rental or property issue records the reporter and reporter role—owner, tenant, manager, or staff—along with its category and communication history.
 - Every ingested message retains its source, source identifier, sender, received time, attachments, sync state, and link to the original source; deduplication prevents the same message from creating multiple issues.

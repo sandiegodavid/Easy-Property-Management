@@ -11,7 +11,7 @@ Deliver complete, understandable workflows for:
 - Operator-run setup scripts to initialize or restore each user's local workspace, select data and backup locations, record its machine-local locator, and verify readiness.
 - Portfolio setup for self-owned and client-managed properties.
 - Single-family homes, condos, townhomes, and offices.
-- Tenants, leases, rent tracking, recorded payment methods, prepaid-check deposit reminders, expenses, and basic communication history.
+- Tenants, leases, pre-move-in/post-move-out condition reports, rent tracking, security-deposit settlement, recorded payment methods, prepaid-check deposit reminders, expenses, and basic communication history.
 - Jurisdiction-sourced notice-deadline alerts and effective-dated rent adjustments with operator confirmation.
 - Owner-reported rent receipts, owner balances, and manual owner-disbursement tracking.
 - Operator-recorded owner/tenant reports with clear attribution for rental and property issues.

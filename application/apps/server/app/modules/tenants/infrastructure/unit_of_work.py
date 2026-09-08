@@ -10,6 +10,7 @@ from app.modules.tenants.infrastructure.sqlalchemy_models import TenantContactMe
 from app.modules.tenants.application.ports import TenantTransaction
 from app.modules.tenants.domain.models import TenantContactMethod, TenantProfile
 from app.modules.tenants.domain.contact_values import contact_search_terms, like_contains_pattern, normalize_contact_value, phone_search_value
+from app.modules.leases.infrastructure.sqlalchemy_models import LeaseModel, LeaseParticipantModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 Result = TypeVar("Result")
 
@@ -61,6 +62,18 @@ class _Transaction:
         row = self.connection.execute(TenantProfileModel.__table__.select().where(TenantProfileModel.party_id == party_id)).mappings().first(); return _profile_mapping(row) if row else None
     def methods(self, party_id):
         rows = self.connection.execute(TenantContactMethodModel.__table__.select().where(TenantContactMethodModel.party_id == party_id).order_by(TenantContactMethodModel.created_at)).mappings().all(); return [TenantContactMethod(**dict(row)) for row in rows]
+    def has_open_lease_participation(self, party_id, today):
+        query = (
+            select(LeaseParticipantModel.id)
+            .join(LeaseModel, LeaseModel.id == LeaseParticipantModel.lease_id)
+            .where(
+                LeaseParticipantModel.tenant_party_id == party_id,
+                LeaseModel.status == "executed",
+                (LeaseParticipantModel.ends_on.is_(None) | (LeaseParticipantModel.ends_on > today)),
+            )
+            .limit(1)
+        )
+        return self.connection.execute(query).first() is not None
     def insert_party(self, item): self.connection.execute(PartyModel.__table__.insert().values(**item.__dict__))
     def insert_profile(self, item): self.connection.execute(TenantProfileModel.__table__.insert().values(**_profile_values(item)))
     def replace_profile(self, item): self.connection.execute(TenantProfileModel.__table__.update().where(TenantProfileModel.party_id == item.party_id).values(**_profile_values(item)))

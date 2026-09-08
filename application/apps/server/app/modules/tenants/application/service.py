@@ -1,6 +1,6 @@
 """Tenant profile and contact-method use cases."""
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
 from app.modules.parties.application.service import PartyCreateCommand, PartyFactory, PartyValidationError
@@ -224,6 +224,10 @@ class TenantService:
             if archive == (profile.archived_at is not None):
                 state = "archived" if archive else "active"
                 raise TenantConflictError(f"Tenant profile is already {state}.")
+            if archive and tx.has_open_lease_participation(party_id, date.today().isoformat()):
+                raise TenantConflictError(
+                    "A tenant with current or scheduled lease participation cannot be archived."
+                )
             updated = replace(profile, archived_at=now if archive else None, updated_at=now)
             tx.replace_profile(updated); tx.record_change(entity_type="tenant_profile", entity_id=party_id, action="status_changed", before=profile.to_dict(), after=updated.to_dict(), reason="tenant_archived" if archive else "tenant_restored", correlation_id=correlation)
             return _view(tx.party(party_id), updated, tx.methods(party_id))

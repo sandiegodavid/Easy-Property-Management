@@ -1,0 +1,1 @@
+"""Lease domain values."""

@@ -18,6 +18,9 @@ from app.modules.audit.domain.models import AuditEvent, AuditSnapshotPolicyRegis
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.runtime import WorkspaceRuntime
+from app.modules.files.application.service import FileService
+from app.modules.files.infrastructure.content_store import FilesystemContentStore
+from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.platform.config import LocalConfig
 from app.platform.product_migrations import ProductSchemaError, validate_latest_schema
 
@@ -125,3 +128,20 @@ class AuditLedgerTests(unittest.TestCase):
             response = client.get(f"/api/audit/events/workspace/{self.manifest.workspace_id}")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["events"][0]["action"], "created")
+
+    def test_file_names_are_redacted_only_from_general_activity(self) -> None:
+        source = Path(self.temp.name) / "job-relocation-letter.pdf"
+        source.write_bytes(b"private supporting document")
+        item = FileService(
+            self.workspace,
+            FilesystemContentStore(self.workspace.paths.files),
+            SQLiteFileUnitOfWork(self.workspace.paths.database, self.recorder),
+        ).add(source, source.name, "application/pdf")
+
+        from app.bootstrap.api import create_app
+        with TestClient(create_app(self.workspace.config.config_path)) as client:
+            activity = client.get("/api/audit/events").json()["events"]
+            contextual = client.get(f"/api/audit/events/file/{item.id}").json()["events"]
+        file_activity = next(event for event in activity if event["entityType"] == "file")
+        self.assertEqual(file_activity["after"]["originalName"], "[redacted]")
+        self.assertEqual(contextual[0]["after"]["originalName"], source.name)

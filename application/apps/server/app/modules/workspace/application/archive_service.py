@@ -10,6 +10,7 @@ import tempfile
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
+from collections.abc import Callable
 
 from app.modules.workspace.application.backup_models import BackupError, BackupResult, PackageType
 from app.modules.workspace.application.backup_policy import secure_directory, secure_file
@@ -32,9 +33,13 @@ from app.platform.config import LocalConfig
 from app.platform.product_migrations import current_revision
 
 
+RemoteMaterializer = Callable[[str, str, str | None, Path, str, int], None]
+
+
 class WorkspaceArchiveService:
-    def __init__(self, workspace_service: WorkspaceService) -> None:
+    def __init__(self, workspace_service: WorkspaceService, remote_materializer: RemoteMaterializer | None = None) -> None:
         self.workspace_service = workspace_service
+        self.remote_materializer = remote_materializer
 
     @property
     def paths(self) -> WorkspacePaths:
@@ -43,7 +48,7 @@ class WorkspaceArchiveService:
     def validate_workspace(self) -> WorkspaceManifest:
         manifest = self.workspace_service.open(integrity_check=True)
         self.assert_safe_file_tree(self.paths.files)
-        self._validate_managed_file_records(self.paths.root)
+        self._validate_managed_file_records(self.paths.root, allow_remote=True)
         return manifest
 
     def create(
@@ -122,20 +127,46 @@ class WorkspaceArchiveService:
         if manifest.workspace_id != contents.header["sourceWorkspaceId"]:
             raise BackupError("Archive workspace identity does not match its encrypted package.")
         self.assert_safe_file_tree(WorkspacePaths(workspace_root).files)
-        self._validate_managed_file_records(workspace_root)
+        # Portable archives are self-contained: no restored record may require S3.
+        self._validate_managed_file_records(workspace_root, allow_remote=False)
         return manifest
 
-    @staticmethod
-    def _validate_managed_file_records(workspace_root: Path) -> None:
+    def _validate_managed_file_records(self, workspace_root: Path, *, allow_remote: bool) -> None:
         database = WorkspacePaths(workspace_root).database
         with closing(sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro", uri=True)) as connection:
             table = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='file_records'").fetchone()
             if not table:
                 raise BackupError("Archive database is missing the required file_records table.")
-            records = connection.execute("SELECT relative_path, content_sha256, size_bytes FROM file_records").fetchall()
+            records = connection.execute(
+                "SELECT l.storage_provider, l.storage_state, l.local_relative_path, l.s3_bucket, l.s3_object_key, "
+                "l.s3_version_id, r.content_sha256, r.size_bytes "
+                "FROM file_records r JOIN file_content_locations l ON l.file_id = r.id"
+            ).fetchall()
+            record_count = connection.execute("SELECT count(*) FROM file_records").fetchone()[0]
+            if len(records) != record_count:
+                raise BackupError("A managed file is missing its content location.")
         files_root = WorkspacePaths(workspace_root).files.resolve()
         expected_paths: set[Path] = set()
-        for relative_path, expected_hash, expected_size in records:
+        for storage_provider, storage_state, relative_path, s3_bucket, s3_object_key, s3_version_id, expected_hash, expected_size in records:
+            if storage_state != "available":
+                raise BackupError("Only available managed file content can be archived.")
+            if storage_provider == "s3":
+                if not allow_remote:
+                    raise BackupError("Portable archives cannot contain remote file locations.")
+                if self.remote_materializer is None or not s3_bucket or not s3_object_key:
+                    raise BackupError("Remote file content cannot be verified by the configured backup service.")
+                with tempfile.TemporaryDirectory(prefix="epm-remote-validation-") as directory:
+                    target = Path(directory) / expected_hash
+                    try:
+                        self.remote_materializer(
+                            s3_bucket, s3_object_key, s3_version_id,
+                            target, expected_hash, expected_size,
+                        )
+                    except Exception as error:
+                        raise BackupError(f"Remote file content failed verification: {error}") from error
+                continue
+            if storage_provider != "local" or relative_path is None:
+                raise BackupError("A file record has an unsupported content location.")
             path = (files_root / relative_path).resolve()
             if (files_root not in path.parents or not path.is_file() or
                     str(relative_path) != f"managed/{expected_hash}"):
@@ -176,6 +207,41 @@ class WorkspaceArchiveService:
             secure_directory(target.parent)
             shutil.copy2(source_file, target)
             secure_file(target)
+        self._materialize_remote_files(workspace)
+
+    def _materialize_remote_files(self, staged_workspace: Path) -> None:
+        database = WorkspacePaths(staged_workspace).database
+        with closing(sqlite3.connect(database)) as connection:
+            records = connection.execute(
+                "SELECT l.file_id, l.storage_state, l.s3_bucket, l.s3_object_key, l.s3_version_id, r.content_sha256, r.size_bytes "
+                "FROM file_content_locations l JOIN file_records r ON r.id = l.file_id "
+                "WHERE l.storage_provider = 's3'"
+            ).fetchall()
+            if records and self.remote_materializer is None:
+                raise BackupError("Remote file content cannot be included by the configured backup service.")
+            for file_id, storage_state, bucket, key, version_id, digest, size in records:
+                if storage_state != "available":
+                    raise BackupError("Only available remote file content can be materialized.")
+                target = staged_workspace / "files" / "managed" / digest
+                target.parent.mkdir(parents=True, exist_ok=True)
+                secure_directory(target.parent)
+                if target.exists():
+                    if target.stat().st_size != size or hashlib.sha256(target.read_bytes()).hexdigest() != digest:
+                        raise BackupError("Materialized remote content conflicts with staged content.")
+                else:
+                    try:
+                        self.remote_materializer(bucket, key, version_id, target, digest, size)
+                    except Exception as error:
+                        target.unlink(missing_ok=True)
+                        raise BackupError(f"Remote file content could not be materialized: {error}") from error
+                secure_file(target)
+                connection.execute(
+                    "UPDATE file_content_locations SET storage_provider='local', storage_state='available', "
+                    "local_relative_path=?, s3_bucket=NULL, s3_object_key=NULL, s3_version_id=NULL, "
+                    "provider_etag=NULL, verified_at=? WHERE file_id=?",
+                    (f"managed/{digest}", datetime.now(UTC).isoformat(), file_id),
+                )
+            connection.commit()
 
     @staticmethod
     def assert_safe_file_tree(root: Path) -> None:

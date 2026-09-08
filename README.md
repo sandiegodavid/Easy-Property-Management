@@ -21,6 +21,8 @@ The planned stack is React/Vite/TypeScript for the interface, with Python/FastAP
 - [LOCAL-002 backup, export, and restore design](docs/LOCAL-002_DESIGN.md)
 - [AUDIT-001 local audit ledger design](docs/AUDIT-001_DESIGN.md)
 - [PORT-001 portfolio ownership-context design](docs/PORT-001_DESIGN.md)
+- [LEASE-001 lease records and occupancy design](docs/LEASE-001_DESIGN.md)
+- [INSP-001 move-in and move-out condition-report design](docs/INSP-001_DESIGN.md)
 
 ## Local workspace configuration
 
@@ -70,3 +72,15 @@ python -m app restore /absolute/path/to/archive.epm-backup /absolute/path/to/new
 ```
 
 Each backup and export prompts for a passphrase of at least 12 characters, uses authenticated encryption, and is validated before it is published. Restore requires a new or empty external destination and never changes the configured live workspace. Automatic daily backups are optional: `python -m app enable-automatic-backups` stores the passphrase in the operating-system credential store only after the operator explicitly opts in.
+
+## Optional S3 file storage
+
+Install the optional S3 adapter from the `application` directory:
+
+```bash
+pip install -e '.[dev,s3]'
+```
+
+Local storage is the default. To make new uploads use S3, set `fileStorageProvider` to `"s3"` and provide `s3Bucket`; `s3Prefix` is optional. The bucket must have versioning enabled. The local application uses the host's normal AWS SDK credential-provider chain, so no AWS credential is saved in the workspace or configuration file.
+
+Keep `s3Bucket` configured even if you later switch `fileStorageProvider` back to `"local"`: it keeps the S3 adapter available for existing S3-backed files and portable backups. Each S3 upload is version-pinned and verified before its metadata is recorded.

@@ -10,6 +10,7 @@ from app.modules.workspace.application.backup_service import BackupError, Backup
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
+from app.modules.files.infrastructure.content_store import S3ContentStore
 
 
 def _config_path(value: str | None) -> Path | None:
@@ -63,8 +64,24 @@ def main() -> None:
         print(f"Format version: {manifest.format_version}")
         return
 
-    backups = BackupService(service, AuditRecorder(SQLiteAuditRepository(service.paths.database)),
-                            lambda database: AuditRecorder(SQLiteAuditRepository(database)))
+    remote_materializer = None
+    if service.config.s3_bucket:
+        try:
+            import boto3
+        except ImportError as error:
+            raise RuntimeError("S3 file storage requires the boto3 package.") from error
+        remote_materializer = S3ContentStore(
+            boto3.client("s3"),
+            service.config.s3_bucket,
+            service.config.s3_prefix,
+            service.paths.root / ".file-content-locks",
+        ).materialize
+    backups = BackupService(
+        service,
+        AuditRecorder(SQLiteAuditRepository(service.paths.database)),
+        lambda database: AuditRecorder(SQLiteAuditRepository(database)),
+        remote_materializer=remote_materializer,
+    )
     if args.command == "configure-backup-destination":
         updated = backups.configure_destination(Path(args.destination))
         print(f"Backup destination ready: {updated.backup_destination_path}")

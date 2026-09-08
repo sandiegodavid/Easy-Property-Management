@@ -10,7 +10,13 @@ from app.modules.files.domain.models import StoredFile
 
 
 class StoredContent(Protocol):
-    relative_path: str
+    storage_provider: str
+    storage_state: str
+    local_relative_path: str | None
+    s3_bucket: str | None
+    s3_object_key: str | None
+    s3_version_id: str | None
+    provider_etag: str | None
     size_bytes: int
     content_sha256: str
     def commit(self) -> None: ...
@@ -19,7 +25,7 @@ class StoredContent(Protocol):
 
 class FileContentStore(Protocol):
     def store(self, source: Path) -> StoredContent: ...
-    def path_for(self, relative_path: str, content_hash: str, size: int) -> Path: ...
+    def path_for(self, item: StoredFile) -> Path: ...
 
 
 @dataclass(frozen=True)
@@ -39,6 +45,14 @@ class FileAuditChange:
     after: dict[str, object]
     reason: str
     correlation_id: str
+
+
+class FileLinkValidator(Protocol):
+    """Owning-domain boundary for validating polymorphic file links."""
+
+    entity_types: frozenset[str]
+
+    def validate(self, link: FileLink) -> None: ...
 
 
 class FileUnitOfWork(Protocol):

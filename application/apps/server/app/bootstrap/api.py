@@ -18,9 +18,10 @@ from app.modules.workspace.application.backup_service import BackupError, Backup
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.files.application.service import FileService
-from app.modules.files.infrastructure.content_store import FilesystemContentStore
+from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.files.api.router import build_router as build_files_router
+from app.modules.files.domain.audit_policy import FILE_ACTIVITY_SNAPSHOT_POLICY
 from app.modules.tasks.api.router import build_router as build_tasks_router
 from app.modules.tasks.application.service import TaskService
 from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork
@@ -31,6 +32,10 @@ from app.modules.tenants.api.router import build_router as build_tenant_router
 from app.modules.tenants.application.service import TenantService
 from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantUnitOfWork
 from app.modules.tenants.domain.audit_policy import TENANT_CONTACT_SNAPSHOT_POLICY
+from app.modules.leases.api.router import build_router as build_lease_router
+from app.modules.leases.application.service import LeaseService
+from app.modules.leases.application.file_links import LeaseFileLinkValidator
+from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseUnitOfWork
 from app.modules.parties.application.service import SharedPartyFactory
 from app.modules.parties.domain.audit_policy import PARTY_ACTIVITY_SNAPSHOT_POLICY
 from app.platform.version import application_version
@@ -43,13 +48,39 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     service = WorkspaceService.from_local_config(config_path)
     audit_repository = SQLiteAuditRepository(service.paths.database)
     recorder = AuditRecorder(audit_repository)
-    backups = BackupService(service, recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)))
     runtime = WorkspaceRuntime(service)
-    files = FileService(service, FilesystemContentStore(service.paths.files),
-                        SQLiteFileUnitOfWork(service.paths.database, recorder))
+    local_store = FilesystemContentStore(service.paths.files)
+    additional_stores = {}
+    primary_store = local_store
+    s3_store = None
+    # Existing file records own their bucket/key. Keep this adapter available
+    # whenever an S3 bucket is configured, even if new uploads default local.
+    if service.config.s3_bucket:
+        try:
+            import boto3
+        except ImportError as error:
+            raise RuntimeError("S3 file storage requires the boto3 package.") from error
+        s3_store = S3ContentStore(boto3.client("s3"), service.config.s3_bucket, service.config.s3_prefix, service.paths.root / ".file-content-locks")
+        additional_stores["s3"] = s3_store
+    if service.config.file_storage_provider == "s3":
+        if s3_store is None:
+            raise RuntimeError("S3 file storage requires an available S3 adapter.")
+        primary_store = s3_store
+        additional_stores["local"] = local_store
+    lease_unit_of_work = SQLiteLeaseUnitOfWork(service.paths.database, recorder)
+    files = FileService(
+        service,
+        primary_store,
+        SQLiteFileUnitOfWork(service.paths.database, recorder),
+        additional_stores,
+        (LeaseFileLinkValidator(lease_unit_of_work),),
+    )
+    remote_materializer = s3_store.materialize if s3_store is not None else None
+    backups = BackupService(service, recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)), remote_materializer=remote_materializer)
     tasks = TaskService(SQLiteTaskUnitOfWork(service.paths.database, recorder))
     portfolio = PortfolioService(SQLitePortfolioUnitOfWork(service.paths.database, recorder))
     tenants = TenantService(SQLiteTenantUnitOfWork(service.paths.database, recorder), SharedPartyFactory())
+    leases = LeaseService(lease_unit_of_work)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -81,6 +112,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.task_service = tasks
     app.state.portfolio_service = portfolio
     app.state.tenant_service = tenants
+    app.state.lease_service = leases
     app.include_router(build_router(service, runtime))
     policies = AuditSnapshotPolicyRegistry({
         ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -96,10 +128,17 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("space_availability", 1): DEFAULT_SNAPSHOT_POLICY,
         ("tenant_profile", 1): DEFAULT_SNAPSHOT_POLICY,
         ("tenant_contact_method", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("lease", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("lease_term", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("lease_participant", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("lease_renewal_option", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("lease_termination_case", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("lease_termination_proposal", 1): DEFAULT_SNAPSHOT_POLICY,
         ("backup_operation", 1): DEFAULT_SNAPSHOT_POLICY,
         ("backup_retention", 1): DEFAULT_SNAPSHOT_POLICY,
         ("workspace_restore", 1): DEFAULT_SNAPSHOT_POLICY,
     }, activity_policies={
+        ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
         ("party", 1): PARTY_ACTIVITY_SNAPSHOT_POLICY,
         ("tenant_contact_method", 1): TENANT_CONTACT_SNAPSHOT_POLICY,
     })
@@ -108,6 +147,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_tasks_router(tasks, runtime))
     app.include_router(build_portfolio_router(portfolio, runtime))
     app.include_router(build_tenant_router(tenants, runtime))
+    app.include_router(build_lease_router(leases, runtime))
     return app
 
 

@@ -31,6 +31,9 @@ class LocalConfig:
     config_path: Path
     workspace_path: Path
     backup_destination_path: Path | None = None
+    file_storage_provider: str = "local"
+    s3_bucket: str | None = None
+    s3_prefix: str = "managed"
 
 
 def load_local_config(config_path: Path | None = None) -> LocalConfig:
@@ -60,11 +63,25 @@ def load_local_config(config_path: Path | None = None) -> LocalConfig:
     backup_destination_path = (
         _absolute_path(backup_value, "backupDestinationPath") if isinstance(backup_value, str) else None
     )
+    file_storage_provider = raw_config.get("fileStorageProvider", "local")
+    if file_storage_provider not in {"local", "s3"}:
+        raise LocalConfigError("fileStorageProvider must be local or s3.")
+    s3_bucket = raw_config.get("s3Bucket")
+    s3_prefix = raw_config.get("s3Prefix", "managed")
+    if file_storage_provider == "s3" and (not isinstance(s3_bucket, str) or not s3_bucket.strip()):
+        raise LocalConfigError("s3Bucket is required when fileStorageProvider is s3.")
+    if s3_bucket is not None and (not isinstance(s3_bucket, str) or not s3_bucket.strip()):
+        raise LocalConfigError("s3Bucket must be nonblank text when provided.")
+    if not isinstance(s3_prefix, str):
+        raise LocalConfigError("s3Prefix must be text.")
 
     return LocalConfig(
         config_path=resolved_config_path,
         workspace_path=workspace_path,
         backup_destination_path=backup_destination_path,
+        file_storage_provider=file_storage_provider,
+        s3_bucket=s3_bucket.strip() if isinstance(s3_bucket, str) else None,
+        s3_prefix=s3_prefix.strip("/"),
     )
 
 

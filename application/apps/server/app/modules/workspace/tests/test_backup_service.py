@@ -16,7 +16,7 @@ from app.modules.workspace.application.backup_service import BackupError, Backup
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.application.service import FileService
-from app.modules.files.infrastructure.content_store import FilesystemContentStore
+from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.infrastructure.encrypted_archive import APPLICATION_VERSION, ArchiveError, _validate_header, _validate_manifest_consistency, decrypt_archive_to_zip, make_header, write_encrypted_archive
@@ -42,6 +42,27 @@ class MemorySecretStore(BackupSecretStore):
 
     def delete_passphrase(self, workspace_id: str) -> None:
         self.values.pop(workspace_id, None)
+
+
+class _BackupFakeS3Client:
+    def __init__(self) -> None:
+        self.objects: dict[tuple[str, str], bytes] = {}
+
+    def get_bucket_versioning(self, *, Bucket):
+        return {"Status": "Enabled"}
+
+    def put_object(self, *, Bucket, Key, Body, Metadata, IfNoneMatch):
+        self.objects[(Bucket, Key)] = Body.read()
+        return {"VersionId": "version-1", "ETag": "etag-1"}
+
+    def download_file(self, bucket, key, filename, ExtraArgs=None):
+        Path(filename).write_bytes(self.objects[(bucket, key)])
+
+    def download_fileobj(self, bucket, key, output, ExtraArgs=None):
+        output.write(self.objects[(bucket, key)])
+
+    def delete_object(self, *, Bucket, Key, VersionId=None):
+        self.objects.pop((Bucket, Key), None)
 
 
 class _FailingAuditRecorder:
@@ -92,9 +113,66 @@ class BackupServiceTests(unittest.TestCase):
         restored_path = self.root / "restored-workspace"
         restored = self.backups.restore(result.archive_path, PASSPHRASE, restored_path)
         self.assertEqual(restored.workspace_path, restored_path.resolve())
-        self.assertEqual((restored_path / "files" / attachment.relative_path).read_text(encoding="utf-8"), "rent receipt")
+        self.assertEqual((restored_path / "files" / attachment.local_relative_path).read_text(encoding="utf-8"), "rent receipt")
         restored_service = WorkspaceService(LocalConfig(self.config_path, restored_path))
         self.assertEqual(restored_service.open().workspace_id, self.manifest.workspace_id)
+
+    def test_s3_content_is_embedded_and_restored_as_portable_local_content(self) -> None:
+        source = self.root / "remote.txt"
+        source.write_text("remote evidence", encoding="utf-8")
+        client = _BackupFakeS3Client()
+        s3 = S3ContentStore(client, "evidence-bucket", "documents")
+        recorder = AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database))
+        files = FileService(
+            self.workspace,
+            s3,
+            SQLiteFileUnitOfWork(self.workspace.paths.database, recorder),
+        )
+        attachment = files.add(source, "remote.txt", "text/plain")
+        backups = BackupService(
+            self.workspace,
+            recorder,
+            lambda database: AuditRecorder(SQLiteAuditRepository(database)),
+            self.secrets,
+            remote_materializer=s3.materialize,
+        )
+
+        result = backups.create_backup(PASSPHRASE)
+        restored_path = self.root / "restored-s3-workspace"
+        backups.restore(result.archive_path, PASSPHRASE, restored_path)
+
+        with sqlite3.connect(restored_path / "database" / "property-management.sqlite") as connection:
+            location = connection.execute(
+                "SELECT storage_provider, local_relative_path, s3_bucket, s3_object_key "
+                "FROM file_content_locations WHERE file_id=?",
+                (attachment.id,),
+            ).fetchone()
+        self.assertEqual(location, ("local", f"managed/{attachment.content_sha256}", None, None))
+        self.assertEqual(
+            (restored_path / "files" / "managed" / attachment.content_sha256).read_text(encoding="utf-8"),
+            "remote evidence",
+        )
+
+    def test_backup_rejects_file_content_not_marked_available(self) -> None:
+        source = self.root / "quarantined.txt"
+        source.write_text("quarantined", encoding="utf-8")
+        files = FileService(
+            self.workspace,
+            FilesystemContentStore(self.workspace.paths.files),
+            SQLiteFileUnitOfWork(
+                self.workspace.paths.database,
+                AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
+            ),
+        )
+        item = files.add(source, "quarantined.txt", "text/plain")
+        with sqlite3.connect(self.workspace.paths.database) as connection:
+            connection.execute(
+                "UPDATE file_content_locations SET storage_state='quarantined' WHERE file_id=?",
+                (item.id,),
+            )
+            connection.commit()
+        with self.assertRaisesRegex(BackupError, "Only available"):
+            self.backups.create_backup(PASSPHRASE)
 
     def test_wrong_passphrase_or_tampered_archive_is_rejected(self) -> None:
         result = self.backups.create_backup(PASSPHRASE)
