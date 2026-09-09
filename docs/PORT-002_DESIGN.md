@@ -153,7 +153,7 @@ Audit snapshots contain IDs, type/layout, lifecycle fields, and operator-entered
 1. Add portfolio SQLAlchemy models and one Alembic revision for property classification/layout and `spaces`, including exact module-owned schema validation.
 2. Extend portfolio domain values with typed property-type, layout, and space commands; enforce cross-row layout invariants in the application service.
 3. Extend the portfolio unit of work to load and mutate property inventory and append explicit correlated audit events atomically.
-4. Extend typed FastAPI contracts; defer the Property type and Rentable spaces UI sections until `DASH-001`.
+4. Extend typed FastAPI contracts; deliver the Property type and Rentable spaces UI sections in `UI-001`, immediately before `DASH-001`.
 5. Update workspace/archive schema validation and add regression coverage for constraints, atomic audit rollback, archive/restore, and cross-row inventory rules.
 
 ## Acceptance criteria

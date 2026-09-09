@@ -15,7 +15,7 @@ PORT-003 is delivered through two formally separate scopes:
 | Scope | Contents | Delivery timing |
 | --- | --- | --- |
 | Backend and API | Domain rules, persistence, audit history, schema validation, backup/restore coverage, summaries, filters, and typed API operations. | Current PORT-003 implementation work. |
-| Operator UI | React portfolio summaries and filters, space status cards, review-status prompts, classification forms, and occupancy/availability change, replacement, and cancellation actions. | Deferred to the UI phase that begins with `DASH-001`. |
+| Operator UI | React portfolio summaries and filters, space status cards, review-status prompts, classification forms, and occupancy/availability change, replacement, and cancellation actions. | Delivered by `UI-001`, immediately before `DASH-001`. |
 
 The backend and API scope can be reviewed and verified independently. That does not complete PORT-003 as a user-facing feature. The backlog must remain **In progress** until both scopes meet their acceptance criteria.
 
@@ -245,7 +245,7 @@ The new tables participate in exact current-schema validation and `LOCAL-002` ba
 4. Extend property queries to load current/scheduled statuses in bounded queries and derive property/portfolio summaries without per-space queries.
 5. Add typed FastAPI contracts for the backend and API scope.
 6. Add tests for status separation, effective dates, source pairing, overlap prevention, archive guards, atomic audit rollback, summaries, and backup/restore.
-7. During the UI phase beginning with `DASH-001`, implement the React portfolio summaries and filters, space status cards, review prompts, and guided classification/change/cancel/replace actions defined in **User experience**.
+7. In `UI-001`, implement the React portfolio summaries and filters, space status cards, review prompts, and guided classification/change/cancel/replace actions defined in **User experience**.
 
 ## Acceptance criteria
 

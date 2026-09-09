@@ -2,7 +2,7 @@
 
 ## Now — MVP foundation
 
-The pre-dashboard phase is backend/API and validation work only. Do not begin React screens, shared web packages, or other UI development until `DASH-001` is implemented.
+The pre-UI phase is backend/API and validation work only. Do not begin React screens, shared web packages, or other UI development until `UI-001`, immediately before `DASH-001`, begins.
 
 Deliver complete, understandable workflows for:
 

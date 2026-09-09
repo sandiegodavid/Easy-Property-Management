@@ -13,7 +13,7 @@ LEASE-001 has two explicitly separate scopes:
 | Scope | Contents | Delivery timing |
 | --- | --- | --- |
 | Backend and API | Current-schema records, business rules, typed local API, audit history, backup/restore validation, and lease-to-occupancy integration. | LEASE-001 implementation. |
-| Operator UI | Lease list and detail screens, lease timeline, participant and term forms, document panel, renewal prompts, and guided execute/end workflows. | Deferred to the UI phase beginning with `DASH-001`. |
+| Operator UI | Lease list and detail screens, lease timeline, participant and term forms, document panel, renewal prompts, and guided execute/end workflows. | Delivered by `UI-001`, immediately before `DASH-001`. |
 
 The backend/API scope may be verified independently, but LEASE-001 remains **In progress** until the operator UI is delivered.
 

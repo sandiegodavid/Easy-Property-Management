@@ -4,7 +4,7 @@
 
 This is the agreed implementation direction for the local, single-operator MVP. It records architecture decisions and options only; it does not authorize or include application code. Detailed product outcomes and dependencies remain in [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md), and the product scope remains in [PRODUCT_BRIEF.md](PRODUCT_BRIEF.md).
 
-UI development is deferred until `DASH-001`. Until that backlog item is implemented, build only backend domain logic, persistence, migrations, APIs, CLI/setup capabilities, tests, and documentation; React screens, shared web packages, and other operator-interface surfaces are out of scope.
+UI development is deferred until `UI-001`, the dedicated operator-interface slice immediately before `DASH-001`. Until `UI-001` begins, build only backend domain logic, persistence, migrations, APIs, CLI/setup capabilities, tests, and documentation; React screens, shared web packages, and other operator-interface surfaces are out of scope.
 
 ## Architecture in one view
 

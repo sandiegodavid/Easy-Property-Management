@@ -90,7 +90,7 @@ Audit events live in the SQLite database and therefore participate in `LOCAL-002
 
 1. Add the audited schema migration and append-only triggers, together with a migration/transaction foundation compatible with SQLite now and PostgreSQL later.
 2. Implement the audit domain types, recorder, repository, snapshot serialization, and record-history query API.
-3. Add a minimal read-only History API and sanitized fixture endpoint to verify backend behavior; defer the UI shell until `DASH-001`.
+3. Add a minimal read-only History API and sanitized fixture endpoint to verify backend behavior; defer the UI shell until `UI-001`, immediately before `DASH-001`.
 4. Require new sensitive modules to provide an `AuditSnapshotPolicy`; introduce audit events with each module rather than retroactively guessing missing history.
 5. Add global activity filters, import/restore correlation handling, and richer domain-specific summaries as those modules arrive.
 

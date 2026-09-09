@@ -153,7 +153,7 @@ The records live only in the workspace SQLite database. They participate in curr
 1. Add SQLAlchemy models and one Alembic revision for the three tables, constraints, indexes, and exact module-owned schema validation.
 2. Add portfolio domain values and application commands for property creation, identity/status updates, ownership replacement, and party creation/archive.
 3. Add a transaction-oriented portfolio unit of work that loads current state, persists the selected change, and appends all audit events under one correlation ID.
-4. Add FastAPI request/response models and routes; defer the Portfolio list/detail/create UI until `DASH-001`.
+4. Add FastAPI request/response models and routes; deliver the Portfolio list/detail/create UI in `UI-001`, immediately before `DASH-001`.
 5. Add current-format workspace/archive validation for the new tables and regression tests for atomic rollback, mode derivation, effective-dated changes, archive guards, and audit correlation.
 
 ## Acceptance criteria
