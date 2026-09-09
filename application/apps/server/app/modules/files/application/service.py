@@ -34,6 +34,7 @@ class FileService:
         entity_id: str | None = None,
         purpose: str = "attachment",
         storage_provider: str | None = None,
+        correlation_id: str | None = None,
     ) -> StoredFile:
         self.workspace.open()
         entity_type, entity_id, purpose = _link_fields(entity_type, entity_id, purpose)
@@ -73,7 +74,7 @@ class FileService:
                 datetime.now(UTC).isoformat(),
                 datetime.now(UTC).isoformat(),
             )
-            correlation_id = str(uuid4())
+            correlation_id = correlation_id or str(uuid4())
             audit_changes = [FileAuditChange("file", item.id, "created", item.to_dict(), "file_stored", correlation_id)]
             if link is not None:
                 audit_changes.append(FileAuditChange("file_link", link.id, "created", {
@@ -102,6 +103,23 @@ class FileService:
         if not item:
             raise FileError("File record was not found.")
         return item
+
+    def add_in_transaction(self, connection, source: Path, original_name: str, media_type: str, *, entity_type: str, entity_id: str, purpose: str, correlation_id: str):
+        """Stage content and persist file/link/audit data on a caller-owned SQLite transaction."""
+        entity_type, entity_id, purpose = _link_fields(entity_type, entity_id, purpose)
+        name = Path(original_name).name.strip() or "attachment"
+        if name != original_name or ".." in name: raise FileError("File name must not contain a path.")
+        link = FileLink(str(uuid4()), entity_type, entity_id, purpose, datetime.now(UTC).isoformat())
+        provider = getattr(self.content_store, "storage_provider", "local"); content = self.content_stores[provider].store(source)
+        try:
+            item = StoredFile(str(uuid4()), name, media_type or "application/octet-stream", content.size_bytes, content.content_sha256, content.storage_provider, content.storage_state, content.local_relative_path, content.s3_bucket, content.s3_object_key, content.s3_version_id, content.provider_etag, datetime.now(UTC).isoformat(), datetime.now(UTC).isoformat())
+            changes = [FileAuditChange("file", item.id, "created", item.to_dict(), "file_stored", correlation_id), FileAuditChange("file_link", link.id, "created", {"fileId": item.id, "entityType": entity_type, "entityId": entity_id, "purpose": purpose}, "file_linked", correlation_id)]
+            writer = getattr(self.unit_of_work, "write_in_transaction", None)
+            if writer is None: raise FileError("The configured file store does not support inspection transactions.")
+            writer(connection, item, link, changes)
+            return item, content
+        except Exception:
+            content.rollback(); raise
 
     def content_path(self, item: StoredFile) -> Path:
         if item.storage_state != "available":

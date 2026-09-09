@@ -216,8 +216,9 @@ class TerminationProposalCommand:
 
 
 class LeaseService:
-    def __init__(self, unit_of_work: LeaseUnitOfWork) -> None:
+    def __init__(self, unit_of_work: LeaseUnitOfWork, inspection_attention_reader=None) -> None:
         self.unit_of_work = unit_of_work
+        self.inspection_attention_reader = inspection_attention_reader
 
     def create(self, command: LeaseCreateCommand) -> dict[str, object]:
         if not isinstance(command, LeaseCreateCommand):
@@ -263,7 +264,7 @@ class LeaseService:
         record = self.unit_of_work.lease_view(lease_id)
         if record is None:
             raise LeaseNotFoundError("Lease was not found.")
-        return _view(*record)
+        return _view(*record, inspection_attention=self.inspection_attention_reader(lease_id) if self.inspection_attention_reader else None)
 
     def list(
         self,
@@ -282,7 +283,7 @@ class LeaseService:
         contract_start_to = None if contract_start_to is None else _date(contract_start_to, "Contract start to")
         renewal_due_on_or_before = None if renewal_due_on_or_before is None else _date(renewal_due_on_or_before, "Renewal due date")
         return [
-            _view(*record)
+            _view(*record, inspection_attention=self.inspection_attention_reader(record[0].id) if self.inspection_attention_reader else None)
             for record in self.unit_of_work.lease_views(
                 status=status,
                 property_id=property_id,
@@ -879,7 +880,7 @@ def _termination_end_reason(case: LeaseTerminationCase) -> str:
     return "early_termination"
 
 
-def _view(lease: Lease, terms: list[LeaseTerm], participants: list[LeaseParticipant], renewals: list[LeaseRenewalOption], files: list[dict[str, object]]) -> dict[str, object]:
+def _view(lease: Lease, terms: list[LeaseTerm], participants: list[LeaseParticipant], renewals: list[LeaseRenewalOption], files: list[dict[str, object]], inspection_attention=None) -> dict[str, object]:
     today = date.today().isoformat()
     if lease.status in {"ended", "terminated", "void"}:
         occupancy_state = "ended"
@@ -894,10 +895,7 @@ def _view(lease: Lease, terms: list[LeaseTerm], participants: list[LeaseParticip
         "participants": [item.to_dict() for item in participants],
         "renewalOptions": [item.to_dict() for item in renewals],
         "files": files,
-        "inspectionAttention": {
-            "preMoveIn": "not_available_until_INSP_001",
-            "postMoveOut": "not_available_until_INSP_001",
-        },
+        "inspectionAttention": inspection_attention or {"preMoveIn": "not_available", "postMoveOut": "not_available"},
     }
 
 

@@ -36,6 +36,10 @@ from app.modules.leases.api.router import build_router as build_lease_router
 from app.modules.leases.application.service import LeaseService
 from app.modules.leases.application.file_links import LeaseFileLinkValidator
 from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseUnitOfWork
+from app.modules.inspections.api.router import build_router as build_inspection_router
+from app.modules.inspections.application.service import InspectionService
+from app.modules.inspections.infrastructure.unit_of_work import SQLiteInspectionUnitOfWork
+from app.modules.inspections.domain.audit_policy import INSPECTION_ACTIVITY_POLICY
 from app.modules.parties.application.service import SharedPartyFactory
 from app.modules.parties.domain.audit_policy import PARTY_ACTIVITY_SNAPSHOT_POLICY
 from app.platform.version import application_version
@@ -68,11 +72,14 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         primary_store = s3_store
         additional_stores["local"] = local_store
     lease_unit_of_work = SQLiteLeaseUnitOfWork(service.paths.database, recorder)
+    inspection_unit_of_work = SQLiteInspectionUnitOfWork(service.paths.database, recorder)
     files = FileService(
         service,
         primary_store,
         SQLiteFileUnitOfWork(service.paths.database, recorder),
         additional_stores,
+        # Inspection evidence is intentionally not a generic FILE-001 upload.
+        # Its dedicated endpoint owns the report audit event and correlation ID.
         (LeaseFileLinkValidator(lease_unit_of_work),),
     )
     remote_materializer = s3_store.materialize if s3_store is not None else None
@@ -80,7 +87,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     tasks = TaskService(SQLiteTaskUnitOfWork(service.paths.database, recorder))
     portfolio = PortfolioService(SQLitePortfolioUnitOfWork(service.paths.database, recorder))
     tenants = TenantService(SQLiteTenantUnitOfWork(service.paths.database, recorder), SharedPartyFactory())
-    leases = LeaseService(lease_unit_of_work)
+    inspections = InspectionService(inspection_unit_of_work, files)
+    leases = LeaseService(lease_unit_of_work, inspections.attention_for_lease)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -113,6 +121,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.portfolio_service = portfolio
     app.state.tenant_service = tenants
     app.state.lease_service = leases
+    app.state.inspection_service = inspections
     app.include_router(build_router(service, runtime))
     policies = AuditSnapshotPolicyRegistry({
         ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -137,10 +146,24 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("backup_operation", 1): DEFAULT_SNAPSHOT_POLICY,
         ("backup_retention", 1): DEFAULT_SNAPSHOT_POLICY,
         ("workspace_restore", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("condition_report", 1): INSPECTION_ACTIVITY_POLICY,
+        ("condition_area", 1): INSPECTION_ACTIVITY_POLICY,
+        ("condition_observation", 1): INSPECTION_ACTIVITY_POLICY,
+        ("condition_report_acknowledgment", 1): INSPECTION_ACTIVITY_POLICY,
+        ("condition_checklist_template", 1): INSPECTION_ACTIVITY_POLICY,
+        ("condition_checklist_template_item", 1): INSPECTION_ACTIVITY_POLICY,
+        ("condition_comparison", 1): INSPECTION_ACTIVITY_POLICY,
     }, activity_policies={
         ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
         ("party", 1): PARTY_ACTIVITY_SNAPSHOT_POLICY,
         ("tenant_contact_method", 1): TENANT_CONTACT_SNAPSHOT_POLICY,
+        ("condition_report", 1): INSPECTION_ACTIVITY_POLICY,
+        ("condition_area", 1): INSPECTION_ACTIVITY_POLICY,
+        ("condition_observation", 1): INSPECTION_ACTIVITY_POLICY,
+        ("condition_report_acknowledgment", 1): INSPECTION_ACTIVITY_POLICY,
+        ("condition_checklist_template", 1): INSPECTION_ACTIVITY_POLICY,
+        ("condition_checklist_template_item", 1): INSPECTION_ACTIVITY_POLICY,
+        ("condition_comparison", 1): INSPECTION_ACTIVITY_POLICY,
     })
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime))
@@ -148,6 +171,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_portfolio_router(portfolio, runtime))
     app.include_router(build_tenant_router(tenants, runtime))
     app.include_router(build_lease_router(leases, runtime))
+    app.include_router(build_inspection_router(inspections, runtime))
     return app
 
 

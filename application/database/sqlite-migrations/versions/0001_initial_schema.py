@@ -13,6 +13,13 @@ depends_on = None
 
 
 def upgrade() -> None:
+    from app.modules.leases.infrastructure import sqlalchemy_models as _lease_models
+    from app.modules.portfolio.infrastructure import sqlalchemy_models as _portfolio_models
+    from app.modules.inspections.infrastructure.sqlalchemy_models import (
+        ConditionAcknowledgmentModel, ConditionAreaModel, ConditionComparisonModel,
+        ConditionObservationModel, ConditionReportModel, ConditionChecklistTemplateModel,
+        ConditionChecklistTemplateItemModel,
+    )
     op.create_table("workspace_metadata", sa.Column("singleton", sa.Integer(), primary_key=True),
         sa.Column("workspace_id", sa.String(), nullable=False, unique=True), sa.Column("format_version", sa.Integer(), nullable=False),
         sa.Column("created_at", sa.String(), nullable=False), sa.CheckConstraint("singleton = 1"))
@@ -83,9 +90,12 @@ def upgrade() -> None:
     op.create_index("lease_termination_cases_lease_status", "lease_termination_cases", ["lease_id", "status", "requested_termination_on"])
     op.create_table("lease_termination_proposals", sa.Column("id", sa.String(), primary_key=True), sa.Column("termination_case_id", sa.String(), sa.ForeignKey("lease_termination_cases.id"), nullable=False), sa.Column("proposal_version", sa.Integer(), nullable=False), sa.Column("proposed_termination_on", sa.String(), nullable=False), sa.Column("expected_move_out_on", sa.String(), nullable=False), sa.Column("rent_responsibility_ends_on", sa.String()), sa.Column("termination_fee_minor", sa.Integer()), sa.Column("currency_code", sa.String()), sa.Column("fee_waived", sa.Integer(), nullable=False), sa.Column("replacement_tenant_condition", sa.String()), sa.Column("access_arrangement", sa.String()), sa.Column("other_terms", sa.String()), sa.Column("response_due_on", sa.String()), sa.Column("status", sa.String(), nullable=False), sa.Column("decided_on", sa.String()), sa.Column("created_at", sa.String(), nullable=False), sa.CheckConstraint("proposal_version > 0"), sa.CheckConstraint("termination_fee_minor IS NULL OR termination_fee_minor >= 0"), sa.CheckConstraint("fee_waived IN (0, 1)"), sa.CheckConstraint("(termination_fee_minor IS NULL AND currency_code IS NULL) OR (termination_fee_minor IS NOT NULL AND length(currency_code) = 3 AND currency_code = upper(currency_code))"), sa.CheckConstraint("status IN ('open', 'accepted', 'rejected', 'countered', 'withdrawn', 'expired')"), sa.CheckConstraint("(status = 'open' AND decided_on IS NULL) OR (status != 'open' AND decided_on IS NOT NULL)"))
     op.create_index("lease_termination_proposals_case_version", "lease_termination_proposals", ["termination_case_id", "proposal_version"], unique=True)
+    for table in (ConditionReportModel.__table__, ConditionAreaModel.__table__, ConditionObservationModel.__table__, ConditionAcknowledgmentModel.__table__, ConditionComparisonModel.__table__, ConditionChecklistTemplateModel.__table__, ConditionChecklistTemplateItemModel.__table__):
+        table.create(op.get_bind())
 
 
 def downgrade() -> None:
+    op.drop_table("condition_checklist_template_items"); op.drop_table("condition_checklist_templates"); op.drop_table("condition_comparisons"); op.drop_table("condition_report_acknowledgments"); op.drop_table("condition_observations"); op.drop_table("condition_areas"); op.drop_table("condition_reports")
     op.drop_table("lease_termination_proposals"); op.drop_table("lease_termination_cases"); op.drop_table("lease_renewal_options"); op.drop_table("lease_participants"); op.drop_table("lease_term_versions"); op.drop_table("leases")
     op.drop_table("space_availability"); op.drop_table("space_occupancy_periods"); op.drop_table("spaces"); op.drop_table("property_ownerships"); op.drop_table("properties"); op.drop_table("tenant_contact_methods"); op.drop_table("tenant_profiles"); op.drop_table("parties")
     op.drop_table("task_reminders"); op.drop_table("tasks"); op.drop_table("file_links"); op.drop_table("file_content_locations"); op.drop_table("file_records")

@@ -82,7 +82,7 @@ All IDs are UUIDs. Timestamps are timezone-aware UTC text. Walkthrough dates are
 
 At most one current finalized report of each kind exists per lease. A correction has the same lease, space, and report kind as its current finalized source. Finalizing it atomically changes the source to `superseded` and makes the correction current; a superseded report cannot receive a second correction. Historic comparisons remain attached to their original observations, while the current comparison view uses the current pre- and post-report and requires a new reviewed classification.
 
-Pre-move-in drafts require an executed lease. Post-move-out drafts require an ended or terminated lease, or an executed lease with an accepted termination case; post-move-out finalization requires the lease's confirmed `actual_move_out_on`. Void leases cannot receive reports. The normal pre-report window is on or before the scheduled `occupancy_starts_on`; LEASE-001 has no actual-move-in fact, so this is a scheduled-date check. A finalization outside its normal window requires `timing_exception_reason` and never changes lease truth.
+Pre-move-in drafts require an executed lease. Post-move-out drafts require an executed, ended, or terminated lease; they may be completed before the lease lifecycle formally closes, but finalization requires the lease's confirmed `actual_move_out_on`. Void and draft leases cannot receive reports. The normal pre-report window is on or before the scheduled `occupancy_starts_on`; LEASE-001 has no actual-move-in fact, so this is a scheduled-date check. A finalization outside its normal window requires `timing_exception_reason` and never changes lease truth.
 
 ### `condition_areas`
 
@@ -148,13 +148,14 @@ One observation may have multiple evidence links. A file may be reused through a
 | Field | Rules and meaning |
 | --- | --- |
 | `id` | Stable UUID. |
+| `pre_report_id`, `post_report_id` | Required references to the exact finalized pre- and post-report versions under review. They preserve the report pair for historical classifications after either report is corrected. |
 | `pre_observation_id`, `post_observation_id` | References to observations for the same lease and space; either may be null only when an item exists on one report alone. |
 | `comparison_state` | `unchanged`, `improved`, `normal_wear`, `possible_tenant_damage`, `maintenance_needed`, or `not_comparable`. |
 | `operator_notes` | Required for possible damage and not-comparable decisions. |
 | `maintenance_issue_id` | Not persisted in the initial INSP-001 slice. It becomes an optional typed link only after `MAINT-001` supplies an owning validator and stable maintenance-issue record. |
 | `created_at`, `updated_at` | UTC timestamps. |
 
-Comparisons are explicit operator-reviewed records rather than conclusions inferred from condition labels alone. The initial slice permits no arbitrary maintenance UUID: its UI and API show that follow-up issue linking is unavailable until `MAINT-001`.
+Comparisons are explicit operator-reviewed records rather than conclusions inferred from condition labels alone. An observation can appear only once within one exact report pair; it may appear again against a corrected version of the other report. The initial slice permits no arbitrary maintenance UUID: its UI and API show that follow-up issue linking is unavailable until `MAINT-001`.
 
 ## Workflow
 

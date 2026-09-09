@@ -20,6 +20,9 @@ class SQLiteFileUnitOfWork:
 
     def write(self, item: StoredFile, link: FileLink | None, audit_changes: list[FileAuditChange]) -> None:
         with self.engine.begin() as connection:
+            self.write_in_transaction(connection, item, link, audit_changes)
+
+    def write_in_transaction(self, connection, item: StoredFile, link: FileLink | None, audit_changes: list[FileAuditChange]) -> None:
             connection.execute(FileRecordModel.__table__.insert().values(
                 id=item.id, original_name=item.original_name, media_type=item.media_type,
                 size_bytes=item.size_bytes, content_sha256=item.content_sha256, created_at=item.created_at,
