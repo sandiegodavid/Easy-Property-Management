@@ -33,7 +33,7 @@ Mixed does not mean a property is both residential and office, and it does not a
 PORT-001 does not provide:
 
 - Property type, rentable-space, suite, unit, occupancy, vacancy, or availability management. Those belong to `PORT-002` and `PORT-003`.
-- Tenants, prospects, vendors, or general contact roles beyond the small owner-party foundation. `TEN-001` expands the shared party/contact model.
+- Tenants, prospects, vendors, or general contact roles beyond the small owner-party foundation. `TEN-001` expands the shared party/contact model, and `VEND-001` moves reusable party identity routes into the dedicated `parties` API module so they are not portfolio-owned.
 - Ownership percentages, legal beneficial-ownership determinations, management agreements, management fees, owner balances, disbursements, or trust accounting.
 - Leases, expenses, payments, owner-reported rent, reports, portal access, authentication, or multi-user permissions.
 - Deletion of business records. Properties and ownership relationships are archived or ended, preserving history.

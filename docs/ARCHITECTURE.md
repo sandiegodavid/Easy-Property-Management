@@ -73,6 +73,19 @@ The server separates domain responsibilities from user-interface screens. This s
 
 `platform` code supplies cross-cutting capabilities such as database access, file storage, auditing, logging, error handling, background job execution, and configuration. It must not become a substitute for domain rules.
 
+### Entity ownership, persistence, and APIs
+
+An abstract or reusable domain concept is not, by itself, a reason to omit persistence or an API. The application keeps a stable table whenever the concept has an independent identity, lifecycle, integrity rules, audit history, or references from more than one workflow. It does not use ORM inheritance merely because a record can be specialized later.
+
+| Concept | Persistence boundary | API boundary |
+| --- | --- | --- |
+| `files` | `file_records`, provider-specific content locations, and `file_links` own immutable file metadata, integrity identity, storage state, and cross-domain references. Business records do not duplicate these fields. | The generic file API is technical plumbing for upload, metadata retrieval, and safe byte retrieval. User-facing screens present files inside their owning workflow, such as a lease, inspection, or expense; there is no general-purpose operator file cabinet. |
+| `parties` | `parties` owns the shared person or organization identity. Tenant, provider, owner, and future contact roles add their own profile or relationship records rather than copying identity fields. | A dedicated `parties` API owns reusable identity operations. Role-specific APIs own their profile and workflow rules. Portfolio's current party routes move here with `VEND-001`, so shared parties do not appear to belong only to property ownership. |
+| `portfolio.properties` | `properties` is a top-level portfolio aggregate with address, lifecycle, ownership, and reporting scope. Residential and office classifications remain fields while their core rules are shared. | The Portfolio API owns property lifecycle and ownership operations. Add category-specific tables only when a future category has substantial independent fields and rules. |
+| `portfolio.spaces` | `spaces` is a child record, not a property subtype. It has a stable ID, independent lifecycle, occupancy/availability history, lease references, and inspection references. | Property creation and detail nest spaces for usability; direct space endpoints handle operational lifecycle and status changes. |
+
+This division prevents duplicated storage metadata and identity data, keeps backup and audit behavior consistent, and permits future modules to reference stable IDs without coupling to a particular UI screen.
+
 The lease, inspection, maintenance, and finance boundaries are deliberate. `leasing` owns contractual dates and participants; `inspections` owns condition evidence; `maintenance` owns repair work and cost records; `finance` owns any security-deposit receipt, approved deduction, refund, and settlement. References connect these records without allowing a condition classification to create a financial deduction automatically.
 
 Task lifecycle rules live in the task application/domain layer. A task unit of work provides one immediate SQLite write transaction for the application service to load state, apply a transition, persist task and reminder changes, and append the corresponding audit events atomically; it contains persistence mechanics rather than task policy.
