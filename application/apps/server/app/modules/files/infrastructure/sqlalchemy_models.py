@@ -1,6 +1,6 @@
 """SQLAlchemy-owned FILE-001 schema."""
 from __future__ import annotations
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.platform.sqlalchemy_models import LocalBase
 
@@ -22,7 +22,13 @@ class FileLinkModel(LocalBase):
     entity_id: Mapped[str] = mapped_column(String, nullable=False)
     purpose: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
-    __table_args__ = (Index("file_links_entity", "entity_type", "entity_id"),)
+    archived_at: Mapped[str | None] = mapped_column(String)
+    archive_reason: Mapped[str | None] = mapped_column(String)
+    __table_args__ = (
+        CheckConstraint("(archived_at IS NULL AND archive_reason IS NULL) OR (archived_at IS NOT NULL AND archive_reason IS NOT NULL AND length(trim(archive_reason)) BETWEEN 1 AND 1000)"),
+        Index("file_links_entity", "entity_type", "entity_id"),
+        Index("file_links_one_active_association", "file_id", "entity_type", "entity_id", "purpose", unique=True, sqlite_where=text("archived_at IS NULL")),
+    )
 
 
 class FileContentLocationModel(LocalBase):

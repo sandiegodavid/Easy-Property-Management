@@ -103,6 +103,17 @@ class SQLiteLeaseUnitOfWork:
             items = session.execute(select(LeaseTerminationCaseModel).where(LeaseTerminationCaseModel.lease_id == lease_id).order_by(LeaseTerminationCaseModel.created_at)).scalars()
             return [_termination_record(session, item) for item in items]
 
+    def file_link_target_exists(self, connection, entity_type: str, entity_id: str) -> bool:
+        model = {
+            "lease": LeaseModel,
+            "lease_termination_case": LeaseTerminationCaseModel,
+        }.get(entity_type)
+        if model is None:
+            return False
+        return connection.execute(
+            select(model.id).where(model.id == entity_id).limit(1)
+        ).first() is not None
+
 
 class _Transaction:
     def __init__(self, connection: Any, recorder: AuditRecorder,

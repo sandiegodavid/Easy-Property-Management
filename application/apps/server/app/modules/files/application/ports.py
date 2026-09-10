@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Callable, Protocol
 
 from app.modules.files.domain.models import StoredFile
 
@@ -35,6 +35,9 @@ class FileLink:
     entity_id: str
     purpose: str
     created_at: str
+    file_id: str | None = None
+    archived_at: str | None = None
+    archive_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,7 @@ class FileAuditChange:
     after: dict[str, object]
     reason: str
     correlation_id: str
+    before: dict[str, object] | None = None
 
 
 class FileLinkValidator(Protocol):
@@ -52,11 +56,14 @@ class FileLinkValidator(Protocol):
 
     entity_types: frozenset[str]
 
-    def validate(self, link: FileLink) -> None: ...
+    def validate_create(self, connection: Any, link: FileLink) -> None: ...
+    def validate_archive(self, connection: Any, link: FileLink) -> None: ...
 
 
 class FileUnitOfWork(Protocol):
     """Persists explicit file/link business changes and their audit entries atomically."""
 
-    def write(self, item: StoredFile, link: FileLink | None, audit_changes: list[FileAuditChange]) -> None: ...
+    def write(self, item: StoredFile, link: FileLink | None, audit_changes: list[FileAuditChange], validate_link: Callable[[Any, FileLink], None] | None = None) -> None: ...
     def get(self, file_id: str) -> StoredFile | None: ...
+    def get_link(self, link_id: str) -> FileLink | None: ...
+    def archive_link(self, link: FileLink, audit_change: FileAuditChange, validate_link: Callable[[Any, FileLink], None]) -> FileLink: ...

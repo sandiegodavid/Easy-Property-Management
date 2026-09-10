@@ -21,12 +21,17 @@ class LeaseFileLinkValidator:
     def __init__(self, leases: LeaseUnitOfWork) -> None:
         self.leases = leases
 
-    def validate(self, link: FileLink) -> None:
+    def validate_create(self, connection, link: FileLink) -> None:
+        self._validate(connection, link)
+
+    def validate_archive(self, connection, link: FileLink) -> None:
+        self._validate(connection, link)
+
+    def _validate(self, connection, link: FileLink) -> None:
         if link.purpose not in self._purposes[link.entity_type]:
             raise FileError(f"Unsupported {link.entity_type} file purpose.")
-        if link.entity_type == "lease":
-            exists = self.leases.lease_view(link.entity_id) is not None
-        else:
-            exists = self.leases.termination_case_view(link.entity_id) is not None
+        exists = self.leases.file_link_target_exists(
+            connection, link.entity_type, link.entity_id
+        )
         if not exists:
             raise FileError(f"The linked {link.entity_type.replace('_', ' ')} does not exist.")

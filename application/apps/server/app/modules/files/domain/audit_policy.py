@@ -15,3 +15,14 @@ class FileActivitySnapshotPolicy(DefaultAuditSnapshotPolicy):
 
 
 FILE_ACTIVITY_SNAPSHOT_POLICY = FileActivitySnapshotPolicy()
+
+
+class FileLinkActivitySnapshotPolicy(DefaultAuditSnapshotPolicy):
+    def redact(self, snapshot: Mapping[str, Any] | None) -> dict[str, Any] | None:
+        presented = super().redact(snapshot)
+        if presented is not None and "archiveReason" in presented:
+            presented["archiveReason"] = "[redacted]"
+        return presented
+
+
+FILE_LINK_ACTIVITY_SNAPSHOT_POLICY = FileLinkActivitySnapshotPolicy()

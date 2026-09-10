@@ -21,7 +21,10 @@ from app.modules.files.application.service import FileService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.files.api.router import build_router as build_files_router
-from app.modules.files.domain.audit_policy import FILE_ACTIVITY_SNAPSHOT_POLICY
+from app.modules.files.domain.audit_policy import (
+    FILE_ACTIVITY_SNAPSHOT_POLICY,
+    FILE_LINK_ACTIVITY_SNAPSHOT_POLICY,
+)
 from app.modules.tasks.api.router import build_router as build_tasks_router
 from app.modules.tasks.application.service import TaskService
 from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork
@@ -237,6 +240,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("rent_receipt_allocation", 1): DEFAULT_SNAPSHOT_POLICY,
     }, activity_policies={
         ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
+        ("file_link", 1): FILE_LINK_ACTIVITY_SNAPSHOT_POLICY,
         ("party_contact_method", 1): PARTY_CONTACT_SNAPSHOT_POLICY,
         ("condition_report", 1): INSPECTION_ACTIVITY_POLICY,
         ("condition_area", 1): INSPECTION_ACTIVITY_POLICY,

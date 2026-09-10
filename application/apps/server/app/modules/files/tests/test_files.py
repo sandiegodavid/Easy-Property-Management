@@ -4,9 +4,12 @@ import tempfile
 import unittest
 import json
 import types
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
+from fastapi.testclient import TestClient
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
@@ -126,6 +129,90 @@ class FileStoreTests(unittest.TestCase):
         link_event = self.audit.history("file_link")[0]
         self.assertEqual(file_event.correlation_id, link_event.correlation_id)
 
+    def test_incorrect_link_is_archived_without_deleting_the_file_or_history(self) -> None:
+        item = self.files.add(self.source, "receipt.pdf", "application/pdf", entity_type="expense", entity_id="expense-1", purpose="receipt")
+        link_id = self.files.get(item.id).links[0]["id"]
+        archived = self.files.archive_link(link_id, confirmed=True, reason="Attached to the wrong expense.")
+        self.assertEqual(archived["id"], link_id)
+        self.assertEqual(self.files.get(item.id).links, ())
+        self.assertTrue(self.files.content_path(self.files.get(item.id)).is_file())
+        archive_event = self.audit.history("file_link", link_id)[-1]
+        creation_event = self.audit.history("file_link", link_id)[0]
+        self.assertEqual(archive_event.action, "archived")
+        self.assertEqual(archive_event.before_snapshot["fileId"], item.id)
+        self.assertEqual(creation_event.after_snapshot, archive_event.before_snapshot)
+        self.assertEqual(archive_event.before_snapshot["createdAt"], archive_event.after_snapshot["createdAt"])
+        self.assertEqual(set(archive_event.changed_fields), {"archivedAt", "archiveReason"})
+        replacement = self.files.add(self.source, "receipt-copy.pdf", "application/pdf", entity_type="expense", entity_id="expense-1", purpose="receipt")
+        self.assertEqual(len(self.files.get(replacement.id).links), 1)
+        with self.assertRaisesRegex(FileError, "already archived"):
+            self.files.archive_link(link_id, confirmed=True, reason="Repeat")
+
+    def test_archived_link_reason_is_redacted_only_from_global_activity(self) -> None:
+        item = self.files.add(
+            self.source, "receipt.pdf", "application/pdf",
+            entity_type="expense", entity_id="expense-1", purpose="receipt",
+        )
+        link_id = self.files.get(item.id).links[0]["id"]
+        self.files.archive_link(link_id, confirmed=True, reason="Contains a private relocation explanation.")
+        self.service.config.config_path.write_text(
+            json.dumps({"localWorkspacePath": str(self.service.paths.root)}), encoding="utf-8"
+        )
+        from app.bootstrap.api import create_app
+        with TestClient(create_app(self.service.config.config_path)) as client:
+            activity = client.get("/api/audit/events").json()["events"]
+            contextual = client.get(f"/api/audit/events/file_link/{link_id}").json()["events"]
+        activity_event = next(event for event in activity if event["entityId"] == link_id and event["action"] == "archived")
+        self.assertEqual(activity_event["after"]["archiveReason"], "[redacted]")
+        self.assertEqual(contextual[-1]["after"]["archiveReason"], "Contains a private relocation explanation.")
+
+    def test_link_authorization_runs_inside_the_serialized_mutation_and_archive_is_not_count_limited(self) -> None:
+        limited = FileService(
+            self.service,
+            FilesystemContentStore(self.service.paths.files),
+            SQLiteFileUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
+            link_validators=(_LimitedExpenseLinkValidator(limit=20),),
+        )
+        for number in range(19):
+            limited.add(self.source, f"receipt-{number}.pdf", "application/pdf", entity_type="expense", entity_id="expense-1", purpose="receipt")
+
+        def add_one(number: int):
+            try:
+                return limited.add(self.source, f"candidate-{number}.pdf", "application/pdf", entity_type="expense", entity_id="expense-1", purpose="receipt")
+            except FileError:
+                return None
+
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            results = list(workers.map(add_one, (1, 2)))
+        self.assertEqual(sum(result is not None for result in results), 1)
+        item = next(result for result in results if result is not None)
+        link_id = limited.get(item.id).links[0]["id"]
+        limited.archive_link(link_id, confirmed=True, reason="This duplicate was attached in error.")
+        self.assertEqual(limited.get(item.id).links, ())
+
+    def test_failed_link_authorization_rolls_back_metadata_and_audit(self) -> None:
+        with self.assertRaisesRegex(FileError, "invalid"):
+            self.files.add(
+                self.source, "receipt.pdf", "application/pdf",
+                entity_type="expense", entity_id="wrong", purpose="receipt",
+            )
+        with self.files.unit_of_work.engine.connect() as connection:
+            self.assertEqual(connection.execute(select(func.count()).select_from(FileLinkModel)).scalar_one(), 0)
+        self.assertEqual(self.audit.history("file"), [])
+        self.assertEqual(self.audit.history("file_link"), [])
+
+    def test_failed_archive_authorization_leaves_link_and_history_unchanged(self) -> None:
+        item = self.files.add(
+            self.source, "receipt.pdf", "application/pdf",
+            entity_type="expense", entity_id="expense-1", purpose="receipt",
+        )
+        link_id = self.files.get(item.id).links[0]["id"]
+        self.files.link_validators["expense"] = _RejectingArchiveValidator()
+        with self.assertRaisesRegex(FileError, "not authorized"):
+            self.files.archive_link(link_id, confirmed=True, reason="Not needed.")
+        self.assertEqual(self.files.get(item.id).links[0]["id"], link_id)
+        self.assertEqual(len(self.audit.history("file_link", link_id)), 1)
+
     def test_deduplication_keeps_separate_metadata_and_path_safety_rejects_escape(self) -> None:
         first = self.files.add(self.source, "one.pdf", "application/pdf"); second = self.files.add(self.source, "two.pdf", "application/pdf")
         self.assertNotEqual(first.id, second.id); self.assertEqual(first.local_relative_path, second.local_relative_path)
@@ -205,9 +292,44 @@ class _FakeS3Client:
 class _ExpenseLinkValidator:
     entity_types = frozenset({"expense"})
 
-    def validate(self, link: FileLink) -> None:
+    def validate_create(self, connection, link: FileLink) -> None:
         if link.entity_id != "expense-1" or link.purpose != "receipt":
             raise FileError("Expense link is invalid.")
+
+    def validate_archive(self, connection, link: FileLink) -> None:
+        if link.entity_id != "expense-1" or link.purpose != "receipt":
+            raise FileError("Expense link is invalid.")
+
+
+class _LimitedExpenseLinkValidator:
+    entity_types = frozenset({"expense"})
+
+    def __init__(self, limit: int) -> None:
+        self.limit = limit
+
+    def validate_create(self, connection, link: FileLink) -> None:
+        active = connection.execute(
+            select(func.count()).select_from(FileLinkModel).where(
+                FileLinkModel.entity_type == link.entity_type,
+                FileLinkModel.entity_id == link.entity_id,
+                FileLinkModel.archived_at.is_(None),
+            )
+        ).scalar_one()
+        if active >= self.limit:
+            raise FileError("Expense evidence limit reached.")
+
+    def validate_archive(self, connection, link: FileLink) -> None:
+        return None
+
+
+class _RejectingArchiveValidator:
+    entity_types = frozenset({"expense"})
+
+    def validate_create(self, connection, link: FileLink) -> None:
+        return None
+
+    def validate_archive(self, connection, link: FileLink) -> None:
+        raise FileError("Archive is not authorized.")
 
 
 class _VersionlessFakeS3Client(_FakeS3Client):
@@ -222,7 +344,7 @@ class _UnavailableS3Client:
 
 
 class _FailingFileUnitOfWork:
-    def write(self, item, link, audit_changes):
+    def write(self, item, link, audit_changes, validate_link=None):
         raise OSError("metadata unavailable")
 
     def get(self, file_id):

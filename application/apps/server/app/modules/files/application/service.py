@@ -45,11 +45,11 @@ class FileService:
             id=str(uuid4()), entity_type=entity_type, entity_id=entity_id,
             purpose=purpose, created_at=datetime.now(UTC).isoformat(),
         )
+        validator = None
         if link is not None:
             validator = self.link_validators.get(link.entity_type)
             if validator is None:
                 raise FileError(f"No owning-domain validator is configured for {link.entity_type} links.")
-            validator.validate(link)
         content = None
         persisted = False
         try:
@@ -77,11 +77,16 @@ class FileService:
             correlation_id = correlation_id or str(uuid4())
             audit_changes = [FileAuditChange("file", item.id, "created", item.to_dict(), "file_stored", correlation_id)]
             if link is not None:
-                audit_changes.append(FileAuditChange("file_link", link.id, "created", {
-                    "fileId": item.id, "entityType": link.entity_type, "entityId": link.entity_id,
-                    "purpose": link.purpose,
-                }, "file_linked", correlation_id))
-            self.unit_of_work.write(item, link, audit_changes)
+                audit_changes.append(FileAuditChange(
+                    "file_link",
+                    link.id,
+                    "created",
+                    _link_snapshot(_link_for_file(link, item.id)),
+                    "file_linked",
+                    correlation_id,
+                ))
+            validation = (lambda connection, candidate: validator.validate_create(connection, candidate)) if validator else None
+            self.unit_of_work.write(item, link, audit_changes, validation)
             persisted = True
             try:
                 content.commit()
@@ -104,6 +109,32 @@ class FileService:
             raise FileError("File record was not found.")
         return item
 
+    def archive_link(self, link_id: str, *, confirmed: bool, reason: str, correlation_id: str | None = None) -> dict[str, object]:
+        if type(confirmed) is not bool or not confirmed:
+            raise FileError("Explicit archive confirmation is required.")
+        if not isinstance(reason, str) or not (reason := reason.strip()) or len(reason) > 1000:
+            raise FileError("Archive reason must be between 1 and 1,000 characters.")
+        current = self.unit_of_work.get_link(link_id)
+        if current is None:
+            raise FileError("File link was not found.")
+        if current.archived_at is not None:
+            raise FileError("File link is already archived.")
+        validator = self.link_validators.get(current.entity_type)
+        if validator is None:
+            raise FileError(f"No owning-domain validator is configured for {current.entity_type} links.")
+        archived = FileLink(current.id, current.entity_type, current.entity_id, current.purpose, current.created_at,
+            current.file_id, datetime.now(UTC).isoformat(), reason)
+        correlation_id = correlation_id or str(uuid4())
+        audit = FileAuditChange("file_link", archived.id, "archived", _link_snapshot(archived),
+            "file_link_archived", correlation_id, _link_snapshot(current))
+        try:
+            self.unit_of_work.archive_link(archived, audit, lambda connection, candidate: validator.validate_archive(connection, candidate))
+        except ValueError as error:
+            raise FileError(str(error)) from error
+        return {"id": archived.id, "fileId": archived.file_id, "entityType": archived.entity_type,
+            "entityId": archived.entity_id, "purpose": archived.purpose, "createdAt": archived.created_at,
+            "archivedAt": archived.archived_at, "archiveReason": archived.archive_reason}
+
     def add_in_transaction(self, connection, source: Path, original_name: str, media_type: str, *, entity_type: str, entity_id: str, purpose: str, correlation_id: str):
         """Stage content and persist file/link/audit data on a caller-owned SQLite transaction."""
         entity_type, entity_id, purpose = _link_fields(entity_type, entity_id, purpose)
@@ -113,7 +144,17 @@ class FileService:
         provider = getattr(self.content_store, "storage_provider", "local"); content = self.content_stores[provider].store(source)
         try:
             item = StoredFile(str(uuid4()), name, media_type or "application/octet-stream", content.size_bytes, content.content_sha256, content.storage_provider, content.storage_state, content.local_relative_path, content.s3_bucket, content.s3_object_key, content.s3_version_id, content.provider_etag, datetime.now(UTC).isoformat(), datetime.now(UTC).isoformat())
-            changes = [FileAuditChange("file", item.id, "created", item.to_dict(), "file_stored", correlation_id), FileAuditChange("file_link", link.id, "created", {"fileId": item.id, "entityType": entity_type, "entityId": entity_id, "purpose": purpose}, "file_linked", correlation_id)]
+            changes = [
+                FileAuditChange("file", item.id, "created", item.to_dict(), "file_stored", correlation_id),
+                FileAuditChange(
+                    "file_link",
+                    link.id,
+                    "created",
+                    _link_snapshot(_link_for_file(link, item.id)),
+                    "file_linked",
+                    correlation_id,
+                ),
+            ]
             writer = getattr(self.unit_of_work, "write_in_transaction", None)
             if writer is None: raise FileError("The configured file store does not support inspection transactions.")
             writer(connection, item, link, changes)
@@ -141,3 +182,28 @@ def _link_fields(entity_type: str | None, entity_id: str | None, purpose: str) -
     if not isinstance(entity_id, str) or not (trimmed_id := entity_id.strip()):
         raise FileError("A file link requires a nonblank entity ID.")
     return trimmed_type, trimmed_id, trimmed_purpose
+
+
+def _link_snapshot(link: FileLink) -> dict[str, object]:
+    return {
+        "fileId": link.file_id,
+        "entityType": link.entity_type,
+        "entityId": link.entity_id,
+        "purpose": link.purpose,
+        "createdAt": link.created_at,
+        "archivedAt": link.archived_at,
+        "archiveReason": link.archive_reason,
+    }
+
+
+def _link_for_file(link: FileLink, file_id: str) -> FileLink:
+    return FileLink(
+        id=link.id,
+        entity_type=link.entity_type,
+        entity_id=link.entity_id,
+        purpose=link.purpose,
+        created_at=link.created_at,
+        file_id=file_id,
+        archived_at=link.archived_at,
+        archive_reason=link.archive_reason,
+    )
