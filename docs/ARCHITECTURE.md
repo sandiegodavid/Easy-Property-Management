@@ -59,9 +59,9 @@ The server separates domain responsibilities from user-interface screens. This s
 | `portfolio` | Property, space, ownership/management relationships, availability, and occupancy. |
 | `leasing` | Listings, leads, showings, offers, applications, approvals, leases, renewals, and rent changes. |
 | `inspections` | Lease-linked move-in/move-out condition reports, observations, evidence links, acknowledgment state, and reviewed comparisons. |
-| `finance` | Rent expectations, receipts, payment methods, prepaid checks, expenses, categories, and financial allocations. |
+| `finance` | Rent expectations, receipts, payment methods, prepaid checks, confirmed actual expenses and refunds, finance-owned expense categories, and financial allocations. |
 | `owner-accounting` | Owner-reported receipts, balances, disbursement approvals, and disbursement history. |
-| `maintenance` | Issue intake, reporter attribution, appointments, quotes, assignments, status, costs, and work journals. |
+| `maintenance` | Issue intake, reporter attribution, appointments, quotes, assignments, status, estimates and work-reported cost context, and work journals. |
 | `providers` | Provider profiles, categories, service areas, references, reputation notes, and historical outcomes. |
 | `communications` | Interaction timeline, reminders, tasks, and completion/follow-up state. |
 | `intake` | Gmail, Outlook.com/Hotmail, SMS, and voice-note source normalization, deduplication, review queues, and source links. |
@@ -88,7 +88,7 @@ This division prevents duplicated storage metadata and identity data, keeps back
 
 Cross-module rules use application-level protocols composed at bootstrap. Party-role activity guards prevent a shared identity from being archived while an active role requires it, and party-contact reference guards prevent a method from being archived while an active role preference references it. Guards and coordinated writes execute inside the caller's existing immediate database transaction; a module must not import another module's SQLAlchemy model or concrete repository to enforce the rule.
 
-The lease, inspection, maintenance, and finance boundaries are deliberate. `leasing` owns contractual dates and participants; `inspections` owns condition evidence; `maintenance` owns repair work and cost records; `finance` owns immutable rent expectations, recorded receipts/allocation history, and later security-deposit receipt, approved deduction, refund, and settlement. FIN-001 reads lease terms through a transaction-aware port composed at bootstrap; it does not import or mutate lease persistence. References connect these records without allowing a condition classification to create a financial deduction automatically.
+The lease, inspection, maintenance, and finance boundaries are deliberate. `leasing` owns contractual dates and participants; `inspections` owns condition evidence; `maintenance` owns repair work, quotes, estimates, and work-reported cost context; `finance` owns immutable rent expectations, recorded receipts/allocation history, confirmed actual expenses and refunds, and later security-deposit receipt, approved deduction, refund, and settlement. FIN-001 reads lease terms through a transaction-aware port composed at bootstrap; FIN-002 reads property, provider, and payer context through transaction-aware ports. Neither imports or mutates another module's persistence. A future maintenance record may reference a Finance expense ID, but it must not duplicate the paid amount as another source of actual spending. References likewise connect inspection records without allowing a condition classification to create a financial deduction automatically.
 
 Task lifecycle rules live in the task application/domain layer. A task unit of work provides one immediate SQLite write transaction for the application service to load state, apply a transition, persist task and reminder changes, and append the corresponding audit events atomically; it contains persistence mechanics rather than task policy.
 
