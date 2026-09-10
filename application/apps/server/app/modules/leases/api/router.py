@@ -6,7 +6,7 @@ from datetime import date, datetime
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 
 from app.modules.leases.application.ports import LeaseConflictError
 from app.modules.leases.application.service import (
@@ -30,8 +30,8 @@ class Contract(BaseModel):
 
 
 class TermRequest(Contract):
-    baseRentMinor: int = Field(ge=0)
-    currencyCode: str = Field(min_length=3, max_length=3)
+    baseRentMinor: StrictInt = Field(gt=0)
+    currencyCode: str = Field(min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
     paymentFrequency: Literal["monthly", "weekly"]
     paymentDueDay: int | None = Field(None, ge=1, le=31)
     agreedSecurityDepositMinor: int = Field(ge=0)
@@ -100,7 +100,7 @@ class TerminationProposalRequest(Contract):
     expectedMoveOutOn: date
     rentResponsibilityEndsOn: date | None = None
     terminationFeeMinor: int | None = Field(None, ge=0)
-    currencyCode: str | None = Field(None, min_length=3, max_length=3)
+    currencyCode: str | None = Field(None, min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
     feeWaived: StrictBool = False
     replacementTenantCondition: str | None = Field(None, max_length=2000)
     accessArrangement: str | None = Field(None, max_length=2000)

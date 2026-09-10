@@ -5,10 +5,13 @@ import unittest
 import json
 from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import patch
+from sqlalchemy import inspect
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from fastapi.testclient import TestClient
 
+from app.bootstrap.api import create_app
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.leases.application.service import (
@@ -24,6 +27,7 @@ from app.modules.leases.application.service import (
 from app.modules.leases.application.file_links import LeaseFileLinkValidator
 from app.modules.leases.application.ports import LeaseConflictError
 from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseUnitOfWork
+from app.modules.leases.infrastructure.schema_validation import _normalise, validate_lease_schema
 from app.modules.files.application.service import FileError, FileService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
@@ -35,9 +39,11 @@ from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantProfileA
 from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard
 from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations, SQLitePartyReadOperations
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations
+from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
 from app.platform.config import LocalConfig
+from app.platform.migration_errors import MigrationSchemaError
 
 
 class LeaseTerminationTests(unittest.TestCase):
@@ -51,10 +57,13 @@ class LeaseTerminationTests(unittest.TestCase):
         self.workspace.initialize()
         audit = SQLiteAuditRepository(self.workspace.paths.database)
         recorder = AuditRecorder(audit)
-        self.portfolio = PortfolioService(SQLitePortfolioUnitOfWork(self.workspace.paths.database, recorder))
+        self.portfolio = PortfolioService(
+            SQLitePortfolioUnitOfWork(self.workspace.paths.database, recorder),
+            time_zone_resolver=BundledAddressTimeZoneResolver(),
+        )
         property_record = self.portfolio.create_property(PropertyCreateCommand(
             "Relocation home", "1 Main Street", "Portland", "US", "single_family_home",
-            (OwnershipInput("local_operator"),),
+            (OwnershipInput("local_operator"),), region="OR",
         ))
         self.space_id = self.portfolio.get_property(property_record.id)["spaces"][0]["id"]
         self.tenants = TenantService(
@@ -114,7 +123,7 @@ class LeaseTerminationTests(unittest.TestCase):
         proposal = self.service.add_termination_proposal(case["id"], TerminationProposalCommand(
             today + timedelta(days=45), today + timedelta(days=40),
             rent_responsibility_ends_on=today + timedelta(days=45),
-            termination_fee_minor=100_000, currency_code="usd", access_arrangement="24-hour notice",
+            termination_fee_minor=100_000, currency_code="USD", access_arrangement="24-hour notice",
         ))
         accepted = self.service.accept_termination_proposal(
             case["id"], proposal["proposals"][0]["id"], accepted_on=today, confirmed=True,
@@ -189,6 +198,121 @@ class LeaseTerminationTests(unittest.TestCase):
             [item["id"] for item in self.service.list(renewal_due_on_or_before=due)],
             [self.lease["id"]],
         )
+
+    def test_term_command_requires_positive_integer_rent_and_ascii_uppercase_currency(self) -> None:
+        invalid_rents = (True, 1.0, "100", 0, -1)
+        for rent in invalid_rents:
+            with self.subTest(rent=rent), self.assertRaises(ValueError):
+                TermCommand(rent, "USD", "monthly", 1, 0)
+        for currency in ("usd", "US1", "UŠD", "US$"):
+            with self.subTest(currency=currency), self.assertRaises(ValueError):
+                TermCommand(1, currency, "monthly", 1, 0)
+
+    def test_term_schema_rejects_zero_rent_and_noncanonical_currency(self) -> None:
+        for assignment in (
+            ("base_rent_minor", 0),
+            ("base_rent_minor", 1.5),
+            ("currency_code", "usd"),
+            ("currency_code", "US1"),
+        ):
+            column, value = assignment
+            with self.subTest(column=column, value=value), self.assertRaises(IntegrityError):
+                with self.service.unit_of_work.engine.begin() as connection:
+                    connection.execute(
+                        text(f"UPDATE lease_term_versions SET {column}=:value WHERE lease_id=:lease"),
+                        {"value": value, "lease": self.lease["id"]},
+                    )
+
+    def test_lease_api_rejects_noncanonical_term_values_at_request_boundary(self) -> None:
+        config = Path(self.temp.name) / "lease-term-api.json"
+        config.write_text(
+            json.dumps({"localWorkspacePath": str(self.workspace.paths.root)}),
+            encoding="utf-8",
+        )
+        payload = {
+            "spaceId": self.space_id,
+            "leaseKind": "residential",
+            "contractStartsOn": date.today().isoformat(),
+            "contractEndsOn": (date.today() + timedelta(days=365)).isoformat(),
+            "occupancyStartsOn": date.today().isoformat(),
+            "participants": [{"tenantPartyId": self.tenant_id, "participantRole": "primary_tenant"}],
+            "initialTerm": {
+                "baseRentMinor": 0,
+                "currencyCode": "USD",
+                "paymentFrequency": "monthly",
+                "paymentDueDay": 1,
+                "agreedSecurityDepositMinor": 0,
+            },
+        }
+        with TestClient(create_app(config)) as client:
+            self.assertEqual(client.post("/api/leases", json=payload).status_code, 422)
+            payload["initialTerm"]["baseRentMinor"] = 1
+            payload["initialTerm"]["currencyCode"] = "usd"
+            self.assertEqual(client.post("/api/leases", json=payload).status_code, 422)
+
+    def test_termination_proposal_currency_is_strict_at_every_boundary(self) -> None:
+        today = date.today()
+        for currency in ("usd", "UŠD", "US1", "US$"):
+            with self.subTest(currency=currency), self.assertRaises(ValueError):
+                TerminationProposalCommand(today, today, termination_fee_minor=1, currency_code=currency)
+        case = self.service.create_termination_case(self.lease["id"], TerminationCaseCommand(
+            "job_relocation", today, today + timedelta(days=30), today + timedelta(days=30),
+        ))
+        proposal = self.service.add_termination_proposal(
+            case["id"], TerminationProposalCommand(today + timedelta(days=30), today + timedelta(days=30),
+                                                      termination_fee_minor=1, currency_code="USD"),
+        )
+        proposal_id = proposal["proposals"][0]["id"]
+        for currency in ("usd", "UŠD", "US1", "US$"):
+            with self.subTest(database_currency=currency), self.assertRaises(IntegrityError):
+                with self.service.unit_of_work.engine.begin() as connection:
+                    connection.execute(
+                        text("UPDATE lease_termination_proposals SET currency_code=:currency WHERE id=:id"),
+                        {"currency": currency, "id": proposal_id},
+                    )
+        config = Path(self.temp.name) / "termination-currency-api.json"
+        config.write_text(json.dumps({"localWorkspacePath": str(self.workspace.paths.root)}), encoding="utf-8")
+        with TestClient(create_app(config)) as client:
+            response = client.post(f"/api/termination-cases/{case['id']}/proposals", json={
+                "proposedTerminationOn": (today + timedelta(days=30)).isoformat(),
+                "expectedMoveOutOn": (today + timedelta(days=30)).isoformat(),
+                "terminationFeeMinor": 1,
+                "currencyCode": "usd",
+            })
+            self.assertEqual(response.status_code, 422)
+
+    def test_schema_normalization_preserves_case_sensitive_glob_literals(self) -> None:
+        upper = _normalise("length(currency_code) = 3 AND currency_code GLOB '[A-Z][A-Z][A-Z]'")
+        lower = _normalise("length(currency_code) = 3 AND currency_code GLOB '[a-z][a-z][a-z]'")
+        self.assertNotEqual(upper, lower)
+
+    def test_schema_validator_rejects_a_lowercase_currency_glob(self) -> None:
+        with self.service.unit_of_work.engine.connect() as connection:
+            base = inspect(connection)
+
+            class LowercaseGlobInspector:
+                def __getattr__(self, name):
+                    return getattr(base, name)
+
+                def get_check_constraints(self, table_name, **kwargs):
+                    checks = base.get_check_constraints(table_name, **kwargs)
+                    if table_name != "lease_term_versions":
+                        return checks
+                    return [
+                        {
+                            **check,
+                            "sqltext": (check.get("sqltext") or "").replace(
+                                "[A-Z][A-Z][A-Z]", "[a-z][a-z][a-z]"
+                            ),
+                        }
+                        for check in checks
+                    ]
+
+            with patch(
+                "app.modules.leases.infrastructure.schema_validation.inspect",
+                return_value=LowercaseGlobInspector(),
+            ), self.assertRaises(MigrationSchemaError):
+                validate_lease_schema(connection)
 
     def test_ordinary_end_rejects_early_move_out(self) -> None:
         tomorrow = date.today() + timedelta(days=1)

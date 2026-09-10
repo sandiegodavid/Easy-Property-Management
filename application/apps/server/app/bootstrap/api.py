@@ -33,6 +33,7 @@ from app.modules.portfolio.infrastructure.unit_of_work import (
     SQLitePortfolioRoleSummaryReader,
     SQLitePortfolioUnitOfWork,
 )
+from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.parties.api.router import build_router as build_party_router
 from app.modules.parties.application.service import PartyContactService, PartyIdentityService
 from app.modules.parties.infrastructure.unit_of_work import (
@@ -118,7 +119,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     tasks = TaskService(SQLiteTaskUnitOfWork(service.paths.database, recorder))
     portfolio = PortfolioService(SQLitePortfolioUnitOfWork(
         service.paths.database, recorder, (SQLiteTenantRoleActivityGuard(),)
-    ), party_reads=party_reads)
+    ), party_reads=party_reads, time_zone_resolver=BundledAddressTimeZoneResolver())
     tenants = TenantService(SQLiteTenantUnitOfWork(
         service.paths.database, recorder, SQLiteLeaseParticipationGuard(),
         party_operations, party_reads,

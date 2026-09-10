@@ -13,12 +13,13 @@ class PropertyModel(LocalBase):
     address_line_1: Mapped[str] = mapped_column(String, nullable=False); address_line_2: Mapped[str | None] = mapped_column(String)
     city: Mapped[str] = mapped_column(String, nullable=False); region: Mapped[str | None] = mapped_column(String)
     postal_code: Mapped[str | None] = mapped_column(String); country_code: Mapped[str] = mapped_column(String, nullable=False)
+    time_zone: Mapped[str] = mapped_column(String, nullable=False)
     notes: Mapped[str | None] = mapped_column(String); status: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[str] = mapped_column(String, nullable=False); updated_at: Mapped[str] = mapped_column(String, nullable=False)
     archived_at: Mapped[str | None] = mapped_column(String)
     property_type: Mapped[str] = mapped_column(String, nullable=False)
     inventory_layout: Mapped[str] = mapped_column(String, nullable=False)
-    __table_args__ = (CheckConstraint("status IN ('active', 'archived')"), CheckConstraint("property_type IN ('single_family_home', 'condo', 'townhome', 'office')"), CheckConstraint("inventory_layout IN ('single_space', 'whole_office', 'office_suites')"), CheckConstraint("length(trim(display_name)) > 0"), CheckConstraint("length(trim(address_line_1)) > 0"), CheckConstraint("length(trim(city)) > 0"), CheckConstraint("length(trim(country_code)) = 2"), Index("properties_status_name", "status", "display_name"))
+    __table_args__ = (CheckConstraint("status IN ('active', 'archived')"), CheckConstraint("property_type IN ('single_family_home', 'condo', 'townhome', 'office')"), CheckConstraint("inventory_layout IN ('single_space', 'whole_office', 'office_suites')"), CheckConstraint("length(trim(display_name)) > 0"), CheckConstraint("length(trim(address_line_1)) > 0"), CheckConstraint("length(trim(city)) > 0"), CheckConstraint("length(trim(country_code)) = 2"), CheckConstraint("length(trim(time_zone)) > 0"), Index("properties_status_name", "status", "display_name"))
 
 
 class PropertyOwnershipModel(LocalBase):

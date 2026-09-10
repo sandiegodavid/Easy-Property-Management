@@ -21,6 +21,7 @@ from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseUnitOfWork
 from app.modules.parties.application.service import SharedPartyFactory
 from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
+from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.tenants.application.service import TenantCreateCommand, TenantService
 from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantProfileAvailability, SQLiteTenantUnitOfWork
 from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations, SQLitePartyReadOperations
@@ -36,8 +37,11 @@ class InspectionWorkflowTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
         root = Path(self.temp.name); self.workspace = WorkspaceService(LocalConfig(root / "config.json", root / "workspace", backup_destination_path=root / "backups")); self.workspace.initialize()
         self.audit = SQLiteAuditRepository(self.workspace.paths.database); self.recorder = AuditRecorder(self.audit)
-        portfolio = PortfolioService(SQLitePortfolioUnitOfWork(self.workspace.paths.database, self.recorder))
-        property_record = portfolio.create_property(PropertyCreateCommand("Home", "1 Main", "Portland", "US", "single_family_home", (OwnershipInput("local_operator"),)))
+        portfolio = PortfolioService(
+            SQLitePortfolioUnitOfWork(self.workspace.paths.database, self.recorder),
+            time_zone_resolver=BundledAddressTimeZoneResolver(),
+        )
+        property_record = portfolio.create_property(PropertyCreateCommand("Home", "1 Main", "Portland", "US", "single_family_home", (OwnershipInput("local_operator"),), region="OR"))
         self.space_id = portfolio.get_property(property_record.id)["spaces"][0]["id"]
         party_operations = SQLitePartyOperations(self.workspace.paths.database)
         tenants = TenantService(SQLiteTenantUnitOfWork(

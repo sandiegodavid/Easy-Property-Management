@@ -15,7 +15,7 @@ def validate_portfolio_schema(connection) -> None:
             {"archived_at"},
         ),
         "properties": (
-            {"id", "display_name", "address_line_1", "address_line_2", "city", "region", "postal_code", "country_code", "notes", "status", "created_at", "updated_at", "archived_at", "property_type", "inventory_layout"},
+            {"id", "display_name", "address_line_1", "address_line_2", "city", "region", "postal_code", "country_code", "time_zone", "notes", "status", "created_at", "updated_at", "archived_at", "property_type", "inventory_layout"},
             {"address_line_2", "region", "postal_code", "notes", "archived_at"},
         ),
         "property_ownerships": (
@@ -155,6 +155,7 @@ def _validate_checks(inspector, expected_columns) -> None:
             "length(trim(address_line_1))>0",
             "length(trim(city))>0",
             "length(trim(country_code))=2",
+            "length(trim(time_zone))>0",
             "property_typein('single_family_home','condo','townhome','office')",
             "inventory_layoutin('single_space','whole_office','office_suites')",
         },

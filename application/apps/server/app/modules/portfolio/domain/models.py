@@ -18,6 +18,7 @@ class Property:
     region: str | None
     postal_code: str | None
     country_code: str
+    time_zone: str
     notes: str | None
     status: str
     created_at: str
@@ -36,6 +37,7 @@ class Property:
             "region": self.region,
             "postalCode": self.postal_code,
             "countryCode": self.country_code,
+            "timeZone": self.time_zone,
             "notes": self.notes,
             "status": self.status,
             "createdAt": self.created_at,

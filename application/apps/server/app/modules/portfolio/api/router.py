@@ -238,6 +238,7 @@ class PropertyResponse(ContractModel):
     region: str | None
     postalCode: str | None
     countryCode: str
+    timeZone: str
     notes: str | None
     status: Literal["active", "archived"]
     createdAt: str

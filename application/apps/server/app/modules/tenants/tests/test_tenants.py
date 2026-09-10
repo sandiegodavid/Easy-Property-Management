@@ -26,6 +26,7 @@ from app.modules.parties.infrastructure.unit_of_work import SQLitePartyUnitOfWor
 from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations, SQLitePartyReadOperations
 from app.modules.portfolio.application.service import PartyCreateCommand, PortfolioService
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
+from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.tenants.application.service import (
     TenantConflictError,
     TenantCreateCommand,
@@ -82,7 +83,10 @@ class TenantTests(unittest.TestCase):
             self.contacts.add(tenant["id"], ContactMethodCommand("email", "robin@example.test"))
 
     def test_designates_existing_party_and_keeps_identity_when_profile_archives(self) -> None:
-        portfolio = PortfolioService(SQLitePortfolioUnitOfWork(self.workspace.paths.database, AuditRecorder(self.audit)))
+        portfolio = PortfolioService(
+            SQLitePortfolioUnitOfWork(self.workspace.paths.database, AuditRecorder(self.audit)),
+            time_zone_resolver=BundledAddressTimeZoneResolver(),
+        )
         party = portfolio.create_party(PartyCreateCommand("individual", "Existing Person"))
         tenant = self.tenants.designate(party.id, notes="Contact after work")
         self.tenants.archive(party.id, confirmed=True)
@@ -239,9 +243,10 @@ class TenantTests(unittest.TestCase):
                 TenantProfilePatchCommand(**values)
 
     def test_party_contact_api_supports_non_tenant_parties_and_extensions(self) -> None:
-        owner = PortfolioService(SQLitePortfolioUnitOfWork(
-            self.workspace.paths.database, AuditRecorder(self.audit)
-        )).create_party(PartyCreateCommand("organization", "Owner LLC"))
+        owner = PortfolioService(
+            SQLitePortfolioUnitOfWork(self.workspace.paths.database, AuditRecorder(self.audit)),
+            time_zone_resolver=BundledAddressTimeZoneResolver(),
+        ).create_party(PartyCreateCommand("organization", "Owner LLC"))
         config = Path(self.temp.name) / "party-api.json"
         config.write_text(json.dumps({"localWorkspacePath": str(self.workspace.paths.root)}), encoding="utf-8")
         with TestClient(create_app(config)) as client:
@@ -264,9 +269,10 @@ class TenantTests(unittest.TestCase):
             )
 
     def test_party_search_finds_active_owner_by_contact_and_excludes_archived_party(self) -> None:
-        owner = PortfolioService(SQLitePortfolioUnitOfWork(
-            self.workspace.paths.database, AuditRecorder(self.audit)
-        )).create_party(PartyCreateCommand("organization", "Searchable Owner"))
+        owner = PortfolioService(
+            SQLitePortfolioUnitOfWork(self.workspace.paths.database, AuditRecorder(self.audit)),
+            time_zone_resolver=BundledAddressTimeZoneResolver(),
+        ).create_party(PartyCreateCommand("organization", "Searchable Owner"))
         contact_service = PartyContactService(SQLitePartyUnitOfWork(
             self.workspace.paths.database, AuditRecorder(self.audit)
         ))
@@ -383,9 +389,10 @@ class TenantTests(unittest.TestCase):
         self.assertNotIn("portfolio.infrastructure.sqlalchemy_models", lease_adapter.read_text())
 
     def test_contact_archive_rejects_unknown_and_unused_reference_resolutions(self) -> None:
-        owner = PortfolioService(SQLitePortfolioUnitOfWork(
-            self.workspace.paths.database, AuditRecorder(self.audit)
-        )).create_party(PartyCreateCommand("organization", "Resolution Owner"))
+        owner = PortfolioService(
+            SQLitePortfolioUnitOfWork(self.workspace.paths.database, AuditRecorder(self.audit)),
+            time_zone_resolver=BundledAddressTimeZoneResolver(),
+        ).create_party(PartyCreateCommand("organization", "Resolution Owner"))
         contact = PartyContactService(SQLitePartyUnitOfWork(
             self.workspace.paths.database, AuditRecorder(self.audit)
         )).add(owner.id, ContactMethodCommand("email", "resolution@example.test"))

@@ -17,6 +17,7 @@ from app.modules.portfolio.application.ports import PortfolioConflictError
 from app.modules.portfolio.application.service import AvailabilityCommand, OccupancyCommand, OwnershipInput, PartyCreateCommand, PortfolioError, PortfolioService, PropertyCreateCommand, SpaceClassificationCommand, SpaceCreateCommand
 from app.modules.portfolio.infrastructure.schema_validation import _normalise_sql, validate_portfolio_schema
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
+from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.workspace.application.service import WorkspaceService
 from app.platform.config import LocalConfig
 from app.platform.migration_errors import MigrationSchemaError
@@ -29,7 +30,10 @@ class PortfolioTests(unittest.TestCase):
         root = Path(self.temp.name)
         self.workspace = WorkspaceService(LocalConfig(root / "config.json", root / "workspace")); self.workspace.initialize()
         self.audit = SQLiteAuditRepository(self.workspace.paths.database)
-        self.service = PortfolioService(SQLitePortfolioUnitOfWork(self.workspace.paths.database, AuditRecorder(self.audit)))
+        self.service = PortfolioService(
+            SQLitePortfolioUnitOfWork(self.workspace.paths.database, AuditRecorder(self.audit)),
+            time_zone_resolver=BundledAddressTimeZoneResolver(),
+        )
 
     def _party(self):
         return self.service.create_party(PartyCreateCommand("individual", "Morgan Owner"))
@@ -49,6 +53,73 @@ class PortfolioTests(unittest.TestCase):
         self.assertEqual(self.service.get_property(managed.id)["ownershipContext"], "managed_for_owner")
         self.assertEqual(self.service.get_property(mixed.id)["ownershipContext"], "mixed")
         self.assertEqual([record["id"] for record in self.service.list_properties(ownership_context_filter="mixed")], [mixed.id])
+
+    def test_property_time_zone_is_derived_and_recomputed_after_an_address_change(self) -> None:
+        property = self._property([OwnershipInput("local_operator")])
+        self.assertEqual(property.time_zone, "America/Los_Angeles")
+        changed = self.service.patch_property(property.id, {
+            "addressLine1": "11 Broadway",
+            "city": "New York",
+            "region": "NY",
+            "postalCode": "10001",
+        })
+        self.assertEqual(changed.time_zone, "America/New_York")
+        event = self.audit.history("property", property.id)[-1]
+        self.assertEqual(event.after_snapshot["timeZone"], "America/New_York")
+
+    def test_property_rejects_an_ambiguous_or_incomplete_address_time_zone(self) -> None:
+        with self.assertRaises(PortfolioError):
+            self.service.create_property(PropertyCreateCommand(
+                "Unknown zone", "10 Main", "Portland", "US", "single_family_home",
+                (OwnershipInput("local_operator"),),
+            ))
+        with self.assertRaises(PortfolioError):
+            self.service.create_property(PropertyCreateCommand(
+                "Ambiguous zone", "10 Main", "Bend", "US", "single_family_home",
+                (OwnershipInput("local_operator"),), region="OR",
+            ))
+
+    def test_time_zone_resolver_uses_local_postal_and_city_candidates(self) -> None:
+        resolver = BundledAddressTimeZoneResolver()
+        self.assertEqual(
+            resolver.resolve(
+                address_line_1="500 Congress Ave", city="Unincorporated", region="TX",
+                postal_code="78701", country_code="US",
+            ),
+            "America/Chicago",
+        )
+        self.assertEqual(
+            resolver.resolve(
+                address_line_1="1 Main", city="El Paso", region="TX",
+                postal_code="79901", country_code="US",
+            ),
+            "America/Denver",
+        )
+        self.assertEqual(
+            resolver.resolve(
+                address_line_1="1 Main", city="Toronto", region="ON",
+                postal_code="M5V 2T6", country_code="CA",
+            ),
+            "America/Toronto",
+        )
+        self.assertEqual(
+            resolver.candidates(
+                address_line_1="1 Main", city="Iqaluit", region="NU",
+                postal_code=None, country_code="CA",
+            ),
+            ("America/Cambridge_Bay", "America/Iqaluit", "America/Rankin_Inlet"),
+        )
+        with self.assertRaises(PortfolioError):
+            resolver.resolve(
+                address_line_1="1 Main", city="Iqaluit", region="NU",
+                postal_code=None, country_code="CA",
+            )
+        for city, postal_code in (("El Paso", "78701"), ("Austin", "79901")):
+            with self.subTest(city=city, postal_code=postal_code), self.assertRaises(PortfolioError):
+                resolver.resolve(
+                    address_line_1="500 Congress Ave", city=city, region="TX",
+                    postal_code=postal_code, country_code="US",
+                )
 
     def test_ownership_replacement_preserves_the_prior_relationship_and_correlation(self) -> None:
         property = self._property([OwnershipInput("local_operator")]); owner = self._party()
@@ -86,19 +157,20 @@ class PortfolioTests(unittest.TestCase):
             self.assertEqual(party.status_code, 201)
             property = client.post("/api/properties", json={
                 "displayName": "Pine office", "addressLine1": "1 Pine Avenue", "city": "Portland",
-                "countryCode": "US", "propertyType": "office", "ownerships": [{"ownerKind": "client_owner", "partyId": party.json()["id"]}],
+                "countryCode": "US", "region": "OR", "propertyType": "office", "ownerships": [{"ownerKind": "client_owner", "partyId": party.json()["id"]}],
             })
             self.assertEqual(property.status_code, 201)
             self.assertEqual(property.json()["ownershipContext"], "managed_for_owner")
+            self.assertEqual(property.json()["timeZone"], "America/Los_Angeles")
             records = client.get("/api/properties", params={"ownershipContext": "managed_for_owner"})
             self.assertEqual([item["id"] for item in records.json()], [property.json()["id"]])
             invalid = client.post("/api/properties", json={
-                "displayName": "Bad", "addressLine1": "1 Test", "city": "Portland", "countryCode": "US",
+                "displayName": "Bad", "addressLine1": "1 Test", "city": "Portland", "countryCode": "US", "region": "OR",
                 "propertyType": "single_family_home", "ownerships": [{"ownerKind": "client_owner"}],
             })
             self.assertEqual(invalid.status_code, 422)
             inline = client.post("/api/properties", json={
-                "displayName": "Cedar home", "addressLine1": "2 Cedar", "city": "Portland", "countryCode": "US",
+                "displayName": "Cedar home", "addressLine1": "2 Cedar", "city": "Portland", "countryCode": "US", "region": "OR",
                 "propertyType": "single_family_home", "ownerships": [{"ownerKind": "client_owner", "inlineParty": {"partyKind": "individual", "displayName": "Casey Owner"}}],
             })
             self.assertEqual(inline.status_code, 201)
@@ -145,6 +217,7 @@ class PortfolioTests(unittest.TestCase):
                 "US",
                 "single_family_home",
                 (object(),),
+                region="OR",
             )
 
     def test_same_date_future_ownership_replacement_is_rejected(self) -> None:
@@ -242,6 +315,7 @@ class PortfolioTests(unittest.TestCase):
                 "US",
                 "office",
                 (OwnershipInput("local_operator"),),
+                region="OR",
                 inventory_layout="office_suites",
                 spaces=(SpaceCreateCommand("Suite 100"), SpaceCreateCommand("Suite 200")),
             )
@@ -261,6 +335,7 @@ class PortfolioTests(unittest.TestCase):
                     "US",
                     "office",
                     (OwnershipInput("local_operator"),),
+                    region="OR",
                     inventory_layout="office_suites",
                 )
             )
@@ -279,6 +354,7 @@ class PortfolioTests(unittest.TestCase):
             PropertyCreateCommand(
                 "Pine offices", "1 Pine Avenue", "Portland", "US", "office",
                 (OwnershipInput("local_operator"),),
+                region="OR",
                 inventory_layout="office_suites",
                 spaces=(SpaceCreateCommand("Suite 100"), SpaceCreateCommand("Suite 200")),
             )
@@ -314,6 +390,7 @@ class PortfolioTests(unittest.TestCase):
                     "addressLine1": "10 Oak Road",
                     "city": "Portland",
                     "countryCode": "US",
+                    "region": "OR",
                     "propertyType": "office",
                     "inventoryLayout": "office_suites",
                     "ownerships": [{"ownerKind": "local_operator"}],
@@ -370,6 +447,7 @@ class PortfolioTests(unittest.TestCase):
     def test_occupied_or_scheduled_space_cannot_be_archived(self) -> None:
         office = self.service.create_property(PropertyCreateCommand(
             "Oak office", "1 Oak", "Portland", "US", "office", (OwnershipInput("local_operator"),),
+            region="OR",
             inventory_layout="office_suites", spaces=(SpaceCreateCommand("A"), SpaceCreateCommand("B")),
         ))
         space_id = self.service.get_property(office.id)["spaces"][0]["id"]
@@ -418,7 +496,7 @@ class PortfolioTests(unittest.TestCase):
         with TestClient(create_app(config)) as client:
             created = client.post("/api/properties", json={
                 "displayName": "Status home", "addressLine1": "9 Status Lane", "city": "Portland",
-                "countryCode": "US", "propertyType": "single_family_home",
+                "countryCode": "US", "region": "OR", "propertyType": "single_family_home",
                 "ownerships": [{"ownerKind": "local_operator"}],
                 "spaces": [{"displayName": "Whole home", "occupancy": {"occupancyStatus": "vacant", "effectiveOn": date.today().isoformat()}}],
             })
@@ -434,6 +512,7 @@ class PortfolioTests(unittest.TestCase):
             self.service.create_property(PropertyCreateCommand(
                 "Future home", "1 Future Way", "Portland", "US", "single_family_home",
                 (OwnershipInput("local_operator"),),
+                region="OR",
                 spaces=(SpaceCreateCommand(
                     "Whole home",
                     initial_occupancy=OccupancyCommand("occupied", "2099-01-01"),
@@ -498,7 +577,7 @@ class PortfolioTests(unittest.TestCase):
     def test_filters_ignore_archived_spaces(self) -> None:
         office = self.service.create_property(PropertyCreateCommand(
             "Filter office", "8 Filter", "Portland", "US", "office",
-            (OwnershipInput("local_operator"),), inventory_layout="office_suites",
+            (OwnershipInput("local_operator"),), region="OR", inventory_layout="office_suites",
             spaces=(SpaceCreateCommand("A"), SpaceCreateCommand("B")),
         ))
         space_id = self.service.get_property(office.id)["spaces"][0]["id"]
@@ -512,7 +591,7 @@ class PortfolioTests(unittest.TestCase):
         with TestClient(create_app(config)) as client:
             created = client.post("/api/properties", json={
                 "displayName": "Attention home", "addressLine1": "7 Review", "city": "Portland",
-                "countryCode": "US", "propertyType": "single_family_home",
+                "countryCode": "US", "region": "OR", "propertyType": "single_family_home",
                 "ownerships": [{"ownerKind": "local_operator"}],
             })
             self.assertEqual(created.status_code, 201)
@@ -681,6 +760,7 @@ class PortfolioTests(unittest.TestCase):
                     "addressLine1": "8 Contract Way",
                     "city": "Portland",
                     "countryCode": "US",
+                    "region": "OR",
                     "propertyType": "single_family_home",
                     "ownerships": [{"ownerKind": "local_operator"}],
                 },
@@ -747,6 +827,7 @@ class PortfolioTests(unittest.TestCase):
                     "addressLine1": "9 Source Way",
                     "city": "Portland",
                     "countryCode": "US",
+                    "region": "OR",
                     "propertyType": "single_family_home",
                     "ownerships": [{"ownerKind": "local_operator"}],
                 },

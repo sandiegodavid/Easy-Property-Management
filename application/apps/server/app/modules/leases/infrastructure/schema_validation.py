@@ -20,7 +20,7 @@ EXPECTED = {
         "integer": {"base_rent_minor", "payment_due_day", "agreed_security_deposit_minor"},
         "indexes": {"lease_terms_lease_dates": (("lease_id", "effective_on", "ends_on"), False)},
         "foreign_keys": {(('lease_id',), 'leases', ('id',))},
-        "checks": {"ends_onisnullorends_on>effective_on", "base_rent_minor>=0", "length(currency_code)=3andcurrency_code=upper(currency_code)", "payment_frequencyin('monthly','weekly')", "(payment_frequency='monthly'andpayment_due_daybetween1and31)or(payment_frequency='weekly'andpayment_due_dayisnull)", "agreed_security_deposit_minor>=0"},
+        "checks": {"ends_onisnullorends_on>effective_on", "typeof(base_rent_minor)='integer'andbase_rent_minor>0", "length(currency_code)=3andcurrency_codeglob'[A-Z][A-Z][A-Z]'", "payment_frequencyin('monthly','weekly')", "(payment_frequency='monthly'andpayment_due_daybetween1and31)or(payment_frequency='weekly'andpayment_due_dayisnull)", "agreed_security_deposit_minor>=0"},
     },
     "lease_participants": {
         "columns": {"id", "lease_id", "tenant_party_id", "participant_role", "starts_on", "ends_on", "notes", "created_at", "updated_at"},
@@ -52,7 +52,7 @@ EXPECTED = {
         "integer": {"proposal_version", "termination_fee_minor", "fee_waived"},
         "indexes": {"lease_termination_proposals_case_version": (("termination_case_id", "proposal_version"), True)},
         "foreign_keys": {(('termination_case_id',), 'lease_termination_cases', ('id',))},
-        "checks": {"proposal_version>0", "termination_fee_minorisnullortermination_fee_minor>=0", "fee_waivedin(0,1)", "(termination_fee_minorisnullandcurrency_codeisnull)or(termination_fee_minorisnotnullandlength(currency_code)=3andcurrency_code=upper(currency_code))", "statusin('open','accepted','rejected','countered','withdrawn','expired')", "(status='open'anddecided_onisnull)or(status!='open'anddecided_onisnotnull)"},
+        "checks": {"proposal_version>0", "termination_fee_minorisnullortermination_fee_minor>=0", "fee_waivedin(0,1)", "(termination_fee_minorisnullandcurrency_codeisnull)or(termination_fee_minorisnotnullandlength(currency_code)=3andcurrency_codeglob'[A-Z][A-Z][A-Z]')", "statusin('open','accepted','rejected','countered','withdrawn','expired')", "(status='open'anddecided_onisnull)or(status!='open'anddecided_onisnotnull)"},
     },
 }
 
@@ -89,4 +89,9 @@ def validate_lease_schema(connection) -> None:
 
 
 def _normalise(value: str) -> str:
-    return "".join(value.lower().split())
+    """Normalize SQL syntax while preserving the case of quoted literals."""
+    parts = value.split("'")
+    return "'".join(
+        part if index % 2 else "".join(part.lower().split())
+        for index, part in enumerate(parts)
+    )

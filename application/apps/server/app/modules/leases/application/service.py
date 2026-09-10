@@ -35,13 +35,11 @@ class TermCommand:
     agreed_security_deposit_minor: int
 
     def __post_init__(self) -> None:
-        if type(self.base_rent_minor) is not int or self.base_rent_minor < 0:
-            raise LeaseError("Base rent must be a non-negative integer minor-unit amount.")
+        if type(self.base_rent_minor) is not int or self.base_rent_minor <= 0:
+            raise LeaseError("Base rent must be a positive integer minor-unit amount.")
         if type(self.agreed_security_deposit_minor) is not int or self.agreed_security_deposit_minor < 0:
             raise LeaseError("Security deposit must be a non-negative integer minor-unit amount.")
-        currency = _text(self.currency_code, "Currency", 3).upper()
-        if len(currency) != 3 or not currency.isalpha():
-            raise LeaseError("Currency must be a three-letter ISO code.")
+        currency = _currency_code(self.currency_code)
         if self.payment_frequency not in {"monthly", "weekly"}:
             raise LeaseError("Payment frequency must be monthly or weekly.")
         if self.payment_frequency == "monthly":
@@ -205,10 +203,7 @@ class TerminationProposalCommand:
             if self.currency_code is not None:
                 raise LeaseError("Currency requires a termination fee.")
         else:
-            currency = _text(self.currency_code, "Currency", 3).upper()
-            if len(currency) != 3 or not currency.isalpha():
-                raise LeaseError("Currency must be a three-letter ISO code.")
-            object.__setattr__(self, "currency_code", currency)
+            object.__setattr__(self, "currency_code", _currency_code(self.currency_code))
         if type(self.fee_waived) is not bool:
             raise LeaseError("Fee-waived must be a boolean.")
         for field, label in (("replacement_tenant_condition", "Replacement tenant condition"), ("access_arrangement", "Access arrangement"), ("other_terms", "Other terms")):
@@ -918,6 +913,17 @@ def _text(value: object, label: str, limit: int) -> str:
     if not isinstance(value, str) or not (text := value.strip()) or len(text) > limit:
         raise LeaseError(f"{label} must contain 1 to {limit} characters.")
     return text
+
+
+def _currency_code(value: object) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 3
+        or not value.isascii()
+        or any(character < "A" or character > "Z" for character in value)
+    ):
+        raise LeaseError("Currency must be exactly three ASCII uppercase letters.")
+    return value
 
 
 def _optional(value: object, label: str, limit: int) -> str | None:

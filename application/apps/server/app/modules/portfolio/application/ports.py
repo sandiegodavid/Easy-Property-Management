@@ -17,6 +17,20 @@ from app.modules.portfolio.domain.models import (
 Result = TypeVar("Result")
 
 
+class AddressTimeZoneResolver(Protocol):
+    """Resolves a structured local address without contacting an external service."""
+
+    def resolve(
+        self,
+        *,
+        address_line_1: str,
+        city: str,
+        region: str | None,
+        postal_code: str | None,
+        country_code: str,
+    ) -> str: ...
+
+
 class PartyRoleActivityGuard(Protocol):
     def conflict(self, connection: Any, party_id: str) -> str | None: ...
 

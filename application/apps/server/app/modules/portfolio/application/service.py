@@ -8,6 +8,7 @@ import unicodedata
 from uuid import uuid4
 
 from app.modules.portfolio.application.ports import (
+    AddressTimeZoneResolver,
     PortfolioConflictError,
     PortfolioTransaction,
     PortfolioUnitOfWork,
@@ -187,10 +188,14 @@ class PropertyUpdateCommand:
 
 class PortfolioService:
     def __init__(self, unit_of_work: PortfolioUnitOfWork, party_factory: PartyFactory | None = None,
-                 party_reads: PartyReadOperations | None = None) -> None:
+                 party_reads: PartyReadOperations | None = None,
+                 time_zone_resolver: AddressTimeZoneResolver | None = None) -> None:
         self.unit_of_work = unit_of_work
         self.party_factory = party_factory or SharedPartyFactory()
         self.party_reads = party_reads
+        if time_zone_resolver is None:
+            raise PortfolioError("A local address time-zone resolver is required.")
+        self.time_zone_resolver = time_zone_resolver
 
     def create_party(self, command: PartyCreateCommand) -> Party:
         now, correlation_id = _now(), str(uuid4())
@@ -204,6 +209,7 @@ class PortfolioService:
 
     def create_property(self, command: PropertyCreateCommand) -> Property:
         now, correlation_id = _now(), str(uuid4())
+        time_zone = self._time_zone_for(command)
         property = Property(
             id=str(uuid4()),
             display_name=command.display_name,
@@ -213,6 +219,7 @@ class PortfolioService:
             region=command.region,
             postal_code=command.postal_code,
             country_code=command.country_code,
+            time_zone=time_zone,
             notes=command.notes,
             status="active",
             created_at=now,
@@ -455,6 +462,11 @@ class PortfolioService:
                 "notes": changes.get("notes", current.notes),
             }
             command = PropertyUpdateCommand(**values)
+            time_zone = current.time_zone
+            if any(field in changes for field in {
+                "addressLine1", "addressLine2", "city", "region", "postalCode", "countryCode",
+            }):
+                time_zone = self._time_zone_for(command)
             updated = replace(
                 current,
                 display_name=command.display_name,
@@ -464,6 +476,7 @@ class PortfolioService:
                 region=command.region,
                 postal_code=command.postal_code,
                 country_code=command.country_code,
+                time_zone=time_zone,
                 notes=command.notes,
                 updated_at=now,
             )
@@ -474,6 +487,15 @@ class PortfolioService:
             )
             return updated
         return self._not_found_from_key_error(write)
+
+    def _time_zone_for(self, command: PropertyCreateCommand | PropertyUpdateCommand) -> str:
+        return self.time_zone_resolver.resolve(
+            address_line_1=command.address_line_1,
+            city=command.city,
+            region=command.region,
+            postal_code=command.postal_code,
+            country_code=command.country_code,
+        )
 
     def archive_property(self, property_id: str, *, confirmed: bool) -> Property:
         if confirmed is not True: raise PortfolioError("Archiving a property requires explicit confirmation.")

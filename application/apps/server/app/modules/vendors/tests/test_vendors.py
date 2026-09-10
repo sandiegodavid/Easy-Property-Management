@@ -17,6 +17,7 @@ from app.modules.parties.application.service import PartyCreateCommand, SharedPa
 from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations
 from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations, SQLitePortfolioUnitOfWork
+from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.vendors.application.service import (
     ProviderLifecycleConflict, ProviderProfileCommand, ProviderService, ServiceAreaCommand,
     ProviderError, ProviderSearchCommand, ServiceCommand, WorkHistoryCommand, ReferenceCommand,
@@ -46,7 +47,10 @@ class ProviderTests(unittest.TestCase):
             SQLitePartyOperations(self.workspace.paths.database),
             SQLitePortfolioLeaseOperations(self.workspace.paths.database),
         ))
-        self.portfolio = PortfolioService(SQLitePortfolioUnitOfWork(self.workspace.paths.database, self.recorder))
+        self.portfolio = PortfolioService(
+            SQLitePortfolioUnitOfWork(self.workspace.paths.database, self.recorder),
+            time_zone_resolver=BundledAddressTimeZoneResolver(),
+        )
 
     def test_provider_lifecycle_labels_search_and_audit(self) -> None:
         created = self.providers.create(
@@ -60,7 +64,7 @@ class ProviderTests(unittest.TestCase):
             self.providers.add_service(party_id, ServiceCommand(" plumbing "))
         self.providers.add_area(party_id, ServiceAreaCommand("Portland Metro", "us"))
         property_id = self.portfolio.create_property(PropertyCreateCommand(
-            "Provider test home", "1 Main", "Portland", "US", "single_family_home", (OwnershipInput("local_operator"),),
+            "Provider test home", "1 Main", "Portland", "US", "single_family_home", (OwnershipInput("local_operator"),), region="OR",
         )).id
         self.providers.add_work_history(party_id, WorkHistoryCommand("2025-01-01", "Repaired a fixture", property_id))
         self.assertEqual([item["party"]["id"] for item in self.providers.list(ProviderSearchCommand(

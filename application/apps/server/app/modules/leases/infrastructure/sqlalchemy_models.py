@@ -50,8 +50,8 @@ class LeaseTermModel(LocalBase):
 
     __table_args__ = (
         CheckConstraint("ends_on IS NULL OR ends_on > effective_on"),
-        CheckConstraint("base_rent_minor >= 0"),
-        CheckConstraint("length(currency_code) = 3 AND currency_code = upper(currency_code)"),
+        CheckConstraint("typeof(base_rent_minor) = 'integer' AND base_rent_minor > 0"),
+        CheckConstraint("length(currency_code) = 3 AND currency_code GLOB '[A-Z][A-Z][A-Z]'"),
         CheckConstraint("payment_frequency IN ('monthly', 'weekly')"),
         CheckConstraint("(payment_frequency = 'monthly' AND payment_due_day BETWEEN 1 AND 31) OR (payment_frequency = 'weekly' AND payment_due_day IS NULL)"),
         CheckConstraint("agreed_security_deposit_minor >= 0"),
@@ -155,7 +155,7 @@ class LeaseTerminationProposalModel(LocalBase):
         CheckConstraint("proposal_version > 0"),
         CheckConstraint("termination_fee_minor IS NULL OR termination_fee_minor >= 0"),
         CheckConstraint("fee_waived IN (0, 1)"),
-        CheckConstraint("(termination_fee_minor IS NULL AND currency_code IS NULL) OR (termination_fee_minor IS NOT NULL AND length(currency_code) = 3 AND currency_code = upper(currency_code))"),
+        CheckConstraint("(termination_fee_minor IS NULL AND currency_code IS NULL) OR (termination_fee_minor IS NOT NULL AND length(currency_code) = 3 AND currency_code GLOB '[A-Z][A-Z][A-Z]')"),
         CheckConstraint("status IN ('open', 'accepted', 'rejected', 'countered', 'withdrawn', 'expired')"),
         CheckConstraint("(status = 'open' AND decided_on IS NULL) OR (status != 'open' AND decided_on IS NOT NULL)"),
         Index("lease_termination_proposals_case_version", "termination_case_id", "proposal_version", unique=True),
