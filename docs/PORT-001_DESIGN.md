@@ -33,7 +33,7 @@ Mixed does not mean a property is both residential and office, and it does not a
 PORT-001 does not provide:
 
 - Property type, rentable-space, suite, unit, occupancy, vacancy, or availability management. Those belong to `PORT-002` and `PORT-003`.
-- Tenants, prospects, vendors, or general contact roles beyond the small owner-party foundation. `TEN-001` expands the shared party/contact model, and `VEND-001` moves reusable party identity routes into the dedicated `parties` API module so they are not portfolio-owned.
+- Tenants, prospects, vendors, or general contact roles beyond the small owner-party foundation. `TEN-001` adds reusable party-owned multi-value contact methods and role/contact guard protocols, and `VEND-001` moves the remaining reusable identity routes into the dedicated `parties` API module so they are not portfolio-owned.
 - Ownership percentages, legal beneficial-ownership determinations, management agreements, management fees, owner balances, disbursements, or trust accounting.
 - Leases, expenses, payments, owner-reported rent, reports, portal access, authentication, or multi-user permissions.
 - Deletion of business records. Properties and ownership relationships are archived or ended, preserving history.
@@ -51,8 +51,9 @@ PORT-001 introduces a generic foundation that later party, leasing, provider, an
 | `id` | Stable UUID. |
 | `party_kind` | `individual` or `organization`. |
 | `display_name` | Required, trimmed, nonblank display name. |
-| `email`, `phone` | Optional contact values; normalized for display only in this item. No delivery or verification claim is made. |
 | `created_at`, `updated_at`, `archived_at` | UTC lifecycle timestamps. |
+
+PORT-001 stores identity only. TEN-001 adds party-owned `party_contact_methods` and explicitly removes redundant scalar email and phone fields from the current greenfield baseline.
 
 ### `properties`
 
@@ -87,7 +88,7 @@ Future modules may add ownership share, management agreement, owner statement, a
 The primary action is **Add property**. The short guided form asks for a property label, address, and “How do you manage this property?”
 
 1. **I own it** creates an active `local_operator` ownership row.
-2. **I manage it for an owner** requires one or more client owners. The operator can select a saved party or add a basic owner contact inline.
+2. **I manage it for an owner** requires one or more client owners. The operator can select a saved party or add a basic owner identity inline; reusable contact methods are party-owned by TEN-001 rather than copied into portfolio records.
 3. **Both** creates the local-operator row and one or more client-owner rows.
 
 The form explains the consequence in plain language, for example: “Managed for an owner — future owner statements and disbursements can be linked to this owner.” It must not ask the operator to understand database roles or legal ownership terminology.
@@ -134,7 +135,7 @@ All endpoints require a ready local workspace. Request models are typed Pydantic
 | `POST` | `/api/properties/{propertyId}/restore` | Restore an archived property. |
 | `PUT` | `/api/properties/{propertyId}/ownerships` | Replace the active ownership set effective on a specified date by ending and creating relationships atomically. |
 | `GET` | `/api/parties?activeOnly=true` | Find selectable client-owner contacts. |
-| `POST` | `/api/parties` | Create a basic client-owner party. |
+| `POST` | `/api/parties` | Create a basic client-owner identity; TEN-001 later adds reusable party contact methods. |
 | `POST` | `/api/parties/{partyId}/archive` | Archive a party only after confirmation and only if it has no current property ownership. |
 | `POST` | `/api/parties/{partyId}/restore` | Restore an archived party. |
 
@@ -144,7 +145,7 @@ Stable UUIDs are returned in all records. Responses expose `ownershipContext` as
 
 Every property, party, and relationship mutation writes its domain row(s) and explicit `AUDIT-001` event(s) in one immediate SQLite transaction. A single create or ownership-change workflow shares one correlation ID across its property, party, and relationship events.
 
-Audit snapshots include portable identifiers and normal business fields, but never application credentials or inferred legal conclusions. Relationship events retain effective dates and prior/current active sets so future owner accounting can explain which context applied.
+Audit snapshots include portable identifiers and normal business fields, but never application credentials or inferred legal conclusions. Relationship events retain effective dates and prior/current active sets so future owner accounting can explain which context applied. Party contact values are introduced and protected by TEN-001 rather than stored by portfolio.
 
 The records live only in the workspace SQLite database. They participate in current-schema validation, `LOCAL-002` encrypted backup/export/restore, and future SaaS migration through stable IDs. No external owner portal, email, or financial integration is introduced.
 
