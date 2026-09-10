@@ -19,6 +19,30 @@ from app.platform.sqlite_engine import create_sqlite_engine, immediate_transacti
 Result = TypeVar("Result")
 
 
+class SQLitePortfolioPartyRoleActivityGuard:
+    """Keeps current and scheduled client-owner identities available."""
+
+    def conflict(self, connection, party_id: str) -> str | None:
+        from datetime import date
+        row = connection.execute(PropertyOwnershipModel.__table__.select().where(
+            PropertyOwnershipModel.party_id == party_id,
+            (PropertyOwnershipModel.ends_on.is_(None) | (PropertyOwnershipModel.ends_on > date.today().isoformat())),
+        )).first()
+        return "A current or scheduled property ownership prevents party archival." if row else None
+
+
+class SQLitePortfolioRoleSummaryReader:
+    def __init__(self, database) -> None: self.engine = create_sqlite_engine(database)
+    def active_roles(self, party_id):
+        from datetime import date
+        with self.engine.connect() as connection:
+            row = connection.execute(PropertyOwnershipModel.__table__.select().where(
+                PropertyOwnershipModel.party_id == party_id,
+                (PropertyOwnershipModel.ends_on.is_(None) | (PropertyOwnershipModel.ends_on > date.today().isoformat())),
+            )).first()
+        return {"client_owner"} if row else set()
+
+
 class SQLitePortfolioUnitOfWork:
     def __init__(self, database, recorder: AuditRecorder,
                  party_role_guards: tuple[PartyRoleActivityGuard, ...] = ()) -> None:

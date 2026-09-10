@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from app.modules.portfolio.application.service import (
@@ -217,22 +217,6 @@ class PartyResponse(ContractModel):
     archivedAt: str | None
 
 
-class PartySearchContactResponse(ContractModel):
-    """An active contact that made a shared party selectable."""
-
-    id: str
-    methodKind: Literal["email", "phone"]
-    displayValue: str
-    extension: str | None
-    label: str | None
-
-
-class PartySearchResponse(PartyResponse):
-    """A party-search candidate, including its active contact methods."""
-
-    contactMethods: list[PartySearchContactResponse]
-
-
 class OwnershipResponse(ContractModel):
     id: str
     propertyId: str
@@ -287,26 +271,6 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
             raise HTTPException(400, str(error)) from error
         except PartyValidationError as error:
             raise HTTPException(400, str(error)) from error
-
-    @router.post("/api/parties", response_model=PartyResponse, status_code=status.HTTP_201_CREATED)
-    def create_party(data: PartyRequest):
-        require_ready(write=True)
-        return invoke(lambda: service.create_party(_party(data)).to_dict())
-
-    @router.get("/api/parties", response_model=list[PartySearchResponse])
-    def list_parties(activeOnly: bool = False, search: str | None = Query(None, max_length=240)):
-        require_ready()
-        return invoke(lambda: service.list_parties(active_only=activeOnly, search=search))
-
-    @router.post("/api/parties/{party_id}/archive", response_model=PartyResponse)
-    def archive_party(party_id: str, data: ConfirmationRequest):
-        require_ready(write=True)
-        return invoke(lambda: service.archive_party(party_id, confirmed=data.confirmed).to_dict())
-
-    @router.post("/api/parties/{party_id}/restore", response_model=PartyResponse)
-    def restore_party(party_id: str):
-        require_ready(write=True)
-        return invoke(lambda: service.restore_party(party_id).to_dict())
 
     @router.post("/api/properties", response_model=PropertyResponse, status_code=status.HTTP_201_CREATED)
     def create_property(data: PropertyCreateRequest):

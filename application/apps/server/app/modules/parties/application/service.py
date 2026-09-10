@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Protocol
 from uuid import uuid4
 
-from app.modules.parties.application.ports import PartyTransaction, PartyUnitOfWork
+from app.modules.parties.application.ports import PartyReadOperations, PartyRoleSummaryReader, PartyTransaction, PartyUnitOfWork
 from app.modules.parties.domain.contact_values import normalize_contact_value
 from app.modules.parties.domain.models import Party, PartyContactMethod
 
@@ -20,6 +20,12 @@ class PartyNotFoundError(PartyValidationError):
 
 class PartyConflictError(PartyValidationError):
     pass
+
+
+class PossibleDuplicatePartyError(PartyConflictError):
+    def __init__(self, candidate_party_ids: list[str]) -> None:
+        super().__init__("A matching active party already exists.")
+        self.candidate_party_ids = candidate_party_ids
 
 
 @dataclass(frozen=True)
@@ -225,6 +231,112 @@ class PartyContactService:
             return self.unit_of_work.write(operation)
         except KeyError as error:
             raise PartyNotFoundError("Party or contact method was not found.") from error
+
+
+@dataclass(frozen=True)
+class PartyPatchCommand:
+    display_name: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "display_name", _required(self.display_name, "Display name", 240))
+
+
+class PartyIdentityService:
+    """Shared identity lifecycle; role modules only add role-specific profiles."""
+
+    def __init__(self, unit_of_work: PartyUnitOfWork, party_reads: PartyReadOperations,
+                 party_factory: PartyFactory | None = None,
+                 role_summary_readers: tuple[PartyRoleSummaryReader, ...] = ()) -> None:
+        self.unit_of_work = unit_of_work
+        self.party_reads = party_reads
+        self.party_factory = party_factory or SharedPartyFactory()
+        self.role_summary_readers = role_summary_readers
+
+    def create(self, command: PartyCreateCommand, *, contacts: tuple[ContactMethodCommand, ...] = (),
+               confirmed_new_party: bool = False) -> Party:
+        if not isinstance(contacts, tuple) or not all(isinstance(item, ContactMethodCommand) for item in contacts):
+            raise PartyValidationError("Party contacts are invalid.")
+        now, correlation = _now(), str(uuid4())
+        def write(tx):
+            provisional = [_contact("", item, now) for item in contacts]
+            _unique(provisional)
+            candidates = tx.duplicate_party_ids(provisional, 10)
+            if candidates and confirmed_new_party is not True:
+                raise PossibleDuplicatePartyError(candidates)
+            item = self.party_factory.create(command, now)
+            tx.insert_party(item)
+            tx.record_change(entity_type="party", entity_id=item.id, action="created", before=None,
+                             after=item.to_dict(), reason="party_created", correlation_id=correlation)
+            for provisional_method in provisional:
+                method = replace(provisional_method, party_id=item.id)
+                tx.insert_method(method)
+                tx.record_change(entity_type="party_contact_method", entity_id=method.id, action="created",
+                                 before=None, after=method.to_audit_dict(), reason="party_contact_created",
+                                 correlation_id=correlation)
+            return item
+        return self.unit_of_work.write(write)
+
+    def get(self, party_id: str) -> tuple[Party, list[PartyContactMethod]]:
+        record = self.unit_of_work.methods(party_id)
+        if record is None:
+            raise PartyNotFoundError("Party was not found.")
+        return record
+
+    def list(self, *, archive_state: str, search: str | None) -> list[tuple[Party, list[PartyContactMethod]]]:
+        if archive_state not in {"active", "archived", "all"}:
+            raise PartyValidationError("Archive state is invalid.")
+        parties = self.party_reads.search(active_only=archive_state == "active", search=_optional(search, "Search", 240))
+        if archive_state == "archived":
+            parties = [item for item in parties if item.archived_at is not None]
+        methods = self.party_reads.methods_for_parties([item.id for item in parties])
+        return [(item, methods.get(item.id, [])) for item in parties]
+
+    def active_roles(self, party_id: str) -> list[str]:
+        return sorted({role for reader in self.role_summary_readers for role in reader.active_roles(party_id)})
+
+    def patch(self, party_id: str, command: PartyPatchCommand) -> Party:
+        now, correlation = _now(), str(uuid4())
+        def write(tx):
+            current = tx.party(party_id)
+            if current is None: raise KeyError
+            if current.archived_at is not None: raise PartyConflictError("An archived party cannot be edited.")
+            updated = replace(current, display_name=command.display_name, updated_at=now)
+            if updated != current:
+                tx.replace_party(updated)
+                tx.record_change(entity_type="party", entity_id=party_id, action="updated", before=current.to_dict(),
+                                 after=updated.to_dict(), reason="party_updated", correlation_id=correlation)
+            return updated
+        return self._write(write)
+
+    def archive(self, party_id: str, *, confirmed: bool) -> Party:
+        if confirmed is not True: raise PartyValidationError("Archiving a party requires explicit confirmation.")
+        now, correlation = _now(), str(uuid4())
+        def write(tx):
+            current = tx.party(party_id)
+            if current is None: raise KeyError
+            if current.archived_at is not None: raise PartyConflictError("Party is already archived.")
+            if conflicts := tx.party_role_conflicts(party_id): raise PartyConflictError(" ".join(conflicts))
+            updated = replace(current, archived_at=now, updated_at=now); tx.replace_party(updated)
+            tx.record_change(entity_type="party", entity_id=party_id, action="archived", before=current.to_dict(),
+                             after=updated.to_dict(), reason="party_archived", correlation_id=correlation)
+            return updated
+        return self._write(write)
+
+    def restore(self, party_id: str) -> Party:
+        now, correlation = _now(), str(uuid4())
+        def write(tx):
+            current = tx.party(party_id)
+            if current is None: raise KeyError
+            if current.archived_at is None: raise PartyConflictError("Party is already active.")
+            updated = replace(current, archived_at=None, updated_at=now); tx.replace_party(updated)
+            tx.record_change(entity_type="party", entity_id=party_id, action="restored", before=current.to_dict(),
+                             after=updated.to_dict(), reason="party_restored", correlation_id=correlation)
+            return updated
+        return self._write(write)
+
+    def _write(self, operation):
+        try: return self.unit_of_work.write(operation)
+        except KeyError as error: raise PartyNotFoundError("Party was not found.") from error
 
 
 def _contact(party_id: str, command: ContactMethodCommand, now: str) -> PartyContactMethod:

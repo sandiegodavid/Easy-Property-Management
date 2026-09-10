@@ -82,6 +82,14 @@ class SQLiteTenantRoleActivityGuard:
         return "An active tenant profile prevents party archival." if row else None
 
 
+class SQLiteTenantRoleSummaryReader:
+    def __init__(self, database) -> None: self.engine = create_sqlite_engine(database)
+    def active_roles(self, party_id):
+        with self.engine.connect() as connection:
+            row = connection.execute(TenantProfileModel.__table__.select().where(TenantProfileModel.party_id == party_id, TenantProfileModel.archived_at.is_(None))).first()
+        return {"tenant"} if row else set()
+
+
 class SQLiteTenantProfileAvailability:
     def is_active(self, connection, party_id):
         row = connection.execute(

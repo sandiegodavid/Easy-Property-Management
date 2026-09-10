@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.parties.application.ports import (
     ContactReferenceGuard,
+    PartyRoleActivityGuard,
     PartyTransaction,
     PartyTransactionOperations,
 )
@@ -25,14 +26,16 @@ Result = TypeVar("Result")
 
 class SQLitePartyUnitOfWork:
     def __init__(self, database, recorder: AuditRecorder,
-                 contact_reference_guards: tuple[ContactReferenceGuard, ...] = ()) -> None:
+                 contact_reference_guards: tuple[ContactReferenceGuard, ...] = (),
+                 role_activity_guards: tuple[PartyRoleActivityGuard, ...] = ()) -> None:
         self.engine = create_sqlite_engine(database)
         self.recorder = recorder
         self.contact_reference_guards = contact_reference_guards
+        self.role_activity_guards = role_activity_guards
 
     def write(self, operation: Callable[[PartyTransaction], Result]) -> Result:
         with immediate_transaction(self.engine) as connection:
-            return operation(_Transaction(connection, self.recorder, self.contact_reference_guards))
+            return operation(_Transaction(connection, self.recorder, self.contact_reference_guards, self.role_activity_guards))
 
     def methods(self, party_id: str) -> tuple[Party, list[PartyContactMethod]] | None:
         with Session(self.engine) as session:
@@ -162,10 +165,12 @@ class SQLitePartyReadOperations:
 
 class _Transaction:
     def __init__(self, connection: Any, recorder: AuditRecorder,
-                 guards: tuple[ContactReferenceGuard, ...]) -> None:
+                 guards: tuple[ContactReferenceGuard, ...],
+                 role_guards: tuple[PartyRoleActivityGuard, ...]) -> None:
         self.connection = connection
         self.recorder = recorder
         self.guards = guards
+        self.role_guards = role_guards
 
     def party(self, party_id):
         row = self.connection.execute(
@@ -181,8 +186,33 @@ class _Transaction:
         ).mappings().all()
         return [PartyContactMethod(**dict(row)) for row in rows]
 
+    def duplicate_party_ids(self, methods, limit):
+        if not methods:
+            return []
+        clauses = [
+            (PartyContactMethodModel.method_kind == item.method_kind)
+            & (PartyContactMethodModel.normalized_value == item.normalized_value)
+            & (PartyContactMethodModel.extension == item.extension if item.extension is not None else PartyContactMethodModel.extension.is_(None))
+            for item in methods
+        ]
+        query = select(PartyContactMethodModel.party_id).join(PartyModel).where(
+            PartyContactMethodModel.status == "active", PartyModel.archived_at.is_(None), or_(*clauses)
+        ).distinct().order_by(PartyModel.display_name, PartyContactMethodModel.party_id).limit(limit)
+        return list(self.connection.execute(query).scalars())
+
     def insert_method(self, item):
         self.connection.execute(PartyContactMethodModel.__table__.insert().values(**item.__dict__))
+
+    def insert_party(self, item):
+        self.connection.execute(PartyModel.__table__.insert().values(**item.__dict__))
+
+    def replace_party(self, item):
+        self.connection.execute(
+            PartyModel.__table__.update().where(PartyModel.id == item.id).values(**item.__dict__)
+        )
+
+    def party_role_conflicts(self, party_id):
+        return [message for guard in self.role_guards if (message := guard.conflict(self.connection, party_id))]
 
     def replace_method(self, item):
         self.connection.execute(

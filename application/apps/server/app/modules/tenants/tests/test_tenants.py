@@ -280,14 +280,8 @@ class TenantTests(unittest.TestCase):
             self.assertEqual(found.status_code, 200)
             self.assertEqual([item["id"] for item in found.json()], [owner.id])
             self.assertEqual(
-                found.json()[0]["contactMethods"],
-                [{
-                    "id": contact_service.list(owner.id)[0]["id"],
-                    "methodKind": "email",
-                    "displayValue": "owner-search@example.test",
-                    "extension": None,
-                    "label": None,
-                }],
+                found.json()[0]["contactMethods"][0]["displayValue"],
+                "owner-search@example.test",
             )
             self.assertEqual(client.post(
                 f"/api/parties/{owner.id}/archive", json={"confirmed": True}
@@ -366,6 +360,19 @@ class TenantTests(unittest.TestCase):
             self.contacts.add(tenant["id"], ContactMethodCommand(
                 "phone", "5035550199", extension="12"
             ))
+
+    def test_party_create_rejects_duplicate_contacts_in_one_request(self) -> None:
+        config = Path(self.temp.name) / "party-duplicates.json"
+        config.write_text(json.dumps({"localWorkspacePath": str(self.workspace.paths.root)}), encoding="utf-8")
+        with TestClient(create_app(config)) as client:
+            response = client.post("/api/parties", json={
+                "partyKind": "individual", "displayName": "Duplicate Contact",
+                "contacts": [
+                    {"methodKind": "phone", "value": "503-555-0199"},
+                    {"methodKind": "phone", "value": "(503) 555 0199"},
+                ],
+            })
+        self.assertEqual(response.status_code, 409)
 
     def test_feature_adapters_do_not_import_each_others_persistence_models(self) -> None:
         tenant_adapter = Path(__file__).parents[1] / "infrastructure" / "unit_of_work.py"

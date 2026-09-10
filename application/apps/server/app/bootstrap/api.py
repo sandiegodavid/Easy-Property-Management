@@ -29,10 +29,12 @@ from app.modules.portfolio.api.router import build_router as build_portfolio_rou
 from app.modules.portfolio.application.service import PortfolioService
 from app.modules.portfolio.infrastructure.unit_of_work import (
     SQLitePortfolioLeaseOperations,
+    SQLitePortfolioPartyRoleActivityGuard,
+    SQLitePortfolioRoleSummaryReader,
     SQLitePortfolioUnitOfWork,
 )
 from app.modules.parties.api.router import build_router as build_party_router
-from app.modules.parties.application.service import PartyContactService
+from app.modules.parties.application.service import PartyContactService, PartyIdentityService
 from app.modules.parties.infrastructure.unit_of_work import (
     SQLitePartyOperations,
     SQLitePartyReadOperations,
@@ -44,6 +46,7 @@ from app.modules.tenants.infrastructure.unit_of_work import (
     SQLiteTenantContactReferenceGuard,
     SQLiteTenantProfileAvailability,
     SQLiteTenantRoleActivityGuard,
+    SQLiteTenantRoleSummaryReader,
     SQLiteTenantUnitOfWork,
 )
 from app.modules.leases.api.router import build_router as build_lease_router
@@ -56,6 +59,12 @@ from app.modules.inspections.infrastructure.unit_of_work import SQLiteInspection
 from app.modules.inspections.domain.audit_policy import INSPECTION_ACTIVITY_POLICY
 from app.modules.parties.application.service import SharedPartyFactory
 from app.modules.parties.domain.audit_policy import PARTY_CONTACT_SNAPSHOT_POLICY
+from app.modules.vendors.api.router import build_router as build_provider_router
+from app.modules.vendors.application.service import ProviderService
+from app.modules.vendors.infrastructure.unit_of_work import (
+    SQLiteProviderRoleActivityGuard, SQLiteProviderRoleSummaryReader, SQLiteProviderUnitOfWork,
+)
+from app.modules.vendors.domain.audit_policy import PROVIDER_ACTIVITY_SNAPSHOT_POLICY
 from app.platform.version import application_version
 
 logger = logging.getLogger(__name__)
@@ -113,7 +122,23 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         party_operations, party_reads,
     ), SharedPartyFactory())
     party_contacts = PartyContactService(SQLitePartyUnitOfWork(
-        service.paths.database, recorder, (SQLiteTenantContactReferenceGuard(recorder),)
+        service.paths.database, recorder, (SQLiteTenantContactReferenceGuard(recorder),),
+        (SQLiteTenantRoleActivityGuard(), SQLitePortfolioPartyRoleActivityGuard(), SQLiteProviderRoleActivityGuard()),
+    ))
+    party_identities = PartyIdentityService(
+        SQLitePartyUnitOfWork(
+            service.paths.database, recorder, (),
+            (SQLiteTenantRoleActivityGuard(), SQLitePortfolioPartyRoleActivityGuard(), SQLiteProviderRoleActivityGuard()),
+        ),
+        party_reads,
+        role_summary_readers=(
+            SQLiteTenantRoleSummaryReader(service.paths.database),
+            SQLitePortfolioRoleSummaryReader(service.paths.database),
+            SQLiteProviderRoleSummaryReader(service.paths.database),
+        ),
+    )
+    providers = ProviderService(SQLiteProviderUnitOfWork(
+        service.paths.database, recorder, party_operations, portfolio_lease_operations,
     ))
     inspections = InspectionService(inspection_unit_of_work, files)
     leases = LeaseService(lease_unit_of_work, inspections.attention_for_lease)
@@ -149,6 +174,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.portfolio_service = portfolio
     app.state.tenant_service = tenants
     app.state.party_contact_service = party_contacts
+    app.state.party_identity_service = party_identities
+    app.state.provider_service = providers
     app.state.lease_service = leases
     app.state.inspection_service = inspections
     app.include_router(build_router(service, runtime))
@@ -182,6 +209,11 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("condition_checklist_template", 1): INSPECTION_ACTIVITY_POLICY,
         ("condition_checklist_template_item", 1): INSPECTION_ACTIVITY_POLICY,
         ("condition_comparison", 1): INSPECTION_ACTIVITY_POLICY,
+        ("provider_profile", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("provider_service", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("provider_service_area", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("provider_work_history", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("provider_reference", 1): DEFAULT_SNAPSHOT_POLICY,
     }, activity_policies={
         ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
         ("party_contact_method", 1): PARTY_CONTACT_SNAPSHOT_POLICY,
@@ -192,12 +224,18 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("condition_checklist_template", 1): INSPECTION_ACTIVITY_POLICY,
         ("condition_checklist_template_item", 1): INSPECTION_ACTIVITY_POLICY,
         ("condition_comparison", 1): INSPECTION_ACTIVITY_POLICY,
+        ("provider_profile", 1): PROVIDER_ACTIVITY_SNAPSHOT_POLICY,
+        ("provider_service", 1): PROVIDER_ACTIVITY_SNAPSHOT_POLICY,
+        ("provider_service_area", 1): PROVIDER_ACTIVITY_SNAPSHOT_POLICY,
+        ("provider_work_history", 1): PROVIDER_ACTIVITY_SNAPSHOT_POLICY,
+        ("provider_reference", 1): PROVIDER_ACTIVITY_SNAPSHOT_POLICY,
     })
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime))
     app.include_router(build_tasks_router(tasks, runtime))
     app.include_router(build_portfolio_router(portfolio, runtime))
-    app.include_router(build_party_router(party_contacts, runtime))
+    app.include_router(build_party_router(party_identities, party_contacts, runtime))
+    app.include_router(build_provider_router(providers, runtime))
     app.include_router(build_tenant_router(tenants, runtime))
     app.include_router(build_lease_router(leases, runtime))
     app.include_router(build_inspection_router(inspections, runtime))
