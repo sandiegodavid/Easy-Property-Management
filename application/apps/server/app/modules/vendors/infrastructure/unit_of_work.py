@@ -1,4 +1,4 @@
-"""SQLite implementation of the VEND-001 transaction boundary."""
+"""SQLite implementation of the provider transaction boundary."""
 
 from collections.abc import Callable
 from typing import Any, TypeVar
@@ -15,11 +15,12 @@ from app.modules.vendors.application.ports import (
     ProviderStorageConflict,
 )
 from app.modules.vendors.domain.models import (
-    ProviderProfile, ProviderReference, ProviderService, ProviderServiceArea, ProviderWorkHistory,
+    ProviderProfile, ProviderReference, ProviderReputationLink, ProviderService,
+    ProviderServiceArea, ProviderWorkHistory,
 )
 from app.modules.vendors.infrastructure.sqlalchemy_models import (
-    ProviderProfileModel, ProviderReferenceModel, ProviderServiceAreaModel,
-    ProviderServiceModel, ProviderWorkHistoryModel,
+    ProviderProfileModel, ProviderReferenceModel, ProviderReputationLinkModel,
+    ProviderServiceAreaModel, ProviderServiceModel, ProviderWorkHistoryModel,
 )
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
@@ -65,6 +66,10 @@ class SQLiteProviderUnitOfWork(ProviderUnitOfWork):
                 [_area(item) for item in rows(ProviderServiceAreaModel)],
                 [_work(item) for item in rows(ProviderWorkHistoryModel)],
                 [_reference(item) for item in rows(ProviderReferenceModel)],
+                sorted(
+                    (_reputation_link(item) for item in rows(ProviderReputationLinkModel)),
+                    key=_reputation_sort_key,
+                ),
             )
 
     def list(self, *, archive_state, search, service, service_area, selection_status, property_id, has_reference):
@@ -83,6 +88,7 @@ class SQLiteProviderUnitOfWork(ProviderUnitOfWork):
             active_areas = _group(session, ProviderServiceAreaModel, party_ids)
             active_work = _group(session, ProviderWorkHistoryModel, party_ids)
             active_references = _group(session, ProviderReferenceModel, party_ids)
+            active_reputation_links = _group(session, ProviderReputationLinkModel, party_ids)
             needle = search.casefold() if search else None
             results = []
             for profile in profiles:
@@ -103,7 +109,7 @@ class SQLiteProviderUnitOfWork(ProviderUnitOfWork):
                     continue
                 if needle and not _matches(needle, party, services, areas, work, references):
                     continue
-                results.append((party, profile, services, areas, len(work), len(references)))
+                results.append((party, profile, services, areas, len(work), len(references), len(active_reputation_links.get(profile.party_id, []))))
             return sorted(results, key=lambda item: (item[0].display_name.casefold(), item[0].id))
 
 
@@ -125,6 +131,11 @@ class _Transaction:
     def areas(self, party_id): return _many(self.connection, ProviderServiceAreaModel, party_id, _area)
     def work_history(self, party_id): return _many(self.connection, ProviderWorkHistoryModel, party_id, _work)
     def references(self, party_id): return _many(self.connection, ProviderReferenceModel, party_id, _reference)
+    def reputation_links(self, party_id):
+        return sorted(
+            _many(self.connection, ProviderReputationLinkModel, party_id, _reputation_link),
+            key=_reputation_sort_key,
+        )
     def property_exists(self, property_id): return self.properties.property(self.connection, property_id) is not None
     def insert_profile(self, item): self.connection.execute(ProviderProfileModel.__table__.insert().values(**item.__dict__))
     def replace_profile(self, item): self.connection.execute(ProviderProfileModel.__table__.update().where(ProviderProfileModel.party_id == item.party_id).values(**item.__dict__))
@@ -136,6 +147,8 @@ class _Transaction:
     def replace_work_history(self, item): self.connection.execute(ProviderWorkHistoryModel.__table__.update().where(ProviderWorkHistoryModel.id == item.id).values(**item.__dict__))
     def insert_reference(self, item): self.connection.execute(ProviderReferenceModel.__table__.insert().values(**item.__dict__))
     def replace_reference(self, item): self.connection.execute(ProviderReferenceModel.__table__.update().where(ProviderReferenceModel.id == item.id).values(**item.__dict__))
+    def insert_reputation_link(self, item): self.connection.execute(ProviderReputationLinkModel.__table__.insert().values(**item.__dict__))
+    def replace_reputation_link(self, item): self.connection.execute(ProviderReputationLinkModel.__table__.update().where(ProviderReputationLinkModel.id == item.id).values(**item.__dict__))
     def record_change(self, **change): self.recorder.record_change(self.connection.connection.driver_connection, **change)
 
 
@@ -185,3 +198,5 @@ def _service(row): return ProviderService(row.id, row.party_id, row.display_name
 def _area(row): return ProviderServiceArea(row.id, row.party_id, row.display_name, row.normalized_name, row.country_code, row.created_at, row.updated_at, row.archived_at)
 def _work(row): return ProviderWorkHistory(row.id, row.party_id, row.property_id, row.performed_on, row.summary, row.outcome_notes, row.created_at, row.updated_at, row.archived_at)
 def _reference(row): return ProviderReference(row.id, row.party_id, row.reference_name, row.organization_name, row.relationship, row.email, row.phone, row.notes, row.created_at, row.updated_at, row.archived_at)
+def _reputation_link(row): return ProviderReputationLink(row.id, row.party_id, row.source_kind, row.source_name, row.normalized_source_key, row.url, row.normalized_url, row.notes, row.last_checked_on, row.created_at, row.updated_at, row.archived_at)
+def _reputation_sort_key(item): return ((item.source_name or item.source_kind).casefold(), item.id)

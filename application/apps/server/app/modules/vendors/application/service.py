@@ -1,18 +1,19 @@
 """Provider-directory use cases and invariants."""
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 import unicodedata
+from urllib.parse import SplitResult, urlsplit, urlunsplit
 from uuid import uuid4
 
 from app.modules.parties.application.service import (
-    ContactMethodCommand, PartyConflictError, PartyCreateCommand, PartyFactory, PartyValidationError,
-    SharedPartyFactory,
+    ContactMethodCommand, PartyCreateCommand, PartyFactory, SharedPartyFactory,
 )
 from app.modules.parties.domain.models import Party, PartyContactMethod
 from app.modules.vendors.application.ports import ProviderStorageConflict, ProviderTransaction, ProviderUnitOfWork
 from app.modules.vendors.domain.models import (
     ProviderProfile, ProviderReference as ProviderReferenceRecord,
+    ProviderReputationLink,
     ProviderService as ProviderServiceRecord, ProviderServiceArea as ProviderServiceAreaRecord,
     ProviderWorkHistory as ProviderWorkHistoryRecord,
 )
@@ -130,6 +131,49 @@ class ReferenceCommand:
             object.__setattr__(self, field, _optional(getattr(self, field), label, limit))
         if not any((self.reference_name, self.organization_name, self.relationship)):
             raise ProviderError("A reference needs a name, organization, or relationship.")
+
+
+@dataclass(frozen=True)
+class ReputationLinkCommand:
+    source_kind: str
+    url: str
+    source_name: str | None = None
+    notes: str | None = None
+    last_checked_on: str | None = None
+    normalized_source_key: str = field(init=False)
+    normalized_url: str = field(init=False)
+
+    def __post_init__(self) -> None:
+        source_kind, source_name, source_key = _reputation_source(self.source_kind, self.source_name)
+        canonical_url = canonical_reputation_url(self.url)
+        object.__setattr__(self, "source_kind", source_kind)
+        object.__setattr__(self, "source_name", source_name)
+        object.__setattr__(self, "normalized_source_key", source_key)
+        object.__setattr__(self, "url", canonical_url)
+        object.__setattr__(self, "normalized_url", canonical_url)
+        object.__setattr__(self, "notes", _optional(self.notes, "Reputation notes", 4000))
+        object.__setattr__(self, "last_checked_on", _reputation_date(self.last_checked_on))
+
+
+@dataclass(frozen=True)
+class ReputationLinkPatchCommand:
+    source_kind: str | object = UNSET
+    url: str | object = UNSET
+    source_name: str | None | object = UNSET
+    notes: str | None | object = UNSET
+    last_checked_on: str | None | object = UNSET
+
+    def __post_init__(self) -> None:
+        if self.source_kind is not UNSET and self.source_kind not in {"google", "yelp", "angi", "other"}:
+            raise ProviderError("Reputation source kind is invalid.")
+        if self.url is not UNSET:
+            object.__setattr__(self, "url", canonical_reputation_url(self.url))
+        if self.source_name is not UNSET:
+            object.__setattr__(self, "source_name", _optional(self.source_name, "Reputation source name", 80))
+        if self.notes is not UNSET:
+            object.__setattr__(self, "notes", _optional(self.notes, "Reputation notes", 4000))
+        if self.last_checked_on is not UNSET:
+            object.__setattr__(self, "last_checked_on", _reputation_date(self.last_checked_on))
 
 
 class ProviderService:
@@ -269,6 +313,118 @@ class ProviderService:
     def archive_reference(self, party_id, item_id, *, confirmed): return self._child_archive(party_id, item_id, confirmed, "reference")
     def restore_reference(self, party_id, item_id): return self._child_restore(party_id, item_id, "reference")
 
+    def add_reputation_link(self, party_id: str, command: ReputationLinkCommand) -> dict[str, object]:
+        if not isinstance(command, ReputationLinkCommand):
+            raise ProviderError("Reputation-link command is invalid.")
+        now, correlation = _now(), str(uuid4())
+
+        def write(tx):
+            _available_provider(tx, party_id)
+            item = _new_reputation_link(party_id, command, now)
+            _unique_reputation_link(tx.reputation_links(party_id), item)
+            tx.insert_reputation_link(item)
+            tx.record_change(
+                entity_type="provider_reputation_link", entity_id=item.id, action="created",
+                before=None, after=item.to_dict(), reason="provider_reputation_link_created",
+                correlation_id=correlation,
+            )
+            return party_id
+
+        return self._write_detail(write)
+
+    def update_reputation_link(
+        self, party_id: str, link_id: str, command: ReputationLinkPatchCommand,
+    ) -> dict[str, object]:
+        if not isinstance(command, ReputationLinkPatchCommand):
+            raise ProviderError("Reputation-link patch command is invalid.")
+        now, correlation = _now(), str(uuid4())
+
+        def write(tx):
+            _available_provider(tx, party_id)
+            current = _required_reputation_link(tx.reputation_links(party_id), link_id)
+            if current.archived_at is not None:
+                raise ProviderLifecycleConflict("An archived reputation link cannot be edited.")
+            complete = ReputationLinkCommand(
+                current.source_kind if command.source_kind is UNSET else command.source_kind,
+                current.url if command.url is UNSET else command.url,
+                current.source_name if command.source_name is UNSET else command.source_name,
+                current.notes if command.notes is UNSET else command.notes,
+                current.last_checked_on if command.last_checked_on is UNSET else command.last_checked_on,
+            )
+            business_values = (
+                complete.source_kind, complete.source_name, complete.normalized_source_key,
+                complete.url, complete.normalized_url, complete.notes, complete.last_checked_on,
+            )
+            if business_values == (
+                current.source_kind, current.source_name, current.normalized_source_key,
+                current.url, current.normalized_url, current.notes, current.last_checked_on,
+            ):
+                return party_id
+            updated = replace(
+                current,
+                source_kind=complete.source_kind,
+                source_name=complete.source_name,
+                normalized_source_key=complete.normalized_source_key,
+                url=complete.url,
+                normalized_url=complete.normalized_url,
+                notes=complete.notes,
+                last_checked_on=complete.last_checked_on,
+                updated_at=now,
+            )
+            _unique_reputation_link(tx.reputation_links(party_id), updated)
+            tx.replace_reputation_link(updated)
+            tx.record_change(
+                entity_type="provider_reputation_link", entity_id=link_id, action="updated",
+                before=current.to_dict(), after=updated.to_dict(),
+                reason="provider_reputation_link_updated", correlation_id=correlation,
+            )
+            return party_id
+
+        return self._write_detail(write)
+
+    def archive_reputation_link(
+        self, party_id: str, link_id: str, *, confirmed: bool,
+    ) -> dict[str, object]:
+        if confirmed is not True:
+            raise ProviderError("Archiving a reputation link requires explicit confirmation.")
+        now, correlation = _now(), str(uuid4())
+
+        def write(tx):
+            _available_provider(tx, party_id)
+            current = _required_reputation_link(tx.reputation_links(party_id), link_id)
+            if current.archived_at is not None:
+                raise ProviderLifecycleConflict("Reputation link is already archived.")
+            updated = replace(current, archived_at=now, updated_at=now)
+            tx.replace_reputation_link(updated)
+            tx.record_change(
+                entity_type="provider_reputation_link", entity_id=link_id, action="archived",
+                before=current.to_dict(), after=updated.to_dict(),
+                reason="provider_reputation_link_archived", correlation_id=correlation,
+            )
+            return party_id
+
+        return self._write_detail(write, include_archived=True)
+
+    def restore_reputation_link(self, party_id: str, link_id: str) -> dict[str, object]:
+        now, correlation = _now(), str(uuid4())
+
+        def write(tx):
+            _available_provider(tx, party_id)
+            current = _required_reputation_link(tx.reputation_links(party_id), link_id)
+            if current.archived_at is None:
+                raise ProviderLifecycleConflict("Reputation link is already active.")
+            updated = replace(current, archived_at=None, updated_at=now)
+            _unique_reputation_link(tx.reputation_links(party_id), updated)
+            tx.replace_reputation_link(updated)
+            tx.record_change(
+                entity_type="provider_reputation_link", entity_id=link_id, action="restored",
+                before=current.to_dict(), after=updated.to_dict(),
+                reason="provider_reputation_link_restored", correlation_id=correlation,
+            )
+            return party_id
+
+        return self._write_detail(write)
+
     def _child_create(self, party_id, command, kind):
         _check_command(command, kind); now, correlation = _now(), str(uuid4())
         def write(tx):
@@ -323,6 +479,13 @@ def _active_profile(tx, party_id):
     if item is None: raise KeyError
     if item.archived_at is not None: raise ProviderLifecycleConflict("Restore the provider before changing its records.")
     return item
+def _available_provider(tx, party_id):
+    profile = _active_profile(tx, party_id)
+    party = tx.party(party_id)
+    if party is None: raise KeyError
+    if party.archived_at is not None:
+        raise ProviderLifecycleConflict("Restore the party before changing reputation links.")
+    return profile
 def _new_contact(party_id, item, now): return PartyContactMethod(str(uuid4()), party_id, item.method_kind, item.value, item.normalized_value, item.extension, item.label, "active", now, now, None)
 def _profile(party_id, command, now): return ProviderProfile(party_id, command.selection_status, command.selection_reason, command.notes, now, now, None)
 def _children(tx, kind, party_id): return {"service": tx.services, "area": tx.areas, "work": tx.work_history, "reference": tx.references}[kind](party_id)
@@ -356,11 +519,11 @@ def _unique_contacts(items):
     if len(keys) != len(set(keys)):
         raise ProviderLifecycleConflict("Active provider contact methods must be unique.")
 def _detail(record):
-    party, profile, contacts, services, areas, work, references = record
-    return {"party": party.to_dict(), "profile": profile.to_dict(), "contactMethods": [item.to_dict() for item in contacts], "services": [item.to_dict() for item in services], "serviceAreas": [item.to_dict() for item in areas], "workHistory": [item.to_dict() for item in work], "references": [item.to_dict() for item in references]}
+    party, profile, contacts, services, areas, work, references, reputation_links = record
+    return {"party": party.to_dict(), "profile": profile.to_dict(), "contactMethods": [item.to_dict() for item in contacts], "services": [item.to_dict() for item in services], "serviceAreas": [item.to_dict() for item in areas], "workHistory": [item.to_dict() for item in work], "references": [item.to_dict() for item in references], "reputationLinks": [item.to_dict() for item in reputation_links]}
 def _summary(record):
-    party, profile, services, areas, work_count, reference_count = record
-    return {"party": party.to_dict(), "profile": profile.to_dict(), "services": [item.to_dict() for item in services], "serviceAreas": [item.to_dict() for item in areas], "workHistoryCount": work_count, "referenceCount": reference_count}
+    party, profile, services, areas, work_count, reference_count, reputation_link_count = record
+    return {"party": party.to_dict(), "profile": profile.to_dict(), "services": [item.to_dict() for item in services], "serviceAreas": [item.to_dict() for item in areas], "workHistoryCount": work_count, "referenceCount": reference_count, "reputationLinkCount": reputation_link_count}
 def _normalized(value): return unicodedata.normalize("NFKC", value).strip().casefold()
 def _normalized_filter(value, label, limit):
     return None if value is None else _normalized(_required(value, label, limit))
@@ -373,4 +536,62 @@ def _date(value):
     if not isinstance(value, str): raise ProviderError("Date is invalid.")
     try: return date.fromisoformat(value).isoformat()
     except ValueError as error: raise ProviderError("Date is invalid.") from error
+def _reputation_source(source_kind, source_name):
+    if source_kind not in {"google", "yelp", "angi", "other"}:
+        raise ProviderError("Reputation source kind is invalid.")
+    if source_kind == "other":
+        name = _required(source_name, "Reputation source name", 80)
+        return source_kind, name, _normalized(name)
+    if source_name is not None:
+        raise ProviderError("Known reputation sources cannot have a source name.")
+    return source_kind, None, source_kind
+def _reputation_date(value):
+    if value is None: return None
+    normalized = _date(value)
+    if normalized > date.today().isoformat():
+        raise ProviderError("Last-checked date cannot be in the future.")
+    return normalized
+def canonical_reputation_url(value):
+    if not isinstance(value, str):
+        raise ProviderError("Reputation URL must be text.")
+    display = unicodedata.normalize("NFKC", value).strip()
+    if not display or any(character.isspace() or unicodedata.category(character) == "Cc" for character in display):
+        raise ProviderError("Reputation URL is invalid.")
+    try:
+        parsed = urlsplit(display)
+        port = parsed.port
+    except ValueError as error:
+        raise ProviderError("Reputation URL is invalid.") from error
+    if parsed.scheme.casefold() != "https" or not parsed.hostname:
+        raise ProviderError("Reputation URL must be an absolute HTTPS URL with a host.")
+    if parsed.username is not None or parsed.password is not None:
+        raise ProviderError("Reputation URL cannot contain user information.")
+    if parsed.fragment or "#" in display:
+        raise ProviderError("Reputation URL cannot contain a fragment.")
+    host = parsed.hostname.lower()
+    if ":" in host:
+        host = f"[{host}]"
+    netloc = host if port in {None, 443} else f"{host}:{port}"
+    canonical = urlunsplit(SplitResult("https", netloc, parsed.path, parsed.query, ""))
+    if len(canonical) > 2048:
+        raise ProviderError("Reputation URL must be at most 2048 characters.")
+    return canonical
+def _new_reputation_link(party_id, command, now):
+    return ProviderReputationLink(
+        str(uuid4()), party_id, command.source_kind, command.source_name,
+        command.normalized_source_key, command.url, command.normalized_url,
+        command.notes, command.last_checked_on, now, now, None,
+    )
+def _required_reputation_link(items, link_id):
+    for item in items:
+        if item.id == link_id: return item
+    raise KeyError
+def _unique_reputation_link(items, candidate):
+    if candidate.archived_at is not None: return
+    for item in items:
+        if item.id == candidate.id or item.archived_at is not None: continue
+        if item.normalized_source_key == candidate.normalized_source_key:
+            raise ProviderLifecycleConflict("An active reputation link already uses this source.")
+        if item.normalized_url == candidate.normalized_url:
+            raise ProviderLifecycleConflict("An active reputation link already uses this URL.")
 def _now(): return datetime.now(UTC).isoformat()

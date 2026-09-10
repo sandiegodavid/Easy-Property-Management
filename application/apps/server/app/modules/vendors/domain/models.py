@@ -106,3 +106,35 @@ class ProviderReference:
             "notes": self.notes, "createdAt": self.created_at,
             "updatedAt": self.updated_at, "archivedAt": self.archived_at,
         }
+
+
+@dataclass(frozen=True)
+class ProviderReputationLink:
+    id: str
+    party_id: str
+    source_kind: str
+    source_name: str | None
+    normalized_source_key: str
+    url: str
+    normalized_url: str
+    notes: str | None
+    last_checked_on: str | None
+    created_at: str
+    updated_at: str
+    archived_at: str | None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id,
+            "partyId": self.party_id,
+            "sourceKind": self.source_kind,
+            "sourceName": self.source_name,
+            "normalizedSourceKey": self.normalized_source_key,
+            "url": self.url,
+            "normalizedUrl": self.normalized_url,
+            "notes": self.notes,
+            "lastCheckedOn": self.last_checked_on,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+            "archivedAt": self.archived_at,
+        }

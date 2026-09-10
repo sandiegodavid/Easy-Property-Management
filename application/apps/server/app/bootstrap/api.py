@@ -64,7 +64,9 @@ from app.modules.vendors.application.service import ProviderService
 from app.modules.vendors.infrastructure.unit_of_work import (
     SQLiteProviderRoleActivityGuard, SQLiteProviderRoleSummaryReader, SQLiteProviderUnitOfWork,
 )
-from app.modules.vendors.domain.audit_policy import PROVIDER_ACTIVITY_SNAPSHOT_POLICY
+from app.modules.vendors.domain.audit_policy import (
+    PROVIDER_ACTIVITY_SNAPSHOT_POLICY, PROVIDER_REPUTATION_LINK_ACTIVITY_POLICY,
+)
 from app.platform.version import application_version
 
 logger = logging.getLogger(__name__)
@@ -214,6 +216,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("provider_service_area", 1): DEFAULT_SNAPSHOT_POLICY,
         ("provider_work_history", 1): DEFAULT_SNAPSHOT_POLICY,
         ("provider_reference", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("provider_reputation_link", 1): DEFAULT_SNAPSHOT_POLICY,
     }, activity_policies={
         ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
         ("party_contact_method", 1): PARTY_CONTACT_SNAPSHOT_POLICY,
@@ -229,6 +232,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("provider_service_area", 1): PROVIDER_ACTIVITY_SNAPSHOT_POLICY,
         ("provider_work_history", 1): PROVIDER_ACTIVITY_SNAPSHOT_POLICY,
         ("provider_reference", 1): PROVIDER_ACTIVITY_SNAPSHOT_POLICY,
+        ("provider_reputation_link", 1): PROVIDER_REPUTATION_LINK_ACTIVITY_POLICY,
     })
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime))

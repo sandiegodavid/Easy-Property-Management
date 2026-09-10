@@ -1,4 +1,4 @@
-"""Typed VEND-001 HTTP contract."""
+"""Typed provider HTTP contract."""
 
 from datetime import date
 from typing import Literal
@@ -10,7 +10,8 @@ from app.modules.parties.application.service import ContactMethodCommand, PartyC
 from app.modules.vendors.application.service import (
     PossibleDuplicateParty, ProviderError, ProviderLifecycleConflict, ProviderNotFoundError,
     ProviderProfileCommand, ProviderProfilePatchCommand, ProviderSearchCommand, ProviderService, ReferenceCommand, ServiceAreaCommand, ServiceCommand, UNSET,
-    WorkHistoryCommand,
+    ReputationLinkCommand, ReputationLinkPatchCommand, WorkHistoryCommand,
+    canonical_reputation_url,
 )
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 
@@ -34,6 +35,48 @@ class ServiceInput(Contract): displayName: str = Field(min_length=1, max_length=
 class AreaInput(ServiceInput): countryCode: str | None = Field(None, min_length=2, max_length=2)
 class WorkInput(Contract): performedOn: date; summary: str = Field(min_length=1, max_length=1000); propertyId: str | None = None; outcomeNotes: str | None = Field(None, max_length=4000)
 class ReferenceInput(Contract): referenceName: str | None = Field(None, max_length=240); organizationName: str | None = Field(None, max_length=240); relationship: str | None = Field(None, max_length=240); email: str | None = Field(None, max_length=320); phone: str | None = Field(None, max_length=320); notes: str | None = Field(None, max_length=4000)
+class ReputationLinkInput(Contract):
+    sourceKind: Literal["google", "yelp", "angi", "other"]
+    sourceName: str | None = Field(None, max_length=80)
+    url: str = Field(min_length=1)
+    notes: str | None = Field(None, max_length=4000)
+    lastCheckedOn: date | None = None
+
+    @model_validator(mode="after")
+    def validate_complete_link(self):
+        try:
+            ReputationLinkCommand(
+                self.sourceKind, self.url, self.sourceName, self.notes,
+                self.lastCheckedOn.isoformat() if self.lastCheckedOn else None,
+            )
+        except ProviderError as error:
+            raise ValueError(str(error)) from error
+        return self
+
+class ReputationLinkPatchInput(Contract):
+    sourceKind: Literal["google", "yelp", "angi", "other"] | None = None
+    sourceName: str | None = Field(None, max_length=80)
+    url: str | None = Field(None, min_length=1)
+    notes: str | None = Field(None, max_length=4000)
+    lastCheckedOn: date | None = None
+
+    @model_validator(mode="after")
+    def validate_supplied_fields(self):
+        fields = self.model_fields_set
+        if "sourceKind" in fields and self.sourceKind is None:
+            raise ValueError("sourceKind cannot be null.")
+        if "url" in fields:
+            if self.url is None:
+                raise ValueError("url cannot be null.")
+            try:
+                canonical_reputation_url(self.url)
+            except ProviderError as error:
+                raise ValueError(str(error)) from error
+        if "sourceName" in fields and self.sourceName is not None and not self.sourceName.strip():
+            raise ValueError("sourceName cannot be blank.")
+        if "lastCheckedOn" in fields and self.lastCheckedOn is not None and self.lastCheckedOn > date.today():
+            raise ValueError("lastCheckedOn cannot be in the future.")
+        return self
 class Confirmation(Contract): confirmed: StrictBool
 class PartyResponse(Contract): id: str; partyKind: Literal["individual", "organization"]; displayName: str; createdAt: str; updatedAt: str; archivedAt: str | None
 class ContactResponse(Contract): id: str; partyId: str; methodKind: Literal["email", "phone"]; displayValue: str; extension: str | None; label: str | None; status: Literal["active", "archived"]; createdAt: str; updatedAt: str; archivedAt: str | None
@@ -42,8 +85,9 @@ class ServiceResponse(Contract): id: str; partyId: str; displayName: str; normal
 class AreaResponse(ServiceResponse): countryCode: str | None
 class WorkResponse(Contract): id: str; partyId: str; propertyId: str | None; performedOn: date; summary: str; outcomeNotes: str | None; createdAt: str; updatedAt: str; archivedAt: str | None
 class ReferenceResponse(Contract): id: str; partyId: str; referenceName: str | None; organizationName: str | None; relationship: str | None; email: str | None; phone: str | None; notes: str | None; createdAt: str; updatedAt: str; archivedAt: str | None
-class ProviderResponse(Contract): party: PartyResponse; profile: ProfileResponse; contactMethods: list[ContactResponse]; services: list[ServiceResponse]; serviceAreas: list[AreaResponse]; workHistory: list[WorkResponse]; references: list[ReferenceResponse]
-class ProviderListResponse(Contract): party: PartyResponse; profile: ProfileResponse; services: list[ServiceResponse]; serviceAreas: list[AreaResponse]; workHistoryCount: int; referenceCount: int
+class ReputationLinkResponse(Contract): id: str; partyId: str; sourceKind: Literal["google", "yelp", "angi", "other"]; sourceName: str | None; normalizedSourceKey: str; url: str; normalizedUrl: str; notes: str | None; lastCheckedOn: date | None; createdAt: str; updatedAt: str; archivedAt: str | None
+class ProviderResponse(Contract): party: PartyResponse; profile: ProfileResponse; contactMethods: list[ContactResponse]; services: list[ServiceResponse]; serviceAreas: list[AreaResponse]; workHistory: list[WorkResponse]; references: list[ReferenceResponse]; reputationLinks: list[ReputationLinkResponse]
+class ProviderListResponse(Contract): party: PartyResponse; profile: ProfileResponse; services: list[ServiceResponse]; serviceAreas: list[AreaResponse]; workHistoryCount: int; referenceCount: int; reputationLinkCount: int
 
 
 def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -> APIRouter:
@@ -85,6 +129,18 @@ def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -
     def archive(party_id: str, data: Confirmation): ready(True); return invoke(lambda: provider_service.archive(party_id, confirmed=data.confirmed))
     @router.post("/{party_id}/restore", response_model=ProviderResponse)
     def restore(party_id: str): ready(True); return invoke(lambda: provider_service.restore(party_id))
+    @router.post("/{party_id}/reputation-links", response_model=ProviderResponse, status_code=status.HTTP_201_CREATED)
+    def add_reputation_link(party_id: str, data: ReputationLinkInput):
+        ready(True); return invoke(lambda: provider_service.add_reputation_link(party_id, _reputation(data)))
+    @router.patch("/{party_id}/reputation-links/{link_id}", response_model=ProviderResponse)
+    def patch_reputation_link(party_id: str, link_id: str, data: ReputationLinkPatchInput):
+        ready(True); return invoke(lambda: provider_service.update_reputation_link(party_id, link_id, _reputation_patch(data)))
+    @router.post("/{party_id}/reputation-links/{link_id}/archive", response_model=ProviderResponse)
+    def archive_reputation_link(party_id: str, link_id: str, data: Confirmation):
+        ready(True); return invoke(lambda: provider_service.archive_reputation_link(party_id, link_id, confirmed=data.confirmed))
+    @router.post("/{party_id}/reputation-links/{link_id}/restore", response_model=ProviderResponse)
+    def restore_reputation_link(party_id: str, link_id: str):
+        ready(True); return invoke(lambda: provider_service.restore_reputation_link(party_id, link_id))
     _children(router, provider_service, ready, invoke)
     return router
 
@@ -142,6 +198,19 @@ def _patch_profile(data):
         data.notes if "notes" in fields else UNSET,
     )
 def _contact(data): return ContactMethodCommand(data.methodKind, data.value, data.extension, data.label)
+def _reputation(data): return ReputationLinkCommand(data.sourceKind, data.url, data.sourceName, data.notes, data.lastCheckedOn.isoformat() if data.lastCheckedOn else None)
+def _reputation_patch(data):
+    fields = data.model_fields_set
+    last_checked_on = UNSET
+    if "lastCheckedOn" in fields:
+        last_checked_on = data.lastCheckedOn.isoformat() if data.lastCheckedOn else None
+    return ReputationLinkPatchCommand(
+        data.sourceKind if "sourceKind" in fields else UNSET,
+        data.url if "url" in fields else UNSET,
+        data.sourceName if "sourceName" in fields else UNSET,
+        data.notes if "notes" in fields else UNSET,
+        last_checked_on,
+    )
 def _command(data):
     if isinstance(data, ServiceInput) and not isinstance(data, AreaInput): return ServiceCommand(data.displayName)
     if isinstance(data, AreaInput): return ServiceAreaCommand(data.displayName, data.countryCode)

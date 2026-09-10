@@ -1,4 +1,4 @@
-"""SQLAlchemy metadata owned by VEND-001."""
+"""SQLAlchemy metadata owned by the provider module."""
 
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -92,4 +92,43 @@ class ProviderReferenceModel(LocalBase):
     __table_args__ = (
         CheckConstraint("length(trim(coalesce(reference_name, ''))) > 0 OR length(trim(coalesce(organization_name, ''))) > 0 OR length(trim(coalesce(relationship, ''))) > 0"),
         Index("provider_references_party_status", "party_id", "archived_at"),
+    )
+
+
+class ProviderReputationLinkModel(LocalBase):
+    __tablename__ = "provider_reputation_links"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    party_id: Mapped[str] = mapped_column(ForeignKey("provider_profiles.party_id"), nullable=False)
+    source_kind: Mapped[str] = mapped_column(String, nullable=False)
+    source_name: Mapped[str | None] = mapped_column(String)
+    normalized_source_key: Mapped[str] = mapped_column(String, nullable=False)
+    url: Mapped[str] = mapped_column(String, nullable=False)
+    normalized_url: Mapped[str] = mapped_column(String, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String)
+    last_checked_on: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False)
+    archived_at: Mapped[str | None] = mapped_column(String)
+    __table_args__ = (
+        CheckConstraint("source_kind IN ('google', 'yelp', 'angi', 'other')"),
+        CheckConstraint(
+            "(source_kind IN ('google', 'yelp', 'angi') AND source_name IS NULL) "
+            "OR (source_kind = 'other' AND source_name IS NOT NULL AND length(trim(source_name)) > 0)"
+        ),
+        CheckConstraint("length(trim(normalized_source_key)) > 0"),
+        CheckConstraint("length(trim(url)) > 0"),
+        CheckConstraint("length(trim(normalized_url)) > 0"),
+        Index("provider_reputation_links_party_status", "party_id", "archived_at"),
+        Index(
+            "provider_reputation_links_one_active_source",
+            "party_id", "normalized_source_key",
+            unique=True,
+            sqlite_where=text("archived_at IS NULL"),
+        ),
+        Index(
+            "provider_reputation_links_one_active_url",
+            "party_id", "normalized_url",
+            unique=True,
+            sqlite_where=text("archived_at IS NULL"),
+        ),
     )

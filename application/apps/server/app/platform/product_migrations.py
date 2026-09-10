@@ -66,7 +66,7 @@ def validate_latest_schema(database_path: Path) -> None:
                 "condition_report_acknowledgments", "condition_comparisons",
                 "condition_checklist_templates", "condition_checklist_template_items",
                 "provider_profiles", "provider_services", "provider_service_areas",
-                "provider_work_history", "provider_references",
+                "provider_work_history", "provider_references", "provider_reputation_links",
             }
             if actual_tables != expected_tables:
                 raise ProductSchemaError("Workspace database contains unsupported application tables.")

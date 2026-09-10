@@ -4,7 +4,9 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -18,6 +20,7 @@ from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLea
 from app.modules.vendors.application.service import (
     ProviderLifecycleConflict, ProviderProfileCommand, ProviderService, ServiceAreaCommand,
     ProviderError, ProviderSearchCommand, ServiceCommand, WorkHistoryCommand, ReferenceCommand,
+    ReputationLinkCommand, ReputationLinkPatchCommand,
 )
 from app.modules.vendors.infrastructure.unit_of_work import SQLiteProviderUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
@@ -126,6 +129,11 @@ class ProviderTests(unittest.TestCase):
         self.providers.add_area(party_id, ServiceAreaCommand("Portland Metro", "US"))
         self.providers.add_work_history(party_id, WorkHistoryCommand("2025-03-01", "Historical rewiring"))
         self.providers.add_reference(party_id, ReferenceCommand(reference_name="Reference", notes="Private note"))
+        reputation = self.providers.add_reputation_link(party_id, ReputationLinkCommand(
+            "google", "https://GOOGLE.example:443/provider?id=123", notes="Private reputation note",
+            last_checked_on="2025-03-02",
+        ))
+        reputation_link_id = reputation["reputationLinks"][0]["id"]
         backups = BackupService(self.workspace, self.recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)))
         archive = backups.create_backup("provider backup passphrase", output_path=Path(self.temp.name) / "provider-backup")
         restored_path = Path(self.temp.name) / "restored-provider"
@@ -139,7 +147,113 @@ class ProviderTests(unittest.TestCase):
         restored = service.detail(party_id, include_archived=True)
         self.assertEqual(restored["services"][0]["displayName"], "Electrical")
         self.assertEqual(restored["references"][0]["referenceName"], "Reference")
+        self.assertEqual(restored["reputationLinks"][0]["url"], "https://google.example/provider?id=123")
+        self.assertTrue(audit.history("provider_reputation_link", reputation_link_id))
         self.assertTrue(audit.history("provider_profile", party_id))
+
+    def test_reputation_command_canonicalization_and_validation(self) -> None:
+        item = ReputationLinkCommand(
+            "other", " HTTPS://Example.COM:443/reviews/path?listing=1 ",
+            "  Better Business Bureau  ", "  Manually checked  ", "2025-01-02",
+        )
+        self.assertEqual(item.source_name, "Better Business Bureau")
+        self.assertEqual(item.normalized_source_key, "better business bureau")
+        self.assertEqual(item.url, "https://example.com/reviews/path?listing=1")
+        for arguments in (
+            ("google", "https://example.com", "Unexpected name"),
+            ("other", "https://example.com", None),
+            ("google", "http://example.com", None),
+            ("google", "https://user@example.com", None),
+            ("google", "https://example.com/path#fragment", None),
+            ("google", "relative/path", None),
+        ):
+            with self.subTest(arguments=arguments), self.assertRaises(ProviderError):
+                ReputationLinkCommand(arguments[0], arguments[1], arguments[2])
+        with self.assertRaises(ProviderError):
+            ReputationLinkCommand(
+                "google", "https://example.com",
+                last_checked_on=(date.today() + timedelta(days=1)).isoformat(),
+            )
+
+    def test_reputation_link_lifecycle_uniqueness_noop_and_atomic_audit(self) -> None:
+        party_id = self.providers.create(
+            PartyCreateCommand("organization", "Reputation Provider"), ProviderProfileCommand(),
+        )["party"]["id"]
+        created = self.providers.add_reputation_link(
+            party_id, ReputationLinkCommand("google", "https://Example.com:443/reviews", notes="Private"),
+        )
+        link_id = created["reputationLinks"][0]["id"]
+        self.assertEqual(created["reputationLinks"][0]["url"], "https://example.com/reviews")
+        self.assertEqual(self.providers.list(ProviderSearchCommand())[0]["reputationLinkCount"], 1)
+        with self.assertRaises(ProviderLifecycleConflict):
+            self.providers.add_reputation_link(party_id, ReputationLinkCommand("google", "https://other.example/reviews"))
+        with self.assertRaises(ProviderLifecycleConflict):
+            self.providers.add_reputation_link(party_id, ReputationLinkCommand("yelp", "https://example.com/reviews"))
+
+        before_events = len(self.recorder.repository.history("provider_reputation_link", link_id))
+        unchanged = self.providers.update_reputation_link(party_id, link_id, ReputationLinkPatchCommand())
+        self.assertEqual(len(self.recorder.repository.history("provider_reputation_link", link_id)), before_events)
+        self.assertEqual(unchanged["reputationLinks"][0]["notes"], "Private")
+        updated = self.providers.update_reputation_link(
+            party_id, link_id, ReputationLinkPatchCommand(notes=None, last_checked_on="2025-04-01"),
+        )
+        self.assertIsNone(updated["reputationLinks"][0]["notes"])
+
+        archived = self.providers.archive_reputation_link(party_id, link_id, confirmed=True)
+        self.assertIsNotNone(archived["reputationLinks"][0]["archivedAt"])
+        self.assertEqual(self.providers.detail(party_id)["reputationLinks"], [])
+        replacement = self.providers.add_reputation_link(
+            party_id, ReputationLinkCommand("google", "https://replacement.example/reviews"),
+        )
+        replacement_id = replacement["reputationLinks"][0]["id"]
+        with self.assertRaises(ProviderLifecycleConflict):
+            self.providers.restore_reputation_link(party_id, link_id)
+        self.providers.archive_reputation_link(party_id, replacement_id, confirmed=True)
+        restored = self.providers.restore_reputation_link(party_id, link_id)
+        self.assertIsNone(restored["reputationLinks"][0]["archivedAt"])
+
+        with patch.object(self.providers.unit_of_work.recorder, "record_change", side_effect=sqlite3.DatabaseError("audit unavailable")):
+            with self.assertRaises(sqlite3.DatabaseError):
+                self.providers.add_reputation_link(
+                    party_id, ReputationLinkCommand("yelp", "https://yelp.example/reviews"),
+                )
+        self.assertEqual(len(self.providers.detail(party_id)["reputationLinks"]), 1)
+
+    def test_reputation_http_contract_and_activity_redaction(self) -> None:
+        with TestClient(create_app(self.config)) as client:
+            provider = client.post("/api/providers", json={
+                "party": {"partyKind": "organization", "displayName": "HTTP Reputation"},
+            }).json()
+            party_id = provider["party"]["id"]
+            invalid_payloads = (
+                {"sourceKind": "google", "sourceName": "Wrong", "url": "https://example.com"},
+                {"sourceKind": "other", "url": "https://example.com"},
+                {"sourceKind": "google", "url": "http://example.com"},
+                {"sourceKind": "google", "url": "https://example.com#fragment"},
+                {"sourceKind": "google", "url": "https://example.com", "unexpected": True},
+            )
+            for payload in invalid_payloads:
+                with self.subTest(payload=payload):
+                    self.assertEqual(client.post(f"/api/providers/{party_id}/reputation-links", json=payload).status_code, 422)
+            created = client.post(f"/api/providers/{party_id}/reputation-links", json={
+                "sourceKind": "other", "sourceName": "Nextdoor",
+                "url": "https://NEXTDOOR.example:443/profile?id=private",
+                "notes": "Private note", "lastCheckedOn": "2025-01-02",
+            })
+            self.assertEqual(created.status_code, 201)
+            link_id = created.json()["reputationLinks"][0]["id"]
+            self.assertEqual(client.get("/api/providers").json()[0]["reputationLinkCount"], 1)
+            patched = client.patch(f"/api/providers/{party_id}/reputation-links/{link_id}", json={
+                "notes": None, "lastCheckedOn": None,
+            })
+            self.assertEqual(patched.status_code, 200)
+            self.assertIsNone(patched.json()["reputationLinks"][0]["notes"])
+            activity = next(event for event in client.get("/api/audit/events").json()["events"] if event["entityType"] == "provider_reputation_link")
+            contextual = client.get(f"/api/audit/events/provider_reputation_link/{link_id}").json()["events"][-1]
+            self.assertEqual(activity["after"]["url"], "[redacted]")
+            self.assertEqual(activity["after"]["normalizedUrl"], "[redacted]")
+            self.assertEqual(activity["after"]["notes"], "[redacted]")
+            self.assertEqual(contextual["after"]["url"], "https://nextdoor.example/profile?id=private")
 
     def test_initial_records_are_atomic_and_correlated(self) -> None:
         created = self.providers.create(
@@ -166,11 +280,27 @@ class ProviderTests(unittest.TestCase):
                     connection.execute("INSERT INTO provider_service_areas (id, party_id, display_name, normalized_name, country_code, created_at, updated_at) VALUES (?, 'vendor', 'Area', 'area', ?, 'now', 'now')", (country_code, country_code))
             with self.assertRaises(sqlite3.IntegrityError):
                 connection.execute("INSERT INTO provider_references (id, party_id, reference_name, created_at, updated_at) VALUES ('blank-reference', 'vendor', '   ', 'now', 'now')")
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute("INSERT INTO provider_reputation_links (id, party_id, source_kind, source_name, normalized_source_key, url, normalized_url, created_at, updated_at) VALUES ('bad-known', 'vendor', 'google', 'Not allowed', 'google', 'https://example.com', 'https://example.com', 'now', 'now')")
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute("INSERT INTO provider_reputation_links (id, party_id, source_kind, source_name, normalized_source_key, url, normalized_url, created_at, updated_at) VALUES ('bad-other', 'vendor', 'other', NULL, 'other', 'https://example.com', 'https://example.com', 'now', 'now')")
         engine = create_sqlite_engine(self.workspace.paths.database)
         try:
             with engine.begin() as connection:
                 connection.exec_driver_sql("DROP INDEX provider_services_one_active_name")
                 connection.exec_driver_sql("CREATE INDEX provider_services_one_active_name ON provider_services(id)")
+            with engine.connect() as connection:
+                with self.assertRaises(MigrationSchemaError):
+                    validate_vendor_schema(connection)
+        finally:
+            engine.dispose()
+
+    def test_reputation_schema_rejects_weakened_partial_index(self) -> None:
+        engine = create_sqlite_engine(self.workspace.paths.database)
+        try:
+            with engine.begin() as connection:
+                connection.exec_driver_sql("DROP INDEX provider_reputation_links_one_active_url")
+                connection.exec_driver_sql("CREATE INDEX provider_reputation_links_one_active_url ON provider_reputation_links(id)")
             with engine.connect() as connection:
                 with self.assertRaises(MigrationSchemaError):
                     validate_vendor_schema(connection)

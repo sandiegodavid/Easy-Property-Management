@@ -18,3 +18,17 @@ class ProviderActivitySnapshotPolicy(DefaultAuditSnapshotPolicy):
 
 
 PROVIDER_ACTIVITY_SNAPSHOT_POLICY = ProviderActivitySnapshotPolicy()
+
+
+class ProviderReputationLinkActivitySnapshotPolicy(DefaultAuditSnapshotPolicy):
+    def redact(self, snapshot: Mapping[str, Any] | None) -> dict[str, Any] | None:
+        presented = super().redact(snapshot)
+        if presented is None:
+            return None
+        for field in ("url", "normalizedUrl", "notes"):
+            if field in presented:
+                presented[field] = "[redacted]"
+        return presented
+
+
+PROVIDER_REPUTATION_LINK_ACTIVITY_POLICY = ProviderReputationLinkActivitySnapshotPolicy()
