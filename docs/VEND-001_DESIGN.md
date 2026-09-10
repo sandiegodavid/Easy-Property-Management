@@ -52,7 +52,7 @@ An `avoid` status requires a nonblank bounded `selection_reason`. A preferred or
 
 ### Services and service areas are simple searchable labels
 
-Provider service offerings and service areas have independent stable IDs and lifecycle state. Each stores a display value plus a normalized case-folded value for uniqueness and search. A service area is a human-entered coverage label such as `Portland metro` or `Multnomah County`; it is not geocoded, a legal jurisdiction, or a promise that work is available. An optional ISO country code is allowed only to disambiguate a label.
+Provider service offerings and service areas have independent stable IDs and lifecycle state. Each stores a display value plus a normalized case-folded value for uniqueness and search. A service area is a human-entered US coverage label such as `Portland metro` or `Multnomah County`; it is not geocoded, a legal jurisdiction, or a promise that work is available. International service areas are deferred.
 
 The application prevents duplicate active normalized service offerings or service areas within one provider. `VEND-CAT-001` later introduces configurable categories and provider-category assignments without redefining or deleting these operator-entered service labels.
 
@@ -103,10 +103,10 @@ The database enforces unique active `(party_id, normalized_name)` values.
 | --- | --- |
 | `id`, `party_id` | Stable UUID and required provider-profile reference. |
 | `display_name`, `normalized_name` | Required human-entered coverage label and normalized lookup value. |
-| `country_code` | Optional uppercase two-letter ISO code; not a geocoding result. |
+| `country_code` | Fixed `US` when persisted; not a geocoding result. |
 | `created_at`, `updated_at`, `archived_at` | UTC lifecycle timestamps. |
 
-The database enforces unique active `(party_id, normalized_name, country_code)` values, treating an absent country code as a distinct explicit value through a normalized non-null storage key.
+The database enforces unique active `(party_id, normalized_name, country_code)` values. The US-only MVP persists `US`; a future international slice may restore optional-country disambiguation.
 
 ### `provider_work_history`
 

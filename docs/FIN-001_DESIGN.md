@@ -18,6 +18,8 @@ FIN-001 provides:
 - Receipt void-and-replace correction rather than destructive edits or deletes.
 - Typed API contracts, atomic audit history, current-schema validation, and encrypted backup/export/restore coverage.
 
+FIN-001 is US-only for the MVP: all source leases use `USD`, and all date-relative calculations use the property's stored US IANA time zone. International currencies, exchange rates, and non-US time zones are deferred.
+
 FIN-001 does not provide:
 
 - Payment initiation, bank feeds, processor integrations, reconciliation, autopay, payment-method storage, check deposit workflows, or bank credentials. `FIN-006` and `FIN-007` own payment-method and prepaid-check workflows.
@@ -30,7 +32,7 @@ FIN-001 does not provide:
 
 ### Lease terms are read through a port; Finance owns financial records
 
-Finance depends on a transaction-aware lease read port supplied at composition. It reads the lease, the explicitly selected term version, space/property identity, the property's IANA time zone, actual move-out, and accepted termination responsibility boundary, but does not import lease or Portfolio SQLAlchemy models or alter their rows. Participants are not part of this projection because FIN-001 does not expose tenant identity. A separate transaction-aware party lookup validates an optional receipt recipient.
+Finance depends on a transaction-aware lease read port supplied at composition. It reads the lease, the explicitly selected term version, space/property identity, the property's US IANA time zone, actual move-out, and accepted termination responsibility boundary, but does not import lease or Portfolio SQLAlchemy models or alter their rows. Participants are not part of this projection because FIN-001 does not expose tenant identity. A separate transaction-aware party lookup validates an optional receipt recipient.
 
 Conversely, LEASE-001 does not import Finance or create financial rows while executing, ending, or terminating a lease. The operator explicitly synchronizes expectations through FIN-001. This preserves the dependency direction and prevents a lease workflow from silently creating a financial obligation without review.
 
@@ -72,7 +74,7 @@ Views expose both settlement and timeliness rather than collapsing unrelated fac
 
 A partial expectation after its due date is `partial` and `late`; it is not relabeled missed. An unpaid expectation remains `late` after its period ends by default, which is the least restrictive automatic classification. Only the operator may mark it `missed`, after explicit confirmation and with a reason; the operator may later clear that review with another reason. Reviews are append-only. A missed review is effective only while the expectation remains active and has received no money; any receipt makes the historical review inactive, and a later receipt void does not reactivate it without a new review. A fully settled expectation is `paid_late` when its final required receipt was received after the due date. A voided expectation has lifecycle status `voided` and no settlement or timeliness status.
 
-All date-relative states use the current date in the property's stored IANA time zone. The application injects the clock/time-zone boundary so tests and future runtime environments do not depend on the server process's ambient time zone. FIN-001 uses no grace period and makes no legal assertion from these labels.
+All date-relative states use the current date in the property's stored US IANA time zone. The application injects the clock/time-zone boundary so tests and future runtime environments do not depend on the server process's ambient time zone. FIN-001 uses no grace period and makes no legal assertion from these labels.
 
 ### Termination responsibilities are bounded
 
@@ -94,7 +96,7 @@ All IDs are UUIDs. Monetary values are integer minor units and are never floatin
 | `period_starts_on`, `period_ends_on` | Required covered local-date range; end is after start. |
 | `due_on` | Required local due date within the covered period. |
 | `expected_amount_minor` | Required positive integer snapshot of base rent. |
-| `currency_code` | Required snapshot using exactly three ASCII uppercase letters. |
+| `currency_code` | Required snapshot fixed to `USD` for the US-only MVP. |
 | `payment_frequency` | Required `monthly` or `weekly` snapshot. |
 | `schedule_anchor_on` | Required operator-confirmed monthly or weekly recurrence anchor used to derive the source schedule. Every expectation for one term carries the same value. |
 | `is_prorated`, `proration_numerator_days`, `proration_denominator_days` | Explain deterministic first/final proration. `is_prorated = false` requires both day counts null; a prorated row requires positive counts with numerator less than denominator. |
@@ -125,7 +127,7 @@ Reviews are append-only and ordered by creation timestamp and ID. A `mark_missed
 | `idempotency_key` | Required client-generated UUID with a workspace-wide unique constraint. |
 | `received_on` | Required local date, not later than the operator’s current local date. |
 | `amount_minor` | Required positive integer. |
-| `currency_code` | Required code using exactly three ASCII uppercase letters. |
+| `currency_code` | Required code fixed to `USD` for the US-only MVP. |
 | `received_by_party_id` | Optional foreign key to an existing shared party; null means the local operator. |
 | `replaces_receipt_id` | Optional unique self-reference to the voided receipt this receipt replaces. |
 | `notes` | Optional trimmed internal receipt context, maximum 4,000 characters. |
@@ -134,7 +136,7 @@ Reviews are append-only and ordered by creation timestamp and ID. A `mark_missed
 
 `void_reason` is trimmed and limited to 1–1,000 characters. A replacement must reference a voided receipt from the same lease and currency, and one receipt may have at most one direct replacement. A replacement may use a corrected date, amount, recipient, notes, and allocation set. If that replacement is later voided, another receipt may replace it, forming an explicit forward correction chain without editing history.
 
-The database enforces `amount_minor > 0`, exactly three ASCII uppercase currency letters, workspace-wide idempotency-key uniqueness, replacement-reference uniqueness, and the null/non-null pairing of `voided_at` and `void_reason`. Application validation additionally enforces UUID syntax, receipt dates, recipient existence, replacement lifecycle/lease/currency compatibility, bounded text, and idempotent payload equivalence.
+The database enforces `amount_minor > 0`, the fixed `USD` currency code, workspace-wide idempotency-key uniqueness, replacement-reference uniqueness, and the null/non-null pairing of `voided_at` and `void_reason`. Application validation additionally enforces UUID syntax, receipt dates, recipient existence, replacement lifecycle/lease/currency compatibility, bounded text, and idempotent payload equivalence.
 
 ### `rent_receipt_allocations`
 
@@ -219,7 +221,7 @@ FIN-001 data and audit history are retained in the encrypted workspace backup/ex
 ## Implementation outline
 
 1. Add FIN-001 SQLAlchemy models, constraints, indexes, module-owned exact schema validation, and baseline/product/archive validation updates for the greenfield current schema.
-2. Define immutable domain values and validated commands for schedule synchronization, proration, expectations, receipts, allocations, missed reviews, and void operations; reject floats, non-positive amounts, non-ASCII currency syntax, future receipt dates, and unchecked direct construction.
+2. Define immutable domain values and validated commands for schedule synchronization, proration, expectations, receipts, allocations, missed reviews, and void operations; reject floats, non-positive amounts, non-`USD` currencies, future receipt dates, and unchecked direct construction.
 3. Define finance unit-of-work and transaction protocols plus transaction-aware lease, property-time-zone, and party read operations. Compose concrete adapters in bootstrap; keep finance application code independent of lease, Portfolio, Parties, and SQLAlchemy infrastructure.
 4. Implement balance/status projections using bounded queries and transaction-time allocation rechecks, then expose typed FastAPI routes and ready/writer-lock/error handling.
 5. Register finance audit policies and add regression coverage for recurring date generation, inclusive ranges, stub/final proration and half-up rounding, leap/month-end behavior, idempotence, property-local dates, partial/full/late/operator-reviewed-missed views, allocations, void/replacement lineage, responsibility overrides, concurrency, schema rejection, and encrypted backup/export/restore.
