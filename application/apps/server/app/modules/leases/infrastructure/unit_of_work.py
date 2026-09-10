@@ -11,7 +11,12 @@ from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.files.infrastructure.sqlalchemy_models import FileLinkModel, FileRecordModel
-from app.modules.leases.application.ports import LeaseConflictError, LeaseTransaction
+from app.modules.leases.application.ports import (
+    LeaseConflictError,
+    LeaseTransaction,
+    PortfolioLeaseOperations,
+    TenantProfileAvailability,
+)
 from app.modules.leases.domain.models import Lease, LeaseParticipant, LeaseRenewalOption, LeaseTerm, LeaseTerminationCase, LeaseTerminationProposal
 from app.modules.leases.infrastructure.sqlalchemy_models import (
     LeaseModel,
@@ -22,22 +27,25 @@ from app.modules.leases.infrastructure.sqlalchemy_models import (
     LeaseTerminationProposalModel,
 )
 from app.modules.portfolio.domain.models import Property, Space, SpaceOccupancyPeriod
-from app.modules.portfolio.infrastructure.sqlalchemy_models import PropertyModel, SpaceModel, SpaceOccupancyPeriodModel
-from app.modules.tenants.infrastructure.sqlalchemy_models import TenantProfileModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 Result = TypeVar("Result")
 
 
 class SQLiteLeaseUnitOfWork:
-    def __init__(self, database, recorder: AuditRecorder) -> None:
+    def __init__(self, database, recorder: AuditRecorder, tenant_profiles: TenantProfileAvailability,
+                 portfolio_operations: PortfolioLeaseOperations) -> None:
         self.engine = create_sqlite_engine(database)
         self.recorder = recorder
+        self.tenant_profiles = tenant_profiles
+        self.portfolio_operations = portfolio_operations
 
     def write(self, operation: Callable[[LeaseTransaction], Result]) -> Result:
         try:
             with immediate_transaction(self.engine) as connection:
-                return operation(_Transaction(connection, self.recorder))
+                return operation(_Transaction(
+                    connection, self.recorder, self.tenant_profiles, self.portfolio_operations
+                ))
         except OperationalError as error:
             if "locked" in str(error).casefold():
                 raise LeaseConflictError("The lease changed concurrently; reload it and try again.") from error
@@ -53,11 +61,13 @@ class SQLiteLeaseUnitOfWork:
     def lease_views(self, *, status=None, property_id=None, space_id=None, tenant_party_id=None,
                     contract_start_from=None, contract_start_to=None, renewal_due_on_or_before=None):
         with Session(self.engine) as session:
-            query = select(LeaseModel).join(SpaceModel, SpaceModel.id == LeaseModel.space_id)
+            query = select(LeaseModel)
             if status is not None:
                 query = query.where(LeaseModel.status == status)
             if property_id is not None:
-                query = query.where(SpaceModel.property_id == property_id)
+                query = query.where(LeaseModel.space_id.in_(
+                    self.portfolio_operations.space_ids_for_property(property_id)
+                ))
             if space_id is not None:
                 query = query.where(LeaseModel.space_id == space_id)
             if tenant_party_id is not None:
@@ -95,24 +105,25 @@ class SQLiteLeaseUnitOfWork:
 
 
 class _Transaction:
-    def __init__(self, connection: Any, recorder: AuditRecorder) -> None:
+    def __init__(self, connection: Any, recorder: AuditRecorder,
+                 tenant_profiles: TenantProfileAvailability,
+                 portfolio_operations: PortfolioLeaseOperations) -> None:
         self.connection = connection
         self.recorder = recorder
+        self.tenant_profiles = tenant_profiles
+        self.portfolio_operations = portfolio_operations
 
     def lease(self, lease_id):
         return _mapped(self.connection, LeaseModel, lease_id, Lease)
 
     def space(self, space_id):
-        return _mapped(self.connection, SpaceModel, space_id, Space)
+        return self.portfolio_operations.space(self.connection, space_id)
 
     def property(self, property_id):
-        return _mapped(self.connection, PropertyModel, property_id, Property)
+        return self.portfolio_operations.property(self.connection, property_id)
 
     def tenant_profile_active(self, party_id):
-        row = self.connection.execute(
-            TenantProfileModel.__table__.select().where(TenantProfileModel.party_id == party_id)
-        ).mappings().first()
-        return row is not None and row["archived_at"] is None
+        return self.tenant_profiles.is_active(self.connection, party_id)
 
     def terms(self, lease_id):
         return _mapped_many(self.connection, LeaseTermModel, LeaseTerm, LeaseTermModel.lease_id == lease_id, LeaseTermModel.effective_on)
@@ -133,7 +144,7 @@ class _Transaction:
         return _mapped_many(self.connection, LeaseTerminationProposalModel, LeaseTerminationProposal, LeaseTerminationProposalModel.termination_case_id == case_id, LeaseTerminationProposalModel.proposal_version)
 
     def occupancy_periods(self, space_id):
-        return _mapped_many(self.connection, SpaceOccupancyPeriodModel, SpaceOccupancyPeriod, SpaceOccupancyPeriodModel.space_id == space_id, SpaceOccupancyPeriodModel.starts_on)
+        return self.portfolio_operations.occupancy_periods(self.connection, space_id)
 
     def insert_lease(self, item):
         self.connection.execute(LeaseModel.__table__.insert().values(**item.__dict__))
@@ -175,13 +186,27 @@ class _Transaction:
         self.connection.execute(LeaseTerminationProposalModel.__table__.update().where(LeaseTerminationProposalModel.id == item.id).values(**item.__dict__))
 
     def insert_occupancy_period(self, item):
-        self.connection.execute(SpaceOccupancyPeriodModel.__table__.insert().values(**item.__dict__))
+        self.portfolio_operations.insert_occupancy_period(self.connection, item)
 
     def replace_occupancy_period(self, item):
-        self.connection.execute(SpaceOccupancyPeriodModel.__table__.update().where(SpaceOccupancyPeriodModel.id == item.id).values(**item.__dict__))
+        self.portfolio_operations.replace_occupancy_period(self.connection, item)
 
     def record_change(self, **change):
         self.recorder.record_change(self.connection.connection.driver_connection, **change)
+
+
+class SQLiteLeaseParticipationGuard:
+    def has_open_participation(self, connection, party_id, today):
+        query = (
+            select(LeaseParticipantModel.id)
+            .join(LeaseModel, LeaseModel.id == LeaseParticipantModel.lease_id)
+            .where(
+                LeaseParticipantModel.tenant_party_id == party_id,
+                LeaseModel.status == "executed",
+                (LeaseParticipantModel.ends_on.is_(None) | (LeaseParticipantModel.ends_on > today)),
+            ).limit(1)
+        )
+        return connection.execute(query).first() is not None
 
 
 def _mapped(connection, model, record_id, domain):

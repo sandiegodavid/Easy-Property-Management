@@ -31,7 +31,10 @@ from app.modules.parties.application.service import SharedPartyFactory
 from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
 from app.modules.tenants.application.service import TenantCreateCommand, TenantService
-from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantUnitOfWork
+from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantProfileAvailability, SQLiteTenantUnitOfWork
+from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard
+from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations, SQLitePartyReadOperations
+from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
 from app.platform.config import LocalConfig
@@ -55,12 +58,19 @@ class LeaseTerminationTests(unittest.TestCase):
         ))
         self.space_id = self.portfolio.get_property(property_record.id)["spaces"][0]["id"]
         self.tenants = TenantService(
-            SQLiteTenantUnitOfWork(self.workspace.paths.database, recorder), SharedPartyFactory()
+            SQLiteTenantUnitOfWork(
+                self.workspace.paths.database, recorder, SQLiteLeaseParticipationGuard(),
+                SQLitePartyOperations(self.workspace.paths.database),
+                SQLitePartyReadOperations(SQLitePartyOperations(self.workspace.paths.database)),
+            ), SharedPartyFactory()
         )
         tenant = self.tenants.create(TenantCreateCommand("individual", "Relocating Tenant"))
         self.tenant_id = tenant["id"]
         self.audit = audit
-        self.service = LeaseService(SQLiteLeaseUnitOfWork(self.workspace.paths.database, recorder))
+        self.service = LeaseService(SQLiteLeaseUnitOfWork(
+            self.workspace.paths.database, recorder, SQLiteTenantProfileAvailability(),
+            SQLitePortfolioLeaseOperations(self.workspace.paths.database),
+        ))
         today = date.today()
         self.lease = self.service.create(LeaseCreateCommand(
             self.space_id, "residential", today, today + timedelta(days=365), today,
@@ -289,6 +299,8 @@ class LeaseTerminationTests(unittest.TestCase):
         restored = LeaseService(SQLiteLeaseUnitOfWork(
             restored_root / "database" / "property-management.sqlite",
             AuditRecorder(restored_audit),
+            SQLiteTenantProfileAvailability(),
+            SQLitePortfolioLeaseOperations(restored_root / "database" / "property-management.sqlite"),
         ))
         lease = restored.get(self.lease["id"])
         restored_case = restored.get_termination_case(case["id"])

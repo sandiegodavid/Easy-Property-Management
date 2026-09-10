@@ -11,7 +11,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.portfolio.application.ports import PortfolioConflictError, PortfolioTransaction
+from app.modules.portfolio.application.ports import PartyRoleActivityGuard, PortfolioConflictError, PortfolioTransaction
 from app.modules.portfolio.domain.models import Party, Property, PropertyOwnership, Space, SpaceAvailability, SpaceOccupancyPeriod
 from app.modules.portfolio.infrastructure.sqlalchemy_models import PartyModel, PropertyModel, PropertyOwnershipModel, SpaceAvailabilityModel, SpaceModel, SpaceOccupancyPeriodModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
@@ -20,13 +20,16 @@ Result = TypeVar("Result")
 
 
 class SQLitePortfolioUnitOfWork:
-    def __init__(self, database, recorder: AuditRecorder) -> None:
-        self.engine = create_sqlite_engine(database); self.recorder = recorder
+    def __init__(self, database, recorder: AuditRecorder,
+                 party_role_guards: tuple[PartyRoleActivityGuard, ...] = ()) -> None:
+        self.engine = create_sqlite_engine(database)
+        self.recorder = recorder
+        self.party_role_guards = party_role_guards
 
     def write(self, operation: Callable[[PortfolioTransaction], Result]) -> Result:
         try:
             with immediate_transaction(self.engine) as connection:
-                return operation(_SQLitePortfolioTransaction(connection, self.recorder))
+                return operation(_SQLitePortfolioTransaction(connection, self.recorder, self.party_role_guards))
         except OperationalError as error:
             if "locked" in str(error).casefold():
                 raise PortfolioConflictError(
@@ -99,9 +102,55 @@ class SQLitePortfolioUnitOfWork:
         return by_space, {item.space_id: item for item in availability}
 
 
+class SQLitePortfolioLeaseOperations:
+    """Portfolio-owned operations exposed to lease transactions at composition."""
+
+    def __init__(self, database) -> None:
+        self.engine = create_sqlite_engine(database)
+
+    def space(self, connection, space_id):
+        row = connection.execute(
+            SpaceModel.__table__.select().where(SpaceModel.id == space_id)
+        ).mappings().first()
+        return Space(**dict(row)) if row else None
+
+    def property(self, connection, property_id):
+        row = connection.execute(
+            PropertyModel.__table__.select().where(PropertyModel.id == property_id)
+        ).mappings().first()
+        return Property(**dict(row)) if row else None
+
+    def occupancy_periods(self, connection, space_id):
+        rows = connection.execute(
+            SpaceOccupancyPeriodModel.__table__.select()
+            .where(SpaceOccupancyPeriodModel.space_id == space_id)
+            .order_by(SpaceOccupancyPeriodModel.starts_on)
+        ).mappings().all()
+        return [SpaceOccupancyPeriod(**dict(row)) for row in rows]
+
+    def insert_occupancy_period(self, connection, item):
+        connection.execute(SpaceOccupancyPeriodModel.__table__.insert().values(**item.__dict__))
+
+    def replace_occupancy_period(self, connection, item):
+        connection.execute(
+            SpaceOccupancyPeriodModel.__table__.update()
+            .where(SpaceOccupancyPeriodModel.id == item.id)
+            .values(**item.__dict__)
+        )
+
+    def space_ids_for_property(self, property_id):
+        with Session(self.engine) as session:
+            return list(session.execute(
+                select(SpaceModel.id).where(SpaceModel.property_id == property_id)
+            ).scalars())
+
+
 class _SQLitePortfolioTransaction:
-    def __init__(self, connection: Any, recorder: AuditRecorder) -> None:
-        self.connection = connection; self.recorder = recorder
+    def __init__(self, connection: Any, recorder: AuditRecorder,
+                 role_guards: tuple[PartyRoleActivityGuard, ...]) -> None:
+        self.connection = connection
+        self.recorder = recorder
+        self.role_guards = role_guards
 
     def get_property(self, property_id: str) -> Property | None:
         row = self.connection.execute(PropertyModel.__table__.select().where(PropertyModel.id == property_id)).mappings().first()
@@ -152,6 +201,9 @@ class _SQLitePortfolioTransaction:
             (PropertyOwnershipModel.ends_on.is_(None) | (PropertyOwnershipModel.ends_on > today)),
         )).mappings().all()
         return [PropertyOwnership(**dict(row)) for row in rows]
+
+    def party_role_conflicts(self, party_id: str) -> list[str]:
+        return [message for guard in self.role_guards if (message := guard.conflict(self.connection, party_id))]
 
     def insert_party(self, party: Party) -> None:
         self.connection.execute(PartyModel.__table__.insert().values(**party.__dict__))

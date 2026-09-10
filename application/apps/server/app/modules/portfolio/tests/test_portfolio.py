@@ -32,7 +32,7 @@ class PortfolioTests(unittest.TestCase):
         self.service = PortfolioService(SQLitePortfolioUnitOfWork(self.workspace.paths.database, AuditRecorder(self.audit)))
 
     def _party(self):
-        return self.service.create_party(PartyCreateCommand("individual", "Morgan Owner", "morgan@example.test"))
+        return self.service.create_party(PartyCreateCommand("individual", "Morgan Owner"))
 
     def _property(self, ownerships):
         return self.service.create_property(PropertyCreateCommand(

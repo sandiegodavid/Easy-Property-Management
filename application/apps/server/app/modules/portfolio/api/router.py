@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from app.modules.portfolio.application.service import (
@@ -32,8 +32,6 @@ class ContractModel(BaseModel):
 class PartyRequest(ContractModel):
     partyKind: Literal["individual", "organization"]
     displayName: str = Field(min_length=1, max_length=240)
-    email: str | None = Field(None, max_length=320)
-    phone: str | None = Field(None, max_length=80)
 
 
 class OwnershipRequest(ContractModel):
@@ -214,11 +212,25 @@ class PartyResponse(ContractModel):
     id: str
     partyKind: Literal["individual", "organization"]
     displayName: str
-    email: str | None
-    phone: str | None
     createdAt: str
     updatedAt: str
     archivedAt: str | None
+
+
+class PartySearchContactResponse(ContractModel):
+    """An active contact that made a shared party selectable."""
+
+    id: str
+    methodKind: Literal["email", "phone"]
+    displayValue: str
+    extension: str | None
+    label: str | None
+
+
+class PartySearchResponse(PartyResponse):
+    """A party-search candidate, including its active contact methods."""
+
+    contactMethods: list[PartySearchContactResponse]
 
 
 class OwnershipResponse(ContractModel):
@@ -281,10 +293,10 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
         require_ready(write=True)
         return invoke(lambda: service.create_party(_party(data)).to_dict())
 
-    @router.get("/api/parties", response_model=list[PartyResponse])
-    def list_parties(activeOnly: bool = False):
+    @router.get("/api/parties", response_model=list[PartySearchResponse])
+    def list_parties(activeOnly: bool = False, search: str | None = Query(None, max_length=240)):
         require_ready()
-        return invoke(lambda: service.list_parties(active_only=activeOnly))
+        return invoke(lambda: service.list_parties(active_only=activeOnly, search=search))
 
     @router.post("/api/parties/{party_id}/archive", response_model=PartyResponse)
     def archive_party(party_id: str, data: ConfirmationRequest):
@@ -443,7 +455,7 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
 
 
 def _party(data: PartyRequest) -> PartyCreateCommand:
-    return PartyCreateCommand(data.partyKind, data.displayName, data.email, data.phone)
+    return PartyCreateCommand(data.partyKind, data.displayName)
 
 
 def _ownerships(items: list[OwnershipRequest]) -> tuple[OwnershipInput, ...]:

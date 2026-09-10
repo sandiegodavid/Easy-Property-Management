@@ -1,105 +1,121 @@
-"""SQLite transaction adapter for tenant contacts."""
+"""SQLite transaction adapter for tenant profiles and creation."""
 from collections.abc import Callable
 from typing import Any, TypeVar
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.parties.domain.models import Party
-from app.modules.parties.infrastructure.sqlalchemy_models import PartyModel
-from app.modules.tenants.infrastructure.sqlalchemy_models import TenantContactMethodModel, TenantProfileModel
-from app.modules.tenants.application.ports import TenantTransaction
-from app.modules.tenants.domain.models import TenantContactMethod, TenantProfile
-from app.modules.tenants.domain.contact_values import contact_search_terms, like_contains_pattern, normalize_contact_value, phone_search_value
-from app.modules.leases.infrastructure.sqlalchemy_models import LeaseModel, LeaseParticipantModel
+from app.modules.parties.application.ports import PartyReadOperations, PartyTransactionOperations
+from app.modules.parties.domain.models import Party, PartyContactMethod
+from app.modules.tenants.infrastructure.sqlalchemy_models import TenantProfileModel
+from app.modules.tenants.application.ports import LeaseParticipationGuard, TenantTransaction
+from app.modules.tenants.domain.models import TenantProfile
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 Result = TypeVar("Result")
 
 class SQLiteTenantUnitOfWork:
-    def __init__(self, database, recorder: AuditRecorder): self.engine = create_sqlite_engine(database); self.recorder = recorder
+    def __init__(self, database, recorder: AuditRecorder, lease_guard: LeaseParticipationGuard,
+                 party_operations: PartyTransactionOperations,
+                 party_reads: PartyReadOperations):
+        self.engine = create_sqlite_engine(database)
+        self.recorder = recorder
+        self.lease_guard = lease_guard
+        self.party_operations = party_operations
+        self.party_reads = party_reads
     def write(self, operation: Callable[[TenantTransaction], Result]) -> Result:
-        with immediate_transaction(self.engine) as connection: return operation(_Transaction(connection, self.recorder))
+        with immediate_transaction(self.engine) as connection:
+            return operation(_Transaction(connection, self.recorder, self.lease_guard, self.party_operations))
     def get(self, party_id):
         with Session(self.engine) as session:
-            party = session.get(PartyModel, party_id); profile = session.get(TenantProfileModel, party_id)
+            party = self.party_reads.get_party(party_id); profile = session.get(TenantProfileModel, party_id)
             if party is None or profile is None: return None
-            return _party(party), _profile(profile), [_method(row) for row in session.execute(select(TenantContactMethodModel).where(TenantContactMethodModel.party_id == party_id).order_by(TenantContactMethodModel.created_at)).scalars()]
+            return party, _profile(profile), self.party_reads.methods_for_parties([party_id])[party_id]
     def list(self, *, archive_state, search):
         with Session(self.engine) as session:
-            query = select(TenantProfileModel, PartyModel).join(PartyModel, PartyModel.id == TenantProfileModel.party_id).order_by(PartyModel.display_name)
+            query = select(TenantProfileModel)
             if archive_state == "active": query = query.where(TenantProfileModel.archived_at.is_(None))
             elif archive_state == "archived": query = query.where(TenantProfileModel.archived_at.is_not(None))
-            if search:
-                terms = contact_search_terms(search)
-                patterns = [like_contains_pattern(term) for term in terms]
-                phone_query = phone_search_value(search)
-                contact_match = select(TenantContactMethodModel.party_id).where(or_(
-                    *(TenantContactMethodModel.display_value.ilike(pattern, escape="\\") for pattern in patterns),
-                    *(TenantContactMethodModel.normalized_value.ilike(pattern, escape="\\") for pattern in patterns),
-                ))
-                name_pattern = like_contains_pattern(search.casefold())
-                query = query.where(or_(
-                    PartyModel.display_name.ilike(name_pattern, escape="\\"),
-                    PartyModel.email.ilike(name_pattern, escape="\\"),
-                    PartyModel.phone.ilike(name_pattern, escape="\\"),
-                    PartyModel.phone.is_not(None) if phone_query is not None else False,
-                    TenantProfileModel.party_id.in_(contact_match),
-                ))
-            rows = session.execute(query).all(); ids = [profile.party_id for profile, _ in rows]
-            methods = {party_id: [] for party_id in ids}
-            if ids:
-                for item in session.execute(select(TenantContactMethodModel).where(TenantContactMethodModel.party_id.in_(ids)).order_by(TenantContactMethodModel.created_at)).scalars():
-                    methods[item.party_id].append(_method(item))
-            records = [(_party(party), _profile(profile), methods[profile.party_id]) for profile, party in rows]
-            if search:
-                return [record for record in records if _matches_search(record[0], record[2], search, terms, phone_query)]
-            return records
+            profiles = [_profile(row) for row in session.execute(query).scalars()]
+            ids = [profile.party_id for profile in profiles]
+            parties = self.party_reads.parties(ids)
+            methods = self.party_reads.methods_for_parties(ids)
+            records = [(parties[profile.party_id], profile, methods[profile.party_id])
+                       for profile in profiles if profile.party_id in parties]
+            if not search:
+                return sorted(records, key=lambda item: (item[0].display_name, item[0].id))
+            matched_ids = {item.id for item in self.party_reads.search(active_only=False, search=search)}
+            return [item for item in records if item[0].id in matched_ids]
 
 class _Transaction:
-    def __init__(self, connection: Any, recorder): self.connection = connection; self.recorder = recorder
+    def __init__(self, connection: Any, recorder, lease_guard, party_operations):
+        self.connection = connection
+        self.recorder = recorder
+        self.lease_guard = lease_guard
+        self.party_operations = party_operations
     def party(self, party_id):
-        row = self.connection.execute(PartyModel.__table__.select().where(PartyModel.id == party_id)).mappings().first(); return Party(**dict(row)) if row else None
+        return self.party_operations.party(self.connection, party_id)
     def profile(self, party_id):
         row = self.connection.execute(TenantProfileModel.__table__.select().where(TenantProfileModel.party_id == party_id)).mappings().first(); return _profile_mapping(row) if row else None
     def methods(self, party_id):
-        rows = self.connection.execute(TenantContactMethodModel.__table__.select().where(TenantContactMethodModel.party_id == party_id).order_by(TenantContactMethodModel.created_at)).mappings().all(); return [TenantContactMethod(**dict(row)) for row in rows]
+        return self.party_operations.methods(self.connection, party_id)
     def has_open_lease_participation(self, party_id, today):
-        query = (
-            select(LeaseParticipantModel.id)
-            .join(LeaseModel, LeaseModel.id == LeaseParticipantModel.lease_id)
-            .where(
-                LeaseParticipantModel.tenant_party_id == party_id,
-                LeaseModel.status == "executed",
-                (LeaseParticipantModel.ends_on.is_(None) | (LeaseParticipantModel.ends_on > today)),
-            )
-            .limit(1)
-        )
-        return self.connection.execute(query).first() is not None
-    def insert_party(self, item): self.connection.execute(PartyModel.__table__.insert().values(**item.__dict__))
+        return self.lease_guard.has_open_participation(self.connection, party_id, today)
+    def duplicate_party_ids(self, methods, limit):
+        return self.party_operations.duplicate_party_ids(self.connection, methods, limit)
+    def insert_party(self, item): self.party_operations.insert_party(self.connection, item)
     def insert_profile(self, item): self.connection.execute(TenantProfileModel.__table__.insert().values(**_profile_values(item)))
     def replace_profile(self, item): self.connection.execute(TenantProfileModel.__table__.update().where(TenantProfileModel.party_id == item.party_id).values(**_profile_values(item)))
-    def insert_method(self, item): self.connection.execute(TenantContactMethodModel.__table__.insert().values(**item.__dict__))
-    def replace_method(self, item): self.connection.execute(TenantContactMethodModel.__table__.update().where(TenantContactMethodModel.id == item.id).values(**item.__dict__))
+    def insert_method(self, item): self.party_operations.insert_method(self.connection, item)
     def record_change(self, **change): self.recorder.record_change(self.connection.connection.driver_connection, **change)
-def _party(row): return Party(**{key: getattr(row, key) for key in Party.__dataclass_fields__})
 def _profile(row): return TenantProfile(row.party_id, row.preferred_contact_method_id, bool(row.do_not_contact), row.notes, row.created_at, row.updated_at, row.archived_at)
 def _profile_mapping(row): return TenantProfile(row["party_id"], row["preferred_contact_method_id"], bool(row["do_not_contact"]), row["notes"], row["created_at"], row["updated_at"], row["archived_at"])
 def _profile_values(item): return {**item.__dict__, "do_not_contact": int(item.do_not_contact)}
-def _method(row): return TenantContactMethod(**{key: getattr(row, key) for key in TenantContactMethod.__dataclass_fields__})
 
 
-def _matches_search(party, methods, search, terms, phone_query):
-    raw = search.casefold()
-    party_values = (party.display_name, party.email, party.phone)
-    if any(value is not None and raw in value.casefold() for value in party_values):
-        return True
-    if phone_query is not None and party.phone is not None:
-        try:
-            if phone_query in normalize_contact_value("phone", party.phone).lstrip("+"):
-                return True
-        except ValueError:
-            pass
-    return any(
-        any(term in value.casefold() for term in terms)
-        for method in methods
-        for value in (method.display_value, method.normalized_value)
-    )
+class SQLiteTenantRoleActivityGuard:
+    def conflict(self, connection, party_id):
+        row = connection.execute(
+            TenantProfileModel.__table__.select().where(
+                TenantProfileModel.party_id == party_id,
+                TenantProfileModel.archived_at.is_(None),
+            )
+        ).first()
+        return "An active tenant profile prevents party archival." if row else None
+
+
+class SQLiteTenantProfileAvailability:
+    def is_active(self, connection, party_id):
+        row = connection.execute(
+            TenantProfileModel.__table__.select().where(TenantProfileModel.party_id == party_id)
+        ).mappings().first()
+        return row is not None and row["archived_at"] is None
+
+
+class SQLiteTenantContactReferenceGuard:
+    role = "tenant"
+    def __init__(self, recorder):
+        self.recorder = recorder
+
+    def resolve_before_archive(self, connection, party_id, contact_method_id,
+                               resolutions, timestamp, correlation_id):
+        row = connection.execute(
+            TenantProfileModel.__table__.select().where(TenantProfileModel.party_id == party_id)
+        ).mappings().first()
+        if (row is None or row["archived_at"] is not None
+                or row["preferred_contact_method_id"] != contact_method_id):
+            return ()
+        matching = tuple(item for item in resolutions if item.role == self.role and item.role_record_id == party_id)
+        if len(matching) != 1:
+            from app.modules.parties.application.service import PartyValidationError
+            raise PartyValidationError("Clear or replace the preferred contact before archiving it.")
+        resolution = matching[0]
+        before = _profile_mapping(row)
+        after = TenantProfile(before.party_id, resolution.replacement_contact_method_id, before.do_not_contact,
+                              before.notes, before.created_at, timestamp, before.archived_at)
+        connection.execute(TenantProfileModel.__table__.update().where(
+            TenantProfileModel.party_id == party_id
+        ).values(**_profile_values(after)))
+        self.recorder.record_change(connection.connection.driver_connection,
+                                    entity_type="tenant_profile", entity_id=party_id, action="updated",
+                                    before=before.to_dict(), after=after.to_dict(),
+                                    reason="preferred_contact_updated", correlation_id=correlation_id)
+        return matching

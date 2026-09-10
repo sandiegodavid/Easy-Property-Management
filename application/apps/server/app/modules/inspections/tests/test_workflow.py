@@ -22,7 +22,10 @@ from app.modules.parties.application.service import SharedPartyFactory
 from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
 from app.modules.tenants.application.service import TenantCreateCommand, TenantService
-from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantUnitOfWork
+from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantProfileAvailability, SQLiteTenantUnitOfWork
+from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations, SQLitePartyReadOperations
+from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations
+from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
 from app.platform.config import LocalConfig
@@ -36,10 +39,17 @@ class InspectionWorkflowTests(unittest.TestCase):
         portfolio = PortfolioService(SQLitePortfolioUnitOfWork(self.workspace.paths.database, self.recorder))
         property_record = portfolio.create_property(PropertyCreateCommand("Home", "1 Main", "Portland", "US", "single_family_home", (OwnershipInput("local_operator"),)))
         self.space_id = portfolio.get_property(property_record.id)["spaces"][0]["id"]
-        tenants = TenantService(SQLiteTenantUnitOfWork(self.workspace.paths.database, self.recorder), SharedPartyFactory())
+        party_operations = SQLitePartyOperations(self.workspace.paths.database)
+        tenants = TenantService(SQLiteTenantUnitOfWork(
+            self.workspace.paths.database, self.recorder, SQLiteLeaseParticipationGuard(), party_operations,
+            SQLitePartyReadOperations(party_operations),
+        ), SharedPartyFactory())
         tenant = tenants.create(TenantCreateCommand("individual", "Tenant"))
         co_tenant = tenants.create(TenantCreateCommand("individual", "Co tenant"))
-        today = date.today(); self.leases = LeaseService(SQLiteLeaseUnitOfWork(self.workspace.paths.database, self.recorder))
+        today = date.today(); self.leases = LeaseService(SQLiteLeaseUnitOfWork(
+            self.workspace.paths.database, self.recorder, SQLiteTenantProfileAvailability(),
+            SQLitePortfolioLeaseOperations(self.workspace.paths.database),
+        ))
         draft = self.leases.create(LeaseCreateCommand(self.space_id, "residential", today, today + timedelta(days=30), today, TermCommand(100000,"USD","monthly",1,0), (ParticipantCommand(tenant["id"],"primary_tenant"), ParticipantCommand(co_tenant["id"],"co_tenant"))))
         self.lease = self.leases.execute(draft["id"], executed_on=today, confirmed=True)
         self.files = FileService(self.workspace, FilesystemContentStore(self.workspace.paths.files), SQLiteFileUnitOfWork(self.workspace.paths.database, self.recorder))

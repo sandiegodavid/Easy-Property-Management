@@ -27,21 +27,35 @@ from app.modules.tasks.application.service import TaskService
 from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork
 from app.modules.portfolio.api.router import build_router as build_portfolio_router
 from app.modules.portfolio.application.service import PortfolioService
-from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
+from app.modules.portfolio.infrastructure.unit_of_work import (
+    SQLitePortfolioLeaseOperations,
+    SQLitePortfolioUnitOfWork,
+)
+from app.modules.parties.api.router import build_router as build_party_router
+from app.modules.parties.application.service import PartyContactService
+from app.modules.parties.infrastructure.unit_of_work import (
+    SQLitePartyOperations,
+    SQLitePartyReadOperations,
+    SQLitePartyUnitOfWork,
+)
 from app.modules.tenants.api.router import build_router as build_tenant_router
 from app.modules.tenants.application.service import TenantService
-from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantUnitOfWork
-from app.modules.tenants.domain.audit_policy import TENANT_CONTACT_SNAPSHOT_POLICY
+from app.modules.tenants.infrastructure.unit_of_work import (
+    SQLiteTenantContactReferenceGuard,
+    SQLiteTenantProfileAvailability,
+    SQLiteTenantRoleActivityGuard,
+    SQLiteTenantUnitOfWork,
+)
 from app.modules.leases.api.router import build_router as build_lease_router
 from app.modules.leases.application.service import LeaseService
 from app.modules.leases.application.file_links import LeaseFileLinkValidator
-from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseUnitOfWork
+from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard, SQLiteLeaseUnitOfWork
 from app.modules.inspections.api.router import build_router as build_inspection_router
 from app.modules.inspections.application.service import InspectionService
 from app.modules.inspections.infrastructure.unit_of_work import SQLiteInspectionUnitOfWork
 from app.modules.inspections.domain.audit_policy import INSPECTION_ACTIVITY_POLICY
 from app.modules.parties.application.service import SharedPartyFactory
-from app.modules.parties.domain.audit_policy import PARTY_ACTIVITY_SNAPSHOT_POLICY
+from app.modules.parties.domain.audit_policy import PARTY_CONTACT_SNAPSHOT_POLICY
 from app.platform.version import application_version
 
 logger = logging.getLogger(__name__)
@@ -71,7 +85,13 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             raise RuntimeError("S3 file storage requires an available S3 adapter.")
         primary_store = s3_store
         additional_stores["local"] = local_store
-    lease_unit_of_work = SQLiteLeaseUnitOfWork(service.paths.database, recorder)
+    party_operations = SQLitePartyOperations(service.paths.database)
+    party_reads = SQLitePartyReadOperations(party_operations)
+    portfolio_lease_operations = SQLitePortfolioLeaseOperations(service.paths.database)
+    lease_unit_of_work = SQLiteLeaseUnitOfWork(
+        service.paths.database, recorder, SQLiteTenantProfileAvailability(),
+        portfolio_lease_operations,
+    )
     inspection_unit_of_work = SQLiteInspectionUnitOfWork(service.paths.database, recorder)
     files = FileService(
         service,
@@ -85,8 +105,16 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     remote_materializer = s3_store.materialize if s3_store is not None else None
     backups = BackupService(service, recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)), remote_materializer=remote_materializer)
     tasks = TaskService(SQLiteTaskUnitOfWork(service.paths.database, recorder))
-    portfolio = PortfolioService(SQLitePortfolioUnitOfWork(service.paths.database, recorder))
-    tenants = TenantService(SQLiteTenantUnitOfWork(service.paths.database, recorder), SharedPartyFactory())
+    portfolio = PortfolioService(SQLitePortfolioUnitOfWork(
+        service.paths.database, recorder, (SQLiteTenantRoleActivityGuard(),)
+    ), party_reads=party_reads)
+    tenants = TenantService(SQLiteTenantUnitOfWork(
+        service.paths.database, recorder, SQLiteLeaseParticipationGuard(),
+        party_operations, party_reads,
+    ), SharedPartyFactory())
+    party_contacts = PartyContactService(SQLitePartyUnitOfWork(
+        service.paths.database, recorder, (SQLiteTenantContactReferenceGuard(recorder),)
+    ))
     inspections = InspectionService(inspection_unit_of_work, files)
     leases = LeaseService(lease_unit_of_work, inspections.attention_for_lease)
 
@@ -120,6 +148,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.task_service = tasks
     app.state.portfolio_service = portfolio
     app.state.tenant_service = tenants
+    app.state.party_contact_service = party_contacts
     app.state.lease_service = leases
     app.state.inspection_service = inspections
     app.include_router(build_router(service, runtime))
@@ -136,7 +165,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("space_occupancy", 1): DEFAULT_SNAPSHOT_POLICY,
         ("space_availability", 1): DEFAULT_SNAPSHOT_POLICY,
         ("tenant_profile", 1): DEFAULT_SNAPSHOT_POLICY,
-        ("tenant_contact_method", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("party_contact_method", 1): DEFAULT_SNAPSHOT_POLICY,
         ("lease", 1): DEFAULT_SNAPSHOT_POLICY,
         ("lease_term", 1): DEFAULT_SNAPSHOT_POLICY,
         ("lease_participant", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -155,8 +184,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("condition_comparison", 1): INSPECTION_ACTIVITY_POLICY,
     }, activity_policies={
         ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
-        ("party", 1): PARTY_ACTIVITY_SNAPSHOT_POLICY,
-        ("tenant_contact_method", 1): TENANT_CONTACT_SNAPSHOT_POLICY,
+        ("party_contact_method", 1): PARTY_CONTACT_SNAPSHOT_POLICY,
         ("condition_report", 1): INSPECTION_ACTIVITY_POLICY,
         ("condition_area", 1): INSPECTION_ACTIVITY_POLICY,
         ("condition_observation", 1): INSPECTION_ACTIVITY_POLICY,
@@ -169,6 +197,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_files_router(files, runtime))
     app.include_router(build_tasks_router(tasks, runtime))
     app.include_router(build_portfolio_router(portfolio, runtime))
+    app.include_router(build_party_router(party_contacts, runtime))
     app.include_router(build_tenant_router(tenants, runtime))
     app.include_router(build_lease_router(leases, runtime))
     app.include_router(build_inspection_router(inspections, runtime))

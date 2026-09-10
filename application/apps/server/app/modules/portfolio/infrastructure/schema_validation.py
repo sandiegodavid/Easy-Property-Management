@@ -11,8 +11,8 @@ def validate_portfolio_schema(connection) -> None:
     inspector = inspect(connection)
     expected_columns = {
         "parties": (
-            {"id", "party_kind", "display_name", "email", "phone", "created_at", "updated_at", "archived_at"},
-            {"email", "phone", "archived_at"},
+            {"id", "party_kind", "display_name", "created_at", "updated_at", "archived_at"},
+            {"archived_at"},
         ),
         "properties": (
             {"id", "display_name", "address_line_1", "address_line_2", "city", "region", "postal_code", "country_code", "notes", "status", "created_at", "updated_at", "archived_at", "property_type", "inventory_layout"},

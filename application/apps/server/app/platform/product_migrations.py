@@ -58,7 +58,7 @@ def validate_latest_schema(database_path: Path) -> None:
             expected_tables = {
                 "alembic_version", "workspace_metadata", "audit_events", "file_records", "file_content_locations",
                 "file_links", "tasks", "task_reminders", "parties", "properties", "property_ownerships", "spaces",
-                "space_occupancy_periods", "space_availability", "tenant_profiles", "tenant_contact_methods",
+                "space_occupancy_periods", "space_availability", "tenant_profiles", "party_contact_methods",
                 "leases", "lease_term_versions", "lease_participants", "lease_renewal_options",
                 "lease_termination_cases", "lease_termination_proposals",
                 "condition_reports", "condition_areas", "condition_observations",

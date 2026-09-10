@@ -4,9 +4,10 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from app.modules.parties.application.service import PartyValidationError
 
 from app.modules.tenants.application.service import (
-    ContactMethodCommand,
+    PossibleDuplicatePartyError,
     TenantConflictError,
     TenantCreateCommand,
     TenantError,
@@ -24,17 +25,17 @@ class Contract(BaseModel):
 class ContactRequest(Contract):
     methodKind: Literal["email", "phone"]
     value: str = Field(min_length=1, max_length=320)
+    extension: str | None = Field(None, max_length=6)
     label: str | None = Field(None, max_length=80)
 
 
 class TenantCreateRequest(Contract):
     partyKind: Literal["individual", "organization"]
     displayName: str = Field(min_length=1, max_length=240)
-    email: str | None = Field(None, max_length=320)
-    phone: str | None = Field(None, max_length=80)
     contacts: list[ContactRequest] = Field(default_factory=list)
     notes: str | None = Field(None, max_length=4000)
     doNotContact: StrictBool = False
+    confirmedNewParty: StrictBool = False
 
 
 class DesignateRequest(Contract):
@@ -57,11 +58,6 @@ class ConfirmationRequest(Contract):
     confirmed: StrictBool
 
 
-class ContactArchiveRequest(ConfirmationRequest):
-    replacementPreferredContactMethodId: str | None = None
-    clearPreference: StrictBool = False
-
-
 class TenantProfileResponse(Contract):
     partyId: str
     preferredContactMethodId: str | None
@@ -77,6 +73,7 @@ class ContactMethodResponse(Contract):
     partyId: str
     methodKind: Literal["email", "phone"]
     displayValue: str
+    extension: str | None
     label: str | None
     status: Literal["active", "archived"]
     createdAt: str
@@ -88,13 +85,20 @@ class TenantResponse(Contract):
     id: str
     partyKind: Literal["individual", "organization"]
     displayName: str
-    email: str | None
-    phone: str | None
     createdAt: str
     updatedAt: str
     archivedAt: str | None
     profile: TenantProfileResponse
     contactMethods: list[ContactMethodResponse]
+
+
+class PossibleDuplicateDetail(Contract):
+    code: Literal["possible_duplicate_party"]
+    candidatePartyIds: list[str] = Field(max_length=10)
+
+
+class PossibleDuplicateResponse(Contract):
+    detail: PossibleDuplicateDetail
 
 
 def build_router(service: TenantService, runtime: WorkspaceRuntime) -> APIRouter:
@@ -111,22 +115,31 @@ def build_router(service: TenantService, runtime: WorkspaceRuntime) -> APIRouter
             return operation()
         except TenantNotFoundError as error:
             raise HTTPException(404, str(error)) from error
+        except PossibleDuplicatePartyError as error:
+            raise HTTPException(409, detail={
+                "code": "possible_duplicate_party",
+                "candidatePartyIds": error.candidate_party_ids,
+            }) from error
         except TenantConflictError as error:
             raise HTTPException(409, str(error)) from error
         except TenantError as error:
             raise HTTPException(400, str(error)) from error
+        except PartyValidationError as error:
+            raise HTTPException(400, str(error)) from error
 
-    @router.post("", status_code=status.HTTP_201_CREATED, response_model=TenantResponse)
+    @router.post("", status_code=status.HTTP_201_CREATED, response_model=TenantResponse,
+                 responses={409: {"model": PossibleDuplicateResponse}})
     def create(data: TenantCreateRequest):
         ready(True)
+        from app.modules.parties.application.service import ContactMethodCommand
         return invoke(lambda: service.create(TenantCreateCommand(
-            data.partyKind,
-            data.displayName,
-            data.email,
-            data.phone,
-            tuple(ContactMethodCommand(item.methodKind, item.value, item.label) for item in data.contacts),
-            data.notes,
-            data.doNotContact,
+            party_kind=data.partyKind,
+            display_name=data.displayName,
+            contacts=tuple(ContactMethodCommand(item.methodKind, item.value, item.extension, item.label)
+                           for item in data.contacts),
+            notes=data.notes,
+            do_not_contact=data.doNotContact,
+            confirmed_new_party=data.confirmedNewParty,
         )))
 
     @router.post("/from-party/{party_id}", status_code=status.HTTP_201_CREATED, response_model=TenantResponse)
@@ -148,30 +161,6 @@ def build_router(service: TenantService, runtime: WorkspaceRuntime) -> APIRouter
     def update(party_id: str, data: ProfilePatchRequest):
         ready(True)
         return invoke(lambda: service.update_profile(party_id, data.command()))
-
-    @router.post("/{party_id}/contact-methods", status_code=status.HTTP_201_CREATED, response_model=ContactMethodResponse)
-    def add_contact(party_id: str, data: ContactRequest):
-        ready(True)
-        return invoke(lambda: service.add_contact(party_id, ContactMethodCommand(data.methodKind, data.value, data.label)).to_dict())
-
-    @router.patch("/{party_id}/contact-methods/{method_id}", response_model=ContactMethodResponse)
-    def update_contact(party_id: str, method_id: str, data: ContactRequest):
-        ready(True)
-        return invoke(lambda: service.update_contact(party_id, method_id, ContactMethodCommand(data.methodKind, data.value, data.label)).to_dict())
-
-    @router.post("/{party_id}/contact-methods/{method_id}/archive", response_model=ContactMethodResponse)
-    def archive_contact(party_id: str, method_id: str, data: ContactArchiveRequest):
-        ready(True)
-        return invoke(lambda: service.archive_contact(
-            party_id, method_id, confirmed=data.confirmed,
-            replacement_preferred_contact_method_id=data.replacementPreferredContactMethodId,
-            clear_preference=data.clearPreference,
-        ).to_dict())
-
-    @router.post("/{party_id}/contact-methods/{method_id}/restore", response_model=ContactMethodResponse)
-    def restore_contact(party_id: str, method_id: str):
-        ready(True)
-        return invoke(lambda: service.restore_contact(party_id, method_id).to_dict())
 
     @router.post("/{party_id}/archive", response_model=TenantResponse)
     def archive(party_id: str, data: ConfirmationRequest):

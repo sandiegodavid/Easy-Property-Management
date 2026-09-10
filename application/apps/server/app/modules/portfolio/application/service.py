@@ -23,6 +23,7 @@ from app.modules.portfolio.domain.models import (
     ownership_context,
 )
 from app.modules.parties.application.service import PartyCreateCommand, PartyFactory, SharedPartyFactory
+from app.modules.parties.application.ports import PartyReadOperations
 
 
 class PortfolioError(RuntimeError):
@@ -185,9 +186,11 @@ class PropertyUpdateCommand:
 
 
 class PortfolioService:
-    def __init__(self, unit_of_work: PortfolioUnitOfWork, party_factory: PartyFactory | None = None) -> None:
+    def __init__(self, unit_of_work: PortfolioUnitOfWork, party_factory: PartyFactory | None = None,
+                 party_reads: PartyReadOperations | None = None) -> None:
         self.unit_of_work = unit_of_work
         self.party_factory = party_factory or SharedPartyFactory()
+        self.party_reads = party_reads
 
     def create_party(self, command: PartyCreateCommand) -> Party:
         now, correlation_id = _now(), str(uuid4())
@@ -543,6 +546,8 @@ class PortfolioService:
             if current.archived_at is not None: return current
             if transaction.open_ownerships_for_party(party_id, date.today().isoformat()):
                 raise PortfolioError("A party with a current or scheduled property ownership cannot be archived.")
+            if conflicts := transaction.party_role_conflicts(party_id):
+                raise PortfolioConflictError(conflicts[0])
             updated = replace(current, updated_at=now, archived_at=now)
             transaction.replace_party(updated)
             transaction.record_change(entity_type="party", entity_id=party_id, action="status_changed",
@@ -603,8 +608,35 @@ class PortfolioService:
         self._not_found_from_key_error(write)
         return self.get_property(property_id)
 
-    def list_parties(self, *, active_only: bool = False) -> list[dict[str, object]]:
-        return [party.to_dict() for party in self.unit_of_work.parties(active_only=active_only)]
+    def list_parties(self, *, active_only: bool = False, search: str | None = None) -> list[dict[str, object]]:
+        if self.party_reads is not None:
+            parties = self.party_reads.search(
+                active_only=active_only, search=_optional(search, "Search", 240)
+            )
+            methods_by_party = self.party_reads.methods_for_parties([party.id for party in parties])
+            return [
+                {
+                    **party.to_dict(),
+                    "contactMethods": [
+                        {
+                            "id": method.id,
+                            "methodKind": method.method_kind,
+                            "displayValue": method.display_value,
+                            "extension": method.extension,
+                            "label": method.label,
+                        }
+                        for method in methods_by_party.get(party.id, [])
+                        if method.status == "active"
+                    ],
+                }
+                for party in parties
+            ]
+        if search is not None:
+            raise PortfolioError("Party search is unavailable without a party read adapter.")
+        return [
+            {**party.to_dict(), "contactMethods": []}
+            for party in self.unit_of_work.parties(active_only=active_only)
+        ]
 
     def get_space_status(self, space_id: str) -> dict[str, object]:
         space = self.unit_of_work.get_space(space_id)
