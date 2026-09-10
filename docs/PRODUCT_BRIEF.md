@@ -118,6 +118,7 @@ The MVP does not include:
 - User data is stored in a configurable external workspace, with the SQLite database, its live journal files, attachments, exports, and backups kept together; application code must not infer this path from its Git checkout.
 - Attachment references are workspace-relative. Workspace relocation and restore verify the complete database-and-files set before switching the locator.
 - A shared “space” concept supports homes, condos, townhomes, office suites, and later apartment units.
+- Each property stores one canonical IANA time zone inferred locally from its structured address; date-relative lease, finance, task, and reporting behavior uses that property zone rather than the server process's ambient time zone.
 - One party/contact model supports owners, tenants, prospects, vendors, and companies in different roles.
 - Financial entries use dated source records and drill-down allocations; settled records are voided/reversed rather than deleted.
 - Owner-reported rent receipts record who reported them, when they were reported, how the owner received the funds, supporting evidence, and verification status so income is not counted twice.

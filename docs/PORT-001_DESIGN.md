@@ -10,7 +10,7 @@ This makes the core distinction visible before leases, rent, expenses, owner rep
 
 PORT-001 provides:
 
-- A property identity with a human-friendly name, a structured address, an active/archived status, and optional internal notes.
+- A property identity with a human-friendly name, a structured address, an address-derived IANA time zone, an active/archived status, and optional internal notes.
 - A lightweight reusable party record for client owners: individual or organization, display name, optional email, and optional phone.
 - Explicit active ownership relationships between a property and either the local operator or a client-owner party.
 - A derived, readable ownership context for every active property:
@@ -62,9 +62,12 @@ PORT-001 stores identity only. TEN-001 adds party-owned `party_contact_methods` 
 | `id` | Stable UUID. |
 | `display_name` | Required operator-facing label, such as “Maple Street home.” |
 | `address_line_1`, `address_line_2`, `city`, `region`, `postal_code`, `country_code` | Structured address; line 1, city, and country code are required. The UI uses local formatting rules but stores no geocoding result. |
+| `time_zone` | Required canonical IANA identifier inferred from the structured address, such as `America/Los_Angeles`; it is returned to clients but is not directly writable. |
 | `notes` | Optional internal note, not a legal property description. |
 | `status` | `active` or `archived`. An archived property is read-only for new operational records until restored. |
 | `created_at`, `updated_at`, `archived_at` | UTC lifecycle timestamps. |
+
+The database requires `time_zone` to be non-null and nonblank. The application validates the resolver result against the runtime IANA database before persistence, and the exact-schema validator requires the field and constraint. Only the canonical zone identifier is portable workspace data; resolver indexes and intermediate address matches are application resources, not workspace records.
 
 ### `property_ownerships`
 
@@ -85,11 +88,13 @@ Future modules may add ownership share, management agreement, owner statement, a
 
 ### Add a property
 
-The primary action is **Add property**. The short guided form asks for a property label, address, and “How do you manage this property?”
+The primary action is **Add property**. The short guided form asks for a property label, address, and “How do you manage this property?” A transaction-independent address-time-zone resolver behind a Portfolio application port derives one canonical IANA zone from a bundled local address/postal data set; no address is sent to an external service and no geocoding result is retained. If the address is insufficient or resolves ambiguously, creation stops and asks the operator to complete or correct the structured address rather than guessing a zone.
 
 1. **I own it** creates an active `local_operator` ownership row.
 2. **I manage it for an owner** requires one or more client owners. The operator can select a saved party or add a basic owner identity inline; reusable contact methods are party-owned by TEN-001 rather than copied into portfolio records.
 3. **Both** creates the local-operator row and one or more client-owner rows.
+
+Changing an address reruns the same resolver and stores the new inferred zone in the property/audit snapshot. Previously recorded local dates remain unchanged; future date-relative views use the new property zone. The UI warns before saving a time-zone change when lease or finance records exist.
 
 The form explains the consequence in plain language, for example: “Managed for an owner — future owner statements and disbursements can be linked to this owner.” It must not ask the operator to understand database roles or legal ownership terminology.
 
@@ -127,7 +132,7 @@ All endpoints require a ready local workspace. Request models are typed Pydantic
 
 | Method | Path | Intent |
 | --- | --- | --- |
-| `POST` | `/api/properties` | Create a property with its initial ownership set atomically. |
+| `POST` | `/api/properties` | Create a property with its inferred time zone and initial ownership set atomically. |
 | `GET` | `/api/properties` | List properties with `status` and derived `ownershipContext` filters. |
 | `GET` | `/api/properties/{propertyId}` | Return property identity, current ownerships, and current ownership context. |
 | `PATCH` | `/api/properties/{propertyId}` | Change one or more editable identity fields. |
@@ -139,20 +144,20 @@ All endpoints require a ready local workspace. Request models are typed Pydantic
 | `POST` | `/api/parties/{partyId}/archive` | Archive a party only after confirmation and only if it has no current property ownership. |
 | `POST` | `/api/parties/{partyId}/restore` | Restore an archived party. |
 
-Stable UUIDs are returned in all records. Responses expose `ownershipContext` as one of `self_owned`, `managed_for_owner`, or `mixed`; it is derived server-side and is not a client-writeable field.
+Stable UUIDs are returned in all records. Responses expose `ownershipContext` as one of `self_owned`, `managed_for_owner`, or `mixed` and expose the canonical `timeZone`; both are derived server-side and are not client-writeable fields.
 
 ## Audit, safety, and portability
 
 Every property, party, and relationship mutation writes its domain row(s) and explicit `AUDIT-001` event(s) in one immediate SQLite transaction. A single create or ownership-change workflow shares one correlation ID across its property, party, and relationship events.
 
-Audit snapshots include portable identifiers and normal business fields, but never application credentials or inferred legal conclusions. Relationship events retain effective dates and prior/current active sets so future owner accounting can explain which context applied. Party contact values are introduced and protected by TEN-001 rather than stored by portfolio.
+Audit snapshots include portable identifiers, the inferred IANA time zone, and normal business fields, but never application credentials, geocoding results, or inferred legal conclusions. Relationship events retain effective dates and prior/current active sets so future owner accounting can explain which context applied. Party contact values are introduced and protected by TEN-001 rather than stored by portfolio.
 
 The records live only in the workspace SQLite database. They participate in current-schema validation, `LOCAL-002` encrypted backup/export/restore, and future SaaS migration through stable IDs. No external owner portal, email, or financial integration is introduced.
 
 ## Implementation outline
 
 1. Add SQLAlchemy models and one Alembic revision for the three tables, constraints, indexes, and exact module-owned schema validation.
-2. Add portfolio domain values and application commands for property creation, identity/status updates, ownership replacement, and party creation/archive.
+2. Add portfolio domain values, the address-time-zone resolver port, and application commands for property creation, identity/status updates, ownership replacement, and party creation/archive.
 3. Add a transaction-oriented portfolio unit of work that loads current state, persists the selected change, and appends all audit events under one correlation ID.
 4. Add FastAPI request/response models and routes; deliver the Portfolio list/detail/create UI in `UI-001`, immediately before `DASH-001`.
 5. Add current-format workspace/archive validation for the new tables and regression tests for atomic rollback, mode derivation, effective-dated changes, archive guards, and audit correlation.
@@ -168,7 +173,8 @@ PORT-001 is complete when:
 5. Property, party, relationship, archive, and restore changes are audited atomically with one correlation ID per user operation.
 6. Archived properties are retained, discoverable through an archived filter, and blocked from new operations according to this item’s scope.
 7. Records survive LOCAL-002 backup/restore with stable IDs, relationships, and audit history intact.
-8. Tests cover self-owned, managed, mixed, effective-dated transitions, direct-command validation, atomic audit rollback, and current-schema rejection.
+8. Tests cover self-owned, managed, mixed, deterministic address time-zone inference (including ambiguous/incomplete addresses), effective-dated transitions, direct-command validation, atomic audit rollback, and current-schema rejection.
+9. Every property stores and returns one canonical IANA time zone derived locally from its structured address; ambiguous or unresolved addresses are rejected rather than assigned a guessed zone.
 
 ## Dependencies and follow-on work
 

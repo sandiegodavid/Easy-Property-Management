@@ -16,7 +16,7 @@ The implementation order is:
 
 An inspection may be designed and tested independently, but a lease-linked move-in or move-out report cannot be implemented before `LEASE-001`. `INSP-001` must not introduce a placeholder lease model.
 
-Like other operator workflows, backend/API and UI delivery are separate. `UI-001` delivers the guided Portfolio, Lease, and Inspection operator workflows immediately before `DASH-001`; INSP-001 remains in progress until its walkthrough and comparison screens are usable.
+Like other operator workflows, backend/API and UI delivery are separate. `UI-001` delivers the guided Portfolio, Lease, Inspection, and FIN-001 rent-expectation/receipt operator workflows immediately before `DASH-001`; INSP-001 remains in progress until its walkthrough and comparison screens are usable.
 
 ## Scope
 

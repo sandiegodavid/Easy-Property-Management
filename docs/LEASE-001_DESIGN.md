@@ -63,7 +63,7 @@ Executing a lease creates a `PORT-003` occupancy period with `source_kind = leas
 
 ## Data model
 
-All IDs are UUIDs. Timestamps are UTC text. Dates are local calendar dates for the workspace and never inferred from a timestamp. Monetary values use non-negative integer minor units and uppercase ISO 4217 currency codes.
+All IDs are UUIDs. Timestamps are UTC text. Dates are local calendar dates for the property and never inferred from a timestamp. Monetary values use integer minor units. Currency codes use exactly three ASCII uppercase letters (`A`–`Z`); this is deterministic ISO-style syntax validation, not a claim that the application maintains a live ISO 4217 registry.
 
 ### `leases`
 
@@ -93,13 +93,15 @@ An accepted early-termination agreement does not immediately change the lease fr
 | --- | --- |
 | `id`, `lease_id` | Stable UUID and required lease reference. |
 | `effective_on`, `ends_on` | Non-overlapping effective range within the lease contract. Initial terms begin on the contract start. |
-| `base_rent_minor`, `currency_code` | Required non-negative amount and ISO currency. |
+| `base_rent_minor`, `currency_code` | Required positive amount and exactly three ASCII uppercase currency letters. A zero-rent agreement cannot produce FIN-001 expectations and is rejected rather than represented as recurring rent. |
 | `payment_frequency` | Required enum: `monthly` or `weekly`. More complex commercial schedules are deferred. |
 | `payment_due_day` | Optional day `1`–`31`; it is meaningful only for monthly terms. |
 | `agreed_security_deposit_minor` | Required non-negative agreed deposit amount; this is not proof of receipt or a ledger balance. |
 | `created_at` | Required UTC timestamp. |
 
 Creating a lease requires one initial term version. Draft terms may be replaced before execution. After execution, LEASE-001 does not revise financial terms; a later amendment/rent-adjustment workflow owns subsequent versions.
+
+Application commands and database constraints both enforce positive base rent and the ASCII currency syntax. Booleans, floats, numeric strings, zero, and negative base-rent inputs are invalid. Security deposits and optional termination fees remain non-negative because zero has a distinct valid meaning for those fields.
 
 ### `lease_participants`
 
@@ -251,6 +253,7 @@ The first LEASE-001 implementation slice must include these existing-module inte
 3. **Add lease-owned occupancy operations.** Lease execution and lifecycle closure must create, end, cancel, or replace `PORT-003` periods using `source_kind = lease` and `source_id = lease_id`. Existing manual occupancy operations continue to reject edits to those source-owned periods; the lease workflow is the only normal owner of their lifecycle.
 4. **Extend all current-format boundaries.** Add the lease tables to the greenfield Alembic baseline and extend module-owned exact schema validation, the application-table allowlist, encrypted backup/export and restore validation, and the audit presentation-policy registry for every lease entity and event type.
 5. **Add lease-aware archive regression coverage.** Verify that active and scheduled executed leases prevent space and property archival through their occupancy records, and that current or future participants on executed leases prevent tenant-profile archival while draft participants do not. Also verify that execution revalidates archived profiles and that ending, terminating, or voiding a lease releases only the appropriate guard without weakening unrelated occupancy or participant history.
+6. **Harden FIN-001 source terms.** Require positive integer base rent and exactly three ASCII uppercase currency letters in the HTTP model, direct application command, SQLAlchemy constraints, greenfield baseline, and exact-schema validator. Regression tests must reject booleans, floats, numeric strings, zero/negative rent, lowercase codes, non-ASCII letters, digits, and punctuation.
 
 Because the product remains greenfield and latest-format-only, introducing the lease schema requires recreating the configured development workspace from the updated current baseline; no legacy adoption or upgrade path is added.
 
@@ -276,6 +279,7 @@ LEASE-001 is complete when:
 6. The API has explicit request/response contracts and controlled `400`, `404`, `409`, and `422` behavior.
 7. The UI provides the deferred operator workflows before the backlog item is marked done.
 8. An operator can record and negotiate a job-relocation termination request, retain proposal history, accept an agreement without premature vacancy, and complete it only with confirmed actual move-out.
+9. Every term exposed to FIN-001 has positive integer base rent and deterministic three-ASCII-uppercase-letter currency syntax enforced at both application and database boundaries.
 
 ## Dependencies and follow-on work
 
