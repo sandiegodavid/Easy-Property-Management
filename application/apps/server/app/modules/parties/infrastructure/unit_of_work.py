@@ -60,6 +60,9 @@ class SQLitePartyOperations(PartyTransactionOperations):
         ).mappings().first()
         return Party(**dict(row)) if row else None
 
+    def exists(self, connection, party_id):
+        return connection.execute(PartyModel.__table__.select().where(PartyModel.id == party_id)).first() is not None
+
     def methods(self, connection, party_id):
         rows = connection.execute(
             PartyContactMethodModel.__table__.select()

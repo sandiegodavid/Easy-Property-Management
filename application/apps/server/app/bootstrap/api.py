@@ -68,6 +68,15 @@ from app.modules.vendors.infrastructure.unit_of_work import (
 from app.modules.vendors.domain.audit_policy import (
     PROVIDER_ACTIVITY_SNAPSHOT_POLICY, PROVIDER_REPUTATION_LINK_ACTIVITY_POLICY,
 )
+from app.modules.finance.api.router import build_router as build_finance_router
+from app.modules.finance.application.service import FinanceService
+from app.modules.finance.infrastructure.unit_of_work import SQLiteFinanceUnitOfWork
+from app.modules.finance.domain.audit_policy import (
+    EXPECTATION_ACTIVITY_POLICY, REVIEW_ACTIVITY_POLICY,
+    RECEIPT_ACTIVITY_POLICY, ALLOCATION_ACTIVITY_POLICY,
+)
+from app.modules.leases.infrastructure.finance_operations import SQLiteLeaseFinanceOperations
+from app.modules.portfolio.infrastructure.finance_operations import SQLitePortfolioFinanceOperations
 from app.platform.version import application_version
 
 logger = logging.getLogger(__name__)
@@ -143,6 +152,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     providers = ProviderService(SQLiteProviderUnitOfWork(
         service.paths.database, recorder, party_operations, portfolio_lease_operations,
     ))
+    finance = FinanceService(SQLiteFinanceUnitOfWork(
+        service.paths.database, recorder, SQLiteLeaseFinanceOperations(SQLitePortfolioFinanceOperations()), party_operations,
+    ))
     inspections = InspectionService(inspection_unit_of_work, files)
     leases = LeaseService(lease_unit_of_work, inspections.attention_for_lease)
 
@@ -181,6 +193,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.provider_service = providers
     app.state.lease_service = leases
     app.state.inspection_service = inspections
+    app.state.finance_service = finance
     app.include_router(build_router(service, runtime))
     policies = AuditSnapshotPolicyRegistry({
         ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -218,6 +231,10 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("provider_work_history", 1): DEFAULT_SNAPSHOT_POLICY,
         ("provider_reference", 1): DEFAULT_SNAPSHOT_POLICY,
         ("provider_reputation_link", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("rent_expectation", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("rent_expectation_timeliness_review", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("rent_receipt", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("rent_receipt_allocation", 1): DEFAULT_SNAPSHOT_POLICY,
     }, activity_policies={
         ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
         ("party_contact_method", 1): PARTY_CONTACT_SNAPSHOT_POLICY,
@@ -234,6 +251,10 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("provider_work_history", 1): PROVIDER_ACTIVITY_SNAPSHOT_POLICY,
         ("provider_reference", 1): PROVIDER_ACTIVITY_SNAPSHOT_POLICY,
         ("provider_reputation_link", 1): PROVIDER_REPUTATION_LINK_ACTIVITY_POLICY,
+        ("rent_expectation", 1): EXPECTATION_ACTIVITY_POLICY,
+        ("rent_expectation_timeliness_review", 1): REVIEW_ACTIVITY_POLICY,
+        ("rent_receipt", 1): RECEIPT_ACTIVITY_POLICY,
+        ("rent_receipt_allocation", 1): ALLOCATION_ACTIVITY_POLICY,
     })
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime))
@@ -244,6 +265,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_tenant_router(tenants, runtime))
     app.include_router(build_lease_router(leases, runtime))
     app.include_router(build_inspection_router(inspections, runtime))
+    app.include_router(build_finance_router(finance, runtime))
     return app
 
 

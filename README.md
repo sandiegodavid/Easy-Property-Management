@@ -23,6 +23,7 @@ The planned stack is React/Vite/TypeScript for the interface, with Python/FastAP
 - [PORT-001 portfolio ownership-context design](docs/PORT-001_DESIGN.md)
 - [LEASE-001 lease records and occupancy design](docs/LEASE-001_DESIGN.md)
 - [INSP-001 move-in and move-out condition-report design](docs/INSP-001_DESIGN.md)
+- [FIN-001 rent expectations and recorded-receipts design](docs/FIN-001_DESIGN.md)
 
 ## Local workspace configuration
 
