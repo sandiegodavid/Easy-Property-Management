@@ -16,7 +16,7 @@ from app.modules.inspections.infrastructure.schema_validation import validate_in
 from app.modules.vendors.infrastructure.schema_validation import validate_vendor_schema
 from app.modules.portfolio.infrastructure.schema_validation import validate_portfolio_schema
 from app.modules.workspace.infrastructure.schema_validation import validate_workspace_schema
-from app.modules.finance.infrastructure.schema_validation import validate_finance_schema
+from app.modules.finance.infrastructure.schema_validation import validate_finance_data, validate_finance_schema
 from app.platform.migration_errors import MigrationSchemaError
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
@@ -70,6 +70,9 @@ def validate_latest_schema(database_path: Path) -> None:
                 "provider_work_history", "provider_references", "provider_reputation_links",
                 "rent_expectations", "rent_expectation_timeliness_reviews", "rent_receipts", "rent_receipt_allocations",
                 "expense_categories", "expenses", "expense_refunds",
+                "security_deposit_accounts", "security_deposit_receipts", "security_deposit_settlements",
+                "security_deposit_settlement_receipts", "security_deposit_deductions",
+                "security_deposit_deduction_sources", "security_deposit_credits", "security_deposit_refunds",
             }
             if actual_tables != expected_tables:
                 raise ProductSchemaError("Workspace database contains unsupported application tables.")
@@ -78,6 +81,7 @@ def validate_latest_schema(database_path: Path) -> None:
                 raise ProductSchemaError("Workspace database is not at the current schema revision.")
             for validator in (validate_workspace_schema, validate_audit_schema, validate_file_schema, validate_task_schema, validate_portfolio_schema, validate_tenant_schema, validate_lease_schema, validate_inspection_schema, validate_vendor_schema, validate_finance_schema):
                 validator(connection)
+            validate_finance_data(connection)
     except ProductSchemaError:
         raise
     except Exception as error:

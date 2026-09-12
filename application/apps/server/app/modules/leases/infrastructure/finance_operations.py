@@ -1,7 +1,7 @@
 """Lease-owned FIN-001 projection, with portfolio context supplied at composition."""
 from sqlalchemy import or_, select
 from app.modules.finance.application.ports import LeaseTermFinanceSnapshot
-from app.modules.leases.infrastructure.sqlalchemy_models import LeaseModel, LeaseTermModel, LeaseTerminationCaseModel, LeaseTerminationProposalModel
+from app.modules.leases.infrastructure.sqlalchemy_models import LeaseModel, LeaseTermModel, LeaseParticipantModel, LeaseTerminationCaseModel, LeaseTerminationProposalModel
 
 class SQLiteLeaseFinanceOperations:
     def __init__(self, portfolio_operations): self.portfolio_operations = portfolio_operations
@@ -73,3 +73,22 @@ class SQLiteLeaseFinanceOperations:
         if not context: return None
         responsibility = connection.execute(select(LeaseTerminationProposalModel.rent_responsibility_ends_on).join(LeaseTerminationCaseModel).where(LeaseTerminationCaseModel.lease_id == lease["id"], LeaseTerminationCaseModel.status.in_(("accepted", "completed")), LeaseTerminationProposalModel.status == "accepted").order_by(LeaseTerminationProposalModel.created_at.desc()).limit(1)).scalar_one_or_none()
         return LeaseTermFinanceSnapshot(term["id"], lease["id"], lease["status"], context["property_id"], context["space_id"], context["time_zone"], term["effective_on"], term["ends_on"], term["base_rent_minor"], term["currency_code"], term["payment_frequency"], term["payment_due_day"], lease["actual_move_out_on"], responsibility)
+
+    def deposit_context(self, connection, lease_id, term_id):
+        snapshot = self.historical_term_snapshot(connection, lease_id, term_id)
+        if snapshot is None:
+            return None
+        term = connection.execute(LeaseTermModel.__table__.select().where(LeaseTermModel.id == term_id)).mappings().first()
+        return {
+            "leaseId": snapshot.lease_id, "status": snapshot.lease_status,
+            "propertyId": snapshot.property_id, "spaceId": snapshot.space_id,
+            "timeZone": snapshot.time_zone, "actualMoveOutOn": snapshot.actual_move_out_on,
+            "agreedSecurityDepositMinor": term["agreed_security_deposit_minor"],
+        }
+
+    def deposit_participants(self, connection, lease_id):
+        return set(connection.execute(
+            select(LeaseParticipantModel.tenant_party_id).where(
+                LeaseParticipantModel.lease_id == lease_id
+            )
+        ).scalars())
