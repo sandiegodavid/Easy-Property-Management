@@ -24,6 +24,7 @@ The planned stack is React/Vite/TypeScript for the interface, with Python/FastAP
 - [LEASE-001 lease records and occupancy design](docs/LEASE-001_DESIGN.md)
 - [INSP-001 move-in and move-out condition-report design](docs/INSP-001_DESIGN.md)
 - [FIN-001 rent expectations and recorded-receipts design](docs/FIN-001_DESIGN.md)
+- [FIN-002 recorded property-expenses design](docs/FIN-002_DESIGN.md)
 
 ## Local workspace configuration
 
@@ -44,7 +45,7 @@ Set `localWorkspacePath` in the live file to the chosen external data folder. Th
 - `database` — current SQLite Alembic baseline and future migration location
 - `config.example.json` — safe, Git-tracked local-workspace configuration template
 
-The React interface and shared web packages are planned follow-on work. No UI development begins until `DASH-001`; before then, work is limited to backend capabilities, APIs, CLI/setup tooling, tests, and documentation. Follow the feature backlog sequence and preserve the local workspace, approval, audit, and migration requirements documented in `docs/`.
+The React interface and shared web packages are planned follow-on work. `UI-001`, immediately before `DASH-001`, delivers the deferred operator workflows; before then, work is limited to backend capabilities, APIs, CLI/setup tooling, tests, and documentation. Follow the feature backlog sequence and preserve the local workspace, approval, audit, and migration requirements documented in `docs/`.
 
 ## Local workspace foundation
 

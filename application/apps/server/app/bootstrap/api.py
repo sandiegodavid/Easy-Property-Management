@@ -20,6 +20,7 @@ from app.modules.workspace.application.service import WorkspaceService
 from app.modules.files.application.service import FileService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
+from app.modules.files.infrastructure.expense_operations import SQLiteFileExpenseOperations
 from app.modules.files.api.router import build_router as build_files_router
 from app.modules.files.domain.audit_policy import (
     FILE_ACTIVITY_SNAPSHOT_POLICY,
@@ -72,14 +73,23 @@ from app.modules.vendors.domain.audit_policy import (
     PROVIDER_ACTIVITY_SNAPSHOT_POLICY, PROVIDER_REPUTATION_LINK_ACTIVITY_POLICY,
 )
 from app.modules.finance.api.router import build_router as build_finance_router
+from app.modules.finance.api.expense_router import build_router as build_expense_router
+from app.modules.finance.application.expense_service import ExpenseService
+from app.modules.finance.application.file_links import ExpenseFileLinkValidator
 from app.modules.finance.application.service import FinanceService
+from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpenseUnitOfWork
+from app.modules.finance.infrastructure.file_links import SQLiteExpenseFileLinkOperations
 from app.modules.finance.infrastructure.unit_of_work import SQLiteFinanceUnitOfWork
 from app.modules.finance.domain.audit_policy import (
     EXPECTATION_ACTIVITY_POLICY, REVIEW_ACTIVITY_POLICY,
     RECEIPT_ACTIVITY_POLICY, ALLOCATION_ACTIVITY_POLICY,
+    EXPENSE_ACTIVITY_POLICY, EXPENSE_CATEGORY_ACTIVITY_POLICY,
+    EXPENSE_REFUND_ACTIVITY_POLICY,
 )
 from app.modules.leases.infrastructure.finance_operations import SQLiteLeaseFinanceOperations
+from app.modules.portfolio.infrastructure.expense_operations import SQLitePortfolioExpenseOperations
 from app.modules.portfolio.infrastructure.finance_operations import SQLitePortfolioFinanceOperations
+from app.modules.vendors.infrastructure.expense_operations import SQLiteProviderExpenseOperations
 from app.platform.version import application_version
 
 logger = logging.getLogger(__name__)
@@ -124,7 +134,10 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         additional_stores,
         # Inspection evidence is intentionally not a generic FILE-001 upload.
         # Its dedicated endpoint owns the report audit event and correlation ID.
-        (LeaseFileLinkValidator(lease_unit_of_work),),
+        (
+            LeaseFileLinkValidator(lease_unit_of_work),
+            ExpenseFileLinkValidator(SQLiteExpenseFileLinkOperations(SQLiteFileExpenseOperations())),
+        ),
     )
     remote_materializer = s3_store.materialize if s3_store is not None else None
     backups = BackupService(service, recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)), remote_materializer=remote_materializer)
@@ -157,6 +170,14 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     ))
     finance = FinanceService(SQLiteFinanceUnitOfWork(
         service.paths.database, recorder, SQLiteLeaseFinanceOperations(SQLitePortfolioFinanceOperations()), party_operations,
+    ))
+    expenses = ExpenseService(SQLiteExpenseUnitOfWork(
+        service.paths.database,
+        recorder,
+        SQLitePortfolioExpenseOperations(),
+        SQLiteProviderExpenseOperations(party_operations),
+        party_operations,
+        SQLiteFileExpenseOperations(),
     ))
     inspections = InspectionService(inspection_unit_of_work, files)
     leases = LeaseService(lease_unit_of_work, inspections.attention_for_lease)
@@ -197,6 +218,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.lease_service = leases
     app.state.inspection_service = inspections
     app.state.finance_service = finance
+    app.state.expense_service = expenses
     app.include_router(build_router(service, runtime))
     policies = AuditSnapshotPolicyRegistry({
         ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -238,6 +260,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("rent_expectation_timeliness_review", 1): DEFAULT_SNAPSHOT_POLICY,
         ("rent_receipt", 1): DEFAULT_SNAPSHOT_POLICY,
         ("rent_receipt_allocation", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("expense_category", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("expense", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("expense_refund", 1): DEFAULT_SNAPSHOT_POLICY,
     }, activity_policies={
         ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
         ("file_link", 1): FILE_LINK_ACTIVITY_SNAPSHOT_POLICY,
@@ -259,6 +284,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("rent_expectation_timeliness_review", 1): REVIEW_ACTIVITY_POLICY,
         ("rent_receipt", 1): RECEIPT_ACTIVITY_POLICY,
         ("rent_receipt_allocation", 1): ALLOCATION_ACTIVITY_POLICY,
+        ("expense_category", 1): EXPENSE_CATEGORY_ACTIVITY_POLICY,
+        ("expense", 1): EXPENSE_ACTIVITY_POLICY,
+        ("expense_refund", 1): EXPENSE_REFUND_ACTIVITY_POLICY,
     })
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime))
@@ -270,6 +298,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_lease_router(leases, runtime))
     app.include_router(build_inspection_router(inspections, runtime))
     app.include_router(build_finance_router(finance, runtime))
+    app.include_router(build_expense_router(expenses, runtime))
     return app
 
 

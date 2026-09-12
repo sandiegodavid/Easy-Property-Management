@@ -106,6 +106,7 @@ All IDs and idempotency keys are UUIDs. API monetary values are fixed-scale deci
 | --- | --- |
 | `id` | Stable UUID primary key. |
 | `idempotency_key` | Required client-generated UUID, unique among expenses. |
+| `request_fingerprint` | Required internal SHA-256 fingerprint of the canonical create request, including duplicate and historical-entry confirmations. It makes retry comparison Finance-owned; it is immutable and never returned or shown in audit snapshots. |
 | `property_id` | Required Portfolio property reference. |
 | `space_id` | Optional space reference; when present it belongs to `property_id`. |
 | `category_id` | Required Finance expense-category reference. |

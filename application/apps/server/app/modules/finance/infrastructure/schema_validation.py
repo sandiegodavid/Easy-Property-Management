@@ -2,12 +2,17 @@
 from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint, inspect
 
 from app.modules.finance.infrastructure.sqlalchemy_models import (
+    ExpenseCategoryModel, ExpenseModel, ExpenseRefundModel,
     RentExpectationModel, RentExpectationTimelinessReviewModel,
     RentReceiptModel, RentReceiptAllocationModel,
 )
 from app.platform.migration_errors import MigrationSchemaError
 
-MODELS = (RentExpectationModel, RentExpectationTimelinessReviewModel, RentReceiptModel, RentReceiptAllocationModel)
+MODELS = (
+    RentExpectationModel, RentExpectationTimelinessReviewModel,
+    RentReceiptModel, RentReceiptAllocationModel,
+    ExpenseCategoryModel, ExpenseModel, ExpenseRefundModel,
+)
 
 def validate_finance_schema(connection):
     inspector = inspect(connection)
@@ -27,8 +32,8 @@ def validate_finance_schema(connection):
         expected_fks = {(tuple(element.parent.name for element in item.elements), item.elements[0].column.table.name, tuple(element.column.name for element in item.elements)) for item in table.constraints if isinstance(item, ForeignKeyConstraint)}
         actual_fks = {(tuple(item["constrained_columns"]), item["referred_table"], tuple(item["referred_columns"])) for item in inspector.get_foreign_keys(table.name)}
         if actual_fks != expected_fks: raise MigrationSchemaError("Finance foreign keys are incompatible.")
-        expected_indexes = {item.name: (tuple(column.name for column in item.columns), bool(item.unique)) for item in table.indexes}
-        actual_indexes = {item["name"]: (tuple(item["column_names"]), bool(item.get("unique"))) for item in inspector.get_indexes(table.name)}
+        expected_indexes = {item.name: (tuple(column.name for column in item.columns), bool(item.unique), _where(item.dialect_options["sqlite"].get("where"))) for item in table.indexes}
+        actual_indexes = {item["name"]: (tuple(item["column_names"]), bool(item.get("unique")), _where(item.get("dialect_options", {}).get("sqlite_where"))) for item in inspector.get_indexes(table.name)}
         if actual_indexes != expected_indexes: raise MigrationSchemaError("Finance indexes are incompatible.")
         expected_unique = {tuple(column.name for column in item.columns) for item in table.constraints if isinstance(item, UniqueConstraint)}
         actual_unique = {tuple(item["column_names"]) for item in inspector.get_unique_constraints(table.name)}
@@ -40,3 +45,7 @@ def validate_finance_schema(connection):
 def _normalise(value: str) -> str:
     parts = value.split("'")
     return "'".join(part if index % 2 else "".join(part.lower().split()) for index, part in enumerate(parts))
+
+
+def _where(value) -> str | None:
+    return None if value is None else _normalise(str(value))

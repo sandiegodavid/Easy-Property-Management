@@ -18,3 +18,7 @@ class AllocationActivityPolicy(FinanceActivityPolicy):
         return None if snapshot is None else {"redacted": True}
 
 ALLOCATION_ACTIVITY_POLICY = AllocationActivityPolicy(set())
+
+EXPENSE_CATEGORY_ACTIVITY_POLICY = FinanceActivityPolicy({"id", "displayName", "displayOrder", "archivedAt"})
+EXPENSE_ACTIVITY_POLICY = FinanceActivityPolicy({"id", "propertyId", "paidOn", "voidedAt"})
+EXPENSE_REFUND_ACTIVITY_POLICY = FinanceActivityPolicy({"id", "receivedOn", "voidedAt"})
