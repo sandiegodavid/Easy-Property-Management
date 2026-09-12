@@ -53,7 +53,7 @@ The post-move-out report never overwrites the pre-move-in baseline. Comparisons 
 
 ### Evidence and financial decisions remain separate
 
-An operator may mark a post-move-out observation as `possible_tenant_damage`, but that classification is only evidence. It does not create a receivable or reduce a refund. `FIN-008` must explicitly select supporting observations and costs, apply jurisdiction-aware human review, and record the final settlement decision.
+An operator may mark a post-move-out observation as `possible_tenant_damage`, but that classification is only evidence. It does not create a receivable or reduce a refund. `FIN-008` must explicitly select supporting observations and costs, record operator-reviewed jurisdiction context without inferring statutory requirements, and record the final settlement decision.
 
 ### Inspections guide but do not block lease truth
 

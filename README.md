@@ -25,6 +25,7 @@ The planned stack is React/Vite/TypeScript for the interface, with Python/FastAP
 - [INSP-001 move-in and move-out condition-report design](docs/INSP-001_DESIGN.md)
 - [FIN-001 rent expectations and recorded-receipts design](docs/FIN-001_DESIGN.md)
 - [FIN-002 recorded property-expenses design](docs/FIN-002_DESIGN.md)
+- [FIN-008 security-deposit receipt and settlement design](docs/FIN-008_DESIGN.md)
 
 ## Local workspace configuration
 
