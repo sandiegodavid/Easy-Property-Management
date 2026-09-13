@@ -39,9 +39,7 @@ The UI uses that response only to prefill a new receipt form. The operator may r
 
 ## FIN-007 prepaid-check handoff
 
-`FIN-007` owns a particular future-dated prepaid check and its scheduled/deposited/returned/voided/replaced lifecycle. One FIN-007 check covers exactly one complete `rent_expectation` period; its amount equals that expectation's amount. Multiple periods require multiple checks.
-
-The check does not create a FIN-001 receipt or income merely because it is scheduled or held. When the operator confirms the check was deposited, FIN-007 and FIN-001 use one immediate transaction and correlation ID to create or select the confirmed receipt, allocate it fully to that expectation, link the check to that receipt, and record its deposited status. The rent-receipt snapshot uses `check`; FIN-007 alone retains the check-specific lifecycle and masked check reference.
+`FIN-007` is the authoritative design for a future-dated prepaid check, its reminder, and its scheduled/deposited/returned/voided/replaced lifecycle. It does not create income while scheduled. Deposit performs the correlated FIN-001 receipt/allocation handoff, whose immutable method snapshot uses `check`; FIN-007 alone retains the check-specific lifecycle and masked reference. See [FIN-007_DESIGN.md](FIN-007_DESIGN.md).
 
 ## API and errors
 
@@ -65,4 +63,4 @@ The current greenfield baseline, SQLAlchemy model, exact schema validator, produ
 
 FIN-006 requires `AUDIT-001`, `LEASE-001`, `FIN-001`, `LOCAL-001`, and `LOCAL-002`. It remains a Finance-owned extension of immutable FIN-001 receipt facts and uses the existing transaction-aware lease read port; it does not import leasing, parties, or connector persistence.
 
-FIN-006 is complete when every new receipt has a validated immutable actual-method snapshot; prefill is convenient but never hidden state; audit/activity/backup behavior protects masked information; receipt corrections retain their own snapshots; FIN-007 has a documented one-check/one-expectation handoff; and UI-001 delivers the operator selection workflow.
+FIN-006 is complete when every new receipt has a validated immutable actual-method snapshot; prefill is convenient but never hidden state; audit/activity/backup behavior protects masked information; receipt corrections retain their own snapshots; FIN-007 has an authoritative one-check/one-expectation handoff; and UI-001 delivers the operator selection workflow.

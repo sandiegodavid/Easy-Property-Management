@@ -62,6 +62,10 @@ The allocation total must equal the receipt amount exactly. An expectation canno
 
 The idempotency key is an opaque client-generated UUID, not a fingerprint derived from date, party, space, or amount because two legitimate receipts may share those values. Repeating a request with the same key and semantically identical payload returns the original receipt without new rows or audit events. Reusing the key with a different payload returns `409`. Separately, recording a new active receipt with the same lease, received-on date, amount, and recipient as an existing active receipt requires an explicit confirmed duplicate review and bounded reason; payment method and allocations do not alter that safety check.
 
+### FIN-007 prepaid-check handoff is a controlled source workflow
+
+A scheduled `FIN-007` prepaid check is neither a FIN-001 receipt nor income. On confirmed deposit, FIN-007 coordinates one immediate transaction and correlation ID to create or select the check-method receipt, fully allocate it to the check's one expectation, and link both facts. The internal handoff preserves FIN-001's allocation, lifecycle, idempotency, and likely-duplicate protections; it does not let a prepaid check silently bypass them. Returning the check uses FIN-001's void workflow rather than deleting the receipt or allocation. The full lifecycle, eligibility, reminder, and correction rules are authoritative in [FIN-007_DESIGN.md](FIN-007_DESIGN.md).
+
 ### Payment status is derived, not manually claimed
 
 Views expose both settlement and timeliness rather than collapsing unrelated facts into one mutable status:
@@ -244,4 +248,4 @@ FIN-001 is complete when:
 
 FIN-001 requires completed `AUDIT-001`, `LEASE-001`, `LOCAL-001`, and `LOCAL-002`. It reads PORT-002 space/property context through LEASE-001’s existing relationship, so it does not add a direct Portfolio persistence dependency.
 
-`UI-001` delivers the expectation synchronization/review, receipt allocation, FIN-006 receipt-method selection/prefill, void/replacement, filters, and source-record drill-down workflows. `FIN-007` adds prepaid checks and deposit reminders; `FIN-008` owns deposits and settlement; `FIN-002` owns expenses; `FIN-003` aggregates financial records; `ADJ-001` proposes adjustments and `ADJ-002` owns the resulting effective-dated rent amendment; `COM-001` owns payment follow-up communication; and `DASH-001` surfaces overdue-rent action cards. None may reinterpret FIN-001 status labels as legal conclusions or initiate collection automatically.
+`UI-001` delivers the expectation synchronization/review, receipt allocation, FIN-006 receipt-method selection/prefill, FIN-007 prepaid-check queue and deposit actions, void/replacement, filters, and source-record drill-down workflows. `FIN-008` owns deposits and settlement; `FIN-002` owns expenses; `FIN-003` aggregates financial records; `ADJ-001` proposes adjustments and `ADJ-002` owns the resulting effective-dated rent amendment; `COM-001` owns payment follow-up communication; and `DASH-001` surfaces overdue-rent action cards. None may reinterpret FIN-001 status labels as legal conclusions or initiate collection automatically.

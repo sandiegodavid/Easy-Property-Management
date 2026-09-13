@@ -95,7 +95,7 @@ Connecting Gmail, Outlook.com/Hotmail, or an SMS provider uses that provider's a
 
 Standalone voice notes may be recorded in the application or imported as audio files. The MVP does not record phone calls. After successful transcription, the source audio does not need to be retained. The application keeps the recording or import metadata, editable transcript, AI summary, confidence information, and operator decision.
 
-The MVP records payment methods, including externally arranged automatic bank payments, but does not initiate transfers or store online-banking credentials. Future-dated prepaid checks are tracked as a schedule and are not counted as received income until deposit is confirmed.
+The MVP records payment methods, including externally arranged automatic bank payments, but does not initiate transfers or store online-banking credentials. A future-dated prepaid check covers one complete rent-expectation period, creates a property-local deposit reminder, and is not counted as received income until a confirmed correlated receipt/allocation handoff. Returned, voided, and replacement checks retain history without storing raw check or bank data.
 
 ## Explicit MVP boundaries
 
