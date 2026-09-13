@@ -1,5 +1,5 @@
 """SQLAlchemy metadata owned by FIN-001."""
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, text
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 from app.platform.sqlalchemy_models import LocalBase
 
@@ -31,6 +31,65 @@ class RentReceiptAllocationModel(LocalBase):
     __tablename__ = "rent_receipt_allocations"
     id: Mapped[str] = mapped_column(String, primary_key=True); receipt_id: Mapped[str] = mapped_column(ForeignKey("rent_receipts.id"), nullable=False); expectation_id: Mapped[str] = mapped_column(ForeignKey("rent_expectations.id"), nullable=False); amount_minor: Mapped[int] = mapped_column(Integer, nullable=False); created_at: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (CheckConstraint("typeof(amount_minor) = 'integer' AND amount_minor > 0"), Index("rent_receipt_allocations_one_receipt_expectation", "receipt_id", "expectation_id", unique=True), Index("rent_receipt_allocations_expectation", "expectation_id"))
+
+
+class PrepaidCheckModel(LocalBase):
+    __tablename__ = "prepaid_checks"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    expectation_id: Mapped[str] = mapped_column(ForeignKey("rent_expectations.id"), nullable=False)
+    lease_id: Mapped[str] = mapped_column(ForeignKey("leases.id"), nullable=False)
+    payer_party_id: Mapped[str] = mapped_column(ForeignKey("parties.id"), nullable=False)
+    received_on: Mapped[str] = mapped_column(String, nullable=False)
+    check_dated_on: Mapped[str] = mapped_column(String, nullable=False)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency_code: Mapped[str] = mapped_column(String, nullable=False)
+    masked_reference: Mapped[str | None] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    receipt_id: Mapped[str | None] = mapped_column(ForeignKey("rent_receipts.id"), unique=True)
+    deposited_on: Mapped[str | None] = mapped_column(String)
+    returned_on: Mapped[str | None] = mapped_column(String)
+    returned_reason: Mapped[str | None] = mapped_column(String)
+    voided_at: Mapped[str | None] = mapped_column(String)
+    void_reason: Mapped[str | None] = mapped_column(String)
+    replaces_prepaid_check_id: Mapped[str | None] = mapped_column(ForeignKey("prepaid_checks.id"), unique=True)
+    replaced_by_prepaid_check_id: Mapped[str | None] = mapped_column(ForeignKey("prepaid_checks.id"), unique=True)
+    replacement_reason: Mapped[str | None] = mapped_column(String)
+    reminder_task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id"), unique=True)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint("typeof(amount_minor) = 'integer' AND amount_minor BETWEEN 1 AND 9999999999"),
+        CheckConstraint("currency_code = 'USD'"),
+        CheckConstraint("received_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND received_on >= '1900-01-01' AND date(received_on, '+0 days') = received_on"),
+        CheckConstraint("check_dated_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND check_dated_on >= '1900-01-01' AND date(check_dated_on, '+0 days') = check_dated_on"),
+        CheckConstraint("deposited_on IS NULL OR (deposited_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND deposited_on >= '1900-01-01' AND date(deposited_on, '+0 days') = deposited_on)"),
+        CheckConstraint("returned_on IS NULL OR (returned_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND returned_on >= '1900-01-01' AND date(returned_on, '+0 days') = returned_on)"),
+        CheckConstraint("check_dated_on > received_on"),
+        CheckConstraint("masked_reference IS NULL OR length(trim(masked_reference)) BETWEEN 1 AND 80"),
+        CheckConstraint("status IN ('scheduled', 'deposited', 'returned', 'voided', 'replaced')"),
+        CheckConstraint("(status = 'scheduled' AND receipt_id IS NULL AND deposited_on IS NULL AND returned_on IS NULL AND returned_reason IS NULL AND voided_at IS NULL AND void_reason IS NULL AND replaced_by_prepaid_check_id IS NULL AND replacement_reason IS NULL) OR (status = 'deposited' AND receipt_id IS NOT NULL AND deposited_on IS NOT NULL AND deposited_on >= check_dated_on AND returned_on IS NULL AND returned_reason IS NULL AND voided_at IS NULL AND void_reason IS NULL AND replaced_by_prepaid_check_id IS NULL AND replacement_reason IS NULL) OR (status = 'returned' AND receipt_id IS NOT NULL AND deposited_on IS NOT NULL AND deposited_on >= check_dated_on AND returned_on IS NOT NULL AND returned_on >= deposited_on AND returned_reason IS NOT NULL AND length(trim(returned_reason)) BETWEEN 1 AND 1000 AND voided_at IS NULL AND void_reason IS NULL AND replaced_by_prepaid_check_id IS NULL AND replacement_reason IS NULL) OR (status = 'voided' AND receipt_id IS NULL AND deposited_on IS NULL AND returned_on IS NULL AND returned_reason IS NULL AND voided_at IS NOT NULL AND void_reason IS NOT NULL AND length(trim(void_reason)) BETWEEN 1 AND 1000 AND replaced_by_prepaid_check_id IS NULL AND replacement_reason IS NULL) OR (status = 'replaced' AND replaced_by_prepaid_check_id IS NOT NULL AND replacement_reason IS NOT NULL AND length(trim(replacement_reason)) BETWEEN 1 AND 1000 AND ((receipt_id IS NOT NULL AND deposited_on IS NOT NULL AND deposited_on >= check_dated_on AND returned_on IS NOT NULL AND returned_on >= deposited_on AND returned_reason IS NOT NULL AND voided_at IS NULL AND void_reason IS NULL) OR (receipt_id IS NULL AND deposited_on IS NULL AND returned_on IS NULL AND returned_reason IS NULL AND voided_at IS NOT NULL AND void_reason IS NOT NULL)))"),
+        Index("prepaid_checks_expectation", "expectation_id", "created_at"),
+        Index("prepaid_checks_lease_state_date", "lease_id", "status", "check_dated_on"),
+        Index("prepaid_checks_one_scheduled_expectation", "expectation_id", unique=True, sqlite_where=text("status = 'scheduled'")),
+    )
+
+
+class PrepaidCheckOperationModel(LocalBase):
+    __tablename__ = "prepaid_check_operations"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    target_prepaid_check_id: Mapped[str] = mapped_column(ForeignKey("prepaid_checks.id"), nullable=False)
+    result_prepaid_check_id: Mapped[str] = mapped_column(ForeignKey("prepaid_checks.id"), nullable=False)
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint("action IN ('create', 'deposit', 'return', 'void', 'replace')"),
+        CheckConstraint("length(request_fingerprint) = 64 AND request_fingerprint NOT GLOB '*[^0123456789abcdef]*'"),
+        UniqueConstraint("target_prepaid_check_id", "action"),
+        Index("prepaid_check_operations_target", "target_prepaid_check_id", "created_at"),
+    )
 
 
 class ExpenseCategoryModel(LocalBase):

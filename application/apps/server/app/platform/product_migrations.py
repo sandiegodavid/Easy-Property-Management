@@ -68,7 +68,7 @@ def validate_latest_schema(database_path: Path) -> None:
                 "condition_checklist_templates", "condition_checklist_template_items",
                 "provider_profiles", "provider_services", "provider_service_areas",
                 "provider_work_history", "provider_references", "provider_reputation_links",
-                "rent_expectations", "rent_expectation_timeliness_reviews", "rent_receipts", "rent_receipt_allocations",
+                    "rent_expectations", "rent_expectation_timeliness_reviews", "rent_receipts", "rent_receipt_allocations", "prepaid_checks", "prepaid_check_operations",
                 "expense_categories", "expenses", "expense_refunds",
                 "security_deposit_accounts", "security_deposit_receipts", "security_deposit_settlements",
                 "security_deposit_settlement_receipts", "security_deposit_deductions",

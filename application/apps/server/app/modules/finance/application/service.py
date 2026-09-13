@@ -6,6 +6,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 from app.modules.finance.application.ports import FinanceUnitOfWork
+from app.modules.finance.application.receipt_handoff import record_receipt_in_transaction, void_receipt_in_transaction
 from app.modules.finance.domain.models import FinanceConflictError, FinanceError, FinanceNotFoundError, RentExpectation, RentReceipt, RecordReceiptCommand, SynchronizeExpectationsCommand, TimelinessReviewCommand, VoidCommand
 
 class FinanceService:
@@ -118,58 +119,10 @@ class FinanceService:
             if old:
                 if _receipt_payload(old,tx.receipt_allocations(old.id)) != _command_payload(command): raise FinanceConflictError("Idempotency key was already used for a different receipt.")
                 return self._receipt_view(old, tx.receipt_projection([old.id])[old.id])
-            if command.received_by_party_id and not tx.party_exists(command.received_by_party_id): raise FinanceNotFoundError("Recipient party was not found.")
-            duplicates = tx.likely_duplicate_receipts(
-                lease_id=command.lease_id, received_on=command.received_on,
-                amount_minor=command.amount_minor,
-                received_by_party_id=command.received_by_party_id,
+            receipt = record_receipt_in_transaction(
+                tx, command, now=self.now, correlation_id=str(uuid4()),
+                audit_reason="Rent receipt recorded.",
             )
-            if duplicates and not command.duplicate_confirmed:
-                raise FinanceConflictError(
-                    "A matching active receipt already exists; explicit duplicate confirmation is required."
-                )
-            if not duplicates and command.duplicate_confirmed:
-                raise FinanceConflictError("Duplicate confirmation is not applicable because no matching receipt exists.")
-            expectations=[]
-            for allocation in command.allocations:
-                item=tx.expectation(allocation.expectation_id)
-                if not item: raise FinanceNotFoundError("Allocated expectation was not found.")
-                if item.lease_id!=command.lease_id or item.currency_code!="USD" or item.voided_at: raise FinanceConflictError("Allocation target is not eligible.")
-                if tx.allocated_amount(item.id)+allocation.amount_minor>item.expected_amount_minor: raise FinanceConflictError("Allocation exceeds expected rent.")
-                expectations.append(item)
-            zone = tx.lease_time_zone(command.lease_id)
-            if zone is None: raise FinanceConflictError("Receipt lease property is unavailable.")
-            if date.fromisoformat(command.received_on) > self.now().astimezone(ZoneInfo(zone)).date(): raise FinanceError("Received date cannot be in the future.")
-            if command.replaces_receipt_id:
-                replaced=tx.receipt(command.replaces_receipt_id)
-                if not replaced: raise FinanceNotFoundError("Replaced receipt was not found.")
-                if not replaced.voided_at or replaced.lease_id!=command.lease_id or replaced.currency_code!="USD": raise FinanceConflictError("Replacement must target a voided receipt on the same lease.")
-                if tx.replacement_exists(replaced.id): raise FinanceConflictError("A replacement receipt already exists.")
-            created_at = _stamp(self.now())
-            receipt = RentReceipt(
-                id=str(uuid4()), lease_id=command.lease_id,
-                idempotency_key=command.idempotency_key,
-                received_on=command.received_on, amount_minor=command.amount_minor,
-                currency_code="USD", payment_method_kind=command.payment_method_kind,
-                payment_method_label=command.payment_method_label,
-                masked_reference=command.masked_reference,
-                other_payment_method_note=command.other_payment_method_note,
-                received_by_party_id=command.received_by_party_id,
-                replaces_receipt_id=command.replaces_receipt_id, notes=command.notes,
-                voided_at=None, void_reason=None, created_at=created_at,
-            )
-            correlation=str(uuid4()); tx.insert_receipt(receipt)
-            audit_snapshot = receipt.to_dict()
-            if duplicates:
-                audit_snapshot = {
-                    **audit_snapshot,
-                    "duplicateConfirmed": True,
-                    "duplicateReason": command.duplicate_reason,
-                    "duplicateCandidateReceiptIds": [item.id for item in duplicates],
-                }
-            tx.record_change(entity_type="rent_receipt",entity_id=receipt.id,action="recorded",before=None,after=audit_snapshot,reason="Rent receipt recorded.",correlation_id=correlation)
-            for allocation in command.allocations:
-                row={"id":str(uuid4()),"receipt_id":receipt.id,"expectation_id":allocation.expectation_id,"amount_minor":allocation.amount_minor,"created_at":created_at}; tx.insert_allocation(row); tx.record_change(entity_type="rent_receipt_allocation",entity_id=row["id"],action="created",before=None,after=_camel(row),reason="Receipt allocation recorded.",correlation_id=correlation)
             return self._receipt_view(receipt, tx.receipt_projection([receipt.id])[receipt.id])
         return self.unit_of_work.write(operation)
     def receipt(self, receipt_id):
@@ -233,7 +186,11 @@ class FinanceService:
             old=tx.receipt(receipt_id)
             if not old: raise FinanceNotFoundError("Rent receipt was not found.")
             if old.voided_at: raise FinanceConflictError("Rent receipt is already voided.")
-            new=replace(old,voided_at=_stamp(self.now()),void_reason=command.reason); tx.replace_receipt(new); tx.record_change(entity_type="rent_receipt",entity_id=new.id,action="voided",before=old.to_dict(),after=new.to_dict(),reason=None,correlation_id=str(uuid4())); return self._receipt_view(new, tx.receipt_projection([new.id])[new.id])
+            check = tx.prepaid_check_by_receipt(old.id)
+            if check is not None and check.status == "deposited":
+                raise FinanceConflictError("A deposited prepaid-check receipt must be returned through FIN-007.")
+            new = void_receipt_in_transaction(tx, old, now=self.now, reason=command.reason, correlation_id=str(uuid4()))
+            return self._receipt_view(new, tx.receipt_projection([new.id])[new.id])
         return self.unit_of_work.write(operation)
     def void_expectation(self, expectation_id, command: VoidCommand):
         def operation(tx):

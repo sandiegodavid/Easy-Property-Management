@@ -39,6 +39,7 @@ class FinanceActivityPolicy:
 EXPECTATION_ACTIVITY_POLICY = FinanceActivityPolicy({"id", "leaseId", "dueOn", "periodStartsOn", "periodEndsOn", "lifecycleStatus"})
 REVIEW_ACTIVITY_POLICY = FinanceActivityPolicy({"id", "expectationId", "decision", "createdAt"})
 RECEIPT_ACTIVITY_POLICY = FinanceActivityPolicy({"id", "leaseId", "receivedOn", "voidedAt"})
+PREPAID_CHECK_ACTIVITY_POLICY = FinanceActivityPolicy({"id", "leaseId", "checkDatedOn", "status", "depositedOn", "returnedOn", "voidedAt", "createdAt", "updatedAt"})
 class AllocationActivityPolicy(FinanceActivityPolicy):
     def redact(self, snapshot):
         return None if snapshot is None else {"redacted": True}

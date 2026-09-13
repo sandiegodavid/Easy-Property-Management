@@ -1,10 +1,14 @@
 """Exact current FIN-001 schema validation."""
 from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint, inspect, text
+from uuid import UUID
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from app.modules.finance.infrastructure.sqlalchemy_models import (
     ExpenseCategoryModel, ExpenseModel, ExpenseRefundModel,
     RentExpectationModel, RentExpectationTimelinessReviewModel,
     RentReceiptModel, RentReceiptAllocationModel,
+    PrepaidCheckModel, PrepaidCheckOperationModel,
     SecurityDepositAccountModel, SecurityDepositReceiptModel,
     SecurityDepositSettlementModel, SecurityDepositSettlementReceiptModel,
     SecurityDepositDeductionModel, SecurityDepositDeductionSourceModel,
@@ -16,6 +20,7 @@ from app.modules.finance.domain.models import FinanceError, PAYMENT_METHOD_KINDS
 MODELS = (
     RentExpectationModel, RentExpectationTimelinessReviewModel,
     RentReceiptModel, RentReceiptAllocationModel,
+    PrepaidCheckModel, PrepaidCheckOperationModel,
     ExpenseCategoryModel, ExpenseModel, ExpenseRefundModel,
     SecurityDepositAccountModel, SecurityDepositReceiptModel,
     SecurityDepositSettlementModel, SecurityDepositSettlementReceiptModel,
@@ -71,7 +76,96 @@ def validate_finance_data(connection):
                 raise FinanceError("Other payment method note is invalid.")
         except FinanceError as error:
             raise MigrationSchemaError("FIN-006 receipt-method data is incompatible.") from error
+    for check in connection.execute(text("SELECT idempotency_key, correlation_id, request_fingerprint FROM prepaid_check_operations")).mappings():
+        try:
+            UUID(check["idempotency_key"])
+            UUID(check["correlation_id"])
+            if not isinstance(check["request_fingerprint"], str) or len(check["request_fingerprint"]) != 64 or any(value not in "0123456789abcdef" for value in check["request_fingerprint"]):
+                raise ValueError("request fingerprint is not canonical SHA-256")
+        except (TypeError, ValueError, AttributeError) as error:
+            raise MigrationSchemaError("FIN-007 operation identifiers are incompatible.") from error
+    for check in connection.execute(text("SELECT masked_reference FROM prepaid_checks")).mappings():
+        try:
+            validate_masked_reference(check["masked_reference"])
+        except FinanceError as error:
+            raise MigrationSchemaError("FIN-007 prepaid-check data is incompatible.") from error
     checks = (
+        """SELECT 1 FROM prepaid_checks item JOIN rent_expectations expectation ON expectation.id = item.expectation_id
+            WHERE item.lease_id != expectation.lease_id OR item.amount_minor != expectation.expected_amount_minor
+               OR item.currency_code != expectation.currency_code OR expectation.is_prorated != 0 LIMIT 1""",
+        """SELECT 1 FROM prepaid_checks item
+            WHERE item.status = 'scheduled' AND (
+                EXISTS (SELECT 1 FROM rent_expectations expectation WHERE expectation.id = item.expectation_id AND expectation.voided_at IS NOT NULL)
+                OR COALESCE((SELECT SUM(allocation.amount_minor) FROM rent_receipt_allocations allocation
+                    JOIN rent_receipts receipt ON receipt.id = allocation.receipt_id
+                    WHERE allocation.expectation_id = item.expectation_id AND receipt.voided_at IS NULL), 0) != 0
+            ) LIMIT 1""",
+        """SELECT 1 FROM prepaid_checks item JOIN rent_receipts receipt ON receipt.id = item.receipt_id
+            WHERE (item.status = 'deposited' AND (receipt.voided_at IS NOT NULL OR receipt.payment_method_kind != 'check'))
+               OR (item.status IN ('returned', 'replaced') AND item.receipt_id IS NOT NULL AND receipt.voided_at IS NULL) LIMIT 1""",
+        """SELECT 1 FROM prepaid_checks item JOIN rent_receipts receipt ON receipt.id = item.receipt_id
+            WHERE item.receipt_id IS NOT NULL AND (
+                receipt.lease_id != item.lease_id OR receipt.amount_minor != item.amount_minor OR receipt.currency_code != item.currency_code
+                OR (SELECT COUNT(*) FROM rent_receipt_allocations allocation WHERE allocation.receipt_id = item.receipt_id) != 1
+                OR NOT EXISTS (SELECT 1 FROM rent_receipt_allocations allocation
+                    WHERE allocation.receipt_id = item.receipt_id AND allocation.expectation_id = item.expectation_id
+                      AND allocation.amount_minor = item.amount_minor)
+            ) LIMIT 1""",
+        """SELECT 1 FROM prepaid_checks item
+            WHERE (item.status IN ('deposited', 'returned', 'replaced') AND NOT EXISTS (
+                SELECT 1 FROM prepaid_check_operations operation WHERE operation.target_prepaid_check_id = item.id AND operation.result_prepaid_check_id = item.id AND operation.action = 'deposit'
+            )) OR (item.status IN ('returned', 'replaced') AND item.receipt_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM prepaid_check_operations operation WHERE operation.target_prepaid_check_id = item.id AND operation.result_prepaid_check_id = item.id AND operation.action = 'return'
+            )) OR (item.status IN ('voided', 'replaced') AND item.receipt_id IS NULL AND NOT EXISTS (
+                SELECT 1 FROM prepaid_check_operations operation WHERE operation.target_prepaid_check_id = item.id AND operation.result_prepaid_check_id = item.id AND operation.action = 'void'
+            )) OR (item.replaces_prepaid_check_id IS NULL AND NOT EXISTS (
+                SELECT 1 FROM prepaid_check_operations operation WHERE operation.target_prepaid_check_id = item.id AND operation.result_prepaid_check_id = item.id AND operation.action = 'create'
+            )) OR (item.replaces_prepaid_check_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM prepaid_check_operations operation WHERE operation.target_prepaid_check_id = item.replaces_prepaid_check_id AND operation.result_prepaid_check_id = item.id AND operation.action = 'replace'
+            )) LIMIT 1""",
+        """SELECT 1 FROM prepaid_checks item
+            WHERE item.reminder_task_id IS NULL OR (
+                NOT EXISTS (SELECT 1 FROM tasks task WHERE task.id = item.reminder_task_id
+                    AND task.related_entity_type = 'prepaid_check' AND task.related_entity_id = item.id AND task.is_all_day = 1)
+                OR (SELECT COUNT(*) FROM task_reminders reminder WHERE reminder.task_id = item.reminder_task_id) != 1
+                OR NOT EXISTS (SELECT 1 FROM task_reminders reminder WHERE reminder.task_id = item.reminder_task_id
+                    AND reminder.remind_at_utc = (SELECT due_at_utc FROM tasks task WHERE task.id = item.reminder_task_id))
+                OR (item.status != 'scheduled' AND EXISTS (SELECT 1 FROM task_reminders reminder
+                    WHERE reminder.task_id = item.reminder_task_id AND reminder.status = 'pending'))
+            ) LIMIT 1""",
+        """SELECT 1 FROM prepaid_checks item
+            JOIN leases lease ON lease.id = item.lease_id
+            JOIN spaces space ON space.id = lease.space_id
+            JOIN properties property ON property.id = space.property_id
+            JOIN tasks task ON task.id = item.reminder_task_id
+            WHERE task.due_timezone != property.time_zone LIMIT 1""",
+        """SELECT 1 FROM prepaid_checks replacement JOIN prepaid_checks original
+            ON original.id = replacement.replaces_prepaid_check_id
+            WHERE replacement.expectation_id != original.expectation_id OR replacement.payer_party_id != original.payer_party_id
+               OR original.status != 'replaced' OR original.replaced_by_prepaid_check_id != replacement.id LIMIT 1""",
+        """SELECT 1 FROM prepaid_checks predecessor JOIN prepaid_checks replacement
+            ON replacement.id = predecessor.replaced_by_prepaid_check_id
+            WHERE replacement.replaces_prepaid_check_id != predecessor.id LIMIT 1""",
+        """SELECT 1 FROM prepaid_check_operations operation
+            WHERE (operation.action IN ('create', 'deposit', 'return', 'void')
+                    AND operation.target_prepaid_check_id != operation.result_prepaid_check_id)
+               OR (operation.action = 'replace' AND NOT EXISTS (
+                    SELECT 1 FROM prepaid_checks predecessor JOIN prepaid_checks replacement
+                    ON replacement.id = operation.result_prepaid_check_id
+                    WHERE predecessor.id = operation.target_prepaid_check_id
+                      AND predecessor.status = 'replaced'
+                      AND predecessor.replaced_by_prepaid_check_id = replacement.id
+                      AND replacement.replaces_prepaid_check_id = predecessor.id
+               )) LIMIT 1""",
+        """WITH RECURSIVE chain(start_id, next_id, path) AS (
+                SELECT id, replaces_prepaid_check_id, id || ',' FROM prepaid_checks
+                UNION ALL
+                SELECT chain.start_id, item.replaces_prepaid_check_id, chain.path || item.id || ','
+                FROM chain JOIN prepaid_checks item ON item.id = chain.next_id
+                WHERE instr(chain.path, item.id || ',') = 0
+            )
+            SELECT 1 FROM chain JOIN prepaid_checks item ON item.id = chain.next_id
+            WHERE instr(chain.path, item.id || ',') > 0 LIMIT 1""",
         """SELECT 1 FROM security_deposit_settlement_receipts captured
             JOIN security_deposit_settlements settlement ON settlement.id = captured.settlement_id
             JOIN security_deposit_receipts receipt ON receipt.id = captured.receipt_id
@@ -213,6 +307,21 @@ def validate_finance_data(connection):
     for query in checks:
         if connection.execute(text(query)).first() is not None:
             raise MigrationSchemaError("FIN-008 data integrity is incompatible.")
+    reminders = connection.execute(text("""
+        SELECT item.check_dated_on, task.due_at_utc, task.due_timezone
+        FROM prepaid_checks item JOIN tasks task ON task.id = item.reminder_task_id
+        WHERE item.reminder_task_id IS NOT NULL
+    """)).mappings()
+    for reminder in reminders:
+        try:
+            due_at = datetime.fromisoformat(reminder["due_at_utc"])
+            if due_at.tzinfo is None:
+                raise ValueError("reminder timestamp must be timezone-aware")
+            due_date = due_at.astimezone(ZoneInfo(reminder["due_timezone"])).date().isoformat()
+        except (TypeError, ValueError):
+            raise MigrationSchemaError("FIN-007 reminder scheduling is incompatible.") from None
+        if due_date != reminder["check_dated_on"]:
+            raise MigrationSchemaError("FIN-007 reminder scheduling is incompatible.")
 
 def _normalise(value: str) -> str:
     parts = value.split("'")

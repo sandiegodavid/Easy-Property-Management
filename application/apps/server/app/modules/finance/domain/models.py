@@ -10,7 +10,13 @@ from uuid import UUID
 class FinanceError(RuntimeError): pass
 class FinanceValidationError(FinanceError): pass
 class FinanceNotFoundError(FinanceError): pass
-class FinanceConflictError(FinanceError): pass
+class FinanceConflictError(FinanceError):
+    """A stable, machine-readable finance lifecycle conflict."""
+
+    def __init__(self, message: str, *, code: str = "finance_conflict", details: dict[str, object] | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.details = details or {}
 
 
 PAYMENT_METHOD_KINDS = frozenset({
@@ -136,6 +142,77 @@ class RentExpectation:
 @dataclass(frozen=True)
 class RentReceipt:
     id: str; lease_id: str; idempotency_key: str; received_on: str; amount_minor: int; currency_code: str; payment_method_kind: str; payment_method_label: str | None; masked_reference: str | None; other_payment_method_note: str | None; received_by_party_id: str | None; replaces_receipt_id: str | None; notes: str | None; voided_at: str | None; void_reason: str | None; created_at: str
+    def to_dict(self): return _camel(asdict(self))
+
+
+PREPAID_CHECK_STATES = frozenset({"scheduled", "deposited", "returned", "voided", "replaced"})
+
+
+@dataclass(frozen=True)
+class PrepaidCheckCommand:
+    expectation_id: str
+    payer_party_id: str
+    received_on: str
+    check_dated_on: str
+    masked_reference: str | None
+    idempotency_key: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "expectation_id", _uuid(self.expectation_id, "Expectation ID"))
+        object.__setattr__(self, "payer_party_id", _uuid(self.payer_party_id, "Payer party ID"))
+        object.__setattr__(self, "received_on", _date(self.received_on, "Received date"))
+        object.__setattr__(self, "check_dated_on", _date(self.check_dated_on, "Check date"))
+        if self.check_dated_on <= self.received_on:
+            raise FinanceValidationError("Check date must be after the received date.")
+        object.__setattr__(self, "masked_reference", _masked_reference(self.masked_reference))
+        object.__setattr__(self, "idempotency_key", _uuid(self.idempotency_key, "Idempotency key"))
+
+
+@dataclass(frozen=True)
+class PrepaidCheckTransitionCommand:
+    idempotency_key: str
+    confirmed: bool
+    reason: str | None = None
+    occurred_on: str | None = None
+    existing_receipt_id: str | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "idempotency_key", _uuid(self.idempotency_key, "Idempotency key"))
+        if type(self.confirmed) is not bool or not self.confirmed:
+            raise FinanceValidationError("Explicit confirmation is required.")
+        if self.reason is not None:
+            object.__setattr__(self, "reason", _text(self.reason, "Reason", 1000, required=True))
+        if self.occurred_on is not None:
+            object.__setattr__(self, "occurred_on", _date(self.occurred_on, "Occurred date"))
+        if self.existing_receipt_id is not None:
+            object.__setattr__(self, "existing_receipt_id", _uuid(self.existing_receipt_id, "Receipt ID"))
+
+
+@dataclass(frozen=True)
+class PrepaidCheck:
+    id: str
+    expectation_id: str
+    lease_id: str
+    payer_party_id: str
+    received_on: str
+    check_dated_on: str
+    amount_minor: int
+    currency_code: str
+    masked_reference: str | None
+    status: str
+    receipt_id: str | None
+    deposited_on: str | None
+    returned_on: str | None
+    returned_reason: str | None
+    voided_at: str | None
+    void_reason: str | None
+    replaces_prepaid_check_id: str | None
+    replaced_by_prepaid_check_id: str | None
+    replacement_reason: str | None
+    reminder_task_id: str | None
+    created_at: str
+    updated_at: str
+
     def to_dict(self): return _camel(asdict(self))
 
 def _camel(values): return {key.split("_")[0] + "".join(word.title() for word in key.split("_")[1:]): value for key, value in values.items()}

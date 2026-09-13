@@ -4,28 +4,29 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 from sqlalchemy import and_, func, or_, select, text
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.finance.application.ports import FinanceTransaction, LeaseFinanceOperations, PartyFinanceOperations
-from app.modules.finance.domain.models import RentExpectation, RentReceipt
-from app.modules.finance.infrastructure.sqlalchemy_models import RentExpectationModel, RentExpectationTimelinessReviewModel, RentReceiptModel, RentReceiptAllocationModel
+from app.modules.finance.application.ports import FinanceTransaction, LeaseFinanceOperations, PartyFinanceOperations, TaskFinanceOperations
+from app.modules.finance.domain.models import PrepaidCheck, RentExpectation, RentReceipt
+from app.modules.finance.infrastructure.sqlalchemy_models import PrepaidCheckModel, PrepaidCheckOperationModel, RentExpectationModel, RentExpectationTimelinessReviewModel, RentReceiptModel, RentReceiptAllocationModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 Result = TypeVar("Result")
 class SQLiteFinanceUnitOfWork:
-    def __init__(self, database, recorder: AuditRecorder, lease_operations: LeaseFinanceOperations, party_operations: PartyFinanceOperations): self.engine=create_sqlite_engine(database); self.recorder=recorder; self.lease_operations=lease_operations; self.party_operations=party_operations
+    def __init__(self, database, recorder: AuditRecorder, lease_operations: LeaseFinanceOperations, party_operations: PartyFinanceOperations, task_operations: TaskFinanceOperations | None = None): self.engine=create_sqlite_engine(database); self.recorder=recorder; self.lease_operations=lease_operations; self.party_operations=party_operations; self.task_operations=task_operations
     def write(self, operation: Callable[[FinanceTransaction], Result]) -> Result:
-        with immediate_transaction(self.engine) as connection: return operation(_Tx(connection, self.recorder, self.lease_operations, self.party_operations))
+        with immediate_transaction(self.engine) as connection: return operation(_Tx(connection, self.recorder, self.lease_operations, self.party_operations, self.task_operations))
     def read(self, operation: Callable[[FinanceTransaction], Result]) -> Result:
         # Listing and presentation never write.  Keep them out of SQLite's
         # immediate writer transaction so ordinary GET requests retain WAL's
         # concurrent-read behaviour.
         with self.engine.connect() as connection:
-            return operation(_Tx(connection, self.recorder, self.lease_operations, self.party_operations))
+            return operation(_Tx(connection, self.recorder, self.lease_operations, self.party_operations, self.task_operations))
 class _Tx:
-    def __init__(self, connection, recorder, lease_operations, party_operations): self.connection=connection; self.recorder=recorder; self.lease_operations=lease_operations; self.party_operations=party_operations
+    def __init__(self, connection, recorder, lease_operations, party_operations, task_operations): self.connection=connection; self.recorder=recorder; self.lease_operations=lease_operations; self.party_operations=party_operations; self.task_operations=task_operations
     def lease_term_snapshot(self, lease_id, term_id): return self.lease_operations.term_snapshot(self.connection, lease_id, term_id)
     def historical_term_snapshot(self, lease_id, term_id): return self.lease_operations.historical_term_snapshot(self.connection, lease_id, term_id)
     def historical_term_snapshots(self, pairs): return self.lease_operations.historical_term_snapshots(self.connection, pairs)
     def party_exists(self, party_id): return self.party_operations.exists(self.connection, party_id)
     def lease_time_zone(self, lease_id): return self.lease_operations.lease_time_zone(self.connection, lease_id)
+    def participant_active(self, lease_id, party_id, on): return self.lease_operations.participant_active(self.connection, lease_id, party_id, on)
     def expectation(self, record_id):
         row=self.connection.execute(RentExpectationModel.__table__.select().where(RentExpectationModel.id==record_id)).mappings().first(); return RentExpectation(**dict(row)) if row else None
     def expectations_for_term(self, term_id): return self.expectations(lease_term_id=term_id)
@@ -239,4 +240,39 @@ class _Tx:
     def replace_receipt(self,item): self.connection.execute(RentReceiptModel.__table__.update().where(RentReceiptModel.id==item.id).values(**item.__dict__))
     def insert_allocation(self,item): self.connection.execute(RentReceiptAllocationModel.__table__.insert().values(**item))
     def insert_review(self,item): self.connection.execute(RentExpectationTimelinessReviewModel.__table__.insert().values(**item))
+    def prepaid_check(self, check_id):
+        row = self.connection.execute(PrepaidCheckModel.__table__.select().where(PrepaidCheckModel.id == check_id)).mappings().first()
+        return PrepaidCheck(**dict(row)) if row else None
+    def prepaid_checks(self, *, lease_id=None, status=None):
+        query = PrepaidCheckModel.__table__.select()
+        if lease_id is not None: query = query.where(PrepaidCheckModel.lease_id == lease_id)
+        if status is not None: query = query.where(PrepaidCheckModel.status == status)
+        return [PrepaidCheck(**dict(row)) for row in self.connection.execute(query.order_by(PrepaidCheckModel.check_dated_on, PrepaidCheckModel.id)).mappings()]
+    def prepaid_check_page(self, *, lease_id=None, payer_party_id=None, expectation_id=None, status=None, cursor=None, limit=101):
+        query = PrepaidCheckModel.__table__.select()
+        if lease_id is not None: query = query.where(PrepaidCheckModel.lease_id == lease_id)
+        if payer_party_id is not None: query = query.where(PrepaidCheckModel.payer_party_id == payer_party_id)
+        if expectation_id is not None: query = query.where(PrepaidCheckModel.expectation_id == expectation_id)
+        if status is not None: query = query.where(PrepaidCheckModel.status == status)
+        if cursor is not None:
+            query = query.where((PrepaidCheckModel.check_dated_on > cursor[0]) | ((PrepaidCheckModel.check_dated_on == cursor[0]) & (PrepaidCheckModel.id > cursor[1])))
+        return [PrepaidCheck(**dict(row)) for row in self.connection.execute(query.order_by(PrepaidCheckModel.check_dated_on, PrepaidCheckModel.id).limit(limit)).mappings()]
+    def prepaid_check_by_operation_key(self, key):
+        row = self.connection.execute(PrepaidCheckOperationModel.__table__.select().where(PrepaidCheckOperationModel.idempotency_key == key)).mappings().first()
+        return dict(row) if row else None
+    def prepaid_check_by_receipt(self, receipt_id):
+        row = self.connection.execute(PrepaidCheckModel.__table__.select().where(PrepaidCheckModel.receipt_id == receipt_id)).mappings().first()
+        return PrepaidCheck(**dict(row)) if row else None
+    def insert_prepaid_check(self, item): self.connection.execute(PrepaidCheckModel.__table__.insert().values(**item.__dict__))
+    def replace_prepaid_check(self, item): self.connection.execute(PrepaidCheckModel.__table__.update().where(PrepaidCheckModel.id == item.id).values(**item.__dict__))
+    def insert_prepaid_check_operation(self, item): self.connection.execute(PrepaidCheckOperationModel.__table__.insert().values(**item))
+    def create_prepaid_check_reminder(self, *, check_id, due_at_utc, due_timezone, correlation_id):
+        if self.task_operations is None: raise RuntimeError("TASK-001 operations are not configured.")
+        return self.task_operations.create_prepaid_check_reminder(self.connection, check_id=check_id, due_at_utc=due_at_utc, due_timezone=due_timezone, correlation_id=correlation_id, record_change=self.record_change)
+    def dismiss_prepaid_check_reminder(self, task_id, *, correlation_id):
+        if self.task_operations is None: raise RuntimeError("TASK-001 operations are not configured.")
+        self.task_operations.dismiss_prepaid_check_reminder(self.connection, task_id, correlation_id=correlation_id, record_change=self.record_change)
+    def prepaid_check_reminder_status(self, task_id):
+        if self.task_operations is None: raise RuntimeError("TASK-001 operations are not configured.")
+        return self.task_operations.prepaid_check_reminder_status(self.connection, task_id)
     def record_change(self,**change): self.recorder.record_change(self.connection.connection.driver_connection,**change)

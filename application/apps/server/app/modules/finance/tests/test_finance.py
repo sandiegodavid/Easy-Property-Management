@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import json
+import sqlite3
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -13,13 +14,14 @@ from fastapi.testclient import TestClient
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.finance.application.service import FinanceService, _boundary_extension_piece, _schedule
+from app.modules.finance.application.prepaid_check_service import PrepaidCheckService
 from app.modules.finance.application.deposit_service import DepositService
 from app.modules.finance.infrastructure.deposit_unit_of_work import SQLiteDepositUnitOfWork
 from app.modules.finance.domain.deposit_models import DeductionCommand, DepositAccountCreateCommand, DepositReceiptCommand, DepositRefundCommand, SettlementCreateCommand, signed_money
 from app.modules.finance.api.router import ExpectationResponse
 from app.modules.finance.api.deposit_router import DepositResponse, ReceiptResponse, SettlementResponse
 from app.modules.finance.application.ports import LeaseTermFinanceSnapshot
-from app.modules.finance.domain.models import FinanceConflictError, FinanceError, RecordReceiptCommand, ReceiptAllocationCommand, RentExpectation, RentReceipt, SynchronizeExpectationsCommand, VoidCommand
+from app.modules.finance.domain.models import FinanceConflictError, FinanceError, PrepaidCheckCommand, PrepaidCheckTransitionCommand, RecordReceiptCommand, ReceiptAllocationCommand, RentExpectation, RentReceipt, SynchronizeExpectationsCommand, VoidCommand
 from app.modules.finance.infrastructure.unit_of_work import SQLiteFinanceUnitOfWork
 from app.modules.leases.application.service import LeaseCreateCommand, LeaseService, ParticipantCommand, TermCommand
 from app.modules.leases.infrastructure.finance_operations import SQLiteLeaseFinanceOperations
@@ -33,6 +35,7 @@ from app.modules.portfolio.infrastructure.finance_operations import SQLitePortfo
 from app.modules.tenants.application.service import TenantCreateCommand, TenantService
 from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantProfileAvailability, SQLiteTenantUnitOfWork
 from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard
+from app.modules.tasks.infrastructure.finance_operations import SQLiteTaskFinanceOperations
 from app.modules.inspections.infrastructure.deposit_operations import SQLiteInspectionDepositOperations
 from app.modules.files.infrastructure.deposit_operations import SQLiteDepositFileOperations
 from app.modules.workspace.application.service import WorkspaceService
@@ -74,6 +77,124 @@ class FinanceWorkflowTests(unittest.TestCase):
         ))
         self.assertEqual(settlement["status"], "draft")
         SettlementResponse.model_validate(settlement)
+
+    def test_prepaid_check_deposit_is_correlated_with_one_expectation(self):
+        term = self.lease["terms"][0]
+        expectations = self.finance.synchronize(self.lease["id"], SynchronizeExpectationsCommand(
+            term["id"], (date.today() + timedelta(days=60)).isoformat(), date.today().replace(day=1).isoformat(),
+        ))
+        expectation = next(item for item in expectations if not item["isProrated"])
+        db = self.workspace.paths.database
+        clock = lambda: datetime.combine(date.today() + timedelta(days=2), datetime.min.time(), UTC)
+        prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
+            db, AuditRecorder(SQLiteAuditRepository(db)),
+            SQLiteLeaseFinanceOperations(SQLitePortfolioFinanceOperations()), SQLitePartyOperations(db),
+            SQLiteTaskFinanceOperations(),
+        ), now=clock)
+        check = prepaid.create(PrepaidCheckCommand(
+            expectation["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(),
+            (date.today() + timedelta(days=1)).isoformat(), "Check •••• 1234", str(uuid4()),
+        ))
+        self.assertEqual(check["depositEligibility"], "eligible")
+        deposited = prepaid.deposit(check["id"], PrepaidCheckTransitionCommand(str(uuid4()), True))
+        self.assertEqual(deposited["status"], "deposited")
+        self.assertIsNotNone(deposited["receiptId"])
+        self.assertEqual(self.finance.expectation(expectation["id"])["settlementStatus"], "paid")
+        with TestClient(create_app(self.config)) as client:
+            response = client.get(f"/api/prepaid-checks/{check['id']}")
+            malformed = client.get("/api/prepaid-checks/not-a-uuid")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["receiptId"], deposited["receiptId"])
+        self.assertEqual(malformed.status_code, 422)
+
+    def test_voided_prepaid_check_can_be_replaced_once(self):
+        term = self.lease["terms"][0]
+        expectations = self.finance.synchronize(self.lease["id"], SynchronizeExpectationsCommand(
+            term["id"], (date.today() + timedelta(days=60)).isoformat(), date.today().replace(day=1).isoformat(),
+        ))
+        expectation = next(item for item in expectations if not item["isProrated"])
+        db = self.workspace.paths.database
+        prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
+            db, AuditRecorder(SQLiteAuditRepository(db)),
+            SQLiteLeaseFinanceOperations(SQLitePortfolioFinanceOperations()), SQLitePartyOperations(db), SQLiteTaskFinanceOperations(),
+        ))
+        check = prepaid.create(PrepaidCheckCommand(
+            expectation["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(),
+            (date.today() + timedelta(days=3)).isoformat(), None, str(uuid4()),
+        ))
+        prepaid.void(check["id"], PrepaidCheckTransitionCommand(str(uuid4()), True, "Replacement check received"))
+        replacement = prepaid.replace(check["id"], PrepaidCheckCommand(
+            expectation["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(),
+            (date.today() + timedelta(days=4)).isoformat(), None, str(uuid4()),
+        ), confirmed=True, reason="Replacement check issued")
+        self.assertEqual(replacement["status"], "scheduled")
+        self.assertEqual(prepaid.get(check["id"])["status"], "replaced")
+
+    def test_prepaid_check_rejects_prorated_expectations_and_requires_explicit_replacement(self):
+        term = self.lease["terms"][0]
+        expectations = self.finance.synchronize(self.lease["id"], SynchronizeExpectationsCommand(
+            term["id"], (date.today() + timedelta(days=60)).isoformat(), date.today().replace(day=1).isoformat(),
+        ))
+        prorated = next(item for item in expectations if item["isProrated"])
+        complete = next(item for item in expectations if not item["isProrated"])
+        prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
+            self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
+            SQLiteLeaseFinanceOperations(SQLitePortfolioFinanceOperations()), SQLitePartyOperations(self.workspace.paths.database), SQLiteTaskFinanceOperations(),
+        ))
+        with self.assertRaises(FinanceConflictError):
+            prepaid.create(PrepaidCheckCommand(prorated["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(), (date.today() + timedelta(days=2)).isoformat(), None, str(uuid4())))
+        check = prepaid.create(PrepaidCheckCommand(complete["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(), (date.today() + timedelta(days=2)).isoformat(), None, str(uuid4())))
+        prepaid.void(check["id"], PrepaidCheckTransitionCommand(str(uuid4()), True, "Printed check was spoiled"))
+        with self.assertRaises(FinanceConflictError):
+            prepaid.create(PrepaidCheckCommand(complete["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(), (date.today() + timedelta(days=3)).isoformat(), None, str(uuid4())))
+        replacement = prepaid.replace(check["id"], PrepaidCheckCommand(complete["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(), (date.today() + timedelta(days=3)).isoformat(), None, str(uuid4())), confirmed=True, reason="A corrected printed check was received")
+        self.assertEqual(replacement["reminderStatus"], "pending")
+        self.assertEqual(prepaid.get(check["id"])["replacementReason"], "A corrected printed check was received")
+
+    def test_prepaid_check_can_adopt_one_compatible_existing_receipt(self):
+        term = self.lease["terms"][0]
+        expectations = self.finance.synchronize(self.lease["id"], SynchronizeExpectationsCommand(
+            term["id"], (date.today() + timedelta(days=60)).isoformat(), date.today().replace(day=1).isoformat(),
+        ))
+        expectation = next(item for item in expectations if not item["isProrated"])
+        clock = lambda: datetime.combine(date.today() + timedelta(days=2), datetime.min.time(), UTC)
+        prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
+            self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
+            SQLiteLeaseFinanceOperations(SQLitePortfolioFinanceOperations()), SQLitePartyOperations(self.workspace.paths.database), SQLiteTaskFinanceOperations(),
+        ), now=clock)
+        check = prepaid.create(PrepaidCheckCommand(
+            expectation["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(),
+            (date.today() + timedelta(days=1)).isoformat(), "Check •••• 4321", str(uuid4()),
+        ))
+        receipt = self.finance.record_receipt(RecordReceiptCommand(
+            self.lease["id"], str(uuid4()), date.today().isoformat(), expectation["expectedAmountMinor"], "USD",
+            (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),), "check",
+        ))
+        deposited = prepaid.deposit(check["id"], PrepaidCheckTransitionCommand(str(uuid4()), True, existing_receipt_id=receipt["id"]))
+        self.assertEqual(deposited["receiptId"], receipt["id"])
+
+    def test_prepaid_check_restore_rejects_one_way_replacement_lineage(self):
+        term = self.lease["terms"][0]
+        expectations = self.finance.synchronize(self.lease["id"], SynchronizeExpectationsCommand(
+            term["id"], (date.today() + timedelta(days=60)).isoformat(), date.today().replace(day=1).isoformat(),
+        ))
+        expectation = next(item for item in expectations if not item["isProrated"])
+        prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
+            self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
+            SQLiteLeaseFinanceOperations(SQLitePortfolioFinanceOperations()), SQLitePartyOperations(self.workspace.paths.database), SQLiteTaskFinanceOperations(),
+        ))
+        original = prepaid.create(PrepaidCheckCommand(expectation["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(), (date.today() + timedelta(days=2)).isoformat(), None, str(uuid4())))
+        prepaid.void(original["id"], PrepaidCheckTransitionCommand(str(uuid4()), True, "Spoiled"))
+        prepaid.replace(original["id"], PrepaidCheckCommand(expectation["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(), (date.today() + timedelta(days=3)).isoformat(), None, str(uuid4())), confirmed=True, reason="Reissued")
+        connection = sqlite3.connect(self.workspace.paths.database)
+        try:
+            connection.execute("PRAGMA ignore_check_constraints = ON")
+            connection.execute("UPDATE prepaid_checks SET status = 'voided', replaced_by_prepaid_check_id = NULL, replacement_reason = NULL WHERE id = ?", (original["id"],))
+            connection.commit()
+        finally:
+            connection.close()
+        with self.assertRaises(ProductSchemaError):
+            validate_latest_schema(self.workspace.paths.database)
 
     def test_signed_deposit_variance_is_not_distorted_for_underfunded_accounts(self):
         self.assertEqual(signed_money(-1), "-0.01")

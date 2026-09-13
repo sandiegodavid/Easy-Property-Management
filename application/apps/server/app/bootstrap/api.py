@@ -30,6 +30,7 @@ from app.modules.files.domain.audit_policy import (
 from app.modules.tasks.api.router import build_router as build_tasks_router
 from app.modules.tasks.application.service import TaskService
 from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork
+from app.modules.tasks.infrastructure.finance_operations import SQLiteTaskFinanceOperations
 from app.modules.portfolio.api.router import build_router as build_portfolio_router
 from app.modules.portfolio.application.service import PortfolioService
 from app.modules.portfolio.infrastructure.unit_of_work import (
@@ -77,11 +78,13 @@ from app.modules.vendors.domain.audit_policy import (
 from app.modules.finance.api.router import build_router as build_finance_router
 from app.modules.finance.api.expense_router import build_router as build_expense_router
 from app.modules.finance.api.deposit_router import build_router as build_deposit_router
+from app.modules.finance.api.prepaid_check_router import build_router as build_prepaid_check_router
 from app.modules.finance.application.expense_service import ExpenseService
 from app.modules.finance.application.deposit_service import DepositService
 from app.modules.finance.application.file_links import ExpenseFileLinkValidator
 from app.modules.finance.application.deposit_file_links import DepositFileLinkValidator
 from app.modules.finance.application.service import FinanceService
+from app.modules.finance.application.prepaid_check_service import PrepaidCheckService
 from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpenseUnitOfWork
 from app.modules.finance.infrastructure.file_links import SQLiteExpenseFileLinkOperations
 from app.modules.finance.infrastructure.deposit_file_links import SQLiteDepositFileLinkOperations
@@ -90,6 +93,7 @@ from app.modules.finance.infrastructure.deposit_unit_of_work import SQLiteDeposi
 from app.modules.finance.domain.audit_policy import (
     EXPECTATION_ACTIVITY_POLICY, REVIEW_ACTIVITY_POLICY,
     RECEIPT_ACTIVITY_POLICY, ALLOCATION_ACTIVITY_POLICY,
+    PREPAID_CHECK_ACTIVITY_POLICY,
     EXPENSE_ACTIVITY_POLICY, EXPENSE_CATEGORY_ACTIVITY_POLICY,
     EXPENSE_REFUND_ACTIVITY_POLICY,
     DEPOSIT_ACTIVITY_POLICY,
@@ -178,8 +182,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         service.paths.database, recorder, party_operations, portfolio_lease_operations,
     ))
     finance = FinanceService(SQLiteFinanceUnitOfWork(
-        service.paths.database, recorder, SQLiteLeaseFinanceOperations(SQLitePortfolioFinanceOperations()), party_operations,
+        service.paths.database, recorder, SQLiteLeaseFinanceOperations(SQLitePortfolioFinanceOperations()), party_operations, SQLiteTaskFinanceOperations(),
     ))
+    prepaid_checks = PrepaidCheckService(finance.unit_of_work)
     expenses = ExpenseService(SQLiteExpenseUnitOfWork(
         service.paths.database,
         recorder,
@@ -232,6 +237,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.lease_service = leases
     app.state.inspection_service = inspections
     app.state.finance_service = finance
+    app.state.prepaid_check_service = prepaid_checks
     app.state.expense_service = expenses
     app.state.deposit_service = deposits
     app.include_router(build_router(service, runtime))
@@ -275,6 +281,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("rent_expectation_timeliness_review", 1): DEFAULT_SNAPSHOT_POLICY,
         ("rent_receipt", 1): DEFAULT_SNAPSHOT_POLICY,
         ("rent_receipt_allocation", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("prepaid_check", 1): DEFAULT_SNAPSHOT_POLICY,
         ("expense_category", 1): DEFAULT_SNAPSHOT_POLICY,
         ("expense", 1): DEFAULT_SNAPSHOT_POLICY,
         ("expense_refund", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -306,6 +313,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("rent_expectation_timeliness_review", 1): REVIEW_ACTIVITY_POLICY,
         ("rent_receipt", 1): RECEIPT_ACTIVITY_POLICY,
         ("rent_receipt_allocation", 1): ALLOCATION_ACTIVITY_POLICY,
+        ("prepaid_check", 1): PREPAID_CHECK_ACTIVITY_POLICY,
         ("expense_category", 1): EXPENSE_CATEGORY_ACTIVITY_POLICY,
         ("expense", 1): EXPENSE_ACTIVITY_POLICY,
         ("expense_refund", 1): EXPENSE_REFUND_ACTIVITY_POLICY,
@@ -327,6 +335,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_lease_router(leases, runtime))
     app.include_router(build_inspection_router(inspections, runtime))
     app.include_router(build_finance_router(finance, runtime))
+    app.include_router(build_prepaid_check_router(prepaid_checks, runtime))
     app.include_router(build_expense_router(expenses, runtime))
     app.include_router(build_deposit_router(deposits, runtime))
     return app

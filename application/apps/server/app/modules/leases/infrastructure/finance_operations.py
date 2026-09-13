@@ -10,6 +10,15 @@ class SQLiteLeaseFinanceOperations:
         if not lease: return None
         context = self.portfolio_operations.context_for_space(connection, lease["space_id"])
         return context["time_zone"] if context else None
+    def participant_active(self, connection, lease_id, party_id, on):
+        return connection.execute(
+            select(LeaseParticipantModel.id).where(
+                LeaseParticipantModel.lease_id == lease_id,
+                LeaseParticipantModel.tenant_party_id == party_id,
+                LeaseParticipantModel.starts_on <= on,
+                or_(LeaseParticipantModel.ends_on.is_(None), LeaseParticipantModel.ends_on >= on),
+            ).limit(1)
+        ).first() is not None
     def term_snapshot(self, connection, lease_id, term_id):
         term = connection.execute(LeaseTermModel.__table__.select().where(LeaseTermModel.id == term_id, LeaseTermModel.lease_id == lease_id)).mappings().first()
         lease = connection.execute(LeaseModel.__table__.select().where(LeaseModel.id == lease_id)).mappings().first()
