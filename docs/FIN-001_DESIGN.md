@@ -22,7 +22,7 @@ FIN-001 is US-only for the MVP: all source leases use `USD`, and all date-relati
 
 FIN-001 does not provide:
 
-- Payment initiation, bank feeds, processor integrations, reconciliation, autopay, payment-method storage, check deposit workflows, or bank credentials. `FIN-006` and `FIN-007` own payment-method and prepaid-check workflows.
+- Payment initiation, bank feeds, processor integrations, reconciliation, autopay setup, reusable payment-method storage, check deposit workflows, or bank credentials. `FIN-006` adds an immutable actual-method snapshot to each receipt; `FIN-007` owns prepaid-check workflows.
 - Fees, concessions, credits, discretionary adjustments, write-offs, refunds, security-deposit receipt/settlement, owner-report intake/evidence/verification, expense tracking, owner balances, tax/accounting, or owner disbursements. Those belong to later FIN and OWNER items. FIN-001 may record an existing party as the confirmed recipient of rent, but `OWNER-003` later owns the report that an owner received it and must link that verified report to the FIN-001 receipt instead of creating duplicate income. FIN-001 performs only the deterministic first/final schedule-edge proration defined below; it does not accept an operator-entered prorated amount.
 - A legal determination of delinquency, grace periods, notice requirements, eviction eligibility, collection activity, or tenant communication.
 - File attachments or receipt-image capture. FILE-001 remains available to future owning workflows, but FIN-001’s durable fact is the recorded receipt and allocation, not an uploaded document.
@@ -56,7 +56,7 @@ A stored period must contain at least two calendar dates; a one-day stub or fina
 
 ### Receipts and allocations represent received money exactly once
 
-A `rent_receipt` records money the operator confirms was received. It has one lease, one received-on date, a positive currency amount, an optional `received_by_party_id`, optional bounded internal notes, one client-generated UUID idempotency key, and one or more allocations. A null `received_by_party_id` means the local operator received the money; a non-null value identifies an existing shared party that received it. `rent_receipt_allocations` distribute that receipt among open expectations of the same lease and currency.
+A `rent_receipt` records money the operator confirms was received. It has one lease, one received-on date, a positive currency amount, an optional `received_by_party_id`, a required immutable actual-payment-method snapshot defined by `FIN-006`, optional bounded internal notes, one client-generated UUID idempotency key, and one or more allocations. A null `received_by_party_id` means the local operator received the money; a non-null value identifies an existing shared party that received it. It identifies who received money, not how it was paid. `rent_receipt_allocations` distribute that receipt among open expectations of the same lease and currency.
 
 The allocation total must equal the receipt amount exactly. An expectation cannot be allocated above its expected amount, and a receipt cannot span leases or currencies. Prepayment allocation to a future active expectation is allowed. This prevents ambiguous unapplied balances and double-counting. A correction voids the whole receipt—with a required reason—and then records a replacement receipt/allocation set whose `replaces_receipt_id` preserves explicit lineage. Receipts and allocations are never edited or deleted after recording.
 
@@ -129,6 +129,7 @@ Reviews are append-only and ordered by creation timestamp and ID. A `mark_missed
 | `amount_minor` | Required positive integer. |
 | `currency_code` | Required code fixed to `USD` for the US-only MVP. |
 | `received_by_party_id` | Optional foreign key to an existing shared party; null means the local operator. |
+| `payment_method_kind`, `payment_method_label`, `masked_reference`, `other_payment_method_note` | Required/optional immutable FIN-006 actual-method snapshot. `other` requires its bounded explanatory note; a masked reference is never a raw financial identifier or credential. |
 | `replaces_receipt_id` | Optional unique self-reference to the voided receipt this receipt replaces. |
 | `notes` | Optional trimmed internal receipt context, maximum 4,000 characters. |
 | `voided_at`, `void_reason` | Both null for an active receipt; both required after a confirmed void. |
@@ -160,7 +161,7 @@ Repeated requests with the same inputs create no duplicate rows or no-op audit e
 
 ### Record or void a receipt
 
-`POST /api/rent-receipts` records a new receipt plus all of its allocations in one immediate transaction and one correlation ID. SQLite's `BEGIN IMMEDIATE` transaction is the concurrency boundary; the service reloads every expectation and current non-voided allocation total after acquiring it before calculating balances. If any allocation is invalid, no receipt, allocation, or audit event persists.
+`POST /api/rent-receipts` records a new receipt, its required FIN-006 actual-method snapshot, and all allocations in one immediate transaction and one correlation ID. SQLite's `BEGIN IMMEDIATE` transaction is the concurrency boundary; the service reloads every expectation and current non-voided allocation total after acquiring it before calculating balances. If any allocation is invalid, no receipt, allocation, or audit event persists.
 
 `POST /api/rent-receipts/{receiptId}/void` requires `confirmed: true` and a bounded nonblank `voidReason`. It retains the receipt and allocations, marks the receipt voided, recalculates all affected views, and appends a before/after audit event. The operator records a replacement separately with `replacesReceiptId`; FIN-001 never silently changes a historical amount.
 
@@ -184,7 +185,7 @@ UI-001 adds a **Money** workflow with **Rent expectations** and **Recorded recei
 
 From an executed lease, **Synchronize rent expectations** requires the operator to select one term. It displays the property time zone, term amount/frequency, suggested recurrence anchor, effective term/responsibility boundary, and a complete preview of every full or prorated period before confirmation. Prorated rows show their covered-day fraction and rounded amount. A responsibility override is visually exceptional and requires its own confirmation and reason.
 
-**Record receipt** generates the UUID idempotency key in the client, defaults `receivedByPartyId` to null (local operator), permits selection of an existing shared party, and allocates 1–100 amounts against still-open expectations from one lease/currency. The screen continuously shows receipt total, allocated total, and remaining balance and cannot submit until they are equal. **Void and replace** first confirms the void reason and then opens a prefilled new receipt with explicit replacement lineage and a new idempotency key; it never edits the old record.
+**Record receipt** generates the UUID idempotency key in the client, defaults `receivedByPartyId` to null (local operator), permits selection of an existing shared party, and allocates 1–100 amounts against still-open expectations from one lease/currency. `FIN-006` pre-fills the required editable actual-method snapshot from the latest non-voided receipt for that lease; it is not a saved expected-payment instruction. The screen continuously shows receipt total, allocated total, and remaining balance and cannot submit until they are equal. **Void and replace** first confirms the void reason and then opens a prefilled new receipt with explicit replacement lineage and a new idempotency key; it never edits the old record.
 
 An unpaid ended period remains **Late** unless the operator chooses **Mark missed**, confirms, and records a reason. Detail shows the review history and provides **Clear missed classification** with a new reason. The UI never describes these operational labels as a legal conclusion, never initiates collection, and does not expose a portfolio money aggregate before FIN-003.
 
@@ -200,11 +201,12 @@ All routes require a ready workspace. Mutations require the writer lock. Request
 | `POST` | `/api/rent-expectations/{expectationId}/void` | Void an unallocated erroneous expectation after explicit confirmation. |
 | `POST` | `/api/rent-expectations/{expectationId}/timeliness-reviews` | Mark an unpaid ended period missed, or clear that review, after confirmation and a reason. |
 | `POST` | `/api/rent-receipts` | Record one receipt and its complete allocation set atomically. |
+| `GET` | `/api/leases/{leaseId}/rent-receipts/payment-method-suggestion` | Return the editable FIN-006 snapshot from the latest non-voided receipt, or no suggestion. |
 | `GET` | `/api/rent-receipts` | List receipts with typed filters. |
 | `GET` | `/api/rent-receipts/{receiptId}` | Return one receipt and its allocations. |
 | `POST` | `/api/rent-receipts/{receiptId}/void` | Void a recorded receipt after explicit confirmation and reason. |
 
-Synchronization requests contain `leaseTermId`, `throughOn`, optional `scheduleAnchorOn`, and an optional confirmed responsibility override/date/reason tuple. Receipt requests contain `idempotencyKey`, `leaseId`, `receivedOn`, `amountMinor`, `currencyCode`, optional `receivedByPartyId`, optional `replacesReceiptId`, optional `notes`, and 1–100 `{expectationId, amountMinor}` allocations. Void and timeliness-review requests use `StrictBool` confirmation and bounded reasons. Monetary request fields use strict integers so booleans, floats, numeric strings, zero, and negative values are rejected.
+Synchronization requests contain `leaseTermId`, `throughOn`, optional `scheduleAnchorOn`, and an optional confirmed responsibility override/date/reason tuple. Receipt requests contain `idempotencyKey`, `leaseId`, `receivedOn`, `amountMinor`, `currencyCode`, optional `receivedByPartyId`, required FIN-006 payment-method snapshot fields, optional `replacesReceiptId`, optional `notes`, and 1–100 `{expectationId, amountMinor}` allocations. `GET /api/leases/{leaseId}/rent-receipts/payment-method-suggestion` provides an editable last-receipt suggestion without creating expected-method state. Void and timeliness-review requests use `StrictBool` confirmation and bounded reasons. Monetary request fields use strict integers so booleans, floats, numeric strings, zero, and negative values are rejected.
 
 Expectation responses expose IDs, schedule dates, expected/received/outstanding minor units, currency, frequency, proration evidence, responsibility-boundary evidence, lifecycle timestamps, settlement/timeliness status, effective missed review, and the bounded allocation summary defined above. Receipt responses expose receipt, recipient, idempotency, correction-lineage, lifecycle, and allocation fields. The API returns canonical UUID and ISO-date strings and never substitutes display labels for stable references.
 
@@ -214,7 +216,7 @@ Malformed request data returns `422`; missing leases, terms, parties, expectatio
 
 Each write persists its rows and `AUDIT-001` changes in one immediate transaction and one correlation ID. Entity types are `rent_expectation`, `rent_expectation_timeliness_review`, `rent_receipt`, and `rent_receipt_allocation`. Synchronization records only newly created expectations; receipt creation records the receipt and every allocation; void workflows record the complete prior/current state; each missed/clear decision records its appended review.
 
-General activity presentation exposes concise lifecycle and due/received dates. Expectation activity redacts expected amounts and responsibility override reasons. Receipt activity redacts amount, notes, idempotency key, `receivedByPartyId`, and correction references. Allocation activity replaces the entire before/after snapshot with a redacted marker because its identifiers and amount together disclose sensitive payment application. Timeliness-review activity exposes the decision and date but redacts its reason. Contextual finance history can reveal the complete local records to the operator. Policies must be registered before the service can write events, preserving fail-closed audit behavior.
+General activity presentation exposes concise lifecycle and due/received dates. Expectation activity redacts expected amounts and responsibility override reasons. Receipt activity redacts amount, notes, idempotency key, `receivedByPartyId`, FIN-006 method label/reference/`other` note, and correction references. Allocation activity replaces the entire before/after snapshot with a redacted marker because its identifiers and amount together disclose sensitive payment application. Timeliness-review activity exposes the decision and date but redacts its reason. Contextual finance history can reveal the complete permitted local records to the operator. Policies must be registered before the service can write events, preserving fail-closed audit behavior.
 
 FIN-001 data and audit history are retained in the encrypted workspace backup/export/restore package. It stores no payment credentials, account numbers, processor tokens, checks, or attachment contents, so no secret-store or remote-content adapter is introduced.
 
@@ -234,7 +236,7 @@ FIN-001 is complete when:
 2. Each expectation clearly shows expected, received, outstanding, settlement, and timeliness state without asserting legal delinquency or applying a hidden grace period.
 3. A receipt can be allocated across one lease’s eligible expectations atomically; totals, currency, lifecycle, and over-allocation rules are enforced under concurrency.
 4. Receipt corrections are explicit void-and-replace chains; expectation corrections are void-only until a future adjustment workflow. Both retain correlated audit history and use no physical deletion.
-5. Payment methods, check/deposit status, fees, discretionary/operator-entered prorations, deposits, expense accounting, bank integration, and automatic collection remain absent from this slice.
+5. FIN-006 actual receipt-method snapshots and FIN-007 check/deposit status extend this slice under their own designs; reusable expected-method storage, bank integration, and automatic collection remain absent.
 6. Typed HTTP and application contracts provide controlled `400`, `404`, `409`, and `422` outcomes.
 7. Exact schema validation and encrypted backup/export/restore preserve all FIN-001 data and audit history.
 
@@ -242,4 +244,4 @@ FIN-001 is complete when:
 
 FIN-001 requires completed `AUDIT-001`, `LEASE-001`, `LOCAL-001`, and `LOCAL-002`. It reads PORT-002 space/property context through LEASE-001’s existing relationship, so it does not add a direct Portfolio persistence dependency.
 
-`UI-001` delivers the expectation synchronization/review, receipt allocation, void/replacement, filters, and source-record drill-down workflows. `FIN-006` adds expected and actual payment methods; `FIN-007` adds prepaid checks and deposit reminders; `FIN-008` owns deposits and settlement; `FIN-002` owns expenses; `FIN-003` aggregates financial records; `ADJ-001` proposes adjustments and `ADJ-002` owns the resulting effective-dated rent amendment; `COM-001` owns payment follow-up communication; and `DASH-001` surfaces overdue-rent action cards. None may reinterpret FIN-001 status labels as legal conclusions or initiate collection automatically.
+`UI-001` delivers the expectation synchronization/review, receipt allocation, FIN-006 receipt-method selection/prefill, void/replacement, filters, and source-record drill-down workflows. `FIN-007` adds prepaid checks and deposit reminders; `FIN-008` owns deposits and settlement; `FIN-002` owns expenses; `FIN-003` aggregates financial records; `ADJ-001` proposes adjustments and `ADJ-002` owns the resulting effective-dated rent amendment; `COM-001` owns payment follow-up communication; and `DASH-001` surfaces overdue-rent action cards. None may reinterpret FIN-001 status labels as legal conclusions or initiate collection automatically.

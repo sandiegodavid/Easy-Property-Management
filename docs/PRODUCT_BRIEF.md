@@ -128,7 +128,7 @@ The MVP does not include:
 - Applicant financial records retain the stated purpose, consent, source, received and verified dates, redaction status, decision use, and retention or deletion date.
 - Lease-approval decisions retain the criteria applied, reviewer, decision, reasons, conditions, and any consumer-report adverse-action follow-up.
 - Rent-adjustment rules are versioned by jurisdiction, effective date, source, and last verification; alerts retain the rule version and operator confirmation used for the calculation.
-- Rent receipts retain expected and actual payment methods. Future-dated checks remain scheduled instruments until their deposit is confirmed.
+- Rent receipts retain an immutable actual payment-method snapshot; the product does not maintain an expected payment method. Future-dated checks remain scheduled instruments until their deposit is confirmed.
 - Move-in and move-out condition reports preserve separate observations and supporting files for the lease's space. Comparisons may identify possible damage or maintenance needs, but only a separate operator-reviewed financial workflow may approve a security-deposit deduction or refund.
 - Providers may have multiple configurable service categories, and AI suggestions retain their rationale, evidence, confidence, safety flags, and operator decision.
 - Every rental or property issue records the reporter and reporter role—owner, tenant, manager, or staff—along with its category and communication history.
