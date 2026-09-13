@@ -11,7 +11,7 @@ Deliver complete, understandable workflows for:
 - Operator-run setup scripts to initialize or restore each user's local workspace, select data and backup locations, record its machine-local locator, and verify readiness.
 - Portfolio setup for self-owned and client-managed properties.
 - Single-family homes, condos, townhomes, and offices.
-- Tenants, leases, pre-move-in/post-move-out condition reports, rent tracking, security-deposit settlement, recorded payment methods, prepaid-check deposit reminders, expenses, and basic communication history.
+- Tenants, leases, pre-move-in/post-move-out condition reports, rent tracking, security-deposit settlement, recorded payment methods, prepaid-check deposit reminders, expenses, and a manual owner/tenant communication ledger with task follow-up.
 - Jurisdiction-sourced notice-deadline alerts and effective-dated rent adjustments with operator confirmation.
 - Owner-reported rent receipts, owner balances, and manual owner-disbursement tracking.
 - Operator-recorded owner/tenant reports with clear attribution for rental and property issues.
@@ -28,7 +28,7 @@ Success means a small operator can complete the monthly rent, vacancy-to-lease, 
 ## Next — Connect and assist locally
 
 - Online payments, autopay, bank feeds, and recurring expenses.
-- Email/SMS reminders, two-way communication, and calendar connections.
+- Connected-account email/SMS reminders and two-way communication, plus calendar connections. The manual COM-001 ledger remains local MVP scope.
 - Owner statements and management fees.
 - Listing syndication, third-party tenant-screening integrations, and e-signatures.
 - AI-assisted showing coordination and negotiation drafting with user approval.

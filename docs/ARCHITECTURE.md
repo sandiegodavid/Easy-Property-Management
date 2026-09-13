@@ -63,7 +63,7 @@ The server separates domain responsibilities from user-interface screens. This s
 | `owner-accounting` | Owner-reported receipts, balances, disbursement approvals, and disbursement history. |
 | `maintenance` | Issue intake, reporter attribution, appointments, quotes, assignments, status, estimates and work-reported cost context, and work journals. |
 | `providers` | Provider profiles, categories, service areas, references, reputation notes, and historical outcomes. |
-| `communications` | Interaction timeline, reminders, tasks, and completion/follow-up state. |
+| `communications` | Manual local interaction timeline for any saved party, typed context links, immutable corrections, and TASK-001 follow-up projection. It neither sends nor ingests messages. |
 | `intake` | Gmail, Outlook.com/Hotmail, SMS, and voice-note source normalization, deduplication, review queues, and source links. |
 | `documents` | Templates, versions, generated drafts, attachments, and document review metadata. |
 | `jurisdictions` | Effective-dated notice rules, sources, verification dates, and alert calculations. |
