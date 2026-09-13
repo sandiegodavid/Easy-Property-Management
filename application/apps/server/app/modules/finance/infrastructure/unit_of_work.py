@@ -50,6 +50,35 @@ class _Tx:
         return [RentExpectation(**dict(row)) for row in self.connection.execute(query).mappings()]
     def receipt(self, record_id):
         row=self.connection.execute(RentReceiptModel.__table__.select().where(RentReceiptModel.id==record_id)).mappings().first(); return RentReceipt(**dict(row)) if row else None
+    def latest_non_voided_receipt(self, lease_id):
+        row = self.connection.execute(
+            RentReceiptModel.__table__.select().where(
+                RentReceiptModel.lease_id == lease_id,
+                RentReceiptModel.voided_at.is_(None),
+            ).order_by(
+                RentReceiptModel.received_on.desc(),
+                RentReceiptModel.created_at.desc(),
+                RentReceiptModel.id.desc(),
+            ).limit(1)
+        ).mappings().first()
+        return RentReceipt(**dict(row)) if row else None
+    def likely_duplicate_receipts(self, *, lease_id, received_on, amount_minor, received_by_party_id):
+        query = RentReceiptModel.__table__.select().where(
+            RentReceiptModel.lease_id == lease_id,
+            RentReceiptModel.received_on == received_on,
+            RentReceiptModel.amount_minor == amount_minor,
+            RentReceiptModel.voided_at.is_(None),
+        )
+        if received_by_party_id is None:
+            query = query.where(RentReceiptModel.received_by_party_id.is_(None))
+        else:
+            query = query.where(RentReceiptModel.received_by_party_id == received_by_party_id)
+        return [
+            RentReceipt(**dict(row))
+            for row in self.connection.execute(
+                query.order_by(RentReceiptModel.created_at, RentReceiptModel.id)
+            ).mappings()
+        ]
     def receipt_by_key(self,key):
         row=self.connection.execute(RentReceiptModel.__table__.select().where(RentReceiptModel.idempotency_key==key)).mappings().first(); return RentReceipt(**dict(row)) if row else None
     def receipt_page(self, *, lease_id, received_from, received_to, received_by_party_id, include_voided, cursor, limit):

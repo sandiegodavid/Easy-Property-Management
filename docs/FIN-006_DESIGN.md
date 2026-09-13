@@ -22,12 +22,12 @@ Every new rent receipt requires:
 | --- | --- |
 | `payment_method_kind` | Required closed value: `automatic_bank_payment`, `bank_transfer`, `check`, `cash`, `online_payment`, or `other`. |
 | `payment_method_label` | Optional trimmed operator-facing label, 1–100 characters when present, such as `Tenant portal` or `Personal check`. |
-| `masked_reference` | Optional pre-masked, printable 1–80 character reference. It may reveal no more than four digits, must contain masking characters when it contains digits, and must never contain a raw account, routing, card, credential, token, or processor secret. Typical values are `•••• 1234` and `Check •••• 9182`. |
+| `masked_reference` | Optional 1–80 character safe reference using an optional plain-language ASCII label, followed by at least two `•` or `*` masking characters and at most four final ASCII digits. It must never contain a raw account, routing, card, credential, token, or processor secret. Typical values are `•••• 1234` and `Check •••• 9182`. |
 | `other_payment_method_note` | Required trimmed 1–200 character explanation exactly when `payment_method_kind = other`; null for every other kind. |
 
 `cash` normally has no reference. A reference is optional for every kind because an operator may know the method but not a safe masked identifier. The API rejects a raw-looking reference rather than attempting to retain or transform it.
 
-The snapshot is part of the receipt's canonical idempotency payload. Reusing an idempotency key with a changed kind, label, masked reference, or `other` note returns typed `409`; it never returns the old receipt as though the payload matched. Likely-duplicate detection remains FIN-001's lease/date/amount/recipient rule and deliberately does not include payment method.
+The snapshot is part of the receipt's canonical idempotency payload. Reusing an idempotency key with a changed kind, label, masked reference, or `other` note returns typed `409`; it never returns the old receipt as though the payload matched. Likely-duplicate detection compares active receipts by lease, received-on date, amount, and recipient—deliberately excluding payment method and allocations. If it finds a candidate, the operator must send `duplicateConfirmed: true` and a bounded `duplicateReason`; the confirmation and candidate IDs are retained in the contextual receipt audit event.
 
 `received_by_party_id` continues to mean who received the money. It is independent of the actual payment method and is not a payer, bank, or payment-provider identity.
 

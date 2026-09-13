@@ -119,6 +119,17 @@ class FinanceService:
                 if _receipt_payload(old,tx.receipt_allocations(old.id)) != _command_payload(command): raise FinanceConflictError("Idempotency key was already used for a different receipt.")
                 return self._receipt_view(old, tx.receipt_projection([old.id])[old.id])
             if command.received_by_party_id and not tx.party_exists(command.received_by_party_id): raise FinanceNotFoundError("Recipient party was not found.")
+            duplicates = tx.likely_duplicate_receipts(
+                lease_id=command.lease_id, received_on=command.received_on,
+                amount_minor=command.amount_minor,
+                received_by_party_id=command.received_by_party_id,
+            )
+            if duplicates and not command.duplicate_confirmed:
+                raise FinanceConflictError(
+                    "A matching active receipt already exists; explicit duplicate confirmation is required."
+                )
+            if not duplicates and command.duplicate_confirmed:
+                raise FinanceConflictError("Duplicate confirmation is not applicable because no matching receipt exists.")
             expectations=[]
             for allocation in command.allocations:
                 item=tx.expectation(allocation.expectation_id)
@@ -134,8 +145,29 @@ class FinanceService:
                 if not replaced: raise FinanceNotFoundError("Replaced receipt was not found.")
                 if not replaced.voided_at or replaced.lease_id!=command.lease_id or replaced.currency_code!="USD": raise FinanceConflictError("Replacement must target a voided receipt on the same lease.")
                 if tx.replacement_exists(replaced.id): raise FinanceConflictError("A replacement receipt already exists.")
-            created_at=_stamp(self.now()); receipt=RentReceipt(str(uuid4()),command.lease_id,command.idempotency_key,command.received_on,command.amount_minor,"USD",command.received_by_party_id,command.replaces_receipt_id,command.notes,None,None,created_at); correlation=str(uuid4()); tx.insert_receipt(receipt)
-            tx.record_change(entity_type="rent_receipt",entity_id=receipt.id,action="recorded",before=None,after=receipt.to_dict(),reason="Rent receipt recorded.",correlation_id=correlation)
+            created_at = _stamp(self.now())
+            receipt = RentReceipt(
+                id=str(uuid4()), lease_id=command.lease_id,
+                idempotency_key=command.idempotency_key,
+                received_on=command.received_on, amount_minor=command.amount_minor,
+                currency_code="USD", payment_method_kind=command.payment_method_kind,
+                payment_method_label=command.payment_method_label,
+                masked_reference=command.masked_reference,
+                other_payment_method_note=command.other_payment_method_note,
+                received_by_party_id=command.received_by_party_id,
+                replaces_receipt_id=command.replaces_receipt_id, notes=command.notes,
+                voided_at=None, void_reason=None, created_at=created_at,
+            )
+            correlation=str(uuid4()); tx.insert_receipt(receipt)
+            audit_snapshot = receipt.to_dict()
+            if duplicates:
+                audit_snapshot = {
+                    **audit_snapshot,
+                    "duplicateConfirmed": True,
+                    "duplicateReason": command.duplicate_reason,
+                    "duplicateCandidateReceiptIds": [item.id for item in duplicates],
+                }
+            tx.record_change(entity_type="rent_receipt",entity_id=receipt.id,action="recorded",before=None,after=audit_snapshot,reason="Rent receipt recorded.",correlation_id=correlation)
             for allocation in command.allocations:
                 row={"id":str(uuid4()),"receipt_id":receipt.id,"expectation_id":allocation.expectation_id,"amount_minor":allocation.amount_minor,"created_at":created_at}; tx.insert_allocation(row); tx.record_change(entity_type="rent_receipt_allocation",entity_id=row["id"],action="created",before=None,after=_camel(row),reason="Receipt allocation recorded.",correlation_id=correlation)
             return self._receipt_view(receipt, tx.receipt_projection([receipt.id])[receipt.id])
@@ -145,6 +177,20 @@ class FinanceService:
             row = tx.receipt(receipt_id)
             if not row: raise FinanceNotFoundError("Rent receipt was not found.")
             return self._receipt_view(row, tx.receipt_projection([row.id])[row.id])
+        return self.unit_of_work.read(operation)
+    def payment_method_suggestion(self, lease_id):
+        def operation(tx):
+            if tx.lease_time_zone(lease_id) is None:
+                raise FinanceNotFoundError("Lease was not found.")
+            receipt = tx.latest_non_voided_receipt(lease_id)
+            if receipt is None:
+                return None
+            return {
+                "paymentMethodKind": receipt.payment_method_kind,
+                "paymentMethodLabel": receipt.payment_method_label,
+                "maskedReference": receipt.masked_reference,
+                "otherPaymentMethodNote": receipt.other_payment_method_note,
+            }
         return self.unit_of_work.read(operation)
     def list_receipts(self, *, lease_id=None, received_from=None, received_to=None, received_by_party_id=None, replaces_receipt_id=None, include_voided=False, cursor=None, page_size=100):
         cursor_key = _cursor_key(cursor, "receipt") if cursor else None
@@ -346,8 +392,8 @@ def _previous(d,freq):
     return date(year, month, min(d.day, _month_days(year, month)))
 def _stamp(value): return value.astimezone(UTC).isoformat()
 def _camel(row): return {key.split("_")[0]+"".join(x.title() for x in key.split("_")[1:]):value for key,value in row.items()}
-def _command_payload(c): return (c.lease_id,c.received_on,c.amount_minor,c.currency_code,c.received_by_party_id,c.replaces_receipt_id,c.notes,tuple(sorted((a.expectation_id,a.amount_minor) for a in c.allocations)))
-def _receipt_payload(r,allocations): return (r.lease_id,r.received_on,r.amount_minor,r.currency_code,r.received_by_party_id,r.replaces_receipt_id,r.notes,tuple(sorted((x["expectation_id"],x["amount_minor"]) for x in allocations)))
+def _command_payload(c): return (c.lease_id,c.received_on,c.amount_minor,c.currency_code,c.payment_method_kind,c.payment_method_label,c.masked_reference,c.other_payment_method_note,c.received_by_party_id,c.replaces_receipt_id,c.notes,tuple(sorted((a.expectation_id,a.amount_minor) for a in c.allocations)))
+def _receipt_payload(r,allocations): return (r.lease_id,r.received_on,r.amount_minor,r.currency_code,r.payment_method_kind,r.payment_method_label,r.masked_reference,r.other_payment_method_note,r.received_by_party_id,r.replaces_receipt_id,r.notes,tuple(sorted((x["expectation_id"],x["amount_minor"]) for x in allocations)))
 def _immutable_expectation(item):
     # Boundary evidence is historical context, not schedule identity. Later
     # responsibility amendments may generate new occurrences without rewriting it.

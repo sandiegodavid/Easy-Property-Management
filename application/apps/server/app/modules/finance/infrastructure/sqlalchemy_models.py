@@ -15,8 +15,17 @@ class RentExpectationTimelinessReviewModel(LocalBase):
 
 class RentReceiptModel(LocalBase):
     __tablename__ = "rent_receipts"
-    id: Mapped[str] = mapped_column(String, primary_key=True); lease_id: Mapped[str] = mapped_column(ForeignKey("leases.id"), nullable=False); idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True); received_on: Mapped[str] = mapped_column(String, nullable=False); amount_minor: Mapped[int] = mapped_column(Integer, nullable=False); currency_code: Mapped[str] = mapped_column(String, nullable=False); received_by_party_id: Mapped[str | None] = mapped_column(ForeignKey("parties.id")); replaces_receipt_id: Mapped[str | None] = mapped_column(ForeignKey("rent_receipts.id"), unique=True); notes: Mapped[str | None] = mapped_column(String); voided_at: Mapped[str | None] = mapped_column(String); void_reason: Mapped[str | None] = mapped_column(String); created_at: Mapped[str] = mapped_column(String, nullable=False)
-    __table_args__ = (CheckConstraint("typeof(amount_minor) = 'integer' AND amount_minor > 0"), CheckConstraint("currency_code = 'USD'"), CheckConstraint("(voided_at IS NULL AND void_reason IS NULL) OR (voided_at IS NOT NULL AND void_reason IS NOT NULL AND length(trim(void_reason)) > 0)"), Index("rent_receipts_lease_received", "lease_id", "received_on"))
+    id: Mapped[str] = mapped_column(String, primary_key=True); lease_id: Mapped[str] = mapped_column(ForeignKey("leases.id"), nullable=False); idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True); received_on: Mapped[str] = mapped_column(String, nullable=False); amount_minor: Mapped[int] = mapped_column(Integer, nullable=False); currency_code: Mapped[str] = mapped_column(String, nullable=False); payment_method_kind: Mapped[str] = mapped_column(String, nullable=False); payment_method_label: Mapped[str | None] = mapped_column(String); masked_reference: Mapped[str | None] = mapped_column(String); other_payment_method_note: Mapped[str | None] = mapped_column(String); received_by_party_id: Mapped[str | None] = mapped_column(ForeignKey("parties.id")); replaces_receipt_id: Mapped[str | None] = mapped_column(ForeignKey("rent_receipts.id"), unique=True); notes: Mapped[str | None] = mapped_column(String); voided_at: Mapped[str | None] = mapped_column(String); void_reason: Mapped[str | None] = mapped_column(String); created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint("typeof(amount_minor) = 'integer' AND amount_minor > 0"),
+        CheckConstraint("currency_code = 'USD'"),
+        CheckConstraint("payment_method_kind IN ('automatic_bank_payment', 'bank_transfer', 'check', 'cash', 'online_payment', 'other')"),
+        CheckConstraint("payment_method_label IS NULL OR length(trim(payment_method_label)) BETWEEN 1 AND 100"),
+        CheckConstraint("masked_reference IS NULL OR length(trim(masked_reference)) BETWEEN 1 AND 80"),
+        CheckConstraint("(payment_method_kind = 'other' AND other_payment_method_note IS NOT NULL AND length(trim(other_payment_method_note)) BETWEEN 1 AND 200) OR (payment_method_kind != 'other' AND other_payment_method_note IS NULL)"),
+        CheckConstraint("(voided_at IS NULL AND void_reason IS NULL) OR (voided_at IS NOT NULL AND void_reason IS NOT NULL AND length(trim(void_reason)) > 0)"),
+        Index("rent_receipts_lease_received", "lease_id", "received_on"),
+    )
 
 class RentReceiptAllocationModel(LocalBase):
     __tablename__ = "rent_receipt_allocations"

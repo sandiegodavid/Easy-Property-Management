@@ -11,6 +11,7 @@ from app.modules.finance.infrastructure.sqlalchemy_models import (
     SecurityDepositCreditModel, SecurityDepositRefundModel,
 )
 from app.platform.migration_errors import MigrationSchemaError
+from app.modules.finance.domain.models import FinanceError, PAYMENT_METHOD_KINDS, validate_masked_reference
 
 MODELS = (
     RentExpectationModel, RentExpectationTimelinessReviewModel,
@@ -55,6 +56,21 @@ def validate_finance_data(connection):
     """Reject cross-row and cross-module FIN-008 corruption after restore/open."""
     if connection.execute(text("PRAGMA foreign_key_check")).first() is not None:
         raise MigrationSchemaError("Workspace contains broken foreign-key references.")
+    for receipt in connection.execute(text(
+        "SELECT payment_method_kind, payment_method_label, masked_reference, other_payment_method_note FROM rent_receipts"
+    )).mappings():
+        try:
+            if receipt["payment_method_kind"] not in PAYMENT_METHOD_KINDS:
+                raise FinanceError("Payment method kind is invalid.")
+            validate_masked_reference(receipt["masked_reference"])
+            if receipt["payment_method_kind"] == "other":
+                note = receipt["other_payment_method_note"]
+                if not isinstance(note, str) or not 1 <= len(note.strip()) <= 200:
+                    raise FinanceError("Other payment method note is invalid.")
+            elif receipt["other_payment_method_note"] is not None:
+                raise FinanceError("Other payment method note is invalid.")
+        except FinanceError as error:
+            raise MigrationSchemaError("FIN-006 receipt-method data is incompatible.") from error
     checks = (
         """SELECT 1 FROM security_deposit_settlement_receipts captured
             JOIN security_deposit_settlements settlement ON settlement.id = captured.settlement_id

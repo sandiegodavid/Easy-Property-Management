@@ -3,12 +3,23 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import date
+import re
 from uuid import UUID
 
 
 class FinanceError(RuntimeError): pass
+class FinanceValidationError(FinanceError): pass
 class FinanceNotFoundError(FinanceError): pass
 class FinanceConflictError(FinanceError): pass
+
+
+PAYMENT_METHOD_KINDS = frozenset({
+    "automatic_bank_payment", "bank_transfer", "check", "cash",
+    "online_payment", "other",
+})
+_SAFE_MASKED_REFERENCE = re.compile(
+    r"^(?:[A-Za-z][A-Za-z ]{0,59} )?[•*]{2,}(?:[ -]?[0-9]{1,4})?$"
+)
 
 
 def _date(value: str, label: str) -> str:
@@ -50,7 +61,21 @@ class ReceiptAllocationCommand:
 
 @dataclass(frozen=True)
 class RecordReceiptCommand:
-    lease_id: str; idempotency_key: str; received_on: str; amount_minor: int; currency_code: str; allocations: tuple[ReceiptAllocationCommand, ...]; received_by_party_id: str | None = None; replaces_receipt_id: str | None = None; notes: str | None = None
+    lease_id: str
+    idempotency_key: str
+    received_on: str
+    amount_minor: int
+    currency_code: str
+    allocations: tuple[ReceiptAllocationCommand, ...]
+    payment_method_kind: str
+    payment_method_label: str | None = None
+    masked_reference: str | None = None
+    other_payment_method_note: str | None = None
+    received_by_party_id: str | None = None
+    replaces_receipt_id: str | None = None
+    notes: str | None = None
+    duplicate_confirmed: bool = False
+    duplicate_reason: str | None = None
     def __post_init__(self):
         object.__setattr__(self, "lease_id", _uuid(self.lease_id, "Lease ID")); object.__setattr__(self, "idempotency_key", _uuid(self.idempotency_key, "Idempotency key")); object.__setattr__(self, "received_on", _date(self.received_on, "Received date"))
         if self.currency_code != "USD": raise FinanceError("FIN-001 supports USD receipts only.")
@@ -61,6 +86,32 @@ class RecordReceiptCommand:
         if self.received_by_party_id is not None: object.__setattr__(self, "received_by_party_id", _uuid(self.received_by_party_id, "Recipient party ID"))
         if self.replaces_receipt_id is not None: object.__setattr__(self, "replaces_receipt_id", _uuid(self.replaces_receipt_id, "Replacement receipt ID"))
         object.__setattr__(self, "notes", _text(self.notes, "Receipt notes", 4000))
+        if not isinstance(self.payment_method_kind, str) or self.payment_method_kind not in PAYMENT_METHOD_KINDS:
+            raise FinanceValidationError("Payment method kind is invalid.")
+        try:
+            label = _text(self.payment_method_label, "Payment method label", 100)
+        except FinanceError as error:
+            raise FinanceValidationError(str(error)) from error
+        object.__setattr__(self, "payment_method_label", label)
+        object.__setattr__(self, "masked_reference", _masked_reference(self.masked_reference))
+        if self.payment_method_kind == "other":
+            try:
+                note = _text(self.other_payment_method_note, "Other payment method note", 200, required=True)
+            except FinanceError as error:
+                raise FinanceValidationError(str(error)) from error
+            object.__setattr__(self, "other_payment_method_note", note)
+        elif self.other_payment_method_note is not None:
+            raise FinanceValidationError("Other payment method note is allowed only for other payment methods.")
+        if type(self.duplicate_confirmed) is not bool:
+            raise FinanceValidationError("Duplicate confirmation must be boolean.")
+        if self.duplicate_confirmed:
+            try:
+                reason = _text(self.duplicate_reason, "Duplicate confirmation reason", 1000, required=True)
+            except FinanceError as error:
+                raise FinanceValidationError(str(error)) from error
+            object.__setattr__(self, "duplicate_reason", reason)
+        elif self.duplicate_reason is not None:
+            raise FinanceValidationError("Duplicate confirmation reason requires confirmation.")
 
 @dataclass(frozen=True)
 class VoidCommand:
@@ -84,7 +135,26 @@ class RentExpectation:
 
 @dataclass(frozen=True)
 class RentReceipt:
-    id: str; lease_id: str; idempotency_key: str; received_on: str; amount_minor: int; currency_code: str; received_by_party_id: str | None; replaces_receipt_id: str | None; notes: str | None; voided_at: str | None; void_reason: str | None; created_at: str
+    id: str; lease_id: str; idempotency_key: str; received_on: str; amount_minor: int; currency_code: str; payment_method_kind: str; payment_method_label: str | None; masked_reference: str | None; other_payment_method_note: str | None; received_by_party_id: str | None; replaces_receipt_id: str | None; notes: str | None; voided_at: str | None; void_reason: str | None; created_at: str
     def to_dict(self): return _camel(asdict(self))
 
 def _camel(values): return {key.split("_")[0] + "".join(word.title() for word in key.split("_")[1:]): value for key, value in values.items()}
+
+
+def _masked_reference(value: str | None) -> str | None:
+    try:
+        value = _text(value, "Masked reference", 80)
+    except FinanceError as error:
+        raise FinanceValidationError(str(error)) from error
+    if value is None:
+        return None
+    if not _SAFE_MASKED_REFERENCE.fullmatch(value):
+        raise FinanceValidationError(
+            "Masked reference must use a safe masked label and reveal at most four final digits."
+        )
+    return value
+
+
+def validate_masked_reference(value: str | None) -> str | None:
+    """Public validation boundary used by schema/data integrity checks."""
+    return _masked_reference(value)

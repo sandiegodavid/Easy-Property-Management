@@ -19,7 +19,7 @@ from app.modules.finance.domain.deposit_models import DeductionCommand, DepositA
 from app.modules.finance.api.router import ExpectationResponse
 from app.modules.finance.api.deposit_router import DepositResponse, ReceiptResponse, SettlementResponse
 from app.modules.finance.application.ports import LeaseTermFinanceSnapshot
-from app.modules.finance.domain.models import FinanceConflictError, FinanceError, RecordReceiptCommand, ReceiptAllocationCommand, RentExpectation, SynchronizeExpectationsCommand, VoidCommand
+from app.modules.finance.domain.models import FinanceConflictError, FinanceError, RecordReceiptCommand, ReceiptAllocationCommand, RentExpectation, RentReceipt, SynchronizeExpectationsCommand, VoidCommand
 from app.modules.finance.infrastructure.unit_of_work import SQLiteFinanceUnitOfWork
 from app.modules.leases.application.service import LeaseCreateCommand, LeaseService, ParticipantCommand, TermCommand
 from app.modules.leases.infrastructure.finance_operations import SQLiteLeaseFinanceOperations
@@ -36,6 +36,7 @@ from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipat
 from app.modules.inspections.infrastructure.deposit_operations import SQLiteInspectionDepositOperations
 from app.modules.files.infrastructure.deposit_operations import SQLiteDepositFileOperations
 from app.modules.workspace.application.service import WorkspaceService
+from app.modules.workspace.application.backup_service import BackupService
 from app.platform.config import LocalConfig
 from app.platform.product_migrations import ProductSchemaError, validate_latest_schema
 from app.bootstrap.api import create_app
@@ -143,6 +144,7 @@ class FinanceWorkflowTests(unittest.TestCase):
         self.finance.record_receipt(RecordReceiptCommand(
             self.lease["id"], str(uuid4()), date.today().isoformat(), expectation["expectedAmountMinor"], "USD",
             (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
+            "cash",
         ))
         account = self.deposits.create_account(self.lease["id"], DepositAccountCreateCommand(term["id"]))
         settlement = self.deposits.create_settlement(account["id"], SettlementCreateCommand(
@@ -435,7 +437,7 @@ class FinanceWorkflowTests(unittest.TestCase):
     def test_synchronize_is_idempotent_and_receipt_settles_expectation(self):
         term=self.lease["terms"][0]; command=SynchronizeExpectationsCommand(term["id"],(date.today()+timedelta(days=60)).isoformat(),date.today().replace(day=1).isoformat())
         rows=self.finance.synchronize(self.lease["id"],command); self.assertTrue(rows); self.assertEqual([],self.finance.synchronize(self.lease["id"],command))
-        expectation=rows[0]; receipt=self.finance.record_receipt(RecordReceiptCommand(self.lease["id"],str(uuid4()),date.today().isoformat(),expectation["expectedAmountMinor"],"USD",(ReceiptAllocationCommand(expectation["id"],expectation["expectedAmountMinor"]),)))
+        expectation=rows[0]; receipt=self.finance.record_receipt(RecordReceiptCommand(self.lease["id"],str(uuid4()),date.today().isoformat(),expectation["expectedAmountMinor"],"USD",(ReceiptAllocationCommand(expectation["id"],expectation["expectedAmountMinor"]),),"cash"))
         self.assertEqual(receipt["allocations"][0]["expectationId"],expectation["id"])
         view = self.finance.expectation(expectation["id"])
         self.assertEqual(view["settlementStatus"],"paid")
@@ -448,11 +450,206 @@ class FinanceWorkflowTests(unittest.TestCase):
         self.assertEqual(voided["allocationCount"], 1)
         self.assertEqual(voided["allocationSummaries"][0]["receiptLifecycleStatus"], "voided")
 
+    def test_receipt_payment_method_is_immutable_and_idempotency_sensitive(self):
+        term = self.lease["terms"][0]
+        expectation = self.finance.synchronize(
+            self.lease["id"],
+            SynchronizeExpectationsCommand(
+                term["id"], (date.today() + timedelta(days=60)).isoformat(),
+                date.today().replace(day=1).isoformat(),
+            ),
+        )[0]
+        key = str(uuid4())
+        command = RecordReceiptCommand(
+            self.lease["id"], key, date.today().isoformat(),
+            expectation["expectedAmountMinor"], "USD",
+            (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
+            "check", "Personal check", "Check •••• 9182",
+        )
+        receipt = self.finance.record_receipt(command)
+        self.assertEqual(receipt["paymentMethodKind"], "check")
+        self.assertEqual(receipt["maskedReference"], "Check •••• 9182")
+        self.assertEqual(self.finance.record_receipt(command)["id"], receipt["id"])
+        with self.assertRaises(FinanceConflictError):
+            self.finance.record_receipt(RecordReceiptCommand(
+                self.lease["id"], key, date.today().isoformat(),
+                expectation["expectedAmountMinor"], "USD",
+                (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
+                "cash",
+            ))
+
+    def test_payment_method_validation_and_suggestion_route(self):
+        with self.assertRaises(FinanceError):
+            RecordReceiptCommand(
+                self.lease["id"], str(uuid4()), date.today().isoformat(), 100, "USD",
+                (ReceiptAllocationCommand(str(uuid4()), 100),), "other",
+            )
+        with self.assertRaises(FinanceError):
+            RecordReceiptCommand(
+                self.lease["id"], str(uuid4()), date.today().isoformat(), 100, "USD",
+                (ReceiptAllocationCommand(str(uuid4()), 100),), "bank_transfer",
+                masked_reference="123456789",
+            )
+        with TestClient(create_app(self.workspace.config.config_path)) as client:
+            empty = client.get(f"/api/leases/{self.lease['id']}/rent-receipts/payment-method-suggestion")
+        self.assertEqual(empty.status_code, 204, empty.text)
+        term = self.lease["terms"][0]
+        expectation = self.finance.synchronize(
+            self.lease["id"],
+            SynchronizeExpectationsCommand(
+                term["id"], (date.today() + timedelta(days=60)).isoformat(),
+                date.today().replace(day=1).isoformat(),
+            ),
+        )[0]
+        self.finance.record_receipt(RecordReceiptCommand(
+            self.lease["id"], str(uuid4()), date.today().isoformat(),
+            expectation["expectedAmountMinor"], "USD",
+            (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
+            "other", other_payment_method_note="Money order",
+        ))
+        with TestClient(create_app(self.workspace.config.config_path)) as client:
+            suggested = client.get(f"/api/leases/{self.lease['id']}/rent-receipts/payment-method-suggestion")
+        self.assertEqual(suggested.status_code, 200, suggested.text)
+        self.assertEqual(suggested.json()["paymentMethodKind"], "other")
+        self.assertEqual(suggested.json()["otherPaymentMethodNote"], "Money order")
+
+    def test_receipt_http_contract_requires_and_returns_payment_method_snapshot(self):
+        term = self.lease["terms"][0]
+        expectation = self.finance.synchronize(
+            self.lease["id"],
+            SynchronizeExpectationsCommand(
+                term["id"], (date.today() + timedelta(days=60)).isoformat(),
+                date.today().replace(day=1).isoformat(),
+            ),
+        )[0]
+        payload = {
+            "leaseId": self.lease["id"], "idempotencyKey": str(uuid4()),
+            "receivedOn": date.today().isoformat(),
+            "amountMinor": expectation["expectedAmountMinor"], "currencyCode": "USD",
+            "allocations": [{"expectationId": expectation["id"], "amountMinor": expectation["expectedAmountMinor"]}],
+            "paymentMethodKind": "online_payment", "paymentMethodLabel": "Tenant portal",
+            "maskedReference": "•••• 4421", "otherPaymentMethodNote": None,
+        }
+        with TestClient(create_app(self.workspace.config.config_path)) as client:
+            invalid = client.post("/api/rent-receipts", json={**payload, "paymentMethodKind": "other"})
+            created = client.post("/api/rent-receipts", json=payload)
+            listed = client.get("/api/rent-receipts")
+        self.assertEqual(invalid.status_code, 422, invalid.text)
+        self.assertEqual(created.status_code, 201, created.text)
+        self.assertEqual(created.json()["paymentMethodKind"], "online_payment")
+        self.assertEqual(created.json()["maskedReference"], "•••• 4421")
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertEqual(listed.json()["items"][0]["paymentMethodLabel"], "Tenant portal")
+
+    def test_duplicate_receipt_requires_explicit_transactional_review(self):
+        term = self.lease["terms"][0]
+        rows = self.finance.synchronize(
+            self.lease["id"],
+            SynchronizeExpectationsCommand(term["id"], (date.today() + timedelta(days=90)).isoformat(), date.today().replace(day=1).isoformat()),
+        )
+        first, second = rows[:2]
+        self.finance.record_receipt(RecordReceiptCommand(
+            self.lease["id"], str(uuid4()), date.today().isoformat(), 100, "USD",
+            (ReceiptAllocationCommand(first["id"], 100),), "cash",
+        ))
+        with self.assertRaises(FinanceConflictError):
+            self.finance.record_receipt(RecordReceiptCommand(
+                self.lease["id"], str(uuid4()), date.today().isoformat(), 100, "USD",
+                (ReceiptAllocationCommand(second["id"], 100),), "online_payment",
+            ))
+        confirmed = self.finance.record_receipt(RecordReceiptCommand(
+            self.lease["id"], str(uuid4()), date.today().isoformat(), 100, "USD",
+            (ReceiptAllocationCommand(second["id"], 100),), "online_payment",
+            duplicate_confirmed=True, duplicate_reason="Separate same-day payment.",
+        ))
+        event = SQLiteAuditRepository(self.workspace.paths.database).history(
+            "rent_receipt", confirmed["id"], action="recorded",
+        )[0]
+        self.assertTrue(event.after_snapshot["duplicateConfirmed"])
+        self.assertEqual(event.after_snapshot["duplicateReason"], "Separate same-day payment.")
+
+    def test_safe_masked_reference_rejects_corrupted_workspace_data(self):
+        with self.assertRaises(FinanceError):
+            RecordReceiptCommand(
+                self.lease["id"], str(uuid4()), date.today().isoformat(), 100, "USD",
+                (ReceiptAllocationCommand(str(uuid4()), 100),), "online_payment",
+                masked_reference="access_token=sk-live-secret",
+            )
+        term = self.lease["terms"][0]
+        expectation = self.finance.synchronize(
+            self.lease["id"],
+            SynchronizeExpectationsCommand(term["id"], (date.today() + timedelta(days=60)).isoformat(), date.today().replace(day=1).isoformat()),
+        )[0]
+        receipt = self.finance.record_receipt(RecordReceiptCommand(
+            self.lease["id"], str(uuid4()), date.today().isoformat(), expectation["expectedAmountMinor"], "USD",
+            (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
+            "check", masked_reference="Check •••• 9182",
+        ))
+        with self.finance.unit_of_work.engine.begin() as connection:
+            connection.execute(text(
+                "UPDATE rent_receipts SET masked_reference = '4111111111111111' WHERE id = :id"
+            ), {"id": receipt["id"]})
+        with self.assertRaises(ProductSchemaError):
+            validate_latest_schema(self.workspace.paths.database)
+
+    def test_suggestion_skips_voided_receipts_and_activity_hides_method_details(self):
+        stamp = datetime.now(UTC).isoformat()
+        first = RentReceipt(str(uuid4()), self.lease["id"], str(uuid4()), "2026-01-01", 100, "USD", "cash", "Cash drawer", None, None, None, None, None, None, None, stamp)
+        latest = RentReceipt(str(uuid4()), self.lease["id"], str(uuid4()), "2026-01-02", 100, "USD", "check", "Personal check", "Check •••• 9182", None, None, None, None, None, None, stamp)
+        self.finance.unit_of_work.write(lambda tx: (tx.insert_receipt(first), tx.insert_receipt(latest)))
+        self.assertEqual(self.finance.payment_method_suggestion(self.lease["id"])["paymentMethodKind"], "check")
+        self.finance.void_receipt(latest.id, VoidCommand(True, "Corrected receipt"))
+        self.assertEqual(self.finance.payment_method_suggestion(self.lease["id"])["paymentMethodKind"], "cash")
+        term = self.lease["terms"][0]
+        expectation = self.finance.synchronize(self.lease["id"], SynchronizeExpectationsCommand(term["id"], (date.today() + timedelta(days=60)).isoformat(), date.today().replace(day=1).isoformat()))[0]
+        created = self.finance.record_receipt(RecordReceiptCommand(
+            self.lease["id"], str(uuid4()), date.today().isoformat(), expectation["expectedAmountMinor"], "USD",
+            (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),), "other",
+            payment_method_label="Internal transfer", masked_reference="•••• 1234", other_payment_method_note="Recorded from portal receipt",
+        ))
+        with TestClient(create_app(self.workspace.config.config_path)) as client:
+            activity = client.get("/api/audit/events").json()["events"]
+            contextual = client.get(f"/api/audit/events/rent_receipt/{created['id']}").json()["events"]
+        event = next(item for item in activity if item["entityId"] == created["id"])
+        self.assertNotIn("paymentMethodLabel", event["after"])
+        self.assertNotIn("maskedReference", event["after"])
+        self.assertNotIn("otherPaymentMethodNote", event["after"])
+        self.assertEqual(contextual[-1]["after"]["maskedReference"], "•••• 1234")
+
+    def test_receipt_method_snapshot_survives_encrypted_backup_and_restore(self):
+        term = self.lease["terms"][0]
+        expectation = self.finance.synchronize(self.lease["id"], SynchronizeExpectationsCommand(
+            term["id"], (date.today() + timedelta(days=60)).isoformat(), date.today().replace(day=1).isoformat(),
+        ))[0]
+        receipt = self.finance.record_receipt(RecordReceiptCommand(
+            self.lease["id"], str(uuid4()), date.today().isoformat(), expectation["expectedAmountMinor"], "USD",
+            (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
+            "check", "Personal check", "Check •••• 9182",
+        ))
+        backups = BackupService(
+            self.workspace, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
+            lambda database: AuditRecorder(SQLiteAuditRepository(database)),
+        )
+        root = self.workspace.paths.root.parent
+        archive = backups.create_backup(
+            "a sufficiently long backup passphrase", output_path=root / "fin006.epm-backup",
+        )
+        restored_path = root / "restored-fin006"
+        backups.restore(archive.archive_path, "a sufficiently long backup passphrase", restored_path)
+        database = restored_path / "database" / "property-management.sqlite"
+        restored = FinanceService(SQLiteFinanceUnitOfWork(
+            database, AuditRecorder(SQLiteAuditRepository(database)),
+            SQLiteLeaseFinanceOperations(SQLitePortfolioFinanceOperations()), SQLitePartyOperations(database),
+        ))
+        restored_receipt = restored.receipt(receipt["id"])
+        self.assertEqual(restored_receipt["paymentMethodKind"], "check")
+        self.assertEqual(restored_receipt["maskedReference"], "Check •••• 9182")
+
     def test_replacement_chain_filter_returns_complete_lineage(self):
         term = self.lease["terms"][0]
         expectation = self.finance.synchronize(self.lease["id"], SynchronizeExpectationsCommand(term["id"], (date.today() + timedelta(days=60)).isoformat(), date.today().replace(day=1).isoformat()))[0]
         def record(replaces=None):
-            return self.finance.record_receipt(RecordReceiptCommand(self.lease["id"], str(uuid4()), date.today().isoformat(), expectation["expectedAmountMinor"], "USD", (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),), replaces_receipt_id=replaces))
+            return self.finance.record_receipt(RecordReceiptCommand(self.lease["id"], str(uuid4()), date.today().isoformat(), expectation["expectedAmountMinor"], "USD", (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),), "cash", replaces_receipt_id=replaces))
         first = record()
         self.finance.void_receipt(first["id"], VoidCommand(True, "Correction"))
         second = record(first["id"])
@@ -577,6 +774,7 @@ class FinanceWorkflowTests(unittest.TestCase):
         self.finance.record_receipt(RecordReceiptCommand(
             self.lease["id"], str(uuid4()), start.isoformat(), 100, "USD",
             (ReceiptAllocationCommand(rows[2].id, 100),),
+            "cash",
         ))
         page = self.finance.list_expectations(lease_id=self.lease["id"], status="paid", page_size=1)
         self.assertEqual([item["id"] for item in page["items"]], [rows[2].id])
