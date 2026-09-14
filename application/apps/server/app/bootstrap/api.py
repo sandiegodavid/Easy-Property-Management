@@ -31,6 +31,14 @@ from app.modules.tasks.api.router import build_router as build_tasks_router
 from app.modules.tasks.application.service import TaskService
 from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork
 from app.modules.tasks.infrastructure.finance_operations import SQLiteTaskFinanceOperations
+from app.modules.tasks.domain.audit_policy import TASK_ACTIVITY_POLICY
+from app.modules.communications.api.router import build_router as build_communications_router
+from app.modules.communications.application.service import CommunicationService
+from app.modules.communications.infrastructure.unit_of_work import (
+    SQLiteCommunicationUnitOfWork,
+)
+from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
+from app.modules.communications.domain.audit_policy import COMMUNICATION_ACTIVITY_POLICY
 from app.modules.portfolio.api.router import build_router as build_portfolio_router
 from app.modules.portfolio.application.service import PortfolioService
 from app.modules.portfolio.infrastructure.unit_of_work import (
@@ -155,6 +163,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     remote_materializer = s3_store.materialize if s3_store is not None else None
     backups = BackupService(service, recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)), remote_materializer=remote_materializer)
     tasks = TaskService(SQLiteTaskUnitOfWork(service.paths.database, recorder))
+    communications = CommunicationService(SQLiteCommunicationUnitOfWork(
+        service.paths.database, recorder, SQLiteCommunicationContextOperations(),
+    ))
     portfolio = PortfolioService(SQLitePortfolioUnitOfWork(
         service.paths.database, recorder, (SQLiteTenantRoleActivityGuard(),)
     ), party_reads=party_reads, time_zone_resolver=BundledAddressTimeZoneResolver())
@@ -229,6 +240,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.workspace_runtime = runtime
     app.state.file_service = files
     app.state.task_service = tasks
+    app.state.communication_service = communications
     app.state.portfolio_service = portfolio
     app.state.tenant_service = tenants
     app.state.party_contact_service = party_contacts
@@ -292,7 +304,11 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("security_deposit_deduction_source", 1): DEFAULT_SNAPSHOT_POLICY,
         ("security_deposit_credit", 1): DEFAULT_SNAPSHOT_POLICY,
         ("security_deposit_refund", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("communication", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("communication_participant", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("communication_link", 1): DEFAULT_SNAPSHOT_POLICY,
     }, activity_policies={
+        ("task", 1): TASK_ACTIVITY_POLICY,
         ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
         ("file_link", 1): FILE_LINK_ACTIVITY_SNAPSHOT_POLICY,
         ("party_contact_method", 1): PARTY_CONTACT_SNAPSHOT_POLICY,
@@ -324,6 +340,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("security_deposit_deduction_source", 1): DEPOSIT_ACTIVITY_POLICY,
         ("security_deposit_credit", 1): DEPOSIT_ACTIVITY_POLICY,
         ("security_deposit_refund", 1): DEPOSIT_ACTIVITY_POLICY,
+        ("communication", 1): COMMUNICATION_ACTIVITY_POLICY,
+        ("communication_participant", 1): COMMUNICATION_ACTIVITY_POLICY,
+        ("communication_link", 1): COMMUNICATION_ACTIVITY_POLICY,
     })
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime))
@@ -338,6 +357,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_prepaid_check_router(prepaid_checks, runtime))
     app.include_router(build_expense_router(expenses, runtime))
     app.include_router(build_deposit_router(deposits, runtime))
+    app.include_router(build_communications_router(communications, runtime))
     return app
 
 

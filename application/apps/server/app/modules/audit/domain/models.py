@@ -42,6 +42,14 @@ class DefaultAuditSnapshotPolicy:
     def redact(self, snapshot: Mapping[str, Any] | None) -> dict[str, Any] | None:
         return None if snapshot is None else _redact_value(snapshot)
 
+    def redact_entity_id(
+        self,
+        entity_id: str,
+        before: Mapping[str, Any] | None = None,
+        after: Mapping[str, Any] | None = None,
+    ) -> str:
+        return entity_id
+
 
 DEFAULT_SNAPSHOT_POLICY = DefaultAuditSnapshotPolicy()
 
@@ -104,7 +112,9 @@ class AuditEvent:
 
     def to_dict(self, snapshot_policy: AuditSnapshotPolicy) -> dict[str, Any]:
         return {"id": self.id, "occurredAt": self.occurred_at.isoformat(), "entityType": self.entity_type,
-                "entityId": self.entity_id, "action": self.action, "before": snapshot_policy.redact(self.before_snapshot),
+                "entityId": getattr(snapshot_policy, "redact_entity_id", lambda value, *_: value)(
+                    self.entity_id, self.before_snapshot, self.after_snapshot,
+                ), "action": self.action, "before": snapshot_policy.redact(self.before_snapshot),
                 "after": snapshot_policy.redact(self.after_snapshot), "changedFields": list(self.changed_fields),
                 "reason": self.reason, "actorKind": self.actor_kind, "actorReference": self.actor_reference,
                 "correlationId": self.correlation_id, "schemaVersion": self.schema_version}

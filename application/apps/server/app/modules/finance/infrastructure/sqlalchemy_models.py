@@ -54,7 +54,7 @@ class PrepaidCheckModel(LocalBase):
     replaces_prepaid_check_id: Mapped[str | None] = mapped_column(ForeignKey("prepaid_checks.id"), unique=True)
     replaced_by_prepaid_check_id: Mapped[str | None] = mapped_column(ForeignKey("prepaid_checks.id"), unique=True)
     replacement_reason: Mapped[str | None] = mapped_column(String)
-    reminder_task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id"), unique=True)
+    reminder_task_id: Mapped[str | None] = mapped_column(String, ForeignKey("tasks.id"), unique=True)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (

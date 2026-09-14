@@ -95,14 +95,8 @@ class TaskService:
 
     def create(self, data: TaskCreateCommand | dict) -> Task:
         command = data if isinstance(data, TaskCreateCommand) else TaskCreateCommand.from_mapping(data)
-        due_at, timezone = _timestamp(command.due_at_utc, command.due_timezone, required=False)
-        now = _now()
+        task = new_task(command)
         correlation_id = str(uuid4())
-        task = Task(
-            str(uuid4()), command.title, command.notes, command.status, command.priority,
-            due_at, timezone, command.is_all_day, None, None, None,
-            command.related_entity_type, command.related_entity_id, command.related_label, now, now,
-        )
 
         def create_in_transaction(transaction: TaskTransaction) -> Task:
             transaction.insert_task(task)
@@ -227,6 +221,17 @@ class TaskService:
                 entity_type="task_reminder", entity_id=dismissed.id, action="dismissed",
                 before=reminder.to_dict(), after=dismissed.to_dict(), reason="task_updated", correlation_id=correlation_id,
             )
+
+
+def new_task(command: TaskCreateCommand, *, task_id: str | None = None, now: str | None = None) -> Task:
+    """Public TASK-001 factory for transaction-aware owning-domain adapters."""
+    due_at, timezone = _timestamp(command.due_at_utc, command.due_timezone, required=False)
+    created_at = now or _now()
+    return Task(
+        task_id or str(uuid4()), command.title, command.notes, command.status, command.priority,
+        due_at, timezone, command.is_all_day, None, None, None,
+        command.related_entity_type, command.related_entity_id, command.related_label, created_at, created_at,
+    )
 
 
 def _now() -> str:
