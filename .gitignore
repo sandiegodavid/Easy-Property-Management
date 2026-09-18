@@ -19,3 +19,5 @@ application/imports/
 application/exports/
 application/backups/
 application/logs/
+
+.DS_Store
