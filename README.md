@@ -29,7 +29,7 @@ The planned stack is React/Vite/TypeScript for the interface, with Python/FastAP
 | 2 | LOCAL-002 | Local data | [LOCAL-002_DESIGN.md](docs/LOCAL-002_DESIGN.md) | ✅ Done |
 | 3 | AUDIT-001 | Audit | [AUDIT-001_DESIGN.md](docs/AUDIT-001_DESIGN.md) | ✅ Done |
 | 4 | FILE-001 | Files | [FILE-001_DESIGN.md](docs/FILE-001_DESIGN.md) and [FILE-001_MIGRATION_AND_ADAPTER_DESIGN.md](docs/FILE-001_MIGRATION_AND_ADAPTER_DESIGN.md) | ✅ Done |
-| 5 | TASK-001 | Tasks | — | ✅ Done |
+| 5 | TASK-001 | Tasks | [TASK-001_DESIGN.md](docs/TASK-001_DESIGN.md) | ✅ Done |
 | 6 | PORT-001 | Portfolio | [PORT-001_DESIGN.md](docs/PORT-001_DESIGN.md) | ✅ Done |
 | 7 | PORT-002 | Inventory | [PORT-002_DESIGN.md](docs/PORT-002_DESIGN.md) | ✅ Done |
 | 8 | PORT-003 | Inventory | [PORT-003_DESIGN.md](docs/PORT-003_DESIGN.md) | 🟡 In progress — pending UI |

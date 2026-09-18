@@ -108,7 +108,6 @@ Backup status is represented by typed state, operation history, failure records,
 | API/data validation | Pydantic | Shared validation approach for API requests, AI-structured output, and configuration. |
 | Attachments | Storage-neutral FILE-001 records and links; local workspace filesystem by default, with optional AWS S3 adapter | Keeps domain associations stable across storage backends. Local files remain portable with the workspace; S3 objects use durable locators and application-owned hashes, never persisted presigned URLs. Portable backups embed verified referenced content. |
 | Background work | SQLite-backed jobs/outbox table run by the application | Handles ingestion, transcription, AI review preparation, reminders, and backup jobs without Redis or a message broker. |
-
 | Secrets | Operating-system credential store | Keeps external connection credentials out of Git, the workspace database, exports, and backups. |
 | Testing | Pytest unit/integration tests against a temporary SQLite workspace; browser end-to-end tests for critical operator workflows | Financial totals, records, approvals, migrations, and intake review are higher risk than screen styling. |
 | Future cloud database | PostgreSQL | Suitable future destination for tenant-isolated SaaS workspaces, concurrent users, and central operations. |
