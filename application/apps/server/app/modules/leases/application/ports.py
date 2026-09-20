@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Mapping
 from typing import Any, Protocol, TypeVar
 
 from app.modules.leases.domain.models import (
@@ -16,6 +16,17 @@ from app.modules.leases.domain.models import (
 from app.modules.portfolio.domain.models import Property, Space, SpaceOccupancyPeriod
 
 Result = TypeVar("Result")
+
+
+class LeaseContextReader(Protocol):
+    """Transaction-aware lease and term facts for owning-module workflows."""
+
+    def lease_space_id(self, connection: Any, lease_id: str) -> str | None: ...
+    def term_context(self, connection: Any, lease_id: str, term_id: str) -> Mapping[str, object] | None: ...
+    def term_contexts(self, connection: Any, pairs: Collection[tuple[str, str]]) -> Mapping[tuple[str, str], Mapping[str, object]]: ...
+    def rent_responsibility_ends_on(self, connection: Any, lease_id: str) -> str | None: ...
+    def participant_active(self, connection: Any, lease_id: str, party_id: str, on: str) -> bool: ...
+    def participant_ids(self, connection: Any, lease_id: str) -> set[str]: ...
 
 
 class TenantProfileAvailability(Protocol):

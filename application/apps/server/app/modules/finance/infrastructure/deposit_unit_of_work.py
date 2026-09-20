@@ -19,23 +19,37 @@ _MODELS = {"account": SecurityDepositAccountModel, "receipt": SecurityDepositRec
 
 
 class SQLiteDepositUnitOfWork:
-    def __init__(self, database, recorder, leases, parties, inspections, files):
-        self.engine = create_sqlite_engine(database); self.recorder = recorder; self.leases = leases; self.parties = parties; self.inspections = inspections; self.files = files
+    def __init__(self, database, recorder, leases, portfolio, parties, inspections, files):
+        self.engine = create_sqlite_engine(database); self.recorder = recorder; self.leases = leases; self.portfolio = portfolio; self.parties = parties; self.inspections = inspections; self.files = files
     def write(self, operation):
         try:
             with immediate_transaction(self.engine) as connection:
-                return operation(_Transaction(connection, self.recorder, self.leases, self.parties, self.inspections, self.files))
+                return operation(_Transaction(connection, self.recorder, self.leases, self.portfolio, self.parties, self.inspections, self.files))
         except (IntegrityError, OperationalError) as error:
             raise FinanceConflictError("The security-deposit record changed concurrently or conflicts with an existing record.") from error
     def read(self, operation):
         with self.engine.connect() as connection:
-            return operation(_Transaction(connection, self.recorder, self.leases, self.parties, self.inspections, self.files))
+            return operation(_Transaction(connection, self.recorder, self.leases, self.portfolio, self.parties, self.inspections, self.files))
 
 
 class _Transaction:
-    def __init__(self, connection, recorder, leases, parties, inspections, files): self.connection = connection; self.recorder = recorder; self.leases = leases; self.parties = parties; self.inspections = inspections; self.files = files
-    def lease_context(self, lease_id, lease_term_id): return self.leases.deposit_context(self.connection, lease_id, lease_term_id)
-    def participants(self, lease_id): return self.leases.deposit_participants(self.connection, lease_id)
+    def __init__(self, connection, recorder, leases, portfolio, parties, inspections, files): self.connection = connection; self.recorder = recorder; self.leases = leases; self.portfolio = portfolio; self.parties = parties; self.inspections = inspections; self.files = files
+    def lease_context(self, lease_id, lease_term_id):
+        context = self.leases.term_context(self.connection, lease_id, lease_term_id)
+        if context is None:
+            return None
+        lease = context["lease"]
+        portfolio_context = self.portfolio.context_for_space(self.connection, lease["space_id"])
+        if portfolio_context is None:
+            return None
+        term = context["term"]
+        return {
+            "leaseId": lease["id"], "status": lease["status"],
+            "propertyId": portfolio_context["property_id"], "spaceId": portfolio_context["space_id"],
+            "timeZone": portfolio_context["time_zone"], "actualMoveOutOn": lease["actual_move_out_on"],
+            "agreedSecurityDepositMinor": term["agreed_security_deposit_minor"],
+        }
+    def participants(self, lease_id): return self.leases.participant_ids(self.connection, lease_id)
     def party(self, party_id):
         item = self.parties.party(self.connection, party_id)
         return None if item is None else {"id": item.id, "display_name": item.display_name, "archived_at": item.archived_at}

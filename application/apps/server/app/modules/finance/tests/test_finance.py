@@ -8,7 +8,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 import unittest
 from uuid import uuid4
-from sqlalchemy import exc, text
+from sqlalchemy import event, exc, text
 from fastapi.testclient import TestClient
 
 from app.modules.audit.application.recorder import AuditRecorder
@@ -24,7 +24,7 @@ from app.modules.finance.application.ports import LeaseTermFinanceSnapshot
 from app.modules.finance.domain.models import FinanceConflictError, FinanceError, PrepaidCheckCommand, PrepaidCheckTransitionCommand, RecordReceiptCommand, ReceiptAllocationCommand, RentExpectation, RentReceipt, SynchronizeExpectationsCommand, VoidCommand
 from app.modules.finance.infrastructure.unit_of_work import SQLiteFinanceUnitOfWork
 from app.modules.leases.application.service import LeaseCreateCommand, LeaseService, ParticipantCommand, TermCommand
-from app.modules.leases.infrastructure.finance_operations import SQLiteLeaseFinanceOperations
+from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
 from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseUnitOfWork
 from app.modules.parties.application.service import SharedPartyFactory
 from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations, SQLitePartyReadOperations
@@ -62,9 +62,9 @@ class FinanceWorkflowTests(unittest.TestCase):
         tenant=TenantService(SQLiteTenantUnitOfWork(db,recorder,SQLiteLeaseParticipationGuard(),party_operations,SQLitePartyReadOperations(party_operations)),SharedPartyFactory()).create(TenantCreateCommand("individual","Rent Tenant"))
         leases=LeaseService(SQLiteLeaseUnitOfWork(db,recorder,SQLiteTenantProfileAvailability(),SQLitePortfolioLeaseOperations(db)))
         today=date.today(); lease=leases.create(LeaseCreateCommand(space_id,"residential",today,today+timedelta(days=90),today,TermCommand(100_000,"USD","monthly",1,0),(ParticipantCommand(tenant["id"],"primary_tenant"),))); self.lease=leases.execute(lease["id"],executed_on=today,confirmed=True)
-        self.finance=FinanceService(SQLiteFinanceUnitOfWork(db,recorder,SQLiteLeaseFinanceOperations(SQLitePortfolioContextReader()),party_operations),now=lambda:datetime.now(UTC))
+        self.finance=FinanceService(SQLiteFinanceUnitOfWork(db,recorder,SQLiteLeaseContextReader(),SQLitePortfolioContextReader(),party_operations),now=lambda:datetime.now(UTC))
         self.file_reader = SQLiteFileLinkReader()
-        self.deposits=DepositService(SQLiteDepositUnitOfWork(db,recorder,SQLiteLeaseFinanceOperations(SQLitePortfolioContextReader()),party_operations,SQLiteInspectionContextReader(),self.file_reader),now=lambda:datetime.now(UTC))
+        self.deposits=DepositService(SQLiteDepositUnitOfWork(db,recorder,SQLiteLeaseContextReader(),SQLitePortfolioContextReader(),party_operations,SQLiteInspectionContextReader(),self.file_reader),now=lambda:datetime.now(UTC))
         self.files = FileService(
             self.workspace, FilesystemContentStore(self.workspace.paths.files),
             SQLiteFileUnitOfWork(db, recorder),
@@ -88,6 +88,55 @@ class FinanceWorkflowTests(unittest.TestCase):
         ))
         self.assertEqual(settlement["status"], "draft")
         SettlementResponse.model_validate(settlement)
+
+    def test_rejected_current_snapshot_does_not_query_rent_responsibility(self):
+        term_id = self.lease["terms"][0]["id"]
+        engine = self.finance.unit_of_work.engine
+        with engine.begin() as connection:
+            connection.execute(text("UPDATE leases SET status='draft', executed_on=NULL WHERE id=:id"), {"id": self.lease["id"]})
+        statements = []
+        def capture(*args):
+            if args[2].lstrip().upper().startswith("SELECT"):
+                statements.append(args[2])
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            self.assertIsNone(self.finance.unit_of_work.read(
+                lambda tx: tx.lease_term_snapshot(self.lease["id"], term_id)
+            ))
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+        self.assertEqual(len(statements), 2)
+        self.assertFalse(any("LEASE_TERMINATION" in statement.upper() for statement in statements))
+
+    def test_historical_snapshot_batch_never_falls_back_to_single_space_reads(self):
+        term_id = self.lease["terms"][0]["id"]
+        unit_of_work = self.finance.unit_of_work
+        original_portfolio = unit_of_work.portfolio_operations
+
+        class MissingBatchPortfolioContext:
+            single_reads = 0
+            def contexts_for_spaces(self, connection, space_ids): return {}
+            def context_for_space(self, connection, space_id):
+                self.single_reads += 1
+                raise AssertionError("batch snapshots must not use single-space reads")
+
+        missing_context = MissingBatchPortfolioContext()
+        unit_of_work.portfolio_operations = missing_context
+        statements = []
+        def capture(*args):
+            if args[2].lstrip().upper().startswith("SELECT"):
+                statements.append(args[2])
+        event.listen(unit_of_work.engine, "before_cursor_execute", capture)
+        try:
+            snapshots = unit_of_work.read(
+                lambda tx: tx.historical_term_snapshots([(self.lease["id"], term_id)])
+            )
+        finally:
+            event.remove(unit_of_work.engine, "before_cursor_execute", capture)
+            unit_of_work.portfolio_operations = original_portfolio
+        self.assertEqual(snapshots, {})
+        self.assertEqual(missing_context.single_reads, 0)
+        self.assertEqual(len(statements), 3)
 
     def test_deduction_evidence_must_be_available_and_archived_before_deletion(self):
         term = self.lease["terms"][0]
@@ -135,7 +184,7 @@ class FinanceWorkflowTests(unittest.TestCase):
         clock = lambda: datetime.combine(date.today() + timedelta(days=2), datetime.min.time(), UTC)
         prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
             db, AuditRecorder(SQLiteAuditRepository(db)),
-            SQLiteLeaseFinanceOperations(SQLitePortfolioContextReader()), SQLitePartyOperations(db),
+            SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), SQLitePartyOperations(db),
             SQLiteTaskTransactionOperations(),
         ), now=clock)
         check = prepaid.create(PrepaidCheckCommand(
@@ -163,7 +212,7 @@ class FinanceWorkflowTests(unittest.TestCase):
         db = self.workspace.paths.database
         prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
             db, AuditRecorder(SQLiteAuditRepository(db)),
-            SQLiteLeaseFinanceOperations(SQLitePortfolioContextReader()), SQLitePartyOperations(db), SQLiteTaskTransactionOperations(),
+            SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), SQLitePartyOperations(db), SQLiteTaskTransactionOperations(),
         ))
         check = prepaid.create(PrepaidCheckCommand(
             expectation["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(),
@@ -186,7 +235,7 @@ class FinanceWorkflowTests(unittest.TestCase):
         complete = next(item for item in expectations if not item["isProrated"])
         prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
             self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
-            SQLiteLeaseFinanceOperations(SQLitePortfolioContextReader()), SQLitePartyOperations(self.workspace.paths.database), SQLiteTaskTransactionOperations(),
+            SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), SQLitePartyOperations(self.workspace.paths.database), SQLiteTaskTransactionOperations(),
         ))
         with self.assertRaises(FinanceConflictError):
             prepaid.create(PrepaidCheckCommand(prorated["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(), (date.today() + timedelta(days=2)).isoformat(), None, str(uuid4())))
@@ -207,7 +256,7 @@ class FinanceWorkflowTests(unittest.TestCase):
         clock = lambda: datetime.combine(date.today() + timedelta(days=2), datetime.min.time(), UTC)
         prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
             self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
-            SQLiteLeaseFinanceOperations(SQLitePortfolioContextReader()), SQLitePartyOperations(self.workspace.paths.database), SQLiteTaskTransactionOperations(),
+            SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), SQLitePartyOperations(self.workspace.paths.database), SQLiteTaskTransactionOperations(),
         ), now=clock)
         check = prepaid.create(PrepaidCheckCommand(
             expectation["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(),
@@ -228,7 +277,7 @@ class FinanceWorkflowTests(unittest.TestCase):
         expectation = next(item for item in expectations if not item["isProrated"])
         prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
             self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
-            SQLiteLeaseFinanceOperations(SQLitePortfolioContextReader()), SQLitePartyOperations(self.workspace.paths.database), SQLiteTaskTransactionOperations(),
+            SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), SQLitePartyOperations(self.workspace.paths.database), SQLiteTaskTransactionOperations(),
         ))
         original = prepaid.create(PrepaidCheckCommand(expectation["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(), (date.today() + timedelta(days=2)).isoformat(), None, str(uuid4())))
         prepaid.void(original["id"], PrepaidCheckTransitionCommand(str(uuid4()), True, "Spoiled"))
@@ -807,7 +856,7 @@ class FinanceWorkflowTests(unittest.TestCase):
         database = restored_path / "database" / "property-management.sqlite"
         restored = FinanceService(SQLiteFinanceUnitOfWork(
             database, AuditRecorder(SQLiteAuditRepository(database)),
-            SQLiteLeaseFinanceOperations(SQLitePortfolioContextReader()), SQLitePartyOperations(database),
+            SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), SQLitePartyOperations(database),
         ))
         restored_receipt = restored.receipt(receipt["id"])
         self.assertEqual(restored_receipt["paymentMethodKind"], "check")

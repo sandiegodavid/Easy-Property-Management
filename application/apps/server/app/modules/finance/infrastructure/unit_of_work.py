@@ -6,31 +6,67 @@ from typing import Any, TypeVar
 from uuid import uuid4
 from sqlalchemy import and_, func, or_, select, text
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.finance.application.ports import FinanceTransaction, LeaseFinanceOperations, PartyFinanceOperations
+from app.modules.finance.application.ports import FinanceTransaction, LeaseTermFinanceSnapshot, PartyFinanceOperations
 from app.modules.finance.domain.models import PrepaidCheck, RentExpectation, RentReceipt
 from app.modules.finance.infrastructure.sqlalchemy_models import PrepaidCheckModel, PrepaidCheckOperationModel, RentExpectationModel, RentExpectationTimelinessReviewModel, RentReceiptModel, RentReceiptAllocationModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 from app.modules.tasks.application.ports import TaskTransactionOperations
 from app.modules.tasks.domain.models import Task, TaskReminder, dismiss
+from app.modules.leases.application.ports import LeaseContextReader
+from app.modules.portfolio.application.ports import PortfolioContextReader
 Result = TypeVar("Result")
+_PORTFOLIO_CONTEXT_UNSET = object()
 class SQLiteFinanceUnitOfWork:
-    def __init__(self, database, recorder: AuditRecorder, lease_operations: LeaseFinanceOperations, party_operations: PartyFinanceOperations, task_operations: TaskTransactionOperations | None = None): self.engine=create_sqlite_engine(database); self.recorder=recorder; self.lease_operations=lease_operations; self.party_operations=party_operations; self.task_operations=task_operations
+    def __init__(self, database, recorder: AuditRecorder, lease_operations: LeaseContextReader, portfolio_operations: PortfolioContextReader, party_operations: PartyFinanceOperations, task_operations: TaskTransactionOperations | None = None): self.engine=create_sqlite_engine(database); self.recorder=recorder; self.lease_operations=lease_operations; self.portfolio_operations=portfolio_operations; self.party_operations=party_operations; self.task_operations=task_operations
     def write(self, operation: Callable[[FinanceTransaction], Result]) -> Result:
-        with immediate_transaction(self.engine) as connection: return operation(_Tx(connection, self.recorder, self.lease_operations, self.party_operations, self.task_operations))
+        with immediate_transaction(self.engine) as connection: return operation(_Tx(connection, self.recorder, self.lease_operations, self.portfolio_operations, self.party_operations, self.task_operations))
     def read(self, operation: Callable[[FinanceTransaction], Result]) -> Result:
         # Listing and presentation never write.  Keep them out of SQLite's
         # immediate writer transaction so ordinary GET requests retain WAL's
         # concurrent-read behaviour.
         with self.engine.connect() as connection:
-            return operation(_Tx(connection, self.recorder, self.lease_operations, self.party_operations, self.task_operations))
+            return operation(_Tx(connection, self.recorder, self.lease_operations, self.portfolio_operations, self.party_operations, self.task_operations))
 class _Tx:
-    def __init__(self, connection, recorder, lease_operations, party_operations, task_operations): self.connection=connection; self.recorder=recorder; self.lease_operations=lease_operations; self.party_operations=party_operations; self.task_operations=task_operations
-    def lease_term_snapshot(self, lease_id, term_id): return self.lease_operations.term_snapshot(self.connection, lease_id, term_id)
-    def historical_term_snapshot(self, lease_id, term_id): return self.lease_operations.historical_term_snapshot(self.connection, lease_id, term_id)
-    def historical_term_snapshots(self, pairs): return self.lease_operations.historical_term_snapshots(self.connection, pairs)
+    def __init__(self, connection, recorder, lease_operations, portfolio_operations, party_operations, task_operations): self.connection=connection; self.recorder=recorder; self.lease_operations=lease_operations; self.portfolio_operations=portfolio_operations; self.party_operations=party_operations; self.task_operations=task_operations
+    def lease_term_snapshot(self, lease_id, term_id):
+        context = self.lease_operations.term_context(self.connection, lease_id, term_id)
+        return self._finance_snapshot(context, current_only=True)
+    def historical_term_snapshot(self, lease_id, term_id):
+        context = self.lease_operations.term_context(self.connection, lease_id, term_id)
+        return self._finance_snapshot(context, current_only=False)
+    def historical_term_snapshots(self, pairs):
+        contexts = self.lease_operations.term_contexts(self.connection, pairs)
+        spaces = {context["lease"]["space_id"] for context in contexts.values()}
+        portfolio_contexts = self.portfolio_operations.contexts_for_spaces(self.connection, spaces)
+        return {
+            pair: snapshot
+            for pair, context in contexts.items()
+            if (snapshot := self._finance_snapshot(context, current_only=False, portfolio_context=portfolio_contexts.get(context["lease"]["space_id"]))) is not None
+        }
     def party_exists(self, party_id): return self.party_operations.exists(self.connection, party_id)
-    def lease_time_zone(self, lease_id): return self.lease_operations.lease_time_zone(self.connection, lease_id)
+    def lease_time_zone(self, lease_id):
+        space_id = self.lease_operations.lease_space_id(self.connection, lease_id)
+        context = None if space_id is None else self.portfolio_operations.context_for_space(self.connection, space_id)
+        return None if context is None else context["time_zone"]
     def participant_active(self, lease_id, party_id, on): return self.lease_operations.participant_active(self.connection, lease_id, party_id, on)
+    def _finance_snapshot(self, context, *, current_only, portfolio_context=_PORTFOLIO_CONTEXT_UNSET):
+        if context is None:
+            return None
+        lease = context["lease"]
+        if current_only and lease["status"] not in {"executed", "ended", "terminated"}:
+            return None
+        if portfolio_context is _PORTFOLIO_CONTEXT_UNSET:
+            portfolio_context = self.portfolio_operations.context_for_space(self.connection, lease["space_id"])
+        if portfolio_context is None:
+            return None
+        term = context["term"]
+        return LeaseTermFinanceSnapshot(
+            term["id"], lease["id"], lease["status"], portfolio_context["property_id"],
+            portfolio_context["space_id"], portfolio_context["time_zone"], term["effective_on"],
+            term["ends_on"], term["base_rent_minor"], term["currency_code"],
+            term["payment_frequency"], term["payment_due_day"], lease["actual_move_out_on"],
+            context.get("rent_responsibility_ends_on") if "rent_responsibility_ends_on" in context else self.lease_operations.rent_responsibility_ends_on(self.connection, lease["id"]),
+        )
     def expectation(self, record_id):
         row=self.connection.execute(RentExpectationModel.__table__.select().where(RentExpectationModel.id==record_id)).mappings().first(); return RentExpectation(**dict(row)) if row else None
     def expectations_for_term(self, term_id): return self.expectations(lease_term_id=term_id)

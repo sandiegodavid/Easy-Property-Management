@@ -9,10 +9,10 @@ from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.finance.application.expense_ports import (
     ExpenseTransaction,
     PartyExpenseOperations,
-    ProviderExpenseOperations,
 )
 from app.modules.files.application.ports import FileLinkReader, FileLinkWithFile
 from app.modules.portfolio.application.ports import PortfolioContextReader
+from app.modules.vendors.application.ports import ProviderContextReader
 from app.modules.finance.domain.expense_models import Expense, ExpenseCategory, ExpenseRefund
 from app.modules.finance.domain.models import FinanceConflictError
 from app.modules.finance.infrastructure.sqlalchemy_models import (
@@ -25,7 +25,7 @@ from app.platform.sqlite_engine import create_sqlite_engine, immediate_transacti
 
 class SQLiteExpenseUnitOfWork:
     def __init__(self, database, recorder: AuditRecorder, portfolio: PortfolioContextReader,
-                 providers: ProviderExpenseOperations, parties: PartyExpenseOperations,
+                 providers: ProviderContextReader, parties: PartyExpenseOperations,
                  files: FileLinkReader) -> None:
         self.engine = create_sqlite_engine(database)
         self.recorder = recorder
@@ -179,6 +179,8 @@ class _Transaction:
         portfolio_contexts = self.portfolio.contexts_for_property_spaces(
             self.connection, {(item.property_id, item.space_id) for item in expenses}
         )
+        provider_profiles = self.providers.profile_contexts(self.connection, provider_ids)
+        provider_parties = self.parties.party_map(self.connection, list(provider_profiles))
         return {
             "categories": categories,
             "contexts": {
@@ -186,9 +188,7 @@ class _Transaction:
                 for item in expenses
                 if (context := portfolio_contexts.get((item.property_id, item.space_id))) is not None
             },
-            "providers": self.providers.expense_providers(
-                self.connection, list(provider_ids)
-            ),
+            "providers": _provider_views(provider_profiles, provider_parties),
             "refunds": refunds,
             "evidence": {
                 expense_id: [_expense_evidence_view(link) for link in links]
@@ -289,7 +289,9 @@ class _Transaction:
         return None if context is None else _expense_context_view(context)
 
     def provider_context(self, party_id):
-        return self.providers.expense_provider(self.connection, party_id)
+        profile = self.providers.profile_context(self.connection, party_id)
+        party = self.parties.party(self.connection, party_id)
+        return None if profile is None or party is None else _provider_view(party_id, profile, party)
 
     def party_exists(self, party_id):
         return self.parties.exists(self.connection, party_id)
@@ -333,6 +335,18 @@ def _expense_context_view(context: dict[str, object]) -> dict[str, object]:
         "spaceName": context["space_display_name"],
         "spaceArchived": False if context["space_status"] is None else context["space_status"] == "archived",
     }
+
+
+def _provider_views(profiles, parties) -> dict[str, dict[str, object]]:
+    return {
+        party_id: _provider_view(party_id, profile, parties[party_id])
+        for party_id, profile in profiles.items()
+        if party_id in parties
+    }
+
+
+def _provider_view(party_id, profile, party) -> dict[str, object]:
+    return {"partyId": party_id, "displayName": party.display_name, "archived": profile["archived_at"] is not None}
 
 
 def _chunks(values, size=500):

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -37,7 +37,7 @@ from app.modules.portfolio.application.service import OwnershipInput, PortfolioS
 from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
-from app.modules.vendors.infrastructure.expense_operations import SQLiteProviderExpenseOperations
+from app.modules.vendors.infrastructure.context_reader import SQLiteProviderContextReader
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
 from app.platform.migration_errors import MigrationSchemaError
@@ -73,7 +73,7 @@ class ExpenseWorkflowTests(unittest.TestCase):
         file_link_reader = SQLiteFileLinkReader()
         self.expenses = ExpenseService(SQLiteExpenseUnitOfWork(
             database, recorder, SQLitePortfolioContextReader(),
-            SQLiteProviderExpenseOperations(party_operations), party_operations,
+            SQLiteProviderContextReader(), party_operations,
             file_link_reader,
         ), now=lambda: datetime.now(UTC))
         self.files = FileService(
@@ -301,10 +301,26 @@ class ExpenseWorkflowTests(unittest.TestCase):
             self.expenses.list_expenses(object())
 
     def test_list_projection_uses_constant_statement_count_per_page(self):
+        provider_ids = [str(uuid4()) for _ in range(5)]
+        stamp = datetime.now(UTC).isoformat()
+        with self.expenses.unit_of_work.engine.begin() as connection:
+            for number, provider_id in enumerate(provider_ids):
+                connection.execute(text(
+                    "INSERT INTO parties (id, party_kind, display_name, created_at, updated_at, archived_at) "
+                    "VALUES (:id, 'organization', :name, :stamp, :stamp, NULL)"
+                ), {"id": provider_id, "name": f"Projection Provider {number}", "stamp": stamp})
+                connection.execute(text(
+                    "INSERT INTO provider_profiles "
+                    "(party_id, selection_status, selection_reason, notes, created_at, updated_at, archived_at) "
+                    "VALUES (:id, 'neutral', NULL, NULL, :stamp, :stamp, NULL)"
+                ), {"id": provider_id, "stamp": stamp})
         for number in range(60):
             self.expenses.record_expense(self.command(
                 amount=f"{number + 1}.00",
                 description=f"Expense {number}",
+                provider_party_id=provider_ids[number % len(provider_ids)],
+                payee_name=None,
+                paid_on=(date.today() - timedelta(days=number)).isoformat(),
             ))
 
         counts = []
@@ -327,12 +343,53 @@ class ExpenseWorkflowTests(unittest.TestCase):
         finally:
             event.remove(engine, "before_cursor_execute", count_statement)
         self.assertEqual(len(result["items"]), 5)
+        self.assertEqual(
+            {item["provider"]["partyId"] for item in result["items"]},
+            set(provider_ids),
+        )
         self.assertEqual(counts[1], counts[0])
         self.assertTrue(expense_selects)
         self.assertTrue(all(
             "WHERE " in statement or "LIMIT " in statement
             for statement in expense_selects
         ))
+
+    def test_provider_context_reader_uses_one_query_for_any_nonempty_batch(self):
+        reader = SQLiteProviderContextReader()
+        provider_ids = [str(uuid4()), str(uuid4())]
+        stamp = datetime.now(UTC).isoformat()
+        engine = self.expenses.unit_of_work.engine
+        with engine.begin() as connection:
+            for number, provider_id in enumerate(provider_ids):
+                connection.execute(text(
+                    "INSERT INTO parties (id, party_kind, display_name, created_at, updated_at, archived_at) "
+                    "VALUES (:id, 'organization', :name, :stamp, :stamp, NULL)"
+                ), {"id": provider_id, "name": f"Reader Provider {number}", "stamp": stamp})
+                connection.execute(text(
+                    "INSERT INTO provider_profiles "
+                    "(party_id, selection_status, selection_reason, notes, created_at, updated_at, archived_at) "
+                    "VALUES (:id, 'neutral', NULL, NULL, :stamp, :stamp, :archived)"
+                ), {"id": provider_id, "stamp": stamp, "archived": None if number == 0 else stamp})
+
+        statements = []
+        def capture(*args):
+            if args[2].lstrip().upper().startswith("SELECT"):
+                statements.append(args[2])
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            with engine.connect() as connection:
+                self.assertEqual(reader.profile_contexts(connection, set()), {})
+                self.assertEqual(len(statements), 0)
+                self.assertEqual(reader.profile_context(connection, "missing"), None)
+                self.assertEqual(len(statements), 1)
+                self.assertIsNone(reader.profile_context(connection, provider_ids[0])["archived_at"])
+                self.assertIsNotNone(reader.profile_context(connection, provider_ids[1])["archived_at"])
+                start = len(statements)
+                contexts = reader.profile_contexts(connection, {provider_ids[0], provider_ids[1], "missing"})
+                self.assertEqual(set(contexts), set(provider_ids))
+                self.assertEqual(len(statements) - start, 1)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
 
     def test_exact_schema_rejects_missing_finance_index(self):
         engine = create_sqlite_engine(self.workspace.paths.database)
@@ -365,7 +422,7 @@ class ExpenseWorkflowTests(unittest.TestCase):
         party_operations = SQLitePartyOperations(restored_database)
         restored = ExpenseService(SQLiteExpenseUnitOfWork(
             restored_database, AuditRecorder(SQLiteAuditRepository(restored_database)),
-            SQLitePortfolioContextReader(), SQLiteProviderExpenseOperations(party_operations),
+            SQLitePortfolioContextReader(), SQLiteProviderContextReader(),
             party_operations, SQLiteFileLinkReader(),
         ))
         detail = restored.expense(expense["id"])

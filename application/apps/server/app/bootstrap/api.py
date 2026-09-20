@@ -105,9 +105,9 @@ from app.modules.finance.domain.audit_policy import (
     EXPENSE_REFUND_ACTIVITY_POLICY,
     DEPOSIT_ACTIVITY_POLICY,
 )
-from app.modules.leases.infrastructure.finance_operations import SQLiteLeaseFinanceOperations
+from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
 from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
-from app.modules.vendors.infrastructure.expense_operations import SQLiteProviderExpenseOperations
+from app.modules.vendors.infrastructure.context_reader import SQLiteProviderContextReader
 from app.platform.version import application_version
 
 logger = logging.getLogger(__name__)
@@ -142,6 +142,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     task_transaction_operations = SQLiteTaskTransactionOperations()
     portfolio_context_reader = SQLitePortfolioContextReader()
     inspection_context_reader = SQLiteInspectionContextReader()
+    lease_context_reader = SQLiteLeaseContextReader()
     party_reads = SQLitePartyReadOperations(party_operations)
     portfolio_lease_operations = SQLitePortfolioLeaseOperations(service.paths.database)
     lease_unit_of_work = SQLiteLeaseUnitOfWork(
@@ -195,20 +196,20 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         service.paths.database, recorder, party_operations, portfolio_lease_operations,
     ))
     finance = FinanceService(SQLiteFinanceUnitOfWork(
-        service.paths.database, recorder, SQLiteLeaseFinanceOperations(portfolio_context_reader), party_operations, task_transaction_operations,
+        service.paths.database, recorder, lease_context_reader, portfolio_context_reader, party_operations, task_transaction_operations,
     ))
     prepaid_checks = PrepaidCheckService(finance.unit_of_work)
     expenses = ExpenseService(SQLiteExpenseUnitOfWork(
         service.paths.database,
         recorder,
         portfolio_context_reader,
-        SQLiteProviderExpenseOperations(party_operations),
+        SQLiteProviderContextReader(),
         party_operations,
         file_link_reader,
     ))
     deposits = DepositService(SQLiteDepositUnitOfWork(
         service.paths.database, recorder,
-        SQLiteLeaseFinanceOperations(portfolio_context_reader), party_operations,
+        lease_context_reader, portfolio_context_reader, party_operations,
         inspection_context_reader, file_link_reader,
     ))
     inspections = InspectionService(inspection_unit_of_work, files)

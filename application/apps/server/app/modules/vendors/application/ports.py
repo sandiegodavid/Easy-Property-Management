@@ -1,6 +1,6 @@
 """Application ports for provider workflows."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Mapping
 from typing import Any, Protocol, TypeVar
 
 from app.modules.parties.application.ports import PartyTransactionOperations
@@ -11,6 +11,11 @@ from app.modules.vendors.domain.models import (
 )
 
 Result = TypeVar("Result")
+
+
+class ProviderContextReader(Protocol):
+    def profile_context(self, connection: Any, party_id: str) -> Mapping[str, object] | None: ...
+    def profile_contexts(self, connection: Any, party_ids: Collection[str]) -> Mapping[str, Mapping[str, object]]: ...
 
 
 class ProviderStorageConflict(RuntimeError):

@@ -6,7 +6,7 @@ import json
 from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
-from sqlalchemy import inspect
+from sqlalchemy import event, inspect
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from fastapi.testclient import TestClient
@@ -27,6 +27,7 @@ from app.modules.leases.application.service import (
 from app.modules.leases.application.file_links import LeaseFileLinkValidator
 from app.modules.leases.application.ports import LeaseConflictError
 from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseUnitOfWork
+from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
 from app.modules.leases.infrastructure.schema_validation import _normalise, validate_lease_schema
 from app.modules.files.application.service import FileError, FileService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore
@@ -95,6 +96,38 @@ class LeaseTerminationTests(unittest.TestCase):
             TermCommand(210_000, "USD", "monthly", 1, 210_000),
             (ParticipantCommand(self.tenant_id, "primary_tenant"),),
         ))
+
+    def test_context_reader_returns_raw_lease_facts_with_bounded_batch_reads(self) -> None:
+        reader = SQLiteLeaseContextReader()
+        term = self.lease["terms"][0]
+        draft = self._new_draft()
+        draft_term = draft["terms"][0]
+        statements = []
+        engine = self.service.unit_of_work.engine
+        def capture(*args):
+            if args[2].lstrip().upper().startswith("SELECT"):
+                statements.append(args[2])
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            with engine.connect() as connection:
+                context = reader.term_context(connection, self.lease["id"], term["id"])
+                self.assertEqual(context["lease"]["status"], "executed")
+                self.assertEqual(context["term"]["agreed_security_deposit_minor"], 200_000)
+                self.assertEqual(context["term"]["currency_code"], "USD")
+                self.assertEqual(reader.lease_space_id(connection, self.lease["id"]), self.space_id)
+                self.assertTrue(reader.participant_active(connection, self.lease["id"], self.tenant_id, date.today().isoformat()))
+                self.assertEqual(reader.participant_ids(connection, self.lease["id"]), {self.tenant_id})
+                self.assertIsNone(reader.term_context(connection, "missing", term["id"]))
+                self.assertEqual(reader.term_context(connection, draft["id"], draft_term["id"])["lease"]["status"], "draft")
+
+                start = len(statements)
+                contexts = reader.term_contexts(connection, {
+                    (self.lease["id"], term["id"]), (draft["id"], draft_term["id"]), ("missing", "missing"),
+                })
+                self.assertEqual(set(contexts), {(self.lease["id"], term["id"]), (draft["id"], draft_term["id"])})
+                self.assertEqual(len(statements) - start, 3)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
 
     def _move_executed_lease_to_yesterday(self, *, contract_ends_on: date) -> None:
         yesterday = date.today() - timedelta(days=1)
