@@ -45,7 +45,7 @@ The planned stack is React/Vite/TypeScript for the interface, with Python/FastAP
 | 18 | FIN-007 | Prepaid checks | [FIN-007_DESIGN.md](docs/FIN-007_DESIGN.md) | 🟡 In progress — pending UI |
 | 19 | COM-001 | Communications | [COM-001_DESIGN.md](docs/COM-001_DESIGN.md) | 🟡 In progress — pending UI |
 | 20 | MAINT-001 | Repairs | [MAINT-001_DESIGN.md](docs/MAINT-001_DESIGN.md) | 🟡 In progress — pending UI |
-| 21 | MAINT-004 | Repairs | — |  |
+| 21 | MAINT-004 | Repairs | — | 🟡 In progress — pending UI |
 | 22 | MAINT-002 | Repairs | — |  |
 | 23 | MAINT-003 | Repairs | — |  |
 | 24 | OWNER-003 | Owner management | — |  |
