@@ -64,6 +64,19 @@ class SQLitePortfolioContextReader:
             or_(PropertyOwnershipModel.ends_on.is_(None), PropertyOwnershipModel.ends_on > on),
         ).limit(1)).first() is not None
 
+    def ownership_subject_kinds_on(self, connection: Any, property_id: str, on: str) -> set[tuple[str, str | None]]:
+        """Return neutral effective ownership subjects, including local operator."""
+        return {
+            (row["owner_kind"], row["party_id"])
+            for row in connection.execute(select(
+                PropertyOwnershipModel.owner_kind, PropertyOwnershipModel.party_id,
+            ).where(
+                PropertyOwnershipModel.property_id == property_id,
+                PropertyOwnershipModel.starts_on <= on,
+                or_(PropertyOwnershipModel.ends_on.is_(None), PropertyOwnershipModel.ends_on > on),
+            )).mappings()
+        }
+
 
 def _property_space_context(property_row, space_row) -> dict[str, object]:
     return {

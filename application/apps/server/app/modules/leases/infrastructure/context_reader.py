@@ -12,6 +12,7 @@ from app.modules.leases.infrastructure.sqlalchemy_models import (
     LeaseTerminationProposalModel,
     LeaseTermModel,
 )
+from app.modules.portfolio.infrastructure.sqlalchemy_models import SpaceModel
 
 
 class SQLiteLeaseContextReader:
@@ -77,7 +78,7 @@ class SQLiteLeaseContextReader:
             LeaseParticipantModel.lease_id == lease_id,
             LeaseParticipantModel.tenant_party_id == party_id,
             LeaseParticipantModel.starts_on <= on,
-            or_(LeaseParticipantModel.ends_on.is_(None), LeaseParticipantModel.ends_on >= on),
+            or_(LeaseParticipantModel.ends_on.is_(None), LeaseParticipantModel.ends_on > on),
         ).limit(1)).first() is not None
 
     def rent_responsibility_ends_on(self, connection: Any, lease_id: str) -> str | None:
@@ -87,6 +88,22 @@ class SQLiteLeaseContextReader:
         return set(connection.execute(select(LeaseParticipantModel.tenant_party_id).where(
             LeaseParticipantModel.lease_id == lease_id
         )).scalars())
+
+    def participant_active_for_property(self, connection: Any, party_id: str, property_id: str, space_id: str | None, on: str) -> bool:
+        query = select(LeaseParticipantModel.id).join(
+            LeaseModel, LeaseModel.id == LeaseParticipantModel.lease_id,
+        ).join(SpaceModel, SpaceModel.id == LeaseModel.space_id).where(
+            LeaseParticipantModel.tenant_party_id == party_id,
+            SpaceModel.property_id == property_id,
+            LeaseModel.status.in_(("executed", "ended", "terminated")),
+            LeaseModel.occupancy_starts_on <= on,
+            or_(LeaseModel.actual_move_out_on.is_(None), LeaseModel.actual_move_out_on > on),
+            LeaseParticipantModel.starts_on <= on,
+            or_(LeaseParticipantModel.ends_on.is_(None), LeaseParticipantModel.ends_on > on),
+        )
+        if space_id is not None:
+            query = query.where(LeaseModel.space_id == space_id)
+        return connection.execute(query.limit(1)).first() is not None
 
     @staticmethod
     def _rent_responsibility_ends_on(connection: Any, lease_id: str) -> str | None:

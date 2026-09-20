@@ -19,7 +19,7 @@ class Contract(BaseModel): model_config = ConfigDict(extra="forbid")
 class ParticipantInputModel(Contract):
     partyId: UUID; role: Literal["sender", "recipient", "reporter", "other"]; partyContactMethodId: UUID | None = None
 class LinkInputModel(Contract):
-    entityType: Literal["party", "property", "space", "lease", "rent_expectation", "rent_receipt", "renewal_option", "task"]; entityId: UUID
+    entityType: Literal["party", "property", "space", "lease", "rent_expectation", "rent_receipt", "renewal_option", "task", "maintenance_issue"]; entityId: UUID
 class FollowUpInputModel(Contract):
     title: str = Field(min_length=1, max_length=240); notes: str | None = Field(default=None, max_length=10_000)
     dueAtUtc: datetime | None = None; dueTimezone: str | None = None

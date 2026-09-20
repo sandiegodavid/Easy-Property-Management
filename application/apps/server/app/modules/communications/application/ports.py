@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from collections.abc import Collection, Mapping
 from typing import Any, Protocol, TypeVar
 
 from app.modules.communications.domain.models import (
@@ -10,6 +11,11 @@ from app.modules.communications.domain.models import (
 )
 
 Result = TypeVar("Result")
+
+
+class CommunicationLinkReader(Protocol):
+    """Bounded, transaction-aware summaries for generic linked entities."""
+    def summaries_for_entities(self, connection: Any, entity_type: str, entity_ids: Collection[str], limit_per_entity: int = 10) -> Mapping[str, list[Mapping[str, object]]]: ...
 
 
 class CommunicationContextOperations(Protocol):

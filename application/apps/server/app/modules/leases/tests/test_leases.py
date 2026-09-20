@@ -66,6 +66,7 @@ class LeaseTerminationTests(unittest.TestCase):
             "Relocation home", "1 Main Street", "Portland", "US", "single_family_home",
             (OwnershipInput("local_operator"),), region="OR",
         ))
+        self.property_id = property_record.id
         self.space_id = self.portfolio.get_property(property_record.id)["spaces"][0]["id"]
         self.tenants = TenantService(
             SQLiteTenantUnitOfWork(
@@ -128,6 +129,49 @@ class LeaseTerminationTests(unittest.TestCase):
                 self.assertEqual(len(statements) - start, 3)
         finally:
             event.remove(engine, "before_cursor_execute", capture)
+
+    def test_property_participant_context_requires_occupied_eligible_lease_and_uses_end_exclusive_dates(self) -> None:
+        reader = SQLiteLeaseContextReader()
+        today = date.today()
+        tomorrow = today + timedelta(days=1)
+        draft = self._new_draft(starts_on=tomorrow)
+        engine = self.service.unit_of_work.engine
+        with engine.begin() as connection:
+            # A participant's end date is exclusive.
+            connection.execute(text(
+                "UPDATE lease_participants SET ends_on=:end WHERE lease_id=:lease"
+            ), {"end": tomorrow.isoformat(), "lease": self.lease["id"]})
+            self.assertTrue(reader.participant_active_for_property(
+                connection, self.tenant_id, self.property_id, self.space_id, today.isoformat()
+            ))
+            # This also isolates the draft lease: its occupancy begins
+            # tomorrow, after the executed lease's participant has ended.
+            self.assertFalse(reader.participant_active_for_property(
+                connection, self.tenant_id, self.property_id, self.space_id, tomorrow.isoformat()
+            ))
+            # A void lease must never establish reporter eligibility.
+            connection.execute(text(
+                "UPDATE leases SET status='void', executed_on=:executed WHERE id=:lease"
+            ), {"executed": today.isoformat(), "lease": draft["id"]})
+            self.assertFalse(reader.participant_active_for_property(
+                connection, self.tenant_id, self.property_id, self.space_id, tomorrow.isoformat()
+            ))
+
+            # Terminated leases remain eligible only before actual move-out.
+            yesterday = today - timedelta(days=1)
+            connection.execute(text(
+                "UPDATE leases SET status='terminated', contract_starts_on=:start, occupancy_starts_on=:start, "
+                "actual_move_out_on=:move_out, end_reason='other' WHERE id=:lease"
+            ), {"start": yesterday.isoformat(), "move_out": today.isoformat(), "lease": self.lease["id"]})
+            connection.execute(text(
+                "UPDATE lease_participants SET starts_on=:start, ends_on=NULL WHERE lease_id=:lease"
+            ), {"start": yesterday.isoformat(), "lease": self.lease["id"]})
+            self.assertTrue(reader.participant_active_for_property(
+                connection, self.tenant_id, self.property_id, self.space_id, yesterday.isoformat()
+            ))
+            self.assertFalse(reader.participant_active_for_property(
+                connection, self.tenant_id, self.property_id, self.space_id, today.isoformat()
+            ))
 
     def _move_executed_lease_to_yesterday(self, *, contract_ends_on: date) -> None:
         yesterday = date.today() - timedelta(days=1)

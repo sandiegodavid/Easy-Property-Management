@@ -11,6 +11,8 @@ from zoneinfo import ZoneInfo
 
 CATEGORIES = frozenset({"plumbing", "electrical", "heating_cooling", "appliance", "structural", "safety_security", "pest", "exterior_grounds", "cleaning", "other"})
 PRIORITIES = frozenset({"low", "normal", "high", "urgent"})
+REPORTER_ROLES = frozenset({"owner", "tenant", "manager", "staff"})
+REPORTER_SUBJECT_KINDS = frozenset({"party", "local_operator"})
 
 class MaintenanceError(ValueError): code = "maintenance_validation"
 class MaintenanceNotFoundError(MaintenanceError): code = "maintenance_not_found"
@@ -50,8 +52,34 @@ def fingerprint(action: str, payload: object) -> str:
     return hashlib.sha256(json.dumps({"action": action, "payload": asdict(payload) if hasattr(payload, "__dataclass_fields__") else payload}, sort_keys=True, separators=(",", ":"), default=str).encode()).hexdigest()
 
 @dataclass(frozen=True)
+class ReporterAttribution:
+    role: str; subject_kind: str; party_id: str | None = None; historical_selection_confirmed: bool | None = None; historical_selection_reason: str | None = None
+    def __post_init__(self):
+        if self.role not in REPORTER_ROLES or self.subject_kind not in REPORTER_SUBJECT_KINDS:
+            raise MaintenanceError("Reporter role or subject kind is invalid.")
+        if self.subject_kind == "party":
+            object.__setattr__(self, "party_id", uuid(self.party_id, "reporter.partyId"))
+        elif self.party_id is not None:
+            raise MaintenanceError("A local operator reporter cannot have a partyId.")
+        if self.role in {"manager", "staff"} and self.subject_kind != "local_operator":
+            raise MaintenanceError("Manager and staff reporters must be the local operator.")
+        if self.role == "tenant" and self.subject_kind != "party":
+            raise MaintenanceError("Tenant reporters must be parties.")
+        confirmed, reason = self.historical_selection_confirmed, self.historical_selection_reason
+        if self.subject_kind != "party" and (confirmed is not None or reason is not None):
+            raise MaintenanceError("Historical reporter selection applies only to party reporters.")
+        if confirmed is not None and type(confirmed) is not bool:
+            raise MaintenanceError("historicalSelectionConfirmed must be a boolean.")
+        if (confirmed is None) != (reason is None):
+            raise MaintenanceError("Historical reporter selection confirmation and reason must be supplied together.")
+        if confirmed is False:
+            raise MaintenanceError("Historical reporter selection requires confirmation.")
+        if reason is not None:
+            object.__setattr__(self, "historical_selection_reason", text(reason, "historicalSelectionReason", 1000, required=True))
+
+@dataclass(frozen=True)
 class IssueCreate:
-    property_id: str; space_id: str | None; summary: str; description: str; category: str; category_detail: str | None; priority: str; reported_at_utc: str
+    property_id: str; space_id: str | None; summary: str; description: str; category: str; category_detail: str | None; priority: str; reported_at_utc: str; reporter: ReporterAttribution
     def __post_init__(self):
         object.__setattr__(self, "property_id", uuid(self.property_id, "propertyId"));
         if self.space_id is not None: object.__setattr__(self, "space_id", uuid(self.space_id, "spaceId"))
@@ -60,6 +88,14 @@ class IssueCreate:
         detail = text(self.category_detail, "categoryDetail", 200) if self.category_detail is not None else None
         if (self.category == "other") != (detail is not None): raise MaintenanceError("categoryDetail is required only for other.")
         object.__setattr__(self, "category_detail", detail)
+
+@dataclass(frozen=True)
+class ReporterCorrection:
+    reporter: ReporterAttribution; confirmed: bool; reason: str
+    def __post_init__(self):
+        if type(self.confirmed) is not bool or not self.confirmed:
+            raise MaintenanceError("Explicit confirmation is required.")
+        object.__setattr__(self, "reason", text(self.reason, "reason", 1000, required=True))
 
 @dataclass(frozen=True)
 class AppointmentCreate:

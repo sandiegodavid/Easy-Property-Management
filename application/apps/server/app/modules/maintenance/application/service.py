@@ -2,6 +2,7 @@
 from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 from app.modules.maintenance.domain.models import *
 from app.modules.maintenance.domain.models import text as maintenance_text
 from app.modules.maintenance.application.ports import MaintenanceUnitOfWork
@@ -30,8 +31,13 @@ class MaintenanceService:
             context=tx.issue_context(command.property_id,command.space_id)
             if not context:raise MaintenanceNotFoundError("Property or space was not found.")
             if context["property"]["status"]!="active" or (context["space"] and context["space"]["status"]!="active"):raise MaintenanceConflictError("Issue requires active property and space.","archived_context")
-            now=_stamp(); item={"id":str(uuid4()),"property_id":command.property_id,"space_id":command.space_id,"summary":command.summary,"description":command.description,"category":command.category,"category_detail":command.category_detail,"priority":command.priority,"status":"open","reported_at_utc":command.reported_at_utc,"reported_timezone":context["property"]["time_zone"],"resolution_summary":None,"resolved_at":None,"cancellation_reason":None,"cancelled_at":None,"idempotency_key":idempotency_key,"request_fingerprint":fp,"created_at":now,"updated_at":now}
-            tx.insert_issue(item); self._audit(tx,"maintenance_issue",item["id"],"created",None,_dict(item),"issue_created")
+            reporter=self._validated_reporter(tx,command.reporter,command.property_id,command.space_id,command.reported_at_utc,context["property"]["time_zone"])
+            now=_stamp(); item={"id":str(uuid4()),"property_id":command.property_id,"space_id":command.space_id,"summary":command.summary,"description":command.description,"category":command.category,"category_detail":command.category_detail,"priority":command.priority,"status":"open","reported_at_utc":command.reported_at_utc,"reported_timezone":context["property"]["time_zone"],**reporter,"resolution_summary":None,"resolved_at":None,"cancellation_reason":None,"cancelled_at":None,"idempotency_key":idempotency_key,"request_fingerprint":fp,"created_at":now,"updated_at":now}
+            tx.insert_issue(item)
+            audit_after=_dict(item)
+            if command.reporter.historical_selection_reason:
+                audit_after["historicalSelectionReason"]=command.reporter.historical_selection_reason
+            self._audit(tx,"maintenance_issue",item["id"],"created",None,audit_after,"issue_created")
             return self._detail(tx,item["id"])
         return self.unit_of_work.write(op)
     def patch_issue(self, issue_id, values):
@@ -40,9 +46,23 @@ class MaintenanceService:
             if old["status"] not in {"open","in_progress"}:raise MaintenanceConflictError("Only active issues can be edited.","issue_closed")
             allowed={k:v for k,v in values.items() if k in {"summary","description","category","category_detail","priority"}}
             updated={**old,**allowed,"updated_at":_stamp()}
-            IssueCreate(old["property_id"],old["space_id"],updated["summary"],updated["description"],updated["category"],updated["category_detail"],updated["priority"],old["reported_at_utc"])
+            IssueCreate(old["property_id"],old["space_id"],updated["summary"],updated["description"],updated["category"],updated["category_detail"],updated["priority"],old["reported_at_utc"],ReporterAttribution(old["reporter_role"],old["reporter_subject_kind"],old["reporter_party_id"]))
             if all(old[k]==updated[k] for k in allowed):return self._detail(tx,issue_id)
             tx.replace_issue(issue_id,updated);self._audit(tx,"maintenance_issue",issue_id,"updated",_dict(old),_dict(updated),"issue_updated");return self._detail(tx,issue_id)
+        return self.unit_of_work.write(op)
+    def correct_reporter(self, issue_id, command: ReporterCorrection):
+        def op(tx):
+            old=self._require(tx.issue,issue_id,"Issue")
+            replacement=self._validated_reporter(tx,command.reporter,old["property_id"],old["space_id"],old["reported_at_utc"],old["reported_timezone"])
+            if all(old[key] == value for key,value in replacement.items()):
+                raise MaintenanceConflictError("Reporter correction makes no change.","reporter_unchanged")
+            updated={**old,**replacement,"updated_at":_stamp()}
+            tx.replace_issue(issue_id,updated)
+            audit_after=_dict(updated)
+            if command.reporter.historical_selection_reason:
+                audit_after["historicalSelectionReason"]=command.reporter.historical_selection_reason
+            self._audit(tx,"maintenance_issue",issue_id,"reporter_corrected",_dict(old),audit_after,"reporter_corrected",narrative=command.reason)
+            return self._detail(tx,issue_id)
         return self.unit_of_work.write(op)
     def transition(self,issue_id,action,reason=None,confirmed=None):
         if action in {"resolve", "cancel", "reopen"}:
@@ -169,23 +189,26 @@ class MaintenanceService:
                 "related_entity_type":task.related_entity_type,"related_entity_id":task.related_entity_id,
             })
         return self.unit_of_work.write(op)
-    def list_issues(self, *, property_id=None, space_id=None, category=None, priority=None, status=None, reported_from=None, reported_to=None, appointment_from=None, appointment_to=None, has_evidence=None, has_linked_expense=None, has_active_task=None, cursor=None, page_size=100):
+    def list_issues(self, *, property_id=None, space_id=None, category=None, priority=None, status=None, reporter_role=None, reporter_party_id=None, reporter_subject_kind=None, reported_from=None, reported_to=None, appointment_from=None, appointment_to=None, has_evidence=None, has_linked_expense=None, has_active_task=None, cursor=None, page_size=100):
         if not isinstance(page_size,int) or not 1<=page_size<=500:raise MaintenanceError("pageSize must be between 1 and 500.")
         for item,name in ((property_id,"propertyId"),(space_id,"spaceId")):
             if item is not None:uuid(item,name)
         if category is not None and category not in CATEGORIES:raise MaintenanceError("Category is invalid.")
         if priority is not None and priority not in PRIORITIES:raise MaintenanceError("Priority is invalid.")
         if status is not None and status not in {"open","in_progress","resolved","cancelled"}:raise MaintenanceError("Status is invalid.")
+        if reporter_role is not None and reporter_role not in REPORTER_ROLES:raise MaintenanceError("Reporter role is invalid.")
+        if reporter_subject_kind is not None and reporter_subject_kind not in REPORTER_SUBJECT_KINDS:raise MaintenanceError("Reporter subject kind is invalid.")
+        if reporter_party_id is not None:uuid(reporter_party_id,"reporterPartyId")
         def op(tx):
             for value,name in ((has_evidence,"hasEvidence"),(has_linked_expense,"hasLinkedExpense"),(has_active_task,"hasActiveTask")):
                 if value is not None and type(value) is not bool:raise MaintenanceError(f"{name} must be a boolean.")
-            records, resume_cursor = tx.issues_page(property_id=property_id,space_id=space_id,category=category,priority=priority,status=status,reported_from=reported_from,reported_to=reported_to,appointment_from=appointment_from,appointment_to=appointment_to,has_evidence=has_evidence,has_linked_expense=has_linked_expense,has_active_task=has_active_task,cursor=cursor,limit=page_size+1)
+            records, resume_cursor = tx.issues_page(property_id=property_id,space_id=space_id,category=category,priority=priority,status=status,reporter_role=reporter_role,reporter_party_id=reporter_party_id,reporter_subject_kind=reporter_subject_kind,reported_from=reported_from,reported_to=reported_to,appointment_from=appointment_from,appointment_to=appointment_to,has_evidence=has_evidence,has_linked_expense=has_linked_expense,has_active_task=has_active_task,cursor=cursor,limit=page_size+1)
             page=records[:page_size]; next_cursor=None
             if len(records)>page_size:
                 tail=page[-1]; next_cursor=f"{tail['priority']}|{tail['reported_at_utc']}|{tail['id']}"
             elif resume_cursor is not None:
                 next_cursor="|".join(resume_cursor)
-            projection=tx.projection([row["id"] for row in page])
+            projection=tx.projection([row["id"] for row in page], include_detail=False)
             return {"items":[self._summary(projection[row["id"]]) for row in page],"nextCursor":next_cursor}
         return self.unit_of_work.read(op)
     def detail(self,issue_id):return self.unit_of_work.read(lambda tx:self._detail(tx,issue_id))
@@ -193,6 +216,26 @@ class MaintenanceService:
         row=getter(item_id)
         if row is None:raise MaintenanceNotFoundError(f"{name} was not found.")
         return row
+    def _validated_reporter(self, tx, reporter, property_id, space_id, reported_at_utc, time_zone):
+        reported_on=datetime.fromisoformat(reported_at_utc).astimezone(ZoneInfo(time_zone)).date().isoformat()
+        if reporter.subject_kind == "local_operator":
+            if reporter.role == "owner" and not tx.reporter_is_owner(property_id,None,reported_on):
+                raise MaintenanceConflictError("The local operator does not own this property on the reported date.","reporter_relationship")
+            return {"reporter_role":reporter.role,"reporter_subject_kind":"local_operator","reporter_party_id":None,"reporter_display_name_snapshot":"Local operator"}
+        party=tx.reporter_party(reporter.party_id)
+        if party is None: raise MaintenanceNotFoundError("Reporter party was not found.")
+        if party.archived_at is not None:
+            if not reporter.historical_selection_confirmed or not reporter.historical_selection_reason:
+                raise MaintenanceConflictError("Archived reporter selection requires historical confirmation.","archived_reporter")
+            if reported_on >= datetime.now(ZoneInfo(time_zone)).date().isoformat():
+                raise MaintenanceConflictError("Archived reporter selection is only available for a backdated issue.","archived_reporter")
+        elif reporter.historical_selection_confirmed is not None:
+            raise MaintenanceConflictError("Historical reporter selection applies only to archived parties.","historical_reporter")
+        if reporter.role == "owner" and not tx.reporter_is_owner(property_id,reporter.party_id,reported_on):
+            raise MaintenanceConflictError("Reporter was not an owner on the reported date.","reporter_relationship")
+        if reporter.role == "tenant" and not tx.reporter_is_tenant(property_id,space_id,reporter.party_id,reported_on):
+            raise MaintenanceConflictError("Reporter was not a tenant for this issue context on the reported date.","reporter_relationship")
+        return {"reporter_role":reporter.role,"reporter_subject_kind":"party","reporter_party_id":reporter.party_id,"reporter_display_name_snapshot":party.display_name}
     def _detail(self,tx,issue_id):
         projection=tx.projection([issue_id])
         if issue_id not in projection:raise MaintenanceNotFoundError("Issue was not found.")
@@ -201,6 +244,8 @@ class MaintenanceService:
         return {"id":item.id,"entityType":item.entity_type,"entityId":item.entity_id,"purpose":item.purpose,"fileId":item.file_id,"createdAt":item.created_at,"archivedAt":item.archived_at,"archiveReason":item.archive_reason,"originalName":item.original_name,"mediaType":item.media_type,"sizeBytes":item.size_bytes,"contentSha256":item.content_sha256}
     def _detail_projection(self,projection):
         issue=projection["issue"]; result=_dict(issue)
+        for key in ("reporterRole","reporterSubjectKind","reporterPartyId","reporterDisplayNameSnapshot"):
+            result.pop(key,None)
         context=projection["context"] or {}
         result["property"]={"id":issue["property_id"],"displayName":context.get("property_display_name"),"status":context.get("property_status"),"timeZone":context.get("time_zone")}
         result["space"]=None if issue["space_id"] is None else {"id":issue["space_id"],"displayName":context.get("space_display_name"),"status":context.get("space_status")}
@@ -209,12 +254,20 @@ class MaintenanceService:
         result["costContexts"]=[{**_dict(item),"files":[self._file(link) for link in projection["cost_files"].get(item["id"],[])]} for item in projection["costs"]]
         result["expenseLinks"]= [{**_dict(item),"expense":_camel_mapping(projection["expenses"].get(item["expense_id"]))} for item in projection["links"]]
         result["tasks"]=[_camel_mapping(item) for item in projection["tasks"]]
+        result["reporter"]=self._reporter_view(issue,projection["party_states"])
+        result["communications"]= [self._communication_view(item) for item in projection["communications"]]
         return result
     def _summary(self,projection):
         issue=projection["issue"]; context=projection["context"] or {}
         scheduled=next((item for item in reversed(projection["appointments"]) if item["status"]=="scheduled"),None)
         evidence_count=len(projection["files"])+sum(len(projection["appointment_files"].get(item["id"],[])) for item in projection["appointments"])+sum(len(projection["cost_files"].get(item["id"],[])) for item in projection["costs"])
-        return {"id":issue["id"],"propertyId":issue["property_id"],"spaceId":issue["space_id"],"summary":issue["summary"],"category":issue["category"],"priority":issue["priority"],"status":issue["status"],"reportedAtUtc":issue["reported_at_utc"],"reportedTimezone":issue["reported_timezone"],"property":{"id":issue["property_id"],"displayName":context.get("property_display_name")},"space":None if issue["space_id"] is None else {"id":issue["space_id"],"displayName":context.get("space_display_name")},"currentAppointment":None if scheduled is None else {"id":scheduled["id"],"startsAtUtc":scheduled["starts_at_utc"],"endsAtUtc":scheduled["ends_at_utc"],"status":scheduled["status"]},"activeFollowUpCount":sum(1 for task in projection["tasks"] if task["status"] in {"open","in_progress"}),"evidenceCount":evidence_count,"linkedExpenseCount":sum(1 for link in projection["links"] if link["archived_at"] is None)}
+        return {"id":issue["id"],"propertyId":issue["property_id"],"spaceId":issue["space_id"],"summary":issue["summary"],"category":issue["category"],"priority":issue["priority"],"status":issue["status"],"reportedAtUtc":issue["reported_at_utc"],"reportedTimezone":issue["reported_timezone"],"reporter":self._reporter_view(issue),"property":{"id":issue["property_id"],"displayName":context.get("property_display_name")},"space":None if issue["space_id"] is None else {"id":issue["space_id"],"displayName":context.get("space_display_name")},"currentAppointment":None if scheduled is None else {"id":scheduled["id"],"startsAtUtc":scheduled["starts_at_utc"],"endsAtUtc":scheduled["ends_at_utc"],"status":scheduled["status"]},"activeFollowUpCount":sum(1 for task in projection["tasks"] if task["status"] in {"open","in_progress"}),"evidenceCount":evidence_count,"linkedExpenseCount":sum(1 for link in projection["links"] if link["archived_at"] is None)}
+    def _reporter_view(self,issue,party_states=None):
+        result={"role":issue["reporter_role"],"subjectKind":issue["reporter_subject_kind"],"partyId":issue["reporter_party_id"],"displayName":issue["reporter_display_name_snapshot"]}
+        if issue["reporter_party_id"] is not None and party_states is not None:result["currentPartyState"]=party_states.get(issue["reporter_party_id"])
+        return result
+    def _communication_view(self,item):
+        return {"id":item["id"],"subject":item["subject"],"channel":item["channel"],"direction":item["direction"],"status":item["status"],"occurredAtUtc":item["occurred_at_utc"],"occurredTimezone":item["occurred_timezone"]}
     def _audit(self,tx,entity_type,entity_id,action,before,after,reason,*,narrative=None):
         # General activity exposes only stable action labels.  Free-form
         # operator narratives remain in a snapshot field redacted by the

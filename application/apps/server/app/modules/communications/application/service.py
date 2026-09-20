@@ -16,7 +16,7 @@ from app.modules.communications.domain.models import Communication, Communicatio
 DIRECTIONS = frozenset({"inbound", "outbound", "internal"})
 CHANNELS = frozenset({"phone", "email", "sms", "in_person", "letter", "other"})
 PARTICIPANT_ROLES = frozenset({"sender", "recipient", "reporter", "other"})
-LINK_TYPES = frozenset({"party", "property", "space", "lease", "rent_expectation", "rent_receipt", "renewal_option", "task"})
+LINK_TYPES = frozenset({"party", "property", "space", "lease", "rent_expectation", "rent_receipt", "renewal_option", "task", "maintenance_issue"})
 
 
 class CommunicationError(ValueError):

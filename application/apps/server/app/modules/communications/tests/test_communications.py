@@ -8,7 +8,7 @@ import json
 import inspect
 from pathlib import Path
 
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
@@ -20,6 +20,7 @@ from app.modules.communications.infrastructure.schema_validation import validate
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
 from app.modules.communications.infrastructure.unit_of_work import SQLiteCommunicationUnitOfWork
+from app.modules.communications.infrastructure.link_reader import SQLiteCommunicationLinkReader
 from app.platform.product_migrations import ProductSchemaError, initialize_latest_schema, validate_latest_schema
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 from app.modules.workspace.application.service import WorkspaceService
@@ -161,6 +162,37 @@ class CommunicationWorkflowTests(unittest.TestCase):
         self.assertEqual(first["id"], following[0]["id"]); self.assertIsNone(after)
         filtered, _ = self.service.list(occurred_on_or_after="2026-01-02", occurred_on_or_before="2026-01-02", linked_task_status="open")
         self.assertEqual([second["id"]], [item["id"] for item in filtered])
+
+    def test_link_summaries_apply_per_entity_limit_in_one_set_based_query(self) -> None:
+        first = self.service.create(self.command(record=True, subject="First", occurred_at="2026-01-01T12:00:00+00:00"), "10101010-2020-4020-8020-202020202020")
+        second = self.service.create(self.command(record=True, subject="Second", occurred_at="2026-01-02T12:00:00+00:00"), "11111110-2020-4020-8020-202020202020")
+        third = self.service.create(self.command(record=True, subject="Third", occurred_at="2026-01-03T12:00:00+00:00"), "12121210-2020-4020-8020-202020202020")
+        issue_one, issue_two = "21111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
+        engine = create_sqlite_engine(self.database)
+        try:
+            with immediate_transaction(engine) as connection:
+                for index, (communication_id, issue_id) in enumerate(((first["id"], issue_one), (second["id"], issue_one), (third["id"], issue_one), (first["id"], issue_two))):
+                    connection.execute(text(
+                        "INSERT INTO communication_links (id, communication_id, entity_type, entity_id, property_timezone_snapshot) "
+                        "VALUES (:id, :communication_id, 'maintenance_issue', :entity_id, 'UTC')"
+                    ), {"id": f"30000000-0000-4000-8000-{index:012d}", "communication_id": communication_id, "entity_id": issue_id})
+            statements = []
+            def capture(*args):
+                if args[2].lstrip().upper().startswith("SELECT"):
+                    statements.append(args[2])
+            event.listen(engine, "before_cursor_execute", capture)
+            try:
+                with engine.connect() as connection:
+                    result = SQLiteCommunicationLinkReader().summaries_for_entities(
+                        connection, "maintenance_issue", {issue_one, issue_two}, limit_per_entity=2,
+                    )
+                self.assertEqual(["Third", "Second"], [row["subject"] for row in result[issue_one]])
+                self.assertEqual(["First"], [row["subject"] for row in result[issue_two]])
+                self.assertEqual(1, len(statements))
+            finally:
+                event.remove(engine, "before_cursor_execute", capture)
+        finally:
+            engine.dispose()
 
     def test_local_date_filter_advances_through_bounded_database_chunks(self) -> None:
         import app.modules.communications.infrastructure.unit_of_work as adapter

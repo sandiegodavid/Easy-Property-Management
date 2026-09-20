@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timezone
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -81,6 +82,11 @@ def validate_maintenance_data(connection) -> None:
     checks = (
         """SELECT 1 FROM maintenance_issues i LEFT JOIN spaces s ON s.id=i.space_id
            WHERE i.space_id IS NOT NULL AND (s.id IS NULL OR s.property_id != i.property_id) LIMIT 1""",
+        """SELECT 1 FROM maintenance_issues issue LEFT JOIN parties party ON party.id=issue.reporter_party_id
+           WHERE (issue.reporter_subject_kind='party' AND party.id IS NULL)
+              OR (issue.reporter_subject_kind='local_operator' AND issue.reporter_party_id IS NOT NULL)
+              OR (issue.reporter_role IN ('manager','staff') AND issue.reporter_subject_kind != 'local_operator')
+              OR (issue.reporter_role='tenant' AND issue.reporter_subject_kind != 'party') LIMIT 1""",
         """SELECT 1 FROM maintenance_appointments a WHERE a.status='scheduled' AND a.ends_at_utc <= a.starts_at_utc LIMIT 1""",
         """SELECT 1 FROM maintenance_cost_contexts replacement JOIN maintenance_cost_contexts original
            ON original.id=replacement.replaces_cost_context_id
@@ -127,11 +133,79 @@ def validate_maintenance_data(connection) -> None:
     )
     if any(connection.execute(text(statement)).first() for statement in checks):
         raise MigrationSchemaError("Maintenance retained data is incompatible.")
+    _validate_reporter_history(connection)
+
+
+_REPORTER_SNAPSHOT_KEYS = (
+    "reporterRole", "reporterSubjectKind", "reporterPartyId",
+    "reporterDisplayNameSnapshot",
+)
+
+
+def _reporter_snapshot(value):
+    if not isinstance(value, dict) or any(key not in value for key in _REPORTER_SNAPSHOT_KEYS):
+        return None
+    return tuple(value[key] for key in _REPORTER_SNAPSHOT_KEYS)
+
+
+def _audit_snapshot(value):
+    if value is None:
+        return None
+    try:
+        parsed = json.loads(value)
+    except (TypeError, json.JSONDecodeError) as error:
+        raise MigrationSchemaError("Maintenance audit snapshots are incompatible.") from error
+    if not isinstance(parsed, dict):
+        raise MigrationSchemaError("Maintenance audit snapshots are incompatible.")
+    return parsed
+
+
+def _validate_reporter_history(connection) -> None:
+    issues = {
+        row["id"]: (
+            row["reporter_role"], row["reporter_subject_kind"],
+            row["reporter_party_id"], row["reporter_display_name_snapshot"],
+        )
+        for row in connection.execute(text(
+            "SELECT id, reporter_role, reporter_subject_kind, reporter_party_id, "
+            "reporter_display_name_snapshot FROM maintenance_issues"
+        )).mappings()
+    }
+    events = connection.execute(text(
+        "SELECT entity_id, action, before_snapshot, after_snapshot FROM audit_events "
+        "WHERE entity_type='maintenance_issue' ORDER BY entity_id, occurred_at, id"
+    )).mappings()
+    history: dict[str, list[object]] = {issue_id: [] for issue_id in issues}
+    for event in events:
+        if event["entity_id"] in history:
+            history[event["entity_id"]].append(event)
+    for issue_id, expected_current in issues.items():
+        expected = None
+        created = False
+        for event in history[issue_id]:
+            before = _reporter_snapshot(_audit_snapshot(event["before_snapshot"]))
+            after = _reporter_snapshot(_audit_snapshot(event["after_snapshot"]))
+            if event["action"] == "created":
+                if created or after is None:
+                    raise MigrationSchemaError("Maintenance reporter history is incompatible.")
+                created, expected = True, after
+                continue
+            if event["action"] == "reporter_corrected":
+                if not created or before != expected or after is None:
+                    raise MigrationSchemaError("Maintenance reporter correction history is incompatible.")
+                expected = after
+                continue
+            # Other maintenance events may carry a full issue snapshot, but
+            # they must never alter reporter attribution.
+            if expected is not None and ((before is not None and before != expected) or (after is not None and after != expected)):
+                raise MigrationSchemaError("Maintenance reporter attribution changed outside a correction.")
+        if not created or expected != expected_current:
+            raise MigrationSchemaError("Maintenance reporter history does not match retained data.")
 
 
 def _validate_identifiers_and_instants(connection) -> None:
     identifier_columns = {
-        "maintenance_issues": ("id", "property_id", "space_id", "idempotency_key"),
+        "maintenance_issues": ("id", "property_id", "space_id", "reporter_party_id", "idempotency_key"),
         "maintenance_appointments": ("id", "issue_id", "idempotency_key"),
         "maintenance_cost_contexts": ("id", "issue_id", "replaces_cost_context_id", "idempotency_key"),
         "maintenance_issue_expense_links": ("id", "issue_id", "expense_id", "idempotency_key"),
@@ -165,9 +239,9 @@ def _validate_identifiers_and_instants(connection) -> None:
 
 
 def _validate_values(connection) -> None:
-    for row in connection.execute(text("SELECT summary, description, category, category_detail, reported_timezone, resolution_summary, cancellation_reason FROM maintenance_issues")).mappings():
+    for row in connection.execute(text("SELECT summary, description, category, category_detail, reported_timezone, reporter_display_name_snapshot, resolution_summary, cancellation_reason FROM maintenance_issues")).mappings():
         _bounded(row["summary"], 240, True); _bounded(row["description"], 10_000, True)
-        _bounded(row["category_detail"], 200, row["category"] == "other"); _bounded(row["resolution_summary"], 1000, False); _bounded(row["cancellation_reason"], 1000, False); _zone(row["reported_timezone"])
+        _bounded(row["category_detail"], 200, row["category"] == "other"); _bounded(row["reporter_display_name_snapshot"], 240, True); _bounded(row["resolution_summary"], 1000, False); _bounded(row["cancellation_reason"], 1000, False); _zone(row["reported_timezone"])
     for row in connection.execute(text("SELECT purpose, instructions, scheduled_timezone, outcome_note, cancellation_reason FROM maintenance_appointments")).mappings():
         _bounded(row["purpose"], 500, True); _bounded(row["instructions"], 4000, False); _bounded(row["outcome_note"], 4000, False); _bounded(row["cancellation_reason"], 1000, False); _zone(row["scheduled_timezone"])
     for row in connection.execute(text("SELECT label, observed_on, source_note, void_reason FROM maintenance_cost_contexts")).mappings():

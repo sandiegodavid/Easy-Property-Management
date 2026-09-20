@@ -4,12 +4,14 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from app.modules.maintenance.application.service import MaintenanceService
-from app.modules.maintenance.domain.models import AppointmentCreate, CostCreate, IssueCreate, MaintenanceConflictError, MaintenanceError, MaintenanceNotFoundError
+from app.modules.maintenance.domain.models import AppointmentCreate, CostCreate, IssueCreate, ReporterAttribution, ReporterCorrection, MaintenanceConflictError, MaintenanceError, MaintenanceNotFoundError
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 class Contract(BaseModel): model_config=ConfigDict(extra="forbid")
-class IssueInput(Contract): propertyId: UUID; spaceId: UUID|None=None; summary:str=Field(min_length=1,max_length=240); description:str=Field(min_length=1,max_length=10000); category:Literal["plumbing","electrical","heating_cooling","appliance","structural","safety_security","pest","exterior_grounds","cleaning","other"]; categoryDetail:str|None=Field(None,max_length=200); priority:Literal["low","normal","high","urgent"]="normal"; reportedAtUtc:datetime; idempotencyKey:UUID
+class ReporterInput(Contract): role:Literal["owner","tenant","manager","staff"]; subjectKind:Literal["party","local_operator"]; partyId:UUID|None=None; historicalSelectionConfirmed:StrictBool|None=None; historicalSelectionReason:str|None=Field(None,min_length=1,max_length=1000)
+class IssueInput(Contract): propertyId: UUID; spaceId: UUID|None=None; summary:str=Field(min_length=1,max_length=240); description:str=Field(min_length=1,max_length=10000); category:Literal["plumbing","electrical","heating_cooling","appliance","structural","safety_security","pest","exterior_grounds","cleaning","other"]; categoryDetail:str|None=Field(None,max_length=200); priority:Literal["low","normal","high","urgent"]="normal"; reportedAtUtc:datetime; reporter:ReporterInput; idempotencyKey:UUID
 class IssuePatch(Contract): summary:str|None=Field(None,min_length=1,max_length=240); description:str|None=Field(None,min_length=1,max_length=10000); category:Literal["plumbing","electrical","heating_cooling","appliance","structural","safety_security","pest","exterior_grounds","cleaning","other"]|None=None; categoryDetail:str|None=Field(None,max_length=200); priority:Literal["low","normal","high","urgent"]|None=None
 class Reason(Contract): confirmed:StrictBool; reason:str=Field(min_length=1,max_length=1000)
+class ReporterCorrectionInput(Contract): reporter:ReporterInput; confirmed:StrictBool; reason:str=Field(min_length=1,max_length=1000)
 class AppointmentInput(Contract): startsAtUtc:datetime; endsAtUtc:datetime; purpose:str=Field(min_length=1,max_length=500); instructions:str|None=Field(None,max_length=4000); idempotencyKey:UUID
 class CostInput(Contract): contextKind:Literal["operator_estimate","work_reported"]; label:str=Field(min_length=1,max_length=200); amount:str; observedOn:date; sourceNote:str|None=Field(None,max_length=4000); replacesCostContextId:UUID|None=None; idempotencyKey:UUID
 class ExpenseLinkInput(Contract): expenseId:UUID; idempotencyKey:UUID
@@ -25,11 +27,13 @@ class PropertySummaryResponse(Contract): id:UUID; displayName:str|None; status:s
 class SpaceSummaryResponse(Contract): id:UUID; displayName:str|None; status:str|None=None
 class ExpenseSummaryResponse(Contract): id:UUID; propertyId:UUID; spaceId:UUID|None; lifecycleStatus:Literal["active","voided"]; netAmountMinor:int; currencyCode:Literal["USD"]; occurredOn:str; payeeSnapshot:str
 class AppointmentSummaryResponse(Contract): id:UUID; startsAtUtc:datetime; endsAtUtc:datetime; status:Literal["scheduled","completed","cancelled"]
+class ReporterResponse(Contract): role:Literal["owner","tenant","manager","staff"]; subjectKind:Literal["party","local_operator"]; partyId:UUID|None; displayName:str; currentPartyState:Literal["active","archived"]|None=None
+class CommunicationSummaryResponse(Contract): id:UUID; subject:str; channel:str; direction:str; status:str; occurredAtUtc:datetime; occurredTimezone:str
 class DetailedAppointmentResponse(AppointmentResponse): files:list[FileSummaryResponse]=[]
 class DetailedCostResponse(CostResponse): files:list[FileSummaryResponse]=[]
 class DetailedExpenseLinkResponse(ExpenseLinkResponse): expense:ExpenseSummaryResponse|None
-class IssueSummaryResponse(Contract): id:UUID; propertyId:UUID; spaceId:UUID|None; summary:str; category:str; priority:str; status:str; reportedAtUtc:datetime; reportedTimezone:str; property:PropertySummaryResponse; space:SpaceSummaryResponse|None; currentAppointment:AppointmentSummaryResponse|None; activeFollowUpCount:int; evidenceCount:int; linkedExpenseCount:int
-class IssueResponse(Contract): id:UUID; propertyId:UUID; spaceId:UUID|None; summary:str; description:str; category:str; categoryDetail:str|None; priority:str; status:str; reportedAtUtc:datetime; reportedTimezone:str; resolutionSummary:str|None; resolvedAt:datetime|None; cancellationReason:str|None; cancelledAt:datetime|None; createdAt:datetime; updatedAt:datetime; property:PropertySummaryResponse; space:SpaceSummaryResponse|None; files:list[FileSummaryResponse]; appointments:list[DetailedAppointmentResponse]; costContexts:list[DetailedCostResponse]; expenseLinks:list[DetailedExpenseLinkResponse]; tasks:list[TaskSummaryResponse]
+class IssueSummaryResponse(Contract): id:UUID; propertyId:UUID; spaceId:UUID|None; summary:str; category:str; priority:str; status:str; reportedAtUtc:datetime; reportedTimezone:str; reporter:ReporterResponse; property:PropertySummaryResponse; space:SpaceSummaryResponse|None; currentAppointment:AppointmentSummaryResponse|None; activeFollowUpCount:int; evidenceCount:int; linkedExpenseCount:int
+class IssueResponse(Contract): id:UUID; propertyId:UUID; spaceId:UUID|None; summary:str; description:str; category:str; categoryDetail:str|None; priority:str; status:str; reportedAtUtc:datetime; reportedTimezone:str; reporter:ReporterResponse; resolutionSummary:str|None; resolvedAt:datetime|None; cancellationReason:str|None; cancelledAt:datetime|None; createdAt:datetime; updatedAt:datetime; property:PropertySummaryResponse; space:SpaceSummaryResponse|None; files:list[FileSummaryResponse]; appointments:list[DetailedAppointmentResponse]; costContexts:list[DetailedCostResponse]; expenseLinks:list[DetailedExpenseLinkResponse]; tasks:list[TaskSummaryResponse]; communications:list[CommunicationSummaryResponse]
 class IssuePageResponse(Contract): items:list[IssueSummaryResponse]; nextCursor:str|None
 def build_router(service:MaintenanceService,runtime:WorkspaceRuntime):
  router=APIRouter(prefix="/api",tags=["maintenance"])
@@ -42,9 +46,11 @@ def build_router(service:MaintenanceService,runtime:WorkspaceRuntime):
   except MaintenanceConflictError as e:raise HTTPException(409,{"code":e.code,"message":str(e)}) from e
   except MaintenanceError as e:raise HTTPException(400,{"code":e.code,"message":str(e)}) from e
  @router.post("/maintenance-issues",response_model=IssueResponse,status_code=status.HTTP_201_CREATED)
- def create(data:IssueInput):ready(True);return invoke(lambda:service.create_issue(IssueCreate(str(data.propertyId),str(data.spaceId) if data.spaceId else None,data.summary,data.description,data.category,data.categoryDetail,data.priority,data.reportedAtUtc.isoformat()),str(data.idempotencyKey)))
+ def create(data:IssueInput):
+  ready(True); reporter=data.reporter
+  return invoke(lambda:service.create_issue(IssueCreate(str(data.propertyId),str(data.spaceId) if data.spaceId else None,data.summary,data.description,data.category,data.categoryDetail,data.priority,data.reportedAtUtc.isoformat(),ReporterAttribution(reporter.role,reporter.subjectKind,str(reporter.partyId) if reporter.partyId else None,reporter.historicalSelectionConfirmed,reporter.historicalSelectionReason)),str(data.idempotencyKey)))
  @router.get("/maintenance-issues",response_model=IssuePageResponse)
- def list_issues(propertyId:UUID|None=None,spaceId:UUID|None=None,category:Literal["plumbing","electrical","heating_cooling","appliance","structural","safety_security","pest","exterior_grounds","cleaning","other"]|None=None,priority:Literal["low","normal","high","urgent"]|None=None,status:Literal["open","in_progress","resolved","cancelled"]|None=None,reportedFrom:datetime|None=None,reportedTo:datetime|None=None,appointmentFrom:datetime|None=None,appointmentTo:datetime|None=None,hasEvidence:bool|None=None,hasLinkedExpense:bool|None=None,hasActiveTask:bool|None=None,cursor:str|None=None,pageSize:int=Query(100,ge=1,le=500)):
+ def list_issues(propertyId:UUID|None=None,spaceId:UUID|None=None,category:Literal["plumbing","electrical","heating_cooling","appliance","structural","safety_security","pest","exterior_grounds","cleaning","other"]|None=None,priority:Literal["low","normal","high","urgent"]|None=None,status:Literal["open","in_progress","resolved","cancelled"]|None=None,reporterRole:Literal["owner","tenant","manager","staff"]|None=None,reporterPartyId:UUID|None=None,reporterSubjectKind:Literal["party","local_operator"]|None=None,reportedFrom:datetime|None=None,reportedTo:datetime|None=None,appointmentFrom:datetime|None=None,appointmentTo:datetime|None=None,hasEvidence:bool|None=None,hasLinkedExpense:bool|None=None,hasActiveTask:bool|None=None,cursor:str|None=None,pageSize:int=Query(100,ge=1,le=500)):
   ready()
   parsed=None
   if cursor:
@@ -54,7 +60,7 @@ def build_router(service:MaintenanceService,runtime:WorkspaceRuntime):
     if datetime.fromisoformat(reported).tzinfo is None: raise ValueError
     parsed=(priority_value,reported,str(UUID(item_id)))
    except (ValueError,AttributeError) as error:raise HTTPException(422,{"code":"maintenance_validation","message":"cursor is invalid."}) from error
-  return invoke(lambda:service.list_issues(property_id=str(propertyId) if propertyId else None,space_id=str(spaceId) if spaceId else None,category=category,priority=priority,status=status,reported_from=reportedFrom.isoformat() if reportedFrom else None,reported_to=reportedTo.isoformat() if reportedTo else None,appointment_from=appointmentFrom.isoformat() if appointmentFrom else None,appointment_to=appointmentTo.isoformat() if appointmentTo else None,has_evidence=hasEvidence,has_linked_expense=hasLinkedExpense,has_active_task=hasActiveTask,cursor=parsed,page_size=pageSize))
+  return invoke(lambda:service.list_issues(property_id=str(propertyId) if propertyId else None,space_id=str(spaceId) if spaceId else None,category=category,priority=priority,status=status,reporter_role=reporterRole,reporter_party_id=str(reporterPartyId) if reporterPartyId else None,reporter_subject_kind=reporterSubjectKind,reported_from=reportedFrom.isoformat() if reportedFrom else None,reported_to=reportedTo.isoformat() if reportedTo else None,appointment_from=appointmentFrom.isoformat() if appointmentFrom else None,appointment_to=appointmentTo.isoformat() if appointmentTo else None,has_evidence=hasEvidence,has_linked_expense=hasLinkedExpense,has_active_task=hasActiveTask,cursor=parsed,page_size=pageSize))
  @router.get("/maintenance-issues/{issue_id}",response_model=IssueResponse)
  def detail(issue_id:UUID):ready();return invoke(lambda:service.detail(str(issue_id)))
  @router.patch("/maintenance-issues/{issue_id}",response_model=IssueResponse)
@@ -62,6 +68,10 @@ def build_router(service:MaintenanceService,runtime:WorkspaceRuntime):
   ready(True)
   names={"categoryDetail":"category_detail"}
   return invoke(lambda:service.patch_issue(str(issue_id),{names.get(k,k):v for k,v in data.model_dump(exclude_unset=True).items()}))
+ @router.post("/maintenance-issues/{issue_id}/reporter/correct",response_model=IssueResponse)
+ def correct_reporter(issue_id:UUID,data:ReporterCorrectionInput):
+  ready(True); reporter=data.reporter
+  return invoke(lambda:service.correct_reporter(str(issue_id),ReporterCorrection(ReporterAttribution(reporter.role,reporter.subjectKind,str(reporter.partyId) if reporter.partyId else None,reporter.historicalSelectionConfirmed,reporter.historicalSelectionReason),data.confirmed,data.reason)))
  @router.post("/maintenance-issues/{issue_id}/start",response_model=IssueResponse)
  def start(issue_id:UUID):ready(True);return invoke(lambda:service.transition(str(issue_id),"start"))
  @router.post("/maintenance-issues/{issue_id}/return-to-open",response_model=IssueResponse)

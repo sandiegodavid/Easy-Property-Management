@@ -14,6 +14,7 @@ from app.modules.portfolio.infrastructure.sqlalchemy_models import PropertyModel
 from app.modules.tasks.application.ports import TaskTransactionOperations
 from app.modules.tasks.application.service import TaskCreateCommand, new_task
 from app.modules.tasks.infrastructure.sqlalchemy_models import TaskModel
+from app.modules.maintenance.infrastructure.sqlalchemy_models import MaintenanceIssueModel
 
 
 class SQLiteCommunicationContextOperations:
@@ -67,6 +68,8 @@ class SQLiteCommunicationContextOperations:
             if connection.execute(select(TaskModel.id).where(TaskModel.id == entity_id)).scalar_one_or_none() is None:
                 raise KeyError("Linked task was not found.")
             return None
+        if entity_type == "maintenance_issue":
+            return _one_zone(connection, select(MaintenanceIssueModel.reported_timezone).where(MaintenanceIssueModel.id == entity_id), "maintenance issue")
         raise ValueError("Communication link type is unsupported.")
 
     def create_follow_up(self, connection: Any, *, communication: Communication, title: str, notes: str | None,

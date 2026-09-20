@@ -37,6 +37,7 @@ from app.modules.communications.application.service import CommunicationService
 from app.modules.communications.infrastructure.unit_of_work import (
     SQLiteCommunicationUnitOfWork,
 )
+from app.modules.communications.infrastructure.link_reader import SQLiteCommunicationLinkReader
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.modules.communications.domain.audit_policy import COMMUNICATION_ACTIVITY_POLICY
 from app.modules.maintenance.api.router import build_router as build_maintenance_router
@@ -161,6 +162,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     maintenance_unit_of_work = SQLiteMaintenanceUnitOfWork(
         service.paths.database, recorder, portfolio_context_reader,
         SQLiteExpenseContextReader(), SQLiteTaskContextReader(), task_transaction_operations, file_link_reader,
+        party_operations, lease_context_reader, SQLiteCommunicationLinkReader(),
     )
     files = FileService(
         service,
