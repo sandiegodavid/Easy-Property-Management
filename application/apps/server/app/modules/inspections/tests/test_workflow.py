@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
-from sqlalchemy import text
+from sqlalchemy import event, text
 from fastapi.testclient import TestClient
 from app.bootstrap.api import create_app
 from app.modules.audit.application.recorder import AuditRecorder
@@ -16,6 +16,7 @@ from app.modules.files.infrastructure.content_store import FilesystemContentStor
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.inspections.application.service import AreaInput, InspectionConflictError, InspectionService, ObservationInput
 from app.modules.inspections.infrastructure.unit_of_work import SQLiteInspectionUnitOfWork
+from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
 from app.modules.leases.application.service import LeaseCreateCommand, LeaseService, ParticipantCommand, TermCommand
 from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseUnitOfWork
 from app.modules.parties.application.service import SharedPartyFactory
@@ -91,6 +92,54 @@ class InspectionWorkflowTests(unittest.TestCase):
         rows = self.inspections.unit_of_work.write(lambda tx: tx.comparisons(self.lease["id"]))
         self.assertEqual(len(rows), 2)
         self.assertGreaterEqual(len(self.audit.history("condition_comparison")), 2)
+
+    def test_context_reader_returns_inspection_facts_in_one_query_per_context(self):
+        reader = SQLiteInspectionContextReader()
+        draft = self.inspections.create(
+            self.lease["id"], report_kind="pre_move_in", walkthrough_on=date.today(),
+            conducted_by="Operator", areas=self.checklist,
+        )
+        observation_id = draft["areas"][0]["observations"][0]["id"]
+        with self.inspections.unit_of_work.engine.connect() as connection:
+            self.assertEqual(reader.observation_context(connection, observation_id)["status"], "draft")
+        pre = self.inspections.acknowledge(draft["id"], self._acknowledge_all(draft))
+        pre = self.inspections.finalize(pre["id"], confirmed=True)
+        with self.leases.unit_of_work.engine.begin() as connection:
+            connection.execute(text("UPDATE leases SET status='ended', actual_move_out_on=:day, end_reason='contract_completed' WHERE id=:id"), {"day": date.today().isoformat(), "id": self.lease["id"]})
+        post = self.inspections.create(self.lease["id"], report_kind="post_move_out", walkthrough_on=date.today(), conducted_by="Operator", areas=self.checklist)
+        post = self.inspections.acknowledge(post["id"], self._acknowledge_all(post))
+        post = self.inspections.finalize(post["id"], confirmed=True)
+        comparison = self.inspections.save_comparisons(self.lease["id"], [{
+            "pre_observation_id": pre["areas"][0]["observations"][0]["id"],
+            "post_observation_id": post["areas"][0]["observations"][0]["id"],
+            "comparison_state": "unchanged", "operator_notes": None,
+        }])[0]
+
+        statements = []
+        engine = self.inspections.unit_of_work.engine
+        def capture(*args):
+            if args[2].lstrip().upper().startswith("SELECT"):
+                statements.append(args[2])
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            with engine.connect() as connection:
+                start = len(statements)
+                observation = reader.observation_context(connection, observation_id)
+                self.assertEqual(len(statements) - start, 1)
+                self.assertEqual(observation["lease_id"], self.lease["id"])
+                self.assertEqual(observation["status"], "finalized")
+
+                start = len(statements)
+                comparison_context = reader.comparison_context(connection, comparison["id"])
+                self.assertEqual(len(statements) - start, 1)
+                self.assertEqual(comparison_context["comparison_state"], "unchanged")
+                self.assertEqual((comparison_context["pre_status"], comparison_context["post_status"]), ("finalized", "finalized"))
+
+                self.assertIsNone(reader.comparison_context(connection, "missing"))
+                self.assertIsNone(reader.observation_context(connection, "missing"))
+                self.assertEqual(reader.finalized_report_kinds(connection, self.lease["id"]), {"pre_move_in", "post_move_out"})
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
 
     def test_configured_generic_file_api_rejects_inspection_evidence_links(self):
         config = Path(self.temp.name) / "api-config.json"

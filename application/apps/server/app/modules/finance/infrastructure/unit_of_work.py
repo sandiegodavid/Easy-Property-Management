@@ -1,16 +1,20 @@
 """SQLite implementation of FIN-001's transaction port."""
 from __future__ import annotations
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any, TypeVar
+from uuid import uuid4
 from sqlalchemy import and_, func, or_, select, text
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.finance.application.ports import FinanceTransaction, LeaseFinanceOperations, PartyFinanceOperations, TaskFinanceOperations
+from app.modules.finance.application.ports import FinanceTransaction, LeaseFinanceOperations, PartyFinanceOperations
 from app.modules.finance.domain.models import PrepaidCheck, RentExpectation, RentReceipt
 from app.modules.finance.infrastructure.sqlalchemy_models import PrepaidCheckModel, PrepaidCheckOperationModel, RentExpectationModel, RentExpectationTimelinessReviewModel, RentReceiptModel, RentReceiptAllocationModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
+from app.modules.tasks.application.ports import TaskTransactionOperations
+from app.modules.tasks.domain.models import Task, TaskReminder, dismiss
 Result = TypeVar("Result")
 class SQLiteFinanceUnitOfWork:
-    def __init__(self, database, recorder: AuditRecorder, lease_operations: LeaseFinanceOperations, party_operations: PartyFinanceOperations, task_operations: TaskFinanceOperations | None = None): self.engine=create_sqlite_engine(database); self.recorder=recorder; self.lease_operations=lease_operations; self.party_operations=party_operations; self.task_operations=task_operations
+    def __init__(self, database, recorder: AuditRecorder, lease_operations: LeaseFinanceOperations, party_operations: PartyFinanceOperations, task_operations: TaskTransactionOperations | None = None): self.engine=create_sqlite_engine(database); self.recorder=recorder; self.lease_operations=lease_operations; self.party_operations=party_operations; self.task_operations=task_operations
     def write(self, operation: Callable[[FinanceTransaction], Result]) -> Result:
         with immediate_transaction(self.engine) as connection: return operation(_Tx(connection, self.recorder, self.lease_operations, self.party_operations, self.task_operations))
     def read(self, operation: Callable[[FinanceTransaction], Result]) -> Result:
@@ -268,11 +272,32 @@ class _Tx:
     def insert_prepaid_check_operation(self, item): self.connection.execute(PrepaidCheckOperationModel.__table__.insert().values(**item))
     def create_prepaid_check_reminder(self, *, check_id, due_at_utc, due_timezone, correlation_id):
         if self.task_operations is None: raise RuntimeError("TASK-001 operations are not configured.")
-        return self.task_operations.create_prepaid_check_reminder(self.connection, check_id=check_id, due_at_utc=due_at_utc, due_timezone=due_timezone, correlation_id=correlation_id, record_change=self.record_change)
+        now = datetime.now(UTC).isoformat()
+        task = Task(
+            str(uuid4()), "Deposit prepaid check", None, "open", "normal",
+            due_at_utc, due_timezone, True, None, None, None,
+            "prepaid_check", check_id, "Prepaid check", now, now,
+        )
+        reminder = TaskReminder(str(uuid4()), task.id, due_at_utc, "pending", None, None, now)
+        self.task_operations.insert_task(self.connection, task)
+        self.task_operations.insert_reminder(self.connection, reminder)
+        self.record_change(entity_type="task", entity_id=task.id, action="created", before=None,
+                           after=task.to_dict(), reason="prepaid_check_reminder_created", correlation_id=correlation_id)
+        self.record_change(entity_type="task_reminder", entity_id=reminder.id, action="created", before=None,
+                           after=reminder.to_dict(), reason="prepaid_check_reminder_created", correlation_id=correlation_id)
+        return task.id
     def dismiss_prepaid_check_reminder(self, task_id, *, correlation_id):
         if self.task_operations is None: raise RuntimeError("TASK-001 operations are not configured.")
-        self.task_operations.dismiss_prepaid_check_reminder(self.connection, task_id, correlation_id=correlation_id, record_change=self.record_change)
+        if task_id is None:
+            return
+        now = datetime.now(UTC).isoformat()
+        for reminder in self.task_operations.pending_reminders(self.connection, task_id):
+            dismissed = dismiss(reminder, now)
+            self.task_operations.replace_reminder(self.connection, dismissed)
+            self.record_change(entity_type="task_reminder", entity_id=dismissed.id, action="dismissed",
+                               before=reminder.to_dict(), after=dismissed.to_dict(),
+                               reason="prepaid_check_lifecycle_changed", correlation_id=correlation_id)
     def prepaid_check_reminder_status(self, task_id):
         if self.task_operations is None: raise RuntimeError("TASK-001 operations are not configured.")
-        return self.task_operations.prepaid_check_reminder_status(self.connection, task_id)
+        return None if task_id is None else self.task_operations.latest_reminder_status(self.connection, task_id)
     def record_change(self,**change): self.recorder.record_change(self.connection.connection.driver_connection,**change)

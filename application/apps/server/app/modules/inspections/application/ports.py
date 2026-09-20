@@ -1,12 +1,20 @@
 """Application-owned contracts for INSP-001 persistence and evidence."""
 from __future__ import annotations
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
 from app.modules.files.domain.models import StoredFile
 from app.modules.inspections.domain.models import ConditionAcknowledgment, ConditionArea, ConditionChecklistTemplate, ConditionChecklistTemplateItem, ConditionComparison, ConditionObservation, ConditionReport
 
 Result = TypeVar("Result")
+
+
+class InspectionContextReader(Protocol):
+    """Transaction-aware inspection facts for owning-module workflows."""
+
+    def finalized_report_kinds(self, connection: Any, lease_id: str) -> set[str]: ...
+    def comparison_context(self, connection: Any, comparison_id: str) -> Mapping[str, object] | None: ...
+    def observation_context(self, connection: Any, observation_id: str) -> Mapping[str, object] | None: ...
 
 class InspectionTransaction(Protocol):
     def lease(self, item_id: str) -> Any: ...

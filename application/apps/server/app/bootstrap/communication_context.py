@@ -11,13 +11,14 @@ from app.modules.finance.infrastructure.sqlalchemy_models import RentExpectation
 from app.modules.leases.infrastructure.sqlalchemy_models import LeaseModel, LeaseRenewalOptionModel
 from app.modules.parties.infrastructure.sqlalchemy_models import PartyContactMethodModel, PartyModel
 from app.modules.portfolio.infrastructure.sqlalchemy_models import PropertyModel, SpaceModel
-from app.modules.tasks.infrastructure.communication_operations import SQLiteTaskCommunicationOperations
+from app.modules.tasks.application.ports import TaskTransactionOperations
+from app.modules.tasks.application.service import TaskCreateCommand, new_task
 from app.modules.tasks.infrastructure.sqlalchemy_models import TaskModel
 
 
 class SQLiteCommunicationContextOperations:
-    def __init__(self, task_operations: SQLiteTaskCommunicationOperations | None = None) -> None:
-        self.task_operations = task_operations or SQLiteTaskCommunicationOperations()
+    def __init__(self, task_operations: TaskTransactionOperations) -> None:
+        self.task_operations = task_operations
 
     def participant_snapshot(self, connection: Any, party_id: str, contact_method_id: str | None) -> tuple[str, str | None]:
         party = connection.execute(PartyModel.__table__.select().where(PartyModel.id == party_id)).mappings().first()
@@ -70,10 +71,14 @@ class SQLiteCommunicationContextOperations:
 
     def create_follow_up(self, connection: Any, *, communication: Communication, title: str, notes: str | None,
                          due_at_utc: str | None, due_timezone: str | None, correlation_id: str) -> dict[str, object]:
-        return self.task_operations.create_follow_up(
-            connection, communication_id=communication.id, label=communication.subject, title=title,
-            notes=notes, due_at_utc=due_at_utc, due_timezone=due_timezone,
-        )
+        task = new_task(TaskCreateCommand(
+            title=title, notes=notes, status="open", priority="normal",
+            due_at_utc=due_at_utc, due_timezone=due_timezone, is_all_day=False,
+            related_entity_type="communication", related_entity_id=communication.id,
+            related_label=communication.subject,
+        ))
+        self.task_operations.insert_task(connection, task)
+        return task.to_dict()
 
     def task_views(self, connection: Any, communication_id: str) -> list[dict[str, object]]:
         rows = connection.execute(TaskModel.__table__.select().where(

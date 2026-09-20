@@ -20,8 +20,7 @@ from app.modules.workspace.application.service import WorkspaceService
 from app.modules.files.application.service import FileService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
-from app.modules.files.infrastructure.expense_operations import SQLiteFileExpenseOperations
-from app.modules.files.infrastructure.deposit_operations import SQLiteDepositFileOperations
+from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
 from app.modules.files.api.router import build_router as build_files_router
 from app.modules.files.domain.audit_policy import (
     FILE_ACTIVITY_SNAPSHOT_POLICY,
@@ -30,7 +29,7 @@ from app.modules.files.domain.audit_policy import (
 from app.modules.tasks.api.router import build_router as build_tasks_router
 from app.modules.tasks.application.service import TaskService
 from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork
-from app.modules.tasks.infrastructure.finance_operations import SQLiteTaskFinanceOperations
+from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
 from app.modules.tasks.domain.audit_policy import TASK_ACTIVITY_POLICY
 from app.modules.communications.api.router import build_router as build_communications_router
 from app.modules.communications.application.service import CommunicationService
@@ -71,7 +70,7 @@ from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipat
 from app.modules.inspections.api.router import build_router as build_inspection_router
 from app.modules.inspections.application.service import InspectionService
 from app.modules.inspections.infrastructure.unit_of_work import SQLiteInspectionUnitOfWork
-from app.modules.inspections.infrastructure.deposit_operations import SQLiteInspectionDepositOperations
+from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
 from app.modules.inspections.domain.audit_policy import INSPECTION_ACTIVITY_POLICY
 from app.modules.parties.application.service import SharedPartyFactory
 from app.modules.parties.domain.audit_policy import PARTY_CONTACT_SNAPSHOT_POLICY
@@ -107,8 +106,7 @@ from app.modules.finance.domain.audit_policy import (
     DEPOSIT_ACTIVITY_POLICY,
 )
 from app.modules.leases.infrastructure.finance_operations import SQLiteLeaseFinanceOperations
-from app.modules.portfolio.infrastructure.expense_operations import SQLitePortfolioExpenseOperations
-from app.modules.portfolio.infrastructure.finance_operations import SQLitePortfolioFinanceOperations
+from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
 from app.modules.vendors.infrastructure.expense_operations import SQLiteProviderExpenseOperations
 from app.platform.version import application_version
 
@@ -140,6 +138,10 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         primary_store = s3_store
         additional_stores["local"] = local_store
     party_operations = SQLitePartyOperations(service.paths.database)
+    file_link_reader = SQLiteFileLinkReader()
+    task_transaction_operations = SQLiteTaskTransactionOperations()
+    portfolio_context_reader = SQLitePortfolioContextReader()
+    inspection_context_reader = SQLiteInspectionContextReader()
     party_reads = SQLitePartyReadOperations(party_operations)
     portfolio_lease_operations = SQLitePortfolioLeaseOperations(service.paths.database)
     lease_unit_of_work = SQLiteLeaseUnitOfWork(
@@ -156,15 +158,15 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         # Its dedicated endpoint owns the report audit event and correlation ID.
         (
             LeaseFileLinkValidator(lease_unit_of_work),
-            ExpenseFileLinkValidator(SQLiteExpenseFileLinkOperations(SQLiteFileExpenseOperations())),
-            DepositFileLinkValidator(SQLiteDepositFileLinkOperations(SQLiteFileExpenseOperations())),
+            ExpenseFileLinkValidator(SQLiteExpenseFileLinkOperations(file_link_reader)),
+            DepositFileLinkValidator(SQLiteDepositFileLinkOperations(file_link_reader)),
         ),
     )
     remote_materializer = s3_store.materialize if s3_store is not None else None
     backups = BackupService(service, recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)), remote_materializer=remote_materializer)
     tasks = TaskService(SQLiteTaskUnitOfWork(service.paths.database, recorder))
     communications = CommunicationService(SQLiteCommunicationUnitOfWork(
-        service.paths.database, recorder, SQLiteCommunicationContextOperations(),
+        service.paths.database, recorder, SQLiteCommunicationContextOperations(task_transaction_operations),
     ))
     portfolio = PortfolioService(SQLitePortfolioUnitOfWork(
         service.paths.database, recorder, (SQLiteTenantRoleActivityGuard(),)
@@ -193,21 +195,21 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         service.paths.database, recorder, party_operations, portfolio_lease_operations,
     ))
     finance = FinanceService(SQLiteFinanceUnitOfWork(
-        service.paths.database, recorder, SQLiteLeaseFinanceOperations(SQLitePortfolioFinanceOperations()), party_operations, SQLiteTaskFinanceOperations(),
+        service.paths.database, recorder, SQLiteLeaseFinanceOperations(portfolio_context_reader), party_operations, task_transaction_operations,
     ))
     prepaid_checks = PrepaidCheckService(finance.unit_of_work)
     expenses = ExpenseService(SQLiteExpenseUnitOfWork(
         service.paths.database,
         recorder,
-        SQLitePortfolioExpenseOperations(),
+        portfolio_context_reader,
         SQLiteProviderExpenseOperations(party_operations),
         party_operations,
-        SQLiteFileExpenseOperations(),
+        file_link_reader,
     ))
     deposits = DepositService(SQLiteDepositUnitOfWork(
         service.paths.database, recorder,
-        SQLiteLeaseFinanceOperations(SQLitePortfolioFinanceOperations()), party_operations,
-        SQLiteInspectionDepositOperations(), SQLiteDepositFileOperations(),
+        SQLiteLeaseFinanceOperations(portfolio_context_reader), party_operations,
+        inspection_context_reader, file_link_reader,
     ))
     inspections = InspectionService(inspection_unit_of_work, files)
     leases = LeaseService(lease_unit_of_work, inspections.attention_for_lease)

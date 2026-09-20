@@ -7,7 +7,7 @@ import types
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
 from fastapi.testclient import TestClient
 
@@ -16,6 +16,7 @@ from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditReposi
 from app.modules.files.application.service import FileError, FileService
 from app.modules.files.application.ports import FileLink
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
+from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
 from app.platform.config import LocalConfig
@@ -242,6 +243,51 @@ class FileStoreTests(unittest.TestCase):
             ), {"id": item.id})
         with self.assertRaisesRegex(FileError, "Only available"):
             self.files.content_path(self.files.get(item.id))
+
+    def test_file_link_reader_counts_and_reads_archived_links_in_one_bulk_query(self) -> None:
+        first = self.files.add(
+            self.source, "first.pdf", "application/pdf", entity_type="expense",
+            entity_id="expense-1", purpose="receipt",
+        )
+        second = self.files.add(
+            self.source, "second.pdf", "application/pdf", entity_type="expense",
+            entity_id="expense-1", purpose="receipt",
+        )
+        first_link_id = self.files.get(first.id).links[0]["id"]
+        self.files.archive_link(first_link_id, confirmed=True, reason="Superseded.")
+        reader = SQLiteFileLinkReader()
+        engine = self.files.unit_of_work.engine
+
+        with engine.connect() as connection:
+            self.assertEqual(reader.active_link_count(connection, "expense", "expense-1"), 1)
+            self.assertTrue(reader.has_active_available_link(connection, "expense", "expense-1"))
+            self.assertEqual(
+                [link.id for link in reader.links_for_entity(connection, "expense", "expense-1")],
+                [first_link_id, self.files.get(second.id).links[0]["id"]],
+            )
+            self.assertEqual(reader.entity_ids_with_active_links(connection, "expense"), {"expense-1"})
+
+        selects = []
+        def count_select(*args):
+            if args[2].lstrip().upper().startswith("SELECT"):
+                selects.append(args[2])
+        event.listen(engine, "before_cursor_execute", count_select)
+        try:
+            with engine.connect() as connection:
+                links = reader.links_for_entities(connection, "expense", ["expense-1", "expense-2"])
+        finally:
+            event.remove(engine, "before_cursor_execute", count_select)
+        self.assertEqual(len(selects), 1)
+        self.assertEqual([link.id for link in links["expense-1"]], [first_link_id, self.files.get(second.id).links[0]["id"]])
+        self.assertEqual(links["expense-1"][0].archived_at is not None, True)
+        self.assertEqual(links["expense-2"], [])
+
+        with engine.begin() as connection:
+            connection.execute(text(
+                "UPDATE file_content_locations SET storage_state='quarantined' WHERE file_id=:id"
+            ), {"id": second.id})
+        with engine.connect() as connection:
+            self.assertFalse(reader.has_active_available_link(connection, "expense", "expense-1"))
 
     def test_file_link_foreign_key_is_enforced(self) -> None:
         with self.assertRaises(IntegrityError):

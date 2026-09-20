@@ -10,6 +10,16 @@ from app.modules.tasks.domain.models import Task, TaskReminder
 Result = TypeVar("Result")
 
 
+class TaskTransactionOperations(Protocol):
+    """Task persistence used inside another module's existing transaction."""
+
+    def insert_task(self, connection: Any, task: Task) -> None: ...
+    def insert_reminder(self, connection: Any, reminder: TaskReminder) -> None: ...
+    def pending_reminders(self, connection: Any, task_id: str) -> list[TaskReminder]: ...
+    def replace_reminder(self, connection: Any, reminder: TaskReminder) -> None: ...
+    def latest_reminder_status(self, connection: Any, task_id: str) -> str | None: ...
+
+
 class TaskTransaction(Protocol):
     """A single write transaction; it contains no task lifecycle policy."""
 

@@ -18,6 +18,7 @@ from app.modules.communications.application.service import (
 )
 from app.modules.communications.infrastructure.schema_validation import validate_communication_schema
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
+from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
 from app.modules.communications.infrastructure.unit_of_work import SQLiteCommunicationUnitOfWork
 from app.platform.product_migrations import ProductSchemaError, initialize_latest_schema, validate_latest_schema
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
@@ -37,7 +38,7 @@ class CommunicationWorkflowTests(unittest.TestCase):
         engine = create_sqlite_engine(self.database)
         with immediate_transaction(engine) as connection:
             connection.execute(text("INSERT INTO parties (id, party_kind, display_name, created_at, updated_at, archived_at) VALUES (:id, 'individual', 'Taylor', :now, :now, NULL)"), {"id": PARTY_ID, "now": "2026-01-01T00:00:00+00:00"})
-        self.service = CommunicationService(SQLiteCommunicationUnitOfWork(self.database, AuditRecorder(SQLiteAuditRepository(self.database)), SQLiteCommunicationContextOperations()))
+        self.service = CommunicationService(SQLiteCommunicationUnitOfWork(self.database, AuditRecorder(SQLiteAuditRepository(self.database)), SQLiteCommunicationContextOperations(SQLiteTaskTransactionOperations())))
 
     def command(self, *, record: bool = False, subject: str = "Repair update", occurred_at: str = "2026-01-01T12:00:00+00:00", follow_up: FollowUpInput | None = None) -> CommunicationCommand:
         return CommunicationCommand("inbound", "phone", subject, "The tenant called back.", occurred_at, "UTC", (ParticipantInput(PARTY_ID, "sender"),), follow_up=follow_up, record=record)
@@ -227,12 +228,12 @@ class CommunicationWorkflowTests(unittest.TestCase):
         updated = self.service.patch(created["id"], PatchCommand(occurred_timezone="America/New_York"), "22222222-2222-4222-8222-222222222223")
         self.assertEqual("America/New_York", updated["links"][0]["propertyTimezoneSnapshot"])
         with engine.connect() as connection:
-            validate_communication_schema(connection, SQLiteCommunicationContextOperations())
+            validate_communication_schema(connection, SQLiteCommunicationContextOperations(SQLiteTaskTransactionOperations()))
 
     def test_follow_up_and_audit_failure_roll_back_one_transaction(self) -> None:
         class FailingRecorder:
             def record_change(self, *args, **kwargs): raise RuntimeError("audit unavailable")
-        failed = CommunicationService(SQLiteCommunicationUnitOfWork(self.database, FailingRecorder(), SQLiteCommunicationContextOperations()))
+        failed = CommunicationService(SQLiteCommunicationUnitOfWork(self.database, FailingRecorder(), SQLiteCommunicationContextOperations(SQLiteTaskTransactionOperations())))
         with self.assertRaises(RuntimeError):
             failed.create(self.command(record=True, follow_up=FollowUpInput("Call back")), "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
         self.assertEqual([], self.service.list()[0])
@@ -245,12 +246,12 @@ class CommunicationWorkflowTests(unittest.TestCase):
         with immediate_transaction(engine) as connection:
             connection.execute(text("INSERT INTO parties (id, party_kind, display_name, created_at, updated_at, archived_at) VALUES (:id, 'individual', 'Taylor', :now, :now, NULL)"), {"id": PARTY_ID, "now": "2026-01-01T00:00:00+00:00"})
         recorder = AuditRecorder(SQLiteAuditRepository(workspace.paths.database))
-        service = CommunicationService(SQLiteCommunicationUnitOfWork(workspace.paths.database, recorder, SQLiteCommunicationContextOperations()))
+        service = CommunicationService(SQLiteCommunicationUnitOfWork(workspace.paths.database, recorder, SQLiteCommunicationContextOperations(SQLiteTaskTransactionOperations())))
         created = service.create(self.command(record=True, follow_up=FollowUpInput("Call back")), "cccccccc-cccc-4ccc-8ccc-cccccccccccc")
         backups = BackupService(workspace, recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)))
         archive = backups.create_backup("a long test backup passphrase")
         destination = root / "restored"; backups.restore(archive.archive_path, "a long test backup passphrase", destination)
-        restored = CommunicationService(SQLiteCommunicationUnitOfWork(destination / "database" / "property-management.sqlite", AuditRecorder(SQLiteAuditRepository(destination / "database" / "property-management.sqlite")), SQLiteCommunicationContextOperations()))
+        restored = CommunicationService(SQLiteCommunicationUnitOfWork(destination / "database" / "property-management.sqlite", AuditRecorder(SQLiteAuditRepository(destination / "database" / "property-management.sqlite")), SQLiteCommunicationContextOperations(SQLiteTaskTransactionOperations())))
         view = restored.get(created["id"])
         self.assertEqual("recorded", view["status"]); self.assertEqual(PARTY_ID, view["participants"][0]["partyId"]); self.assertEqual(1, len(view["followUpTasks"]))
 

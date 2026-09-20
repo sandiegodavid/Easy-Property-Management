@@ -15,7 +15,7 @@ from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.application.service import FileError, FileService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore
-from app.modules.files.infrastructure.expense_operations import SQLiteFileExpenseOperations
+from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.finance.application.expense_service import ExpenseService, PossibleDuplicateExpenseError
 from app.modules.finance.application.file_links import ExpenseFileLinkValidator
@@ -34,7 +34,7 @@ from app.modules.finance.infrastructure.file_links import SQLiteExpenseFileLinkO
 from app.modules.finance.infrastructure.schema_validation import validate_finance_schema
 from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations
 from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
-from app.modules.portfolio.infrastructure.expense_operations import SQLitePortfolioExpenseOperations
+from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
 from app.modules.vendors.infrastructure.expense_operations import SQLiteProviderExpenseOperations
@@ -70,16 +70,17 @@ class ExpenseWorkflowTests(unittest.TestCase):
         self.property_id = property_record.id
         self.space_id = portfolio.get_property(property_record.id)["spaces"][0]["id"]
         party_operations = SQLitePartyOperations(database)
+        file_link_reader = SQLiteFileLinkReader()
         self.expenses = ExpenseService(SQLiteExpenseUnitOfWork(
-            database, recorder, SQLitePortfolioExpenseOperations(),
+            database, recorder, SQLitePortfolioContextReader(),
             SQLiteProviderExpenseOperations(party_operations), party_operations,
-            SQLiteFileExpenseOperations(),
+            file_link_reader,
         ), now=lambda: datetime.now(UTC))
         self.files = FileService(
             self.workspace,
             FilesystemContentStore(self.workspace.paths.files),
             SQLiteFileUnitOfWork(database, recorder),
-            link_validators=(ExpenseFileLinkValidator(SQLiteExpenseFileLinkOperations(SQLiteFileExpenseOperations())),),
+            link_validators=(ExpenseFileLinkValidator(SQLiteExpenseFileLinkOperations(file_link_reader)),),
         )
         self.category_id = self.expenses.list_categories()[0]["id"]
 
@@ -364,8 +365,8 @@ class ExpenseWorkflowTests(unittest.TestCase):
         party_operations = SQLitePartyOperations(restored_database)
         restored = ExpenseService(SQLiteExpenseUnitOfWork(
             restored_database, AuditRecorder(SQLiteAuditRepository(restored_database)),
-            SQLitePortfolioExpenseOperations(), SQLiteProviderExpenseOperations(party_operations),
-            party_operations, SQLiteFileExpenseOperations(),
+            SQLitePortfolioContextReader(), SQLiteProviderExpenseOperations(party_operations),
+            party_operations, SQLiteFileLinkReader(),
         ))
         detail = restored.expense(expense["id"])
         self.assertEqual(detail["refunds"][0]["id"], refund["id"])

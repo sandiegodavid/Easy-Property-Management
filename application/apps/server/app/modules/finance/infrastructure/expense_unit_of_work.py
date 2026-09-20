@@ -8,11 +8,11 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.finance.application.expense_ports import (
     ExpenseTransaction,
-    FileExpenseOperations,
     PartyExpenseOperations,
-    PortfolioExpenseOperations,
     ProviderExpenseOperations,
 )
+from app.modules.files.application.ports import FileLinkReader, FileLinkWithFile
+from app.modules.portfolio.application.ports import PortfolioContextReader
 from app.modules.finance.domain.expense_models import Expense, ExpenseCategory, ExpenseRefund
 from app.modules.finance.domain.models import FinanceConflictError
 from app.modules.finance.infrastructure.sqlalchemy_models import (
@@ -24,9 +24,9 @@ from app.platform.sqlite_engine import create_sqlite_engine, immediate_transacti
 
 
 class SQLiteExpenseUnitOfWork:
-    def __init__(self, database, recorder: AuditRecorder, portfolio: PortfolioExpenseOperations,
+    def __init__(self, database, recorder: AuditRecorder, portfolio: PortfolioContextReader,
                  providers: ProviderExpenseOperations, parties: PartyExpenseOperations,
-                 files: FileExpenseOperations) -> None:
+                 files: FileLinkReader) -> None:
         self.engine = create_sqlite_engine(database)
         self.recorder = recorder
         self.portfolio = portfolio
@@ -114,7 +114,7 @@ class _Transaction:
             query = query.where(ExpenseModel.voided_at.is_(None))
         has_evidence = filters.get("has_evidence")
         if has_evidence is not None:
-            evidence_ids = self.files.expense_ids_with_active_evidence(self.connection)
+            evidence_ids = self.files.entity_ids_with_active_links(self.connection, "expense")
             query = query.where(
                 ExpenseModel.id.in_(evidence_ids) if has_evidence
                 else ExpenseModel.id.not_in(evidence_ids)
@@ -176,18 +176,26 @@ class _Transaction:
             item = ExpenseRefund(**dict(row))
             refunds[item.expense_id].append(item)
         correction_rows = self._connected_correction_rows(expenses)
+        portfolio_contexts = self.portfolio.contexts_for_property_spaces(
+            self.connection, {(item.property_id, item.space_id) for item in expenses}
+        )
         return {
             "categories": categories,
-            "contexts": self.portfolio.expense_contexts(
-                self.connection, expenses
-            ),
+            "contexts": {
+                item.id: _expense_context_view(context)
+                for item in expenses
+                if (context := portfolio_contexts.get((item.property_id, item.space_id))) is not None
+            },
             "providers": self.providers.expense_providers(
                 self.connection, list(provider_ids)
             ),
             "refunds": refunds,
-            "evidence": self.files.evidence_for_expenses(
-                self.connection, expense_ids
-            ),
+            "evidence": {
+                expense_id: [_expense_evidence_view(link) for link in links]
+                for expense_id, links in self.files.links_for_entities(
+                    self.connection, "expense", expense_ids
+                ).items()
+            },
             "correction_chains": {
                 expense_id: _correction_chain(
                     correction_rows, expense_id, "replaces_expense_id"
@@ -277,7 +285,8 @@ class _Transaction:
         ).values(**item.__dict__))
 
     def portfolio_context(self, property_id, space_id, paid_on):
-        return self.portfolio.expense_context(self.connection, property_id, space_id, paid_on)
+        context = self.portfolio.context_for_property_space(self.connection, property_id, space_id)
+        return None if context is None else _expense_context_view(context)
 
     def provider_context(self, party_id):
         return self.providers.expense_provider(self.connection, party_id)
@@ -297,6 +306,33 @@ class _Transaction:
 def _one(connection, model, record_id, domain):
     row = connection.execute(model.__table__.select().where(model.id == record_id)).mappings().first()
     return domain(**dict(row)) if row else None
+
+
+def _expense_evidence_view(link: FileLinkWithFile) -> dict[str, object]:
+    return {
+        "linkId": link.id,
+        "fileId": link.file_id,
+        "originalName": link.original_name,
+        "mediaType": link.media_type,
+        "sizeBytes": link.size_bytes,
+        "contentSha256": link.content_sha256,
+        "purpose": link.purpose,
+        "createdAt": link.created_at,
+        "archivedAt": link.archived_at,
+        "archiveReason": link.archive_reason,
+    }
+
+
+def _expense_context_view(context: dict[str, object]) -> dict[str, object]:
+    return {
+        "propertyId": context["property_id"],
+        "propertyName": context["property_display_name"],
+        "propertyArchived": context["property_status"] == "archived",
+        "timeZone": context["time_zone"],
+        "spaceId": context["space_id"],
+        "spaceName": context["space_display_name"],
+        "spaceArchived": False if context["space_status"] is None else context["space_status"] == "archived",
+    }
 
 
 def _chunks(values, size=500):

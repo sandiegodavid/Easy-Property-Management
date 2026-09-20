@@ -10,6 +10,7 @@ from sqlalchemy import text
 from app.modules.audit.infrastructure.schema_validation import validate_audit_schema
 from app.modules.files.infrastructure.schema_validation import validate_file_schema
 from app.modules.tasks.infrastructure.schema_validation import validate_task_schema
+from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
 from app.modules.tenants.infrastructure.schema_validation import validate_tenant_schema
 from app.modules.leases.infrastructure.schema_validation import validate_lease_schema
 from app.modules.inspections.infrastructure.schema_validation import validate_inspection_schema
@@ -84,7 +85,7 @@ def validate_latest_schema(database_path: Path) -> None:
                 raise ProductSchemaError("Workspace database is not at the current schema revision.")
             for validator in (validate_workspace_schema, validate_audit_schema, validate_file_schema, validate_task_schema, validate_portfolio_schema, validate_tenant_schema, validate_lease_schema, validate_inspection_schema, validate_vendor_schema, validate_finance_schema):
                 validator(connection)
-            validate_communication_schema(connection, SQLiteCommunicationContextOperations())
+            validate_communication_schema(connection, SQLiteCommunicationContextOperations(SQLiteTaskTransactionOperations()))
             validate_finance_data(connection)
     except ProductSchemaError:
         raise

@@ -6,9 +6,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from sqlalchemy import event
+
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.tasks.application.service import TaskError, TaskService
+from app.modules.tasks.domain.models import Task, TaskReminder, dismiss
+from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
 from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
 from app.platform.config import LocalConfig
@@ -62,3 +66,36 @@ class TaskTests(unittest.TestCase):
         task = self.tasks.create({"title": "Rule check"})
         with self.assertRaises(TaskError): self.tasks.transition(task.id, "open")
         with self.assertRaises(TaskError): self.tasks.list("unknown")
+
+    def test_transaction_operations_keep_prepaid_reminder_persistence_statement_counts(self) -> None:
+        operations = SQLiteTaskTransactionOperations()
+        task = Task(
+            "task-1", "Deposit prepaid check", None, "open", "normal",
+            "2026-01-01T08:00:00+00:00", "UTC", True, None, None, None,
+            "prepaid_check", "check-1", "Prepaid check", "2026-01-01T00:00:00+00:00",
+            "2026-01-01T00:00:00+00:00",
+        )
+        reminders = [
+            TaskReminder(f"reminder-{number}", task.id, task.due_at_utc, "pending", None, None, task.created_at_utc)
+            for number in (1, 2)
+        ]
+        statements = []
+        engine = self.tasks.unit_of_work.engine
+        def capture_statement(*args):
+            statements.append(args[2])
+        event.listen(engine, "before_cursor_execute", capture_statement)
+        try:
+            with engine.begin() as connection:
+                operations.insert_task(connection, task)
+                for reminder in reminders:
+                    operations.insert_reminder(connection, reminder)
+                pending = operations.pending_reminders(connection, task.id)
+                for reminder in pending:
+                    operations.replace_reminder(connection, dismiss(reminder, "2026-01-01T01:00:00+00:00"))
+                self.assertEqual(operations.latest_reminder_status(connection, task.id), "dismissed")
+        finally:
+            event.remove(engine, "before_cursor_execute", capture_statement)
+        self.assertEqual(sum(statement.lstrip().upper().startswith("INSERT INTO TASKS") for statement in statements), 1)
+        self.assertEqual(sum(statement.lstrip().upper().startswith("INSERT INTO TASK_REMINDERS") for statement in statements), 2)
+        self.assertEqual(sum(statement.lstrip().upper().startswith("UPDATE TASK_REMINDERS") for statement in statements), 2)
+        self.assertEqual(sum(statement.lstrip().upper().startswith("SELECT") for statement in statements), 2)

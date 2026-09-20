@@ -1,4 +1,6 @@
 """SQLite FIN-008 transaction adapter."""
+from dataclasses import asdict
+
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 
@@ -82,7 +84,22 @@ class _Transaction:
         if source_kind == "expense":
             row = self.connection.execute(select(ExpenseModel.__table__).where(ExpenseModel.id == source_id)).mappings().first()
             return None if row is None else {"propertyId": row["property_id"], "spaceId": row["space_id"], "summary": f"Expense {row['paid_on']}", "active": row["voided_at"] is None}
-        return self.inspections.source_context(self.connection, source_kind, source_id)
+        if source_kind == "inspection_comparison":
+            row = self.inspections.comparison_context(self.connection, source_id)
+            return None if row is None else {
+                "leaseId": row["lease_id"],
+                "summary": f"Inspection comparison {row['comparison_state']}",
+                "active": row["pre_status"] == "finalized" and row["post_status"] == "finalized",
+            }
+        if source_kind == "inspection_observation":
+            row = self.inspections.observation_context(self.connection, source_id)
+            return None if row is None else {
+                "leaseId": row["lease_id"],
+                "spaceId": row["space_id"],
+                "summary": f"Inspection observation {row['condition_state']}",
+                "active": row["status"] == "finalized",
+            }
+        return None
     def expense_source_used_elsewhere(self, expense_id, deduction_id):
         return self.connection.execute(
             select(SecurityDepositDeductionSourceModel.id)
@@ -92,10 +109,17 @@ class _Transaction:
                 SecurityDepositDeductionSourceModel.deduction_id != deduction_id,
             )
         ).first() is not None
-    def deduction_has_file_evidence(self, deduction_id): return self.files.active_deduction_evidence(self.connection, deduction_id)
+    def deduction_has_file_evidence(self, deduction_id): return self.files.has_active_available_link(self.connection, "security_deposit_deduction", deduction_id)
     def evidence(self, entity_type, entity_id):
-        return self.files.evidence(self.connection, entity_type, entity_id)
-    def inspection_warnings(self, lease_id): return self.inspections.deposit_warnings(self.connection, lease_id)
+        return [asdict(link) for link in self.files.links_for_entity(self.connection, entity_type, entity_id)]
+    def inspection_warnings(self, lease_id):
+        kinds = self.inspections.finalized_report_kinds(self.connection, lease_id)
+        warnings = []
+        if "pre_move_in" not in kinds:
+            warnings.append("missing_pre_move_in_inspection")
+        if "post_move_out" not in kinds:
+            warnings.append("missing_post_move_out_inspection")
+        return warnings
     def credits(self, settlement_id): return [dict(row) for row in self.connection.execute(select(SecurityDepositCreditModel.__table__).where(SecurityDepositCreditModel.settlement_id == settlement_id)).mappings()]
     def refund(self, record_id): return _one(self.connection, SecurityDepositRefundModel, record_id)
     def refund_by_key(self, key): return self.connection.execute(select(SecurityDepositRefundModel.__table__).where(SecurityDepositRefundModel.idempotency_key == key)).mappings().first()

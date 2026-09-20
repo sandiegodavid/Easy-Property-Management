@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from typing import Any, Protocol, TypeVar
 
 from app.modules.portfolio.domain.models import (
@@ -15,6 +15,16 @@ from app.modules.portfolio.domain.models import (
 )
 
 Result = TypeVar("Result")
+
+
+class PortfolioContextReader(Protocol):
+    """Transaction-aware property, space, and ownership context reads."""
+
+    def context_for_space(self, connection: Any, space_id: str) -> dict[str, object] | None: ...
+    def contexts_for_spaces(self, connection: Any, space_ids: Collection[str]) -> dict[str, dict[str, object]]: ...
+    def context_for_property_space(self, connection: Any, property_id: str, space_id: str | None) -> dict[str, object] | None: ...
+    def contexts_for_property_spaces(self, connection: Any, references: Collection[tuple[str, str | None]]) -> dict[tuple[str, str | None], dict[str, object]]: ...
+    def party_owned_property_on(self, connection: Any, property_id: str, party_id: str, on: str) -> bool: ...
 
 
 class AddressTimeZoneResolver(Protocol):

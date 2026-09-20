@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 
 from app.bootstrap.api import create_app
 from app.modules.audit.application.recorder import AuditRecorder
@@ -16,6 +17,7 @@ from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditReposi
 from app.modules.portfolio.application.ports import PortfolioConflictError
 from app.modules.portfolio.application.service import AvailabilityCommand, OccupancyCommand, OwnershipInput, PartyCreateCommand, PortfolioError, PortfolioService, PropertyCreateCommand, SpaceClassificationCommand, SpaceCreateCommand
 from app.modules.portfolio.infrastructure.schema_validation import _normalise_sql, validate_portfolio_schema
+from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.workspace.application.service import WorkspaceService
@@ -53,6 +55,67 @@ class PortfolioTests(unittest.TestCase):
         self.assertEqual(self.service.get_property(managed.id)["ownershipContext"], "managed_for_owner")
         self.assertEqual(self.service.get_property(mixed.id)["ownershipContext"], "mixed")
         self.assertEqual([record["id"] for record in self.service.list_properties(ownership_context_filter="mixed")], [mixed.id])
+
+    def test_context_reader_uses_bounded_set_based_queries(self) -> None:
+        owner = self._party()
+        first = self.service.create_property(PropertyCreateCommand(
+            "Reader office", "20 Maple Street", "Portland", "US", "office",
+            (OwnershipInput("client_owner", owner.id),), region="OR", postal_code="97201",
+            inventory_layout="office_suites",
+            spaces=(SpaceCreateCommand("Suite 100"), SpaceCreateCommand("Suite 200")),
+        ))
+        second = self._property([OwnershipInput("local_operator")])
+        first_spaces = [space["id"] for space in self.service.get_property(first.id)["spaces"]]
+        reader = SQLitePortfolioContextReader()
+        statements = []
+        engine = self.service.unit_of_work.engine
+        def capture(*args):
+            if args[2].lstrip().upper().startswith("SELECT"):
+                statements.append(args[2])
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            with engine.connect() as connection:
+                def measured(operation):
+                    start = len(statements)
+                    result = operation()
+                    return result, statements[start:]
+
+                context, queries = measured(lambda: reader.context_for_space(connection, first_spaces[0]))
+                self.assertEqual(context["property_id"], first.id)
+                self.assertEqual(len(queries), 2)
+
+                contexts, queries = measured(lambda: reader.contexts_for_spaces(connection, first_spaces))
+                self.assertEqual(set(contexts), set(first_spaces))
+                self.assertEqual(len(queries), 1)
+
+                empty_spaces, queries = measured(lambda: reader.contexts_for_spaces(connection, set()))
+                self.assertEqual(empty_spaces, {})
+                self.assertEqual(queries, [])
+
+                property_only, queries = measured(lambda: reader.contexts_for_property_spaces(
+                    connection, {(first.id, None), (second.id, None), (first.id, None)}
+                ))
+                self.assertEqual(set(property_only), {(first.id, None), (second.id, None)})
+                self.assertEqual(len(queries), 1)
+
+                mixed, queries = measured(lambda: reader.contexts_for_property_spaces(
+                    connection, {(first.id, first_spaces[0]), (first.id, first_spaces[1]), (second.id, None)}
+                ))
+                self.assertEqual(set(mixed), {(first.id, first_spaces[0]), (first.id, first_spaces[1]), (second.id, None)})
+                self.assertEqual(len(queries), 2)
+
+                empty, queries = measured(lambda: reader.contexts_for_property_spaces(connection, set()))
+                self.assertEqual(empty, {})
+                self.assertEqual(queries, [])
+
+                owned, queries = measured(lambda: reader.party_owned_property_on(
+                    connection, first.id, owner.id, date.today().isoformat()
+                ))
+                self.assertTrue(owned)
+                self.assertEqual(len(queries), 1)
+                self.assertIn("LIMIT", queries[0].upper())
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
 
     def test_property_time_zone_is_derived_and_recomputed_after_an_address_change(self) -> None:
         property = self._property([OwnershipInput("local_operator")])

@@ -1,10 +1,11 @@
 """Lease-owned FIN-001 projection, with portfolio context supplied at composition."""
 from sqlalchemy import or_, select
 from app.modules.finance.application.ports import LeaseTermFinanceSnapshot
+from app.modules.portfolio.application.ports import PortfolioContextReader
 from app.modules.leases.infrastructure.sqlalchemy_models import LeaseModel, LeaseTermModel, LeaseParticipantModel, LeaseTerminationCaseModel, LeaseTerminationProposalModel
 
 class SQLiteLeaseFinanceOperations:
-    def __init__(self, portfolio_operations): self.portfolio_operations = portfolio_operations
+    def __init__(self, portfolio_operations: PortfolioContextReader): self.portfolio_operations = portfolio_operations
     def lease_time_zone(self, connection, lease_id):
         lease = connection.execute(LeaseModel.__table__.select().where(LeaseModel.id == lease_id)).mappings().first()
         if not lease: return None

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Protocol, Sequence
 
 from app.modules.files.domain.models import StoredFile
 
@@ -38,6 +38,34 @@ class FileLink:
     file_id: str | None = None
     archived_at: str | None = None
     archive_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class FileLinkWithFile:
+    """A file link and the immutable metadata of its linked file."""
+
+    id: str
+    entity_type: str
+    entity_id: str
+    purpose: str
+    created_at: str
+    file_id: str
+    archived_at: str | None
+    archive_reason: str | None
+    original_name: str
+    media_type: str
+    size_bytes: int
+    content_sha256: str
+
+
+class FileLinkReader(Protocol):
+    """Transaction-aware reads of polymorphic file links."""
+
+    def active_link_count(self, connection: Any, entity_type: str, entity_id: str) -> int: ...
+    def has_active_available_link(self, connection: Any, entity_type: str, entity_id: str) -> bool: ...
+    def links_for_entity(self, connection: Any, entity_type: str, entity_id: str) -> list[FileLink]: ...
+    def links_for_entities(self, connection: Any, entity_type: str, entity_ids: Sequence[str]) -> dict[str, list[FileLinkWithFile]]: ...
+    def entity_ids_with_active_links(self, connection: Any, entity_type: str) -> set[str]: ...
 
 
 @dataclass(frozen=True)
