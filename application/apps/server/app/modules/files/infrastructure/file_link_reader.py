@@ -76,3 +76,12 @@ class SQLiteFileLinkReader:
             FileLinkModel.entity_type == entity_type,
             FileLinkModel.archived_at.is_(None),
         )).scalars())
+
+    def active_linked_entity_ids(self, connection, entity_type: str, entity_ids: Sequence[str]) -> set[str]:
+        if not entity_ids:
+            return set()
+        return set(connection.execute(select(FileLinkModel.entity_id).where(
+            FileLinkModel.entity_type == entity_type,
+            FileLinkModel.entity_id.in_(set(entity_ids)),
+            FileLinkModel.archived_at.is_(None),
+        )).scalars())

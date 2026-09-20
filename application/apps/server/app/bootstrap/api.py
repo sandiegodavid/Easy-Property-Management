@@ -30,6 +30,7 @@ from app.modules.tasks.api.router import build_router as build_tasks_router
 from app.modules.tasks.application.service import TaskService
 from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork
 from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
+from app.modules.tasks.infrastructure.context_reader import SQLiteTaskContextReader
 from app.modules.tasks.domain.audit_policy import TASK_ACTIVITY_POLICY
 from app.modules.communications.api.router import build_router as build_communications_router
 from app.modules.communications.application.service import CommunicationService
@@ -38,6 +39,12 @@ from app.modules.communications.infrastructure.unit_of_work import (
 )
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.modules.communications.domain.audit_policy import COMMUNICATION_ACTIVITY_POLICY
+from app.modules.maintenance.api.router import build_router as build_maintenance_router
+from app.modules.maintenance.application.service import MaintenanceService
+from app.modules.maintenance.application.file_links import MaintenanceFileLinkValidator
+from app.modules.maintenance.infrastructure.unit_of_work import SQLiteMaintenanceUnitOfWork
+from app.modules.maintenance.infrastructure.file_links import SQLiteMaintenanceFileLinkOperations
+from app.modules.maintenance.domain.audit_policy import MAINTENANCE_ACTIVITY_POLICY
 from app.modules.portfolio.api.router import build_router as build_portfolio_router
 from app.modules.portfolio.application.service import PortfolioService
 from app.modules.portfolio.infrastructure.unit_of_work import (
@@ -91,6 +98,7 @@ from app.modules.finance.application.deposit_service import DepositService
 from app.modules.finance.application.file_links import ExpenseFileLinkValidator
 from app.modules.finance.application.deposit_file_links import DepositFileLinkValidator
 from app.modules.finance.application.service import FinanceService
+from app.modules.finance.infrastructure.expense_context_reader import SQLiteExpenseContextReader
 from app.modules.finance.application.prepaid_check_service import PrepaidCheckService
 from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpenseUnitOfWork
 from app.modules.finance.infrastructure.file_links import SQLiteExpenseFileLinkOperations
@@ -150,6 +158,10 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         portfolio_lease_operations,
     )
     inspection_unit_of_work = SQLiteInspectionUnitOfWork(service.paths.database, recorder)
+    maintenance_unit_of_work = SQLiteMaintenanceUnitOfWork(
+        service.paths.database, recorder, portfolio_context_reader,
+        SQLiteExpenseContextReader(), SQLiteTaskContextReader(), task_transaction_operations, file_link_reader,
+    )
     files = FileService(
         service,
         primary_store,
@@ -161,6 +173,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             LeaseFileLinkValidator(lease_unit_of_work),
             ExpenseFileLinkValidator(SQLiteExpenseFileLinkOperations(file_link_reader)),
             DepositFileLinkValidator(SQLiteDepositFileLinkOperations(file_link_reader)),
+            MaintenanceFileLinkValidator(SQLiteMaintenanceFileLinkOperations(file_link_reader)),
         ),
     )
     remote_materializer = s3_store.materialize if s3_store is not None else None
@@ -213,6 +226,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         inspection_context_reader, file_link_reader,
     ))
     inspections = InspectionService(inspection_unit_of_work, files)
+    maintenance = MaintenanceService(maintenance_unit_of_work)
     leases = LeaseService(lease_unit_of_work, inspections.attention_for_lease)
 
     @asynccontextmanager
@@ -255,6 +269,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.prepaid_check_service = prepaid_checks
     app.state.expense_service = expenses
     app.state.deposit_service = deposits
+    app.state.maintenance_service = maintenance
     app.include_router(build_router(service, runtime))
     policies = AuditSnapshotPolicyRegistry({
         ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -310,6 +325,10 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("communication", 1): DEFAULT_SNAPSHOT_POLICY,
         ("communication_participant", 1): DEFAULT_SNAPSHOT_POLICY,
         ("communication_link", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("maintenance_issue", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("maintenance_appointment", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("maintenance_cost_context", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("maintenance_expense_link", 1): DEFAULT_SNAPSHOT_POLICY,
     }, activity_policies={
         ("task", 1): TASK_ACTIVITY_POLICY,
         ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
@@ -346,6 +365,10 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("communication", 1): COMMUNICATION_ACTIVITY_POLICY,
         ("communication_participant", 1): COMMUNICATION_ACTIVITY_POLICY,
         ("communication_link", 1): COMMUNICATION_ACTIVITY_POLICY,
+        ("maintenance_issue", 1): MAINTENANCE_ACTIVITY_POLICY,
+        ("maintenance_appointment", 1): MAINTENANCE_ACTIVITY_POLICY,
+        ("maintenance_cost_context", 1): MAINTENANCE_ACTIVITY_POLICY,
+        ("maintenance_expense_link", 1): MAINTENANCE_ACTIVITY_POLICY,
     })
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime))
@@ -361,6 +384,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_expense_router(expenses, runtime))
     app.include_router(build_deposit_router(deposits, runtime))
     app.include_router(build_communications_router(communications, runtime))
+    app.include_router(build_maintenance_router(maintenance, runtime))
     return app
 
 
