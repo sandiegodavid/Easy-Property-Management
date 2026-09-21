@@ -35,7 +35,7 @@ MAINT-002 provides:
 
 - Manual recording of a received quote from an existing saved provider.
 - Multiple comparable quote options per issue, including multiple options from the same provider.
-- Exact USD total, received date, optional validity date, scope summary, terms/notes, and a durable provider display snapshot.
+- Exact USD total, received date, optional validity date, optional paired quoted earliest-work-start and estimated-work-finish dates, scope summary, terms/notes, and a durable provider display snapshot.
 - Explicit withdrawal and replacement history for incorrect, superseded, or provider-withdrawn quotes.
 - Selection of an exact quote or a confirmed direct assignment when no quote exists.
 - At most one current assignment per issue, with atomic reassignment and retained prior assignments.
@@ -66,6 +66,8 @@ A quote is an immutable received offer associated with one maintenance issue and
 Quote totals never enter Finance totals, owner balances, expense reports, or the issue's confirmed-spending total. Selecting a quote does not create an expense. If work is later paid, the operator records a FIN-002 expense and links it through the existing MAINT-001 expense-link workflow.
 
 The MVP records one total amount rather than quote line items. The scope and terms remain bounded text and attached documents. This keeps comparison useful without prematurely designing estimating, tax, or payable subsystems.
+
+A provider may also supply an earliest date on which work can start and an estimated finish date. The pair is optional; when recorded, both property-local ISO dates are required and finish cannot precede start. These are provider-supplied quoted schedule facts used in human comparison. They do not schedule an appointment, start a deadline, or promise actual performance. MAINT-003 later records actual work occurrence instants and keeps quoted and actual facts visibly distinct.
 
 ### Quote history is immutable and correction is explicit
 
@@ -129,6 +131,8 @@ All IDs and idempotency keys are UUIDs. Timestamps are aware UTC text. Quote dat
 | `currency_code` | Required exact value `USD`. |
 | `received_on` | Required property-local ISO date. It cannot be after the current property-local date. |
 | `valid_through` | Optional property-local ISO date on or after `received_on`. |
+| `earliest_work_start_on` | Optional quoted property-local ISO date; required together with `estimated_work_finish_on`. |
+| `estimated_work_finish_on` | Optional quoted property-local ISO date; required together with `earliest_work_start_on` and not before it. |
 | `terms_notes` | Optional sensitive text, maximum 4,000 characters. |
 | `replaces_quote_id` | Optional unique self-reference to a withdrawn quote for the same issue and provider. |
 | `withdrawn_at`, `withdrawal_reason` | Both null while active and both required after confirmed withdrawal. |
@@ -173,7 +177,7 @@ Withdrawal does not rewrite an existing assignment that historically selected th
 
 ### Compare quotes
 
-`GET /api/maintenance-issues/{issueId}/quote-comparison` returns active and withdrawn quote options ordered by active first, non-expired first, amount ascending, received date descending, and ID for stability. It exposes stored provider snapshots, optional current provider/profile state, document counts, and whether each quote appears in current or historical assignments.
+`GET /api/maintenance-issues/{issueId}/quote-comparison` returns active and withdrawn quote options ordered by active first, non-expired first, amount ascending, received date descending, and ID for stability. It exposes stored provider snapshots, optional current provider/profile state, quoted earliest-work-start and estimated-work-finish dates, document counts, and whether each quote appears in current or historical assignments.
 
 The server does not calculate a winner, score providers, infer scope equivalence, or treat lowest price as recommended. Different scopes remain visibly different.
 
@@ -237,7 +241,7 @@ The current greenfield baseline, SQLAlchemy models, product table allowlist, mod
 4. Extend Maintenance's FILE-001 validator with quote and assignment targets and purposes.
 5. Extend issue list/detail projections with two set-based Maintenance child queries and bounded source-owned batch readers; assert query budgets before accepting another abstraction or query.
 6. Update the current greenfield schema baseline, product allowlist, exact/retained-data validation, backup/restore coverage, and audit-policy registration. Do not add compatibility tables or dual-read/write paths.
-7. Add tests for quote validation and alternatives, provider availability, avoided-provider override, direct assignment, selection and reassignment, idempotency, correction lineage, issue-lifecycle independence, file links, audit privacy, exact schema/data rejection, query budgets, concurrency, and restore integrity.
+7. Add tests for quote validation and alternatives, paired quoted schedule dates, provider availability, avoided-provider override, direct assignment, selection and reassignment, idempotency, correction lineage, issue-lifecycle independence, file links, audit privacy, exact schema/data rejection, query budgets, concurrency, and restore integrity.
 8. Deliver the operator workflow through the existing `UI-001` scope.
 
 ## Backend acceptance criteria
@@ -253,7 +257,7 @@ MAINT-002 backend/API scope is complete when:
 7. Quote and assignment documents use FILE-001 without duplicating storage metadata.
 8. Issue lifecycle, appointments, tasks, communications, journals, and expenses do not transition implicitly.
 9. List/detail/comparison reads remain bounded and set-based with no provider or file N+1 behavior.
-10. Exact schema validation and encrypted backup/restore preserve quotes, assignment history, file links, audit history, replacement lineage, and stable IDs.
+10. Exact schema validation and encrypted backup/restore preserve quotes including quoted schedule dates, assignment history, file links, audit history, replacement lineage, and stable IDs.
 
 The overall operator workflow remains pending until `UI-001` supplies quote comparison and assignment screens. Work execution and outcome history remain pending until `MAINT-003`.
 
@@ -339,13 +343,19 @@ Decision: update the current baseline and rebuild development workspaces/fixture
 
 Decision: add MAINT-002 to `RPT-001` and treat quote totals as operational comparison facts, never expenses.
 
+### 14. Provider selection lacked quoted schedule availability
+
+Price and scope are not the only comparison factors: a provider's earliest available start and expected finish can materially affect selection.
+
+Decision: add optional paired `earliest_work_start_on` and `estimated_work_finish_on` property-local dates to immutable quotes. Display them in comparison without calculating a winner or mutating appointments. MAINT-003 records actual work timing separately so later reporting and recommendations can compare quoted and actual facts with explicit provenance.
+
 ## Dependencies and follow-on work
 
 MAINT-002 requires completed `AUDIT-001`, `FILE-001`, `VEND-001`, and `MAINT-001`. It consumes Parties and Portfolio indirectly through those implemented boundaries and requires no new ownership of their data.
 
 Follow-on ownership remains:
 
-- `MAINT-003` — append-only work journal and repair outcomes, optionally referencing stable assignments.
+- `MAINT-003` — [append-only work journal](MAINT-003_DESIGN.md), actual work timing, completion evidence, and repair outcomes, optionally referencing stable assignments.
 - `UI-001` — quote comparison, direct/quote-backed assignment, override confirmation, reassignment, and history screens.
 - `VEND-003` — sending quote requests; it may later correlate delivery with Maintenance quotes.
 - `VEND-CAT-001` — configurable provider categories and any explicit mapping to Maintenance issue categories.

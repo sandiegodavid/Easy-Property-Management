@@ -31,7 +31,7 @@ MAINT-001 does not provide:
 
 - Reporter identity or reporter role. `MAINT-004` owns owner, tenant, manager, and staff attribution.
 - Provider quotes, quote comparison, provider selection, or assignment. `MAINT-002` owns those records.
-- An append-only work journal or provider outcome history. `MAINT-003` owns the journal and may project completed outcomes into Providers.
+- An append-only work journal or issue-backed provider outcome history. `MAINT-003` owns those facts; provider-facing views may compose a bounded Maintenance projection but never copy journal rows into Providers.
 - Email, SMS, or calendar delivery/synchronization. `COM-002` and `COM-003` own connected delivery and calendars.
 - Bills, payables, payment initiation, or recurring costs. Finance backlog items own those workflows.
 - Automatic expense creation. The operator records confirmed spending through FIN-002 and then links the resulting expense.

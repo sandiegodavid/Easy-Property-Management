@@ -60,6 +60,8 @@ The application prevents duplicate active normalized service offerings or servic
 
 Provider work history is a manually entered historical note. It may optionally reference `properties.id`, records a performed-on date, summary, optional outcome note, and lifecycle timestamps. It does not create an issue, quote, assignment, expense, cost, work order, or maintenance completion claim.
 
+Once MAINT-003 is available, this table remains only for prior experience outside the application's issue/assignment workflow. MAINT-003 is authoritative for issue-backed work timing and outcomes. No journal completion is copied into `provider_work_history`; provider-facing views may compose clearly labeled, bounded Maintenance projections with these manual notes.
+
 Provider references are separately auditable local notes. They may include an optional reference name, organization, relationship/context, email, phone, and notes. A reference is not promoted automatically to a shared party because the operator may have limited information or no permission to create a reusable contact. Contact values are never exposed in generalized activity presentation.
 
 ## Data model
@@ -254,4 +256,4 @@ VEND-001 is complete when:
 
 VEND-001 requires `PORT-001` for the shared party identity, `TEN-001` for party-owned contacts and guard protocols, and `AUDIT-001` for its append-only ledger. It uses existing `LOCAL-001` and `LOCAL-002` workspace capabilities without a new data location.
 
-`VEND-002` adds [manually recorded reputation links](VEND-002_DESIGN.md) to a provider profile. `VEND-CAT-001` adds configurable provider categories and assignments. `MAINT-002` selects a saved provider for quotes or assignments, while `MAINT-003` becomes the authoritative work journal. `FIN-002` can reference the stable provider identity for an expense. `ISSUE-AI-004` may rank saved providers only after these source records exist and must not contact or assign one automatically. `VEND-003` and `VEND-005` own direct quote requests and external discovery respectively.
+`VEND-002` adds [manually recorded reputation links](VEND-002_DESIGN.md) to a provider profile. `VEND-CAT-001` adds configurable provider categories and assignments. `MAINT-002` selects a saved provider for quotes or assignments, while [MAINT-003](MAINT-003_DESIGN.md) becomes the authoritative issue-backed work journal. Provider history screens compose rather than duplicate the two sources. `FIN-002` can reference the stable provider identity for an expense. `ISSUE-AI-004` may rank saved providers only after these source records exist and must not contact or assign one automatically. `VEND-003` and `VEND-005` own direct quote requests and external discovery respectively.
