@@ -13,7 +13,7 @@ Deliver complete, understandable workflows for:
 - Single-family homes, condos, townhomes, and offices.
 - Tenants, leases, pre-move-in/post-move-out condition reports, rent tracking, security-deposit settlement, recorded payment methods, prepaid-check deposit reminders, expenses, and a manual owner/tenant communication ledger with task follow-up.
 - Jurisdiction-sourced notice-deadline alerts and effective-dated rent adjustments with operator confirmation.
-- Owner-reported rent receipts, owner balances, and manual owner-disbursement tracking.
+- Owner-reported rent receipts, client-owner concern tracking, owner balances, and manual owner-disbursement tracking.
 - Operator-recorded owner/tenant reports with clear attribution for rental and property issues.
 - Local ingestion of issue messages and attachments from connected Gmail, Outlook.com/Hotmail, and SMS sources.
 - AI-assisted issue detection, structured field extraction, property/reporter matching, urgency suggestions, duplicate detection, advisory diagnosis, maintenance triage, and provider recommendations informed by internal history, outcomes, response times, costs, and recorded reputation data.

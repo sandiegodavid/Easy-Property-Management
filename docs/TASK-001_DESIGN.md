@@ -306,3 +306,5 @@ TASK-001 requires completed `LOCAL-001` and `AUDIT-001`. It has no direct depend
 - `BEGIN-003` (Beginner experience) — includes task onboarding.
 
 None of these may reinterpret TASK-001 statuses or reminders beyond their defined semantics. TASK-001 remains the stable task foundation.
+
+For OWNER-004 specifically, `related_entity_type = 'owner_concern'` links a task to the stable concern ID. Task completion or cancellation never resolves or dismisses the concern, and concern resolution, dismissal, or reopening never mutates the task. OWNER-004 may coordinate task creation in its caller-owned transaction, but TASK-001 remains authoritative for validation and lifecycle.

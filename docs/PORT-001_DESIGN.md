@@ -28,6 +28,12 @@ The local workspace has one operator and no application login. “Self” always
 
 Mixed does not mean a property is both residential and office, and it does not apply merely because a fully client-owned property has multiple client owners. Later owner accounting can use these explicit relationships to distinguish each owner's records; PORT-001 does not infer ownership percentages or legal rights.
 
+### Alignment with OWNER-004 concerns
+
+`OWNER-004` uses PORT-001's effective-dated ownership facts without redefining them. An owner concern must select one Party that was a `client_owner` of the property on the property-local raised date. On a mixed property, only the specifically selected client-owner Party is eligible. The `local_operator` relationship intentionally has no Party ID and is never converted into a synthetic owner identity; the local operator records their own observations through the appropriate task, communication, maintenance, lease, tenant, or portfolio workflow instead.
+
+Ending an ownership relationship or later archiving the Party does not rewrite a valid historical concern. Conversely, an open concern does not extend an ownership relationship or prove legal ownership, percentage share, beneficial interest, or authority. OWNER-004 consumes these neutral facts through the transaction-aware Portfolio context protocol and owns all concern-specific eligibility and response policy.
+
 ## Explicit boundaries
 
 PORT-001 does not provide:
@@ -178,4 +184,4 @@ PORT-001 is complete when:
 
 ## Dependencies and follow-on work
 
-PORT-001 requires `LOCAL-001` for the workspace and `AUDIT-001` for the required history. It unlocks `PORT-002`, `TEN-001`, `VEND-001`, owner-management work, and later SaaS authorization. `PORT-002` adds property type and spaces to the same `properties` records rather than creating a competing property identity.
+PORT-001 requires `LOCAL-001` for the workspace and `AUDIT-001` for the required history. It unlocks `PORT-002`, `TEN-001`, `VEND-001`, owner-accounting and owner-management work, and later SaaS authorization. `PORT-002` adds property type and spaces to the same `properties` records rather than creating a competing property identity. `OWNER-004` consumes the exact `client_owner`/`local_operator` distinction documented here and must not introduce a competing owner identity or relationship model.

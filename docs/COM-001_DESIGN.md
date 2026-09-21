@@ -50,11 +50,11 @@ All IDs are UUIDs. Timestamps are timezone-aware UTC text. Dates and timestamps 
 
 Each communication has one or more `communication_participants`. A participant stores a required `party_id`, optional `party_contact_method_id`, required role (`sender`, `recipient`, `reporter`, or `other`), and immutable display snapshots for the party and selected contact method. A selected contact method must belong to the selected party. New recordings select an active party and, if supplied, an active contact method. Archived facts remain readable through snapshots; later lifecycle changes do not rewrite history.
 
-Each communication has zero or more `communication_links`, each with a stable UUID, its communication ID, a typed `entity_type`, and a target UUID. Property-derived links additionally retain a nullable `property_timezone_snapshot`: it is the canonical IANA zone resolved when the draft link was last validated. It is returned as `propertyTimezoneSnapshot` in the link response so callers can explain the preserved local context. COM-001 accepts only these current typed links:
+Each communication has zero or more `communication_links`, each with a stable UUID, its communication ID, a typed `entity_type`, and a target UUID. Property-derived links additionally retain a nullable `property_timezone_snapshot`: it is the canonical IANA zone resolved when the draft link was last validated. It is returned as `propertyTimezoneSnapshot` in the link response so callers can explain the preserved local context. COM-001 accepts these typed links, with owning feature slices adding target validation when their aggregate becomes current:
 
-- `party`, `property`, `space`, `lease`, `rent_expectation`, `rent_receipt`, `renewal_option`, and `task`.
+- `party`, `property`, `space`, `lease`, `rent_expectation`, `rent_receipt`, `renewal_option`, `task`, `maintenance_issue`, and `owner_concern`.
 
-The owning application module validates every link target in the same immediate transaction. Unknown, misspelled, nonexistent, or unsupported target types are rejected; link validation is never fail-open. Maintenance, leads, applications, and ingested-source links are deferred to their owning feature slices and require an explicit current-schema extension.
+The owning application module validates every link target in the same immediate transaction. Unknown, misspelled, nonexistent, or unsupported target types are rejected; link validation is never fail-open. MAINT-004 supplies `maintenance_issue` target validation and OWNER-004 supplies `owner_concern` target validation. Leads, applications, and ingested-source links remain deferred to their owning feature slices and require an explicit current-schema extension.
 
 ## Recording, correction, and time rules
 
@@ -101,6 +101,8 @@ Contextual communication history may display the recorded subject, body, partici
 ## Architecture and persistence boundaries
 
 The `communications` application service depends only on application-level transaction-aware ports for parties/contact methods, portfolio/lease time-zone and context validation, finance link validation, renewal options, and TASK-001 creation/read projection. Bootstrap composes SQLite implementations against the shared transaction connection. Communications must not import other modules' SQLAlchemy models or persistence adapters, and the dependent modules must not import communications persistence.
+
+OWNER-004 may project bounded communication summaries and validate one optional originating recorded communication through consumer-neutral Communications readers. A communication-linked `owner_concern` remains owned by owner-management; participant role `reporter` is local to the communication and does not establish or change the concern's raising owner. Communication correction never rewrites concern attribution, context, or lifecycle.
 
 The greenfield baseline adds communication tables, exact schema validation, current expected-table registration, current data-integrity validation, archive validation, backup/export/restore coverage, and operation/idempotency records. It adds no migration compatibility, adoption path, compatibility aliases, or legacy tables. Every retained communication, participant snapshot, link, follow-up task reference, correction lineage, and correlated audit event survives encrypted backup/restore.
 

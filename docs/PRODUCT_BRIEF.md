@@ -79,7 +79,7 @@ Later phases may support users with little or no accounting or property-manageme
 2. **Properties** — owned versus managed relationship, property type, spaces, occupancy, and history.
 3. **Tenants, leases, and condition reports** — contacts, terms, agreed deposits, dates, document storage, effective-dated changes, and evidence-backed pre-move-in/post-move-out walkthroughs.
 4. **Payments, deposits, and expenses** — expected, received, partial, late, and outstanding rent; payment methods and prepaid-check deposit reminders; security-deposit receipt and operator-approved settlement; owner-reported rent receipts; expenses, vendors, categories, and receipts.
-5. **Owner management** — owner balances, funds due, manual disbursement approval and recording, and owner-raised rental concerns.
+5. **Owner management** — owner balances, funds due, manual disbursement approval and recording, and client-owner-raised general rental, lease, tenant, and vacancy concerns.
 6. **Listings, leads, and applicants** — manual listing creation, lead pipeline, showing schedule, offers and counteroffers, applications, lawful applicant qualification records, supporting financial evidence, and human approval decisions.
 7. **Communications and reminders** — a manual local owner/tenant interaction ledger, typed property/lease/rent context, and task-based rent or renewal follow-up. It records completed or received contacts; it does not send or ingest messages in this slice.
 8. **Issue inbox** — ingest issue messages and attachments from connected Gmail, Outlook.com/Hotmail, and SMS sources, plus locally recorded or imported voice notes, into a local review queue.
