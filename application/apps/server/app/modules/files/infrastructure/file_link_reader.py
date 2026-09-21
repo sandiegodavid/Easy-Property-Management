@@ -35,6 +35,30 @@ class SQLiteFileLinkReader:
             .limit(1)
         ).first() is not None
 
+    def active_available_link_count(self, connection, entity_type: str, entity_id: str) -> int:
+        return int(connection.execute(select(func.count()).select_from(FileLinkModel).join(
+            FileContentLocationModel, FileContentLocationModel.file_id == FileLinkModel.file_id,
+        ).where(FileLinkModel.entity_type == entity_type, FileLinkModel.entity_id == entity_id,
+                FileLinkModel.archived_at.is_(None), FileContentLocationModel.storage_state == "available")).scalar_one())
+
+    def link_is_active_available(self, connection, link_id: str) -> bool:
+        return connection.execute(select(FileLinkModel.id).join(
+            FileContentLocationModel, FileContentLocationModel.file_id == FileLinkModel.file_id,
+        ).where(FileLinkModel.id == link_id, FileLinkModel.archived_at.is_(None),
+                FileContentLocationModel.storage_state == "available").limit(1)).first() is not None
+
+    def active_available_links(self, connection, entity_type: str, entity_id: str) -> list[FileLink]:
+        return [FileLink(**dict(row)) for row in connection.execute(
+            select(FileLinkModel.__table__).join(
+                FileContentLocationModel, FileContentLocationModel.file_id == FileLinkModel.file_id,
+            ).where(
+                FileLinkModel.entity_type == entity_type,
+                FileLinkModel.entity_id == entity_id,
+                FileLinkModel.archived_at.is_(None),
+                FileContentLocationModel.storage_state == "available",
+            ).order_by(FileLinkModel.created_at, FileLinkModel.id)
+        ).mappings()]
+
     def links_for_entity(self, connection, entity_type: str, entity_id: str) -> list[FileLink]:
         return [
             FileLink(**dict(row))
@@ -71,6 +95,15 @@ class SQLiteFileLinkReader:
             result[item.entity_id].append(item)
         return result
 
+    def active_link_predicate(self, entity_type: str, entity_id):
+        return select(FileLinkModel.id).where(
+            FileLinkModel.entity_type == entity_type,
+            FileLinkModel.entity_id == entity_id,
+            FileLinkModel.archived_at.is_(None),
+        ).exists()
+
+    # Kept for existing internal callers; cross-module filtered reads use the
+    # SQL predicate above so they never materialize a workspace-wide ID set.
     def entity_ids_with_active_links(self, connection, entity_type: str) -> set[str]:
         return set(connection.execute(select(FileLinkModel.entity_id).where(
             FileLinkModel.entity_type == entity_type,

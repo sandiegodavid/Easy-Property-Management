@@ -1,0 +1,1 @@
+"""Owner-accounting domain values."""

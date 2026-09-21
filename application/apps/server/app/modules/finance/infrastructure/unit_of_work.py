@@ -103,7 +103,7 @@ class _Tx:
             ).limit(1)
         ).mappings().first()
         return RentReceipt(**dict(row)) if row else None
-    def likely_duplicate_receipts(self, *, lease_id, received_on, amount_minor, received_by_party_id):
+    def likely_duplicate_receipts(self, *, lease_id, received_on, amount_minor, received_by_party_id, limit=20):
         query = RentReceiptModel.__table__.select().where(
             RentReceiptModel.lease_id == lease_id,
             RentReceiptModel.received_on == received_on,
@@ -117,7 +117,7 @@ class _Tx:
         return [
             RentReceipt(**dict(row))
             for row in self.connection.execute(
-                query.order_by(RentReceiptModel.created_at, RentReceiptModel.id)
+                query.order_by(RentReceiptModel.created_at, RentReceiptModel.id).limit(limit)
             ).mappings()
         ]
     def receipt_by_key(self,key):

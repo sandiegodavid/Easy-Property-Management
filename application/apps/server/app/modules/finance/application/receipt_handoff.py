@@ -14,6 +14,8 @@ from app.modules.finance.domain.models import (
     RentReceipt,
 )
 
+DUPLICATE_CANDIDATE_LIMIT = 20
+
 
 def record_receipt_in_transaction(
     tx,
@@ -32,6 +34,7 @@ def record_receipt_in_transaction(
         received_on=command.received_on,
         amount_minor=command.amount_minor,
         received_by_party_id=command.received_by_party_id,
+        limit=DUPLICATE_CANDIDATE_LIMIT,
     )
     if duplicates and not command.duplicate_confirmed:
         if duplicate_conflict is not None:

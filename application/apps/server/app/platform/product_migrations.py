@@ -20,6 +20,7 @@ from app.modules.workspace.infrastructure.schema_validation import validate_work
 from app.modules.finance.infrastructure.schema_validation import validate_finance_data, validate_finance_schema
 from app.modules.communications.infrastructure.schema_validation import validate_communication_schema
 from app.modules.maintenance.infrastructure.schema_validation import validate_maintenance_schema
+from app.modules.owner_accounting.infrastructure.schema_validation import validate_owner_accounting_schema
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.platform.migration_errors import MigrationSchemaError
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
@@ -79,13 +80,14 @@ def validate_latest_schema(database_path: Path) -> None:
                 "security_deposit_deduction_sources", "security_deposit_credits", "security_deposit_refunds",
                 "communications", "communication_participants", "communication_links", "communication_operations",
                 "maintenance_issues", "maintenance_appointments", "maintenance_cost_contexts", "maintenance_issue_expense_links", "maintenance_follow_up_operations", "maintenance_quotes", "maintenance_assignments", "maintenance_work_journal_entries",
+                "owner_rent_reports", "owner_rent_report_operations",
             }
             if actual_tables != expected_tables:
                 raise ProductSchemaError("Workspace database contains unsupported application tables.")
             revisions = connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
             if revisions != [current_revision()]:
                 raise ProductSchemaError("Workspace database is not at the current schema revision.")
-            for validator in (validate_workspace_schema, validate_audit_schema, validate_file_schema, validate_task_schema, validate_portfolio_schema, validate_tenant_schema, validate_lease_schema, validate_inspection_schema, validate_vendor_schema, validate_finance_schema, validate_maintenance_schema):
+            for validator in (validate_workspace_schema, validate_audit_schema, validate_file_schema, validate_task_schema, validate_portfolio_schema, validate_tenant_schema, validate_lease_schema, validate_inspection_schema, validate_vendor_schema, validate_finance_schema, validate_maintenance_schema, validate_owner_accounting_schema):
                 validator(connection)
             validate_communication_schema(connection, SQLiteCommunicationContextOperations(SQLiteTaskTransactionOperations()))
             validate_finance_data(connection)

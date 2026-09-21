@@ -47,6 +47,12 @@ from app.modules.maintenance.application.file_links import MaintenanceFileLinkVa
 from app.modules.maintenance.infrastructure.unit_of_work import SQLiteMaintenanceUnitOfWork
 from app.modules.maintenance.infrastructure.file_links import SQLiteMaintenanceFileLinkOperations
 from app.modules.maintenance.domain.audit_policy import MAINTENANCE_ACTIVITY_POLICY
+from app.modules.owner_accounting.api.router import build_router as build_owner_rent_report_router
+from app.modules.owner_accounting.application.service import OwnerRentReportService
+from app.modules.owner_accounting.application.file_links import OwnerRentReportFileLinkValidator
+from app.modules.owner_accounting.infrastructure.unit_of_work import SQLiteOwnerRentReportUnitOfWork
+from app.modules.owner_accounting.infrastructure.file_links import SQLiteOwnerRentReportFileLinkOperations
+from app.modules.owner_accounting.domain.audit_policy import OWNER_REPORT_ACTIVITY_POLICY
 from app.modules.portfolio.api.router import build_router as build_portfolio_router
 from app.modules.portfolio.application.service import PortfolioService
 from app.modules.portfolio.infrastructure.unit_of_work import (
@@ -106,6 +112,7 @@ from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpens
 from app.modules.finance.infrastructure.file_links import SQLiteExpenseFileLinkOperations
 from app.modules.finance.infrastructure.deposit_file_links import SQLiteDepositFileLinkOperations
 from app.modules.finance.infrastructure.unit_of_work import SQLiteFinanceUnitOfWork
+from app.modules.finance.infrastructure.receipt_transaction_operations import SQLiteReceiptTransactionOperations
 from app.modules.finance.infrastructure.deposit_unit_of_work import SQLiteDepositUnitOfWork
 from app.modules.finance.domain.audit_policy import (
     EXPECTATION_ACTIVITY_POLICY, REVIEW_ACTIVITY_POLICY,
@@ -177,6 +184,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             ExpenseFileLinkValidator(SQLiteExpenseFileLinkOperations(file_link_reader)),
             DepositFileLinkValidator(SQLiteDepositFileLinkOperations(file_link_reader)),
             MaintenanceFileLinkValidator(SQLiteMaintenanceFileLinkOperations(file_link_reader)),
+            OwnerRentReportFileLinkValidator(SQLiteOwnerRentReportFileLinkOperations(file_link_reader)),
         ),
     )
     remote_materializer = s3_store.materialize if s3_store is not None else None
@@ -228,6 +236,12 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         lease_context_reader, portfolio_context_reader, party_operations,
         inspection_context_reader, file_link_reader,
     ))
+    owner_rent_reports = OwnerRentReportService(SQLiteOwnerRentReportUnitOfWork(
+        service.paths.database, recorder, lease_context_reader, portfolio_context_reader,
+        party_operations, file_link_reader, SQLiteReceiptTransactionOperations(
+            recorder, lease_context_reader, portfolio_context_reader, party_operations,
+        ),
+    ))
     inspections = InspectionService(inspection_unit_of_work, files)
     maintenance = MaintenanceService(maintenance_unit_of_work)
     work_journal = WorkJournalService(maintenance_unit_of_work)
@@ -275,6 +289,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.deposit_service = deposits
     app.state.maintenance_service = maintenance
     app.state.work_journal_service = work_journal
+    app.state.owner_rent_report_service = owner_rent_reports
     app.include_router(build_router(service, runtime))
     policies = AuditSnapshotPolicyRegistry({
         ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -337,6 +352,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("maintenance_quote", 1): DEFAULT_SNAPSHOT_POLICY,
         ("maintenance_assignment", 1): DEFAULT_SNAPSHOT_POLICY,
         ("maintenance_work_journal_entry", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("owner_rent_report", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("owner_rent_report_operation", 1): DEFAULT_SNAPSHOT_POLICY,
     }, activity_policies={
         ("task", 1): TASK_ACTIVITY_POLICY,
         ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
@@ -380,6 +397,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("maintenance_quote", 1): MAINTENANCE_ACTIVITY_POLICY,
         ("maintenance_assignment", 1): MAINTENANCE_ACTIVITY_POLICY,
         ("maintenance_work_journal_entry", 1): MAINTENANCE_ACTIVITY_POLICY,
+        ("owner_rent_report", 1): OWNER_REPORT_ACTIVITY_POLICY,
+        ("owner_rent_report_operation", 1): OWNER_REPORT_ACTIVITY_POLICY,
     })
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime))
@@ -396,6 +415,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_deposit_router(deposits, runtime))
     app.include_router(build_communications_router(communications, runtime))
     app.include_router(build_maintenance_router(maintenance, work_journal, runtime))
+    app.include_router(build_owner_rent_report_router(owner_rent_reports, runtime))
     return app
 
 

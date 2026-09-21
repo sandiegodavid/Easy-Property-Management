@@ -161,6 +161,7 @@ Database checks enforce bounded stored shapes, USD/amount rules, FIN-006 conditi
 | `report_id` | Required result/target report ID. |
 | `request_fingerprint` | Required canonical SHA-256 fingerprint of the semantic command. |
 | `result_receipt_id` | Present only when verification returns a receipt. |
+| `receipt_created` | Null for `create`, `patch`, and `reject`. For `verify`, immutable `0` means the report adopted the explicitly selected existing receipt; immutable `1` means verification created the receipt and its allocations under the operation correlation. |
 | `correlation_id`, `created_at` | Required audit correlation and UTC timestamp. |
 
 Operation records are append-only and are the retry authority. Same key and same semantic request returns the original current representation without repeating file checks, receipt creation, allocations, or audit events. Same key with a changed request returns typed `409`.
