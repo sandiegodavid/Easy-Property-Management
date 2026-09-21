@@ -164,6 +164,65 @@ class MaintenanceService:
             if old["archived_at"]:raise MaintenanceConflictError("Expense link is already archived.","expense_link_archived")
             updated={**old,"archived_at":_stamp(),"archive_reason":reason};tx.replace_expense_link(link_id,updated);self._audit(tx,"maintenance_expense_link",link_id,"archived",_dict(old),_dict(updated),"expense_link_archived", narrative=reason);return _dict(updated)
         return self.unit_of_work.write(op)
+    def create_quote(self, issue_id, command: QuoteCreate, idempotency_key: str):
+        uuid(idempotency_key,"idempotencyKey"); fp=fingerprint("quote",{"issueId":issue_id,"command":command.__dict__})
+        def op(tx):
+            prior=tx.quote_by_key(idempotency_key)
+            if prior:
+                if prior["request_fingerprint"]!=fp: raise MaintenanceConflictError("Idempotency key payload changed.","idempotency_conflict")
+                return _dict(dict(prior))
+            issue=self._require(tx.issue,issue_id,"Issue")
+            if issue["status"] not in {"open","in_progress"}: raise MaintenanceConflictError("Quotes require an active issue.","issue_closed")
+            provider=self._active_provider(tx,command.provider_party_id)
+            today=datetime.now(ZoneInfo(issue["reported_timezone"])).date().isoformat()
+            if command.received_on > today: raise MaintenanceError("receivedOn cannot be in the future for the property.")
+            if command.replaces_quote_id:
+                old=self._require(tx.quote,command.replaces_quote_id,"Quote")
+                if old["issue_id"]!=issue_id or old["provider_party_id"]!=command.provider_party_id or not old["withdrawn_at"]: raise MaintenanceConflictError("Replacement must target a withdrawn quote for the same issue and provider.")
+                if tx.quote_replacement(command.replaces_quote_id): raise MaintenanceConflictError("Quote already has a replacement.","quote_replaced")
+            now=_stamp(); item={"id":str(uuid4()),"issue_id":issue_id,"provider_party_id":command.provider_party_id,"provider_display_name_snapshot":provider["display_name"],"label":command.label,"scope_summary":command.scope_summary,"amount_minor":command.amount,"currency_code":"USD","received_on":command.received_on,"valid_through":command.valid_through,"terms_notes":command.terms_notes,"replaces_quote_id":command.replaces_quote_id,"withdrawn_at":None,"withdrawal_reason":None,"idempotency_key":idempotency_key,"request_fingerprint":fp,"created_at":now}
+            tx.insert_quote(item); self._audit(tx,"maintenance_quote",item["id"],"created",None,_dict(item),"quote_created"); return _dict(item)
+        return self.unit_of_work.write(op)
+    def withdraw_quote(self, quote_id, reason, confirmed):
+        if type(confirmed) is not bool or not confirmed: raise MaintenanceError("Explicit confirmation is required.")
+        reason=maintenance_text(reason,"withdrawalReason",1000,required=True)
+        def op(tx):
+            old=self._require(tx.quote,quote_id,"Quote")
+            if old["withdrawn_at"]: raise MaintenanceConflictError("Quote is already withdrawn.","quote_withdrawn")
+            new={**old,"withdrawn_at":_stamp(),"withdrawal_reason":reason}; tx.replace_quote(quote_id,new); self._audit(tx,"maintenance_quote",quote_id,"withdrawn",_dict(old),_dict(new),"quote_withdrawn",narrative=reason); return _dict(new)
+        return self.unit_of_work.write(op)
+    def create_assignment(self, issue_id, command: AssignmentCreate, idempotency_key: str):
+        uuid(idempotency_key,"idempotencyKey"); fp=fingerprint("assignment",{"issueId":issue_id,"command":command.__dict__})
+        def op(tx):
+            prior=tx.assignment_by_key(idempotency_key)
+            if prior:
+                if prior["request_fingerprint"]!=fp: raise MaintenanceConflictError("Idempotency key payload changed.","idempotency_conflict")
+                return _dict(dict(prior))
+            issue=self._require(tx.issue,issue_id,"Issue")
+            if issue["status"] not in {"open","in_progress"}: raise MaintenanceConflictError("Assignments require an active issue.","issue_closed")
+            provider=self._active_provider(tx,command.provider_party_id)
+            if provider["selection_status"]=="avoid" and (command.avoid_override_confirmed is not True or command.avoid_override_reason is None): raise MaintenanceConflictError("Avoided provider assignment requires confirmation and a reason.","avoid_override_required")
+            if provider["selection_status"]!="avoid" and command.avoid_override_reason is not None: raise MaintenanceError("avoidOverrideReason applies only to an avoided provider.")
+            if command.quote_id:
+                quote=self._require(tx.quote,command.quote_id,"Quote")
+                today=datetime.now(ZoneInfo(issue["reported_timezone"])).date().isoformat()
+                if quote["issue_id"]!=issue_id or quote["provider_party_id"]!=command.provider_party_id or quote["withdrawn_at"] or (quote["valid_through"] and quote["valid_through"]<today): raise MaintenanceConflictError("Assignment quote is not an active compatible quote.","quote_unavailable")
+            current=tx.current_assignment(issue_id)
+            correlation=str(uuid4())
+            if current:
+                if command.replaces_assignment_id!=current["id"]: raise MaintenanceConflictError("Current assignment must be explicitly replaced.","current_assignment")
+                ended={**current,"ended_at":_stamp(),"end_reason":command.end_reason}; tx.replace_assignment(current["id"],ended); self._audit(tx,"maintenance_assignment",current["id"],"ended",_dict(current),_dict(ended),"assignment_reassigned",narrative=command.end_reason,correlation_id=correlation)
+            elif command.replaces_assignment_id is not None: raise MaintenanceConflictError("Replacement assignment is not current.","stale_replacement")
+            now=_stamp(); item={"id":str(uuid4()),"issue_id":issue_id,"provider_party_id":command.provider_party_id,"provider_display_name_snapshot":provider["display_name"],"quote_id":command.quote_id,"provider_selection_status_snapshot":provider["selection_status"],"selection_reason":command.selection_reason,"avoid_override_reason":command.avoid_override_reason,"instructions":command.instructions,"replaces_assignment_id":current["id"] if current else None,"assigned_at":now,"ended_at":None,"end_reason":None,"idempotency_key":idempotency_key,"request_fingerprint":fp}; tx.insert_assignment(item); self._audit(tx,"maintenance_assignment",item["id"],"created",None,_dict(item),"assignment_created",correlation_id=correlation); return _dict(item)
+        return self.unit_of_work.write(op)
+    def end_assignment(self, assignment_id, reason, confirmed):
+        if type(confirmed) is not bool or not confirmed: raise MaintenanceError("Explicit confirmation is required.")
+        reason=maintenance_text(reason,"endReason",1000,required=True)
+        def op(tx):
+            old=self._require(tx.assignment,assignment_id,"Assignment")
+            if old["ended_at"]: raise MaintenanceConflictError("Assignment is already ended.","assignment_ended")
+            new={**old,"ended_at":_stamp(),"end_reason":reason}; tx.replace_assignment(assignment_id,new); self._audit(tx,"maintenance_assignment",assignment_id,"ended",_dict(old),_dict(new),"assignment_ended",narrative=reason); return _dict(new)
+        return self.unit_of_work.write(op)
     def create_follow_up(self, issue_id, title, notes, priority, due_at_utc, due_timezone, idempotency_key):
         uuid(idempotency_key,"idempotencyKey")
         payload={"issueId":issue_id,"title":title,"notes":notes,"priority":priority,"dueAtUtc":due_at_utc,"dueTimezone":due_timezone};fp=fingerprint("follow_up",payload)
@@ -189,7 +248,7 @@ class MaintenanceService:
                 "related_entity_type":task.related_entity_type,"related_entity_id":task.related_entity_id,
             })
         return self.unit_of_work.write(op)
-    def list_issues(self, *, property_id=None, space_id=None, category=None, priority=None, status=None, reporter_role=None, reporter_party_id=None, reporter_subject_kind=None, reported_from=None, reported_to=None, appointment_from=None, appointment_to=None, has_evidence=None, has_linked_expense=None, has_active_task=None, cursor=None, page_size=100):
+    def list_issues(self, *, property_id=None, space_id=None, category=None, priority=None, status=None, reporter_role=None, reporter_party_id=None, reporter_subject_kind=None, provider_party_id=None, has_active_quote=None, has_current_assignment=None, reported_from=None, reported_to=None, appointment_from=None, appointment_to=None, has_evidence=None, has_linked_expense=None, has_active_task=None, cursor=None, page_size=100):
         if not isinstance(page_size,int) or not 1<=page_size<=500:raise MaintenanceError("pageSize must be between 1 and 500.")
         for item,name in ((property_id,"propertyId"),(space_id,"spaceId")):
             if item is not None:uuid(item,name)
@@ -199,10 +258,11 @@ class MaintenanceService:
         if reporter_role is not None and reporter_role not in REPORTER_ROLES:raise MaintenanceError("Reporter role is invalid.")
         if reporter_subject_kind is not None and reporter_subject_kind not in REPORTER_SUBJECT_KINDS:raise MaintenanceError("Reporter subject kind is invalid.")
         if reporter_party_id is not None:uuid(reporter_party_id,"reporterPartyId")
+        if provider_party_id is not None:uuid(provider_party_id,"providerPartyId")
         def op(tx):
-            for value,name in ((has_evidence,"hasEvidence"),(has_linked_expense,"hasLinkedExpense"),(has_active_task,"hasActiveTask")):
+            for value,name in ((has_evidence,"hasEvidence"),(has_linked_expense,"hasLinkedExpense"),(has_active_task,"hasActiveTask"),(has_active_quote,"hasActiveQuote"),(has_current_assignment,"hasCurrentAssignment")):
                 if value is not None and type(value) is not bool:raise MaintenanceError(f"{name} must be a boolean.")
-            records, resume_cursor = tx.issues_page(property_id=property_id,space_id=space_id,category=category,priority=priority,status=status,reporter_role=reporter_role,reporter_party_id=reporter_party_id,reporter_subject_kind=reporter_subject_kind,reported_from=reported_from,reported_to=reported_to,appointment_from=appointment_from,appointment_to=appointment_to,has_evidence=has_evidence,has_linked_expense=has_linked_expense,has_active_task=has_active_task,cursor=cursor,limit=page_size+1)
+            records, resume_cursor = tx.issues_page(property_id=property_id,space_id=space_id,category=category,priority=priority,status=status,reporter_role=reporter_role,reporter_party_id=reporter_party_id,reporter_subject_kind=reporter_subject_kind,provider_party_id=provider_party_id,has_active_quote=has_active_quote,has_current_assignment=has_current_assignment,reported_from=reported_from,reported_to=reported_to,appointment_from=appointment_from,appointment_to=appointment_to,has_evidence=has_evidence,has_linked_expense=has_linked_expense,has_active_task=has_active_task,cursor=cursor,limit=page_size+1)
             page=records[:page_size]; next_cursor=None
             if len(records)>page_size:
                 tail=page[-1]; next_cursor=f"{tail['priority']}|{tail['reported_at_utc']}|{tail['id']}"
@@ -212,10 +272,22 @@ class MaintenanceService:
             return {"items":[self._summary(projection[row["id"]]) for row in page],"nextCursor":next_cursor}
         return self.unit_of_work.read(op)
     def detail(self,issue_id):return self.unit_of_work.read(lambda tx:self._detail(tx,issue_id))
+    def quote_comparison(self, issue_id):
+        def op(tx):
+            projection=tx.comparison_projection(issue_id)
+            if issue_id not in projection: raise MaintenanceNotFoundError("Issue was not found.")
+            assignments=projection[issue_id]["assignments"]
+            return {"issueId":issue_id,"quotes":[{**self._provider_state(_dict(item),projection[issue_id]["provider_states"]),"documentCount":projection[issue_id]["quote_document_counts"].get(item["id"],0),"isCurrentAssignment":any(a["quote_id"]==item["id"] and a["ended_at"] is None for a in assignments),"isHistoricalAssignment":any(a["quote_id"]==item["id"] and a["ended_at"] is not None for a in assignments)} for item in projection[issue_id]["quotes"]]}
+        return self.unit_of_work.read(op)
     def _require(self,getter,item_id,name):
         row=getter(item_id)
         if row is None:raise MaintenanceNotFoundError(f"{name} was not found.")
         return row
+    def _active_provider(self,tx,party_id):
+        provider=tx.provider_context(party_id)
+        if provider is None: raise MaintenanceNotFoundError("Provider profile was not found.")
+        if provider["party_archived_at"] or provider["archived_at"]: raise MaintenanceConflictError("Provider must be active.","archived_provider")
+        return provider
     def _validated_reporter(self, tx, reporter, property_id, space_id, reported_at_utc, time_zone):
         reported_on=datetime.fromisoformat(reported_at_utc).astimezone(ZoneInfo(time_zone)).date().isoformat()
         if reporter.subject_kind == "local_operator":
@@ -252,6 +324,8 @@ class MaintenanceService:
         result["files"]=[self._file(item) for item in projection["files"]]
         result["appointments"]=[{**_dict(item),"files":[self._file(link) for link in projection["appointment_files"].get(item["id"],[])]} for item in projection["appointments"]]
         result["costContexts"]=[{**_dict(item),"files":[self._file(link) for link in projection["cost_files"].get(item["id"],[])]} for item in projection["costs"]]
+        result["quotes"]=[{**self._provider_state(_dict(item),projection["provider_states"]),"files":[self._file(link) for link in projection["quote_files"].get(item["id"],[])]} for item in projection["quotes"]]
+        result["assignments"]=[{**self._provider_state(_dict(item),projection["provider_states"]),"files":[self._file(link) for link in projection["assignment_files"].get(item["id"],[])]} for item in projection["assignments"]]
         result["expenseLinks"]= [{**_dict(item),"expense":_camel_mapping(projection["expenses"].get(item["expense_id"]))} for item in projection["links"]]
         result["tasks"]=[_camel_mapping(item) for item in projection["tasks"]]
         result["reporter"]=self._reporter_view(issue,projection["party_states"])
@@ -260,18 +334,21 @@ class MaintenanceService:
     def _summary(self,projection):
         issue=projection["issue"]; context=projection["context"] or {}
         scheduled=next((item for item in reversed(projection["appointments"]) if item["status"]=="scheduled"),None)
-        evidence_count=len(projection["files"])+sum(len(projection["appointment_files"].get(item["id"],[])) for item in projection["appointments"])+sum(len(projection["cost_files"].get(item["id"],[])) for item in projection["costs"])
-        return {"id":issue["id"],"propertyId":issue["property_id"],"spaceId":issue["space_id"],"summary":issue["summary"],"category":issue["category"],"priority":issue["priority"],"status":issue["status"],"reportedAtUtc":issue["reported_at_utc"],"reportedTimezone":issue["reported_timezone"],"reporter":self._reporter_view(issue),"property":{"id":issue["property_id"],"displayName":context.get("property_display_name")},"space":None if issue["space_id"] is None else {"id":issue["space_id"],"displayName":context.get("space_display_name")},"currentAppointment":None if scheduled is None else {"id":scheduled["id"],"startsAtUtc":scheduled["starts_at_utc"],"endsAtUtc":scheduled["ends_at_utc"],"status":scheduled["status"]},"activeFollowUpCount":sum(1 for task in projection["tasks"] if task["status"] in {"open","in_progress"}),"evidenceCount":evidence_count,"linkedExpenseCount":sum(1 for link in projection["links"] if link["archived_at"] is None)}
+        evidence_count=projection["evidence_count"] if projection["evidence_count"] is not None else len(projection["files"])+sum(len(projection["appointment_files"].get(item["id"],[])) for item in projection["appointments"])+sum(len(projection["cost_files"].get(item["id"],[])) for item in projection["costs"])
+        current_assignment=next((item for item in projection["assignments"] if item["ended_at"] is None),None)
+        return {"id":issue["id"],"propertyId":issue["property_id"],"spaceId":issue["space_id"],"summary":issue["summary"],"category":issue["category"],"priority":issue["priority"],"status":issue["status"],"reportedAtUtc":issue["reported_at_utc"],"reportedTimezone":issue["reported_timezone"],"reporter":self._reporter_view(issue),"property":{"id":issue["property_id"],"displayName":context.get("property_display_name")},"space":None if issue["space_id"] is None else {"id":issue["space_id"],"displayName":context.get("space_display_name")},"currentAppointment":None if scheduled is None else {"id":scheduled["id"],"startsAtUtc":scheduled["starts_at_utc"],"endsAtUtc":scheduled["ends_at_utc"],"status":scheduled["status"]},"activeFollowUpCount":sum(1 for task in projection["tasks"] if task["status"] in {"open","in_progress"}),"evidenceCount":evidence_count,"linkedExpenseCount":sum(1 for link in projection["links"] if link["archived_at"] is None),"activeQuoteCount":sum(1 for quote in projection["quotes"] if quote["withdrawn_at"] is None),"currentAssignmentProviderSnapshot":None if current_assignment is None else current_assignment["provider_display_name_snapshot"]}
+    def _provider_state(self,item,states):
+        return {**item,**states.get(item["providerPartyId"],{"currentPartyState":None,"currentProviderProfileState":None})}
     def _reporter_view(self,issue,party_states=None):
         result={"role":issue["reporter_role"],"subjectKind":issue["reporter_subject_kind"],"partyId":issue["reporter_party_id"],"displayName":issue["reporter_display_name_snapshot"]}
         if issue["reporter_party_id"] is not None and party_states is not None:result["currentPartyState"]=party_states.get(issue["reporter_party_id"])
         return result
     def _communication_view(self,item):
         return {"id":item["id"],"subject":item["subject"],"channel":item["channel"],"direction":item["direction"],"status":item["status"],"occurredAtUtc":item["occurred_at_utc"],"occurredTimezone":item["occurred_timezone"]}
-    def _audit(self,tx,entity_type,entity_id,action,before,after,reason,*,narrative=None):
+    def _audit(self,tx,entity_type,entity_id,action,before,after,reason,*,narrative=None,correlation_id=None):
         # General activity exposes only stable action labels.  Free-form
         # operator narratives remain in a snapshot field redacted by the
         # maintenance activity policy, while contextual history retains them.
         if narrative:
             after={**after,"operatorNarrative":narrative}
-        tx.record_change(entity_type=entity_type,entity_id=entity_id,action=action,before=before,after=after,reason=reason,correlation_id=str(uuid4()))
+        tx.record_change(entity_type=entity_type,entity_id=entity_id,action=action,before=before,after=after,reason=reason,correlation_id=correlation_id or str(uuid4()))

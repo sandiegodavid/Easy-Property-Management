@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
+from sqlalchemy import select
+
 from app.modules.tasks.infrastructure.sqlalchemy_models import TaskModel
 
 
@@ -20,7 +22,11 @@ class SQLiteTaskContextReader:
         if not entity_ids:
             return {}
         rows = connection.execute(
-            TaskModel.__table__.select().where(
+            select(
+                TaskModel.id, TaskModel.title, TaskModel.status, TaskModel.priority,
+                TaskModel.due_at_utc, TaskModel.due_timezone, TaskModel.is_all_day,
+                TaskModel.related_entity_type, TaskModel.related_entity_id,
+            ).where(
                 TaskModel.related_entity_type == entity_type,
                 TaskModel.related_entity_id.in_(set(entity_ids)),
             ).order_by(TaskModel.created_at_utc.desc(), TaskModel.id.desc())

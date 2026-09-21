@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 
 from app.modules.files.application.ports import FileLink, FileLinkWithFile
 from app.modules.files.infrastructure.sqlalchemy_models import (
@@ -85,3 +85,31 @@ class SQLiteFileLinkReader:
             FileLinkModel.entity_id.in_(set(entity_ids)),
             FileLinkModel.archived_at.is_(None),
         )).scalars())
+
+    def active_link_counts_for_entities(self, connection, entity_type: str, entity_ids: Sequence[str]) -> dict[str, int]:
+        entity_ids = list(dict.fromkeys(entity_ids))
+        if not entity_ids:
+            return {}
+        return {
+            row["entity_id"]: int(row["count"])
+            for row in connection.execute(select(
+                FileLinkModel.entity_id, func.count().label("count"),
+            ).where(
+                FileLinkModel.entity_type == entity_type,
+                FileLinkModel.entity_id.in_(entity_ids),
+                FileLinkModel.archived_at.is_(None),
+            ).group_by(FileLinkModel.entity_id)).mappings()
+        }
+
+    def active_link_counts_for_entity_groups(self, connection, entity_ids_by_type: dict[str, Sequence[str]]) -> dict[tuple[str, str], int]:
+        conditions = [and_(FileLinkModel.entity_type == entity_type, FileLinkModel.entity_id.in_(set(entity_ids))) for entity_type, entity_ids in entity_ids_by_type.items() if entity_ids]
+        if not conditions:
+            return {}
+        return {
+            (row["entity_type"], row["entity_id"]): int(row["count"])
+            for row in connection.execute(select(
+                FileLinkModel.entity_type, FileLinkModel.entity_id, func.count().label("count"),
+            ).where(FileLinkModel.archived_at.is_(None), or_(*conditions)).group_by(
+                FileLinkModel.entity_type, FileLinkModel.entity_id,
+            )).mappings()
+        }

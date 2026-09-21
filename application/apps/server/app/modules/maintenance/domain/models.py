@@ -118,3 +118,47 @@ class CostCreate:
         except ValueError as error: raise MaintenanceError("observedOn must be an ISO date.") from error
         object.__setattr__(self, "source_note", text(self.source_note, "sourceNote", 4000) if self.source_note is not None else None)
         if self.replaces_cost_context_id is not None: object.__setattr__(self, "replaces_cost_context_id", uuid(self.replaces_cost_context_id, "replacesCostContextId"))
+
+def local_date(value: str, name: str) -> str:
+    if not isinstance(value, str): raise MaintenanceError(f"{name} must be an ISO date.")
+    try: return date.fromisoformat(value).isoformat()
+    except ValueError as error: raise MaintenanceError(f"{name} must be an ISO date.") from error
+
+@dataclass(frozen=True)
+class QuoteCreate:
+    provider_party_id: str; label: str; scope_summary: str; amount: str; received_on: str
+    valid_through: str | None = None; terms_notes: str | None = None; replaces_quote_id: str | None = None
+    def __post_init__(self):
+        object.__setattr__(self, "provider_party_id", uuid(self.provider_party_id, "providerPartyId"))
+        object.__setattr__(self, "label", text(self.label, "label", 200, required=True))
+        object.__setattr__(self, "scope_summary", text(self.scope_summary, "scopeSummary", 4000, required=True))
+        object.__setattr__(self, "amount", money(self.amount))
+        received = local_date(self.received_on, "receivedOn"); object.__setattr__(self, "received_on", received)
+        if self.valid_through is not None:
+            valid = local_date(self.valid_through, "validThrough")
+            if valid < received: raise MaintenanceError("validThrough cannot precede receivedOn.")
+            object.__setattr__(self, "valid_through", valid)
+        object.__setattr__(self, "terms_notes", text(self.terms_notes, "termsNotes", 4000) if self.terms_notes is not None else None)
+        if self.replaces_quote_id is not None: object.__setattr__(self, "replaces_quote_id", uuid(self.replaces_quote_id, "replacesQuoteId"))
+
+@dataclass(frozen=True)
+class AssignmentCreate:
+    provider_party_id: str; quote_id: str | None = None; selection_reason: str | None = None
+    instructions: str | None = None; direct_assignment_confirmed: bool | None = None
+    avoid_override_confirmed: bool | None = None; avoid_override_reason: str | None = None
+    replaces_assignment_id: str | None = None; replacement_confirmed: bool | None = None; end_reason: str | None = None
+    def __post_init__(self):
+        object.__setattr__(self, "provider_party_id", uuid(self.provider_party_id, "providerPartyId"))
+        if self.quote_id is not None: object.__setattr__(self, "quote_id", uuid(self.quote_id, "quoteId"))
+        object.__setattr__(self, "selection_reason", text(self.selection_reason, "selectionReason", 1000) if self.selection_reason is not None else None)
+        object.__setattr__(self, "instructions", text(self.instructions, "instructions", 4000) if self.instructions is not None else None)
+        if self.quote_id is None:
+            if self.direct_assignment_confirmed is not True or self.selection_reason is None: raise MaintenanceError("Direct assignment requires confirmation and a selection reason.")
+        elif self.direct_assignment_confirmed is not None: raise MaintenanceError("directAssignmentConfirmed applies only without a quote.")
+        if self.avoid_override_confirmed is not None and type(self.avoid_override_confirmed) is not bool: raise MaintenanceError("avoidOverrideConfirmed must be a boolean.")
+        object.__setattr__(self, "avoid_override_reason", text(self.avoid_override_reason, "avoidOverrideReason", 1000) if self.avoid_override_reason is not None else None)
+        if self.replaces_assignment_id is not None:
+            object.__setattr__(self, "replaces_assignment_id", uuid(self.replaces_assignment_id, "replacesAssignmentId"))
+            if self.replacement_confirmed is not True: raise MaintenanceError("Reassignment requires explicit confirmation.")
+            object.__setattr__(self, "end_reason", text(self.end_reason, "endReason", 1000, required=True))
+        elif self.replacement_confirmed is not None or self.end_reason is not None: raise MaintenanceError("Replacement confirmation and end reason require replacesAssignmentId.")

@@ -201,7 +201,7 @@ Reads remain set-based and bounded independently of page size:
 - one Maintenance query for assignments for all requested issue IDs;
 - one FILE-001 batch query per new entity type when detail requires files;
 - at most one Party batch query and one Provider batch query for distinct provider IDs on detail/comparison;
-- no Party, Provider, or File query on the default issue list because stored snapshots and Maintenance-owned counts are sufficient.
+- no Party or Provider query on the default issue list. The existing MAINT-001 `evidenceCount` remains an accurate live FILE-001-derived value, so the list uses one bounded grouped active-link count query for the page rather than loading file metadata or issuing one query per entity type. This is an intentional MAINT-001 compatibility tradeoff; quote and assignment document links are not queried by the default list.
 
 The existing `ProviderContextReader` needs the smallest neutral extension that returns profile availability and selection status for one or many Party IDs. Existing Party operations supply identity availability and display names. Providers must not gain `maintenance_quote_eligible()`, assignment policy, Maintenance response objects, or Maintenance-named adapters. Maintenance owns eligibility, override policy, snapshots, and response shaping in accordance with `ARCHITECTURE.md` SRP guidance.
 

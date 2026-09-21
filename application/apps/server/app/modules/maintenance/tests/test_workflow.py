@@ -9,7 +9,7 @@ from uuid import uuid4
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
@@ -25,7 +25,7 @@ from app.modules.finance.infrastructure.expense_context_reader import SQLiteExpe
 from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpenseUnitOfWork
 from app.modules.maintenance.application.service import MaintenanceService
 from app.modules.maintenance.domain.audit_policy import MAINTENANCE_ACTIVITY_POLICY
-from app.modules.maintenance.domain.models import AppointmentCreate, IssueCreate, ReporterAttribution, ReporterCorrection, MaintenanceConflictError, MaintenanceError
+from app.modules.maintenance.domain.models import AppointmentCreate, AssignmentCreate, IssueCreate, QuoteCreate, ReporterAttribution, ReporterCorrection, MaintenanceConflictError, MaintenanceError
 from app.modules.maintenance.infrastructure.unit_of_work import SQLiteMaintenanceUnitOfWork
 from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
 from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
@@ -49,6 +49,8 @@ from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.platform.config import LocalConfig
 from app.platform.sqlite_engine import create_sqlite_engine
 from app.modules.vendors.infrastructure.context_reader import SQLiteProviderContextReader
+from app.modules.vendors.application.service import ProviderProfileCommand, ProviderService
+from app.modules.vendors.infrastructure.unit_of_work import SQLiteProviderUnitOfWork
 from app.bootstrap.api import create_app
 from fastapi.testclient import TestClient
 
@@ -87,7 +89,15 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             database, recorder, SQLitePortfolioContextReader(), SQLiteExpenseContextReader(),
             SQLiteTaskContextReader(), SQLiteTaskTransactionOperations(), SQLiteFileLinkReader(),
             self.party_operations, SQLiteLeaseContextReader(), SQLiteCommunicationLinkReader(),
+            SQLiteProviderContextReader(),
         ))
+
+    def provider(self, status="neutral"):
+        providers=ProviderService(SQLiteProviderUnitOfWork(
+            self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
+            self.party_operations, SQLitePortfolioLeaseOperations(self.workspace.paths.database),
+        ))
+        return providers.create(PartyCreateCommand("organization", "Fast Plumbing"), ProviderProfileCommand(status, selection_reason="Legacy concern" if status == "avoid" else None))["party"]["id"]
 
     def issue(self):
         return self.service.create_issue(IssueCreate(
@@ -423,3 +433,115 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             })
             self.assertEqual(scheduled.status_code, 201, scheduled.text)
             self.assertTrue(client.get("/api/maintenance-issues", params={"hasEvidence": False}).json()["items"])
+
+    def test_quotes_assignments_replacement_and_avoid_override(self) -> None:
+        issue = self.issue(); provider = self.provider(); today = datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
+        quote = self.service.create_quote(issue["id"], QuoteCreate(provider, "Standard repair", "Replace the failed valve.", "125.00", today), str(uuid4()))
+        assignment = self.service.create_assignment(issue["id"], AssignmentCreate(provider, quote["id"]), str(uuid4()))
+        replacement = self.service.create_assignment(issue["id"], AssignmentCreate(provider, quote["id"], replaces_assignment_id=assignment["id"], replacement_confirmed=True, end_reason="Reissued authorization"), str(uuid4()))
+        self.assertEqual(replacement["replacesAssignmentId"], assignment["id"])
+        self.assertEqual(self.service.quote_comparison(issue["id"])["quotes"][0]["id"], quote["id"])
+        avoided = self.provider("avoid")
+        with self.assertRaises(MaintenanceConflictError):
+            self.service.create_assignment(issue["id"], AssignmentCreate(avoided, selection_reason="Emergency", direct_assignment_confirmed=True), str(uuid4()))
+        self.workspace.open()
+
+    def test_quote_replacement_is_single_use_and_audit_snapshots_detect_tampering(self) -> None:
+        issue = self.issue(); provider = self.provider(); today = datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
+        original = self.service.create_quote(issue["id"], QuoteCreate(provider, "Original", "Original scope.", "100.00", today), str(uuid4()))
+        self.service.withdraw_quote(original["id"], "Provider corrected the offer.", True)
+        self.service.create_quote(issue["id"], QuoteCreate(provider, "Replacement", "Corrected scope.", "120.00", today, replaces_quote_id=original["id"]), str(uuid4()))
+        with self.assertRaisesRegex(MaintenanceConflictError, "already has a replacement") as error:
+            self.service.create_quote(issue["id"], QuoteCreate(provider, "Duplicate", "Duplicate scope.", "130.00", today, replaces_quote_id=original["id"]), str(uuid4()))
+        self.assertEqual("quote_replaced", error.exception.code)
+        engine = create_sqlite_engine(self.workspace.paths.database)
+        try:
+            with engine.begin() as connection:
+                connection.execute(text("UPDATE maintenance_quotes SET amount_minor=999 WHERE id=:id"), {"id": original["id"]})
+            with self.assertRaises(WorkspaceError): self.workspace.open()
+        finally: engine.dispose()
+
+    def test_quote_comparison_orders_active_nonexpired_before_expired_and_withdrawn_and_surfaces_current_state(self) -> None:
+        issue = self.issue(); provider = self.provider(); today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
+        expired = self.service.create_quote(issue["id"], QuoteCreate(provider, "Expired", "Expired scope.", "1.00", (today - timedelta(days=2)).isoformat(), (today - timedelta(days=1)).isoformat()), str(uuid4()))
+        valid = self.service.create_quote(issue["id"], QuoteCreate(provider, "Valid", "Valid scope.", "100.00", today.isoformat(), today.isoformat()), str(uuid4()))
+        withdrawn = self.service.create_quote(issue["id"], QuoteCreate(provider, "Withdrawn", "Withdrawn scope.", "2.00", today.isoformat()), str(uuid4()))
+        self.service.withdraw_quote(withdrawn["id"], "No longer offered.", True)
+        self.portfolio.archive_party(provider, confirmed=True)
+        comparison = self.service.quote_comparison(issue["id"])["quotes"]
+        self.assertEqual([valid["id"], expired["id"], withdrawn["id"]], [item["id"] for item in comparison])
+        self.assertEqual("archived", comparison[0]["currentPartyState"])
+        detail = self.service.detail(issue["id"])
+        self.assertEqual("archived", detail["quotes"][0]["currentPartyState"])
+
+    def test_quote_comparison_uses_only_its_bounded_projection_and_document_counts(self) -> None:
+        issue = self.issue(); provider = self.provider(); today = datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
+        quote = self.service.create_quote(issue["id"], QuoteCreate(provider, "Minimal", "Minimal comparison scope.", "75.00", today), str(uuid4()))
+        class Unused:
+            def __getattr__(self, _name): raise AssertionError("comparison must not load unrelated projections")
+        class CountOnlyFiles:
+            def __init__(self, delegate): self.delegate, self.calls = delegate, []
+            def active_link_counts_for_entities(self, connection, entity_type, entity_ids):
+                self.calls.append((entity_type, tuple(entity_ids))); return self.delegate.active_link_counts_for_entities(connection, entity_type, entity_ids)
+        files = CountOnlyFiles(self.service.unit_of_work.files)
+        self.service.unit_of_work.files = files
+        self.service.unit_of_work.portfolio = Unused(); self.service.unit_of_work.finance = Unused(); self.service.unit_of_work.tasks = Unused(); self.service.unit_of_work.communications = Unused()
+        comparison = self.service.quote_comparison(issue["id"])
+        self.assertEqual(quote["id"], comparison["quotes"][0]["id"])
+        self.assertEqual(0, comparison["quotes"][0]["documentCount"])
+        self.assertEqual([("maintenance_quote", (quote["id"],))], files.calls)
+
+    def test_default_list_projection_has_a_constant_budget_without_quote_assignment_file_or_provider_reads(self) -> None:
+        issues = [self.issue() for _ in range(3)]
+        provider = self.provider(); today = datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
+        quote = self.service.create_quote(issues[0]["id"], QuoteCreate(provider, "Listed", "Listed quote scope.", "50.00", today), str(uuid4()))
+        self.service.create_assignment(issues[0]["id"], AssignmentCreate(provider, quote["id"]), str(uuid4()))
+        class FileSpy:
+            def __init__(self, delegate): self.delegate, self.calls = delegate, []
+            def links_for_entities(self, connection, entity_type, entity_ids):
+                self.calls.append(entity_type); return self.delegate.links_for_entities(connection, entity_type, entity_ids)
+            def active_link_counts_for_entity_groups(self, connection, entity_ids_by_type):
+                self.calls.append("summary_counts"); return self.delegate.active_link_counts_for_entity_groups(connection, entity_ids_by_type)
+        class FailingProviders:
+            def profile_contexts(self, *_args): raise AssertionError("list must not read provider state")
+        class FailingFinance:
+            def expense_contexts(self, *_args): raise AssertionError("list must not load expense contexts")
+        spy = FileSpy(self.service.unit_of_work.files)
+        self.service.unit_of_work.files = spy; self.service.unit_of_work.providers = FailingProviders(); self.service.unit_of_work.finance = FailingFinance()
+        import app.modules.maintenance.infrastructure.unit_of_work as adapter
+        engine = create_sqlite_engine(self.workspace.paths.database); statements = []; original = adapter.create_engine
+        def capture(*args):
+            if args[2].lstrip().upper().startswith("SELECT"): statements.append(args[2].upper())
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            with patch.object(adapter, "create_engine", return_value=engine):
+                first = len(statements); self.service.list_issues(page_size=1); one = len(statements) - first
+                first = len(statements); self.service.list_issues(page_size=3); three = len(statements) - first
+        finally:
+            event.remove(engine, "before_cursor_execute", capture); engine.dispose()
+        self.assertEqual(one, three)
+        self.assertFalse(any("MAINTENANCE_QUOTE" in statement and "SELECT" in statement and "SCOPE_SUMMARY" in statement for statement in statements))
+        self.assertFalse(any("MAINTENANCE_ASSIGNMENT" in statement and "MAINTENANCE_QUOTE" in statement for statement in statements))
+        self.assertFalse(any("EXPENSES" in statement or "EXPENSE_REFUNDS" in statement for statement in statements))
+        self.assertNotIn("maintenance_quote", spy.calls)
+        self.assertNotIn("maintenance_assignment", spy.calls)
+        self.assertEqual(2, spy.calls.count("summary_counts"))
+
+    def test_quote_and_assignment_http_contract(self) -> None:
+        provider = self.provider()
+        with TestClient(create_app(self.workspace.config.config_path)) as client:
+            issue = client.post("/api/maintenance-issues", json={"propertyId": self.property_id, "summary": "Faucet", "description": "Faucet is dripping continuously.", "category": "plumbing", "priority": "normal", "reportedAtUtc": datetime.now(UTC).isoformat(), "reporter": {"role": "manager", "subjectKind": "local_operator"}, "idempotencyKey": str(uuid4())}).json()
+            quote = client.post(f"/api/maintenance-issues/{issue['id']}/quotes", json={"providerPartyId": provider, "label": "Repair", "scopeSummary": "Repair faucet cartridge.", "amount": "85.00", "receivedOn": datetime.now(ZoneInfo('America/Los_Angeles')).date().isoformat(), "idempotencyKey": str(uuid4())})
+            self.assertEqual(quote.status_code, 201, quote.text)
+            assignment = client.post(f"/api/maintenance-issues/{issue['id']}/assignments", json={"providerPartyId": provider, "quoteId": quote.json()["id"], "idempotencyKey": str(uuid4())})
+            self.assertEqual(assignment.status_code, 201, assignment.text)
+            comparison = client.get(f"/api/maintenance-issues/{issue['id']}/quote-comparison")
+            self.assertEqual(comparison.status_code, 200)
+            self.assertNotIn("files", comparison.json()["quotes"][0])
+            self.assertEqual(client.post(f"/api/maintenance-quotes/{quote.json()['id']}/withdraw", json={"confirmed": True, "reason": "Corrected quote."}).status_code, 200)
+            replacement = {"providerPartyId": provider, "label": "Replacement", "scopeSummary": "Repair with corrected parts.", "amount": "90.00", "receivedOn": datetime.now(ZoneInfo('America/Los_Angeles')).date().isoformat(), "replacesQuoteId": quote.json()["id"], "idempotencyKey": str(uuid4())}
+            self.assertEqual(client.post(f"/api/maintenance-issues/{issue['id']}/quotes", json=replacement).status_code, 201)
+            duplicate = {**replacement, "idempotencyKey": str(uuid4())}
+            response = client.post(f"/api/maintenance-issues/{issue['id']}/quotes", json=duplicate)
+            self.assertEqual(response.status_code, 409, response.text)
+            self.assertEqual(response.json()["detail"]["code"], "quote_replaced")

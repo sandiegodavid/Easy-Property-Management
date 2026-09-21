@@ -162,7 +162,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     maintenance_unit_of_work = SQLiteMaintenanceUnitOfWork(
         service.paths.database, recorder, portfolio_context_reader,
         SQLiteExpenseContextReader(), SQLiteTaskContextReader(), task_transaction_operations, file_link_reader,
-        party_operations, lease_context_reader, SQLiteCommunicationLinkReader(),
+        party_operations, lease_context_reader, SQLiteCommunicationLinkReader(), SQLiteProviderContextReader(),
     )
     files = FileService(
         service,
@@ -331,6 +331,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("maintenance_appointment", 1): DEFAULT_SNAPSHOT_POLICY,
         ("maintenance_cost_context", 1): DEFAULT_SNAPSHOT_POLICY,
         ("maintenance_expense_link", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("maintenance_quote", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("maintenance_assignment", 1): DEFAULT_SNAPSHOT_POLICY,
     }, activity_policies={
         ("task", 1): TASK_ACTIVITY_POLICY,
         ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
@@ -371,6 +373,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("maintenance_appointment", 1): MAINTENANCE_ACTIVITY_POLICY,
         ("maintenance_cost_context", 1): MAINTENANCE_ACTIVITY_POLICY,
         ("maintenance_expense_link", 1): MAINTENANCE_ACTIVITY_POLICY,
+        ("maintenance_quote", 1): MAINTENANCE_ACTIVITY_POLICY,
+        ("maintenance_assignment", 1): MAINTENANCE_ACTIVITY_POLICY,
     })
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime))

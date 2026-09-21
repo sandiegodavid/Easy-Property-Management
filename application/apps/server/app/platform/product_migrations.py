@@ -78,7 +78,7 @@ def validate_latest_schema(database_path: Path) -> None:
                 "security_deposit_settlement_receipts", "security_deposit_deductions",
                 "security_deposit_deduction_sources", "security_deposit_credits", "security_deposit_refunds",
                 "communications", "communication_participants", "communication_links", "communication_operations",
-                "maintenance_issues", "maintenance_appointments", "maintenance_cost_contexts", "maintenance_issue_expense_links", "maintenance_follow_up_operations",
+                "maintenance_issues", "maintenance_appointments", "maintenance_cost_contexts", "maintenance_issue_expense_links", "maintenance_follow_up_operations", "maintenance_quotes", "maintenance_assignments",
             }
             if actual_tables != expected_tables:
                 raise ProductSchemaError("Workspace database contains unsupported application tables.")
