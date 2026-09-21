@@ -510,6 +510,10 @@ class PortfolioService:
             current = transaction.get_property(property_id)
             if current is None: raise KeyError
             if current.status == status: return current
+            if status == "archived":
+                conflicts = transaction.property_archive_conflicts(property_id)
+                if conflicts:
+                    raise PortfolioError(conflicts[0])
             if status == "active" and not transaction.ownerships_at(property_id, date.today().isoformat()):
                 raise PortfolioError("An active property requires an active ownership relationship.")
             updated = replace(

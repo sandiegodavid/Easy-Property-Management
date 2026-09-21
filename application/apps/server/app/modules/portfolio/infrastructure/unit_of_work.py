@@ -11,7 +11,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.portfolio.application.ports import PartyRoleActivityGuard, PortfolioConflictError, PortfolioTransaction
+from app.modules.portfolio.application.ports import PartyRoleActivityGuard, PropertyArchiveGuard, PortfolioConflictError, PortfolioTransaction
 from app.modules.portfolio.domain.models import Party, Property, PropertyOwnership, Space, SpaceAvailability, SpaceOccupancyPeriod
 from app.modules.portfolio.infrastructure.sqlalchemy_models import PartyModel, PropertyModel, PropertyOwnershipModel, SpaceAvailabilityModel, SpaceModel, SpaceOccupancyPeriodModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
@@ -45,15 +45,16 @@ class SQLitePortfolioRoleSummaryReader:
 
 class SQLitePortfolioUnitOfWork:
     def __init__(self, database, recorder: AuditRecorder,
-                 party_role_guards: tuple[PartyRoleActivityGuard, ...] = ()) -> None:
+                 party_role_guards: tuple[PartyRoleActivityGuard, ...] = (), property_archive_guards: tuple[PropertyArchiveGuard, ...] = ()) -> None:
         self.engine = create_sqlite_engine(database)
         self.recorder = recorder
         self.party_role_guards = party_role_guards
+        self.property_archive_guards = property_archive_guards
 
     def write(self, operation: Callable[[PortfolioTransaction], Result]) -> Result:
         try:
             with immediate_transaction(self.engine) as connection:
-                return operation(_SQLitePortfolioTransaction(connection, self.recorder, self.party_role_guards))
+                return operation(_SQLitePortfolioTransaction(connection, self.recorder, self.party_role_guards, self.property_archive_guards))
         except OperationalError as error:
             if "locked" in str(error).casefold():
                 raise PortfolioConflictError(
@@ -171,10 +172,11 @@ class SQLitePortfolioLeaseOperations:
 
 class _SQLitePortfolioTransaction:
     def __init__(self, connection: Any, recorder: AuditRecorder,
-                 role_guards: tuple[PartyRoleActivityGuard, ...]) -> None:
+                 role_guards: tuple[PartyRoleActivityGuard, ...], property_archive_guards: tuple[PropertyArchiveGuard, ...] = ()) -> None:
         self.connection = connection
         self.recorder = recorder
         self.role_guards = role_guards
+        self.property_archive_guards = property_archive_guards
 
     def get_property(self, property_id: str) -> Property | None:
         row = self.connection.execute(PropertyModel.__table__.select().where(PropertyModel.id == property_id)).mappings().first()
@@ -228,6 +230,8 @@ class _SQLitePortfolioTransaction:
 
     def party_role_conflicts(self, party_id: str) -> list[str]:
         return [message for guard in self.role_guards if (message := guard.conflict(self.connection, party_id))]
+    def property_archive_conflicts(self, property_id: str) -> list[str]:
+        return [message for guard in self.property_archive_guards if (message := guard.conflict(self.connection, property_id))]
 
     def insert_party(self, party: Party) -> None:
         self.connection.execute(PartyModel.__table__.insert().values(**party.__dict__))

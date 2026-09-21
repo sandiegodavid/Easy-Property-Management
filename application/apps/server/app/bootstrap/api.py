@@ -53,6 +53,11 @@ from app.modules.owner_accounting.application.file_links import OwnerRentReportF
 from app.modules.owner_accounting.infrastructure.unit_of_work import SQLiteOwnerRentReportUnitOfWork
 from app.modules.owner_accounting.infrastructure.file_links import SQLiteOwnerRentReportFileLinkOperations
 from app.modules.owner_accounting.domain.audit_policy import OWNER_REPORT_ACTIVITY_POLICY
+from app.modules.owner_management.api.router import build_router as build_owner_concern_router
+from app.modules.owner_management.application.service import OwnerConcernService
+from app.modules.owner_management.infrastructure.unit_of_work import SQLiteOwnerConcernPropertyArchiveGuard, SQLiteOwnerConcernUnitOfWork
+from app.modules.owner_management.domain.audit_policy import OWNER_CONCERN_ACTIVITY_POLICY
+from app.bootstrap.owner_concern_context import SQLiteOwnerConcernContext
 from app.modules.portfolio.api.router import build_router as build_portfolio_router
 from app.modules.portfolio.application.service import PortfolioService
 from app.modules.portfolio.infrastructure.unit_of_work import (
@@ -193,8 +198,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     communications = CommunicationService(SQLiteCommunicationUnitOfWork(
         service.paths.database, recorder, SQLiteCommunicationContextOperations(task_transaction_operations),
     ))
+    owner_concern_guard = SQLiteOwnerConcernPropertyArchiveGuard()
     portfolio = PortfolioService(SQLitePortfolioUnitOfWork(
-        service.paths.database, recorder, (SQLiteTenantRoleActivityGuard(),)
+        service.paths.database, recorder, (SQLiteTenantRoleActivityGuard(),), (owner_concern_guard,)
     ), party_reads=party_reads, time_zone_resolver=BundledAddressTimeZoneResolver())
     tenants = TenantService(SQLiteTenantUnitOfWork(
         service.paths.database, recorder, SQLiteLeaseParticipationGuard(),
@@ -241,6 +247,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         party_operations, file_link_reader, SQLiteReceiptTransactionOperations(
             recorder, lease_context_reader, portfolio_context_reader, party_operations,
         ),
+    ))
+    owner_concerns = OwnerConcernService(SQLiteOwnerConcernUnitOfWork(
+        service.paths.database, recorder, SQLiteOwnerConcernContext(task_transaction_operations),
     ))
     inspections = InspectionService(inspection_unit_of_work, files)
     maintenance = MaintenanceService(maintenance_unit_of_work)
@@ -290,6 +299,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.maintenance_service = maintenance
     app.state.work_journal_service = work_journal
     app.state.owner_rent_report_service = owner_rent_reports
+    app.state.owner_concern_service = owner_concerns
     app.include_router(build_router(service, runtime))
     policies = AuditSnapshotPolicyRegistry({
         ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -354,6 +364,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("maintenance_work_journal_entry", 1): DEFAULT_SNAPSHOT_POLICY,
         ("owner_rent_report", 1): DEFAULT_SNAPSHOT_POLICY,
         ("owner_rent_report_operation", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("owner_concern", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("owner_concern_follow_up_operation", 1): DEFAULT_SNAPSHOT_POLICY,
     }, activity_policies={
         ("task", 1): TASK_ACTIVITY_POLICY,
         ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
@@ -399,6 +411,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("maintenance_work_journal_entry", 1): MAINTENANCE_ACTIVITY_POLICY,
         ("owner_rent_report", 1): OWNER_REPORT_ACTIVITY_POLICY,
         ("owner_rent_report_operation", 1): OWNER_REPORT_ACTIVITY_POLICY,
+        ("owner_concern", 1): OWNER_CONCERN_ACTIVITY_POLICY,
+        ("owner_concern_follow_up_operation", 1): OWNER_CONCERN_ACTIVITY_POLICY,
     })
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime))
@@ -416,6 +430,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_communications_router(communications, runtime))
     app.include_router(build_maintenance_router(maintenance, work_journal, runtime))
     app.include_router(build_owner_rent_report_router(owner_rent_reports, runtime))
+    app.include_router(build_owner_concern_router(owner_concerns, runtime))
     return app
 
 
