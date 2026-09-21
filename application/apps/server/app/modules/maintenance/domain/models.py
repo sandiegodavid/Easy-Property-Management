@@ -127,7 +127,7 @@ def local_date(value: str, name: str) -> str:
 @dataclass(frozen=True)
 class QuoteCreate:
     provider_party_id: str; label: str; scope_summary: str; amount: str; received_on: str
-    valid_through: str | None = None; terms_notes: str | None = None; replaces_quote_id: str | None = None
+    valid_through: str | None = None; earliest_work_start_on: str | None = None; estimated_work_finish_on: str | None = None; terms_notes: str | None = None; replaces_quote_id: str | None = None
     def __post_init__(self):
         object.__setattr__(self, "provider_party_id", uuid(self.provider_party_id, "providerPartyId"))
         object.__setattr__(self, "label", text(self.label, "label", 200, required=True))
@@ -138,6 +138,15 @@ class QuoteCreate:
             valid = local_date(self.valid_through, "validThrough")
             if valid < received: raise MaintenanceError("validThrough cannot precede receivedOn.")
             object.__setattr__(self, "valid_through", valid)
+        if (self.earliest_work_start_on is None) != (self.estimated_work_finish_on is None):
+            raise MaintenanceError("Quoted work start and finish dates must be supplied together.")
+        if self.earliest_work_start_on is not None:
+            start = local_date(self.earliest_work_start_on, "earliestWorkStartOn")
+            finish = local_date(self.estimated_work_finish_on, "estimatedWorkFinishOn")
+            if finish < start:
+                raise MaintenanceError("estimatedWorkFinishOn cannot precede earliestWorkStartOn.")
+            object.__setattr__(self, "earliest_work_start_on", start)
+            object.__setattr__(self, "estimated_work_finish_on", finish)
         object.__setattr__(self, "terms_notes", text(self.terms_notes, "termsNotes", 4000) if self.terms_notes is not None else None)
         if self.replaces_quote_id is not None: object.__setattr__(self, "replaces_quote_id", uuid(self.replaces_quote_id, "replacesQuoteId"))
 

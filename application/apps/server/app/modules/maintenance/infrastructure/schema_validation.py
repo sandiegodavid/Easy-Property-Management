@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -18,16 +18,21 @@ from .sqlalchemy_models import (
     MaintenanceIssueModel,
     MaintenanceQuoteModel,
     MaintenanceAssignmentModel,
+    MaintenanceWorkJournalEntryModel,
 )
 
 
 MODELS = (
     MaintenanceIssueModel, MaintenanceAppointmentModel, MaintenanceCostContextModel,
-    MaintenanceIssueExpenseLinkModel, MaintenanceFollowUpOperationModel, MaintenanceQuoteModel, MaintenanceAssignmentModel,
+    MaintenanceIssueExpenseLinkModel, MaintenanceFollowUpOperationModel, MaintenanceQuoteModel, MaintenanceAssignmentModel, MaintenanceWorkJournalEntryModel,
 )
 OPERATION_TRIGGERS = {
     "maintenance_follow_up_operations_no_update": "CREATE TRIGGER maintenance_follow_up_operations_no_update BEFORE UPDATE ON maintenance_follow_up_operations BEGIN SELECT RAISE(ABORT, 'maintenance follow-up operations are immutable'); END",
     "maintenance_follow_up_operations_no_delete": "CREATE TRIGGER maintenance_follow_up_operations_no_delete BEFORE DELETE ON maintenance_follow_up_operations BEGIN SELECT RAISE(ABORT, 'maintenance follow-up operations are immutable'); END",
+}
+WORK_JOURNAL_TRIGGERS = {
+    "maintenance_work_journal_entries_no_update": "CREATE TRIGGER maintenance_work_journal_entries_no_update BEFORE UPDATE ON maintenance_work_journal_entries BEGIN SELECT RAISE(ABORT, 'maintenance work journal entries are immutable'); END",
+    "maintenance_work_journal_entries_no_delete": "CREATE TRIGGER maintenance_work_journal_entries_no_delete BEFORE DELETE ON maintenance_work_journal_entries BEGIN SELECT RAISE(ABORT, 'maintenance work journal entries are immutable'); END",
 }
 
 
@@ -74,6 +79,9 @@ def validate_maintenance_schema(connection) -> None:
     expected_triggers = {name: _trigger_sql(sql) for name, sql in OPERATION_TRIGGERS.items()}
     if triggers != expected_triggers:
         raise MigrationSchemaError("Maintenance follow-up operation triggers are incompatible.")
+    journal_triggers = {name: _trigger_sql(sql) for name, sql in connection.exec_driver_sql("SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'maintenance_work_journal_entries'")}
+    if journal_triggers != {name: _trigger_sql(sql) for name, sql in WORK_JOURNAL_TRIGGERS.items()}:
+        raise MigrationSchemaError("Maintenance work-journal triggers are incompatible.")
 
 
 def validate_maintenance_data(connection) -> None:
@@ -81,6 +89,7 @@ def validate_maintenance_data(connection) -> None:
         raise MigrationSchemaError("Maintenance data has broken foreign keys.")
     _validate_identifiers_and_instants(connection)
     _validate_values(connection)
+    _validate_work_journal_links(connection)
     checks = (
         """SELECT 1 FROM maintenance_issues i LEFT JOIN spaces s ON s.id=i.space_id
            WHERE i.space_id IS NOT NULL AND (s.id IS NULL OR s.property_id != i.property_id) LIMIT 1""",
@@ -108,6 +117,10 @@ def validate_maintenance_data(connection) -> None:
            WHERE assignment.quote_id IS NOT NULL AND (quote.id IS NULL OR quote.issue_id != assignment.issue_id OR quote.provider_party_id != assignment.provider_party_id) LIMIT 1""",
         """SELECT 1 FROM maintenance_assignments replacement JOIN maintenance_assignments original ON original.id=replacement.replaces_assignment_id
            WHERE replacement.issue_id != original.issue_id OR original.ended_at IS NULL OR replacement.id=replacement.replaces_assignment_id LIMIT 1""",
+        """SELECT 1 FROM maintenance_work_journal_entries entry LEFT JOIN maintenance_assignments assignment ON assignment.id=entry.assignment_id
+           LEFT JOIN maintenance_work_journal_entries corrected ON corrected.id=entry.corrects_entry_id
+           WHERE (entry.assignment_id IS NOT NULL AND (assignment.id IS NULL OR assignment.issue_id != entry.issue_id))
+             OR (entry.corrects_entry_id IS NOT NULL AND (corrected.id IS NULL OR corrected.issue_id != entry.issue_id)) LIMIT 1""",
         """SELECT 1 FROM maintenance_issues issue WHERE NOT EXISTS (
              SELECT 1 FROM audit_events event WHERE event.entity_type='maintenance_issue' AND event.entity_id=issue.id AND event.action='created'
            ) LIMIT 1""",
@@ -154,6 +167,7 @@ def validate_maintenance_data(connection) -> None:
         raise MigrationSchemaError("Maintenance retained data is incompatible.")
     _validate_reporter_history(connection)
     _validate_quote_assignment_history(connection)
+    _validate_work_journal_audit_history(connection)
 
 
 _REPORTER_SNAPSHOT_KEYS = (
@@ -223,7 +237,109 @@ def _validate_reporter_history(connection) -> None:
             raise MigrationSchemaError("Maintenance reporter history does not match retained data.")
 
 
-_QUOTE_KEYS = ("id", "issueId", "providerPartyId", "providerDisplayNameSnapshot", "label", "scopeSummary", "amountMinor", "currencyCode", "receivedOn", "validThrough", "termsNotes", "replacesQuoteId", "withdrawnAt", "withdrawalReason", "createdAt")
+_JOURNAL_ROW_KEYS = (
+    "id", "issue_id", "assignment_id", "entry_kind", "corrected_entry_kind", "source_kind",
+    "occurred_at_utc", "occurred_timezone", "summary", "detail", "outcome_status",
+    "outcome_summary", "follow_up_required", "operator_verified", "corrects_entry_id",
+    "correction_reason", "recorded_at_utc",
+)
+
+
+def _journal_snapshot(row) -> dict[str, object]:
+    result = {"id": row["id"]}
+    for key in _JOURNAL_ROW_KEYS:
+        if key == "id":
+            continue
+        value = row[key]
+        if key in {"follow_up_required", "operator_verified"} and value is not None:
+            value = bool(value)
+        result[_camel(key)] = value
+    result["effectiveKind"] = row["corrected_entry_kind"] or row["entry_kind"]
+    # A created snapshot records the state at creation.  A later correction
+    # must not rewrite that immutable historical fact.
+    result["isEffective"] = True
+    return result
+
+
+def _camel(value: str) -> str:
+    head, *tail = value.split("_")
+    return head + "".join(item.title() for item in tail)
+
+
+def _validate_work_journal_audit_history(connection) -> None:
+    rows = {
+        row["id"]: dict(row)
+        for row in connection.execute(text(
+            "SELECT id, issue_id, assignment_id, entry_kind, corrected_entry_kind, source_kind, "
+            "occurred_at_utc, occurred_timezone, summary, detail, outcome_status, outcome_summary, "
+            "follow_up_required, operator_verified, corrects_entry_id, correction_reason, recorded_at_utc "
+            "FROM maintenance_work_journal_entries"
+        )).mappings()
+    }
+    events = list(connection.execute(text(
+        "SELECT id, entity_id, action, before_snapshot, after_snapshot, changed_fields, reason, "
+        "correlation_id, schema_version FROM audit_events "
+        "WHERE entity_type='maintenance_work_journal_entry'"
+    )).mappings())
+    by_entry: dict[str, list[object]] = {entry_id: [] for entry_id in rows}
+    for event in events:
+        entry_id = event["entity_id"]
+        if entry_id not in by_entry:
+            raise MigrationSchemaError("Maintenance work-journal audit references an unknown entry.")
+        by_entry[entry_id].append(event)
+    for entry_id, row in rows.items():
+        history = by_entry[entry_id]
+        if len(history) != 1:
+            raise MigrationSchemaError("Maintenance work-journal audit creation history is incompatible.")
+        event = history[0]
+        try:
+            UUID(event["id"]); UUID(event["correlation_id"])
+            changed = json.loads(event["changed_fields"])
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
+            raise MigrationSchemaError("Maintenance work-journal audit metadata is incompatible.") from error
+        if (
+            event["action"] != "created" or event["before_snapshot"] is not None
+            or event["schema_version"] != 1 or changed != ["$"]
+            or event["reason"] not in {"work_journal_created", "work_journal_historical_created"}
+            or _audit_snapshot(event["after_snapshot"]) != _journal_snapshot(row)
+        ):
+            raise MigrationSchemaError("Maintenance work-journal audit snapshot is incompatible.")
+
+
+def _validate_work_journal_links(connection) -> None:
+    """Validate FILE-001 links owned by retained work-journal entries."""
+    rows = list(connection.execute(text(
+        "SELECT link.id, link.entity_id, link.purpose, link.created_at, link.archived_at, entry.entry_kind, "
+        "entry.corrected_entry_kind, (SELECT correction.recorded_at_utc FROM maintenance_work_journal_entries correction "
+        "WHERE correction.corrects_entry_id=entry.id) AS corrected_at "
+        "FROM file_links link LEFT JOIN maintenance_work_journal_entries entry ON entry.id=link.entity_id "
+        "WHERE link.entity_type='maintenance_work_journal_entry'"
+    )).mappings())
+    active_counts: dict[str, int] = {}
+    allowed = {"completion_photo", "work_report", "supporting_document"}
+    for row in rows:
+        if row["entry_kind"] is None or row["purpose"] not in allowed:
+            raise MigrationSchemaError("Maintenance work-journal file links are incompatible.")
+        if row["archived_at"] is None:
+            active_counts[row["entity_id"]] = active_counts.get(row["entity_id"], 0) + 1
+            effective_kind = row["corrected_entry_kind"] or row["entry_kind"]
+            # Evidence already attached to an original entry remains immutable
+            # historical context after a correction.  A later attachment must
+            # not be made to the superseded record.
+            try:
+                attached_after_correction = (
+                    row["corrected_at"] is not None
+                    and datetime.fromisoformat(row["created_at"]) >= datetime.fromisoformat(row["corrected_at"])
+                )
+            except (TypeError, ValueError) as error:
+                raise MigrationSchemaError("Maintenance work-journal evidence timestamps are incompatible.") from error
+            if attached_after_correction or (row["purpose"] == "completion_photo" and effective_kind != "work_completed"):
+                raise MigrationSchemaError("Maintenance active work-journal evidence is incompatible.")
+    if any(count > 20 for count in active_counts.values()):
+        raise MigrationSchemaError("Maintenance work-journal evidence limit is incompatible.")
+
+
+_QUOTE_KEYS = ("id", "issueId", "providerPartyId", "providerDisplayNameSnapshot", "label", "scopeSummary", "amountMinor", "currencyCode", "receivedOn", "validThrough", "earliestWorkStartOn", "estimatedWorkFinishOn", "termsNotes", "replacesQuoteId", "withdrawnAt", "withdrawalReason", "createdAt")
 _ASSIGNMENT_KEYS = ("id", "issueId", "providerPartyId", "providerDisplayNameSnapshot", "quoteId", "providerSelectionStatusSnapshot", "selectionReason", "avoidOverrideReason", "instructions", "replacesAssignmentId", "assignedAt", "endedAt", "endReason")
 
 
@@ -302,6 +418,7 @@ def _validate_identifiers_and_instants(connection) -> None:
         "maintenance_cost_contexts": ("id", "issue_id", "replaces_cost_context_id", "idempotency_key"),
         "maintenance_issue_expense_links": ("id", "issue_id", "expense_id", "idempotency_key"),
         "maintenance_follow_up_operations": ("idempotency_key", "issue_id", "task_id", "correlation_id"),
+        "maintenance_work_journal_entries": ("id", "issue_id", "assignment_id", "corrects_entry_id", "idempotency_key"),
         "maintenance_quotes": ("id", "issue_id", "provider_party_id", "replaces_quote_id", "idempotency_key"),
         "maintenance_assignments": ("id", "issue_id", "provider_party_id", "quote_id", "replaces_assignment_id", "idempotency_key"),
     }
@@ -311,6 +428,7 @@ def _validate_identifiers_and_instants(connection) -> None:
         "maintenance_cost_contexts": ("voided_at", "created_at"),
         "maintenance_issue_expense_links": ("created_at", "archived_at"),
         "maintenance_follow_up_operations": ("created_at",),
+        "maintenance_work_journal_entries": ("occurred_at_utc", "recorded_at_utc"),
         "maintenance_quotes": ("withdrawn_at", "created_at"),
         "maintenance_assignments": ("assigned_at", "ended_at"),
     }
@@ -346,9 +464,20 @@ def _validate_values(connection) -> None:
         except (TypeError, ValueError) as error: raise MigrationSchemaError("Maintenance observed dates are incompatible.") from error
     for row in connection.execute(text("SELECT archive_reason FROM maintenance_issue_expense_links")).mappings():
         _bounded(row["archive_reason"], 1000, False)
-    for row in connection.execute(text("SELECT provider_display_name_snapshot, label, scope_summary, received_on, valid_through, terms_notes, withdrawal_reason FROM maintenance_quotes")).mappings():
+    for row in connection.execute(text("SELECT occurred_timezone, summary, detail, outcome_summary, correction_reason FROM maintenance_work_journal_entries")).mappings():
+        _zone(row["occurred_timezone"]); _bounded(row["summary"], 240, True); _bounded(row["detail"], 4000, False); _bounded(row["outcome_summary"], 4000, False); _bounded(row["correction_reason"], 1000, False)
+    for row in connection.execute(text("SELECT occurred_at_utc, recorded_at_utc FROM maintenance_work_journal_entries")).mappings():
+        occurred = datetime.fromisoformat(row["occurred_at_utc"])
+        recorded = datetime.fromisoformat(row["recorded_at_utc"])
+        if occurred > recorded + timedelta(minutes=5):
+            raise MigrationSchemaError("Maintenance work-journal occurrence time is incompatible.")
+    for row in connection.execute(text("SELECT provider_display_name_snapshot, label, scope_summary, received_on, valid_through, earliest_work_start_on, estimated_work_finish_on, terms_notes, withdrawal_reason FROM maintenance_quotes")).mappings():
         _bounded(row["provider_display_name_snapshot"], 240, True); _bounded(row["label"], 200, True); _bounded(row["scope_summary"], 4000, True); _bounded(row["terms_notes"], 4000, False); _bounded(row["withdrawal_reason"], 1000, False)
-        try: date.fromisoformat(row["received_on"]); row["valid_through"] is None or date.fromisoformat(row["valid_through"])
+        try:
+            date.fromisoformat(row["received_on"])
+            row["valid_through"] is None or date.fromisoformat(row["valid_through"])
+            row["earliest_work_start_on"] is None or date.fromisoformat(row["earliest_work_start_on"])
+            row["estimated_work_finish_on"] is None or date.fromisoformat(row["estimated_work_finish_on"])
         except (TypeError, ValueError) as error: raise MigrationSchemaError("Maintenance quote dates are incompatible.") from error
     for row in connection.execute(text("SELECT provider_display_name_snapshot, selection_reason, avoid_override_reason, instructions, end_reason FROM maintenance_assignments")).mappings():
         _bounded(row["provider_display_name_snapshot"], 240, True); _bounded(row["selection_reason"], 1000, False); _bounded(row["avoid_override_reason"], 1000, False); _bounded(row["instructions"], 4000, False); _bounded(row["end_reason"], 1000, False)

@@ -8,14 +8,14 @@ from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from typing import Callable
 from zoneinfo import ZoneInfo
-from sqlalchemy import and_, create_engine, desc, exists, select
+from sqlalchemy import and_, case, create_engine, desc, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.maintenance.domain.models import MaintenanceConflictError
 from app.platform.sqlite_engine import immediate_transaction
 from .sqlalchemy_models import *
 
-MODELS={"issue":MaintenanceIssueModel,"appointment":MaintenanceAppointmentModel,"cost":MaintenanceCostContextModel,"expense_link":MaintenanceIssueExpenseLinkModel,"follow_up_operation":MaintenanceFollowUpOperationModel,"quote":MaintenanceQuoteModel,"assignment":MaintenanceAssignmentModel}
+MODELS={"issue":MaintenanceIssueModel,"appointment":MaintenanceAppointmentModel,"cost":MaintenanceCostContextModel,"expense_link":MaintenanceIssueExpenseLinkModel,"follow_up_operation":MaintenanceFollowUpOperationModel,"quote":MaintenanceQuoteModel,"assignment":MaintenanceAssignmentModel,"work_journal":MaintenanceWorkJournalEntryModel}
 class SQLiteMaintenanceTransaction:
     def __init__(self, connection, recorder, portfolio, finance, tasks, task_operations, files, parties=None, leases=None, communications=None, providers=None):
         self.connection,self.recorder=connection,recorder
@@ -36,6 +36,7 @@ class SQLiteMaintenanceTransaction:
     def expense_link(self, item_id): return self._get("expense_link", item_id)
     def quote(self, item_id): return self._get("quote", item_id)
     def assignment(self, item_id): return self._get("assignment", item_id)
+    def work_journal(self, item_id): return self._get("work_journal", item_id)
     def issue_by_key(self, key): return self._by_idempotency_key("issue", key)
     def appointment_by_key(self, key): return self._by_idempotency_key("appointment", key)
     def cost_context_by_key(self, key): return self._by_idempotency_key("cost", key)
@@ -45,6 +46,10 @@ class SQLiteMaintenanceTransaction:
         row=self.connection.execute(select(MaintenanceQuoteModel).where(MaintenanceQuoteModel.replaces_quote_id==quote_id)).mappings().first()
         return None if row is None else dict(row)
     def assignment_by_key(self, key): return self._by_idempotency_key("assignment", key)
+    def work_journal_by_key(self, key): return self._by_idempotency_key("work_journal", key)
+    def work_journal_correction(self, entry_id):
+        row=self.connection.execute(select(MaintenanceWorkJournalEntryModel).where(MaintenanceWorkJournalEntryModel.corrects_entry_id==entry_id)).mappings().first()
+        return None if row is None else dict(row)
     def follow_up_by_key(self, key): return self._by_idempotency_key("follow_up_operation", key)
     def insert_issue(self, values): self._insert("issue", values)
     def replace_issue(self, item_id, values): self._replace("issue", item_id, values)
@@ -62,6 +67,11 @@ class SQLiteMaintenanceTransaction:
     def replace_quote(self, item_id, values): self._replace("quote", item_id, values)
     def insert_assignment(self, values): self._insert("assignment", values)
     def replace_assignment(self, item_id, values): self._replace("assignment", item_id, values)
+    def insert_work_journal(self, values):
+        try:self._insert("work_journal", values)
+        except IntegrityError as error:
+            if "corrects_entry_id" in str(error.orig): raise MaintenanceConflictError("Journal entry already has a correction.","correction_exists") from error
+            raise
     def insert_follow_up_operation(self, values): self._insert("follow_up_operation", values)
     def appointments_for_issue(self, issue_id):
         return [dict(row) for row in self.connection.execute(select(MaintenanceAppointmentModel).where(MaintenanceAppointmentModel.issue_id==issue_id)).mappings()]
@@ -102,6 +112,71 @@ class SQLiteMaintenanceTransaction:
                 MaintenanceIssueExpenseLinkModel.archived_at.is_(None),
             )
         ).first() is not None
+    def work_journal_page(self, *, issue_id, provider_party_id, cursor, limit, descending):
+        # Both issue and provider journals expose the same immutable context.
+        # Keep the joins outer: operator observations legitimately have no
+        # assignment or quote.
+        query=(
+            select(MaintenanceWorkJournalEntryModel)
+            .join(MaintenanceIssueModel,MaintenanceIssueModel.id==MaintenanceWorkJournalEntryModel.issue_id)
+            .outerjoin(MaintenanceAssignmentModel,MaintenanceAssignmentModel.id==MaintenanceWorkJournalEntryModel.assignment_id)
+            .outerjoin(MaintenanceQuoteModel,MaintenanceQuoteModel.id==MaintenanceAssignmentModel.quote_id)
+            .add_columns(
+                MaintenanceIssueModel.summary.label("issue_summary"),
+                MaintenanceIssueModel.property_id.label("property_id"),
+                MaintenanceIssueModel.space_id.label("space_id"),
+                MaintenanceAssignmentModel.provider_party_id.label("provider_party_id"),
+                MaintenanceAssignmentModel.provider_display_name_snapshot.label("provider_display_name_snapshot"),
+                MaintenanceAssignmentModel.assigned_at.label("assigned_at"),
+                MaintenanceAssignmentModel.quote_id.label("quote_id"),
+                MaintenanceQuoteModel.earliest_work_start_on.label("quoted_earliest_work_start_on"),
+                MaintenanceQuoteModel.estimated_work_finish_on.label("quoted_estimated_work_finish_on"),
+            )
+        )
+        if provider_party_id is not None:
+            query=query.where(MaintenanceAssignmentModel.provider_party_id==provider_party_id)
+        if issue_id is not None: query=query.where(MaintenanceWorkJournalEntryModel.issue_id==issue_id)
+        if cursor:
+            occurred, recorded, item_id=cursor
+            if descending:
+                query=query.where((MaintenanceWorkJournalEntryModel.occurred_at_utc<occurred)|and_(MaintenanceWorkJournalEntryModel.occurred_at_utc==occurred,MaintenanceWorkJournalEntryModel.recorded_at_utc<recorded)|and_(MaintenanceWorkJournalEntryModel.occurred_at_utc==occurred,MaintenanceWorkJournalEntryModel.recorded_at_utc==recorded,MaintenanceWorkJournalEntryModel.id<item_id))
+            else:
+                query=query.where((MaintenanceWorkJournalEntryModel.occurred_at_utc>occurred)|and_(MaintenanceWorkJournalEntryModel.occurred_at_utc==occurred,MaintenanceWorkJournalEntryModel.recorded_at_utc>recorded)|and_(MaintenanceWorkJournalEntryModel.occurred_at_utc==occurred,MaintenanceWorkJournalEntryModel.recorded_at_utc==recorded,MaintenanceWorkJournalEntryModel.id>item_id))
+        ordering=(desc(MaintenanceWorkJournalEntryModel.occurred_at_utc),desc(MaintenanceWorkJournalEntryModel.recorded_at_utc),desc(MaintenanceWorkJournalEntryModel.id)) if descending else (MaintenanceWorkJournalEntryModel.occurred_at_utc,MaintenanceWorkJournalEntryModel.recorded_at_utc,MaintenanceWorkJournalEntryModel.id)
+        return [dict(row) for row in self.connection.execute(query.order_by(*ordering).limit(limit)).mappings()]
+    def work_journal_corrected_ids(self, entry_ids):
+        if not entry_ids:return set()
+        return set(self.connection.execute(select(MaintenanceWorkJournalEntryModel.corrects_entry_id).where(MaintenanceWorkJournalEntryModel.corrects_entry_id.in_(entry_ids))).scalars())
+    def work_journal_files(self, entry_ids):
+        if not entry_ids or not self.files:
+            return {}
+        return self.files.links_for_entities(self.connection, "maintenance_work_journal_entry", entry_ids)
+    def work_journal_assignment_start_seconds(self, assignment_ids):
+        """Return the earliest effective work-start duration for each assignment."""
+        assignment_ids=list(dict.fromkeys(item for item in assignment_ids if item is not None))
+        if not assignment_ids:
+            return {}
+        correction=MaintenanceWorkJournalEntryModel.__table__.alias("journal_correction")
+        effective=~exists(select(correction.c.id).where(correction.c.corrects_entry_id==MaintenanceWorkJournalEntryModel.id))
+        effective_kind=case(
+            (MaintenanceWorkJournalEntryModel.entry_kind=="correction", MaintenanceWorkJournalEntryModel.corrected_entry_kind),
+            else_=MaintenanceWorkJournalEntryModel.entry_kind,
+        )
+        rows=self.connection.execute(
+            select(
+                MaintenanceWorkJournalEntryModel.assignment_id,
+                MaintenanceAssignmentModel.assigned_at,
+                func.min(MaintenanceWorkJournalEntryModel.occurred_at_utc).label("started_at"),
+            ).join(MaintenanceAssignmentModel, MaintenanceAssignmentModel.id==MaintenanceWorkJournalEntryModel.assignment_id)
+            .where(MaintenanceWorkJournalEntryModel.assignment_id.in_(assignment_ids), effective, effective_kind=="work_started")
+            .group_by(MaintenanceWorkJournalEntryModel.assignment_id, MaintenanceAssignmentModel.assigned_at)
+        ).mappings()
+        result={}
+        for row in rows:
+            started=datetime.fromisoformat(row["started_at"])
+            assigned=datetime.fromisoformat(row["assigned_at"])
+            result[row["assignment_id"]]=None if started < assigned else int((started-assigned).total_seconds())
+        return result
     def issues_page(self, *, property_id=None, space_id=None, category=None, priority=None, status=None, reporter_role=None, reporter_party_id=None, reporter_subject_kind=None, provider_party_id=None, has_active_quote=None, has_current_assignment=None, reported_from=None, reported_to=None, appointment_from=None,appointment_to=None,has_evidence=None,has_linked_expense=None,has_active_task=None,cursor=None,limit=101):
         query=select(MaintenanceIssueModel)
         conditions=[]
@@ -236,7 +311,7 @@ class SQLiteMaintenanceTransaction:
         issue_ids=list(dict.fromkeys(issue_ids))
         if not issue_ids:return {}
         issues={row["id"]:dict(row) for row in self.connection.execute(select(MaintenanceIssueModel).where(MaintenanceIssueModel.id.in_(issue_ids))).mappings()}
-        appointments={issue_id:[] for issue_id in issues}; costs={issue_id:[] for issue_id in issues}; links={issue_id:[] for issue_id in issues}; quotes={issue_id:[] for issue_id in issues}; assignments={issue_id:[] for issue_id in issues}
+        appointments={issue_id:[] for issue_id in issues}; costs={issue_id:[] for issue_id in issues}; links={issue_id:[] for issue_id in issues}; quotes={issue_id:[] for issue_id in issues}; assignments={issue_id:[] for issue_id in issues}; journals={issue_id:[] for issue_id in issues}; journal_counts={issue_id:0 for issue_id in issues}
         appointment_columns=(MaintenanceAppointmentModel,) if include_detail else (MaintenanceAppointmentModel.id,MaintenanceAppointmentModel.issue_id,MaintenanceAppointmentModel.starts_at_utc,MaintenanceAppointmentModel.ends_at_utc,MaintenanceAppointmentModel.status)
         cost_columns=(MaintenanceCostContextModel,) if include_detail else (MaintenanceCostContextModel.id,MaintenanceCostContextModel.issue_id)
         link_columns=(MaintenanceIssueExpenseLinkModel,) if include_detail else (MaintenanceIssueExpenseLinkModel.issue_id,MaintenanceIssueExpenseLinkModel.archived_at)
@@ -247,6 +322,55 @@ class SQLiteMaintenanceTransaction:
         assignment_columns=(MaintenanceAssignmentModel.issue_id,MaintenanceAssignmentModel.provider_display_name_snapshot,MaintenanceAssignmentModel.ended_at) if not include_detail else (MaintenanceAssignmentModel,)
         for row in self.connection.execute(select(*quote_columns).where(MaintenanceQuoteModel.issue_id.in_(issue_ids))).mappings(): quotes[row["issue_id"]].append(dict(row))
         for row in self.connection.execute(select(*assignment_columns).where(MaintenanceAssignmentModel.issue_id.in_(issue_ids))).mappings(): assignments[row["issue_id"]].append(dict(row))
+        journal_summaries={issue_id:{"actual_work_started":None,"actual_work_completed":None} for issue_id in issues}
+        journal_evidence_counts={issue_id:0 for issue_id in issues}
+        if include_detail:
+            # A windowed query retains only the ten newest entries per issue;
+            # detail therefore never pulls an unbounded history collection.
+            ranked=select(
+                MaintenanceWorkJournalEntryModel,
+                func.row_number().over(
+                    partition_by=MaintenanceWorkJournalEntryModel.issue_id,
+                    order_by=(MaintenanceWorkJournalEntryModel.occurred_at_utc.desc(),MaintenanceWorkJournalEntryModel.recorded_at_utc.desc(),MaintenanceWorkJournalEntryModel.id.desc()),
+                ).label("rank"),
+            ).where(MaintenanceWorkJournalEntryModel.issue_id.in_(issue_ids)).subquery()
+            for row in self.connection.execute(select(ranked).where(ranked.c.rank<=10)).mappings():
+                item={key:value for key,value in row.items() if key!="rank"}
+                journals[item["issue_id"]].append(item)
+            for issue_id in journals:
+                journals[issue_id].sort(key=lambda item:(item["occurred_at_utc"],item["recorded_at_utc"],item["id"]),reverse=True)
+            for row in self.connection.execute(
+                select(MaintenanceWorkJournalEntryModel.issue_id,func.count().label("count"))
+                .where(MaintenanceWorkJournalEntryModel.issue_id.in_(issue_ids))
+                .group_by(MaintenanceWorkJournalEntryModel.issue_id)
+            ).mappings(): journal_counts[row["issue_id"]]=row["count"]
+            child=MaintenanceWorkJournalEntryModel.__table__.alias("journal_correction")
+            effective=~exists(select(child.c.id).where(child.c.corrects_entry_id==MaintenanceWorkJournalEntryModel.id))
+            kind=case((MaintenanceWorkJournalEntryModel.entry_kind=="correction",MaintenanceWorkJournalEntryModel.corrected_entry_kind),else_=MaintenanceWorkJournalEntryModel.entry_kind)
+            effective_rows=self.connection.execute(
+                select(MaintenanceWorkJournalEntryModel,kind.label("effective_kind"))
+                .where(MaintenanceWorkJournalEntryModel.issue_id.in_(issue_ids),effective)
+                .order_by(MaintenanceWorkJournalEntryModel.issue_id,MaintenanceWorkJournalEntryModel.occurred_at_utc,MaintenanceWorkJournalEntryModel.recorded_at_utc,MaintenanceWorkJournalEntryModel.id)
+            ).mappings()
+            for row in effective_rows:
+                item=dict(row); summary=journal_summaries[item["issue_id"]]
+                if item["effective_kind"]=="work_started" and summary["actual_work_started"] is None:
+                    summary["actual_work_started"]=item
+                if item["effective_kind"]=="work_completed" and item["operator_verified"] and item["outcome_status"]=="completed" and summary["actual_work_completed"] is None:
+                    summary["actual_work_completed"]=item
+            if self.files:
+                journal_owner = {
+                    row["id"]: row["issue_id"]
+                    for row in self.connection.execute(
+                        select(MaintenanceWorkJournalEntryModel.id, MaintenanceWorkJournalEntryModel.issue_id)
+                        .where(MaintenanceWorkJournalEntryModel.issue_id.in_(issue_ids))
+                    ).mappings()
+                }
+                active = self.files.active_link_counts_for_entities(
+                    self.connection, "maintenance_work_journal_entry", list(journal_owner),
+                )
+                for entry_id, count in active.items():
+                    journal_evidence_counts[journal_owner[entry_id]] += count
         contexts=self.portfolio.contexts_for_property_spaces(self.connection,[(row["property_id"],row["space_id"]) for row in issues.values()])
         if include_detail:
             for issue_id, values in quotes.items():
@@ -260,6 +384,7 @@ class SQLiteMaintenanceTransaction:
         cost_files=self.files.links_for_entities(self.connection,"maintenance_cost_context",[row["id"] for values in costs.values() for row in values]) if include_detail and self.files else {}
         quote_files=self.files.links_for_entities(self.connection,"maintenance_quote",[row["id"] for values in quotes.values() for row in values]) if include_detail and self.files else {}
         assignment_files=self.files.links_for_entities(self.connection,"maintenance_assignment",[row["id"] for values in assignments.values() for row in values]) if include_detail and self.files else {}
+        journal_files=self.files.links_for_entities(self.connection,"maintenance_work_journal_entry",[row["id"] for values in journals.values() for row in values]) if include_detail and self.files else {}
         party_states=(
             self.reporter_party_states([row["reporter_party_id"] for row in issues.values() if row["reporter_party_id"]])
             if include_detail else {}
@@ -270,7 +395,8 @@ class SQLiteMaintenanceTransaction:
             self.communications.summaries_for_entities(self.connection,"maintenance_issue",issue_ids)
             if include_detail and self.communications else {}
         )
-        return {issue_id:{"issue":issue,"appointments":appointments[issue_id],"costs":costs[issue_id],"links":links[issue_id],"quotes":quotes[issue_id],"assignments":assignments[issue_id],"context":contexts.get((issue["property_id"],issue["space_id"])),"tasks":tasks.get(issue_id,[]),"expenses":expenses,"files":issue_files.get(issue_id,[]),"appointment_files":appointment_files,"cost_files":cost_files,"quote_files":quote_files,"assignment_files":assignment_files,"party_states":party_states,"provider_states":provider_states,"evidence_count":None if include_detail else sum(evidence_counts.get((entity_type,item_id),0) for entity_type,item_id in [("maintenance_issue",issue_id)]+[("maintenance_appointment",item["id"]) for item in appointments[issue_id]]+[("maintenance_cost_context",item["id"]) for item in costs[issue_id]]),"communications":communications.get(issue_id,[])} for issue_id,issue in issues.items()}
+        corrected_ids=self.work_journal_corrected_ids([row["id"] for values in journals.values() for row in values]) if include_detail else set()
+        return {issue_id:{"issue":issue,"appointments":appointments[issue_id],"costs":costs[issue_id],"links":links[issue_id],"quotes":quotes[issue_id],"assignments":assignments[issue_id],"journals":journals[issue_id],"journal_count":journal_counts[issue_id],"journal_corrected_ids":corrected_ids,"journal_summary":journal_summaries[issue_id],"journal_evidence_count":journal_evidence_counts[issue_id],"context":contexts.get((issue["property_id"],issue["space_id"])),"tasks":tasks.get(issue_id,[]),"expenses":expenses,"files":issue_files.get(issue_id,[]),"appointment_files":appointment_files,"cost_files":cost_files,"quote_files":quote_files,"assignment_files":assignment_files,"journal_files":journal_files,"party_states":party_states,"provider_states":provider_states,"evidence_count":None if include_detail else sum(evidence_counts.get((entity_type,item_id),0) for entity_type,item_id in [("maintenance_issue",issue_id)]+[("maintenance_appointment",item["id"]) for item in appointments[issue_id]]+[("maintenance_cost_context",item["id"]) for item in costs[issue_id]]),"communications":communications.get(issue_id,[])} for issue_id,issue in issues.items()}
     def comparison_projection(self, issue_id):
         issue=self.connection.execute(select(MaintenanceIssueModel.id,MaintenanceIssueModel.reported_timezone).where(MaintenanceIssueModel.id==issue_id)).mappings().first()
         if issue is None:return {}

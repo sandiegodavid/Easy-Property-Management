@@ -180,7 +180,7 @@ class MaintenanceService:
                 old=self._require(tx.quote,command.replaces_quote_id,"Quote")
                 if old["issue_id"]!=issue_id or old["provider_party_id"]!=command.provider_party_id or not old["withdrawn_at"]: raise MaintenanceConflictError("Replacement must target a withdrawn quote for the same issue and provider.")
                 if tx.quote_replacement(command.replaces_quote_id): raise MaintenanceConflictError("Quote already has a replacement.","quote_replaced")
-            now=_stamp(); item={"id":str(uuid4()),"issue_id":issue_id,"provider_party_id":command.provider_party_id,"provider_display_name_snapshot":provider["display_name"],"label":command.label,"scope_summary":command.scope_summary,"amount_minor":command.amount,"currency_code":"USD","received_on":command.received_on,"valid_through":command.valid_through,"terms_notes":command.terms_notes,"replaces_quote_id":command.replaces_quote_id,"withdrawn_at":None,"withdrawal_reason":None,"idempotency_key":idempotency_key,"request_fingerprint":fp,"created_at":now}
+            now=_stamp(); item={"id":str(uuid4()),"issue_id":issue_id,"provider_party_id":command.provider_party_id,"provider_display_name_snapshot":provider["display_name"],"label":command.label,"scope_summary":command.scope_summary,"amount_minor":command.amount,"currency_code":"USD","received_on":command.received_on,"valid_through":command.valid_through,"earliest_work_start_on":command.earliest_work_start_on,"estimated_work_finish_on":command.estimated_work_finish_on,"terms_notes":command.terms_notes,"replaces_quote_id":command.replaces_quote_id,"withdrawn_at":None,"withdrawal_reason":None,"idempotency_key":idempotency_key,"request_fingerprint":fp,"created_at":now}
             tx.insert_quote(item); self._audit(tx,"maintenance_quote",item["id"],"created",None,_dict(item),"quote_created"); return _dict(item)
         return self.unit_of_work.write(op)
     def withdraw_quote(self, quote_id, reason, confirmed):
@@ -326,6 +326,17 @@ class MaintenanceService:
         result["costContexts"]=[{**_dict(item),"files":[self._file(link) for link in projection["cost_files"].get(item["id"],[])]} for item in projection["costs"]]
         result["quotes"]=[{**self._provider_state(_dict(item),projection["provider_states"]),"files":[self._file(link) for link in projection["quote_files"].get(item["id"],[])]} for item in projection["quotes"]]
         result["assignments"]=[{**self._provider_state(_dict(item),projection["provider_states"]),"files":[self._file(link) for link in projection["assignment_files"].get(item["id"],[])]} for item in projection["assignments"]]
+        result["workJournalPreview"]=[{**_dict(item),"effectiveKind":item["corrected_entry_kind"] or item["entry_kind"],"isEffective":item["id"] not in projection["journal_corrected_ids"],"files":[self._file(link) for link in projection["journal_files"].get(item["id"],[])]} for item in projection["journals"]]
+        result["workJournalEntryCount"]=projection["journal_count"]
+        # Preview is intentionally capped at ten rows; the count is not.
+        # Only active links are evidence for the current issue state.
+        result["activeCompletionEvidenceCount"]=projection["journal_evidence_count"]
+        journal_summary=projection["journal_summary"]
+        def timing_view(item):
+            if item is None:return None
+            return {**_dict(item),"effectiveKind":item["effective_kind"],"isEffective":True,"files":[]}
+        result["actualWorkStarted"]=timing_view(journal_summary["actual_work_started"])
+        result["actualWorkCompleted"]=timing_view(journal_summary["actual_work_completed"])
         result["expenseLinks"]= [{**_dict(item),"expense":_camel_mapping(projection["expenses"].get(item["expense_id"]))} for item in projection["links"]]
         result["tasks"]=[_camel_mapping(item) for item in projection["tasks"]]
         result["reporter"]=self._reporter_view(issue,projection["party_states"])

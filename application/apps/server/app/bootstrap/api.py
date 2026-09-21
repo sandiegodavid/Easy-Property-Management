@@ -42,6 +42,7 @@ from app.bootstrap.communication_context import SQLiteCommunicationContextOperat
 from app.modules.communications.domain.audit_policy import COMMUNICATION_ACTIVITY_POLICY
 from app.modules.maintenance.api.router import build_router as build_maintenance_router
 from app.modules.maintenance.application.service import MaintenanceService
+from app.modules.maintenance.application.work_journal_service import WorkJournalService
 from app.modules.maintenance.application.file_links import MaintenanceFileLinkValidator
 from app.modules.maintenance.infrastructure.unit_of_work import SQLiteMaintenanceUnitOfWork
 from app.modules.maintenance.infrastructure.file_links import SQLiteMaintenanceFileLinkOperations
@@ -229,6 +230,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     ))
     inspections = InspectionService(inspection_unit_of_work, files)
     maintenance = MaintenanceService(maintenance_unit_of_work)
+    work_journal = WorkJournalService(maintenance_unit_of_work)
     leases = LeaseService(lease_unit_of_work, inspections.attention_for_lease)
 
     @asynccontextmanager
@@ -272,6 +274,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.expense_service = expenses
     app.state.deposit_service = deposits
     app.state.maintenance_service = maintenance
+    app.state.work_journal_service = work_journal
     app.include_router(build_router(service, runtime))
     policies = AuditSnapshotPolicyRegistry({
         ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -333,6 +336,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("maintenance_expense_link", 1): DEFAULT_SNAPSHOT_POLICY,
         ("maintenance_quote", 1): DEFAULT_SNAPSHOT_POLICY,
         ("maintenance_assignment", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("maintenance_work_journal_entry", 1): DEFAULT_SNAPSHOT_POLICY,
     }, activity_policies={
         ("task", 1): TASK_ACTIVITY_POLICY,
         ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
@@ -375,6 +379,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("maintenance_expense_link", 1): MAINTENANCE_ACTIVITY_POLICY,
         ("maintenance_quote", 1): MAINTENANCE_ACTIVITY_POLICY,
         ("maintenance_assignment", 1): MAINTENANCE_ACTIVITY_POLICY,
+        ("maintenance_work_journal_entry", 1): MAINTENANCE_ACTIVITY_POLICY,
     })
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime))
@@ -390,7 +395,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_expense_router(expenses, runtime))
     app.include_router(build_deposit_router(deposits, runtime))
     app.include_router(build_communications_router(communications, runtime))
-    app.include_router(build_maintenance_router(maintenance, runtime))
+    app.include_router(build_maintenance_router(maintenance, work_journal, runtime))
     return app
 
 

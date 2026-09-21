@@ -14,6 +14,7 @@ from sqlalchemy import event, text
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
+from app.modules.files.application.ports import FileLink
 from app.modules.communications.infrastructure.link_reader import SQLiteCommunicationLinkReader
 from app.modules.communications.application.service import CommunicationCommand, CommunicationService, LinkInput, ParticipantInput
 from app.modules.communications.infrastructure.unit_of_work import SQLiteCommunicationUnitOfWork
@@ -24,9 +25,13 @@ from app.modules.finance.domain.models import VoidCommand
 from app.modules.finance.infrastructure.expense_context_reader import SQLiteExpenseContextReader
 from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpenseUnitOfWork
 from app.modules.maintenance.application.service import MaintenanceService
+from app.modules.maintenance.application.work_journal_service import WorkJournalService
 from app.modules.maintenance.domain.audit_policy import MAINTENANCE_ACTIVITY_POLICY
 from app.modules.maintenance.domain.models import AppointmentCreate, AssignmentCreate, IssueCreate, QuoteCreate, ReporterAttribution, ReporterCorrection, MaintenanceConflictError, MaintenanceError
+from app.modules.maintenance.domain.work_journal import WorkJournalCreate
 from app.modules.maintenance.infrastructure.unit_of_work import SQLiteMaintenanceUnitOfWork
+from app.modules.maintenance.infrastructure.file_links import SQLiteMaintenanceFileLinkOperations
+from app.modules.maintenance.application.file_links import MaintenanceFileLinkValidator
 from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
 from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
@@ -91,6 +96,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             self.party_operations, SQLiteLeaseContextReader(), SQLiteCommunicationLinkReader(),
             SQLiteProviderContextReader(),
         ))
+        self.journal = WorkJournalService(self.service.unit_of_work)
 
     def provider(self, status="neutral"):
         providers=ProviderService(SQLiteProviderUnitOfWork(
@@ -318,6 +324,10 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             self._local_midday(datetime.now(ZoneInfo("America/Los_Angeles")).date()).isoformat(), "America/Los_Angeles",
             (ParticipantInput(party_id, "reporter"),), (LinkInput("maintenance_issue", issue["id"]),), record=True,
         ), str(uuid4()))
+        journal_entry = self.journal.record(issue["id"], WorkJournalCreate(
+            None, "work_completed", "operator_observation", datetime.now(UTC).isoformat(), "Backup repair completed",
+            outcome_status="completed", outcome_summary="The repair is complete.", follow_up_required=False, operator_verified=True,
+        ), str(uuid4()))
         archive = Path(self.temp.name) / "maintenance.epm-backup"
         backups = BackupService(self.workspace, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)), lambda database: AuditRecorder(SQLiteAuditRepository(database)))
         backups.create_backup("a sufficiently long test passphrase", output_path=archive)
@@ -332,6 +342,10 @@ class MaintenanceWorkflowTests(unittest.TestCase):
         detail = restored.detail(issue["id"])
         self.assertEqual("Local operator", detail["reporter"]["displayName"])
         self.assertEqual(["Backup repair call"], [item["subject"] for item in detail["communications"]])
+        restored_journal = WorkJournalService(restored.unit_of_work)
+        journal_page = restored_journal.issue_journal(issue["id"])
+        self.assertEqual([journal_entry["id"]], [item["id"] for item in journal_page["items"]])
+        self.assertEqual("work_completed", detail["actualWorkCompleted"]["effectiveKind"])
         restored_communications = CommunicationService(SQLiteCommunicationUnitOfWork(
             database, AuditRecorder(SQLiteAuditRepository(database)),
             SQLiteCommunicationContextOperations(SQLiteTaskTransactionOperations()),
@@ -396,6 +410,42 @@ class MaintenanceWorkflowTests(unittest.TestCase):
         finally:
             engine.dispose()
 
+    def test_append_only_work_journal_correction_and_terminal_history(self) -> None:
+        issue = self.issue()
+        start = self.journal.record(issue["id"], WorkJournalCreate(
+            None, "work_started", "operator_observation", datetime.now(UTC).isoformat(), "Work began",
+        ), str(uuid4()))
+        completed = self.journal.record(issue["id"], WorkJournalCreate(
+            None, "work_completed", "operator_observation", datetime.now(UTC).isoformat(), "Repair completed",
+            outcome_status="completed", outcome_summary="Leak stopped", follow_up_required=False, operator_verified=True,
+        ), str(uuid4()))
+        correction = self.journal.record(issue["id"], WorkJournalCreate(
+            None, "correction", "operator_observation", datetime.now(UTC).isoformat(), "Corrected completion",
+            outcome_status="partially_completed", outcome_summary="Leak reduced", follow_up_required=True, operator_verified=True,
+            corrects_entry_id=completed["id"], corrected_entry_kind="work_completed", correction_reason="Initial observation overstated repair",
+        ), str(uuid4()))
+        page = self.journal.issue_journal(issue["id"])
+        states = {item["id"]: item["isEffective"] for item in page["items"]}
+        self.assertTrue(states[start["id"]]); self.assertFalse(states[completed["id"]]); self.assertTrue(states[correction["id"]])
+        with self.assertRaises(MaintenanceConflictError):
+            self.journal.record(issue["id"], WorkJournalCreate(
+                None, "correction", "operator_observation", datetime.now(UTC).isoformat(), "Second correction",
+                outcome_status="completed", outcome_summary="No leak", follow_up_required=False, operator_verified=True,
+                corrects_entry_id=completed["id"], corrected_entry_kind="work_completed", correction_reason="Duplicate",
+            ), str(uuid4()))
+        self.service.transition(issue["id"], "resolve", "Issue addressed", True)
+        with self.assertRaises(MaintenanceConflictError):
+            self.journal.record(issue["id"], WorkJournalCreate(None, "general_note", "other_report", datetime.now(UTC).isoformat(), "Late note"), str(uuid4()))
+        historical = self.journal.record(issue["id"], WorkJournalCreate(None, "general_note", "other_report", datetime.now(UTC).isoformat(), "Late note", historical_entry_confirmed=True), str(uuid4()))
+        self.assertEqual(historical["entryKind"], "general_note")
+        engine = create_sqlite_engine(self.workspace.paths.database)
+        try:
+            with engine.begin() as connection:
+                with self.assertRaises(Exception):
+                    connection.execute(text("DELETE FROM maintenance_work_journal_entries WHERE id=:id"), {"id": start["id"]})
+        finally:
+            engine.dispose()
+
     def test_invalid_archived_expense_link_reason_fails_workspace_validation(self) -> None:
         issue = self.issue()
         link = self.service.link_expense(issue["id"], self.expense()["id"], str(uuid4()))
@@ -433,6 +483,18 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             })
             self.assertEqual(scheduled.status_code, 201, scheduled.text)
             self.assertTrue(client.get("/api/maintenance-issues", params={"hasEvidence": False}).json()["items"])
+            journal = client.post(f"/api/maintenance-issues/{created.json()['id']}/work-journal", json={
+                "entryKind": "work_completed", "sourceKind": "operator_observation",
+                "occurredAtUtc": datetime.now(UTC).isoformat(), "summary": "Outlet repaired",
+                "outcomeStatus": "completed", "outcomeSummary": "Cover secured.",
+                "followUpRequired": False, "operatorVerified": True,
+                "idempotencyKey": str(uuid4()),
+            })
+            self.assertEqual(journal.status_code, 201, journal.text)
+            detail = client.get(f"/api/maintenance-issues/{created.json()['id']}")
+            self.assertEqual(detail.status_code, 200, detail.text)
+            self.assertEqual(1, detail.json()["workJournalEntryCount"])
+            self.assertEqual("work_completed", detail.json()["actualWorkCompleted"]["effectiveKind"])
 
     def test_quotes_assignments_replacement_and_avoid_override(self) -> None:
         issue = self.issue(); provider = self.provider(); today = datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
@@ -445,6 +507,193 @@ class MaintenanceWorkflowTests(unittest.TestCase):
         with self.assertRaises(MaintenanceConflictError):
             self.service.create_assignment(issue["id"], AssignmentCreate(avoided, selection_reason="Emergency", direct_assignment_confirmed=True), str(uuid4()))
         self.workspace.open()
+
+    def test_quote_schedule_dates_are_paired_and_persisted(self) -> None:
+        issue = self.issue(); provider = self.provider(); today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
+        quote = self.service.create_quote(issue["id"], QuoteCreate(
+            provider, "Scheduled repair", "Repair the valve.", "125.00", today.isoformat(),
+            earliest_work_start_on=(today + timedelta(days=2)).isoformat(),
+            estimated_work_finish_on=(today + timedelta(days=4)).isoformat(),
+        ), str(uuid4()))
+        self.assertEqual((today + timedelta(days=2)).isoformat(), quote["earliestWorkStartOn"])
+        with self.assertRaises(MaintenanceError):
+            QuoteCreate(provider, "Incomplete", "Scope.", "1.00", today.isoformat(), earliest_work_start_on=today.isoformat())
+        engine = create_sqlite_engine(self.workspace.paths.database)
+        try:
+            with engine.begin() as connection:
+                connection.execute(text(
+                    "UPDATE maintenance_quotes SET earliest_work_start_on=:on WHERE id=:id",
+                ), {"on": (today + timedelta(days=3)).isoformat(), "id": quote["id"]})
+            with self.assertRaises(WorkspaceError):
+                self.workspace.open()
+        finally:
+            engine.dispose()
+
+    def test_work_journal_audit_history_is_exact_and_orphans_fail_validation(self) -> None:
+        issue = self.issue()
+        entry = self.journal.record(issue["id"], WorkJournalCreate(
+            None, "general_note", "operator_observation", datetime.now(UTC).isoformat(), "Journal note",
+        ), str(uuid4()))
+        engine = create_sqlite_engine(self.workspace.paths.database)
+        try:
+            with engine.begin() as connection:
+                event = connection.execute(text(
+                    "SELECT occurred_at, before_snapshot, after_snapshot, changed_fields, reason, actor_kind, "
+                    "actor_reference, correlation_id, schema_version FROM audit_events "
+                    "WHERE entity_type='maintenance_work_journal_entry' AND entity_id=:id"
+                ), {"id": entry["id"]}).mappings().one()
+                connection.execute(text(
+                    "INSERT INTO audit_events (id, occurred_at, entity_type, entity_id, action, before_snapshot, "
+                    "after_snapshot, changed_fields, reason, actor_kind, actor_reference, correlation_id, schema_version) "
+                    "VALUES (:id, :occurred_at, 'maintenance_work_journal_entry', :entry_id, 'created', "
+                    ":before_snapshot, :after_snapshot, :changed_fields, :reason, :actor_kind, :actor_reference, "
+                    ":correlation_id, :schema_version)"
+                ), {**dict(event), "id": str(uuid4()), "entry_id": entry["id"]})
+            with self.assertRaises(WorkspaceError):
+                self.workspace.open()
+            with engine.begin() as connection:
+                connection.execute(text("DROP TRIGGER audit_events_no_delete"))
+                connection.execute(text("DELETE FROM audit_events WHERE entity_type='maintenance_work_journal_entry' AND entity_id=:id AND id != (SELECT min(id) FROM audit_events WHERE entity_type='maintenance_work_journal_entry' AND entity_id=:id)"), {"id": entry["id"]})
+                connection.execute(text("CREATE TRIGGER audit_events_no_delete BEFORE DELETE ON audit_events BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END"))
+                connection.execute(text("DROP TRIGGER audit_events_no_update"))
+                connection.execute(text("UPDATE audit_events SET after_snapshot='{}' WHERE entity_type='maintenance_work_journal_entry' AND entity_id=:id"), {"id": entry["id"]})
+                connection.execute(text("CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON audit_events BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END"))
+            with self.assertRaises(WorkspaceError):
+                self.workspace.open()
+        finally:
+            engine.dispose()
+
+    def test_missing_work_journal_audit_and_future_occurrence_fail_restore_validation(self) -> None:
+        issue = self.issue()
+        entry = self.journal.record(issue["id"], WorkJournalCreate(
+            None, "general_note", "operator_observation", datetime.now(UTC).isoformat(), "Journal note",
+        ), str(uuid4()))
+        engine = create_sqlite_engine(self.workspace.paths.database)
+        try:
+            with engine.begin() as connection:
+                connection.execute(text("DROP TRIGGER audit_events_no_delete"))
+                connection.execute(text("DELETE FROM audit_events WHERE entity_type='maintenance_work_journal_entry' AND entity_id=:id"), {"id": entry["id"]})
+                connection.execute(text("CREATE TRIGGER audit_events_no_delete BEFORE DELETE ON audit_events BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END"))
+            with self.assertRaises(WorkspaceError):
+                self.workspace.open()
+        finally:
+            engine.dispose()
+
+        # A separate clean workspace checks the retained future-occurrence
+        # relationship rather than relying on command-time validation alone.
+        fresh = tempfile.TemporaryDirectory(); self.addCleanup(fresh.cleanup)
+        other = WorkspaceService(LocalConfig(Path(fresh.name) / "config.json", Path(fresh.name) / "workspace"))
+        other.initialize()
+        other.config.config_path.write_text(json.dumps({"localWorkspacePath": str(other.paths.root)}), encoding="utf-8")
+        recorder = AuditRecorder(SQLiteAuditRepository(other.paths.database))
+        portfolio = PortfolioService(SQLitePortfolioUnitOfWork(other.paths.database, recorder), time_zone_resolver=BundledAddressTimeZoneResolver())
+        property_record = portfolio.create_property(PropertyCreateCommand("Future validation home", "1 Main Street", "Portland", "US", "single_family_home", (OwnershipInput("local_operator"),), region="OR"))
+        service = MaintenanceService(SQLiteMaintenanceUnitOfWork(other.paths.database, recorder, SQLitePortfolioContextReader(), SQLiteExpenseContextReader(), SQLiteTaskContextReader(), SQLiteTaskTransactionOperations(), SQLiteFileLinkReader(), SQLitePartyOperations(other.paths.database), SQLiteLeaseContextReader(), SQLiteCommunicationLinkReader(), SQLiteProviderContextReader()))
+        second_issue = service.create_issue(IssueCreate(property_record.id, None, "Future entry", "Validate retained future occurrence.", "plumbing", None, "normal", datetime.now(UTC).isoformat(), ReporterAttribution("manager", "local_operator")), str(uuid4()))
+        second_entry = WorkJournalService(service.unit_of_work).record(second_issue["id"], WorkJournalCreate(None, "general_note", "operator_observation", datetime.now(UTC).isoformat(), "Recorded note"), str(uuid4()))
+        second_engine = create_sqlite_engine(other.paths.database)
+        try:
+            with second_engine.begin() as connection:
+                connection.execute(text("DROP TRIGGER maintenance_work_journal_entries_no_update"))
+                connection.execute(text("UPDATE maintenance_work_journal_entries SET occurred_at_utc=:at WHERE id=:id"), {"at": (datetime.now(UTC) + timedelta(minutes=6)).isoformat(), "id": second_entry["id"]})
+                connection.execute(text("CREATE TRIGGER maintenance_work_journal_entries_no_update BEFORE UPDATE ON maintenance_work_journal_entries BEGIN SELECT RAISE(ABORT, 'maintenance work journal entries are immutable'); END"))
+            with self.assertRaises(WorkspaceError):
+                other.open()
+        finally:
+            second_engine.dispose()
+
+    def test_orphaned_work_journal_audit_fails_restore_validation(self) -> None:
+        issue = self.issue()
+        entry = self.journal.record(issue["id"], WorkJournalCreate(
+            None, "general_note", "operator_observation", datetime.now(UTC).isoformat(), "Journal note",
+        ), str(uuid4()))
+        engine = create_sqlite_engine(self.workspace.paths.database)
+        try:
+            with engine.begin() as connection:
+                source = connection.execute(text(
+                    "SELECT occurred_at, before_snapshot, after_snapshot, changed_fields, reason, actor_kind, "
+                    "actor_reference, correlation_id, schema_version FROM audit_events "
+                    "WHERE entity_type='maintenance_work_journal_entry' AND entity_id=:id"
+                ), {"id": entry["id"]}).mappings().one()
+                connection.execute(text(
+                    "INSERT INTO audit_events (id, occurred_at, entity_type, entity_id, action, before_snapshot, "
+                    "after_snapshot, changed_fields, reason, actor_kind, actor_reference, correlation_id, schema_version) "
+                    "VALUES (:id, :occurred_at, 'maintenance_work_journal_entry', :entry_id, 'created', "
+                    ":before_snapshot, :after_snapshot, :changed_fields, :reason, :actor_kind, :actor_reference, "
+                    ":correlation_id, :schema_version)"
+                ), {**dict(source), "id": str(uuid4()), "entry_id": str(uuid4())})
+            with self.assertRaises(WorkspaceError):
+                self.workspace.open()
+        finally:
+            engine.dispose()
+
+    def test_work_journal_link_rules_and_all_entry_evidence_count(self) -> None:
+        issue = self.issue()
+        entries = [self.journal.record(issue["id"], WorkJournalCreate(
+            None, "general_note", "operator_observation", datetime.now(UTC).isoformat(), f"Note {index}",
+        ), str(uuid4())) for index in range(11)]
+        engine = create_sqlite_engine(self.workspace.paths.database)
+        file_id, link_id = str(uuid4()), str(uuid4())
+        try:
+            with engine.begin() as connection:
+                connection.execute(text("INSERT INTO file_records (id, original_name, media_type, size_bytes, content_sha256, created_at) VALUES (:id, 'report.txt', 'text/plain', 1, :hash, :at)"), {"id": file_id, "hash": "a" * 64, "at": datetime.now(UTC).isoformat()})
+                connection.execute(text("INSERT INTO file_links (id, file_id, entity_type, entity_id, purpose, created_at) VALUES (:id, :file, 'maintenance_work_journal_entry', :entry, 'supporting_document', :at)"), {"id": link_id, "file": file_id, "entry": entries[0]["id"], "at": datetime.now(UTC).isoformat()})
+            detail = self.service.detail(issue["id"])
+            self.assertEqual(1, detail["activeCompletionEvidenceCount"])
+            journal_page = self.journal.issue_journal(issue["id"])
+            linked = next(item for item in journal_page["items"] if item["id"] == entries[0]["id"])
+            self.assertEqual(link_id, linked["files"][0]["id"])
+            with engine.begin() as connection:
+                connection.execute(text("UPDATE file_links SET purpose='not_allowed' WHERE id=:id"), {"id": link_id})
+            with self.assertRaises(WorkspaceError):
+                self.workspace.open()
+        finally:
+            engine.dispose()
+
+    def test_provider_work_journal_uses_assignment_snapshot_and_start_timing(self) -> None:
+        issue = self.issue()
+        provider = self.provider()
+        today = datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
+        quote = self.service.create_quote(issue["id"], QuoteCreate(
+            provider, "Repair quote", "Repair the affected fixture.", "100.00", today,
+        ), str(uuid4()))
+        assignment = self.service.create_assignment(issue["id"], AssignmentCreate(provider, quote["id"]), str(uuid4()))
+        self.journal.record(issue["id"], WorkJournalCreate(
+            assignment["id"], "work_started", "provider_report", datetime.now(UTC).isoformat(), "Provider started work",
+        ), str(uuid4()))
+        page = self.journal.provider_history(provider)
+        item = page["items"][0]
+        self.assertEqual("Fast Plumbing", item["providerDisplayNameSnapshot"])
+        self.assertEqual(assignment["id"], item["assignmentId"])
+        self.assertIsNotNone(item["recordedAssignmentToWorkStartSeconds"])
+
+    def test_superseded_work_journal_entries_reject_new_evidence_at_creation_and_restore(self) -> None:
+        issue = self.issue()
+        original = self.journal.record(issue["id"], WorkJournalCreate(
+            None, "work_completed", "operator_observation", datetime.now(UTC).isoformat(), "First completion",
+            outcome_status="completed", outcome_summary="Original outcome", follow_up_required=False, operator_verified=True,
+        ), str(uuid4()))
+        correction = self.journal.record(issue["id"], WorkJournalCreate(
+            None, "correction", "operator_observation", datetime.now(UTC).isoformat(), "Corrected completion",
+            outcome_status="partially_completed", outcome_summary="Correction outcome", follow_up_required=True, operator_verified=True,
+            corrects_entry_id=original["id"], corrected_entry_kind="work_completed", correction_reason="New evidence changed the conclusion",
+        ), str(uuid4()))
+        validator = MaintenanceFileLinkValidator(SQLiteMaintenanceFileLinkOperations(SQLiteFileLinkReader()))
+        engine = create_sqlite_engine(self.workspace.paths.database)
+        file_id = str(uuid4())
+        try:
+            with engine.begin() as connection:
+                with self.assertRaises(ValueError):
+                    validator.validate_create(connection, FileLink(
+                        id=str(uuid4()), entity_type="maintenance_work_journal_entry", entity_id=original["id"],
+                        purpose="completion_photo", created_at=datetime.now(UTC).isoformat(), file_id=file_id,
+                    ))
+                connection.execute(text("INSERT INTO file_records (id, original_name, media_type, size_bytes, content_sha256, created_at) VALUES (:id, 'new-proof.txt', 'text/plain', 1, :hash, :at)"), {"id": file_id, "hash": "b" * 64, "at": datetime.now(UTC).isoformat()})
+                connection.execute(text("INSERT INTO file_links (id, file_id, entity_type, entity_id, purpose, created_at) VALUES (:id, :file, 'maintenance_work_journal_entry', :entry, 'completion_photo', :at)"), {"id": str(uuid4()), "file": file_id, "entry": original["id"], "at": (datetime.fromisoformat(correction["recordedAtUtc"]) + timedelta(seconds=1)).isoformat()})
+            with self.assertRaises(WorkspaceError):
+                self.workspace.open()
+        finally:
+            engine.dispose()
 
     def test_quote_replacement_is_single_use_and_audit_snapshots_detect_tampering(self) -> None:
         issue = self.issue(); provider = self.provider(); today = datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
