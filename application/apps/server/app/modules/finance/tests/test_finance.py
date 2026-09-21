@@ -45,6 +45,7 @@ from app.modules.finance.application.deposit_file_links import DepositFileLinkVa
 from app.modules.finance.infrastructure.deposit_file_links import SQLiteDepositFileLinkOperations
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.platform.config import LocalConfig
 from app.platform.product_migrations import ProductSchemaError, validate_latest_schema
 from app.bootstrap.api import create_app
@@ -833,6 +834,7 @@ class FinanceWorkflowTests(unittest.TestCase):
         self.assertNotIn("otherPaymentMethodNote", event["after"])
         self.assertEqual(contextual[-1]["after"]["maskedReference"], "•••• 1234")
 
+    @fast_backup_encryption()
     def test_receipt_method_snapshot_survives_encrypted_backup_and_restore(self):
         term = self.lease["terms"][0]
         expectation = self.finance.synchronize(self.lease["id"], SynchronizeExpectationsCommand(

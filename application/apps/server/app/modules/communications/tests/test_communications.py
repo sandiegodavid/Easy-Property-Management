@@ -25,6 +25,7 @@ from app.platform.product_migrations import ProductSchemaError, initialize_lates
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.platform.config import LocalConfig
 from app.bootstrap.api import create_app
 from fastapi.testclient import TestClient
@@ -272,6 +273,7 @@ class CommunicationWorkflowTests(unittest.TestCase):
         result = self.service.create(self.command(record=True, follow_up=FollowUpInput("Call back")), "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
         self.assertEqual(1, len(result["followUpTasks"]))
 
+    @fast_backup_encryption()
     def test_communication_dataset_survives_encrypted_backup_and_restore(self) -> None:
         root = Path(tempfile.mkdtemp()); workspace = WorkspaceService(LocalConfig(root / "config.json", root / "workspace", backup_destination_path=root / "backups")); workspace.initialize()
         engine = create_sqlite_engine(workspace.paths.database)

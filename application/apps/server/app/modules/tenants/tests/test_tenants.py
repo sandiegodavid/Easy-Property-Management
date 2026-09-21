@@ -38,6 +38,7 @@ from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantContactR
 from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.platform.config import LocalConfig
 from app.platform.migration_errors import MigrationSchemaError
 from app.platform.sqlite_engine import create_sqlite_engine
@@ -442,6 +443,7 @@ class TenantTests(unittest.TestCase):
         with self.assertRaises(TenantConflictError):
             self.tenants.restore(tenant["id"])
 
+    @fast_backup_encryption()
     def test_encrypted_backup_export_and_restore_preserve_tenant_data(self) -> None:
         tenant = self.tenants.create(TenantCreateCommand(
             "individual", "Backup Tenant", contacts=(

@@ -12,6 +12,7 @@ class MaintenanceCommandTests(TestCase):
         with self.assertRaises(MaintenanceError): AppointmentCreate("2026-09-20T10:00:00+00:00","2026-09-20T10:00:00+00:00","visit")
         self.assertEqual(CostCreate("operator_estimate","Plumber","12.34","2026-09-20").amount,1234)
         with self.assertRaises(MaintenanceError): CostCreate("operator_estimate","Plumber","12.3","2026-09-20")
+        with self.assertRaises(MaintenanceError): CostCreate("operator_estimate", "Plumber", "12.00", "2026-09-20T12:30:00")
 
     def test_local_operator_cannot_claim_historical_party_selection(self):
         with self.assertRaises(MaintenanceError):

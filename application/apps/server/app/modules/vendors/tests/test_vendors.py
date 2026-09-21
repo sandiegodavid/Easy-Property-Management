@@ -26,6 +26,7 @@ from app.modules.vendors.application.service import (
 from app.modules.vendors.infrastructure.unit_of_work import SQLiteProviderUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.modules.vendors.infrastructure.schema_validation import validate_vendor_schema
 from app.platform.migration_errors import MigrationSchemaError
 from app.platform.sqlite_engine import create_sqlite_engine
@@ -123,6 +124,7 @@ class ProviderTests(unittest.TestCase):
             self.assertEqual(client.post(f"/api/parties/{party_id}/archive", json={"confirmed": True}).status_code, 409)
             self.assertEqual(client.post(f"/api/providers/{party_id}/archive", json={"confirmed": True}).status_code, 200)
 
+    @fast_backup_encryption()
     def test_encrypted_backup_restore_preserves_provider_history(self) -> None:
         provider = self.providers.create(
             PartyCreateCommand("organization", "Restorable Provider"),

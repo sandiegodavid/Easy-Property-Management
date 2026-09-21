@@ -172,10 +172,9 @@ class FileStoreTests(unittest.TestCase):
             self.service,
             FilesystemContentStore(self.service.paths.files),
             SQLiteFileUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
-            link_validators=(_LimitedExpenseLinkValidator(limit=20),),
+            link_validators=(_LimitedExpenseLinkValidator(limit=2),),
         )
-        for number in range(19):
-            limited.add(self.source, f"receipt-{number}.pdf", "application/pdf", entity_type="expense", entity_id="expense-1", purpose="receipt")
+        limited.add(self.source, "receipt.pdf", "application/pdf", entity_type="expense", entity_id="expense-1", purpose="receipt")
 
         def add_one(number: int):
             try:

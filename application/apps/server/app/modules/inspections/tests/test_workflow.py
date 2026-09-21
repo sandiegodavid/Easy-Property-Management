@@ -30,6 +30,7 @@ from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLea
 from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.platform.config import LocalConfig
 
 
@@ -156,6 +157,7 @@ class InspectionWorkflowTests(unittest.TestCase):
         self.inspections.acknowledge(report["id"], self._acknowledge_all(report))
         with self.assertRaises(InspectionConflictError): self.inspections.finalize(report["id"], confirmed=True)
 
+    @fast_backup_encryption()
     def test_inspection_dataset_evidence_and_correlated_audit_round_trip_through_backup(self):
         template = self.inspections.create_template(
             display_name="Move-in checklist",

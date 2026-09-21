@@ -43,6 +43,7 @@ from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLea
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.platform.config import LocalConfig
 from app.platform.migration_errors import MigrationSchemaError
 
@@ -461,6 +462,7 @@ class LeaseTerminationTests(unittest.TestCase):
                             },
                         )
 
+    @fast_backup_encryption()
     def test_lease_history_and_documents_round_trip_through_backup_restore(self) -> None:
         today = date.today()
         self.service.add_renewal_option(self.lease["id"], RenewalCommand(

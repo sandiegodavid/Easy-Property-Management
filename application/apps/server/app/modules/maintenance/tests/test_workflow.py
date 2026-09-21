@@ -25,7 +25,7 @@ from app.modules.finance.infrastructure.expense_context_reader import SQLiteExpe
 from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpenseUnitOfWork
 from app.modules.maintenance.application.service import MaintenanceService
 from app.modules.maintenance.domain.audit_policy import MAINTENANCE_ACTIVITY_POLICY
-from app.modules.maintenance.domain.models import AppointmentCreate, CostCreate, IssueCreate, ReporterAttribution, ReporterCorrection, MaintenanceConflictError, MaintenanceError
+from app.modules.maintenance.domain.models import AppointmentCreate, IssueCreate, ReporterAttribution, ReporterCorrection, MaintenanceConflictError, MaintenanceError
 from app.modules.maintenance.infrastructure.unit_of_work import SQLiteMaintenanceUnitOfWork
 from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
 from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
@@ -45,6 +45,7 @@ from app.modules.tasks.infrastructure.context_reader import SQLiteTaskContextRea
 from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
 from app.modules.workspace.application.service import WorkspaceError, WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.platform.config import LocalConfig
 from app.platform.sqlite_engine import create_sqlite_engine
 from app.modules.vendors.infrastructure.context_reader import SQLiteProviderContextReader
@@ -98,7 +99,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
         return self.expenses.record_expense(ExpenseCreateCommand(
             idempotency_key=str(uuid4()), property_id=self.property_id,
             space_id=self.space_id, category_id=self.category_id,
-            paid_by_kind="local_operator", paid_on=datetime.now(UTC).date().isoformat(),
+            paid_by_kind="local_operator", paid_on=datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat(),
             amount="42.00", currency_code="USD", description="Repair supply",
             payee_name="Local hardware",
         ))
@@ -290,6 +291,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             detail = client.get(f"/api/maintenance-issues/{issue['id']}")
             self.assertEqual({"Initial repair call", "Corrected repair call"}, {item["subject"] for item in detail.json()["communications"]})
 
+    @fast_backup_encryption()
     def test_reporter_attribution_survives_backup_restore(self) -> None:
         issue = self.issue()
         party_property = self.portfolio.create_property(PropertyCreateCommand(
@@ -326,10 +328,6 @@ class MaintenanceWorkflowTests(unittest.TestCase):
         ))
         listed, _ = restored_communications.list(entity_type="maintenance_issue", entity_id=issue["id"])
         self.assertEqual([communication["id"]], [item["id"] for item in listed])
-
-    def test_cost_rejects_datetime_observed_on(self) -> None:
-        with self.assertRaises(MaintenanceError):
-            CostCreate("operator_estimate", "Plumber", "12.00", "2026-09-20T12:30:00")
 
     def test_future_appointment_blocks_resolution(self) -> None:
         item = self.issue()
