@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field, StrictBool, model_validator
 from app.modules.tasks.application.service import TaskConflictError, TaskError, TaskNotFoundError, TaskService
 from app.modules.workspace.application.runtime import WorkspaceRuntime
@@ -17,7 +17,19 @@ def build_router(service: TaskService, runtime: WorkspaceRuntime) -> APIRouter:
     @router.post("", status_code=status.HTTP_201_CREATED)
     def create(data: TaskCreateRequest): ready(True); return invoke(lambda: service.create(data.model_dump()).to_dict())
     @router.get("")
-    def list_tasks(status: str | None = None): ready(); return invoke(lambda: [task.to_dict() for task in service.list(status)])
+    def list_tasks(status: str | None = None, due: str | None = None, priority: str | None = None,
+                   includeVoided: bool = False, relatedEntityType: str | None = None,
+                   relatedEntityId: str | None = None, pageSize: int = Query(100, ge=1, le=500),
+                   cursor: str | None = None):
+        ready()
+        if (relatedEntityType is None) != (relatedEntityId is None):
+            raise HTTPException(422, "relatedEntityType and relatedEntityId must be supplied together.")
+        tasks, next_cursor = invoke(lambda: service.page(
+            status=status, due=due, priority=priority, include_voided=includeVoided,
+            related_entity_type=relatedEntityType,
+            related_entity_id=relatedEntityId, page_size=pageSize, cursor=cursor,
+        ))
+        return {"items": [task.to_dict() for task in tasks], "nextCursor": next_cursor}
     @router.get("/summary")
     def summary(): ready(); return service.summary()
     @router.get("/{task_id}")

@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from typing import Any, TypeVar
-from sqlalchemy import and_, or_, select
+from sqlalchemy import case, select
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.owner_management.domain.models import Concern
 from app.modules.owner_management.infrastructure.sqlalchemy_models import OwnerConcernFollowUpOperationModel, OwnerConcernModel
@@ -41,18 +41,24 @@ class _Tx:
         query=select(OwnerConcernModel)
         for column,key in ((OwnerConcernModel.owner_party_id,"owner_party_id"),(OwnerConcernModel.property_id,"property_id"),(OwnerConcernModel.space_id,"space_id"),(OwnerConcernModel.lease_id,"lease_id"),(OwnerConcernModel.tenant_party_id,"tenant_party_id"),(OwnerConcernModel.concern_type,"concern_type"),(OwnerConcernModel.priority,"priority"),(OwnerConcernModel.status,"status")):
             if filters.get(key) is not None: query=query.where(column==filters[key])
-        if cursor: query=query.where(OwnerConcernModel.id < cursor)
+        query=self.owner.context.apply_concern_filters(self.connection,query,filters,OwnerConcernModel)
         order={"urgent":0,"high":1,"normal":2,"low":3}
         # SQLite CASE keeps priority ordering deterministic while raised time remains descending.
-        from sqlalchemy import case
-        query=query.order_by(case(order,value=OwnerConcernModel.priority),OwnerConcernModel.raised_at_utc.desc(),OwnerConcernModel.id.desc()).limit(limit)
+        rank = case(order,value=OwnerConcernModel.priority)
+        if cursor:
+            cursor_rank, cursor_raised, cursor_id = cursor
+            query=query.where((rank > cursor_rank) | ((rank == cursor_rank) & ((OwnerConcernModel.raised_at_utc < cursor_raised) | ((OwnerConcernModel.raised_at_utc == cursor_raised) & (OwnerConcernModel.id < cursor_id)))))
+        query=query.order_by(rank,OwnerConcernModel.raised_at_utc.desc(),OwnerConcernModel.id.desc()).limit(limit)
         return [Concern(**dict(item)) for item in self.connection.execute(query).mappings()]
     def context(self, **values): return self.owner.context.context(self.connection,**values)
+    def active_property(self, property_id): return self.owner.context.active_property(self.connection,property_id)
     def originating_communication(self,*args): return self.owner.context.originating_communication(self.connection,*args)
     def create_task(self,values,*,correlation_id):
         return self.owner.context.create_task(self.connection,values,correlation_id, self.record_change)
     def task_views(self, concern_ids): return self.owner.context.task_views(self.connection,concern_ids)
+    def active_task_counts(self, concern_ids): return self.owner.context.active_task_counts(self.connection,concern_ids)
     def communication_counts(self, concern_ids): return self.owner.context.communication_counts(self.connection,concern_ids)
+    def detail_projection(self, concern): return self.owner.context.detail_projection(self.connection,concern)
     def record_change(self,**change): self.owner.recorder.record_change(self.connection.connection.driver_connection,**change)
 
 class SQLiteOwnerConcernPropertyArchiveGuard:

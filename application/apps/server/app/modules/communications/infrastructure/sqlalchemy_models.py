@@ -60,7 +60,7 @@ class CommunicationLinkModel(LocalBase):
     entity_id: Mapped[str] = mapped_column(String, nullable=False)
     property_timezone_snapshot: Mapped[str | None] = mapped_column(String)
     __table_args__ = (
-        CheckConstraint("entity_type IN ('party','property','space','lease','rent_expectation','rent_receipt','renewal_option','task','maintenance_issue')"),
+        CheckConstraint("entity_type IN ('party','property','space','lease','rent_expectation','rent_receipt','renewal_option','task','maintenance_issue','owner_concern')"),
         UniqueConstraint("communication_id", "entity_type", "entity_id", name="communication_links_unique_target"),
         Index("communication_links_target", "entity_type", "entity_id", "communication_id"),
     )

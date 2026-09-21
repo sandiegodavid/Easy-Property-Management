@@ -172,10 +172,24 @@ All times are evaluated using the application's injected clock boundary so tests
 - `status`: comma-separated list (`open,in_progress,completed,cancelled`).
 - `due`: `overdue`, `today`, `next7days`, `nodate`, or ISO date range `YYYY-MM-DD,YYYY-MM-DD`.
 - `priority`: comma-separated list.
-- `relatedEntityType`: filters by `related_entity_type`.
+- `relatedEntityType` and `relatedEntityId`: supplied together to filter the generic related-record link. This supports a bounded complete follow-up history for a record such as `owner_concern` without loading unrelated tasks.
 - `includeVoided`: `true` to include completed/cancelled (default false).
 - Cursor pagination: default page size 100, max 500.
 - Default ordering: `due_at_utc ASC NULLS LAST, created_at_utc DESC`.
+
+The persistence query applies status, priority, and related-record predicates before
+pagination. Due filters use each task's stored due timezone, so they are applied by
+the application after reading ordered bounded chunks. A request examines at most
+1,000 candidate rows, in at most ten persistence queries. When more than
+`pageSize` matches are found, `nextCursor` identifies the final returned item, so
+matches already scanned but not yet returned remain available on the next page. When
+the 1,000-candidate scan budget is exhausted before filling a page,
+`nextCursor` instead identifies the final scanned candidate. Consequently a
+selective due filter may return fewer than `pageSize` items, including an empty
+`items` array, with a non-null `nextCursor`. Clients must continue requesting pages
+whenever `nextCursor` is present; only a null cursor denotes exhaustion. This
+explicitly trades a small number of sparse pages for a fixed read/query budget and
+avoids an unbounded scan of the task history.
 
 ### Get task detail
 

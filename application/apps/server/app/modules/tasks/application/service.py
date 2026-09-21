@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
+from base64 import urlsafe_b64decode, urlsafe_b64encode
+from json import dumps, loads
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -13,6 +16,7 @@ from app.modules.tasks.domain.models import Task, TaskReminder, dismiss, is_term
 TASK_STATUSES = {"open", "in_progress", "completed", "cancelled"}
 INITIAL_TASK_STATUSES = {"open", "in_progress"}
 TASK_PRIORITIES = {"low", "normal", "high", "urgent"}
+MAX_DUE_FILTER_SCAN_CANDIDATES = 1_000
 
 
 class TaskError(RuntimeError):
@@ -90,12 +94,14 @@ class TaskCreateCommand:
 class TaskService:
     """Owns task and reminder lifecycle rules; adapters only persist changes."""
 
-    def __init__(self, unit_of_work: TaskUnitOfWork) -> None:
+    def __init__(self, unit_of_work: TaskUnitOfWork,
+                 now: Callable[[], datetime] | None = None) -> None:
         self.unit_of_work = unit_of_work
+        self._clock = now or (lambda: datetime.now(UTC))
 
     def create(self, data: TaskCreateCommand | dict) -> Task:
         command = data if isinstance(data, TaskCreateCommand) else TaskCreateCommand.from_mapping(data)
-        task = new_task(command)
+        task = new_task(command, now=self._now())
         correlation_id = str(uuid4())
 
         def create_in_transaction(transaction: TaskTransaction) -> Task:
@@ -119,10 +125,49 @@ class TaskService:
             raise TaskError("Invalid task status.")
         return self.unit_of_work.list(status)
 
+    def page(self, *, status: str | None = None, due: str | None = None,
+             priority: str | None = None, include_voided: bool = False,
+             related_entity_type: str | None = None, related_entity_id: str | None = None,
+             page_size: int = 100, cursor: str | None = None) -> tuple[list[Task], str | None]:
+        statuses = _query_values(status, TASK_STATUSES, "status")
+        priorities = _query_values(priority, TASK_PRIORITIES, "priority")
+        if type(include_voided) is not bool:
+            raise TaskError("includeVoided must be a boolean.")
+        if statuses is None:
+            statuses = tuple(sorted(INITIAL_TASK_STATUSES if not include_voided else TASK_STATUSES))
+        elif not include_voided:
+            statuses = tuple(value for value in statuses if value in INITIAL_TASK_STATUSES)
+        related_type = _optional_trimmed_text(related_entity_type, "Related entity type")
+        related_id = _optional_trimmed_text(related_entity_id, "Related entity ID")
+        if (related_type is None) != (related_id is None):
+            raise TaskError("relatedEntityType and relatedEntityId must be supplied together.")
+        if type(page_size) is not int or not 1 <= page_size <= 500:
+            raise TaskError("Page size must be between 1 and 500.")
+        due_filter = _due_filter(due, self._instant())
+        scan_cursor = _task_cursor(cursor) if cursor else None
+        matched: list[Task] = []
+        chunk_size = max(100, page_size + 1)
+        scanned = 0
+        while scanned < MAX_DUE_FILTER_SCAN_CANDIDATES:
+            limit = min(chunk_size, MAX_DUE_FILTER_SCAN_CANDIDATES - scanned)
+            tasks = self.unit_of_work.page(
+                statuses=statuses, priorities=priorities, related_entity_type=related_type,
+                related_entity_id=related_id, limit=limit, cursor=scan_cursor,
+            )
+            scanned += len(tasks)
+            matched.extend(task for task in tasks if due_filter(task))
+            if len(matched) > page_size:
+                page = matched[:page_size]
+                return page, _encode_task_cursor(page[-1])
+            if len(tasks) < limit:
+                return matched, None
+            scan_cursor = _task_values_for_cursor(tasks[-1])
+        return matched, _encode_task_cursor_values(scan_cursor) if scan_cursor else None
+
     def transition(self, task_id: str, status: str, outcome_note: str | None = None) -> Task:
         if status not in TASK_STATUSES or (outcome_note is not None and not isinstance(outcome_note, str)):
             raise TaskError("Invalid task transition.")
-        now = _now()
+        now = self._now()
         correlation_id = str(uuid4())
 
         def transition_in_transaction(transaction: TaskTransaction) -> Task:
@@ -148,7 +193,7 @@ class TaskService:
 
     def add_reminder(self, task_id: str, remind_at_utc: str) -> TaskReminder:
         instant, _ = _timestamp(remind_at_utc, "UTC", required=True)
-        reminder = TaskReminder(str(uuid4()), task_id, instant, "pending", None, None, _now())
+        reminder = TaskReminder(str(uuid4()), task_id, instant, "pending", None, None, self._now())
         correlation_id = str(uuid4())
 
         def create_in_transaction(transaction: TaskTransaction) -> TaskReminder:
@@ -170,7 +215,7 @@ class TaskService:
     def set_reminder_status(self, task_id: str, reminder_id: str, status: str) -> TaskReminder:
         if status not in {"acknowledged", "dismissed"}:
             raise TaskError("Reminder status is invalid.")
-        now = _now()
+        now = self._now()
         correlation_id = str(uuid4())
 
         def transition_in_transaction(transaction: TaskTransaction) -> TaskReminder:
@@ -200,7 +245,7 @@ class TaskService:
             raise TaskConflictError(str(error)) from error
 
     def summary(self) -> dict[str, object]:
-        now = datetime.now(UTC)
+        now = self._instant()
         active = [task for task in self.unit_of_work.list() if task.status in INITIAL_TASK_STATUSES]
         active_ids = {task.id for task in active}
         return {
@@ -211,6 +256,15 @@ class TaskService:
                 if reminder.task_id in active_ids and reminder.status == "pending" and _parse(reminder.remind_at_utc) <= now
             ],
         }
+
+    def _instant(self) -> datetime:
+        instant = self._clock()
+        if not isinstance(instant, datetime) or instant.tzinfo is None or instant.utcoffset() is None:
+            raise TaskError("Task clock must return an aware timestamp.")
+        return instant.astimezone(UTC)
+
+    def _now(self) -> str:
+        return self._instant().isoformat()
 
     @staticmethod
     def _dismiss_pending_reminders(transaction: TaskTransaction, task: Task, now: str, correlation_id: str) -> None:
@@ -236,6 +290,55 @@ def new_task(command: TaskCreateCommand, *, task_id: str | None = None, now: str
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def _query_values(value: str | None, allowed: set[str], label: str) -> tuple[str, ...] | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise TaskError(f"{label} must be a nonblank comma-separated list.")
+    values = tuple(part.strip() for part in value.split(","))
+    if not all(values) or len(set(values)) != len(values) or any(part not in allowed for part in values):
+        raise TaskError(f"Invalid task {label} filter.")
+    return values
+
+
+def _due_filter(value: str | None, now: datetime):
+    if value is None:
+        return lambda task: True
+    if not isinstance(value, str) or not value.strip():
+        raise TaskError("due must be a supported period or ISO date range.")
+    value = value.strip()
+    if value in {"overdue", "today", "next7days", "nodate"}:
+        def named(task: Task) -> bool:
+            if value == "nodate":
+                return task.due_at_utc is None
+            if task.due_at_utc is None:
+                return False
+            instant = _parse(task.due_at_utc)
+            if value == "overdue":
+                return task.status in INITIAL_TASK_STATUSES and instant < now
+            timezone = ZoneInfo(task.due_timezone or "UTC")
+            local_today = now.astimezone(timezone).date()
+            local_day = instant.astimezone(timezone).date()
+            if value == "today":
+                return local_day == local_today
+            return local_today < local_day <= local_today + timedelta(days=7)
+        return named
+    parts = tuple(part.strip() for part in value.split(","))
+    if len(parts) != 2 or not all(parts):
+        raise TaskError("due date range must be YYYY-MM-DD,YYYY-MM-DD.")
+    try:
+        start, end = (date.fromisoformat(part) for part in parts)
+    except ValueError as error:
+        raise TaskError("due date range must use ISO calendar dates.") from error
+    if end < start:
+        raise TaskError("due date range must not end before it starts.")
+    def ranged(task: Task) -> bool:
+        if task.due_at_utc is None:
+            return False
+        return start <= _parse(task.due_at_utc).astimezone(ZoneInfo(task.due_timezone or "UTC")).date() <= end
+    return ranged
 
 
 def _optional_trimmed_text(value: object, label: str) -> str | None:
@@ -270,3 +373,35 @@ def _timestamp(value: object, timezone: object, *, required: bool) -> tuple[str 
     except ZoneInfoNotFoundError as error:
         raise TaskError("dueTimezone must be a valid IANA timezone.") from error
     return _parse(value).isoformat(), label
+
+
+def _task_cursor(value: str) -> tuple[int, str | None, str, str]:
+    if not isinstance(value, str):
+        raise TaskError("Cursor is invalid.")
+    try:
+        no_due, due, created, task_id = loads(urlsafe_b64decode(value.encode()).decode())
+        if type(no_due) is not int or no_due not in {0, 1}:
+            raise ValueError
+        if (no_due == 0 and not isinstance(due, str)) or (no_due == 1 and due is not None):
+            raise ValueError
+        if due is not None:
+            _parse(due)
+        _parse(created)
+        if not isinstance(task_id, str) or not task_id:
+            raise ValueError
+        return no_due, due, created, task_id
+    except (TypeError, ValueError, UnicodeDecodeError) as error:
+        raise TaskError("Cursor is invalid.") from error
+
+
+def _encode_task_cursor(task: Task) -> str:
+    values = _task_values_for_cursor(task)
+    return _encode_task_cursor_values(values)
+
+
+def _encode_task_cursor_values(values: tuple[int, str | None, str, str]) -> str:
+    return urlsafe_b64encode(dumps(values, separators=(",", ":")).encode()).decode()
+
+
+def _task_values_for_cursor(task: Task) -> tuple[int, str | None, str, str]:
+    return int(task.due_at_utc is None), task.due_at_utc, task.created_at_utc, task.id

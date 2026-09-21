@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
@@ -40,6 +40,37 @@ class SQLiteTaskUnitOfWork:
             )
             if status:
                 query = query.where(TaskModel.status == status)
+            return [_task(row) for row in session.execute(query).scalars()]
+
+    def page(self, *, statuses: tuple[str, ...], priorities: tuple[str, ...] | None,
+             related_entity_type: str | None, related_entity_id: str | None, limit: int,
+             cursor: tuple[int, str | None, str, str] | None) -> list[Task]:
+        with Session(self.engine) as session:
+            no_due = TaskModel.due_at_utc.is_(None)
+            query = select(TaskModel)
+            query = query.where(TaskModel.status.in_(statuses))
+            if priorities is not None:
+                query = query.where(TaskModel.priority.in_(priorities))
+            if related_entity_type is not None:
+                query = query.where(
+                    TaskModel.related_entity_type == related_entity_type,
+                    TaskModel.related_entity_id == related_entity_id,
+                )
+            if cursor is not None:
+                cursor_no_due, cursor_due, cursor_created, cursor_id = cursor
+                later_same_due = or_(
+                    TaskModel.created_at_utc < cursor_created,
+                    and_(TaskModel.created_at_utc == cursor_created, TaskModel.id < cursor_id),
+                )
+                if cursor_no_due:
+                    query = query.where(and_(no_due, later_same_due))
+                else:
+                    query = query.where(or_(
+                        no_due,
+                        TaskModel.due_at_utc > cursor_due,
+                        and_(TaskModel.due_at_utc == cursor_due, later_same_due),
+                    ))
+            query = query.order_by(no_due, TaskModel.due_at_utc, TaskModel.created_at_utc.desc(), TaskModel.id.desc()).limit(limit)
             return [_task(row) for row in session.execute(query).scalars()]
 
     def reminders(self, task_id: str | None = None) -> list[TaskReminder]:

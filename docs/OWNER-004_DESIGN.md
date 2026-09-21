@@ -258,7 +258,7 @@ Malformed requests return `422`; missing records return `404`; invalid relations
 
 List projections contain concern identity, summary, type, priority, status, owner/property/space snapshots, raised local time, active follow-up count, and linked-communication count. They exclude full descriptions, terminal narratives, communication bodies, task notes, and audit history.
 
-Detail returns full operator-authorized concern context, replacement lineage, current source-state summaries, bounded recent communication summaries, and related task summaries. Full communication history remains available from COM-001 filtered by `owner_concern` and ID.
+Detail returns full operator-authorized concern context, replacement lineage, current source-state summaries, bounded recent communication summaries, and up to 20 related task summaries ordered by most recently updated first. Full communication history remains available from COM-001 filtered by `owner_concern` and ID; complete follow-up-task history, including terminal tasks, is retrieved through cursor-paginated `GET /api/tasks?relatedEntityType=owner_concern&relatedEntityId={concernId}&includeVoided=true`.
 
 Reads must be set-based. One concern page query may be followed by bounded batch queries for current Party/context state, task projections, and communication counts or summaries. No owner, property, lease, tenant, task, or communication N+1 queries are allowed. Query-budget tests make this constraint explicit.
 

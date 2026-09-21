@@ -72,9 +72,10 @@ class SQLiteCommunicationContextOperations:
         if entity_type == "maintenance_issue":
             return _one_zone(connection, select(MaintenanceIssueModel.reported_timezone).where(MaintenanceIssueModel.id == entity_id), "maintenance issue")
         if entity_type == "owner_concern":
-            if connection.execute(select(OwnerConcernModel.id).where(OwnerConcernModel.id == entity_id)).scalar_one_or_none() is None:
+            zone = connection.execute(select(OwnerConcernModel.property_timezone_snapshot).where(OwnerConcernModel.id == entity_id)).scalar_one_or_none()
+            if zone is None:
                 raise KeyError("Linked owner concern was not found.")
-            return None
+            return zone
         raise ValueError("Communication link type is unsupported.")
 
     def create_follow_up(self, connection: Any, *, communication: Communication, title: str, notes: str | None,

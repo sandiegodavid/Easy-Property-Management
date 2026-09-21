@@ -5,6 +5,7 @@ import json
 import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import uuid4
@@ -222,29 +223,33 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
         property_record = portfolio.create_property(PropertyCreateCommand("Owner home", "1 Main Street", "Portland", "US", "single_family_home", (OwnershipInput("client_owner", party_id=owner.id),), region="OR"))
         space_id = portfolio.get_property(property_record.id)["spaces"][0]["id"]
         tenant = TenantService(SQLiteTenantUnitOfWork(database, recorder, SQLiteLeaseParticipationGuard(), parties, SQLitePartyReadOperations(parties)), SharedPartyFactory()).create(TenantCreateCommand("individual", "Tenant"))
-        today = datetime.now(UTC).date()
+        # Capture one injected instant and derive all business dates from the
+        # property's timezone.  This remains correct during UTC/local-date
+        # boundaries and prevents a test from crossing midnight mid-run.
+        self.now = datetime.now(UTC).replace(microsecond=0)
+        today = self.now.astimezone(ZoneInfo("America/Los_Angeles")).date()
         leases = LeaseService(SQLiteLeaseUnitOfWork(database, recorder, SQLiteTenantProfileAvailability(), SQLitePortfolioLeaseOperations(database)))
         lease = leases.create(LeaseCreateCommand(space_id, "residential", today, today + timedelta(days=365), today, TermCommand(100_000, "USD", "monthly", 1, 0), (ParticipantCommand(tenant["id"], "primary_tenant"),)))
         self.lease = leases.execute(lease["id"], executed_on=today, confirmed=True)
         self.recorder, self.database, self.parties = recorder, database, parties
         self.files_reader = SQLiteFileLinkReader()
         self.receipt_operations = SQLiteReceiptTransactionOperations(recorder, SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), parties)
-        self.finance = FinanceService(SQLiteFinanceUnitOfWork(database, recorder, SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), parties), now=lambda: datetime.now(UTC))
-        self.service = OwnerRentReportService(SQLiteOwnerRentReportUnitOfWork(database, recorder, SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), parties, self.files_reader, self.receipt_operations), now=lambda: datetime.now(UTC))
+        self.finance = FinanceService(SQLiteFinanceUnitOfWork(database, recorder, SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), parties), now=lambda: self.now)
+        self.service = OwnerRentReportService(SQLiteOwnerRentReportUnitOfWork(database, recorder, SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), parties, self.files_reader, self.receipt_operations), now=lambda: self.now)
         self.files = FileService(self.workspace, FilesystemContentStore(self.workspace.paths.files), SQLiteFileUnitOfWork(database, recorder), link_validators=(OwnerRentReportFileLinkValidator(SQLiteOwnerRentReportFileLinkOperations(self.files_reader)),))
 
     def _expectation(self):
         term = self.lease["terms"][0]
         rows = self.finance.synchronize(self.lease["id"], SynchronizeExpectationsCommand(
-            term["id"], (datetime.now(UTC).date() + timedelta(days=60)).isoformat(),
-            datetime.now(UTC).date().replace(day=1).isoformat(),
+            term["id"], (self.now.astimezone(ZoneInfo("America/Los_Angeles")).date() + timedelta(days=60)).isoformat(),
+            self.now.astimezone(ZoneInfo("America/Los_Angeles")).date().replace(day=1).isoformat(),
         ))
         return rows[0]
 
     def _report_with_evidence(self, amount, key=None):
         item = self.service.create(OwnerRentReportCommand(
-            self.lease["id"], self.owner_id, datetime.now(UTC).date().isoformat(), amount, "cash",
-            key or str(uuid4()), datetime.now(UTC).isoformat(),
+            self.lease["id"], self.owner_id, self.now.astimezone(ZoneInfo("America/Los_Angeles")).date().isoformat(), amount, "cash",
+            key or str(uuid4()), self.now.isoformat(),
         ))
         source = Path(self.temp.name) / f"{item['id']}.txt"; source.write_text("statement", encoding="utf-8")
         self.files.add(source, "statement.txt", "text/plain", entity_type="owner_rent_report", entity_id=item["id"], purpose="owner_statement")
@@ -252,7 +257,7 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
 
     def test_create_and_zero_evidence_list_are_transactional_and_batched(self):
         for amount in (100, 101, 102):
-            self.service.create(OwnerRentReportCommand(self.lease["id"], self.owner_id, datetime.now(UTC).date().isoformat(), amount, "cash", str(uuid4()), datetime.now(UTC).isoformat()))
+            self.service.create(OwnerRentReportCommand(self.lease["id"], self.owner_id, self.now.astimezone(ZoneInfo("America/Los_Angeles")).date().isoformat(), amount, "cash", str(uuid4()), self.now.isoformat()))
         statements = []
         def capture(*args):
             if args[2].lstrip().upper().startswith("SELECT"): statements.append(args[2].upper())
@@ -267,7 +272,7 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
     def test_verification_adopts_existing_receipt_and_retries_idempotently(self):
         expectation = self._expectation()
         receipt = self.finance.record_receipt(RecordReceiptCommand(
-            self.lease["id"], str(uuid4()), datetime.now(UTC).date().isoformat(),
+            self.lease["id"], str(uuid4()), self.now.astimezone(ZoneInfo("America/Los_Angeles")).date().isoformat(),
             expectation["expectedAmountMinor"], "USD", (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
             "cash", received_by_party_id=self.owner_id,
         ))
