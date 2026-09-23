@@ -30,7 +30,7 @@ Success means a small operator can complete monthly rent, vacancy-to-lease, and 
 
 ## Next — Connect and assist locally
 
-- Broader HOA profiles, standing rules management, and approval requests; MVP includes violation notices only.
+- Broader HOA profiles, standing rules management, architectural approvals, assessments, and board administration; MVP includes violation notices and narrow coordination of HOA-covered common-element repairs.
 
 - Online payments, autopay, bank feeds, and recurring expenses.
 - Connected-account email/SMS reminders and two-way communication, plus calendar connections. The manual COM-001 ledger remains local MVP scope.

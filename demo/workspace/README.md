@@ -12,10 +12,16 @@ UI-001 operator-experience prototype:
 - waiting and upcoming follow-ups, appointments, and a deposit settlement;
 - occupied, vacant, client-owned, and self-owned properties;
 - owner, tenant, provider, lease, money, maintenance, conversation, legal, and
-  HOA-notice records connected with stable synthetic IDs.
+  HOA-notice records connected with stable synthetic IDs;
+- a shared condo water-regulator case covered by the HOA, with multiple affected
+  units, three recorded contacts, and another scheduled follow-up.
 
 All monetary amounts are USD minor units. Dates without a time are property-local
 dates; timestamps are UTC ISO-8601 values. The file is a seed fixture, not a
 current-format application workspace: a future importer or seed command must map
 its records through the application's APIs and audit rules instead of copying it
 into a live database.
+
+The focused interaction model for the shared repair is available at
+`../hoa-shared-repair-prototype.html`. It is a throwaway, in-memory design probe;
+`../operator-experience.html` remains the broader UI-001 comparison artifact.

@@ -180,15 +180,15 @@ Directory presentation is part of the confirmed design.
 
 The product owner accepted manual case tracking, evidence, attorney links, and reminders for the initial release. Automated legal-rule interpretation is deferred. Record preparation and process facts without inferring legal eligibility, compliance, deadlines, or successful eviction. Use linked source records and separately confirmed milestones; actual move-out, rent, maintenance, and expense records retain their own lifecycles. D39–D40 define placement and lifecycle; the delivery boundaries below identify supporting implementation work.
 
-### D38: Limit MVP HOA work to violation notices
+### D38: Keep MVP HOA work narrow
 
-MVP supports receipt and tracking of HOA violation notices and their resolution. Retain association/sender identity, property, original notice and any cited rule/evidence, dates, next action, communications, linked remediation work, and closure evidence. Minimal notice-specific association and rule references do not require a standing HOA rules module.
+MVP supports receipt and tracking of HOA violation notices and their resolution. It also supports the later-confirmed D47 case: coordination of an HOA-covered common-element repair affecting condo units. Retain association/sender identity, property, original notice and any cited rule/evidence, dates, next action, communications, linked remediation work, and closure evidence. For a shared repair, retain one Maintenance-owned case, affected managed units, responsibility/coverage evidence, every contact and follow-up, and physical verification. These narrow capabilities do not require a standing HOA rules or board-management module.
 
-Standing rules management, a comprehensive HOA profile, approval requests, and other broader HOA capabilities are explicitly deferred until after MVP. Preserve records and links so these can be added later without recreating violation history. Notice-related claimed or disputed amounts remain contextual facts; they do not automatically create paid expenses or tenant charges.
+Standing rules management, architectural approval requests, assessments, board administration, and other broader HOA capabilities are explicitly deferred until after MVP. Preserve records and links so these can be added later without recreating violation or coordination history. Notice-related claimed or disputed amounts and HOA repair estimates remain contextual facts; they do not automatically create paid expenses or tenant charges.
 
-### D39: Place Providers, legal matters, and HOA notices in context
+### D39: Place Providers, legal matters, and HOA work in context
 
-Providers is a configurable permanent destination, visible by default and hideable through Settings. It remains accessible contextually from Maintenance and legal matters. Legal matters live within Leasing and the related lease/property; HOA notices live within the affected property. Both contribute actionable records to Home and appear in the relevant owner workspace. Do not introduce separate permanent Legal and HOA destinations in MVP.
+Providers is a configurable permanent destination, visible by default and hideable through Settings. It remains accessible contextually from Maintenance and legal matters. Legal matters live within Leasing and the related lease/property. HOA notices live within the affected property; HOA-covered shared repairs live in Maintenance and every affected managed-property workspace. Both contribute actionable records to Home and appear in the relevant owner workspace. Do not introduce separate permanent Legal and HOA destinations in MVP.
 
 ### D40: Separate legal-matter status from milestones
 
@@ -218,6 +218,34 @@ Support local Excel uploads and direct Google Sheets selection through read-only
 
 MVP imports create new valid records or explicitly link/skip existing ones after duplicate review. Linking means reusing the selected identity or record to satisfy a relationship; it does not authorize changing its existing fields or merging identities. Conflicting or ambiguous matches require resolution before affected rows can commit. Preserve property-to-owner relationships through explicit mapping. Present row-level validation errors and final import results, including created, linked, skipped, and failed outcomes. Retry only unfinished work without duplicating successful writes. General existing-record overwrite/update behavior is deferred.
 
+### D46: Connect Meta Muse and govern AI use in Settings
+
+Follow-up research is documented in [Meta Muse integration research and design proposals](META_MUSE_RESEARCH.md). The settled design distinguishes app-initiated Muse model inference through Meta Model API from optional Muse personal-agent access through MCP-001. Unverified personal-agent connection capabilities remain visibly unavailable until their transport is proven.
+
+Settings gains an AI assistance section alongside Appearance, Permanent destinations, and Data & backup. Meta Muse is the fixed assistant identity. Show separate status for the Meta Model API credential used by built-in inference and the optional Muse bridge used by the personal agent. A model API credential never implies that the personal agent is connected. AI-GOV-001 supplies governance and inference settings; MCP-001 supplies verified bridge state.
+
+There is no operator-facing provider selector. Generated runs record `assistant_name=meta_muse`, `transport_provider=meta_model_api`, and the actual Muse model/version. Settings may show this transport as diagnostic provenance and may restrict registered Muse model versions per action, but cannot select another assistant or transport.
+
+Meta Model API shows only Configured or Not configured credential state, never the key value. Its key is entered through a dedicated credential control and stored in the operating-system credential store, keyed to the workspace; it never appears in the database, backups, exports, audit snapshots, or logs. After restore or migration, it must be re-entered before app-initiated inference. Muse bridge authorization is a separate scoped grant and status; it never reuses the model API credential.
+
+A global Pause all AI assistance switch fails every AI run closed while on, including MCP proposal intents. The switch state is visible wherever AI-assisted work is offered, and enabling it never discards drafts already awaiting review.
+
+Per generated action type, the operator can enable or disable the action, set a daily run cap and per-run token budget, and restrict the registered Muse model versions. External Muse proposals use measurable admission controls such as enabled state, daily proposal cap, and payload-size ceiling; do not present an agent token budget when Muse does not report usage. Redaction profile name and version per action type are shown read-only; profiles themselves are versioned configuration, not operator-editable text.
+
+Pending AI drafts are reachable from the same section with a count of drafts awaiting review, linking to the review queue. Draft detail distinguishes the retained source, the exact bounded governed/redacted input sent to or admitted from Meta Muse, the returned proposal, and operator edits. Approval, editing, or dismissal happens in the review queue with draft-versus-source comparison; nothing in Settings approves a draft or executes its consequences.
+
+### D47: Track one shared HOA-covered repair across affected condo units
+
+When a building system or common element affects multiple condominium units, create one shared maintenance case rather than duplicate independent issues. Select a primary property for navigation and link every affected managed property or unit. If the operator does not manage every affected unit, retain a bounded free-text affected-area note without creating fake portfolio records. The case appears once on Home and in every linked property workspace.
+
+The case records the affected scope (for example, Shared building water regulator), the association responsible for coordinating or covering the work, the basis and confidence of that responsibility, and the current next action. The HOA is a saved organization/contact, not a provider assignment. If the HOA hires a contractor, preserve the contractor as a separate provider and keep the HOA relationship visible. An operator-entered coverage assertion is not proof that the HOA has accepted responsibility, and an HOA estimate or claimed charge is not a paid property expense.
+
+Show an ordered coordination timeline containing every call, email, submitted document, response, promise, appointment, and operator note. Each communication remains a distinct source-linked record. Repeated follow-ups are separate Tasks with waiting-for context and dates; completing one follow-up may schedule the next but never resolves the maintenance case. Home shows the current actionable follow-up or Waiting state without repeating the case once per affected unit.
+
+The case remains open until the physical outcome is explicitly verified. HOA acknowledgement, approval, contractor assignment, or a promised replacement date are milestones rather than resolution. Closing requires an outcome such as regulator replaced and service verified, plus the verification date/source. Unresolved damage inside an individual unit can remain a separate linked issue after the shared asset is repaired.
+
+In the summary bar, show the shared asset, affected scope, current HOA state, and next follow-up, for example: Shared water regulator · 3 units affected · Waiting for Cascadia HOA · Follow up Sep 25. Expanding it shows responsibility/coverage evidence, affected managed units, the communication timeline, current commitment, and actions to record contact, schedule another follow-up, link a contractor, or verify completion.
+
 ## Confirmed design coverage
 
 ### New questions raised September 23: providers, eviction, and HOA work
@@ -226,7 +254,7 @@ MVP scope, navigation, and interaction model were confirmed through D37–D41. T
 
 - **Providers:** Promote the shared provider directory to a configurable permanent destination, with contextual access from Maintenance and other relevant workflows. With attorneys and other professional services, the directory crosses module boundaries. Use the existing shared identity and provider profile; Legal / Attorney is a service category, with optional practice-area labels. VEND-CAT-001 already plans Legal, but is sequenced after UI-001; a formal category picker requires an explicit sequencing/dependency decision.
 - **Eviction/legal matters:** Introduce a typed legal-matter record linked to property, lease, relevant parties, and attorney/law firm. Entry points belong in Leasing and property/lease context; Home aggregates actionable deadlines. Track preparation, source facts/evidence, notices and service evidence, court reference, milestones, attorney involvement, communications, tasks, costs, and outcome. Stages must support branches, pauses, and closure without eviction. Preserve original records and versioned evidence; date/source/confirmation accompanies deadlines. Do not infer readiness to file, legal compliance, possession, move-out, collectible tenant charges, or automatic notice delivery. Legal expenses remain Finance-owned; attorney engagement is distinct from a maintenance assignment. A reviewed export packet should distinguish selected evidence from internal/legal notes, without treating a privacy label as a legal privilege determination.
-- **HOA violation notices (MVP):** Track each notice and its resolution as a separate matter linked to the affected property. Retain the original notice, cited rule reference, relevant dates, next action, communications, evidence, claimed/assessed/disputed amounts, and resolution evidence. Repair completion does not close the notice; an HOA charge is not automatically an expense or tenant charge. Linked Maintenance records own physical remediation. An association is an organization/contact role, not automatically a provider. Standing rule management, approval requests, and broader HOA management are post-MVP per D38.
+- **HOA work (MVP):** Track violation notices and the narrow association-coordination needed for an HOA-covered shared repair. A notice remains a separate matter with its original notice, cited rule reference, response, dispute, remediation, claimed amounts, and closure evidence. A shared repair remains Maintenance-owned, can link multiple affected managed units, and retains each HOA communication and follow-up. The association is an organization/contact, not automatically a provider. Standing rule management, architectural approval requests, assessments, board administration, and broader HOA management remain post-MVP.
 
 These domains reuse Tasks, Files, Communications, Finance, and shared identity through explicit supported links. They must not be squeezed into repair categories or owner-concern records. MVP inclusion is agreed; domain contracts and backlog sequencing remain implementation-planning work rather than unresolved product choices.
 
@@ -245,8 +273,8 @@ Research context: [California Courts eviction overview](https://selfhelp.courts.
 - Workflow specification
   - Settled: principal rent, lease setup, repair completion, owner-report review, move-out/settlement, and conversation journeys (D23–D28).
   - Settled: finding records, deferring work, correction presentation, and operating-status feedback.
-  - Settled: manual legal-matter and HOA-notice scope, navigation, lifecycle, and closure behavior.
-  - Settled: appearance switch, visible inline-toggle guidance, Excel/read-only Google Sheets snapshots, and create/link/skip import behavior (D42–D45).
+  - Settled: manual legal-matter, HOA-notice, and shared HOA-covered repair scope, navigation, lifecycle, and closure behavior.
+  - Settled: appearance switch, visible inline-toggle guidance, Excel/read-only Google Sheets snapshots, create/link/skip import behavior, and fixed Meta Muse connection, credential, kill-switch, limit, governed-input, and redaction controls (D42–D46).
   - Complete: consolidated product design confirmed. Detailed API/schema design and implementation follow separately.
 
 ## Working glossary
@@ -260,6 +288,7 @@ Research context: [California Courts eviction overview](https://selfhelp.courts.
 - **Owner workspace:** A contextual view across an owner's related properties and records. It must distinguish property-level facts from amounts attributable to that owner.
 - **Legal matter:** A manually tracked preparation/process record linking a property/lease, participants, counsel, evidence, milestones, and next actions. It is not a legal eligibility determination.
 - **HOA violation notice:** A received allegation or required-action notice tracked through response and documented resolution. A recorded allegation is not an admitted violation, and completion of a linked repair does not establish association acceptance.
+- **Shared HOA-covered repair:** One Maintenance-owned case for a building system or common element affecting one or more managed condo units, with an association-responsibility assertion, affected scope, coordination history, and explicit physical verification. It is not a provider assignment or proof of accepted coverage.
 
 ## Existing constraints to preserve
 
@@ -274,7 +303,7 @@ Research context: [California Courts eviction overview](https://selfhelp.courts.
 
 - TASK-002 owns waiting/follow-up behavior; OPS-001 owns shared operator support. Tasks and provider UI are explicit UI-001 scope.
 - VEND-CAT-001, CONN-001, and FIN-003 move before UI-001 so provider categories, Sheets authorization, and dashboard totals have source capabilities.
-- LEGAL-001 and HOA-001 supply manual legal matters and violation-notice records before their UI. HOA-002 retains broader HOA work after MVP.
+- LEGAL-001 and HOA-001 supply manual legal matters, violation-notice records, and narrow HOA-covered shared-repair coordination before their UI. HOA-002 retains broader HOA work after MVP.
 - DATA-002 and DATA-003 supply initial Excel and read-only Sheets intake. DATA-001 retains broader later migration/update scope.
 - UI-001 remains immediately before DASH-001. LEAD-002 adds showing integration after the showing workflow exists, removing the former forward dependency.
 
@@ -289,6 +318,7 @@ These are implementation gaps, not reasons to silently weaken confirmed experien
 - TASK-001's summary implementation exposes overdue and due reminders, while its design also promises today and next-seven-day buckets. Existing task queries can supply date filtering; the consolidated contract needs reconciliation.
 - Owner views can compose effective-dated relationships and owner-filtered concerns/reports. Owner entitlement, balances, fees, statements, and disbursements require their later domain capabilities.
 - Current ownership must not erase historical or unresolved work. Local-operator ownership has no owner Party ID; the UI must not fabricate one.
+- Existing Maintenance supports a property-level issue without a space, and Communications/Tasks support repeated contact and follow-up. It does not yet persist an HOA responsibility assertion, multiple affected property/unit links, or shared-case deduplication; HOA-001 must add these contracts without treating the association as a provider.
 
 ## Delivery boundaries
 
@@ -297,7 +327,7 @@ The design is broader than the existing UI-001 backlog row. Preserve backend-fir
 1. **Shared operator support:** Implement missing waiting/follow-up semantics, coverage review state, incomplete-form recovery, navigation preferences, and bounded search/read composition. Reuse existing domain drafts rather than replacing their lifecycle rules.
 2. **Providers:** Deliver the directory with shared identity and existing service history. Bring the required VEND-CAT-001 category support before its consuming UI, rather than presenting free-form service labels as an implemented category taxonomy. Legal/Attorney belongs in the category model; engagement belongs to the legal matter.
 3. **Legal matters:** Add the authoritative case record, provider engagement links, manual statuses/milestones, deadline provenance, evidence targets, typed communication/task links, and explicit closure outcome. Do not broaden rent-adjustment rules into an unreviewed eviction deadline engine.
-4. **HOA notices:** Add the notice record, property/sender context, original notice and rule references, response/remediation links, disputed state, claimed-charge context, and evidenced or explicitly unconfirmed closure. Defer standing rules and approvals.
+4. **HOA coordination:** Add the notice record, property/sender context, original notice and rule references, response/remediation links, disputed state, claimed-charge context, and evidenced or explicitly unconfirmed closure. Also add the narrow Maintenance-owned shared-repair links for association responsibility, affected managed units, repeated contact/follow-up, and physical verification. Defer standing rules, architectural approvals, assessments, and board administration.
 5. **UI-001 workflows:** Deliver directories, contextual workspaces, inline expansions, substantial workflow pages, and the agreed domain interactions using those validated capabilities. Navigation changes alone do not establish backend feature readiness.
 6. **DASH-001 aggregation:** Compose Needs action, Waiting, Upcoming, appointments, and information review from authoritative sources. Include legal/HOA next actions and retain existing domain-specific semantics. Reconcile the current showing dependency explicitly; never imply showings exist before LEAD-002 is available.
 
@@ -329,11 +359,12 @@ These scenarios derive from confirmed decisions and must be included in implemen
 20. Switch Light/Dark in Settings while a form/inline section is open. Preserve input, focus, expansion, and record state; retain the appearance preference across restarts.
 21. Explain inline toggling visibly in every relevant view and keep the chevron, aria-expanded, and actual section visibility consistent on repeated clicks and keyboard use.
 22. Preview a spreadsheet containing new records, likely duplicate shared identities, and properties referring to owners. Require explicit relationship/duplicate resolution, report invalid rows accurately, and verify retries do not duplicate imported records. Link/skip leaves existing fields unchanged.
+23. Record a shared water-regulator failure affecting multiple condo units and covered by the HOA. Show one case on Home and in every affected managed-property workspace. Record multiple unanswered and answered contacts, each with its own date and source, and reschedule follow-up without rewriting prior attempts. HOA acknowledgement, contractor assignment, and a promised replacement date leave the case open. Close only after explicit replacement/service verification; keep any unit-specific residual damage open separately.
 23. Preview a read-only Google Sheets snapshot, then change the source externally before confirming the import. Import only the reviewed snapshot or require a refreshed preview; never silently substitute changed values. No source-sheet writes or ongoing synchronization occur.
 
 ## Screen review
 
-An in-conversation interactive design preview uses fictional sample data to review Home, owner/property directories and workspaces, inline secondary actions, and navigation customization. The product owner approved the overall visual design and requested inline toggles and clarification of browsing multiple records. D35 and D36 document the resulting refinement. The preview is not production UI and does not write application records. The complete product design is confirmed. The illustrative preview is not an implementation contract and predates some final additions, including Providers/legal/HOA/import screens and the full-bar D35 trigger; use this document as authority.
+An in-conversation interactive design preview uses fictional sample data to review Home, owner/property directories and workspaces, inline secondary actions, and navigation customization. The product owner approved the overall visual design and requested inline toggles and clarification of browsing multiple records. D35 and D36 document the resulting refinement. The preview is not production UI and does not write application records. The complete product design is confirmed. The illustrative preview is not an implementation contract and predates some final additions, including Providers/legal/HOA/import screens, the AI provider Settings section, and the full-bar D35 trigger; use this document as authority.
 
 ## Sources
 
@@ -343,4 +374,4 @@ An in-conversation interactive design preview uses fictional sample data to revi
 - [Product decisions](DECISIONS.md)
 - [README](../README.md)
 
-Decisions D1–D34 were confirmed by the product owner in the design interview on 2026-09-22. D5 incorporates the explicit requirements for an Owners destination and Settings customization of permanent destinations. Later decisions refine earlier choices; specifically D17 settles D5 customization, D19 settles D6 ordering, D15 settles D9 draft protection, and D18 confirms the supporting work for D7. The overall screen direction and inline refinements were accepted. D37–D45 and the explicit inline-toggle explanation were confirmed on September 23, 2026; the complete design was confirmed through Q45 on September 23, 2026.
+Decisions D1–D34 were confirmed by the product owner in the design interview on 2026-09-22. D5 incorporates the explicit requirements for an Owners destination and Settings customization of permanent destinations. Later decisions refine earlier choices; specifically D17 settles D5 customization, D19 settles D6 ordering, D15 settles D9 draft protection, and D18 confirms the supporting work for D7. The overall screen direction and inline refinements were accepted. D37–D46 and the explicit inline-toggle explanation were confirmed on September 23, 2026; the complete design was confirmed through Q45 on September 23, 2026, with D46 confirmed the same day.

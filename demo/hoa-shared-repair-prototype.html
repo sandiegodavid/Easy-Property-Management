@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prototype — HOA-covered shared repair</title>
+  <style>
+    :root { color-scheme: light; --ink:#18302f; --muted:#61706e; --line:#dbe3df; --paper:#fffdfa; --wash:#f3f7f4; --accent:#14796d; --warn:#9a6416; --bad:#a13b32; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#eaf0ed; color:var(--ink); font:15px/1.5 Inter, ui-sans-serif, system-ui, sans-serif; }
+    main { width:min(1080px, calc(100% - 32px)); margin:32px auto 64px; }
+    header, section { background:var(--paper); border:1px solid var(--line); border-radius:18px; box-shadow:0 12px 32px rgba(24,48,47,.07); }
+    header { padding:28px; }
+    section { padding:22px; margin-top:18px; }
+    h1, h2, h3, p { margin-top:0; }
+    h1 { font-size:30px; letter-spacing:-.03em; margin-bottom:8px; }
+    h2 { font-size:18px; }
+    .eyebrow { color:var(--accent); font-size:12px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+    .muted { color:var(--muted); }
+    .grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; }
+    .fact { padding:14px; background:var(--wash); border-radius:12px; }
+    .fact small { display:block; color:var(--muted); }
+    .fact strong { display:block; margin-top:4px; }
+    .wide { grid-column:span 2; }
+    .timeline { list-style:none; padding:0; margin:14px 0 0; }
+    .timeline li { border-left:3px solid var(--line); padding:0 0 15px 14px; }
+    .timeline li:last-child { padding-bottom:0; }
+    .timeline time { color:var(--muted); font-size:12px; }
+    .controls { display:flex; flex-wrap:wrap; gap:9px; }
+    button { border:1px solid var(--line); background:#fff; color:var(--ink); border-radius:10px; padding:10px 13px; font:inherit; font-weight:700; cursor:pointer; }
+    button:hover { border-color:var(--accent); }
+    button.primary { background:var(--accent); border-color:var(--accent); color:white; }
+    button:disabled { cursor:not-allowed; opacity:.45; }
+    .message { min-height:24px; margin:12px 0 0; color:var(--accent); font-weight:700; }
+    .message.error { color:var(--bad); }
+    .tabs { display:flex; gap:8px; border-bottom:1px solid var(--line); margin-bottom:18px; }
+    .tabs button { border:0; border-bottom:3px solid transparent; border-radius:0; background:transparent; }
+    .tabs button[aria-selected="true"] { border-bottom-color:var(--accent); color:var(--accent); }
+    .step { display:flex; gap:12px; align-items:flex-start; padding:12px 0; border-top:1px solid var(--line); }
+    .step span { width:28px; height:28px; flex:0 0 28px; border-radius:50%; background:var(--wash); display:grid; place-items:center; font-weight:800; }
+    .step.done span { background:var(--accent); color:#fff; }
+    .tag { display:inline-block; padding:3px 8px; border-radius:99px; background:#e0f2ed; color:#09675d; font-size:12px; font-weight:800; }
+    .warning { background:#fff5de; color:#80520d; }
+    .prototype { border:1px dashed var(--warn); color:var(--warn); padding:8px 11px; border-radius:10px; display:inline-block; margin-bottom:16px; }
+    @media (max-width:720px) { .grid { grid-template-columns:1fr; } .wide { grid-column:auto; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="prototype">Throwaway logic prototype — no data is saved</div>
+    <div class="eyebrow">Design question</div>
+    <h1>Can one shared repair survive repeated HOA follow-ups without being closed too early?</h1>
+    <p class="muted">Explore a water regulator shared by three condo units. The case should appear once, retain every contact, and stay open until replacement and service are explicitly verified.</p>
+  </header>
+
+  <section aria-labelledby="state-title">
+    <h2 id="state-title">Current case</h2>
+    <div id="facts" class="grid"></div>
+    <h3 style="margin-top:20px">Coordination timeline</h3>
+    <ol id="timeline" class="timeline"></ol>
+    <p id="message" class="message" role="status" aria-live="polite"></p>
+  </section>
+
+  <section aria-labelledby="actions-title">
+    <h2 id="actions-title">Try actions in any order</h2>
+    <div id="actions" class="controls"></div>
+  </section>
+
+  <section aria-labelledby="walkthrough-title">
+    <h2 id="walkthrough-title">Guided walkthroughs</h2>
+    <div id="tabs" class="tabs" role="tablist"></div>
+    <div id="walkthrough"></div>
+  </section>
+</main>
+<script>
+const SharedRepair = (() => {
+  const initial = () => ({
+    id: 'maintenance-cedar-water-regulator',
+    title: 'Shared water regulator needs replacement',
+    affectedUnits: ['3B', '4A', '4B'],
+    managedUnits: ['3B'],
+    responsibleOrganization: 'Cascadia Heights HOA',
+    responsibilityBasis: 'Operator-reviewed common-element correspondence',
+    hoaState: 'No response yet',
+    repairState: 'Open — replacement not verified',
+    currentFollowUp: 'Sep 19, 2026',
+    contacts: [{ date:'Sep 16', label:'Issue reported to HOA by email', outcome:'Awaiting response' }],
+    replacementVerified: false,
+    closed: false
+  });
+
+  function reduce(state, action) {
+    const next = structuredClone(state);
+    switch (action.type) {
+      case 'NO_RESPONSE':
+        next.contacts.push({ date:action.date, label:'Follow-up call to HOA', outcome:'Voicemail left — no response' });
+        next.currentFollowUp = action.nextDate;
+        return { state:next, message:`Contact preserved. Next follow-up scheduled for ${action.nextDate}.` };
+      case 'ACKNOWLEDGE':
+        next.contacts.push({ date:action.date, label:'HOA response received', outcome:'Common-element responsibility acknowledged; scheduling pending' });
+        next.hoaState = 'Responsibility acknowledged — contractor pending';
+        next.currentFollowUp = action.nextDate;
+        return { state:next, message:'Acknowledgement is a milestone. The repair remains open.' };
+      case 'SCHEDULE':
+        next.contacts.push({ date:action.date, label:'HOA contractor update', outcome:`Replacement promised for ${action.serviceDate}` });
+        next.hoaState = `Contractor promised for ${action.serviceDate}`;
+        next.currentFollowUp = action.serviceDate;
+        return { state:next, message:'A promised date does not verify the physical outcome.' };
+      case 'VERIFY':
+        next.contacts.push({ date:action.date, label:'Replacement verified', outcome:'Regulator replaced; stable pressure confirmed in managed unit 3B' });
+        next.replacementVerified = true;
+        next.repairState = 'Replacement verified — ready to close';
+        next.currentFollowUp = 'None';
+        return { state:next, message:'Physical completion is now verified.' };
+      case 'CLOSE':
+        if (!state.replacementVerified) return { state, error:'Cannot close: HOA contact, acknowledgement, and scheduling are not physical verification.' };
+        next.closed = true;
+        next.repairState = 'Closed — replacement and service verified';
+        return { state:next, message:'Case closed with verification history intact.' };
+      case 'RESET': return { state:initial(), message:'Case reset.' };
+      default: return { state, error:'Unknown action.' };
+    }
+  }
+  return { initial, reduce };
+})();
+
+const actionDefinitions = [
+  ['Record no-response follow-up', {type:'NO_RESPONSE', date:'Sep 19', nextDate:'Sep 22'}],
+  ['Record HOA acknowledgement', {type:'ACKNOWLEDGE', date:'Sep 22', nextDate:'Sep 25'}],
+  ['Record promised replacement', {type:'SCHEDULE', date:'Sep 25', serviceDate:'Sep 29'}],
+  ['Verify replacement and service', {type:'VERIFY', date:'Sep 29'}],
+  ['Close case', {type:'CLOSE'}],
+  ['Reset', {type:'RESET'}]
+];
+
+const scenarios = [
+  {
+    name:'Repeated follow-up',
+    description:'Watch prior attempts stay in the timeline while only the current follow-up date changes.',
+    steps:[actionDefinitions[0], actionDefinitions[1]]
+  },
+  {
+    name:'Promise is not completion',
+    description:'The HOA can acknowledge coverage and schedule a contractor, but the issue must remain open.',
+    steps:[actionDefinitions[1], actionDefinitions[2], actionDefinitions[4]]
+  },
+  {
+    name:'Verified close',
+    description:'Close succeeds only after the regulator replacement and service are explicitly verified.',
+    steps:[actionDefinitions[1], actionDefinitions[2], actionDefinitions[3], actionDefinitions[4]]
+  }
+];
+
+let state = SharedRepair.initial();
+let selectedScenario = 0;
+let completedSteps = 0;
+const facts = document.querySelector('#facts');
+const timeline = document.querySelector('#timeline');
+const message = document.querySelector('#message');
+
+function dispatch(action, fromWalkthrough=false) {
+  const result = SharedRepair.reduce(state, action);
+  state = result.state;
+  message.textContent = result.error || result.message || '';
+  message.className = `message${result.error ? ' error' : ''}`;
+  if (fromWalkthrough && !result.error) completedSteps += 1;
+  render();
+}
+
+function render() {
+  facts.innerHTML = `
+    <div class="fact wide"><small>Shared case</small><strong>${state.title}</strong></div>
+    <div class="fact"><small>Status</small><strong>${state.repairState}</strong></div>
+    <div class="fact"><small>Affected scope</small><strong>${state.affectedUnits.join(', ')} · managed: ${state.managedUnits.join(', ')}</strong></div>
+    <div class="fact"><small>Responsible organization</small><strong>${state.responsibleOrganization}</strong></div>
+    <div class="fact"><small>HOA state</small><strong>${state.hoaState}</strong></div>
+    <div class="fact"><small>Current follow-up</small><strong>${state.currentFollowUp}</strong></div>
+    <div class="fact"><small>Home presentation</small><strong>One grouped item across affected managed units</strong></div>`;
+  timeline.innerHTML = state.contacts.map(item => `<li><time>${item.date}, 2026</time><strong>${item.label}</strong><div class="muted">${item.outcome}</div></li>`).join('');
+  document.querySelector('#actions').innerHTML = actionDefinitions.map(([label, action], index) => `<button class="${index===3?'primary':''}" data-free="${index}">${label}</button>`).join('');
+  document.querySelectorAll('[data-free]').forEach(button => button.onclick = () => dispatch(actionDefinitions[Number(button.dataset.free)][1]));
+  renderScenario();
+}
+
+function selectScenario(index) {
+  selectedScenario = index;
+  completedSteps = 0;
+  state = SharedRepair.initial();
+  message.textContent = 'Walkthrough reset to the initial reported case.';
+  message.className = 'message';
+  render();
+}
+
+function renderScenario() {
+  document.querySelector('#tabs').innerHTML = scenarios.map((scenario,index) => `<button role="tab" aria-selected="${index===selectedScenario}" data-tab="${index}">${scenario.name}</button>`).join('');
+  document.querySelectorAll('[data-tab]').forEach(button => button.onclick = () => selectScenario(Number(button.dataset.tab)));
+  const scenario = scenarios[selectedScenario];
+  document.querySelector('#walkthrough').innerHTML = `<p class="muted">${scenario.description}</p>` + scenario.steps.map(([label,action],index) => `
+    <div class="step ${index<completedSteps?'done':''}">
+      <span>${index<completedSteps?'✓':index+1}</span>
+      <div><button data-step="${index}" ${index!==completedSteps?'disabled':''}>${label}</button></div>
+    </div>`).join('');
+  document.querySelectorAll('[data-step]').forEach(button => button.onclick = () => dispatch(scenario.steps[Number(button.dataset.step)][1], true));
+}
+
+render();
+</script>
+</body>
+</html>
