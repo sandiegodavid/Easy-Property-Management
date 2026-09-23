@@ -18,6 +18,7 @@ The planned stack is React/Vite/TypeScript for the interface, with Python/FastAP
 - [Product roadmap](docs/ROADMAP.md)
 - [Product decisions](docs/DECISIONS.md)
 - [Architecture and technology plan](docs/ARCHITECTURE.md)
+- [Confirmed operator experience and acceptance scenarios](docs/UI-001_DESIGN.md)
 
 ## Local workspace configuration
 
@@ -39,6 +40,8 @@ Set `localWorkspacePath` in the live file to the chosen external data folder. Th
 - `config.example.json` — safe, Git-tracked local-workspace configuration template
 
 The React interface and shared web packages are planned follow-on work. `UI-001`, immediately before `DASH-001`, delivers the deferred operator workflows; before then, work is limited to backend capabilities, APIs, CLI/setup tooling, tests, and documentation. Follow the feature backlog sequence and preserve the local workspace, approval, audit, and migration requirements documented in `docs/`.
+
+The confirmed UI design includes configurable Owners and Providers destinations, Light/Dark appearance, full-summary-bar inline expansion, manual legal matters, HOA violation notices, and reviewed Excel/read-only Google Sheets intake for properties, owners, and providers. The backlog names their supporting prerequisites; design approval does not indicate those new capabilities are implemented. Broader HOA administration and historical/update imports remain post-MVP.
 
 ## Local workspace foundation
 

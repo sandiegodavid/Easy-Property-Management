@@ -69,6 +69,16 @@ Users can inspect, back up, open, or move the workspace through **Settings → D
 - Jurisdiction-based notice alerts show the rule source, effective date, and last verification and require operator confirmation; they are planning aids, not legal advice.
 - AI issue diagnosis and provider suggestions are advisory, surface possible safety or emergency escalation, and never contact or assign a provider without operator approval.
 
+## Confirmed operator experience
+
+The [UI-001 operator design](UI-001_DESIGN.md), confirmed September 23, 2026, defines the interaction contract: configurable Home, Properties, Owners, Leasing, Money, Maintenance, and Providers destinations; searchable property/owner directories; contextual workspaces; Light/Dark appearance; and inline disclosure through the entire non-editable summary bar. Inputs and commit actions appear only inside expanded content or dedicated workflow pages. Show the hint: “Click anywhere on an item’s summary bar to expand or collapse its details.”
+
+Home separates actionable, waiting, and upcoming work, with visible appointments and information gaps. Waiting retains follow-up context without changing original deadlines or concealing urgent unresolved work. Coverage distinguishes recorded information, missing required information, review needs, and justified non-applicability. Resumable drafts, source drill-down, and precise partial-success feedback support operator trust.
+
+MVP also includes manual eviction/legal-matter preparation and process tracking with attorney/provider links, evidence, dated milestones, confirmed deadline sources, and explicit closure outcomes. It does not infer legal eligibility or automatically change leases, occupancy, or money. Property-linked HOA work is limited to violation notices and documented response/resolution; standing rules management, approval requests, and broader HOA administration remain post-MVP.
+
+Initial intake supports Excel uploads and direct read-only Google Sheets snapshots for properties, owners, and providers. The operator maps columns and relationships, reviews validation/duplicates, and confirms create/link/skip operations. Import does not silently merge or overwrite records, write to source sheets, or continuously synchronize. Broader lease/balance/history migration remains later scope.
+
 ## Future accessibility for complete beginners
 
 Later phases may support users with little or no accounting or property-management experience through guided setup, plain-language explanations, contextual checklists, safe defaults, and step-by-step workflows. This should add a beginner-friendly layer without removing the professional detail that experienced operators rely on.

@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "1.0",
+  "dataset": {
+    "name": "Oak & Pine demonstration portfolio",
+    "synthetic": true,
+    "asOf": "2026-09-23T16:00:00Z",
+    "currency": "USD",
+    "operator": {
+      "id": "operator-local",
+      "displayName": "Jordan Ellis",
+      "timeZone": "America/Los_Angeles"
+    }
+  },
+  "parties": [
+    { "id": "owner-alex-morgan", "kind": "individual", "displayName": "Alex Morgan", "roles": ["client_owner"], "contacts": [{ "kind": "email", "value": "alex.morgan@example.test", "label": "Primary" }, { "kind": "phone", "value": "+1-503-555-0101", "label": "Mobile" }] },
+    { "id": "owner-priya-shah", "kind": "individual", "displayName": "Priya Shah", "roles": ["client_owner"], "contacts": [{ "kind": "email", "value": "priya.shah@example.test", "label": "Primary" }] },
+    { "id": "tenant-maya-chen", "kind": "individual", "displayName": "Maya Chen", "roles": ["tenant"], "contacts": [{ "kind": "email", "value": "maya.chen@example.test", "label": "Primary" }, { "kind": "phone", "value": "+1-503-555-0102", "label": "Mobile" }] },
+    { "id": "tenant-jordan-brooks", "kind": "individual", "displayName": "Jordan Brooks", "roles": ["tenant"], "contacts": [{ "kind": "email", "value": "jordan.brooks@example.test", "label": "Primary" }] },
+    { "id": "tenant-taylor-reed", "kind": "individual", "displayName": "Taylor Reed", "roles": ["tenant"], "contacts": [{ "kind": "email", "value": "taylor.reed@example.test", "label": "Primary" }] },
+    { "id": "provider-northside-plumbing", "kind": "organization", "displayName": "Northside Plumbing", "roles": ["provider"], "contacts": [{ "kind": "phone", "value": "+1-503-555-0103", "label": "Dispatch" }] },
+    { "id": "provider-harbor-legal", "kind": "organization", "displayName": "Harbor Legal Group", "roles": ["provider"], "contacts": [{ "kind": "email", "value": "intake@harborlegal.example.test", "label": "Intake" }] }
+  ],
+  "properties": [
+    { "id": "property-oak", "displayName": "12 Oak Street", "address": { "line1": "12 Oak Street", "city": "Portland", "region": "OR", "postalCode": "97205", "countryCode": "US" }, "timeZone": "America/Los_Angeles", "propertyType": "single_family_home", "ownership": [{ "ownerKind": "client_owner", "partyId": "owner-alex-morgan", "startsOn": "2024-01-01" }], "spaces": [{ "id": "space-oak-home", "displayName": "Main home", "occupancy": "occupied", "availability": "not_available", "tenantPartyIds": ["tenant-maya-chen"] }] },
+    { "id": "property-pine", "displayName": "48 Pine Avenue", "address": { "line1": "48 Pine Avenue", "city": "Portland", "region": "OR", "postalCode": "97212", "countryCode": "US" }, "timeZone": "America/Los_Angeles", "propertyType": "townhome", "ownership": [{ "ownerKind": "client_owner", "partyId": "owner-alex-morgan", "startsOn": "2024-01-01" }], "spaces": [{ "id": "space-pine-home", "displayName": "Main home", "occupancy": "occupied", "availability": "not_available", "tenantPartyIds": ["tenant-jordan-brooks"] }] },
+    { "id": "property-cedar", "displayName": "7 Cedar Lane", "address": { "line1": "7 Cedar Lane", "city": "Portland", "region": "OR", "postalCode": "97229", "countryCode": "US" }, "timeZone": "America/Los_Angeles", "propertyType": "condo", "ownership": [{ "ownerKind": "client_owner", "partyId": "owner-priya-shah", "startsOn": "2025-03-15" }], "spaces": [{ "id": "space-cedar-home", "displayName": "Condo", "occupancy": "vacant", "availability": "available_now", "tenantPartyIds": [] }] },
+    { "id": "property-maple", "displayName": "90 Maple Court", "address": { "line1": "90 Maple Court", "city": "Portland", "region": "OR", "postalCode": "97217", "countryCode": "US" }, "timeZone": "America/Los_Angeles", "propertyType": "single_family_home", "ownership": [{ "ownerKind": "local_operator", "startsOn": "2023-06-01" }], "spaces": [{ "id": "space-maple-home", "displayName": "Main home", "occupancy": "occupied", "availability": "not_available", "tenantPartyIds": ["tenant-taylor-reed"] }] }
+  ],
+  "leases": [
+    { "id": "lease-oak-maya", "propertyId": "property-oak", "spaceId": "space-oak-home", "tenantPartyIds": ["tenant-maya-chen"], "status": "executed", "startsOn": "2026-07-01", "endsOn": "2027-06-30", "monthlyRentMinor": 185000, "rentScheduleStatus": "confirmed" },
+    { "id": "lease-pine-jordan", "propertyId": "property-pine", "spaceId": "space-pine-home", "tenantPartyIds": ["tenant-jordan-brooks"], "status": "executed", "startsOn": "2026-02-01", "endsOn": "2027-01-31", "monthlyRentMinor": 185000, "rentScheduleStatus": "needs_review", "lastTermsChangeOn": "2026-09-20" },
+    { "id": "lease-maple-taylor", "propertyId": "property-maple", "spaceId": "space-maple-home", "tenantPartyIds": ["tenant-taylor-reed"], "status": "executed", "startsOn": "2026-06-01", "endsOn": "2027-05-31", "monthlyRentMinor": 210000, "rentScheduleStatus": "confirmed" }
+  ],
+  "providers": [
+    { "id": "provider-profile-northside", "partyId": "provider-northside-plumbing", "serviceCategories": ["plumbing", "emergency_repairs"], "status": "active", "notes": "Preferred plumbing provider for Oak and Pine." },
+    { "id": "provider-profile-harbor", "partyId": "provider-harbor-legal", "serviceCategories": ["attorney", "eviction_support"], "status": "active", "notes": "Legal provider; engagements remain in manual legal matters." }
+  ],
+  "maintenanceIssues": [
+    { "id": "maintenance-oak-kitchen-leak", "propertyId": "property-oak", "spaceId": "space-oak-home", "reportedByPartyId": "tenant-maya-chen", "title": "Kitchen leak", "description": "Water collecting below the kitchen sink.", "priority": "urgent", "status": "in_progress", "reportedAt": "2026-09-22T16:15:00Z", "providerPartyId": "provider-northside-plumbing", "nextAction": "Review response and visit plan", "ownerUpdateStatus": "open", "appointment": { "startsAt": "2026-09-23T21:00:00Z", "status": "scheduled", "title": "Plumber visit" } }
+  ],
+  "money": {
+    "rentExpectations": [{ "id": "rent-pine-2026-09", "leaseId": "lease-pine-jordan", "period": "2026-09", "expectedMinor": 185000, "receivedMinor": 120000, "dueMinor": 65000, "status": "overdue" }],
+    "payments": [{ "id": "payment-pine-2026-09-01", "leaseId": "lease-pine-jordan", "receivedOn": "2026-09-01", "amountMinor": 120000, "method": "bank_transfer", "allocation": "2026-09" }],
+    "expenses": [{ "id": "expense-plumbing-2026-09-15", "propertyId": "property-oak", "providerPartyId": "provider-northside-plumbing", "paidOn": "2026-09-15", "amountMinor": 17500, "category": "repairs_and_maintenance", "status": "confirmed" }],
+    "ownerReports": [{ "id": "owner-report-oak-september", "ownerPartyId": "owner-alex-morgan", "propertyId": "property-oak", "reportedOn": "2026-09-21", "period": "2026-09", "amountMinor": 185000, "status": "pending_verification", "evidence": "Synthetic payment confirmation" }],
+    "depositSettlements": [{ "id": "deposit-settlement-pine", "leaseId": "lease-pine-jordan", "status": "draft", "followUpOn": "2026-09-25", "deductionsStatus": "requires_evidence", "refundStatus": "not_recorded" }]
+  },
+  "communications": [
+    { "id": "communication-alex-repair", "kind": "call", "occurredAt": "2026-09-21T17:30:00Z", "participantPartyIds": ["owner-alex-morgan"], "propertyId": "property-oak", "maintenanceIssueId": "maintenance-oak-kitchen-leak", "summary": "Discussed repair timing and requested an update after the plumber visit.", "recordingStatus": "recorded_externally", "followUpTaskId": "task-update-alex" }
+  ],
+  "tasks": [
+    { "id": "task-review-oak-leak", "title": "Kitchen leak needs your decision", "propertyId": "property-oak", "sourceType": "maintenance_issue", "sourceId": "maintenance-oak-kitchen-leak", "queue": "needs_action", "urgency": "urgent", "status": "open", "dueOn": "2026-09-23" },
+    { "id": "task-record-pine-rent", "title": "September rent still due", "propertyId": "property-pine", "sourceType": "rent_expectation", "sourceId": "rent-pine-2026-09", "queue": "needs_action", "urgency": "overdue", "status": "open", "dueOn": "2026-09-01" },
+    { "id": "task-review-owner-report", "title": "Verify rent received by owner", "propertyId": "property-oak", "sourceType": "owner_report", "sourceId": "owner-report-oak-september", "queue": "needs_action", "urgency": "review", "status": "open" },
+    { "id": "task-request-estimate", "title": "Kitchen repair estimate", "propertyId": "property-oak", "sourceType": "maintenance_issue", "sourceId": "maintenance-oak-kitchen-leak", "queue": "waiting", "waitingFor": "Northside Plumbing", "followUpOn": "2026-09-23", "status": "open" },
+    { "id": "task-update-alex", "title": "Update Alex after plumber visit", "propertyId": "property-oak", "sourceType": "communication", "sourceId": "communication-alex-repair", "queue": "waiting", "waitingFor": "Plumber visit completion", "followUpOn": "2026-09-23", "status": "open" },
+    { "id": "task-deposit-followup", "title": "Deposit refund follow-up", "propertyId": "property-pine", "sourceType": "deposit_settlement", "sourceId": "deposit-settlement-pine", "queue": "upcoming", "dueOn": "2026-09-25", "status": "open" },
+    { "id": "task-renew-oak", "title": "Review lease renewal", "propertyId": "property-oak", "sourceType": "lease", "sourceId": "lease-oak-maya", "queue": "upcoming", "dueOn": "2026-09-28", "status": "open" }
+  ],
+  "legalMatters": [{ "id": "legal-pine-lease", "propertyId": "property-pine", "leaseId": "lease-pine-jordan", "status": "preparing", "attorneyProviderPartyId": "provider-harbor-legal", "summary": "Synthetic example of a documented legal-preparation matter.", "milestones": [{ "date": "2026-09-22", "title": "Initial attorney consultation recorded", "confirmed": true }], "deadlines": [{ "date": "2026-10-01", "title": "Operator-entered follow-up date", "confirmed": false }] }],
+  "hoaViolationNotices": [{ "id": "hoa-cedar-parking", "propertyId": "property-cedar", "status": "response_in_progress", "receivedOn": "2026-09-18", "title": "Parking-space violation notice", "citedRuleReference": "Synthetic HOA rule reference", "evidence": "Synthetic notice PDF reference", "responseDueOn": "2026-09-30", "closureConfirmed": false }]
+}

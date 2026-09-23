@@ -26,7 +26,7 @@ VEND-001 does not provide:
 - Quote requests, appointment scheduling, provider assignment, repair outcomes, costs, or a maintenance work journal. `MAINT-001`, `MAINT-002`, and `MAINT-003` own those workflows.
 - Provider onboarding, background checks, insurance, licensing, tax forms, payment credentials, bank details, or legal verification.
 - Sending communications, external account connections, autonomous provider selection, or AI contact actions.
-- A React provider screen. This slice delivers the backend/API contract; a later dedicated provider UI slice may place it within Maintenance as described by the architecture.
+- A React provider screen within this backend slice. UI-001 delivers the confirmed configurable permanent Providers destination and contextual access from Maintenance/legal matters, as specified in [the operator design](UI-001_DESIGN.md).
 
 ## Core decisions
 

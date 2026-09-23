@@ -10,6 +10,9 @@ Deliver complete, understandable workflows for:
 - A configurable external local workspace for records and attachments, separate from Git-maintained application code, with backup/export and restore.
 - Operator-run setup scripts to initialize or restore each user's local workspace, select data and backup locations, record its machine-local locator, and verify readiness.
 - Portfolio setup for self-owned and client-managed properties.
+- Reviewed Excel and read-only Google Sheets snapshot imports for properties, owners, and providers, with explicit create/link/skip and duplicate-safe retries.
+- The confirmed [operator experience](UI-001_DESIGN.md): configurable navigation, property/owner directories, Providers, Light/Dark Settings, full-summary-bar inline expansion, drafts, coverage reviews, and visible waiting/follow-up work.
+- Manual eviction/legal-matter tracking with attorney links and sourced milestone/deadline records, plus property-linked HOA violation notices with explicit response and closure.
 - Single-family homes, condos, townhomes, and offices.
 - Tenants, leases, pre-move-in/post-move-out condition reports, rent tracking, security-deposit settlement, recorded payment methods, prepaid-check deposit reminders, expenses, and a manual owner/tenant communication ledger with task follow-up.
 - Jurisdiction-sourced notice-deadline alerts and effective-dated rent adjustments with operator confirmation.
@@ -23,9 +26,11 @@ Deliver complete, understandable workflows for:
 - Repair intake, quotes, configurable provider categories, vendor history, and work journals.
 - Action dashboard and drill-down reporting.
 
-Success means a small operator can complete the monthly rent, vacancy-to-lease, and repair-to-completion workflows without a spreadsheet.
+Success means a small operator can complete monthly rent, vacancy-to-lease, and repair-to-completion workflows, review legal/HOA next actions, and migrate initial property/owner/provider records without maintaining a parallel tracking spreadsheet. Legal outcomes, actual move-out, repairs, and financial actions remain separately confirmed facts.
 
 ## Next — Connect and assist locally
+
+- Broader HOA profiles, standing rules management, and approval requests; MVP includes violation notices only.
 
 - Online payments, autopay, bank feeds, and recurring expenses.
 - Connected-account email/SMS reminders and two-way communication, plus calendar connections. The manual COM-001 ledger remains local MVP scope.
@@ -41,7 +46,7 @@ Success means a small operator can complete the monthly rent, vacancy-to-lease, 
 - Multi-unit apartment-building support, including common areas, turnovers, and bulk actions.
 - Trust accounting, automated owner fund transfers, advanced commercial leases, CAM/NNN reconciliation, and accounting integrations.
 - Live reputation integrations and vendor monitoring.
-- Custom reports, scheduled exports, advanced permissions, public API, and bulk imports.
+- Custom reports, scheduled exports, advanced permissions, public API, and advanced lease/balance/history migration or update imports. Initial property/owner/provider create/link/skip intake is MVP scope.
 
 ## Future SaaS — Share and collaborate
 
