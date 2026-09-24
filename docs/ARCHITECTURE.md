@@ -72,7 +72,7 @@ The server separates domain responsibilities from user-interface screens. This s
 | `maintenance` | Issue intake, reporter attribution, appointments, quotes, assignments, status, estimates and work-reported cost context, and append-only issue-backed work journals and outcomes. |
 | `providers` | Provider profiles, categories, service areas, references, reputation notes, and manually entered prior-work context outside the issue workflow. |
 | `communications` | Manual local interaction timeline for any saved party, typed context links, immutable corrections, and TASK-001 follow-up projection. It neither sends nor ingests messages. |
-| `intake` | Retained evidence submitted by Muse or the operator, voice transcripts, source normalization, account-scoped deduplication, and source-linked review. No native mailbox fetching. |
+| `intake` | Retained evidence submitted by authorized assistants or the operator, voice transcripts, source normalization, account-scoped deduplication, and source-linked review. No native mailbox fetching. |
 | `documents` | Templates, versions, generated drafts, attachments, and document review metadata. |
 | `jurisdictions` | Effective-dated notice rules, sources, verification dates, and alert calculations. |
 | `reporting` | Read models, filters, aggregate reports, and source-record drill-down. |
@@ -228,15 +228,45 @@ Backups of an active workspace use SQLite's backup facility or an equivalent con
 
 ## AI and connector architecture
 
-AI and external transports are adapters behind explicit interfaces, not direct calls scattered through features. The `ai_governance` module owns AI run records, exact bounded governed/redacted inputs, draft shells, review decisions, action limits, and redaction-profile bindings. The relevant domain module prepares a bounded candidate from a source record; AI Governance applies its versioned redaction profile and calls the provider-neutral `AiProviderPort`. The product-facing assistant is fixed as Meta Muse, and app-initiated inference uses Muse models through Meta Model API. This transport choice is recorded as provenance and is not an operator-selectable provider. Personal-agent access is a separate MCP-001 grant and never reuses the model API credential. Output remains a draft until an operator approves it through the review queue, and approval executes inside the owning module's transaction together with the official record and audit events. No AI module may send a message, sign a document, initiate a payment, contact or assign a provider, or change lease, occupancy, or money state without an explicit operator action.
+The app owns official records, deadlines, reminders, durable workflow state, review, and audit. AI is optional. Manual work remains available when every AI connection is absent, paused, or unavailable. This provider-neutral design adopts [AI integration research](AI_INTEGRATION_RESEARCH.md).
 
-A local MCP server provides the conversational assistant surface: bounded, redacted read/query tools over workspace records. It never writes directly; assistant-proposed changes enter the same review queue as `ai_drafts` and take effect only through operator approval.
+### Independent model and assistant connections
 
-Provider API keys live in the operating-system credential store keyed to the workspace ID, under the same rule as connector credentials. Ingested messages retain source IDs and source links so processing is idempotent and auditable. Connector and AI credentials never enter an export, backup, or SaaS migration; they must be reauthorized after restore or migration.
+| Boundary | Application contract | Candidate adapters |
+| --- | --- | --- |
+| Built-in assistance | A domain prepares bounded context; AI Governance redacts and invokes `AiProviderPort`; output becomes a reviewable draft. | Registered hosted APIs such as OpenAI or Meta Model API, or an optional local runtime such as Ollama with a validated pinned model. |
+| Connected assistants | MCP-001 validates scoped reads, retained evidence, external proposals, receipts, and connection health through one application-owned service. | MCP for compatible desktop clients such as ChatGPT desktop/Codex or Claude; file exchange for Muse Agent if its reported capabilities pass verification. |
+| Computer use | Optional interaction through ordinary application workflows and permissions. | Capability of a particular assistant environment, not a model API entitlement or a required integration transport. |
 
-Inbound messaging arrives through Muse Agent or manual operator entry. The app holds no mail/SMS credentials and does not fetch or send messages. Intake preserves bounded submitted source evidence separately from proposed fields; operator approval creates official records. COM-002 prepares outbound drafts for manual sending and records the operator-reported sent outcome. CONN-001 authorizes read-only Google Sheets only. Model inference and transcription use their AI adapters and device-held credentials.
+Selecting Meta Model API does not connect Muse Agent; selecting an OpenAI model does not connect ChatGPT or its mailbox. Local weights do not supply email access, schedules, or an MCP client. Settings keeps **Built-in AI** and **Connected assistants** separate. Operators select only registered, validated configurations, not arbitrary provider names or URLs. Supporting a common interface does not promise every adapter in the first release.
 
-MCP-001 owns bridge grants, configuration, source/proposal admission, and heartbeat health. INGEST-002 review is independent of bridge transport to avoid circular dependencies and preserve manual operation. Missing contact after twice the expected poll interval raises a visible warning while enabled; failed polls remain visible even if heartbeats arrive. Agent reports cannot prove complete mailbox coverage. Remote reachability, personal-agent authorization, and scheduling must be verified before enabling the bridge.
+### Governance and execution
+
+`ai_governance` owns run records, exact bounded governed inputs, draft shells, decisions, limits, disclosure permissions, and redaction bindings. Domain modules own context preparation, payload schemas, source revisions, and approval consequences. No provider is called inside a SQLite transaction. Approval writes the official record, review decision, and correlated audit events in the owning domain's transaction. No AI adapter sends messages, signs documents, initiates payments, or changes lease, occupancy, assignment, or money state autonomously.
+
+Record the actual provider/model, adapter version, execution location, configuration revision, and prompt/schema/profile versions on each generated run. Local runs additionally identify the model artifact/digest, quantization, and runtime/version. External proposals identify the authenticated connection and delegation; any unverified model identity or usage is labeled assistant-reported or unknown. Provider changes affect new runs only and do not relabel historical drafts.
+
+Cloud disclosure approval is bound to the selected connection and disclosure version/data classes. No silent fallback from local to cloud or between vendors. An explicit retry must pass the destination's disclosure, action, and capability checks. Global pause blocks new model calls, assistant reads/exports, and proposal admission; in-flight calls may already have disclosed data. Recheck pause/revocation before admission, retain a blocked outcome for late results, and preserve existing drafts for operator review. Pausing app access cannot retract prior exports or stop an assistant's independent schedules.
+
+### Local inference
+
+Begin with one optional bounded-text pilot, selected using [local model research](LOCAL_MODEL_RESEARCH.md). The backend alone invokes the registered runtime, with bounded context/output, one local inference at a time, finite timeouts, and no open database transaction. A local-only configuration rejects cloud model variants, remote destinations, and implicit network fallback. Validate offline inference after installation. Image/audio/document support is enabled per tested model/runtime/action combination; model-family claims alone are insufficient.
+
+Runtime processes, weights, endpoints, and secrets are machine configuration outside portable workspace backups. The workspace retains selection references and immutable run provenance; restore reports setup required until the device is checked again. Localhost alone is not authentication. Constrain runtime access and do not expose it to the browser or LAN by default.
+
+### Assistant transports and evidence
+
+MCP-001 retains its identifier but now covers the shared assistant contract and separate MCP/file adapters. The local MCP server exposes bounded read tools plus explicit source/proposal submission and receipt tools; it exposes no generic SQL, filesystem, approval, or domain-write tool. MCP is not ChatGPT-exclusive. Client compatibility, authentication, and local transport must be tested for the exact product. Hosted/web clients require a separately authorized remote path; no tunnel or public endpoint is enabled in MVP.
+
+The Muse candidate uses a per-connection file exchange, not assumed localhost HTTP or MCP access. It receives bounded exports only, publishes complete envelopes, and reads durable receipts. File paths and self-declared agent names do not prove identity. Automatic admission requires verified filesystem isolation and trustworthy writer attribution; otherwise use manual import. File watching is backed by startup/resume recovery scans. Both transports use the same source normalization, authorization, idempotency, review, and receipt state machine.
+
+Inbound messages arrive through authorized assistants or manual entry. The app holds no mail/SMS credentials and does not fetch or send messages. Intake retains bounded evidence separately from proposed fields and deduplicates by source account/message identity across assistant connections. INGEST-002 review does not depend on MCP-001 or optional matching. COM-002 drafts are sent manually and retain operator-reported sent outcomes. CONN-001 remains read-only Google Sheets authorization.
+
+Credentials live in the OS credential store keyed by workspace and connection, independently for model APIs and assistant grants. No usable secret or delegation survives export/restore. Scheduled assistant connections distinguish last contact, last successful poll, acknowledged configuration, and failed polls. Two missed acknowledged intervals raise a warning; an interactive MCP session with no schedule does not generate a fictitious polling alarm. No heartbeat proves complete mailbox coverage.
+
+### Delivery gates
+
+AI-GOV-001 establishes the neutral registry and review boundary with fake adapters; production inference needs a validated hosted adapter or the separate AI-LOCAL-001 pilot. INGEST-001/002 provide evidence and review independently. MCP-001 first validates one local MCP client and the common contract; the Muse file adapter is separately capability-gated. UI-001 shows only implemented capabilities and honest setup/unavailable states. Protocol tests and synthetic end-to-end scenarios precede enabling any provider on real records.
 
 ## Future SaaS path
 

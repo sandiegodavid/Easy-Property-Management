@@ -4,9 +4,9 @@
 
 Proposed backend/API design. No application code is included in this document.
 
-This design is based on the AI-GOV-001 backlog outcome, `ARCHITECTURE.md`, the accepted AI decisions in `DECISIONS.md`, the confirmed UI direction in `UI-001_DESIGN.md`, `META_MUSE_RESEARCH.md`, the downstream AI/ingestion/MCP backlog, and the current server implementation.
+This design is based on the AI-GOV-001 backlog outcome, `ARCHITECTURE.md`, the accepted AI decisions in `DECISIONS.md`, the confirmed UI direction in `UI-001_DESIGN.md`, `AI_INTEGRATION_RESEARCH.md`, the downstream AI/ingestion/MCP backlog, and the current server implementation.
 
-The product-facing assistant is always **Meta Muse**. App-initiated inference uses Muse models through **Meta Model API**, behind `AiProviderPort`; invoking the Muse personal agent is a separate integration. Meta's [official API overview](https://dev.meta.ai/docs/overview) and [quickstart](https://dev.meta.ai/docs/quickstart) verify model access. Record `assistant_name=meta_muse`, `transport_provider=meta_model_api`, and the actual model/version returned. No alternative model provider is required by this design. Personal-agent proposals enter through MCP-001, whose connection and bootstrap capabilities require separate verification.
+Built-in assistance is provider-neutral. Operators may choose a registered hosted model connection (including Meta Model API or OpenAI) or a validated on-device runtime. Connected personal assistants are separate MCP-001 connections and may use a different vendor. No provider is selected merely by this design; production adapters must pass their capability and disclosure gates. This revision supersedes the former fixed Meta Muse identity.
 
 ## Outcome
 
@@ -63,11 +63,11 @@ AI-GOV-001 excludes:
 
 - production prompts or domain output schemas;
 - source ingestion and source-message persistence (`INGEST-001`);
-- issue extraction/matching and issue-specific approval (`MCP-001`, `ISSUE-AI-002`, `INGEST-002`);
+- issue extraction/matching and issue-specific approval (`ISSUE-AI-001`, `ISSUE-AI-002`, `INGEST-002`);
 - a local MCP server or assistant delegation (`MCP-001`);
 - voice transcription, documents, marketing, recommendations, or scheduling;
 - automatic approval or any automatic domain side effect;
-- model evaluation, fine-tuning, retrieval infrastructure, or prompt marketplaces; and
+- domain-quality evaluation suites (owned by each capability), fine-tuning, retrieval infrastructure, or prompt marketplaces; and
 - React work. UI-001 owns the eventual Settings and review surfaces.
 
 ## Architecture and ownership
@@ -99,7 +99,7 @@ Every production action type must have one immutable code definition registered 
 - prompt-template identifier and version;
 - draft payload schema and output-schema version;
 - allowed confidence labels, their provenance fields, and whether a calibrated numeric value is permitted;
-- fixed Meta Muse assistant identity and allowed transport-provider/model/version ceilings;
+- required capabilities/input modalities, permitted execution locations, and allowed provider/model/version ceilings;
 - maximum prompt and completion tokens permitted by code;
 - the explicit approval effect (`create`, `update`, or `advisory_only`) and whether it requires a result reference; and
 - validator/approval-handler identifiers supplied by the owning module.
@@ -119,12 +119,27 @@ One singleton row owns workspace-wide settings.
 | Field | Rule |
 | --- | --- |
 | `singleton` | Integer primary key constrained to `1`. |
-| `kill_switch` | Boolean. When enabled, no new provider run or external proposal is accepted. Existing drafts remain reviewable and dismissible; approval remains allowed because it performs no new model call. |
-| `cloud_message_content_enabled` | Boolean, default false. Explicitly permits bounded, profile-redacted tenant/owner message content to be sent to the configured cloud model transport. It never permits an unredacted request or overrides an action's minimization profile. |
-| `cloud_message_disclosure_version`, `cloud_message_enabled_at` | Required while permission is enabled and null while disabled. They identify the plain-language disclosure explicitly acknowledged by the operator and when it was enabled. |
+| `kill_switch` | Boolean. When enabled, no new provider call, assistant read/export, or external proposal is accepted. Recheck at dispatch and result admission. Existing drafts remain reviewable, dismissible, and explicitly approvable under current domain checks; no new AI call occurs. |
+| `built_in_enabled` | Boolean, default false. Off blocks all app-initiated inference, including action-specific connection overrides, without affecting assistant grants. |
+| `default_connection_id` | Nullable reference to `ai_model_connections`; null means built-in assistance is not configured. Selection never grants disclosure permission. |
 | `updated_at` | UTC timestamp. |
 
 The kill switch is not duplicated on every action-limit row.
+
+### `ai_model_connections`
+
+One row per configured model connection, independent of MCP-001 assistant delegations. This is a sixth governance table.
+
+| Field | Rule |
+| --- | --- |
+| `id`, `label`, `revision` | Stable UUID, bounded operator label, monotonic configuration revision. |
+| `adapter_id`, `adapter_version`, `model_identifier`, `execution_location` | Registered combination only; location is `on_device` or `cloud`. Operators cannot enter arbitrary network destinations through this table. |
+| `model_artifact_digest`, `quantization`, `runtime_id`, `runtime_version` | Required for a validated local configuration; null where inapplicable for hosted models. |
+| `enabled` | Disabling blocks new dispatch; no automatic alternative is chosen. |
+| `cloud_data_classes`, `disclosure_version`, `disclosure_accepted_at` | Explicit allowed data classes and destination-specific disclosure acknowledgement; default empty. Required for cloud transmission of each governed class, including tenant/owner message content. A destination or disclosure change clears permission. Local processing needs no cloud consent. |
+| `created_at`, `updated_at` | UTC timestamps. |
+
+Credentials, local endpoints, paths, runtime processes, downloads, and current health are device configuration, not portable row content. Readiness is derived from a device check; restoring a row cannot restore a live connection. Action overrides may select another registered connection with the same checks. The effective connection and revision are frozen when reserving a run.
 
 ### `ai_action_limits`
 
@@ -134,6 +149,7 @@ One optional operator override per registered action type.
 | --- | --- |
 | `action_type` | Primary key; must exist in the static registry. |
 | `enabled` | Boolean. |
+| `connection_id` | Optional registered model connection override; null uses the workspace default. External proposals do not use it. |
 | `max_runs_per_utc_day` | Positive integer no greater than the registered ceiling. It applies to both provider generations and later external proposals. |
 | `max_prompt_tokens` | Positive integer no greater than the registered ceiling. |
 | `max_completion_tokens` | Positive integer no greater than the registered ceiling. |
@@ -153,8 +169,10 @@ One row represents one governed provider invocation or, later, one externally pr
 | `action_type`, `owning_module` | Required registered codes. |
 | `source_entity_type`, `source_entity_id` | Required typed source reference. No polymorphic database foreign key is claimed. |
 | `source_revision`, `source_fingerprint` | Required opaque revision and SHA-256 supplied by the source-domain projection. These preserve what the run was based on without requiring a universal `record_version` column. |
-| `assistant_name`, `transport_provider`, `model_identifier` | `assistant_name` is always `meta_muse`. `transport_provider` truthfully identifies the API/adapter that executed a generated run; the exact model/version is also required for `provider_generation`. For a connected Meta Muse `external_proposal`, transport/model may be null only when Muse does not report them. These fields are provenance, not operator-selectable product identities. |
-| `prompt_template_id`, `prompt_template_version`, `output_schema_version` | Required registered versions. |
+| `connection_id`, `configuration_revision`, `transport_provider`, `adapter_version`, `model_identifier`, `execution_location` | Generated runs snapshot the registered model connection and actual provider/model/location. No fixed assistant name. |
+| `model_artifact_digest`, `quantization`, `runtime_id`, `runtime_version` | Required provenance for local generation; absent when inapplicable. |
+| `assistant_name`, `assistant_connection_id`, `delegation_id`, `reported_model_identifier` | External proposals identify the authenticated connection/grant. Display name comes from that binding, not submitted text. Model/usage are nullable and labeled reported unless verified. Generated runs need no personal-assistant identity. |
+| `prompt_template_id`, `prompt_template_version`, `output_schema_version` | Registered prompt versions required for generated runs; null for external proposals whose internal prompt is unknown. Output/envelope schema version is required for both kinds. |
 | `redaction_profile`, `redaction_profile_version` | Required applied profile. |
 | `governed_input_json` | Exact canonical bounded content admitted by governance: the redacted provider request for `provider_generation`, or the validated proposal envelope for `external_proposal`. This is retained so the operator can see what left or entered the workspace. It never contains credentials. |
 | `input_fingerprint`, `request_fingerprint` | SHA-256 digests of the canonical governed input and complete idempotent request respectively. |
@@ -217,7 +235,7 @@ A profile is versioned code with explicit rules per field: allow, drop, mask, tr
 - reversible tokenization is out of scope until a design identifies where its mapping lives and how it is retained safely; and
 - the exact canonical redacted request and profile version are persisted before the provider is called.
 
-Tenant/owner message content has an additional fail-closed gate. When `cloud_message_content_enabled` is false, an action that would transmit any such content is blocked before provider access even if its redaction profile would otherwise accept the fields. Enabling the setting requires plain-language disclosure that minimized message content leaves the device for the configured model transport, identifies the classes of data included and excluded, and writes an audit event. The operator cannot disable mandatory redaction, secret rejection, field bounds, or consent requirements. Actions using only non-message data must separately declare whether this gate applies; they do not inherit permission merely because another action was enabled.
+Cloud disclosure is checked against the effective connection, accepted disclosure version, and each action's data classes. Tenant/owner messages remain blocked by default; other classes do not inherit permission from them. Before sending, show the destination and what will leave the device. Changing vendors or moving a local request to cloud requires that destination's explicit permission. Redaction and minimization remain mandatory for both local and cloud inference. A local client or file bridge does not establish local processing; assistant exports require their own MCP-001 disclosure grant.
 
 Provider output passes the registered Pydantic schema, bounded-size checks, and secret/account-identifier rejection before a draft can be stored. A malformed output fails the run and creates no draft.
 
@@ -231,9 +249,13 @@ Provider output passes the registered Pydantic schema, bounded-size checks, and 
 
 The coordinator, not the adapter, owns action limits, persistence, idempotency, and audit. The adapter owns protocol translation, timeout enforcement, provider token counting/estimation, response-schema submission where supported, and sanitized provider errors. A provider/model that cannot enforce the registered completion ceiling is not eligible.
 
-AI-GOV-001 adds an AI transport-credential application protocol and a keyring adapter keyed by `(workspace_id, transport_provider)`. It may reuse the `keyring` library but must not reuse the backup-specific `BackupSecretStore` interface. APIs can set, replace, delete, and report credential presence for the configured transport; they never return credential values. Secrets are excluded from database rows, logs, audit snapshots, archives, exports, and migration payloads.
+AI-GOV-001 adds an AI transport-credential application protocol and a keyring adapter keyed by `(workspace_id, connection_id)`. It may reuse the `keyring` library but must not reuse the backup-specific `BackupSecretStore` interface. APIs can set, replace, delete, and report credential presence for the configured transport; they never return credential values. Secrets are excluded from database rows, logs, audit snapshots, archives, exports, and migration payloads.
 
-There is no operator-selectable assistant or provider in this design. The product surface is always Meta Muse. The active transport adapter is selected by trusted application/deployment configuration from a static allowlist, while persisted runs record both `assistant_name=meta_muse` and the actual transport provider/model used. Per-action settings may narrow the model choices exposed by that configured adapter but cannot select another transport. Restoring a workspace reports the configured AI transport credential as unavailable until re-entered on that device.
+A static adapter registry declares supported models, execution location, credentials required, tested input modalities, schemas, and context/output ceilings. Settings selects only registered combinations; unavailable choices show a reason and cannot run. Meta Model API is one hosted adapter, not the identity of all AI output. A model's function calling is a proposed structured response, not permission to execute tools.
+
+Local inference is introduced by AI-LOCAL-001 through the same port. Machine configuration constrains the endpoint to the approved local runtime and rejects cloud tags/fallback. Start with one local inference at a time and bounded text; timeout and explicit interruption must leave normal record workflows usable. Release concurrency capacity on every exit. No automatic installation/download or model switching occurs during an ordinary action. Weights are outside backups. Cloud credentials are optional for local adapters; check the adapter's actual requirements rather than demanding a dummy API key.
+
+Configuration changes affect later runs only. Snapshot the chosen configuration at reservation, recheck permission/pause immediately before dispatch and result admission, and never relabel old drafts. Revoked permission or pause during a call cannot recall sent data; retain a sanitized blocked outcome and no new review draft for a late result. There is no cross-provider automatic retry.
 
 ## Run lifecycle and transaction boundaries
 
@@ -241,9 +263,9 @@ AI-GOV-001 does not hold a SQLite transaction open during a network call.
 
 1. The capability-owning application service supplies a typed candidate, source revision/fingerprint, and idempotency key to the AI coordinator.
 2. The coordinator resolves the registered action, applies redaction, canonicalizes the exact provider request, and computes fingerprints.
-3. It checks the configured transport credential through the keyring port before opening a write transaction. In one immediate transaction it then checks the kill switch, action enablement, registered transport/model allowlist, token estimates, UTC-day cap, source reference, and idempotency. It inserts a `reserved` run and its audit event. A missing credential or other blocked request inserts a `blocked` run and audit event but never calls the provider.
-4. A short transaction changes the reserved run to `running`. The provider call then occurs with no database transaction open.
-5. On success, one immediate transaction revalidates the returned payload, changes the run to `succeeded`, inserts the `proposed` draft, and writes correlated audit events.
+3. It checks adapter readiness and any required credential through the device/keyring ports before opening a write transaction. In one immediate transaction it then checks the kill switch, built-in enablement, connection revision and disclosure permission, action enablement, registered transport/model/capability allowlist, token estimates, UTC-day cap, source reference, and idempotency. It inserts a `reserved` run and its audit event. A missing required credential or other blocked request inserts a `blocked` run and audit event but never calls the provider.
+4. A short transaction rechecks permission and pause, then changes the reserved run to `running`. The provider call then occurs with no database transaction open.
+5. On success, one immediate transaction rechecks pause/disclosure eligibility and revalidates the returned payload, changes the run to `succeeded`, inserts the `proposed` draft, and writes correlated audit events.
 6. On failure, one immediate transaction marks the run `failed` with a sanitized code/detail and writes its audit event. No draft is created.
 
 The daily cap counts provider runs that reached `running`, including provider failures, and external proposals successfully admitted by MCP-001. Input tokens are conservatively estimated before a provider call; `max_completion_tokens` is passed to the provider. Reported actual usage is retained but does not retroactively invalidate a completed draft. Credential changes affect later reservations and do not cancel a provider call already in flight.
@@ -268,9 +290,10 @@ AI Governance exposes transaction operations, not another module's repository. O
 
 All request models reject unknown fields. Pages use bounded cursor pagination.
 
-- `GET /api/ai/settings` returns kill-switch state, the cloud-message-content permission and disclosure metadata, fixed Meta Muse assistant metadata, configured transport health/credential presence, and registered action summaries. Transport identity is diagnostic provenance, not a selectable assistant.
-- `PUT /api/ai/settings` changes the kill switch or cloud-message-content permission with an idempotency key and audit event. Enabling cloud message processing requires an explicit disclosure acknowledgement version; a generic settings save cannot imply consent.
-- `PUT /api/ai/transport-credential` stores/replaces the configured adapter's write-only credential; `DELETE` removes it. `GET /api/ai/settings` reports presence and health metadata without secret material. The client cannot use this endpoint to choose an arbitrary provider.
+- `GET /api/ai/settings` returns kill-switch state, default model connection, registered choices/capabilities, destination-bound disclosures, derived readiness, and action summaries. Assistant connection state is read separately from MCP-001.
+- `PUT /api/ai/settings` changes the kill switch, built-in enablement, or default connection with idempotency and audit. It cannot implicitly consent to disclosure.
+- `GET/POST /api/ai/connections` and `PATCH /api/ai/connections/{id}` list/create/update registered model configurations with revision checks; `POST .../{id}/test` checks readiness using synthetic content; `PUT .../{id}/disclosure` records explicit destination/data-class consent.
+- `PUT /api/ai/connections/{id}/credential` stores/replaces that connection's write-only credential; `DELETE` removes it. Read APIs report presence only. No arbitrary URL/provider proxy is exposed.
 - `GET /api/ai/limits` and `PUT /api/ai/limits/{actionType}` read or narrow operator overrides.
 - `GET /api/ai/redaction-profiles` returns profile name, version, action binding, and a human-readable field-handling summary—not executable rules or secret values.
 - `GET /api/ai/drafts` returns a bounded page filtered by status, owning module, entity kind, action type, or source reference.
@@ -285,7 +308,7 @@ Malformed requests return `422`; missing resources `404`; provider transport fai
 
 ## Audit, privacy, and retained-data validation
 
-AI-GOV-001 registers dedicated snapshot and activity policies for `ai_run`, `ai_draft`, `ai_review_decision`, `ai_settings`, and `ai_action_limit`.
+AI-GOV-001 registers dedicated snapshot and activity policies for `ai_run`, `ai_draft`, `ai_review_decision`, `ai_settings`, `ai_action_limit`, and `ai_model_connection`.
 
 - Operator request/configuration/review events use `local_operator`.
 - Provider-produced output events use the existing `ai_assistant` actor kind with provider/model in bounded snapshot fields or `actor_reference`.
@@ -301,15 +324,15 @@ AI-GOV-001 stores token usage when the provider reports it. It stores no cost es
 
 ## Backup, export, and restore
 
-All five tables participate in the encrypted LOCAL-002 database snapshot and exact archive validation. Stable IDs, versions, source/result references, lineage, review history, and correlation IDs survive restore. Static action/profile definitions are application code; historical rows carry their identifiers and versions so the current application can validate them. Supported application releases must retain validators and presentation policies for every historical version they claim to restore.
+All six tables participate in the encrypted LOCAL-002 database snapshot and exact archive validation. Stable IDs, versions, source/result references, lineage, review history, and correlation IDs survive restore. Static action/profile definitions are application code; historical rows carry their identifiers and versions so the current application can validate them. Supported application releases must retain validators and presentation policies for every historical version they claim to restore.
 
-Provider credentials are not workspace content and never enter the archive. After restore, the configured provider remains visible but unavailable until its credential is supplied on the new device. If the restored application does not recognize a retained action/profile/schema version, restore validation fails before activation.
+Provider credentials are not workspace content and never enter the archive. After restore, configured connections remain visible but unavailable until credentials or local runtime readiness and disclosure settings are revalidated on the new device. Model weights, runtime endpoints, and secrets are excluded. If the restored application does not recognize a retained action/profile/schema version, restore validation fails before activation.
 
 ## UI-001 contract
 
 AI-GOV-001 delivers backend/API behavior only. UI-001 must provide:
 
-- Settings → AI assistance with the fixed Meta Muse identity, configured connection/credential state, a global kill switch, write-only credential controls, per-action limits, plain-language redaction visibility, and an explicit cloud-message-content permission/disclosure control that cannot disable mandatory redaction;
+- Settings → AI assistance with separate Built-in AI and Connected assistants cards, registered cloud/on-device selections, capability-aware readiness, a global pause, write-only credential controls, per-action limits, redaction visibility, and per-destination disclosure controls that cannot disable mandatory redaction;
 - a review queue that distinguishes source content, exact governed/redacted input, AI output, operator edits, confidence labels, and stale-source warnings;
 - approve/edit/dismiss controls only when a registered owning-domain handler exists; and
 - explicit unavailable states for missing credentials, unsupported providers, unregistered historical versions, and missing sources.
@@ -326,10 +349,10 @@ AI-GOV-001 should be marked backend-complete but operator-workflow-in-progress u
 
 ## Acceptance criteria
 
-- Exact-schema and retained-data validation cover all five tables and their lifecycle/correlation invariants.
+- Exact-schema and retained-data validation cover all six tables and their lifecycle/correlation invariants.
 - A synthetic registered action proves redaction, exact provider-input retention, output validation, draft creation, editing, dismissal, approval handoff, audit history, and backup/restore without creating a production AI feature.
 - Unknown actions, provider/model/profile versions, extra fields, secrets, oversized context, and malformed outputs fail closed.
-- Kill switch, cloud-message-content permission, disabled action, UTC-day cap, prompt cap, completion cap, configured Meta Model API transport, and registered Muse model allowlist are enforced atomically before provider access.
+- Kill switch, destination-bound disclosure permission, disabled action, UTC-day cap, prompt cap, completion cap, registered adapter, and action/model capability allowlist are enforced atomically before provider access.
 - Concurrent duplicate submissions make at most one provider call; same-key/different-request conflicts are stable and typed.
 - Provider calls occur outside SQLite transactions; interruption recovery leaves no indefinitely running row.
 - Terminal drafts are immutable; supersession is acyclic and non-branching; stale-source approval cannot create an official record.
@@ -339,9 +362,9 @@ AI-GOV-001 should be marked backend-complete but operator-workflow-in-progress u
 
 ## Implementation sequence
 
-1. Specify the Meta Model API adapter's request format, supported Muse model/version, token ceilings, timeout, and credential contract using the official API documentation. Verify these with synthetic data before production enablement.
+1. Define the neutral adapter registry and connection/disclosure schema. Qualify one hosted candidate with synthetic data before production enablement; Meta and OpenAI are candidates, not mandatory defaults. AI-LOCAL-001 qualifies local inference separately.
 2. Add AI domain values, action/profile registries, pure redaction, lifecycle, and limit policies with unit tests.
-3. Add the five tables to the current baseline, exact schema/data validation, audit policies, and LOCAL-002 coverage.
+3. Add the six tables to the current baseline, exact schema/data validation, audit policies, and LOCAL-002 coverage.
 4. Add provider and credential ports plus a deterministic fake adapter; do not claim a production provider until its official protocol is selected.
 5. Add the coordinator with short transaction phases, idempotency, concurrency, limit reservation, and interruption recovery.
 6. Add draft read/edit/dismiss APIs, approval dispatch contracts, and a test-only owning-domain handler proving atomicity.
@@ -353,8 +376,8 @@ AI-GOV-001 should be marked backend-complete but operator-workflow-in-progress u
 The cross-feature delivery plan is:
 
 1. **Phase 0 — Governance and adapters:** design and deliver AI-GOV-001, including governed draft/review state, exact redacted-input retention, confidence provenance, audit events, action limits, the provider adapter, configured transport credentials, and the fail-closed cloud-message-content permission and disclosure policy.
-2. **Phase 1 — Source intake and review:** INGEST-001 retains evidence submitted by Muse or the operator and local voice transcripts. INGEST-002 owns issue-draft review and approval without depending on bridge transport or optional matching. No native mail fetching or sending is built.
-3. **Phase 2 — Bridge and intelligence:** MCP-001 adds authenticated source/proposal admission and heartbeat monitoring. ISSUE-AI-001 is superseded by agent extraction. ISSUE-AI-002 remains optional matching assistance; diagnosis, provider suggestions, and voice capabilities follow their active dependencies. Manual entry works without an agent.
+2. **Phase 1 — Source intake and review:** INGEST-001 retains evidence submitted by an authorized assistant or the operator and local voice transcripts. INGEST-002 owns issue-draft review and approval without depending on bridge transport or optional matching. No native mail fetching or sending is built.
+3. **Phase 2 — Bridge and intelligence:** MCP-001 adds authenticated source/proposal admission and heartbeat monitoring. ISSUE-AI-001 supplies optional built-in extraction over retained evidence; external proposals need no second inference. ISSUE-AI-002 remains optional matching assistance; diagnosis, provider suggestions, and voice capabilities follow their active dependencies. Manual entry works without an agent.
 4. **Phase 3 — Documents and marketing:** deliver DOC-001 before DOC-AI-001/002/003, and LIST-001 before MKT-AI-001. Generated material is reviewed; the operator sends manually and records the outcome.
 5. **Phase 4 — Operator surfaces:** UI-001 renders Settings and review; DASH-003 displays pending work, failed polls, and stale bridge contact. CONN-001 remains limited to read-only Sheets authorization.
 
@@ -364,80 +387,53 @@ These phases are delivery gates, not permission to collapse ownership boundaries
 
 AUDIT-001 is AI-GOV-001's only hard prerequisite. FILE-001 remains a dependency of file-consuming capabilities such as ingestion, document analysis, and voice/file workflows; AI Governance itself owns no files or file links.
 
-The dependency graph is sound at a high level, but the numbered delivery order is not yet aligned with the phased roadmap:
+Hard dependencies take precedence over sequence labels; the optional local pilot runs only after its evidence and extraction contracts exist:
 
 - INGEST-001 owns retained messages/transcripts and source identity.
-- ISSUE-AI-001 is superseded by agent extraction; INGEST-002 registers the issue-draft contract and ISSUE-AI-002 may add matching assistance.
+- ISSUE-AI-001 supplies optional built-in extraction; INGEST-002 registers the issue-draft contract and ISSUE-AI-002 may add matching assistance.
 - INGEST-002 owns issue-specific source comparison, link/create/update decisions, and Maintenance approval consequences.
 - MCP-001 admits authenticated external proposals to the same queue without forcing another provider call.
 - VOICE-AI-001, DOC-AI items, marketing, recommendations, and scheduling register their own bounded actions later.
 - UI-001 renders Settings and review; DASH-003 later surfaces outstanding AI/ingestion attention on Home.
 
-## Contradictions and decisions required
+## Resolved design decisions
 
-### Decisions resolved
+These decisions summarize the implementation boundaries established above. They are grouped by responsibility; all have the same status.
 
-1. **Resolved: Muse model inference and Muse personal-agent access are separate surfaces.** App-initiated generation calls Muse models through the documented Meta Model API. `AiProviderPort` preserves the domain boundary. A model API key does not connect the personal agent, authorize its Gmail account, or create its schedules.
+### Integration and domain ownership
 
-   Persist `assistant_name=meta_muse`, `transport_provider=meta_model_api`, and actual model/version for generated runs. UI-001 shows fixed Meta Muse identity with separate model API credential status and optional personal-agent connection status. MCP-001 still needs a verified path to the local workspace; a connector announcement does not establish loopback reachability, unattended bootstrap, or schedule-management APIs. Inbound is exclusively Muse-submitted or manually entered; the app stores no mail credentials and fetches no mail. Retained Intake evidence remains required for source comparison. Outbound is drafted in the app and sent manually by the operator.
+- **Model inference and assistant access are independent.** Registered hosted or local adapters generate bounded drafts. MCP/file connections admit external proposals. Neither connection authorizes the other's accounts, credentials, or schedules. Provenance identifies the actual provider or submitting connection.
+- **Domains control generation and approval effects.** Capability-owned endpoints prepare bounded context and invoke the coordinator internally; there is no generic public `POST /api/ai/runs`. Each action declares `create`, `update`, or `advisory_only` and whether approval requires a result reference. Approval and retained-data validation enforce that declaration; “Approved” never implies an unspecified domain mutation.
+- **External proposals use a separate admission path.** Runs distinguish `provider_generation` from `external_proposal`; admitting an assistant proposal does not call a model again. External activity uses the existing `ai_assistant` audit actor kind with connection/delegation metadata.
+- **Intake and sending remain application-controlled.** Authorized assistants or manual entry supply evidence; the app does not fetch mail. INGEST-001 retains that evidence and INGEST-002 owns source comparison and approval. COM-002 prepares drafts for manual sending. A heartbeat establishes contact, not complete message coverage; calendar synchronization requires its own capability and authority contract.
 
-2. **Resolved: UI-001 depends on AI-GOV-001 and INGEST-002.** AI-GOV-001 supplies provider transport, credential, kill-switch, limit, redaction, and generic review contracts. INGEST-002 supplies the working issue-draft source comparison and approval workflow promised by UI-001; without it UI-001 could deliver only Settings and an empty-state review shell. Both are hard dependencies in the backlog.
+### Execution and controls
 
-### Design contradictions resolved
+- **Global settings and action overrides have distinct scope.** One `ai_settings` singleton owns the global kill switch and default model selection. Action settings can narrow limits or select an eligible connection; assistant grants remain independent. Built-in Off blocks generated runs even when an action has a connection override.
+- **The coordinator enforces application policy.** It checks permissions and limits, reserves capacity, and owns persistence, idempotency, and audit. Provider adapters translate protocols, count or estimate tokens, enforce request ceilings/timeouts, and sanitize errors.
+- **Execution is synchronous outside database transactions.** Use `reserved`/`running` with startup interruption recovery. Durable queuing and persisted cancellation states require a later jobs/outbox design; they are not assumed by this slice.
 
-3. **The prior design exposed generic run creation even though domains must prepare redacted input.** A public `POST /api/ai/runs` could bypass source ownership and action-specific candidate construction.
+### Evidence, review, and retention
 
-   **Resolution:** no generic provider-run endpoint. Capability-owned endpoints call the coordinator internally. MCP-001 gets a distinct authenticated external-proposal admission contract.
+- **Retain the exact governed input.** Store the bounded canonical redacted request and its fingerprint, not an unredacted duplicate or a fingerprint alone. External proposals retain their validated envelope so reviewers can distinguish source evidence, submitted interpretation, and operator edits.
+- **Sources own revision and retention semantics.** Source adapters return opaque revisions and content fingerprints; no universal database version column is required. The source module retains the referenced record or an explicit tombstone. Source deletion never cascades into runs, drafts, or decisions.
+- **Edits and approval are different review actions.** Review rows are append-only. An edit creates no official result; only a terminal approval can require a result reference, according to the action definition. Official-record consequences remain atomic with the owning domain's review completion.
+- **Governed history is retained for the local MVP.** Runs, exact redacted inputs, drafts, decisions, lineage, and audit history remain in the workspace and portable archives until a dedicated retention design defines deletion/redaction and referential behavior.
+- **Confidence and usage must have provenance.** Each action declares allowed confidence labels and their provenance. Percentages require a documented calibrated value permitted by that action; missing confidence or usage remains unknown. Retain provider-reported token usage, but omit cost estimates until a design supplies provider, currency, pricing snapshot/version, and an explicitly non-financial estimate label.
 
-4. **The prior design stored only an input fingerprint while UI-001 requires redaction visibility.** A fingerprint cannot show what data left the workspace or support meaningful review.
+### Delivery dependencies
 
-   **Resolution:** retain the exact bounded canonical **redacted** provider request plus its fingerprint. Never retain an unredacted duplicate in AI Governance.
-
-5. **A “global” kill switch was modeled on every action row.** Multiple rows could disagree.
-
-   **Resolution:** one `ai_settings` singleton owns the kill switch; action rows own only narrower overrides. Meta Muse is fixed by registered application configuration, not copied across action rows.
-
-6. **`edited` was both a nonterminal draft state and a decision requiring a result record.** An operator may edit several times before approving, and an edit creates no official result.
-
-   **Resolution:** review rows are append-only actions. Edits have no result reference; only the single terminal approval may require one.
-
-7. **The prior adapter contract made provider adapters enforce application limits.** That leaks governance and persistence concerns into external protocol adapters.
-
-   **Resolution:** the AI coordinator enforces limits and reserves capacity; the adapter only counts/estimates tokens, enforces request ceilings/timeouts, performs the provider call, and translates errors.
-
-8. **Queued/cancelled lifecycle states assumed durable background execution that is not implemented.**
-
-   **Resolution:** use synchronous execution with `reserved`/`running` and startup interruption recovery. Add queue/cancellation only with a later durable jobs/outbox design.
-
-9. **MCP-001 models an external proposal as a provider run and therefore risks a redundant model call.** It also uses an `ai_agent` audit actor kind absent from AUDIT-001 and assumes universal `record_version` fields absent from current domains.
-
-   **Resolution:** AI runs distinguish `provider_generation` from `external_proposal`; external proposals enter validation/review without another provider call. MCP-001 now uses `actor_kind=ai_assistant` plus delegation metadata and source-owned opaque revisions/fingerprints. Its proposal endpoint is separate from provider generation.
-
-### Additional decisions resolved
-
-10. **Resolved: FILE-001 is not an AI-GOV-001 hard dependency.** Core governance stores bounded JSON and typed references and creates no generic file links. FILE-001 remains on each file-consuming AI capability. No AI-owned file table or artificial link is introduced.
-
-11. **Resolved: source adapters supply opaque revisions and fingerprints.** Each source adapter returns an opaque revision plus a content fingerprint. The source module retains the referenced source or an explicit tombstone for as long as an AI run references it. Source deletion never cascades into governed runs, drafts, or decisions.
-
-12. **Resolved: governed AI history is retained indefinitely for the local MVP.** Runs, exact redacted inputs, drafts, decisions, lineage, and audit history remain in the workspace and portable archives until a dedicated retention design defines deletion/redaction, referential behavior, and audit evidence.
-
-13. **Resolved: confidence semantics are action-specific and provenance-bearing.** Each action definition declares allowed confidence labels and provenance requirements. The UI renders no percentage unless the adapter supplies a documented calibrated value permitted by that definition; absent confidence stays unknown rather than becoming zero.
-
-14. **Resolved: AI-GOV-001 omits cost estimates.** It retains provider-reported token usage. Estimated cost may be added later only with provider, currency, pricing snapshot/version, and an explicitly non-financial estimate label.
-
-15. **Resolved: every action declares its approval effect.** Each action definition declares `create`, `update`, or `advisory_only` and whether a result reference is mandatory. Approval validation and retained-data validation enforce that declaration. “Approved” never implies an unspecified domain mutation.
-
-16. **Resolved: bridge or manual intake; manual outbound sending.** GMAIL-001, OUTLOOK-001, SMS-001, and ISSUE-AI-001 are superseded by the bridge. CONN-001 is Sheets-only. INGEST-001 retains submitted evidence; INGEST-002 owns source comparison and approval. Removing native fetching does not remove evidence retention or the review queue.
-
-    The dependency cycle introduced by making INGEST-002 depend on MCP-001 while MCP-001 depends on INGEST-002 is removed: review accepts validated submissions independently of transport, then MCP adds delegation and agent admission. Matching remains optional. A stale heartbeat reports missing contact, not proof of missed or fully ingested email. COM-002 and downstream delivery features prepare drafts for manual sending; calendar synchronization in COM-003 still requires a separate capability/authority contract.
+- **Governance does not own files.** FILE-001 is not an AI-GOV-001 hard dependency: governance stores bounded JSON and typed references, without an AI-owned file table or generic file links. File-consuming capabilities retain their own FILE-001 dependency.
+- **Review precedes assistant transport.** INGEST-002 accepts validated submissions independently of MCP-001; MCP-001 then adds delegation and transport admission. Optional matching and built-in extraction do not gate external-proposal review. ISSUE-AI-001 provides optional built-in extraction; GMAIL-001, OUTLOOK-001, and SMS-001 remain superseded by assistant/manual intake. CONN-001 remains Sheets-only.
+- **UI-001 requires working governance, review, and assistant contracts.** AI-GOV-001 supplies model settings, controls, and generic review; INGEST-002 supplies source comparison and issue approval; MCP-001 supplies assistant setup and status. All three are hard dependencies. An empty review shell or provider selector alone does not fulfill the operator workflow.
 
 ## Definition of Done
 
-- [ ] Meta Muse is used consistently as the product-facing assistant; the Meta Model API adapter records actual Muse model provenance and keeps personal-agent connection status separate from model API credentials.
-- [ ] The static action/profile registries and all five persistence tables have exact current-schema and retained-data validation.
+- [ ] Built-in model connections and assistant grants are independent; at least two fake adapters prove provider switching, truthful provenance, destination-specific permission, and no implicit fallback.
+- [ ] The static action/profile registries and all six persistence tables have exact current-schema and retained-data validation.
 - [ ] Redaction is deterministic, versioned, bounded, secret-rejecting, and retains the exact redacted request.
-- [ ] Tenant/owner message content is never sent to a cloud model unless the explicit permission and disclosure version are recorded; the permission cannot disable mandatory redaction or minimization.
-- [ ] Limits, kill switch, fixed Meta Muse assistant identity, transport-qualified model allowlists, idempotency, transaction phases, and interruption recovery behave as specified.
+- [ ] Tenant/owner message content is never sent to a cloud model unless the destination-specific permission and disclosure version are recorded; the permission cannot disable mandatory redaction or minimization.
+- [ ] Limits, kill switch, registered connection selection, transport-qualified model allowlists, idempotency, transaction phases, and interruption recovery behave as specified.
 - [ ] Draft edit/dismiss and owning-domain atomic approval contracts are verified with a synthetic capability.
 - [ ] Source revisions/fingerprints, tombstones, indefinite MVP retention, confidence provenance, and declared approval effects are enforced and validated on workspace open and restore.
 - [ ] AI-GOV-001 persists no file links and no cost estimate; provider-reported token usage remains available.
@@ -445,4 +441,4 @@ The dependency graph is sound at a high level, but the numbered delivery order i
 - [ ] Provider credentials are write-only OS secrets and pass database/log/archive exclusion tests.
 - [ ] LOCAL-002 round trips every governed record and stable relationship.
 - [ ] No production AI capability, MCP server, ingestion workflow, or React screen is falsely delivered by this slice.
-- [ ] The backlog/UI/MCP documentation contradictions above are reconciled before dependent implementation begins.
+- [ ] Backlog dependencies and UI/MCP contracts remain consistent with these decisions before dependent implementation begins.

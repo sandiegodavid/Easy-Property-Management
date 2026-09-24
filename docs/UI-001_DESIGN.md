@@ -228,21 +228,46 @@ Support local Excel uploads and direct Google Sheets selection through read-only
 
 MVP imports create new valid records or explicitly link/skip existing ones after duplicate review. Linking means reusing the selected identity or record to satisfy a relationship; it does not authorize changing its existing fields or merging identities. Conflicting or ambiguous matches require resolution before affected rows can commit. Preserve property-to-owner relationships through explicit mapping. Present row-level validation errors and final import results, including created, linked, skipped, and failed outcomes. Retry only unfinished work without duplicating successful writes. General existing-record overwrite/update behavior is deferred.
 
-### D46: Connect Meta Muse and govern AI use in Settings
+### D46: Choose built-in AI and connected assistants independently
 
-Follow-up research is documented in [Meta Muse integration research and design proposals](META_MUSE_RESEARCH.md). The settled design distinguishes app-initiated Muse model inference through Meta Model API from optional Muse personal-agent access through MCP-001. Unverified personal-agent connection capabilities remain visibly unavailable until their transport is proven.
+This revision adopts [AI integration research](AI_INTEGRATION_RESEARCH.md). Settings → **AI assistance** has two independent cards, **Built-in AI** and **Connected assistants**, plus shared pause/review controls. Keep the default presentation brief; expand setup, scope, limits, and diagnostics under non-editable summary bars following D35. AI remains optional and never becomes a permanent navigation destination.
 
-Settings gains an AI assistance section alongside Appearance, Permanent destinations, and Data & backup. Meta Muse is the fixed assistant identity. Show separate status for the Meta Model API credential used by built-in inference and the optional Muse bridge used by the personal agent. A model API credential never implies that the personal agent is connected. AI-GOV-001 supplies governance and inference settings; MCP-001 supplies verified bridge state.
+#### Built-in AI
 
-There is no operator-facing provider selector. Generated runs record `assistant_name=meta_muse`, `transport_provider=meta_model_api`, and the actual Muse model/version. Settings may show this transport as diagnostic provenance and may restrict registered Muse model versions per action, but cannot select another assistant or transport.
+Explain: “Help summarize records and prepare drafts inside this app.” Choose **Off**, **On this device**, or **Cloud service**. Below the choice show only registered, tested adapters/models for the selected route. Meta Model API and OpenAI are hosted candidates; a validated local runtime/model is another option. Do not show “Muse recommended,” an unexplained “Other,” or a selected provider that has not passed evaluation. Selection affects new runs only and does not connect a personal assistant.
 
-Meta Model API shows only Configured or Not configured credential state, never the key value. Its key is entered through a dedicated credential control and stored in the operating-system credential store, keyed to the workspace; it never appears in the database, backups, exports, audit snapshots, or logs. After restore or migration, it must be re-entered before app-initiated inference. Muse bridge authorization is a separate scoped grant and status; it never reuses the model API credential.
+For cloud setup, use write-only credential entry with Configured/Not configured state, a synthetic connection test, selected model, and explicit destination/data-class disclosure. Explain what leaves the device. Changing the destination requires that destination's permission; a generic Save cannot consent. Keys remain in the OS credential store, excluded from workspace data, history, and backups. A subscription to a chat product does not establish API credentials or billing.
 
-A global Pause all AI assistance switch fails every AI run closed while on, including MCP proposal intents. The switch state is visible wherever AI-assisted work is offered, and enabling it never discards drafts already awaiting review.
+For on-device setup, show runtime/model, installation/download requirement, disk/memory guidance established for that exact package, test status, and supported tasks. Advanced details contain runtime version and model digest. Never claim “Ready,” offline operation, or voice/image support until the actual device/runtime/action is verified. Setup is operator-assisted in MVP; no automatic download from a workflow. Weights and runtime setup do not travel with a workspace backup.
 
-Per generated action type, the operator can enable or disable the action, set a daily run cap and per-run token budget, and restrict the registered Muse model versions. External Muse proposals use measurable admission controls such as enabled state, daily proposal cap, and payload-size ceiling; do not present an agent token budget when Muse does not report usage. Redaction profile name and version per action type are shown read-only; profiles themselves are versioned configuration, not operator-editable text.
+Show task availability separately: summaries may be Ready while transcription is Unsupported. Unsupported/unavailable actions explain why and preserve manual work. No silent fallback to cloud or another vendor. An explicit “Try with [provider]” must name the destination, preserve the original draft, and pass disclosure/governance again. Keep advanced per-action model overrides and token limits collapsed by default.
 
-Pending AI drafts are reachable from the same section with a count of drafts awaiting review, linking to the review queue. Draft detail distinguishes the retained source, the exact bounded governed/redacted input sent to or admitted from Meta Muse, the returned proposal, and operator edits. Approval, editing, or dismissal happens in the review queue with draft-versus-source comparison; nothing in Settings approves a draft or executes its consequences.
+#### Connected assistants
+
+Explain: “Let an assistant bring relevant messages and propose work for your review.” List configured connections with the actual assistant/client name, connection method, allowed property/account scope, and status. Add connection offers validated local MCP clients and a separately verified file-exchange option for Muse Agent; unvalidated candidates show Setup not verified. More than one connection is permitted, but warn about overlapping scheduled mailbox coverage. Model-provider selection and assistant selection never change one another.
+
+Setup follows choose client → inspect capabilities → select scope/data disclosure → test with synthetic evidence and a proposal → enable. No universal assistant API-key box. Grant creation is explicit; the assistant cannot approve its own scope. Show technical transport details only when needed for setup or troubleshooting. File exchange does not imply on-device inference. If the required file isolation is unavailable, offer manual import instead of pretending scoped automation is safe.
+
+For scheduled discovery show last contact, last successful poll, requested versus acknowledged interval/configuration, failed/partial polling, and pending proposals. For interactive clients show last activity and connection-test status; do not invent a polling schedule. Use Not configured / Setup required / Ready / Paused / Needs attention / Revoked, with a reason and recovery action. “Connected” does not mean all messages have been found. Restoring a workspace displays historical connection details with Setup required.
+
+#### Shared control and review
+
+**Pause all AI assistance** stops new model calls, assistant reads/exports, and proposal admission. Explain that prior disclosures cannot be recalled and the assistant may still run its independent schedules. In-flight work may already have left the device; late results must pass current governance before admission. Existing drafts remain available for explicit operator review, edit, dismissal, and source-checked approval. Pausing one connection does not pause the other connections; revocation is a separate explicit action.
+
+Per-action controls expose enablement, daily caps, registered model limits, and a read-only redaction profile summary. Assistant proposals use admission/payload limits rather than invented token budgets. Missing usage is Unknown. None of these controls approve a draft.
+
+Show “Drafts awaiting review” with a count and link to the normal contextual queue. Each draft labels **Generated with [provider/model] · On this device/Cloud service** or **Proposed by [assistant connection] · [connection method]**. Distinguish verified connection identity from assistant-reported model details. Source, exact bounded governed input, AI suggestion, and operator edits remain separate. A file handoff must never be labeled local inference. Show stale evidence and paused/revoked source warnings; no generic approval bypasses a stale-source conflict.
+
+#### Acceptance scenarios
+
+- Choose local assistance with a Muse file connection, then change only the model to a hosted option; assistant scope stays unchanged and cloud disclosure is required.
+- Choose Meta Model API with a different compatible MCP assistant; neither credential grants the other connection's access.
+- Test unavailable runtime, missing credential, unsupported modality, rejected disclosure, provider change, and restore; show truthful recovery/manual options.
+- Pause globally and per connection; existing drafts stay visible, new requests are blocked at the appropriate boundary, and assistant scheduling is not falsely reported stopped.
+- Review proposals from two assistants with duplicate source evidence; show source provenance and duplicate handling without two official records.
+- Use full-summary-bar mouse/keyboard expansion in both themes; input controls inside expanded panels never toggle the parent.
+
+The comparison demo uses clearly labeled simulated setup, tests, and review states. It makes no external calls and stores no credentials; it does not prove that any listed integration is implemented.
 
 ### D47: Track one shared HOA-covered repair across affected condo units
 
@@ -255,6 +280,22 @@ Show an ordered coordination timeline containing every call, email, submitted do
 The case remains open until the physical outcome is explicitly verified. HOA acknowledgement, approval, contractor assignment, or a promised replacement date are milestones rather than resolution. Closing requires an outcome such as regulator replaced and service verified, plus the verification date/source. Unresolved damage inside an individual unit can remain a separate linked issue after the shared asset is repaired.
 
 In the summary bar, show the shared asset, affected scope, current HOA state, and next follow-up, for example: Shared water regulator · 3 units affected · Waiting for Cascadia HOA · Follow up Sep 25. Expanding it shows responsibility/coverage evidence, affected managed units, the communication timeline, current commitment, and actions to record contact, schedule another follow-up, link a contractor, or verify completion.
+
+#### HOA follow-up presentation example
+
+Inside the expanded shared-repair case, show:
+
+> **Waiting for Cascadia HOA**
+>
+> Three contacts recorded · Replacement date still unconfirmed
+>
+> Next follow-up: September 25
+>
+> **Prepare follow-up** · **Record response**
+
+Preparing the follow-up uses the selected correspondence and latest commitment to draft a message. Review shows the proposed content, supporting records, and intended changes together. Draft approval and message sending are distinct actions. Keep the next follow-up and unresolved repair visible until separately updated or physically verified; an assistant's work status never establishes repair completion.
+
+The actions sit inside the expanded content per D35. AI-assisted preparation follows D46's availability and review controls.
 
 ## Confirmed design coverage
 
@@ -272,7 +313,7 @@ In the summary bar, show the shared asset, affected scope, current HOA state, an
   - Settled: principal rent, lease setup, repair completion, owner-report review, move-out/settlement, and conversation journeys (D23–D28).
   - Settled: finding records, deferring work, correction presentation, and operating-status feedback.
   - Settled: manual legal-matter, HOA-notice, and shared HOA-covered repair scope, navigation, lifecycle, and closure behavior.
-  - Settled: appearance switch, visible inline-toggle guidance, Excel/read-only Google Sheets snapshots, create/link/skip import behavior, and fixed Meta Muse connection, credential, kill-switch, limit, governed-input, and redaction controls (D42–D46).
+  - Settled: appearance switch, visible inline-toggle guidance, Excel/read-only Google Sheets snapshots, create/link/skip import behavior, and independent model/assistant selections, credentials, pause, limits, governed-input, disclosure, and redaction controls (D42–D46).
   - Complete: consolidated product design confirmed. Detailed API/schema design and implementation follow separately.
 
 ## Working glossary
@@ -358,11 +399,11 @@ These scenarios derive from confirmed decisions and must be included in implemen
 21. Explain inline toggling visibly in every relevant view and keep the chevron, aria-expanded, and actual section visibility consistent on repeated clicks and keyboard use.
 22. Preview a spreadsheet containing new records, likely duplicate shared identities, and properties referring to owners. Require explicit relationship/duplicate resolution, report invalid rows accurately, and verify retries do not duplicate imported records. Link/skip leaves existing fields unchanged.
 23. Record a shared water-regulator failure affecting multiple condo units and covered by the HOA. Show one case on Home and in every affected managed-property workspace. Record multiple unanswered and answered contacts, each with its own date and source, and reschedule follow-up without rewriting prior attempts. HOA acknowledgement, contractor assignment, and a promised replacement date leave the case open. Close only after explicit replacement/service verification; keep any unit-specific residual damage open separately.
-23. Preview a read-only Google Sheets snapshot, then change the source externally before confirming the import. Import only the reviewed snapshot or require a refreshed preview; never silently substitute changed values. No source-sheet writes or ongoing synchronization occur.
+24. Preview a read-only Google Sheets snapshot, then change the source externally before confirming the import. Import only the reviewed snapshot or require a refreshed preview; never silently substitute changed values. No source-sheet writes or ongoing synchronization occur.
 
 ## Screen review
 
-An in-conversation interactive design preview uses fictional sample data to review Home, owner/property directories and workspaces, inline secondary actions, and navigation customization. The product owner approved the overall visual design and requested inline toggles and clarification of browsing multiple records. D35 and D36 document the resulting refinement. The preview is not production UI and does not write application records. The complete product design is confirmed. The illustrative preview is not an implementation contract and predates some final additions, including Providers/legal/HOA/import screens, the AI provider Settings section, and the full-bar D35 trigger; use this document as authority.
+An in-conversation interactive design preview uses fictional sample data to review Home, owner/property directories and workspaces, inline secondary actions, and navigation customization. The product owner approved the overall visual design and requested inline toggles and clarification of browsing multiple records. D35 and D36 document the resulting refinement. The preview is not production UI and does not write application records. The complete product design is confirmed. The illustrative preview is not an implementation contract and predates some final additions, including Providers/legal/HOA/import screens. Its AI Settings now demonstrates D46 with simulated provider/assistant states and full-bar disclosure controls; Use this document as authority for workflows not shown in the demo.
 
 ## Sources
 
@@ -375,5 +416,3 @@ An in-conversation interactive design preview uses fictional sample data to revi
 - [California DRE common-interest-development guidance](https://www.dre.ca.gov/Newsroom/DRE_Updates/2026_08_21_Common_Interest_Dev.html), used to distinguish governing instruments, assessments, restrictions, and unresolved violation notices when bounding HOA scope.
 
 The California sources are jurisdiction-specific examples informing record structure, not universal procedural templates or legal rules for the app.
-
-Decisions D1–D34 were confirmed by the product owner in the design interview on 2026-09-22. D5 incorporates the explicit requirements for an Owners destination and Settings customization of permanent destinations. Later decisions refine earlier choices; specifically D17 settles D5 customization, D19 settles D6 ordering, D15 settles D9 draft protection, and D18 confirms the supporting work for D7. The overall screen direction and inline refinements were accepted. D37–D46 and the explicit inline-toggle explanation were confirmed on September 23, 2026; the complete design was confirmed through Q45 on September 23, 2026, with D46 confirmed the same day.

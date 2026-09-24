@@ -1,250 +1,145 @@
-# MCP-001 — Muse as Consumer: Agent Delegation and Write-Intent Design
+# MCP-001 — Connected Assistants, Scoped Context, and Reviewed Proposals
 
-## Status
+## Status and purpose
 
-Proposed design; no bridge implementation or verified personal-agent bootstrap is implied. The bridge section below supersedes the earlier setup-bundle proposal. Model inference is verified separately through [Meta Model API](https://dev.meta.ai/docs/overview). Muse personal-agent connector registration, local reachability, scheduling, and secure credential delivery remain integration gates.
+Proposed implementation design, revised September 24, 2026 using [AI integration research](AI_INTEGRATION_RESEARCH.md). No live connection is implied. The stable backlog ID is retained; it defines the shared assistant contract and its MCP transport. The separate [Muse file-exchange proposal](META_MUSE_RESEARCH.md#proposed-file-exchange-adapter) reuses that application contract but is not part of the MCP protocol.
 
-## Purpose
+An assistant may discover messages in its separately authorized accounts, request bounded context, and submit evidence-backed proposals. The app validates and retains evidence, shows a review, and commits only after operator approval. Built-in hosted/local inference belongs to AI-GOV-001 and does not require an assistant connection. A model key never grants personal-assistant access.
 
-`MCP-001` covers both directions of Muse integration. The application-using-Muse direction (ingest, transcription, drafting) is governed by `AI-GOV-001` and implemented by domain slices. This document specifies the reverse direction: **Muse as a consumer of the application** — an agent that reads workspace records and proposes property-management work on the operator's behalf.
+Hard dependencies: AI-GOV-001 and INGEST-002. Their prerequisites supply audit, retained evidence, files, and domain review. Manual review and intake do not depend on this transport slice.
 
-The core principle is unchanged: the agent never writes official records directly. It reads through bounded, redacted projections and submits typed write *intents*; intents become `ai_drafts` through the standard `mcp_proposal` run flow and only take effect when the operator approves them in the review queue.
+## Client compatibility and delivery scope
 
-## Scope and boundaries
+MCP is a protocol, not a ChatGPT-exclusive service. Documented consumers include [ChatGPT desktop/Codex](https://learn.chatgpt.com/docs/extend/mcp), [Claude Desktop](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop), [Claude Code](https://code.claude.com/docs/en/mcp), and [VS Code](https://code.visualstudio.com/docs/agents/reference/mcp-configuration). Local STDIO is the first transport target; exact client version, launch permissions, and tool behavior must pass an integration test. Streamable HTTP is a separate local adapter, not assumed available merely because a client supports MCP.
 
-MCP-001 provides:
+Hosted ChatGPT web does not inherit a desktop's local configuration. OpenAI documents [Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels) for private servers, but it is a remote disclosure route with separate setup and permissions. No tunnel, public endpoint, or remote access is enabled by this MVP design. Computer use and model function calling are not themselves MCP clients.
 
-- The local MCP server: read/query tools with declared projection schemas over workspace records.
-- Agent identity and delegated authorization: scoped, revocable grants for named agents (Muse first), with tokens in the OS credential store.
-- The write-intent envelope and the first fully-specified intent slice (maintenance issues); later workflows extend the catalog.
-- Source-owned opaque revisions and content fingerprints so proposals are evaluated against the source projection they were based on.
-- Sandbox mode for exercising tools against disposable data.
-- The change-notification polling contract (`activity.since`).
-- Per-agent limits and accounting, reusing the `ai_action_limits` machinery.
-- Audit events attributing agent reads, proposals, and decisions.
+Muse Agent's supplied session reports file commands but no local MCP client, HTTP path, shell, or GUI control. Treat these as session observations to verify, not universal product claims. Its candidate transport is file exchange, with manual import as fallback. Do not advertise Muse as MCP-ready.
 
-MCP-001 does not provide:
+Deliver one tested local MCP client first, then qualify other MCP client configurations independently. File-adapter qualification is specified in the Muse note. The interface does not require every listed client to ship. Unsupported candidates appear as unavailable with a reason; they cannot grant working access.
 
-- Any AI capability itself (extraction, transcription, drafting) — domain slices own those.
-- The operator review UI — `UI-001` owns review-queue rendering and the "proposed by Muse" attribution.
-- Remote/cloud access to the workspace; the MCP server is local to the operator's machine.
-- Autonomous side effects: no intent executes without operator approval, ever.
+## Shared application boundary
 
-Hard dependencies: `AI-GOV-001` and `INGEST-002`, matching the backlog; their prerequisites provide audit, local workspace, retained sources, and issue review.
+MCP tools call application services, never domain repositories directly. Other transports must reuse the same boundary:
 
-## Agent identity and delegated authorization
+1. Resolve workspace, connection, delegation, and effective scopes.
+2. Check pause, expiry/revocation, disclosure permission, and bounded input.
+3. Read authorized projections or admit original source evidence through Intake.
+4. Validate a typed proposal, source identities/revisions, and idempotency.
+5. Admit an AI-GOV run with `execution_kind=external_proposal`, without a second model call.
+6. Return a durable receipt and expose subsequent review/commit outcomes.
 
-Muse acts as a distinct principal, delegated by the operator — never as the operator, and never with the operator's credentials.
+No SQL, arbitrary filesystem access, approval tool, generic provider-run endpoint, sending, payment, signing, or unrestricted domain-write tool is exposed. Tools labeled proposal-only still mutate the review queue and must not claim to be read-only. Tool annotations describe behavior; authorization remains server-enforced.
 
-- A **delegation grant** names the agent (`muse`), lists granted **scopes**, and is created explicitly by the operator in Settings → AI & Muse → Agent access (UI-001 follow-up to D46). Granting writes an audit event.
-- Scopes are fine-grained verbs over entity kinds, e.g. `issues:read`, `issues:propose`, `properties:read`, `communications:read`, `documents:propose`. There is no wildcard scope; `admin` does not exist.
-- The grant issues a **token** shown once at creation. The token is stored in the OS credential store keyed to the workspace ID, alongside provider API keys. Only a token *fingerprint* is persisted server-side, in the new `agent_delegations` table — never the token.
-- Every MCP tool call authenticates with the token. Unknown, expired, or revoked tokens fail closed with a typed `401`/`403`; the failure is audit-logged.
-- **Revocation** is immediate: the token stops working on the next call. In-flight runs finish; pending proposals already in the review queue stay there for the operator to approve or dismiss — revocation never silently deletes operator-visible work.
-- Delegation is per workspace. Backup/export/restore and SaaS migration exclude tokens; a restored workspace requires re-grant before the agent can connect.
+## Connections and delegation
 
-### `agent_delegations`
+Settings → AI assistance → Connected assistants manages named connections independently of model providers. A connection identifies the actual product/client and transport, not just a vendor. Multiple connections can coexist; avoid scheduling duplicate mailbox discovery by default and warn about overlapping account/filter coverage. Cross-connection source deduplication remains mandatory.
 
-| Field | Rule |
+A grant explicitly selects properties/units, data classes, purpose, registered read/submission scopes, expiry, and any scheduled polling expectation. No wildcard or admin scope exists. The application determines the effective principal from authenticated transport/session binding; envelope display names cannot confer identity or permissions. Reads and exports enforce both entity and field scope. Shared HOA cases disclose only authorized units; links to other units do not expand the grant.
+
+| Persistence | Required content |
 | --- | --- |
-| `id` | Stable UUID primary key. |
-| `agent_name` | Required, e.g. `muse`. One active grant per agent per workspace. |
-| `scopes` | Required JSON list of granted scope strings; validated against the registered scope catalog. |
-| `token_fingerprint` | Required SHA-256 of the token; used to identify the token, never to recover it. |
-| `granted_at`, `revoked_at` | Required UTC; `revoked_at` null while active. |
-| `last_used_at` | Nullable UTC; updated on authenticated calls (sampled, not per-call, to avoid write amplification). |
-| `status` | `active`, `revoked`, or `expired`. |
+| `assistant_connections` | Stable ID, operator label, registered client/adapter/version, transport (`mcp_stdio`, `mcp_http`, `file_exchange`), desired/acknowledged configuration revisions, interactive/scheduled mode, lifecycle, and historical capability-test result. Live health is device-verified. |
+| `agent_delegations` | Stable ID, connection/workspace ID, scope and entity/data-class bounds, disclosure version/acknowledgement, expiry, grant/revocation timestamps, status, and credential verifier where applicable. No usable secret. |
+| `ai_agent_limits` | Connection/action admission caps and payload ceilings, no broader than the registered external-proposal limits. Unknown agent token usage is not zero. |
+| `assistant_submissions` | Connection, grant, intent ID/key/fingerprint, source/run/draft references, durable receipt state, correlated audit, and timestamps. |
+| `assistant_poll_reports` | Unique connection/poll ID, server receipt time, reported outcome/counts/error, acknowledged configuration, and last successful poll. Bounded report payloads and explicit retention policy consistent with governed history. |
 
-## Read tool catalog
+All require exact schema, retained-data, audit, and encrypted archive validation. Ephemeral transport folders, usable credentials, local paths, and current device sessions are excluded from backups. Restore preserves history but invalidates every live delegation and requires new device authorization.
 
-The MCP server exposes read/query tools only. Each tool declares its projection schema; responses are bounded pages of redacted projections, never full domain records.
+### Authentication by transport
 
-| Tool | Returns |
+- **STDIO:** a trusted launcher binds the process/session to a preapproved connection and grant. Resolve credentials via device-controlled bootstrap, not command-line plaintext or a secret in exported configuration. No unauthenticated launch obtains workspace access. The launcher is an adapter to the running application boundary, not a second independent database writer.
+- **Local HTTP:** bind to the intended loopback interface, authenticate each call with a connection-bound credential, enforce host/origin checks and protocol/session rules. Localhost alone is not authentication. Credential rotation invalidates the previous verifier and requires verified delivery.
+
+Model API keys and assistant credentials are distinct OS secrets keyed to workspace and connection. Grant management is an operator-only application operation, never an assistant tool. There is no assistant-to-assistant delegation.
+
+## Read and submission tools
+
+Each tool has bounded request/response schemas, cursor pagination, field minimization, and explicit capability/scope checks. Expose only tools whose source domains and approval contracts exist.
+
+| Tool family | Contract |
 | --- | --- |
-| `properties.list` / `properties.get` | Property summaries: id, name, type, occupancy, availability, opaque source revision, and content fingerprint. No owner PII beyond masked references. |
-| `issues.list` / `issues.get` | Issue summaries: id, property, category, priority, status, attention reason, opaque source revision, and content fingerprint. Narrative bodies are bounded by the tool contract. |
-| `leases.get` | Lease terms for a property: parties (masked), dates, rent amount, opaque source revision, and content fingerprint. No bank or payment credential data, ever. |
-| `rent.status` | Rent tracking state per property/lease with opaque source revision and content fingerprint. |
-| `providers.list` / `providers.get` | Provider directory entries the operator maintains; no private contact details beyond what the operator's redaction profile allows. |
-| `communications.list` / `communications.get` | Message metadata with bounded excerpts; full bodies only through explicit, purpose-declared parameters. |
-| `tasks.list` / `tasks.get` | Tasks and reminders with due dates, statuses, related records. |
-| `coverage.get` | A property's coverage states (Recorded / Needs review / Missing / Not applicable) per responsibility area. |
-| `activity.since` | Change-notification cursor feed (see below). |
+| `properties.list/get`, `issues.list/get` | Authorized summaries with source-owned opaque revision and fingerprint. |
+| `leases.get`, `rent.status` | Bounded authorized facts; never payment credentials or unrestricted applicant evidence. |
+| `providers.list/get`, `tasks.list/get`, `coverage.get` | Domain-owned projections; no duplication of authority. |
+| `communications.list/get` | Bounded metadata/excerpts; larger permitted content needs an explicit purpose and data-class grant. |
+| `activity.since` | Scoped metadata changes only, opaque cursor, bounded page, rate limit/retry hint. Invalid/expired cursor returns an explicit resync requirement, not an empty successful result. |
+| `sources.submit` | Bounded source evidence and account identity admitted through INGEST-001; attachments use FILE-001 validation. |
+| `proposals.submit` | Typed external proposal admission only; returns a review-queue receipt. |
+| `receipts.get` | Connection-owned submission status and permitted result reference; never another connection's queue. |
+| `connection.config`, `connection.heartbeat` | Read authorized desired configuration and report a poll outcome; neither grants scope nor acknowledges an unverified schedule automatically. |
 
-Conventions: cursor pagination with bounded page sizes; unknown fields forbidden in requests; every projection includes a source-owned opaque `source_revision` and canonical content fingerprint for concurrency; sensitive identifiers are masked per the owning module's redaction profile; empty results are explicit, never errors. No universal database version column is assumed.
+Read tools do not expose raw attachments by path or provide arbitrary access to SQLite, workspace archives, or the attachments tree. Non-MCP transports must preserve these same scope boundaries.
 
-## Write-intent envelope
-
-A write intent is the only way the agent proposes a change. The envelope is uniform; the payload schema is per intent action, owned and validated by the domain module.
+## Proposal and receipt contract
 
 ```json
 {
+  "intent_version": 1,
   "intent_id": "uuid",
   "idempotency_key": "uuid",
-  "agent_name": "muse",
   "action": "maintenance.issue.create",
-  "base_ref": { "entity_type": "issue", "entity_id": "uuid-or-null", "source_revision": "opaque-source-revision", "source_fingerprint": "sha256" },
-  "payload": { "...per-action schema..." },
-  "rationale": "bounded operator-readable text, max 500 chars",
-  "conversation_ref": "optional correlation id"
+  "base_ref": {
+    "entity_type": "intake_source",
+    "entity_id": "uuid",
+    "source_revision": "opaque-source-revision",
+    "source_fingerprint": "sha256"
+  },
+  "payload": { "property_id": "uuid", "title": "Water under kitchen sink" },
+  "evidence_refs": [{ "entity_type": "intake_source", "entity_id": "uuid" }],
+  "rationale": "Tenant reports an active leak; review priority and response.",
+  "conversation_ref": null
 }
 ```
 
-Rules:
+The example abbreviates the domain payload; registered schemas are authoritative. The app supplies authenticated connection/delegation identity. A create cites retained evidence/parent context; an update cites the current target plus supporting evidence. Missing or ambiguous property/unit matches stay unresolved in review and cannot create an official issue until selected. At least one usable evidence reference is required; a Gmail message ID without retained content is not a source comparison.
 
-- `action` is a namespaced code registered in config; unknown actions are rejected with a typed error.
-- `base_ref.source_revision` is the version the agent based the proposal on (from a read tool). For creates, `entity_id` is null and the version refers to the parent/evidence record.
-- The intent is submitted to the proposed authenticated `POST /api/agents/proposals` endpoint. The registered domain action validates source references, schema, scope, limits, and redaction, then admits an AI-GOV run with `execution_kind=external_proposal`. No second provider call occurs. Audit uses `actor_kind=ai_assistant` with the delegation reference; approval remains attributed to the operator.
-- Duplicate `idempotency_key` returns the original run/draft; retries never double-propose.
-- `rationale` is shown to the operator in the review queue next to the draft. It must be a plain-language reason, never a dump of record contents.
+Deduplicate transport submissions by workspace/connection/idempotency key. Same key and same fingerprint returns the same receipt; changed content returns `409 assistant_idempotency_conflict`. Map admission to a stable application-generated AI-GOV UUID, so connection-scoped keys cannot collide with its globally unique run key. Separately deduplicate source messages across connections by source provider, verified/bound account identity, and message ID. Repeated interpretations of one source must be presented as revisions/duplicate candidates, never silently create two issues. Unverified source account claims retain that qualification.
 
-## Intent catalog — first slice: maintenance issues
+Receipt states are `accepted_for_review`, `rejected`, `approved_committed`, `dismissed`, and `superseded`; approval conflicts keep the proposal awaiting review with a typed failure. A receipt includes stable submission/run/draft references, receipt version, timestamps, safe error/retry guidance, and a result reference only after the domain transaction commits. Admission is not approval and approval is not external delivery. Store the receipt state transactionally with admission/decision; transport publication can retry after a crash without repeating the domain effect.
 
-The maintenance module owns these intent actions, their payload schemas, and their approval consequences.
+### First action and later extensions
 
-### `maintenance.issue.create`
+The first implemented action is `maintenance.issue.create` from retained evidence, with property/unit, reporter, category, priority, bounded title/description, and evidence links. INGEST-002 and Maintenance own schema, required fields, and atomic approval. This does not invoke a model API.
 
-Draft a new issue from evidence (an ingested message, photo, or voice note).
+Updates, status transitions, assignments, task creation, documents, and reminders are separately registered extensions, not implicitly delivered by MCP-001. They must use each domain's actual lifecycle and approval rules; do not invent a simplified maintenance status sequence. Assignment never implies contacting a provider. Repair completion requires the domain's verification checks. An HOA follow-up draft cannot establish sent delivery, acknowledgement, or physical repair completion.
 
-Payload: `property_id`, `category` (bounded code), `priority` (bounded code), `title` (bounded), `description` (bounded, redacted input), `evidence_refs` (typed refs to messages/files the claim rests on; at least one required). Approval creates the official issue record linked to its evidence.
+Opaque source revisions need not be monotonic integers. At approval, reload the source and compare its revision/fingerprint in the owning transaction. Stale input returns `409 ai_stale_draft`; require a refreshed proposal or explicit domain-supported revalidation, not a generic “approve anyway.”
 
-### `maintenance.issue.update`
+## Discovery, timing, and health
 
-Propose field updates to an existing issue: `category`, `priority`, `notes` (append-only; prior notes are never rewritten). `base_ref` must name the issue and its version. Approval applies the update in the owning module's transaction; if the version moved since, the draft is flagged stale and approval requires operator confirmation.
+The app owns no mailbox credential or poller. An assistant's separately authorized scheduler performs message discovery. Desired cadence in Settings is a request until the actual scheduler acknowledges it. Enabling a connection requires proof of the supported schedule, filters, account scope, pagination, overlap/catch-up, durable checkpoints, and per-message retry behavior; a rolling one-day query is insufficient after downtime.
 
-### `maintenance.issue.status`
+MCP submission can deliver quickly, but it does not make message discovery instantaneous. Mac sleep, closed apps, failed polling, missing attachments, and unavailable networks affect coverage. Emergency workflows must not promise immediate detection; an assistant may also alert the operator after discovery, but chat is not the durable record or application approval.
 
-Propose a status transition along the allowed path (`open` → `in_progress` → `resolved`; `resolved` → `open` for reopen). Payload: `to_status`, `note`. Terminal transitions are never implied — the agent must name the target status.
+A scheduled connection reports a unique poll ID, acknowledged config revision, outcome (`success`, `partial`, `failed`), bounded counts, and sanitized error. Server receipt time drives health, not an assistant-supplied timestamp. Replaying a poll ID cannot create fresh activity. Track last contact separately from last fully successful poll.
 
-### `maintenance.issue.assign`
+While scheduled and enabled, no valid contact for twice the acknowledged interval raises “No contact from [connection] since [time]. Check the connection or enter items manually.” Before initial acknowledgement use the requested interval and show “Not yet verified.” An unacknowledged interval edit does not postpone a stale warning. A fresh failed/partial poll clears silence but retains its own failure/incomplete warning. Interactive MCP connections show last activity and test status without missed-poll alarms. Evaluate on startup/resume; no live warning is possible while the app is closed. Reports never prove complete mailbox coverage.
 
-Propose assigning a provider to an issue. Payload: `provider_id`, `note`. Assignment is on the never-autonomous list: the intent only ever creates a draft; the provider is contacted only by the operator's explicit approval action, never by the agent or by approval alone without the module's contact step.
+## Pause, revocation, and review
 
-Later slices (rent reminders, document drafts, task creation, lease workflows) extend this catalog with the same envelope; each slice's design specifies its payload schema and approval consequences.
+Global AI pause blocks new inference, assistant reads/exports, and source/proposal admission. Connection pause affects that assistant alone; revoke invalidates its grant on the next operation. Recheck authorization before response disclosure and admission commit. In-flight disclosure cannot be recalled, and independent assistant schedules/account permissions are not revoked by the app.
 
-## Concurrency
+Already admitted drafts remain reviewable, editable, and dismissible. Approval remains an explicit operator action with current source/domain checks and a visible paused/revoked-source notice; it does not reactivate the connection. Queued but unadmitted work has no authority. Tokens/scopes are never silently inherited by a replacement connection.
 
-- Every official record carries a monotonically increasing `source_revision`, already returned by read tools.
-- A proposal is evaluated against `base_ref.source_revision` at review time. If the record changed since, the review queue marks the draft **stale**: the operator sees what changed and confirms or dismisses. Stale drafts are never auto-approved and never auto-rebased.
-- Approval executes in the owning module's transaction with an optimistic-version check; a version mismatch inside the transaction aborts approval with a typed `409` (`ai_stale_draft`), leaving the draft proposed.
+## Operator and management APIs
 
-## Direct-vs-proposal boundary
+UI-001 owns setup, scope/disclosure review, enable/pause/revoke, synthetic tests, health details, and per-connection limits. Show transport names in advanced details, with a plain label such as “Local connection” for MCP. Do not show a universal API-key field for assistants.
 
-The agent may write directly **only** to agent-scoped scratch: its own conversation checkpoints, read cursors, and working notes. These are never official records, never surfaced as operator data, and never backed up as workspace content.
+Proposed operator-only APIs: `GET/POST /api/assistants/connections`, `PATCH .../{id}`, `POST .../{id}/test`, `POST .../{id}/grants`, and `POST .../{id}/pause` or `/revoke`. Read responses omit secrets. Model connections use `/api/ai/connections` separately. MCP tools call internal admission services; no unauthenticated `/api/agents/proposals` workaround is required. An HTTP transport exposes only its authenticated protocol boundary.
 
-Everything affecting official records — creates, updates, status changes, assignments — goes through write intents and the review queue. The AI-GOV-001 never-autonomous list (no sending messages, signing documents, payments, contacting or assigning providers, or changing lease/occupancy/money state except inside an operator-approved transaction) applies to the agent direction without exception.
+Audit every grant, disclosure, proposal, decision, rejection, pause, revocation, and health transition with the connection/grant and correlation ID. Record data-bearing reads/exports; only empty health polling may be sampled. Model identity supplied by an external assistant is not independently verified attribution.
 
-## Sandbox mode
+## Verification and Definition of Done
 
-A `sandbox` flag on the MCP session routes all intents against a disposable copy of the workspace. Intents run full validation and dry-run approval consequences; no drafts enter the real review queue and no real records are touched. Sandbox sessions are labeled in every audit event. The sandbox is the expected way to exercise a new intent slice before granting its scope on the real workspace.
-
-## Change notification
-
-v1 is a polling contract, not a push channel:
-
-- `activity.since(cursor, entity_kinds)` returns a bounded page of change metadata: entity type, entity id, change kind (`created`/`updated`/`status_changed`), timestamp, and the new `source_revision`. Bodies and narrative content are excluded; the agent follows up with read tools if it needs detail.
-- Cursors are opaque and stable; polling more often than the documented minimum interval returns `429` with a retry hint.
-- The feed respects scopes: the agent only sees change metadata for entity kinds it may read.
-
-## Limits and accounting
-
-- External proposals consume registered action admission caps and obey action enablement and the kill switch. App-side payload size limits apply. The app cannot enforce or measure the personal agent's model token budget unless supported usage data is reported.
-- A new `ai_agent_limits` table holds measurable per-agent admission overrides keyed by (`agent_name`, `action_type`): enabled state, maximum proposals per UTC day, and maximum canonical payload bytes, each no broader than the registered action ceiling. It does not mirror prompt/completion token limits. Absent an override, the registered external-proposal defaults apply. Overrides are operator-editable in Settings and audit-logged.
-- Reported agent model usage is optional provenance. Missing usage stays unknown; it is never reported as zero or inferred from proposal size.
-
-## Audit and privacy
-
-- Agent-authenticated reads are audit-logged at the tool-call level (tool name, entity refs, timestamp) with `actor_kind=ai_assistant`, `agent_name`, and the delegation id. High-volume polling reads may be sampled per config; proposals, approvals, and revocations are never sampled.
-- One correlation id spans the intent, its run, its draft, the review decision, and the resulting official record.
-- Audit snapshots apply the owning module's redaction policy; agent scratch is excluded from operator-visible snapshots.
-- Delegation grants, scope changes, and revocations are configuration changes with audit events.
-
-## API contracts
-
-MCP tools are exposed over the local MCP transport with JSON schemas per tool; the REST surface manages delegation and introspection:
-
-- `POST /api/agents/delegations` creates a grant (operator action, returns the one-time token).
-- `GET /api/agents/delegations` lists grants with fingerprints, scopes, status, and last-used timestamps — never tokens.
-- `POST /api/agents/delegations/{id}/revoke` revokes immediately.
-- `GET /api/agents/scopes` returns the registered scope catalog.
-- `POST /api/agents/proposals` accepts authenticated external intents through AI-GOV's admission port, with typed `409`s for stale revisions, limit violations, disabled actions, and kill-switch blocks. It exposes no generic provider-run operation.
-
-Malformed values return `422`; unknown entities `404`; authentication failures `401`/`403` with no detail leakage.
-
-## UI-001 scope pointer
-
-UI-001 owns the operator-visible surface, as a follow-up to D46:
-
-- Settings → AI & Muse → Agent access: grant/revoke delegation, scope checklist, token fingerprint and last-used display, per-agent limit overrides.
-- Review queue: "Proposed by Muse" attribution with model, run id, rationale, and stale-version warnings on every agent-originated draft.
-- Activity views: agent proposals and decisions attributed to Muse, distinct from operator actions.
-
-## Acceptance criteria
-
-- Delegation grant → token → authenticated read tools → write intent → draft in review queue → operator approval creates the official record, end to end, with audit events at each step carrying `actor_kind=ai_assistant`.
-- Revoked token fails closed on the next call; pending drafts remain for operator decision.
-- Unknown action codes, malformed payloads, and missing evidence refs are rejected with typed errors before any draft is created.
-- Stale base versions flag drafts and abort approval transactions with `ai_stale_draft`.
-- Sandbox intents never touch real records or the real queue.
-- Idempotent intent resubmission returns the original run/draft.
-- Secrets (tokens, API keys) proven absent from the database, snapshots, backups, exports, and logs.
-- `activity.since` polling respects scopes and rate limits.
-
-## Non-goals
-
-- Remote or multi-user agent access; the MCP server is local and single-operator.
-- Push notifications or subscriptions; polling is the v1 contract.
-- Agent-to-agent delegation or sub-delegation.
-- Automatic approval, auto-send, auto-sign, auto-pay, or any autonomous side effect.
-- Model evaluation or fine-tuning on workspace data.
-
-## Bridge bootstrap protocol — agent or manual intake
-
-The product decision is inbound via Muse Agent or manual operator entry, with no app-held Gmail, Outlook, or SMS credentials and no app mail polling. Muse performs extraction using its own authorized connections. The app retains submitted evidence, proposed fields, review decisions, and audit history. Outbound drafts are sent manually by the operator; the bridge receives no sending authority.
-
-### Connection and setup
-
-Personal-agent connector registration, secure credential delivery, local API reachability, and schedule management remain verification gates. A cloud agent cannot inherently reach a loopback URL. No implicit tunnel is authorized. Manual intake remains available while agent access is unavailable.
-
-Settings owns enable/pause, Gmail filter, optional sender filters, desired poll interval, registered scopes, review requirement, last contact, last successful poll, sanitized failures, and proposal counts. Sender filters never confer authority. Desired and acknowledged configuration versions are distinct; reading a changed interval does not automatically reschedule the agent.
-
-Generate a non-secret versioned descriptor with workspace ID, verified address, supported endpoint paths, and approved scopes. Setup secrets never enter workspace files, backups, exports, logs, or audit snapshots. If the verified authorization protocol uses a one-time app token, it has 256 bits of randomness, a 15-minute expiry, atomic single consumption, and only a stored verifier. Exchange it through a dedicated setup operation bound to the preapproved grant; the agent cannot grant itself privileges through an operator endpoint. Initial scopes cover source submission, issue proposals, config/heartbeat, and required bounded context reads only. Tasks/documents require separately registered actions and grants.
-
-After the required user approval, securely exchange credentials, establish a supported schedule, acknowledge configuration, and prove the connection with synthetic data. One-step setup and unattended rotation remain intended UX until the actual integration supports them.
-
-### Poll and admission
-
-1. Fetch authenticated, delegation-scoped `GET /api/bridge/config`. Disabled, revoked, or paused bridges cannot submit even with stale cached configuration. The AI kill switch belongs to `/api/ai/settings`.
-2. Muse reads its authorized mailbox using the configured filters and durable continuation state. App permission does not grant or revoke Muse's independent mailbox access.
-3. Submit bounded original source evidence and provenance through Intake's authenticated source-admission boundary. Preserve source content separately from the proposed interpretation, with authorized attachments through FILE-001. Missing source content is explicitly marked incomplete; a message ID alone cannot support a source comparison.
-4. Submit the draft through `POST /api/agents/proposals`, referencing retained evidence. AI-GOV admits an `external_proposal` without a second model call. No generic `/api/ai/runs` endpoint is exposed.
-5. Deduplicate sources by workspace, provider, mailbox/account identity, and provider message ID. Validate identity against the authorized bridge binding; treat agent-supplied provenance as agent-reported unless independently verified. Use a separate stable UUID request idempotency key. Intake defines duplicate candidate handling so retries do not create additional drafts.
-6. Retain per-message success/retry state and advance checkpoints only for acknowledged or explicitly skipped items. Timestamp-only cursors and rolling one-day queries are insufficient after downtime; define overlap, pagination, catch-up, and failure retries before enablement.
-7. Submit an authenticated heartbeat after each attempted poll, including empty and failed polls when the app is reachable. Include a unique poll ID, acknowledged config version, outcome, bounded counts, and sanitized error codes. Agent timestamps are diagnostic; server receipt time drives freshness.
-
-### Heartbeat monitoring
-
-The app retains bridge enable time, last server-received heartbeat, last successful poll, reported poll outcome, and acknowledged interval/configuration. These belong to MCP bridge state and require schema, audit, and restore coverage. A repeated poll ID is idempotent and cannot fabricate new activity.
-
-While enabled and expected to run, no heartbeat for twice the acknowledged poll interval triggers a persistent Settings/DASH-003 warning: “No Muse bridge contact since <time>. Check the connection or enter issues manually.” Before the first heartbeat, measure from enable time and show “No bridge contact yet.” Use the configured interval until the initial acknowledgement arrives; unacknowledged interval edits do not hide an existing stale warning.
-
-A heartbeat clears the contact warning but a failed poll keeps a separate failure warning until a successful poll is reported. Neither heartbeat nor success report proves complete mailbox coverage: the app cannot independently detect messages the agent never reported. Health is evaluated from persisted timestamps on app startup/resume as well as while running; a closed local app cannot display a live warning. Expected paused/revoked states do not generate stale alerts. Audit health transitions once rather than every dashboard read.
-
-### Revocation, rotation, and restore
-
-Recheck grants and pause state before committing admission. Revocation rejects the next app request; it cannot stop an external schedule or revoke Muse's Gmail permission. Keep existing drafts reviewable. Rotation needs verified secure delivery, acknowledgement, retry behavior, and revocation precedence before unattended rotation is promised. Restore invalidates usable delegations, including retained verifiers, and requires fresh authorization. Prior health history is retained as history, never presented as a live restored connection.
-
-## Definition of Done
-
-- [ ] Delegation persistence, expiry, restore invalidation, scope validation, and audit history have exact-schema and retained-data validation.
-- [ ] Read projections are bounded and redacted, with source-owned opaque revisions/fingerprints rather than assumed universal version columns.
-- [ ] External proposals enter AI-GOV without a second model call and are approved atomically through the owning domain.
-- [ ] Revocation, pause, idempotency, source staleness, limits, and secret exclusion have regression coverage.
-- [ ] Optional bridge transport, individual approval, secure credential delivery, and scheduler capabilities are verified against the personal agent.
-- [ ] Setup secrets are absent from the workspace, archives, logs, and non-secret descriptors.
-- [ ] Intake retains original sources and attachments separately from drafts, with account-scoped source deduplication and reliable retry/catch-up.
-- [ ] Desired and acknowledged configuration are distinguishable; schedule changes are not inferred from config reads.
-- [ ] A synthetic end-to-end test proves read, source admission, draft review, and denial after revocation.
-- [ ] Operator surfaces remain UI-001 work; neither this design nor a generated descriptor proves that a live bridge exists.
-- [ ] Setup bundle generation, one-time token exchange, and the agent poll runbook end to end (Gmail to intents to review queue, Gmail message IDs as idempotency keys).
-- [ ] Config propagation (app settings edits take effect on the next poll with no agent-side update) and heartbeat: a missed heartbeat surfaces a persistent "bridge silent" banner within 2x the poll interval.
+- [ ] One real local MCP client completes scoped read → source retention → proposal → app review → domain commit → final receipt with synthetic data. Document client/version/transport and failed capability checks.
+- [ ] Client-neutral contracts pass transport-independent service tests and MCP adapter tests; unsupported client configurations stay unavailable.
+- [ ] Each supported MCP transport proves identity, bounded access, explicit disclosures, pause/revocation, and restore reauthorization.
+- [ ] Duplicate same/different payloads, cross-connection source duplicates, stale sources, ambiguous units, oversized inputs, malformed evidence, and injected instructions cannot bypass review.
+- [ ] Disconnects, restart after admission/before receipt, replayed heartbeats, offline/sleep recovery, and receipt retries cannot duplicate or lose an admitted proposal.
+- [ ] Scheduled and interactive health have distinct semantics; last contact never means complete coverage.
+- [ ] Approval/receipt outcome is atomic with domain writes; no model retry or external send occurs on proposal admission.
+- [ ] Sandbox testing uses a separately authorized disposable workspace and separate credentials; an assistant cannot switch into production with a request flag.
+- [ ] Backups retain provenance and history, exclude usable secrets/exports/runtime state, and restore with all connections requiring reauthorization.
+- [ ] Manual intake, app-owned reminders, and ordinary property workflows remain usable with no assistant.
