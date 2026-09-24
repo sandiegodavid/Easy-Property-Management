@@ -180,15 +180,25 @@ Directory presentation is part of the confirmed design.
 
 The product owner accepted manual case tracking, evidence, attorney links, and reminders for the initial release. Automated legal-rule interpretation is deferred. Record preparation and process facts without inferring legal eligibility, compliance, deadlines, or successful eviction. Use linked source records and separately confirmed milestones; actual move-out, rent, maintenance, and expense records retain their own lifecycles. D39–D40 define placement and lifecycle; the delivery boundaries below identify supporting implementation work.
 
+Use a typed legal-matter record linked to the property, lease, relevant parties, and any attorney or law firm. Track preparation, source facts and evidence, notices and service evidence, court reference, milestones, attorney involvement, communications, tasks, costs, and outcome. Preserve original records and versioned evidence. Any recorded deadline includes its date, source, and confirmation state.
+
+Do not infer readiness to file, legal compliance, possession, move-out, collectible tenant charges, or automatic notice delivery. Legal expenses remain Finance-owned, and attorney engagement is distinct from a maintenance assignment. A reviewed export packet distinguishes selected evidence from internal or legal notes without treating an app privacy label as a determination of legal privilege.
+
 ### D38: Keep MVP HOA work narrow
 
 MVP supports receipt and tracking of HOA violation notices and their resolution. It also supports the later-confirmed D47 case: coordination of an HOA-covered common-element repair affecting condo units. Retain association/sender identity, property, original notice and any cited rule/evidence, dates, next action, communications, linked remediation work, and closure evidence. For a shared repair, retain one Maintenance-owned case, affected managed units, responsibility/coverage evidence, every contact and follow-up, and physical verification. These narrow capabilities do not require a standing HOA rules or board-management module.
+
+A violation notice remains a separate matter from its remediation work. Preserve the original notice, cited rule reference, response, disputed state, claimed amounts, linked remediation, and closure evidence. A shared repair remains a Maintenance record even when it is linked to an HOA notice or coordinated through the association.
 
 Standing rules management, architectural approval requests, assessments, board administration, and other broader HOA capabilities are explicitly deferred until after MVP. Preserve records and links so these can be added later without recreating violation or coordination history. Notice-related claimed or disputed amounts and HOA repair estimates remain contextual facts; they do not automatically create paid expenses or tenant charges.
 
 ### D39: Place Providers, legal matters, and HOA work in context
 
 Providers is a configurable permanent destination, visible by default and hideable through Settings. It remains accessible contextually from Maintenance and legal matters. Legal matters live within Leasing and the related lease/property. HOA notices live within the affected property; HOA-covered shared repairs live in Maintenance and every affected managed-property workspace. Both contribute actionable records to Home and appear in the relevant owner workspace. Do not introduce separate permanent Legal and HOA destinations in MVP.
+
+The provider directory crosses module boundaries and uses shared party identity and one provider profile. Legal / Attorney is a service category with optional practice-area labels. An attorney engagement belongs to its legal matter rather than becoming a maintenance assignment. Formal category selection depends on VEND-CAT-001 being delivered before the consuming UI.
+
+Legal and HOA work reuse Tasks, Files, Communications, Finance, and shared identity through explicit supported links. Do not squeeze either domain into repair categories or owner-concern records. Their MVP inclusion is settled; detailed domain contracts and backlog sequencing remain implementation-planning work.
 
 ### D40: Separate legal-matter status from milestones
 
@@ -247,18 +257,6 @@ The case remains open until the physical outcome is explicitly verified. HOA ack
 In the summary bar, show the shared asset, affected scope, current HOA state, and next follow-up, for example: Shared water regulator · 3 units affected · Waiting for Cascadia HOA · Follow up Sep 25. Expanding it shows responsibility/coverage evidence, affected managed units, the communication timeline, current commitment, and actions to record contact, schedule another follow-up, link a contractor, or verify completion.
 
 ## Confirmed design coverage
-
-### New questions raised September 23: providers, eviction, and HOA work
-
-MVP scope, navigation, and interaction model were confirmed through D37–D41. The following describes the extension boundaries and delivery implications:
-
-- **Providers:** Promote the shared provider directory to a configurable permanent destination, with contextual access from Maintenance and other relevant workflows. With attorneys and other professional services, the directory crosses module boundaries. Use the existing shared identity and provider profile; Legal / Attorney is a service category, with optional practice-area labels. VEND-CAT-001 already plans Legal, but is sequenced after UI-001; a formal category picker requires an explicit sequencing/dependency decision.
-- **Eviction/legal matters:** Introduce a typed legal-matter record linked to property, lease, relevant parties, and attorney/law firm. Entry points belong in Leasing and property/lease context; Home aggregates actionable deadlines. Track preparation, source facts/evidence, notices and service evidence, court reference, milestones, attorney involvement, communications, tasks, costs, and outcome. Stages must support branches, pauses, and closure without eviction. Preserve original records and versioned evidence; date/source/confirmation accompanies deadlines. Do not infer readiness to file, legal compliance, possession, move-out, collectible tenant charges, or automatic notice delivery. Legal expenses remain Finance-owned; attorney engagement is distinct from a maintenance assignment. A reviewed export packet should distinguish selected evidence from internal/legal notes, without treating a privacy label as a legal privilege determination.
-- **HOA work (MVP):** Track violation notices and the narrow association-coordination needed for an HOA-covered shared repair. A notice remains a separate matter with its original notice, cited rule reference, response, dispute, remediation, claimed amounts, and closure evidence. A shared repair remains Maintenance-owned, can link multiple affected managed units, and retains each HOA communication and follow-up. The association is an organization/contact, not automatically a provider. Standing rule management, architectural approval requests, assessments, board administration, and broader HOA management remain post-MVP.
-
-These domains reuse Tasks, Files, Communications, Finance, and shared identity through explicit supported links. They must not be squeezed into repair categories or owner-concern records. MVP inclusion is agreed; domain contracts and backlog sequencing remain implementation-planning work rather than unresolved product choices.
-
-Research context: [California Courts eviction overview](https://selfhelp.courts.ca.gov/eviction) distinguishes notices from court cases; [California DRE common-interest-development guidance](https://www.dre.ca.gov/Newsroom/DRE_Updates/2026_08_21_Common_Interest_Dev.html) distinguishes governing instruments, assessments, restrictions, and unresolved violation notices. These are jurisdiction-specific examples informing record structure, not universal procedural templates or legal rules for the app.
 
 - Coherent operating experience (D1, D3, D5–D7, D9)
   - Settled: owner workspace structure, navigation scope, source-linked attention grouping, and draft protection.
@@ -373,5 +371,9 @@ An in-conversation interactive design preview uses fictional sample data to revi
 - [Architecture](ARCHITECTURE.md)
 - [Product decisions](DECISIONS.md)
 - [README](../README.md)
+- [California Courts eviction overview](https://selfhelp.courts.ca.gov/eviction), used to distinguish notices from court cases when structuring manual legal matters.
+- [California DRE common-interest-development guidance](https://www.dre.ca.gov/Newsroom/DRE_Updates/2026_08_21_Common_Interest_Dev.html), used to distinguish governing instruments, assessments, restrictions, and unresolved violation notices when bounding HOA scope.
+
+The California sources are jurisdiction-specific examples informing record structure, not universal procedural templates or legal rules for the app.
 
 Decisions D1–D34 were confirmed by the product owner in the design interview on 2026-09-22. D5 incorporates the explicit requirements for an Owners destination and Settings customization of permanent destinations. Later decisions refine earlier choices; specifically D17 settles D5 customization, D19 settles D6 ordering, D15 settles D9 draft protection, and D18 confirms the supporting work for D7. The overall screen direction and inline refinements were accepted. D37–D46 and the explicit inline-toggle explanation were confirmed on September 23, 2026; the complete design was confirmed through Q45 on September 23, 2026, with D46 confirmed the same day.
