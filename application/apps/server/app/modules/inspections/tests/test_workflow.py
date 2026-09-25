@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from datetime import date, timedelta
 from pathlib import Path
+from uuid import uuid4
 from sqlalchemy import event, text
 from fastapi.testclient import TestClient
 from app.bootstrap.api import create_app
@@ -45,6 +46,7 @@ class InspectionWorkflowTests(unittest.TestCase):
         )
         property_record = portfolio.create_property(PropertyCreateCommand("Home", "1 Main", "Portland", "US", "single_family_home", (OwnershipInput("local_operator"),), region="OR"))
         self.space_id = portfolio.get_property(property_record.id)["spaces"][0]["id"]
+        self.portfolio = portfolio
         party_operations = SQLitePartyOperations(self.workspace.paths.database)
         tenants = TenantService(SQLiteTenantUnitOfWork(
             self.workspace.paths.database, self.recorder, SQLiteLeaseParticipationGuard(), party_operations,
@@ -55,9 +57,13 @@ class InspectionWorkflowTests(unittest.TestCase):
         today = date.today(); self.leases = LeaseService(SQLiteLeaseUnitOfWork(
             self.workspace.paths.database, self.recorder, SQLiteTenantProfileAvailability(),
             SQLitePortfolioLeaseOperations(self.workspace.paths.database),
+            SQLiteInspectionContextReader(),
         ))
         draft = self.leases.create(LeaseCreateCommand(self.space_id, "residential", today, today + timedelta(days=30), today, TermCommand(100000,"USD","monthly",1,0), (ParticipantCommand(tenant["id"],"primary_tenant"), ParticipantCommand(co_tenant["id"],"co_tenant"))))
-        self.lease = self.leases.execute(draft["id"], executed_on=today, confirmed=True)
+        self.lease = self.leases.execute(
+            draft["id"], executed_on=today, confirmed=True,
+            expected_revision=portfolio.get_space_status(self.space_id)["revision"], idempotency_key=str(uuid4()),
+        )
         self.files = FileService(self.workspace, FilesystemContentStore(self.workspace.paths.files), SQLiteFileUnitOfWork(self.workspace.paths.database, self.recorder))
         self.inspections = InspectionService(SQLiteInspectionUnitOfWork(self.workspace.paths.database, self.recorder), self.files)
         self.backups = BackupService(self.workspace, self.recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)))

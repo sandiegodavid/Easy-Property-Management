@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from uuid import uuid4
 from pathlib import Path
+from app.modules.inspections.application.attention import inspection_attention
 from app.modules.inspections.application.ports import InspectionEvidenceStore, InspectionTransaction, InspectionUnitOfWork
 from app.modules.inspections.domain.models import ConditionAcknowledgment, ConditionArea, ConditionChecklistTemplate, ConditionChecklistTemplateItem, ConditionComparison, ConditionObservation, ConditionReport
 
@@ -53,7 +54,12 @@ class InspectionService:
         lease = self.unit_of_work.lease_summary(lease_id)
         if lease is None: raise InspectionNotFoundError("Lease was not found.")
         reports = self.unit_of_work.report_views(lease_id); current = {(item["reportKind"], item["status"]) for item in reports}; today = date.today().isoformat()
-        return {"reports": reports, "attention": {"preMoveIn": "complete" if ("pre_move_in", "finalized") in current else ("overdue" if lease["status"] == "executed" and lease["occupancy_starts_on"] < today else ("due" if lease["status"] == "executed" else "not_due")), "postMoveOut": "complete" if ("post_move_out", "finalized") in current else ("due" if lease["actual_move_out_on"] else "not_due")}}
+        return {"reports": reports, "attention": inspection_attention(
+            lease_status=lease["status"], occupancy_starts_on=lease["occupancy_starts_on"],
+            actual_move_out_on=lease["actual_move_out_on"],
+            finalized_report_kinds={kind for kind, status in current if status == "finalized"},
+            effective_on=today,
+        )}
     def attention_for_lease(self, lease_id): return self.list_for_lease(lease_id)["attention"]
     def list_templates(self): return self.unit_of_work.template_views()
     def create_template(self, *, display_name, applicability="any", notes=None, areas=()):

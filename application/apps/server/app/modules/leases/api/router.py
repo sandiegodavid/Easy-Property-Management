@@ -73,11 +73,16 @@ class ConfirmationRequest(Contract):
     confirmed: StrictBool
 
 
-class ExecuteRequest(ConfirmationRequest):
+class TimelineConfirmationRequest(ConfirmationRequest):
+    expectedRevision: StrictInt = Field(ge=0)
+    idempotencyKey: str = Field(min_length=1, max_length=200)
+
+
+class ExecuteRequest(TimelineConfirmationRequest):
     executedOn: date
 
 
-class EndRequest(ConfirmationRequest):
+class EndRequest(TimelineConfirmationRequest):
     actualMoveOutOn: date
 
 
@@ -118,7 +123,7 @@ class TerminationCasePatchRequest(Contract):
     operatorNotes: str | None = Field(None, max_length=4000)
 
 
-class TerminationCompleteRequest(ConfirmationRequest):
+class TerminationCompleteRequest(TimelineConfirmationRequest):
     actualMoveOutOn: date
 
 
@@ -265,6 +270,15 @@ class LeaseResponse(Contract):
     renewalOptions: list[LeaseRenewalResponse]
     files: list[LeaseFileResponse]
     inspectionAttention: InspectionAttentionResponse
+    revision: int | None = None
+    operationId: str | None = None
+
+
+class TimelineLeaseResponse(LeaseResponse):
+    """The replayable source-timeline mutation contract."""
+
+    revision: int
+    operationId: str
 
 
 def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
@@ -283,7 +297,10 @@ def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
         except LeaseNotFoundError as error:
             raise HTTPException(404, str(error)) from error
         except LeaseConflictError as error:
-            raise HTTPException(409, str(error)) from error
+            detail: str | dict[str, object] = str(error)
+            if error.current_status is not None:
+                detail = {"message": str(error), "currentStatus": error.current_status}
+            raise HTTPException(409, detail) from error
         except LeaseError as error:
             raise HTTPException(400, str(error)) from error
 
@@ -354,27 +371,31 @@ def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
         ready(True)
         return invoke(lambda: service.remove_participant(lease_id, participant_id))
 
-    @leases.post("/{lease_id}/execute", response_model=LeaseResponse)
+    @leases.post("/{lease_id}/execute", response_model=TimelineLeaseResponse)
     def execute(lease_id: str, data: ExecuteRequest):
         ready(True)
-        return invoke(lambda: service.execute(lease_id, executed_on=data.executedOn, confirmed=data.confirmed))
+        return invoke(lambda: service.execute(lease_id, executed_on=data.executedOn, confirmed=data.confirmed,
+                                              expected_revision=data.expectedRevision, idempotency_key=data.idempotencyKey))
 
-    @leases.post("/{lease_id}/end", response_model=LeaseResponse)
+    @leases.post("/{lease_id}/end", response_model=TimelineLeaseResponse)
     def end(lease_id: str, data: EndRequest):
         ready(True)
         return invoke(lambda: service.end(lease_id, actual_move_out_on=data.actualMoveOutOn,
-                                          confirmed=data.confirmed))
+                                          confirmed=data.confirmed, expected_revision=data.expectedRevision,
+                                          idempotency_key=data.idempotencyKey))
 
-    @leases.post("/{lease_id}/terminate", response_model=LeaseResponse)
+    @leases.post("/{lease_id}/terminate", response_model=TimelineLeaseResponse)
     def terminate(lease_id: str, data: TerminateRequest):
         ready(True)
         return invoke(lambda: service.terminate(lease_id, actual_move_out_on=data.actualMoveOutOn,
-                                                end_reason=data.endReason, confirmed=data.confirmed))
+                                                end_reason=data.endReason, confirmed=data.confirmed,
+                                                expected_revision=data.expectedRevision, idempotency_key=data.idempotencyKey))
 
-    @leases.post("/{lease_id}/void", response_model=LeaseResponse)
-    def void(lease_id: str, data: ConfirmationRequest):
+    @leases.post("/{lease_id}/void", response_model=TimelineLeaseResponse)
+    def void(lease_id: str, data: TimelineConfirmationRequest):
         ready(True)
-        return invoke(lambda: service.void(lease_id, confirmed=data.confirmed))
+        return invoke(lambda: service.void(lease_id, confirmed=data.confirmed,
+                                           expected_revision=data.expectedRevision, idempotency_key=data.idempotencyKey))
 
     @leases.post("/{lease_id}/renewal-options", status_code=201, response_model=LeaseResponse)
     def add_renewal(lease_id: str, data: RenewalRequest):
@@ -430,10 +451,13 @@ def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
         ready(True)
         return invoke(lambda: service.transition_termination_case(case_id, status=data.status, operator_notes=data.operatorNotes))
 
-    @router.post("/api/termination-cases/{case_id}/complete", response_model=LeaseResponse)
+    @router.post("/api/termination-cases/{case_id}/complete", response_model=TimelineLeaseResponse)
     def complete_termination_case(case_id: str, data: TerminationCompleteRequest):
         ready(True)
-        return invoke(lambda: service.complete_termination_case(case_id, actual_move_out_on=data.actualMoveOutOn, confirmed=data.confirmed))
+        return invoke(lambda: service.complete_termination_case(
+            case_id, actual_move_out_on=data.actualMoveOutOn, confirmed=data.confirmed,
+            expected_revision=data.expectedRevision, idempotency_key=data.idempotencyKey,
+        ))
 
     router.include_router(leases)
     return router

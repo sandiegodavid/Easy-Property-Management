@@ -4,16 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from collections import defaultdict
+from json import dumps, loads
 from typing import Any, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.portfolio.application.ports import PartyRoleActivityGuard, PropertyArchiveGuard, PortfolioConflictError, PortfolioTransaction
+from app.modules.portfolio.application.source_timeline import PortfolioSourceTimelineService, SourceTimelineChangeSet
 from app.modules.portfolio.domain.models import Party, Property, PropertyOwnership, Space, SpaceAvailability, SpaceOccupancyPeriod
-from app.modules.portfolio.infrastructure.sqlalchemy_models import PartyModel, PropertyModel, PropertyOwnershipModel, SpaceAvailabilityModel, SpaceModel, SpaceOccupancyPeriodModel
+from app.modules.portfolio.infrastructure.sqlalchemy_models import PartyModel, PropertyModel, PropertyOwnershipModel, SpaceAvailabilityModel, SpaceModel, SpaceOccupancyPeriodModel, SpaceStatusOperationModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 Result = TypeVar("Result")
@@ -61,6 +63,14 @@ class SQLitePortfolioUnitOfWork:
                     "The portfolio changed concurrently; reload it and try again."
                 ) from error
             raise
+
+    def read(self, operation: Callable[[PortfolioTransaction], Result]) -> Result:
+        # Keep a source page's rows, status facts, and total in one SQLite snapshot.
+        with self.engine.connect() as connection:
+            with connection.begin():
+                return operation(_SQLitePortfolioTransaction(
+                    connection, self.recorder, self.party_role_guards, self.property_archive_guards,
+                ))
 
     def get_property(self, property_id: str) -> Property | None:
         with Session(self.engine) as session:
@@ -132,6 +142,7 @@ class SQLitePortfolioLeaseOperations:
 
     def __init__(self, database) -> None:
         self.engine = create_sqlite_engine(database)
+        self.source_timeline = PortfolioSourceTimelineService()
 
     def space(self, connection, space_id):
         row = connection.execute(
@@ -153,6 +164,12 @@ class SQLitePortfolioLeaseOperations:
         ).mappings().all()
         return [SpaceOccupancyPeriod(**dict(row)) for row in rows]
 
+    def availability(self, connection, space_id):
+        row = connection.execute(
+            SpaceAvailabilityModel.__table__.select().where(SpaceAvailabilityModel.space_id == space_id)
+        ).mappings().first()
+        return SpaceAvailability(**dict(row)) if row else None
+
     def insert_occupancy_period(self, connection, item):
         connection.execute(SpaceOccupancyPeriodModel.__table__.insert().values(**item.__dict__))
 
@@ -162,6 +179,40 @@ class SQLitePortfolioLeaseOperations:
             .where(SpaceOccupancyPeriodModel.id == item.id)
             .values(**item.__dict__)
         )
+
+    def replace_space(self, connection, space):
+        connection.execute(SpaceModel.__table__.update().where(SpaceModel.id == space.id).values(**space.__dict__))
+
+    def status_operation(self, connection, idempotency_key):
+        return connection.execute(
+            SpaceStatusOperationModel.__table__.select().where(
+                SpaceStatusOperationModel.idempotency_key == idempotency_key
+            )
+        ).mappings().first()
+
+    def source_timeline_operation(self, connection, idempotency_key):
+        return self.status_operation(connection, idempotency_key)
+
+    def insert_status_operation(self, connection, operation):
+        connection.execute(SpaceStatusOperationModel.__table__.insert().values(**operation))
+
+    def apply_source_timeline(self, connection, changes: SourceTimelineChangeSet):
+        return self.source_timeline.apply(self, connection, changes)
+
+    def store_source_timeline_consumer_result(self, connection, operation_id, consumer_result):
+        row = connection.execute(
+            SpaceStatusOperationModel.__table__.select().where(SpaceStatusOperationModel.id == operation_id)
+        ).mappings().first()
+        if row is None:
+            raise KeyError(operation_id)
+        snapshot = dict(loads(str(row["result_snapshot"])))
+        if "consumerResult" not in snapshot:
+            snapshot["consumerResult"] = consumer_result
+            connection.execute(
+                SpaceStatusOperationModel.__table__.update()
+                .where(SpaceStatusOperationModel.id == operation_id)
+                .values(result_snapshot=dumps(snapshot, sort_keys=True))
+            )
 
     def space_ids_for_property(self, property_id):
         with Session(self.engine) as session:
@@ -206,6 +257,106 @@ class _SQLitePortfolioTransaction:
     def availability(self, space_id: str) -> SpaceAvailability | None:
         row = self.connection.execute(SpaceAvailabilityModel.__table__.select().where(SpaceAvailabilityModel.space_id == space_id)).mappings().first()
         return SpaceAvailability(**dict(row)) if row else None
+
+    def status_operation(self, idempotency_key: str) -> dict[str, object] | None:
+        row = self.connection.execute(SpaceStatusOperationModel.__table__.select().where(
+            SpaceStatusOperationModel.idempotency_key == idempotency_key,
+        )).mappings().first()
+        return None if row is None else dict(row)
+
+    def insert_status_operation(self, operation: dict[str, object]) -> None:
+        self.connection.execute(SpaceStatusOperationModel.__table__.insert().values(**operation))
+
+    def property_views(self, *, status: str | None = None) -> list[tuple[Property, list[PropertyOwnership], dict[str, Party], list[Space]]]:
+        query = select(PropertyModel).order_by(PropertyModel.display_name, PropertyModel.id)
+        if status is not None:
+            query = query.where(PropertyModel.status == status)
+        properties = [Property(**dict(row)) for row in self.connection.execute(query).mappings()]
+        return self._hydrate_property_views(properties)
+
+    def _hydrate_property_views(self, properties: list[Property]) -> list[tuple[Property, list[PropertyOwnership], dict[str, Party], list[Space]]]:
+        property_ids = [item.id for item in properties]
+        if not property_ids:
+            return []
+        ownerships = [PropertyOwnership(**dict(row)) for row in self.connection.execute(
+            select(PropertyOwnershipModel).where(PropertyOwnershipModel.property_id.in_(property_ids)).order_by(PropertyOwnershipModel.created_at)
+        ).mappings()]
+        spaces = [Space(**dict(row)) for row in self.connection.execute(
+            select(SpaceModel).where(SpaceModel.property_id.in_(property_ids)).order_by(SpaceModel.created_at)
+        ).mappings()]
+        party_ids = {item.party_id for item in ownerships if item.party_id is not None}
+        parties = {} if not party_ids else {
+            item["id"]: Party(**dict(item)) for item in self.connection.execute(select(PartyModel).where(PartyModel.id.in_(party_ids))).mappings()
+        }
+        ownership_by_property: dict[str, list[PropertyOwnership]] = defaultdict(list)
+        for item in ownerships:
+            ownership_by_property[item.property_id].append(item)
+        spaces_by_property: dict[str, list[Space]] = defaultdict(list)
+        for item in spaces:
+            spaces_by_property[item.property_id].append(item)
+        return [(item, ownership_by_property[item.id], parties, spaces_by_property[item.id]) for item in properties]
+
+    def property_page_ids(self, *, status: str | None, ownership_context: str | None, occupancy: str | None, availability: str | None, needs_attention: bool | None, local_days: dict[str, str], cursor: tuple[str, str] | None, limit: int) -> tuple[list[str], int]:
+        display_key = PropertyModel.display_name
+        default_day = next(iter(local_days.values()))
+        local_day = case(local_days, value=PropertyModel.time_zone, else_=default_day)
+        predicate = [] if status is None else [PropertyModel.status == status]
+        active_spaces = SpaceModel.status == "active"
+        ownership_active = and_(PropertyOwnershipModel.property_id == PropertyModel.id, PropertyOwnershipModel.starts_on <= local_day, or_(PropertyOwnershipModel.ends_on.is_(None), PropertyOwnershipModel.ends_on > local_day))
+        local_owner = exists(select(1).where(ownership_active, PropertyOwnershipModel.owner_kind == "local_operator"))
+        client_owner = exists(select(1).where(ownership_active, PropertyOwnershipModel.owner_kind == "client_owner"))
+        if ownership_context == "self_owned": predicate.extend((local_owner, ~client_owner))
+        elif ownership_context == "managed_for_owner": predicate.extend((client_owner, ~local_owner))
+        elif ownership_context == "mixed": predicate.extend((local_owner, client_owner))
+        current_period = and_(SpaceOccupancyPeriodModel.space_id == SpaceModel.id, SpaceOccupancyPeriodModel.record_state == "valid", SpaceOccupancyPeriodModel.starts_on <= local_day, or_(SpaceOccupancyPeriodModel.ends_on.is_(None), SpaceOccupancyPeriodModel.ends_on > local_day))
+        if occupancy is not None:
+            predicate.extend((PropertyModel.status == "active", exists(select(1).select_from(SpaceModel).join(SpaceOccupancyPeriodModel, current_period).where(SpaceModel.property_id == PropertyModel.id, active_spaces, SpaceOccupancyPeriodModel.occupancy_status == occupancy))))
+        effective_availability = SpaceAvailabilityModel.availability_status
+        if availability is not None:
+            if availability == "available_now":
+                availability_match = or_(effective_availability == "available_now", and_(effective_availability == "available_on", SpaceAvailabilityModel.available_on <= local_day))
+            elif availability == "available_on":
+                availability_match = and_(effective_availability == "available_on", SpaceAvailabilityModel.available_on > local_day)
+            else:
+                availability_match = effective_availability == availability
+            predicate.extend((PropertyModel.status == "active", exists(select(1).select_from(SpaceModel).join(SpaceAvailabilityModel, SpaceAvailabilityModel.space_id == SpaceModel.id).where(SpaceModel.property_id == PropertyModel.id, active_spaces, availability_match))))
+        if needs_attention is not None:
+            unknown = exists(select(1).select_from(SpaceModel).outerjoin(SpaceOccupancyPeriodModel, current_period).outerjoin(SpaceAvailabilityModel, SpaceAvailabilityModel.space_id == SpaceModel.id).where(SpaceModel.property_id == PropertyModel.id, active_spaces, or_(SpaceOccupancyPeriodModel.occupancy_status == "unknown", SpaceAvailabilityModel.availability_status == "unknown")))
+            predicate.append(unknown if needs_attention else ~unknown)
+        count_predicate = tuple(predicate)
+        if cursor is not None:
+            predicate.append(or_(display_key > cursor[0], (display_key == cursor[0]) & (PropertyModel.id > cursor[1])))
+        ids = list(self.connection.execute(
+            select(PropertyModel.id).where(*predicate).order_by(display_key, PropertyModel.id).limit(limit)
+        ).scalars())
+        total = int(self.connection.execute(select(func.count()).select_from(PropertyModel).where(*count_predicate)).scalar_one())
+        return ids, total
+
+    def property_time_zones(self) -> set[str]:
+        return set(self.connection.execute(select(PropertyModel.time_zone).distinct()).scalars())
+
+    def property_views_for_ids(self, property_ids: list[str]) -> list[tuple[Property, list[PropertyOwnership], dict[str, Party], list[Space]]]:
+        if not property_ids:
+            return []
+        order = {property_id: index for index, property_id in enumerate(property_ids)}
+        properties = [Property(**dict(row)) for row in self.connection.execute(
+            select(PropertyModel).where(PropertyModel.id.in_(property_ids))
+        ).mappings()]
+        return self._hydrate_property_views(sorted(properties, key=lambda item: order[item.id]))
+
+    def space_statuses(self, space_ids: list[str]) -> tuple[dict[str, list[SpaceOccupancyPeriod]], dict[str, SpaceAvailability]]:
+        if not space_ids:
+            return {}, {}
+        periods = [SpaceOccupancyPeriod(**dict(row)) for row in self.connection.execute(
+            select(SpaceOccupancyPeriodModel).where(SpaceOccupancyPeriodModel.space_id.in_(space_ids)).order_by(SpaceOccupancyPeriodModel.starts_on)
+        ).mappings()]
+        availability = [SpaceAvailability(**dict(row)) for row in self.connection.execute(
+            select(SpaceAvailabilityModel).where(SpaceAvailabilityModel.space_id.in_(space_ids))
+        ).mappings()]
+        by_space: dict[str, list[SpaceOccupancyPeriod]] = defaultdict(list)
+        for item in periods:
+            by_space[item.space_id].append(item)
+        return by_space, {item.space_id: item for item in availability}
 
     def ownerships_at(self, property_id: str, when: str) -> list[PropertyOwnership]:
         rows = self.connection.execute(PropertyOwnershipModel.__table__.select().where(

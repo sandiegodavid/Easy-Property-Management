@@ -38,6 +38,7 @@ from app.modules.owner_accounting.infrastructure.schema_validation import valida
 from app.modules.leases.application.service import LeaseCreateCommand, LeaseService, ParticipantCommand, TermCommand
 from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
 from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseUnitOfWork
+from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
 from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard
 from app.modules.parties.application.service import PartyCreateCommand, SharedPartyFactory
 from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations, SQLitePartyReadOperations
@@ -228,9 +229,12 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
         # boundaries and prevents a test from crossing midnight mid-run.
         self.now = datetime.now(UTC).replace(microsecond=0)
         today = self.now.astimezone(ZoneInfo("America/Los_Angeles")).date()
-        leases = LeaseService(SQLiteLeaseUnitOfWork(database, recorder, SQLiteTenantProfileAvailability(), SQLitePortfolioLeaseOperations(database)))
+        leases = LeaseService(SQLiteLeaseUnitOfWork(database, recorder, SQLiteTenantProfileAvailability(), SQLitePortfolioLeaseOperations(database), SQLiteInspectionContextReader()))
         lease = leases.create(LeaseCreateCommand(space_id, "residential", today, today + timedelta(days=365), today, TermCommand(100_000, "USD", "monthly", 1, 0), (ParticipantCommand(tenant["id"], "primary_tenant"),)))
-        self.lease = leases.execute(lease["id"], executed_on=today, confirmed=True)
+        self.lease = leases.execute(
+            lease["id"], executed_on=today, confirmed=True,
+            expected_revision=portfolio.get_space_status(space_id)["revision"], idempotency_key=str(uuid4()),
+        )
         self.recorder, self.database, self.parties = recorder, database, parties
         self.files_reader = SQLiteFileLinkReader()
         self.receipt_operations = SQLiteReceiptTransactionOperations(recorder, SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), parties)

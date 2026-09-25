@@ -41,6 +41,7 @@ class SpaceModel(LocalBase):
     suite_or_floor: Mapped[str | None] = mapped_column(String)
     notes: Mapped[str | None] = mapped_column(String)
     status: Mapped[str] = mapped_column(String, nullable=False)
+    status_revision: Mapped[int] = mapped_column(nullable=False, default=0)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
     archived_at: Mapped[str | None] = mapped_column(String)
@@ -100,3 +101,15 @@ class SpaceAvailabilityModel(LocalBase):
         CheckConstraint("(source_kind = 'manual' AND source_id IS NULL) OR (source_kind IN ('listing', 'lease') AND source_id IS NOT NULL)"),
         Index("space_availability_status_date", "availability_status", "available_on"),
     )
+
+
+class SpaceStatusOperationModel(LocalBase):
+    __tablename__ = "space_status_operations"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    space_id: Mapped[str] = mapped_column(ForeignKey("spaces.id"), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    result_revision: Mapped[int] = mapped_column(nullable=False)
+    result_snapshot: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (Index("space_status_operations_space_key", "space_id", "idempotency_key"),)

@@ -23,7 +23,7 @@ def validate_portfolio_schema(connection) -> None:
             {"party_id", "ends_on", "ended_at"},
         ),
         "spaces": (
-            {"id", "property_id", "space_kind", "display_name", "normalized_name", "suite_or_floor", "notes", "status", "created_at", "updated_at", "archived_at", "archived_by_property_operation_id"},
+            {"id", "property_id", "space_kind", "display_name", "normalized_name", "suite_or_floor", "notes", "status", "status_revision", "created_at", "updated_at", "archived_at", "archived_by_property_operation_id"},
             {"suite_or_floor", "notes", "archived_at", "archived_by_property_operation_id"},
         ),
         "space_occupancy_periods": (
@@ -33,6 +33,10 @@ def validate_portfolio_schema(connection) -> None:
         "space_availability": (
             {"space_id", "availability_status", "available_on", "source_kind", "source_id", "note", "updated_at"},
             {"available_on", "source_id", "note"},
+        ),
+        "space_status_operations": (
+            {"id", "space_id", "idempotency_key", "request_fingerprint", "result_revision", "result_snapshot", "created_at"},
+            set(),
         ),
     }
     _validate_columns(inspector, expected_columns)
@@ -54,6 +58,10 @@ def _validate_columns(inspector, expected_columns) -> None:
         for column in columns:
             if not column["primary_key"] and bool(column["nullable"]) != (column["name"] in nullable):
                 raise MigrationSchemaError(f"{table} nullability is incompatible with PORT-001.")
+            if column["name"] in {"status_revision", "result_revision"}:
+                if "INT" not in str(column["type"]).upper():
+                    raise MigrationSchemaError(f"{table} column types are incompatible with PORT-003.")
+                continue
             if "TEXT" not in str(column["type"]).upper() and "CHAR" not in str(column["type"]).upper():
                 raise MigrationSchemaError(f"{table} column types are incompatible with PORT-001.")
 
@@ -89,6 +97,9 @@ def _validate_indexes(connection, inspector, expected_columns) -> None:
         },
         "space_availability": {
             "space_availability_status_date": (("availability_status", "available_on"), False),
+        },
+        "space_status_operations": {
+            "space_status_operations_space_key": (("space_id", "idempotency_key"), False),
         },
     }
     if indexes != required:
@@ -129,6 +140,9 @@ def _validate_foreign_keys(inspector) -> None:
             (("superseded_by_id",), "space_occupancy_periods", ("id",)),
         },
         "space_availability": {
+            (("space_id",), "spaces", ("id",)),
+        },
+        "space_status_operations": {
             (("space_id",), "spaces", ("id",)),
         },
     }
@@ -180,6 +194,7 @@ def _validate_checks(inspector, expected_columns) -> None:
             "(availability_status='available_on'andavailable_onisnotnull)or(availability_status!='available_on'andavailable_onisnull)",
             "(source_kind='manual'andsource_idisnull)or(source_kindin('listing','lease')andsource_idisnotnull)",
         },
+        "space_status_operations": set(),
     }
     found = {
         table: {

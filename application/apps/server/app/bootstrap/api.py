@@ -169,7 +169,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     portfolio_lease_operations = SQLitePortfolioLeaseOperations(service.paths.database)
     lease_unit_of_work = SQLiteLeaseUnitOfWork(
         service.paths.database, recorder, SQLiteTenantProfileAvailability(),
-        portfolio_lease_operations,
+        portfolio_lease_operations, inspection_context_reader,
     )
     inspection_unit_of_work = SQLiteInspectionUnitOfWork(service.paths.database, recorder)
     maintenance_unit_of_work = SQLiteMaintenanceUnitOfWork(

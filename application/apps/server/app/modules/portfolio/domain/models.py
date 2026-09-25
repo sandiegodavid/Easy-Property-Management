@@ -83,6 +83,7 @@ class Space:
     suite_or_floor: str | None
     notes: str | None
     status: str
+    status_revision: int
     created_at: str
     updated_at: str
     archived_at: str | None
@@ -97,6 +98,7 @@ class Space:
             "suiteOrFloor": self.suite_or_floor,
             "notes": self.notes,
             "status": self.status,
+            "revision": self.status_revision,
             "createdAt": self.created_at,
             "updatedAt": self.updated_at,
             "archivedAt": self.archived_at,

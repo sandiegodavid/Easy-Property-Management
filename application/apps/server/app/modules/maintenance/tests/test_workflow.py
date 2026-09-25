@@ -25,6 +25,7 @@ from app.modules.finance.domain.models import VoidCommand
 from app.modules.finance.infrastructure.expense_context_reader import SQLiteExpenseContextReader
 from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpenseUnitOfWork
 from app.modules.maintenance.application.service import MaintenanceService
+from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
 from app.modules.maintenance.application.work_journal_service import WorkJournalService
 from app.modules.maintenance.domain.audit_policy import MAINTENANCE_ACTIVITY_POLICY
 from app.modules.maintenance.domain.models import AppointmentCreate, AssignmentCreate, IssueCreate, QuoteCreate, ReporterAttribution, ReporterCorrection, MaintenanceConflictError, MaintenanceError
@@ -247,6 +248,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
         leases = LeaseService(SQLiteLeaseUnitOfWork(
             database, AuditRecorder(SQLiteAuditRepository(database)), SQLiteTenantProfileAvailability(),
             SQLitePortfolioLeaseOperations(database),
+            SQLiteInspectionContextReader(),
         ))
         today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
         lease = leases.create(LeaseCreateCommand(
@@ -254,7 +256,10 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             TermCommand(200_000, "USD", "monthly", 1, 200_000),
             (ParticipantCommand(tenant["id"], "primary_tenant"),),
         ))
-        leases.execute(lease["id"], executed_on=today.isoformat(), confirmed=True)
+        leases.execute(
+            lease["id"], executed_on=today.isoformat(), confirmed=True,
+            expected_revision=self.portfolio.get_space_status(self.space_id)["revision"], idempotency_key=str(uuid4()),
+        )
         command = IssueCreate(
             self.property_id, self.space_id, "Tenant report", "The tenant reported an active occupancy issue.",
             "plumbing", None, "normal", self._local_midday(today).isoformat(), ReporterAttribution("tenant", "party", tenant["id"]),

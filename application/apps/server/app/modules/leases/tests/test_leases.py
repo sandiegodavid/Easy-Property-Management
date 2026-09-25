@@ -3,8 +3,10 @@ from __future__ import annotations
 import tempfile
 import unittest
 import json
-from datetime import date, timedelta
+from dataclasses import replace
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 from unittest.mock import patch
 from sqlalchemy import event, inspect
 from sqlalchemy import text
@@ -27,6 +29,7 @@ from app.modules.leases.application.service import (
 from app.modules.leases.application.file_links import LeaseFileLinkValidator
 from app.modules.leases.application.ports import LeaseConflictError
 from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseUnitOfWork
+from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
 from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
 from app.modules.leases.infrastructure.schema_validation import _normalise, validate_lease_schema
 from app.modules.files.application.service import FileError, FileService
@@ -40,6 +43,8 @@ from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantProfileA
 from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard
 from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations, SQLitePartyReadOperations
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations
+from app.modules.portfolio.application.source_timeline import SourceTimelineChangeSet
+from app.modules.portfolio.domain.models import SpaceOccupancyPeriod
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
@@ -82,6 +87,7 @@ class LeaseTerminationTests(unittest.TestCase):
         self.service = LeaseService(SQLiteLeaseUnitOfWork(
             self.workspace.paths.database, recorder, SQLiteTenantProfileAvailability(),
             SQLitePortfolioLeaseOperations(self.workspace.paths.database),
+            SQLiteInspectionContextReader(),
         ))
         today = date.today()
         self.lease = self.service.create(LeaseCreateCommand(
@@ -89,7 +95,12 @@ class LeaseTerminationTests(unittest.TestCase):
             TermCommand(200_000, "USD", "monthly", 1, 200_000),
             (ParticipantCommand(self.tenant_id, "primary_tenant"),),
         ))
-        self.lease = self.service.execute(self.lease["id"], executed_on=today, confirmed=True)
+        self._execute_revision = self.portfolio.get_space_status(self.space_id)["revision"]
+        self._execute_key = str(uuid4())
+        self.lease = self.service.execute(
+            self.lease["id"], executed_on=today, confirmed=True,
+            expected_revision=self._execute_revision, idempotency_key=self._execute_key,
+        )
 
     def _new_draft(self, *, starts_on: date | None = None) -> dict[str, object]:
         start = starts_on or date.today()
@@ -98,6 +109,198 @@ class LeaseTerminationTests(unittest.TestCase):
             TermCommand(210_000, "USD", "monthly", 1, 210_000),
             (ParticipantCommand(self.tenant_id, "primary_tenant"),),
         ))
+
+    def _timeline_kwargs(self) -> dict[str, object]:
+        return {
+            "expected_revision": self.portfolio.get_space_status(self.space_id)["revision"],
+            "idempotency_key": str(uuid4()),
+        }
+
+    def _source_change(self, *, replacements, inserts=(), action, expected_revision,
+                       idempotency_key, committed_at="2025-01-01T12:00:00+00:00"):
+        return SourceTimelineChangeSet(
+            space_id=self.space_id, replacements=tuple(replacements), inserts=tuple(inserts),
+            source_kind="lease", source_id=self.lease["id"], action=action, expected_revision=expected_revision,
+            idempotency_key=idempotency_key, correlation_id="correlation", committed_at=committed_at,
+            request_context={"action": action},
+        )
+
+    def test_lease_source_timeline_is_replayable_and_advances_one_revision(self) -> None:
+        """Lease-owned timeline writes share one revisioned portfolio operation."""
+        before = self.portfolio.get_space_status(self.space_id)
+        key = "lease-source-timeline-replay"
+
+        def apply(tx):
+            period = next(item for item in tx.occupancy_periods(self.space_id)
+                          if item.source_kind == "lease" and item.source_id == self.lease["id"])
+            changed = replace(period, note="Lease timeline source operation")
+            return tx.apply_source_timeline(self._source_change(
+                replacements=(changed,), action="test", expected_revision=before["revision"], idempotency_key=key,
+            ))
+
+        first = self.service.unit_of_work.write(apply)
+        self.assertEqual(first["revision"], before["revision"] + 1)
+        self.assertEqual(first["updatedAt"], "2025-01-01T12:00:00+00:00")
+        replay = self.service.unit_of_work.write(apply)
+        self.assertEqual(replay, first)
+        self.assertEqual(self.portfolio.get_space_status(self.space_id)["revision"], first["revision"])
+
+        def changed_reuse(tx):
+            period = next(item for item in tx.occupancy_periods(self.space_id)
+                          if item.source_kind == "lease" and item.source_id == self.lease["id"])
+            return tx.apply_source_timeline(self._source_change(
+                replacements=(replace(period, note="Changed request"),), action="test",
+                expected_revision=first["revision"], idempotency_key=key,
+                committed_at="2025-01-01T12:05:00+00:00",
+            ))
+
+        with self.assertRaises(LeaseConflictError):
+            self.service.unit_of_work.write(changed_reuse)
+
+    def test_execute_records_post_mutation_inspection_attention_and_replays_it(self) -> None:
+        self.assertEqual(self.lease["inspectionAttention"], {
+            "preMoveIn": "due", "postMoveOut": "not_due",
+        })
+        replay = self.service.execute(
+            self.lease["id"], executed_on=date.today(), confirmed=True,
+            expected_revision=self._execute_revision, idempotency_key=self._execute_key,
+        )
+        self.assertEqual(replay, self.lease)
+
+    def test_lease_source_timeline_rejects_stale_or_invalid_timeline_before_writing(self) -> None:
+        before = self.portfolio.get_space_status(self.space_id)
+
+        def stale(tx):
+            period = next(item for item in tx.occupancy_periods(self.space_id)
+                          if item.source_kind == "lease" and item.source_id == self.lease["id"])
+            return tx.apply_source_timeline(self._source_change(
+                replacements=(period,), action="stale", expected_revision=before["revision"] - 1,
+                idempotency_key="lease-source-stale", committed_at=datetime.now(UTC).isoformat(),
+            ))
+
+        with self.assertRaises(LeaseConflictError) as stale_error:
+            self.service.unit_of_work.write(stale)
+        self.assertEqual(stale_error.exception.current_status["revision"], before["revision"])
+
+        def invalid(tx):
+            period = next(item for item in tx.occupancy_periods(self.space_id)
+                          if item.source_kind == "lease" and item.source_id == self.lease["id"])
+            invalid_period = replace(period, ends_on=period.starts_on)
+            return tx.apply_source_timeline(self._source_change(
+                replacements=(invalid_period,), action="invalid", expected_revision=before["revision"],
+                idempotency_key="lease-source-invalid",
+            ))
+
+        with self.assertRaises(LeaseConflictError):
+            self.service.unit_of_work.write(invalid)
+        self.assertEqual(self.portfolio.get_space_status(self.space_id)["revision"], before["revision"])
+
+    def test_source_change_set_validates_non_http_concurrency_inputs_and_linkage(self) -> None:
+        before = self.portfolio.get_space_status(self.space_id)["revision"]
+
+        def invalid_key(tx):
+            period = next(item for item in tx.occupancy_periods(self.space_id)
+                          if item.source_kind == "lease" and item.source_id == self.lease["id"])
+            return tx.apply_source_timeline(self._source_change(
+                replacements=(period,), action="invalid-key", expected_revision=True, idempotency_key=" ",
+            ))
+
+        with self.assertRaises(LeaseConflictError):
+            self.service.unit_of_work.write(invalid_key)
+
+        period = next(item for item in self.service.unit_of_work.write(
+            lambda tx: tx.occupancy_periods(self.space_id)
+        ) if item.source_kind == "lease" and item.source_id == self.lease["id"])
+        successor = SpaceOccupancyPeriod(
+            str(uuid4()), self.space_id, "occupied", period.starts_on, None, "valid", None,
+            "lease", self.lease["id"], "successor", "2025-01-01T12:00:00+00:00", None, None,
+        )
+        linked = SourceTimelineChangeSet(
+            space_id=self.space_id, replacements=(replace(period, superseded_by_id=successor.id),),
+            inserts=(successor,), source_kind="lease", source_id=self.lease["id"], action="linkage",
+            expected_revision=before, idempotency_key="linkage", correlation_id="correlation",
+            committed_at="2025-01-01T12:00:00+00:00", request_context={},
+        )
+        unlinked = replace(linked, replacements=(replace(period, superseded_by_id=None),))
+        self.assertNotEqual(linked.fingerprint(), unlinked.fingerprint())
+
+    def test_execute_close_and_void_each_commit_one_source_revision(self) -> None:
+        today = date.today()
+        self._move_executed_lease_to_yesterday(contract_ends_on=today)
+        before = self.portfolio.get_space_status(self.space_id)["revision"]
+        ended = self.service.end(self.lease["id"], actual_move_out_on=today, confirmed=True,
+                                 **self._timeline_kwargs())
+        self.assertEqual(self.portfolio.get_space_status(self.space_id)["revision"], before + 1)
+
+        successor = self._new_draft(starts_on=today + timedelta(days=1))
+        executed = self.service.execute(successor["id"], executed_on=today, confirmed=True,
+                                        **self._timeline_kwargs())
+        self.assertEqual(executed["status"], "executed")
+        self.assertEqual(self.portfolio.get_space_status(self.space_id)["revision"], before + 2)
+
+        voided = self.service.void(successor["id"], confirmed=True, **self._timeline_kwargs())
+        self.assertEqual(voided["status"], "void")
+        self.assertEqual(self.portfolio.get_space_status(self.space_id)["revision"], before + 3)
+
+    def test_close_replays_the_recorded_operation_before_lifecycle_validation(self) -> None:
+        today = date.today()
+        self._move_executed_lease_to_yesterday(contract_ends_on=today)
+        revision = self.portfolio.get_space_status(self.space_id)["revision"]
+        key = str(uuid4())
+        first = self.service.end(
+            self.lease["id"], actual_move_out_on=today, confirmed=True,
+            expected_revision=revision, idempotency_key=key,
+        )
+        replay = self.service.end(
+            self.lease["id"], actual_move_out_on=today, confirmed=True,
+            expected_revision=revision, idempotency_key=key,
+        )
+        self.assertEqual(first["inspectionAttention"]["postMoveOut"], "due")
+        self.assertEqual(replay, first)
+        with self.assertRaises(LeaseConflictError):
+            self.service.end(
+                self.lease["id"], actual_move_out_on=today + timedelta(days=1), confirmed=True,
+                expected_revision=revision, idempotency_key=key,
+            )
+
+    def test_terminate_records_post_mutation_inspection_attention_and_replays_it(self) -> None:
+        today = date.today()
+        self._move_executed_lease_to_yesterday(contract_ends_on=today + timedelta(days=90))
+        case = self.service.create_termination_case(self.lease["id"], TerminationCaseCommand(
+            "job_relocation", today, today, today,
+        ))
+        proposal = self.service.add_termination_proposal(case["id"], TerminationProposalCommand(today, today))
+        self.service.accept_termination_proposal(
+            case["id"], proposal["proposals"][0]["id"], accepted_on=today, confirmed=True,
+        )
+        revision = self.portfolio.get_space_status(self.space_id)["revision"]
+        key = str(uuid4())
+        first = self.service.terminate(
+            self.lease["id"], actual_move_out_on=today, end_reason="early_termination", confirmed=True,
+            expected_revision=revision, idempotency_key=key,
+        )
+        replay = self.service.terminate(
+            self.lease["id"], actual_move_out_on=today, end_reason="early_termination", confirmed=True,
+            expected_revision=revision, idempotency_key=key,
+        )
+        self.assertEqual(first["inspectionAttention"]["postMoveOut"], "due")
+        self.assertEqual(replay, first)
+
+    def test_source_timeline_rolls_back_with_the_lease_transaction(self) -> None:
+        before = self.portfolio.get_space_status(self.space_id)["revision"]
+
+        def abort_after_source_write(tx):
+            period = next(item for item in tx.occupancy_periods(self.space_id)
+                          if item.source_kind == "lease" and item.source_id == self.lease["id"])
+            tx.apply_source_timeline(self._source_change(
+                replacements=(replace(period, note="must roll back"),), action="rollback",
+                expected_revision=before, idempotency_key="lease-source-rollback",
+            ))
+            raise RuntimeError("abort the enclosing lease transaction")
+
+        with self.assertRaisesRegex(RuntimeError, "abort the enclosing"):
+            self.service.unit_of_work.write(abort_after_source_write)
+        self.assertEqual(self.portfolio.get_space_status(self.space_id)["revision"], before)
 
     def test_context_reader_returns_raw_lease_facts_with_bounded_batch_reads(self) -> None:
         reader = SQLiteLeaseContextReader()
@@ -215,10 +418,12 @@ class LeaseTerminationTests(unittest.TestCase):
     def test_completed_lease_vacancy_can_be_superseded_by_the_next_lease(self) -> None:
         today = date.today()
         self._move_executed_lease_to_yesterday(contract_ends_on=today)
-        ended = self.service.end(self.lease["id"], actual_move_out_on=today, confirmed=True)
+        ended = self.service.end(self.lease["id"], actual_move_out_on=today, confirmed=True,
+                                 **self._timeline_kwargs())
         self.assertEqual(ended["status"], "ended")
         successor = self._new_draft(starts_on=today)
-        executed = self.service.execute(successor["id"], executed_on=today, confirmed=True)
+        executed = self.service.execute(successor["id"], executed_on=today, confirmed=True,
+                                        **self._timeline_kwargs())
         self.assertEqual(executed["status"], "executed")
         self.assertEqual(executed["occupancyState"], "current")
 
@@ -233,12 +438,13 @@ class LeaseTerminationTests(unittest.TestCase):
             case["id"], proposed["proposals"][0]["id"], accepted_on=today, confirmed=True,
         )
         completed = self.service.complete_termination_case(
-            case["id"], actual_move_out_on=today, confirmed=True,
+            case["id"], actual_move_out_on=today, confirmed=True, **self._timeline_kwargs(),
         )
         self.assertEqual(completed["status"], "terminated")
         successor = self._new_draft(starts_on=today)
         self.assertEqual(
-            self.service.execute(successor["id"], executed_on=today, confirmed=True)["status"],
+            self.service.execute(successor["id"], executed_on=today, confirmed=True,
+                                 **self._timeline_kwargs())["status"],
             "executed",
         )
 
@@ -251,7 +457,8 @@ class LeaseTerminationTests(unittest.TestCase):
                 {"now": "2026-01-01T00:00:00+00:00", "party": self.tenant_id},
             )
         with self.assertRaises(LeaseConflictError):
-            self.service.execute(draft["id"], executed_on=date.today(), confirmed=True)
+            self.service.execute(draft["id"], executed_on=date.today(), confirmed=True,
+                                 **self._timeline_kwargs())
 
     def test_draft_date_patch_keeps_the_initial_term_aligned(self) -> None:
         tomorrow = date.today() + timedelta(days=1)
@@ -396,7 +603,8 @@ class LeaseTerminationTests(unittest.TestCase):
         tomorrow = date.today() + timedelta(days=1)
         self._move_executed_lease_to_yesterday(contract_ends_on=tomorrow)
         with self.assertRaises(LeaseConflictError):
-            self.service.end(self.lease["id"], actual_move_out_on=date.today(), confirmed=True)
+            self.service.end(self.lease["id"], actual_move_out_on=date.today(), confirmed=True,
+                             **self._timeline_kwargs())
 
     def test_termination_case_review_and_decline_close_open_proposals(self) -> None:
         today = date.today()
@@ -427,7 +635,7 @@ class LeaseTerminationTests(unittest.TestCase):
         with self.assertRaises(LeaseConflictError):
             self.service.terminate(
                 self.lease["id"], actual_move_out_on=today,
-                end_reason="mutual_termination", confirmed=True,
+                end_reason="mutual_termination", confirmed=True, **self._timeline_kwargs(),
             )
 
     def test_database_rejects_unknown_lease_end_reason(self) -> None:
@@ -504,6 +712,7 @@ class LeaseTerminationTests(unittest.TestCase):
             AuditRecorder(restored_audit),
             SQLiteTenantProfileAvailability(),
             SQLitePortfolioLeaseOperations(restored_root / "database" / "property-management.sqlite"),
+            SQLiteInspectionContextReader(),
         ))
         lease = restored.get(self.lease["id"])
         restored_case = restored.get_termination_case(case["id"])
@@ -550,11 +759,13 @@ class LeaseTerminationTests(unittest.TestCase):
             missing = client.get("/api/leases/missing")
             conflict = client.post(
                 f"/api/leases/{self.lease['id']}/execute",
-                json={"executedOn": date.today().isoformat(), "confirmed": True},
+                json={"executedOn": date.today().isoformat(), "confirmed": True,
+                      "expectedRevision": 1, "idempotencyKey": str(uuid4())},
             )
             rule = client.post(
                 f"/api/leases/{self.lease['id']}/end",
-                json={"actualMoveOutOn": (date.today() + timedelta(days=1)).isoformat(), "confirmed": True},
+                json={"actualMoveOutOn": (date.today() + timedelta(days=1)).isoformat(), "confirmed": True,
+                      "expectedRevision": 1, "idempotencyKey": str(uuid4())},
             )
         self.assertEqual(malformed.status_code, 422)
         self.assertEqual(missing.status_code, 404)

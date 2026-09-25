@@ -4,8 +4,10 @@ import sqlite3
 import tempfile
 import unittest
 import json
-from datetime import date, timedelta
+from uuid import uuid4
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -15,7 +17,7 @@ from app.bootstrap.api import create_app
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.portfolio.application.ports import PortfolioConflictError
-from app.modules.portfolio.application.service import AvailabilityCommand, OccupancyCommand, OwnershipInput, PartyCreateCommand, PortfolioError, PortfolioService, PropertyCreateCommand, SpaceClassificationCommand, SpaceCreateCommand
+from app.modules.portfolio.application.service import AvailabilityCommand, OccupancyCommand, OccupancyCorrectionCommand, OwnershipInput, PartyCreateCommand, PortfolioError, PortfolioService, PropertyCreateCommand, SpaceClassificationCommand, SpaceCreateCommand
 from app.modules.portfolio.infrastructure.schema_validation import _normalise_sql, validate_portfolio_schema
 from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
@@ -36,6 +38,34 @@ class PortfolioTests(unittest.TestCase):
             SQLitePortfolioUnitOfWork(self.workspace.paths.database, AuditRecorder(self.audit)),
             time_zone_resolver=BundledAddressTimeZoneResolver(),
         )
+
+    def _status_mutation(self, operation, space_id, *args):
+        return operation(
+            space_id, *args,
+            expected_revision=self.service.get_space_status(space_id)["revision"],
+            idempotency_key=str(uuid4()),
+        )
+
+    def _change_occupancy(self, space_id, command):
+        return self._status_mutation(self.service.change_occupancy, space_id, command)
+
+    def _cancel_scheduled_occupancy(self, space_id, period_id):
+        return self._status_mutation(self.service.cancel_scheduled_occupancy, space_id, period_id)
+
+    def _replace_scheduled_occupancy(self, space_id, period_id, command):
+        return self._status_mutation(self.service.replace_scheduled_occupancy, space_id, period_id, command)
+
+    def _correct_occupancy(self, space_id, period_id, command):
+        return self._status_mutation(self.service.correct_occupancy, space_id, period_id, command)
+
+    def _reschedule_scheduled_occupancy(self, space_id, period_id, command):
+        return self._status_mutation(self.service.reschedule_scheduled_occupancy, space_id, period_id, command)
+
+    def _change_availability(self, space_id, command):
+        return self._status_mutation(self.service.change_availability, space_id, command)
+
+    def _classify_space(self, space_id, command):
+        return self._status_mutation(self.service.classify_space, space_id, command)
 
     def _party(self):
         return self.service.create_party(PartyCreateCommand("individual", "Morgan Owner"))
@@ -226,7 +256,7 @@ class PortfolioTests(unittest.TestCase):
             self.assertEqual(property.json()["ownershipContext"], "managed_for_owner")
             self.assertEqual(property.json()["timeZone"], "America/Los_Angeles")
             records = client.get("/api/properties", params={"ownershipContext": "managed_for_owner"})
-            self.assertEqual([item["id"] for item in records.json()], [property.json()["id"]])
+            self.assertEqual([item["id"] for item in records.json()["items"]], [property.json()["id"]])
             invalid = client.post("/api/properties", json={
                 "displayName": "Bad", "addressLine1": "1 Test", "city": "Portland", "countryCode": "US", "region": "OR",
                 "propertyType": "single_family_home", "ownerships": [{"ownerKind": "client_owner"}],
@@ -332,7 +362,7 @@ class PortfolioTests(unittest.TestCase):
                 "CREATE TABLE spaces ("
                 "id TEXT PRIMARY KEY, property_id TEXT NOT NULL, space_kind TEXT NOT NULL, "
                 "display_name TEXT NOT NULL, normalized_name TEXT NOT NULL, suite_or_floor TEXT, "
-                "notes TEXT, status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, "
+                "notes TEXT, status TEXT NOT NULL, status_revision INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, "
                 "archived_at TEXT, archived_by_property_operation_id TEXT, "
                 "CHECK(space_kind IN ('whole_home', 'whole_office', 'office_suite')), "
                 "CHECK(status IN ('active', 'archived')), CHECK(length(trim(display_name)) > 0))"
@@ -488,7 +518,7 @@ class PortfolioTests(unittest.TestCase):
         initial = self.service.get_space_status(space_id)
         self.assertEqual(initial["currentOccupancy"]["occupancyStatus"], "unknown")
         self.assertEqual(initial["availability"]["availabilityStatus"], "unknown")
-        changed = self.service.classify_space(
+        changed = self._classify_space(
             space_id,
             SpaceClassificationCommand(
                 occupancy=OccupancyCommand("vacant", date.today().isoformat()),
@@ -500,10 +530,10 @@ class PortfolioTests(unittest.TestCase):
     def test_scheduled_transition_does_not_change_current_status_and_can_be_cancelled(self) -> None:
         property = self._property([OwnershipInput("local_operator")])
         space_id = self.service.get_property(property.id)["spaces"][0]["id"]
-        scheduled = self.service.change_occupancy(space_id, OccupancyCommand("occupied", "2099-01-01"))
+        scheduled = self._change_occupancy(space_id, OccupancyCommand("occupied", "2099-01-01"))
         self.assertEqual(scheduled["currentOccupancy"]["occupancyStatus"], "unknown")
         period_id = scheduled["scheduledOccupancy"]["id"]
-        restored = self.service.cancel_scheduled_occupancy(space_id, period_id)
+        restored = self._cancel_scheduled_occupancy(space_id, period_id)
         self.assertIsNone(restored["scheduledOccupancy"])
         self.assertEqual(restored["currentOccupancy"]["occupancyStatus"], "unknown")
 
@@ -514,7 +544,7 @@ class PortfolioTests(unittest.TestCase):
             inventory_layout="office_suites", spaces=(SpaceCreateCommand("A"), SpaceCreateCommand("B")),
         ))
         space_id = self.service.get_property(office.id)["spaces"][0]["id"]
-        self.service.classify_space(
+        self._classify_space(
             space_id,
             SpaceClassificationCommand(
                 OccupancyCommand("occupied", date.today().isoformat()),
@@ -523,7 +553,7 @@ class PortfolioTests(unittest.TestCase):
         )
         with self.assertRaises(PortfolioError):
             self.service.archive_space(space_id, confirmed=True)
-        self.service.change_occupancy(space_id, OccupancyCommand("vacant", "2099-01-01"))
+        self._change_occupancy(space_id, OccupancyCommand("vacant", "2099-01-01"))
         with self.assertRaises(PortfolioError):
             self.service.archive_space(space_id, confirmed=True)
 
@@ -533,8 +563,8 @@ class PortfolioTests(unittest.TestCase):
         with self.assertRaises(PortfolioError):
             AvailabilityCommand("available_on")
         with self.assertRaises(PortfolioError):
-            AvailabilityCommand("available_on", "2000-01-01")
-        self.service.change_availability(space_id, AvailabilityCommand("available_on", "2099-01-01"))
+            self._change_availability(space_id, AvailabilityCommand("available_on", "2000-01-01"))
+        self._change_availability(space_id, AvailabilityCommand("available_on", "2099-01-01"))
         detail = self.service.get_property(property.id)
         self.assertEqual(detail["statusSummary"]["availableLaterCount"], 1)
         self.assertEqual(self.service.list_properties(availability_filter="available_on")[0]["id"], property.id)
@@ -542,7 +572,7 @@ class PortfolioTests(unittest.TestCase):
     def test_availability_becomes_available_now_on_its_date(self) -> None:
         property = self._property([OwnershipInput("local_operator")])
         space_id = self.service.get_property(property.id)["spaces"][0]["id"]
-        self.service.change_availability(
+        self._change_availability(
             space_id,
             AvailabilityCommand("available_on", date.today().isoformat()),
         )
@@ -552,6 +582,38 @@ class PortfolioTests(unittest.TestCase):
         summary = self.service.get_property(property.id)["statusSummary"]
         self.assertEqual(summary["availableNowCount"], 1)
         self.assertEqual(summary["availableLaterCount"], 0)
+
+    def test_current_occupancy_correction_and_future_reschedule_preserve_history(self) -> None:
+        property = self._property([OwnershipInput("local_operator")])
+        space_id = self.service.get_property(property.id)["spaces"][0]["id"]
+        current_id = self.service.get_space_status(space_id)["currentOccupancy"]["id"]
+        corrected = self._correct_occupancy(
+            space_id, current_id,
+            OccupancyCorrectionCommand(OccupancyCommand("vacant", date.today().isoformat(), "Corrected"), "Wrong entry"),
+        )
+        self.assertEqual(corrected["currentOccupancy"]["occupancyStatus"], "vacant")
+        scheduled = self._change_occupancy(space_id, OccupancyCommand("occupied", "2090-01-01", "Planned"))
+        scheduled_id = scheduled["scheduledOccupancy"]["id"]
+        rescheduled = self._reschedule_scheduled_occupancy(
+            space_id, scheduled_id, OccupancyCommand("vacant", "2090-02-01", "Moved"),
+        )
+        self.assertEqual(rescheduled["scheduledOccupancy"]["startsOn"], "2090-02-01")
+        periods = self.service.unit_of_work.space_statuses([space_id])[0][space_id]
+        self.assertEqual(len([item for item in periods if item.record_state == "superseded"]), 2)
+
+    def test_space_status_discloses_timezone_effective_date_and_attention_facts(self) -> None:
+        property = self._property([OwnershipInput("local_operator")])
+        space_id = self.service.get_property(property.id)["spaces"][0]["id"]
+        status = self.service.get_space_status(space_id)
+        self.assertIn("asOf", status)
+        self.assertEqual(status["effectiveLocalDate"], datetime.fromisoformat(status["asOf"]).astimezone(
+            ZoneInfo("America/Los_Angeles")
+        ).date().isoformat())
+        self.assertEqual({item["code"] for item in status["attentionReasons"]}, {
+            "occupancy_unknown", "availability_unknown",
+        })
+        self.assertEqual(status["availability"]["recordedStatus"], "unknown")
+        self.assertEqual(status["availability"]["effectiveStatus"], "unknown")
 
     def test_status_api_rejects_invalid_availability_and_returns_a_scheduled_transition(self) -> None:
         config = Path(self.temp.name) / "status-api-config.json"
@@ -566,7 +628,7 @@ class PortfolioTests(unittest.TestCase):
             self.assertEqual(created.status_code, 201)
             space_id = created.json()["spaces"][0]["id"]
             self.assertEqual(client.put(f"/api/spaces/{space_id}/availability", json={"availabilityStatus": "available_on"}).status_code, 422)
-            changed = client.put(f"/api/spaces/{space_id}/occupancy", json={"occupancyStatus": "occupied", "effectiveOn": "2099-01-01"})
+            changed = client.put(f"/api/spaces/{space_id}/occupancy", json={"occupancyStatus": "occupied", "effectiveOn": "2099-01-01", "expectedRevision": 0, "idempotencyKey": "schedule-status"})
             self.assertEqual(changed.status_code, 200)
             self.assertEqual(changed.json()["scheduledOccupancy"]["occupancyStatus"], "occupied")
 
@@ -587,7 +649,7 @@ class PortfolioTests(unittest.TestCase):
         property = self._property([OwnershipInput("local_operator")])
         space_id = self.service.get_property(property.id)["spaces"][0]["id"]
         with self.assertRaises(PortfolioError):
-            self.service.change_occupancy(
+            self._change_occupancy(
                 space_id,
                 OccupancyCommand("vacant", date.today().isoformat()),
             )
@@ -595,18 +657,18 @@ class PortfolioTests(unittest.TestCase):
     def test_only_latest_scheduled_transition_can_be_cancelled(self) -> None:
         property = self._property([OwnershipInput("local_operator")])
         space_id = self.service.get_property(property.id)["spaces"][0]["id"]
-        first = self.service.change_occupancy(space_id, OccupancyCommand("vacant", "2090-01-01"))
+        first = self._change_occupancy(space_id, OccupancyCommand("vacant", "2090-01-01"))
         first_id = first["scheduledOccupancy"]["id"]
-        self.service.change_occupancy(space_id, OccupancyCommand("occupied", "2091-01-01"))
+        self._change_occupancy(space_id, OccupancyCommand("occupied", "2091-01-01"))
         with self.assertRaises(PortfolioError):
-            self.service.cancel_scheduled_occupancy(space_id, first_id)
+            self._cancel_scheduled_occupancy(space_id, first_id)
         self.assertEqual(self.service.get_space_status(space_id)["scheduledOccupancy"]["id"], first_id)
 
     def test_classification_is_atomic_and_uses_one_correlation_id(self) -> None:
         property = self._property([OwnershipInput("local_operator")])
         space_id = self.service.get_property(property.id)["spaces"][0]["id"]
         before_count = len(self.audit.history())
-        result = self.service.classify_space(
+        result = self._classify_space(
             space_id,
             SpaceClassificationCommand(
                 OccupancyCommand("vacant", date.today().isoformat(), "Ready"),
@@ -632,7 +694,7 @@ class PortfolioTests(unittest.TestCase):
             side_effect=sqlite3.DatabaseError("audit unavailable"),
         ):
             with self.assertRaises(sqlite3.DatabaseError):
-                self.service.classify_space(space_id, command)
+                self._classify_space(space_id, command)
         status = self.service.get_space_status(space_id)
         self.assertEqual(status["currentOccupancy"]["occupancyStatus"], "unknown")
         self.assertEqual(status["availability"]["availabilityStatus"], "unknown")
@@ -644,7 +706,7 @@ class PortfolioTests(unittest.TestCase):
             spaces=(SpaceCreateCommand("A"), SpaceCreateCommand("B")),
         ))
         space_id = self.service.get_property(office.id)["spaces"][0]["id"]
-        self.service.change_availability(space_id, AvailabilityCommand("available_now"))
+        self._change_availability(space_id, AvailabilityCommand("available_now"))
         self.service.archive_space(space_id, confirmed=True)
         self.assertEqual(self.service.list_properties(availability_filter="available_now"), [])
 
@@ -662,8 +724,8 @@ class PortfolioTests(unittest.TestCase):
             false_results = client.get("/api/properties", params={"needsAttention": "false"})
             self.assertEqual(true_results.status_code, 200)
             self.assertEqual(false_results.status_code, 200)
-            self.assertEqual(len(true_results.json()), 1)
-            self.assertEqual(false_results.json(), [])
+            self.assertEqual(len(true_results.json()["items"]), 1)
+            self.assertEqual(false_results.json()["items"], [])
             space_id = created.json()["spaces"][0]["id"]
             classified = client.put(f"/api/spaces/{space_id}/classification", json={
                 "occupancy": {
@@ -671,16 +733,18 @@ class PortfolioTests(unittest.TestCase):
                     "effectiveOn": date.today().isoformat(),
                 },
                 "availability": {"availabilityStatus": "available_now"},
+                "expectedRevision": 0,
+                "idempotencyKey": "classify-attention",
             })
             self.assertEqual(classified.status_code, 200)
             self.assertEqual(classified.json()["currentOccupancy"]["occupancyStatus"], "vacant")
-            self.assertEqual(len(client.get("/api/properties", params={"needsAttention": "false"}).json()), 1)
+            self.assertEqual(len(client.get("/api/properties", params={"needsAttention": "false"}).json()["items"]), 1)
 
     def test_classification_can_complete_unknown_values_separately(self) -> None:
         property = self._property([OwnershipInput("local_operator")])
         space_id = self.service.get_property(property.id)["spaces"][0]["id"]
 
-        availability_only = self.service.classify_space(
+        availability_only = self._classify_space(
             space_id,
             SpaceClassificationCommand(
                 availability=AvailabilityCommand("available_now"),
@@ -695,7 +759,7 @@ class PortfolioTests(unittest.TestCase):
             "available_now",
         )
 
-        occupancy_later = self.service.classify_space(
+        occupancy_later = self._classify_space(
             space_id,
             SpaceClassificationCommand(
                 occupancy=OccupancyCommand("vacant", date.today().isoformat()),
@@ -720,7 +784,7 @@ class PortfolioTests(unittest.TestCase):
                 (yesterday, space_id),
             )
 
-        self.service.classify_space(
+        self._classify_space(
             space_id,
             SpaceClassificationCommand(
                 occupancy=OccupancyCommand("vacant", date.today().isoformat()),
@@ -739,7 +803,7 @@ class PortfolioTests(unittest.TestCase):
         property = self._property([OwnershipInput("local_operator")])
         space_id = self.service.get_property(property.id)["spaces"][0]["id"]
         with self.assertRaisesRegex(PortfolioError, "cannot take effect in the past"):
-            self.service.change_occupancy(
+            self._change_occupancy(
                 space_id,
                 OccupancyCommand(
                     "vacant",
@@ -750,11 +814,11 @@ class PortfolioTests(unittest.TestCase):
     def test_status_exposes_all_scheduled_transitions_and_latest_can_be_cancelled(self) -> None:
         property = self._property([OwnershipInput("local_operator")])
         space_id = self.service.get_property(property.id)["spaces"][0]["id"]
-        self.service.change_occupancy(
+        self._change_occupancy(
             space_id,
             OccupancyCommand("vacant", "2090-01-01"),
         )
-        status = self.service.change_occupancy(
+        status = self._change_occupancy(
             space_id,
             OccupancyCommand("occupied", "2091-01-01"),
         )
@@ -764,7 +828,7 @@ class PortfolioTests(unittest.TestCase):
             ["2090-01-01", "2091-01-01"],
         )
         latest_id = timeline[-1]["id"]
-        cancelled = self.service.cancel_scheduled_occupancy(space_id, latest_id)
+        cancelled = self._cancel_scheduled_occupancy(space_id, latest_id)
         self.assertEqual(
             [item["startsOn"] for item in cancelled["scheduledOccupancyTimeline"]],
             ["2090-01-01"],
@@ -773,12 +837,12 @@ class PortfolioTests(unittest.TestCase):
     def test_scheduled_replacement_is_atomic_and_preserves_superseded_record(self) -> None:
         property = self._property([OwnershipInput("local_operator")])
         space_id = self.service.get_property(property.id)["spaces"][0]["id"]
-        scheduled = self.service.change_occupancy(
+        scheduled = self._change_occupancy(
             space_id,
             OccupancyCommand("vacant", "2090-01-01"),
         )
         old_id = scheduled["scheduledOccupancy"]["id"]
-        replaced = self.service.replace_scheduled_occupancy(
+        replaced = self._replace_scheduled_occupancy(
             space_id,
             old_id,
             OccupancyCommand("occupied", "2090-01-01", "Corrected"),
@@ -794,7 +858,7 @@ class PortfolioTests(unittest.TestCase):
         first = self._property([OwnershipInput("local_operator")])
         second = self._property([OwnershipInput("local_operator")])
         first_space = self.service.get_property(first.id)["spaces"][0]["id"]
-        self.service.classify_space(
+        self._classify_space(
             first_space,
             SpaceClassificationCommand(
                 OccupancyCommand("vacant", date.today().isoformat()),
@@ -842,22 +906,30 @@ class PortfolioTests(unittest.TestCase):
 
             first = client.put(
                 f"/api/spaces/{space_id}/occupancy",
-                json={"occupancyStatus": "vacant", "effectiveOn": "2090-01-01"},
+                json={"occupancyStatus": "vacant", "effectiveOn": "2090-01-01", "expectedRevision": 0, "idempotencyKey": "first-transition"},
             )
             second = client.put(
                 f"/api/spaces/{space_id}/occupancy",
-                json={"occupancyStatus": "occupied", "effectiveOn": "2091-01-01"},
+                json={"occupancyStatus": "occupied", "effectiveOn": "2091-01-01", "expectedRevision": 1, "idempotencyKey": "second-transition"},
             )
             self.assertEqual(first.status_code, 200)
             self.assertEqual(second.status_code, 200)
+            self.assertEqual(second.json()["revision"], 2)
+            self.assertIsNotNone(second.json()["operationId"])
             timeline = second.json()["scheduledOccupancyTimeline"]
             self.assertEqual(len(timeline), 2)
             latest_id = timeline[-1]["id"]
             replacement = client.put(
                 f"/api/spaces/{space_id}/occupancy/scheduled/{latest_id}/replace",
-                json={"occupancyStatus": "vacant", "effectiveOn": "2091-01-01"},
+                json={"occupancyStatus": "vacant", "effectiveOn": "2091-01-01", "expectedRevision": 2, "idempotencyKey": "replace-transition"},
             )
             self.assertEqual(replacement.status_code, 200)
+            replay = client.put(
+                f"/api/spaces/{space_id}/occupancy/scheduled/{latest_id}/replace",
+                json={"occupancyStatus": "vacant", "effectiveOn": "2091-01-01", "expectedRevision": 2, "idempotencyKey": "replace-transition"},
+            )
+            self.assertEqual(replay.status_code, 200)
+            self.assertEqual(replay.json()["operationId"], replacement.json()["operationId"])
             self.assertEqual(
                 replacement.json()["scheduledOccupancyTimeline"][-1]["occupancyStatus"],
                 "vacant",
@@ -916,7 +988,7 @@ class PortfolioTests(unittest.TestCase):
                 )
             conflict = client.put(
                 f"/api/spaces/{space_id}/availability",
-                json={"availabilityStatus": "available_now"},
+                json={"availabilityStatus": "available_now", "expectedRevision": 0, "idempotencyKey": "source-conflict"},
             )
             self.assertEqual(conflict.status_code, 409)
 
@@ -931,7 +1003,7 @@ class PortfolioTests(unittest.TestCase):
                 (occupancy_space_id,),
             )
         with self.assertRaises(PortfolioConflictError):
-            self.service.classify_space(
+            self._classify_space(
                 occupancy_space_id,
                 SpaceClassificationCommand(
                     occupancy=OccupancyCommand("vacant", date.today().isoformat()),
@@ -948,14 +1020,14 @@ class PortfolioTests(unittest.TestCase):
                 (availability_space_id,),
             )
         with self.assertRaises(PortfolioConflictError):
-            self.service.classify_space(
+            self._classify_space(
                 availability_space_id,
                 SpaceClassificationCommand(
                     availability=AvailabilityCommand("available_now"),
                 ),
             )
 
-        scheduled = self.service.change_occupancy(
+        scheduled = self._change_occupancy(
             availability_space_id,
             OccupancyCommand("vacant", "2090-01-01"),
         )
@@ -967,7 +1039,7 @@ class PortfolioTests(unittest.TestCase):
                 (scheduled["scheduledOccupancy"]["id"],),
             )
         with self.assertRaises(PortfolioConflictError):
-            self.service.change_occupancy(
+            self._change_occupancy(
                 availability_space_id,
                 OccupancyCommand("occupied", "2090-01-01"),
             )

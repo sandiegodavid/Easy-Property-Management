@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from app.modules.portfolio.application.service import (
@@ -17,6 +17,7 @@ from app.modules.portfolio.application.service import (
     PropertyCreateCommand,
     OccupancyCommand,
     AvailabilityCommand,
+    OccupancyCorrectionCommand,
     SpaceClassificationCommand,
     SpaceCreateCommand,
 )
@@ -83,12 +84,16 @@ class OccupancyRequest(ContractModel):
     occupancyStatus: Literal["occupied", "vacant", "unknown"]
     effectiveOn: date
     note: str | None = Field(None, max_length=1000)
+    expectedRevision: int | None = Field(None, ge=0)
+    idempotencyKey: str | None = Field(None, min_length=1, max_length=200)
 
 
 class AvailabilityRequest(ContractModel):
     availabilityStatus: Literal["available_now", "available_on", "not_available", "unknown"]
     availableOn: date | None = None
     note: str | None = Field(None, max_length=1000)
+    expectedRevision: int | None = Field(None, ge=0)
+    idempotencyKey: str | None = Field(None, min_length=1, max_length=200)
 
     @model_validator(mode="after")
     def validate_date(self) -> "AvailabilityRequest":
@@ -97,9 +102,21 @@ class AvailabilityRequest(ContractModel):
         return self
 
 
+class OccupancyMutationRequest(OccupancyRequest):
+    expectedRevision: int = Field(ge=0)
+    idempotencyKey: str = Field(min_length=1, max_length=200)
+
+
+class AvailabilityMutationRequest(AvailabilityRequest):
+    expectedRevision: int = Field(ge=0)
+    idempotencyKey: str = Field(min_length=1, max_length=200)
+
+
 class SpaceClassificationRequest(ContractModel):
     occupancy: OccupancyRequest | None = None
     availability: AvailabilityRequest | None = None
+    expectedRevision: int = Field(ge=0)
+    idempotencyKey: str = Field(min_length=1, max_length=200)
 
     @model_validator(mode="after")
     def require_status(self) -> "SpaceClassificationRequest":
@@ -110,6 +127,18 @@ class SpaceClassificationRequest(ContractModel):
         if self.availability is not None and self.availability.availabilityStatus == "unknown":
             raise ValueError("classification availability must select a known status")
         return self
+
+
+class OccupancyCorrectionRequest(ContractModel):
+    occupancy: OccupancyRequest
+    reason: str = Field(min_length=1, max_length=1000)
+    expectedRevision: int = Field(ge=0)
+    idempotencyKey: str = Field(min_length=1, max_length=200)
+
+
+class StatusMutationRequest(ContractModel):
+    expectedRevision: int = Field(ge=0)
+    idempotencyKey: str = Field(min_length=1, max_length=200)
 
 
 class SpacePatchRequest(ContractModel):
@@ -146,6 +175,7 @@ class SpaceResponse(ContractModel):
     suiteOrFloor: str | None
     notes: str | None
     status: Literal["active", "archived"]
+    revision: int
     createdAt: str
     updatedAt: str
     archivedAt: str | None
@@ -175,6 +205,13 @@ class AvailabilityResponse(ContractModel):
     sourceId: str | None
     note: str | None
     updatedAt: datetime
+    recordedStatus: Literal["available_now", "available_on", "not_available", "unknown"]
+    effectiveStatus: Literal["available_now", "available_on", "not_available", "unknown"]
+
+
+class AttentionReasonResponse(ContractModel):
+    code: Literal["occupancy_unknown", "availability_unknown", "source_conflict", "missing_status_record"]
+    resolution: str
 
 
 class SpaceStatusResponse(SpaceResponse):
@@ -182,6 +219,10 @@ class SpaceStatusResponse(SpaceResponse):
     scheduledOccupancy: OccupancyPeriodResponse | None
     scheduledOccupancyTimeline: list[OccupancyPeriodResponse]
     availability: AvailabilityResponse
+    attentionReasons: list[AttentionReasonResponse]
+    asOf: datetime
+    effectiveLocalDate: date
+    operationId: str | None = None
 
 
 class PropertyStatusSummaryResponse(ContractModel):
@@ -206,6 +247,7 @@ class PortfolioStatusSummaryResponse(ContractModel):
     nearestAvailableOn: date | None
     needsAttentionSpaceCount: int
     needsAttentionPropertyCount: int
+    asOf: datetime
 
 
 class PartyResponse(ContractModel):
@@ -250,6 +292,15 @@ class PropertyResponse(ContractModel):
     ownerships: list[OwnershipResponse]
     spaces: list[SpaceStatusResponse]
     statusSummary: PropertyStatusSummaryResponse
+    asOf: datetime
+    effectiveLocalDate: date
+
+
+class PropertyPageResponse(ContractModel):
+    items: list[PropertyResponse]
+    nextCursor: str | None
+    matchingTotal: int
+    asOf: datetime
 
 
 def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRouter:
@@ -267,7 +318,10 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
         except PortfolioNotFoundError as error:
             raise HTTPException(404, str(error)) from error
         except PortfolioConflictError as error:
-            raise HTTPException(409, str(error)) from error
+            detail: object = str(error)
+            if error.current_status is not None:
+                detail = {"message": str(error), "currentStatus": error.current_status}
+            raise HTTPException(409, detail) from error
         except PortfolioError as error:
             raise HTTPException(400, str(error)) from error
         except PartyValidationError as error:
@@ -283,21 +337,25 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
 
         return invoke(create_and_load)
 
-    @router.get("/api/properties", response_model=list[PropertyResponse])
+    @router.get("/api/properties", response_model=PropertyPageResponse, operation_id="getPortfolioPropertySourcePage")
     def list_properties(
         status: Literal["active", "archived"] | None = None,
         ownershipContext: Literal["self_owned", "managed_for_owner", "mixed"] | None = None,
         occupancy: Literal["occupied", "vacant", "unknown"] | None = None,
         availability: Literal["available_now", "available_on", "not_available", "unknown"] | None = None,
         needsAttention: bool | None = None,
+        pageSize: int = Query(100, ge=1, le=500),
+        cursor: str | None = None,
     ):
         require_ready()
-        return invoke(lambda: service.list_properties(
+        return invoke(lambda: service.page_properties(
             status=status,
             ownership_context_filter=ownershipContext,
             occupancy_filter=occupancy,
             availability_filter=availability,
             needs_attention=needsAttention,
+            page_size=pageSize,
+            cursor=cursor,
         ))
 
     @router.get("/api/properties/{property_id}", response_model=PropertyResponse)
@@ -376,34 +434,49 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
         return invoke(lambda: service.get_space_status(space_id))
 
     @router.put("/api/spaces/{space_id}/occupancy", response_model=SpaceStatusResponse)
-    def change_occupancy(space_id: str, data: OccupancyRequest):
+    def change_occupancy(space_id: str, data: OccupancyMutationRequest):
         require_ready(write=True)
-        return invoke(lambda: service.change_occupancy(space_id, _occupancy(data)))
+        return invoke(lambda: service.change_occupancy(space_id, _occupancy(data), expected_revision=data.expectedRevision, idempotency_key=data.idempotencyKey))
 
     @router.post("/api/spaces/{space_id}/occupancy/scheduled/{period_id}/cancel", response_model=SpaceStatusResponse)
-    def cancel_scheduled_occupancy(space_id: str, period_id: str):
+    def cancel_scheduled_occupancy(space_id: str, period_id: str, data: StatusMutationRequest):
         require_ready(write=True)
-        return invoke(lambda: service.cancel_scheduled_occupancy(space_id, period_id))
+        return invoke(lambda: service.cancel_scheduled_occupancy(space_id, period_id, expected_revision=data.expectedRevision, idempotency_key=data.idempotencyKey))
 
-    @router.put("/api/spaces/{space_id}/occupancy/scheduled/{period_id}/replace", response_model=SpaceStatusResponse)
-    def replace_scheduled_occupancy(
+    @router.post("/api/spaces/{space_id}/occupancy/{period_id}/correct", response_model=SpaceStatusResponse)
+    def correct_occupancy(space_id: str, period_id: str, data: OccupancyCorrectionRequest):
+        require_ready(write=True)
+        return invoke(lambda: service.correct_occupancy(
+            space_id, period_id, OccupancyCorrectionCommand(_occupancy(data.occupancy), data.reason), expected_revision=data.expectedRevision, idempotency_key=data.idempotencyKey,
+        ))
+
+    @router.put("/api/spaces/{space_id}/occupancy/scheduled/{period_id}/reschedule", response_model=SpaceStatusResponse)
+    def reschedule_scheduled_occupancy(
         space_id: str,
         period_id: str,
-        data: OccupancyRequest,
+        data: OccupancyMutationRequest,
     ):
         require_ready(write=True)
         return invoke(
-            lambda: service.replace_scheduled_occupancy(
+            lambda: service.reschedule_scheduled_occupancy(
                 space_id,
                 period_id,
                 _occupancy(data),
+                expected_revision=data.expectedRevision,
+                idempotency_key=data.idempotencyKey,
             )
         )
 
-    @router.put("/api/spaces/{space_id}/availability", response_model=SpaceStatusResponse)
-    def change_availability(space_id: str, data: AvailabilityRequest):
+    @router.put("/api/spaces/{space_id}/occupancy/scheduled/{period_id}/replace", response_model=SpaceStatusResponse, deprecated=True)
+    def replace_scheduled_occupancy(space_id: str, period_id: str, data: OccupancyMutationRequest):
+        """Compatibility alias retained for callers of the pre-PORT-003 operation."""
         require_ready(write=True)
-        return invoke(lambda: service.change_availability(space_id, _availability(data)))
+        return invoke(lambda: service.replace_scheduled_occupancy(space_id, period_id, _occupancy(data), expected_revision=data.expectedRevision, idempotency_key=data.idempotencyKey))
+
+    @router.put("/api/spaces/{space_id}/availability", response_model=SpaceStatusResponse)
+    def change_availability(space_id: str, data: AvailabilityMutationRequest):
+        require_ready(write=True)
+        return invoke(lambda: service.change_availability(space_id, _availability(data), expected_revision=data.expectedRevision, idempotency_key=data.idempotencyKey))
 
     @router.put("/api/spaces/{space_id}/classification", response_model=SpaceStatusResponse)
     def classify_space(space_id: str, data: SpaceClassificationRequest):
@@ -413,7 +486,7 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
             SpaceClassificationCommand(
                 None if data.occupancy is None else _occupancy(data.occupancy),
                 None if data.availability is None else _availability(data.availability),
-            ),
+            ), expected_revision=data.expectedRevision, idempotency_key=data.idempotencyKey,
         ))
 
     return router

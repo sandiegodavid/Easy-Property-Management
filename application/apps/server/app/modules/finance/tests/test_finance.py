@@ -61,8 +61,8 @@ class FinanceWorkflowTests(unittest.TestCase):
         portfolio=PortfolioService(SQLitePortfolioUnitOfWork(db,recorder),time_zone_resolver=BundledAddressTimeZoneResolver())
         property_record=portfolio.create_property(PropertyCreateCommand("Rent home","1 Main Street","Portland","US","single_family_home",(OwnershipInput("local_operator"),),region="OR")); space_id=portfolio.get_property(property_record.id)["spaces"][0]["id"]
         tenant=TenantService(SQLiteTenantUnitOfWork(db,recorder,SQLiteLeaseParticipationGuard(),party_operations,SQLitePartyReadOperations(party_operations)),SharedPartyFactory()).create(TenantCreateCommand("individual","Rent Tenant"))
-        leases=LeaseService(SQLiteLeaseUnitOfWork(db,recorder,SQLiteTenantProfileAvailability(),SQLitePortfolioLeaseOperations(db)))
-        today=date.today(); lease=leases.create(LeaseCreateCommand(space_id,"residential",today,today+timedelta(days=90),today,TermCommand(100_000,"USD","monthly",1,0),(ParticipantCommand(tenant["id"],"primary_tenant"),))); self.lease=leases.execute(lease["id"],executed_on=today,confirmed=True)
+        leases=LeaseService(SQLiteLeaseUnitOfWork(db,recorder,SQLiteTenantProfileAvailability(),SQLitePortfolioLeaseOperations(db),SQLiteInspectionContextReader()))
+        today=date.today(); lease=leases.create(LeaseCreateCommand(space_id,"residential",today,today+timedelta(days=90),today,TermCommand(100_000,"USD","monthly",1,0),(ParticipantCommand(tenant["id"],"primary_tenant"),))); self.lease=leases.execute(lease["id"],executed_on=today,confirmed=True,expected_revision=portfolio.get_space_status(space_id)["revision"],idempotency_key=str(uuid4()))
         self.finance=FinanceService(SQLiteFinanceUnitOfWork(db,recorder,SQLiteLeaseContextReader(),SQLitePortfolioContextReader(),party_operations),now=lambda:datetime.now(UTC))
         self.file_reader = SQLiteFileLinkReader()
         self.deposits=DepositService(SQLiteDepositUnitOfWork(db,recorder,SQLiteLeaseContextReader(),SQLitePortfolioContextReader(),party_operations,SQLiteInspectionContextReader(),self.file_reader),now=lambda:datetime.now(UTC))
