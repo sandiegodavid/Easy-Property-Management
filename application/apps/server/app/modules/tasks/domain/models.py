@@ -1,5 +1,10 @@
 from __future__ import annotations
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+
+ACTIVE_TASK_STATUSES = frozenset({"open", "in_progress"})
 
 
 @dataclass(frozen=True)
@@ -51,3 +56,21 @@ def dismiss(reminder: TaskReminder, now: str) -> TaskReminder:
     if reminder.status != "pending":
         raise ValueError("Reminder is no longer pending.")
     return TaskReminder(reminder.id, reminder.task_id, reminder.remind_at_utc, "dismissed", None, now, reminder.created_at_utc)
+
+
+def due_bucket(*, status: str, due_at_utc: str | None, due_timezone: str | None,
+               is_all_day: bool, now: datetime) -> str | None:
+    """Classify an active task's due state under TASK-001's local-time rules."""
+    if status not in ACTIVE_TASK_STATUSES or due_at_utc is None or due_timezone is None:
+        return None
+    instant = datetime.fromisoformat(due_at_utc).astimezone(UTC)
+    timezone = ZoneInfo(due_timezone)
+    local_today = now.astimezone(timezone).date()
+    local_day = instant.astimezone(timezone).date()
+    if (is_all_day and local_day < local_today) or (not is_all_day and instant < now):
+        return "overdue"
+    if local_day == local_today:
+        return "today"
+    if local_today < local_day <= local_today + timedelta(days=7):
+        return "next7days"
+    return None

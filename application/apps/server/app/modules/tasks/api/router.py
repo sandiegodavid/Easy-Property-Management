@@ -1,5 +1,8 @@
+from datetime import datetime
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel, Field, StrictBool, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 from app.modules.tasks.application.service import TaskConflictError, TaskError, TaskNotFoundError, TaskService
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 
@@ -30,8 +33,10 @@ def build_router(service: TaskService, runtime: WorkspaceRuntime) -> APIRouter:
             related_entity_id=relatedEntityId, page_size=pageSize, cursor=cursor,
         ))
         return {"items": [task.to_dict() for task in tasks], "nextCursor": next_cursor}
-    @router.get("/summary")
-    def summary(): ready(); return service.summary()
+    @router.get("/summary", response_model=TaskSummaryResponse, operation_id="getTaskSummary")
+    def summary(limitPerBucket: int = Query(20, ge=1, le=100)):
+        ready()
+        return invoke(lambda: service.summary(limit_per_bucket=limitPerBucket))
     @router.get("/{task_id}")
     def get(task_id: str): ready(); return invoke(lambda: service.get(task_id).to_dict())
     @router.post("/{task_id}/complete")
@@ -49,7 +54,56 @@ def build_router(service: TaskService, runtime: WorkspaceRuntime) -> APIRouter:
     @router.post("/{task_id}/reminders/{reminder_id}/dismiss")
     def dismiss(task_id: str, reminder_id: str): ready(True); return invoke(lambda: service.set_reminder_status(task_id, reminder_id, "dismissed").to_dict())
     return router
-class TaskCreateRequest(BaseModel):
+class Contract(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class TaskResponse(Contract):
+    id: str
+    title: str
+    notes: str | None
+    status: Literal["open", "in_progress", "completed", "cancelled"]
+    priority: Literal["low", "normal", "high", "urgent"]
+    dueAtUtc: datetime | None
+    dueTimezone: str | None
+    isAllDay: bool
+    completedAtUtc: datetime | None
+    cancelledAtUtc: datetime | None
+    outcomeNote: str | None
+    relatedEntityType: str | None
+    relatedEntityId: str | None
+    relatedLabel: str | None
+    createdAtUtc: datetime
+    updatedAtUtc: datetime
+
+
+class DueReminderResponse(Contract):
+    id: str
+    taskId: str
+    remindAtUtc: datetime
+    status: Literal["pending", "acknowledged", "dismissed", "sent"]
+    acknowledgedAtUtc: datetime | None
+    dismissedAtUtc: datetime | None
+    createdAtUtc: datetime
+    taskTitle: str
+    taskDueAtUtc: datetime | None
+    taskDueTimezone: str | None
+    taskIsAllDay: bool
+    relatedLabel: str | None
+
+
+class TaskSummaryResponse(Contract):
+    overdue: list[TaskResponse]
+    overdueTotal: int
+    today: list[TaskResponse]
+    todayTotal: int
+    next7days: list[TaskResponse]
+    next7daysTotal: int
+    dueReminders: list[DueReminderResponse]
+    dueRemindersTotal: int
+
+
+class TaskCreateRequest(Contract):
     title: str = Field(min_length=1, max_length=240); notes: str | None = None
     status: str = "open"; priority: str = "normal"; dueAtUtc: str | None = None; dueTimezone: str | None = None; isAllDay: StrictBool = False
     relatedEntityType: str | None = None; relatedEntityId: str | None = None; relatedLabel: str | None = None
@@ -65,5 +119,5 @@ class TaskCreateRequest(BaseModel):
         if related_label is not None and related_type is None:
             raise ValueError("relatedLabel requires relatedEntityType and relatedEntityId")
         return self
-class OutcomeRequest(BaseModel): outcomeNote: str | None = None
-class ReminderRequest(BaseModel): remindAtUtc: str = Field(min_length=1)
+class OutcomeRequest(Contract): outcomeNote: str | None = None
+class ReminderRequest(Contract): remindAtUtc: str = Field(min_length=1)

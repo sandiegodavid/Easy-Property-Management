@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from json import dumps, loads
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.modules.tasks.application.ports import TaskTransaction, TaskUnitOfWork
-from app.modules.tasks.domain.models import Task, TaskReminder, dismiss, is_terminal, transition
+from app.modules.tasks.application.ports import DueReminderSummary, TaskTransaction, TaskUnitOfWork
+from app.modules.tasks.domain.models import ACTIVE_TASK_STATUSES, Task, TaskReminder, dismiss, due_bucket, is_terminal, transition
 
 TASK_STATUSES = {"open", "in_progress", "completed", "cancelled"}
-INITIAL_TASK_STATUSES = {"open", "in_progress"}
+INITIAL_TASK_STATUSES = ACTIVE_TASK_STATUSES
 TASK_PRIORITIES = {"low", "normal", "high", "urgent"}
 MAX_DUE_FILTER_SCAN_CANDIDATES = 1_000
 
@@ -244,17 +244,16 @@ class TaskService:
         except ValueError as error:
             raise TaskConflictError(str(error)) from error
 
-    def summary(self) -> dict[str, object]:
-        now = self._instant()
-        active = [task for task in self.unit_of_work.list() if task.status in INITIAL_TASK_STATUSES]
-        active_ids = {task.id for task in active}
+    def summary(self, *, limit_per_bucket: int = 20) -> dict[str, object]:
+        if type(limit_per_bucket) is not int or not 1 <= limit_per_bucket <= 100:
+            raise TaskError("limitPerBucket must be between 1 and 100.")
+        summary = self.unit_of_work.summary(now=self._instant(), limit=limit_per_bucket)
         return {
-            "overdue": [task.to_dict() for task in active if task.due_at_utc and _parse(task.due_at_utc) < now],
-            "dueReminders": [
-                reminder.to_dict()
-                for reminder in self.unit_of_work.reminders()
-                if reminder.task_id in active_ids and reminder.status == "pending" and _parse(reminder.remind_at_utc) <= now
-            ],
+            "overdue": [task.to_dict() for task in summary.overdue], "overdueTotal": summary.overdue_total,
+            "today": [task.to_dict() for task in summary.today], "todayTotal": summary.today_total,
+            "next7days": [task.to_dict() for task in summary.next7days], "next7daysTotal": summary.next7days_total,
+            "dueReminders": [_due_reminder_dict(reminder) for reminder in summary.due_reminders],
+            "dueRemindersTotal": summary.due_reminders_total,
         }
 
     def _instant(self) -> datetime:
@@ -292,6 +291,17 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _due_reminder_dict(reminder: DueReminderSummary) -> dict[str, object]:
+    return {
+        "id": reminder.id, "taskId": reminder.task_id, "remindAtUtc": reminder.remind_at_utc,
+        "status": reminder.status, "acknowledgedAtUtc": reminder.acknowledged_at_utc,
+        "dismissedAtUtc": reminder.dismissed_at_utc, "createdAtUtc": reminder.created_at_utc,
+        "taskTitle": reminder.task_title, "taskDueAtUtc": reminder.task_due_at_utc,
+        "taskDueTimezone": reminder.task_due_timezone, "taskIsAllDay": reminder.task_is_all_day,
+        "relatedLabel": reminder.related_label,
+    }
+
+
 def _query_values(value: str | None, allowed: set[str], label: str) -> tuple[str, ...] | None:
     if value is None:
         return None
@@ -313,17 +323,10 @@ def _due_filter(value: str | None, now: datetime):
         def named(task: Task) -> bool:
             if value == "nodate":
                 return task.due_at_utc is None
-            if task.due_at_utc is None:
-                return False
-            instant = _parse(task.due_at_utc)
-            if value == "overdue":
-                return task.status in INITIAL_TASK_STATUSES and instant < now
-            timezone = ZoneInfo(task.due_timezone or "UTC")
-            local_today = now.astimezone(timezone).date()
-            local_day = instant.astimezone(timezone).date()
-            if value == "today":
-                return local_day == local_today
-            return local_today < local_day <= local_today + timedelta(days=7)
+            return due_bucket(
+                status=task.status, due_at_utc=task.due_at_utc, due_timezone=task.due_timezone,
+                is_all_day=task.is_all_day, now=now,
+            ) == value
         return named
     parts = tuple(part.strip() for part in value.split(","))
     if len(parts) != 2 or not all(parts):

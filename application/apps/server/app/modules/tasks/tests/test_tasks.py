@@ -14,6 +14,7 @@ from sqlalchemy import event
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.tasks.application.service import TaskError, TaskService
+from app.modules.tasks.application.ports import DueReminderSummary
 from app.modules.tasks.api.router import build_router
 from app.modules.tasks.domain.models import Task, TaskReminder, dismiss
 from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
@@ -199,7 +200,125 @@ class TaskTests(unittest.TestCase):
             task(2_001, "2026-01-14T20:00:00+00:00"),
             task(2_002, "2026-01-15T20:00:00+00:00"),
         ]), now=fixed_clock).page(due="today")
-        self.assertEqual([item.id for item in local_today], ["task-2001"])
+        # Timed tasks from earlier today are overdue, not also in today.
+        self.assertEqual([item.id for item in local_today], [])
+
+    def test_summary_has_mutually_exclusive_timezone_buckets_totals_and_bounds(self) -> None:
+        now = datetime(2026, 1, 15, 12, 0, tzinfo=UTC)
+        service = TaskService(self.tasks.unit_of_work, now=lambda: now)
+
+        def create(title: str, due: str, timezone: str, *, all_day: bool = False):
+            return service.create({
+                "title": title, "dueAtUtc": due, "dueTimezone": timezone, "isAllDay": all_day,
+            })
+
+        # 04:00 in Los Angeles: a timed 02:00 task is overdue, while an
+        # all-day task remains due throughout its local calendar date.
+        timed_overdue = create("Timed overdue", "2026-01-15T10:00:00+00:00", "America/Los_Angeles")
+        all_day_today = create("All-day today", "2026-01-15T08:00:00+00:00", "America/Los_Angeles", all_day=True)
+        all_day_overdue = create("All-day overdue", "2026-01-14T08:00:00+00:00", "America/Los_Angeles", all_day=True)
+        exact_now = create("Boundary today", "2026-01-15T12:00:00+00:00", "UTC")
+        tokyo_today = create("Tokyo today", "2026-01-15T14:00:00+00:00", "Asia/Tokyo")
+        first_next = create("First next", "2026-01-16T08:00:00+00:00", "America/Los_Angeles", all_day=True)
+        create("Second next", "2026-01-17T08:00:00+00:00", "America/Los_Angeles", all_day=True)
+        service.add_reminder(all_day_today.id, "2026-01-15T11:00:00+00:00")
+        earliest_reminder = service.add_reminder(all_day_today.id, "2026-01-15T10:00:00+00:00")
+        raw_summary = self.tasks.unit_of_work.summary(now=now, limit=1)
+        self.assertIsInstance(raw_summary.due_reminders[0], DueReminderSummary)
+        self.assertEqual(raw_summary.due_reminders[0].task_id, all_day_today.id)
+
+        statements: list[str] = []
+        def capture_statement(*args): statements.append(args[2])
+        event.listen(self.tasks.unit_of_work.engine, "before_cursor_execute", capture_statement)
+        try:
+            summary = service.summary(limit_per_bucket=1)
+        finally:
+            event.remove(self.tasks.unit_of_work.engine, "before_cursor_execute", capture_statement)
+
+        self.assertEqual(summary["overdueTotal"], 2)
+        self.assertEqual(summary["todayTotal"], 3)
+        self.assertEqual(summary["next7daysTotal"], 2)
+        self.assertEqual(summary["dueRemindersTotal"], 2)
+        self.assertEqual([item["id"] for item in summary["overdue"]], [all_day_overdue.id])
+        self.assertEqual([item["id"] for item in summary["today"]], [all_day_today.id])
+        self.assertEqual([item["id"] for item in summary["next7days"]], [first_next.id])
+        self.assertEqual([item["id"] for item in summary["dueReminders"]], [earliest_reminder.id])
+        self.assertEqual(summary["dueReminders"][0]["taskTitle"], "All-day today")
+        self.assertEqual(summary["dueReminders"][0]["taskDueAtUtc"], all_day_today.due_at_utc)
+        returned = {item["id"] for key in ("overdue", "today", "next7days") for item in summary[key]}
+        self.assertNotIn(timed_overdue.id, {item["id"] for item in summary["today"]})
+        self.assertNotIn(exact_now.id, {item["id"] for item in summary["overdue"]})
+        self.assertNotIn(tokyo_today.id, {item["id"] for item in summary["overdue"]})
+        for bucket, total in (("overdue", 2), ("today", 3), ("next7days", 2)):
+            listed, cursor = service.page(due=bucket, page_size=10)
+            self.assertIsNone(cursor)
+            self.assertEqual(len(listed), total)
+        self.assertLessEqual(sum(statement.lstrip().upper().startswith("SELECT") for statement in statements), 8)
+        self.assertEqual(len(returned), 3)
+
+    def test_summary_uses_one_read_snapshot_when_a_writer_commits_mid_summary(self) -> None:
+        now = datetime(2026, 1, 15, 12, 0, tzinfo=UTC)
+        service = TaskService(self.tasks.unit_of_work, now=lambda: now)
+        task = service.create({
+            "title": "Overdue", "dueAtUtc": "2026-01-15T10:00:00+00:00", "dueTimezone": "UTC",
+        })
+        database = self.tasks.unit_of_work.engine.url.database
+        assert database is not None
+        with sqlite3.connect(database) as connection:
+            connection.execute("PRAGMA journal_mode=WAL")
+
+        select_count = 0
+        writer_committed = False
+
+        def update_after_count(*_):
+            nonlocal select_count, writer_committed
+            statement = _[2].lstrip().upper()
+            if not statement.startswith("SELECT"):
+                return
+            select_count += 1
+            if select_count == 2:
+                with sqlite3.connect(database) as writer:
+                    writer.execute(
+                        "UPDATE tasks SET due_at_utc = ? WHERE id = ?",
+                        ("2026-02-01T10:00:00+00:00", task.id),
+                    )
+                writer_committed = True
+
+        event.listen(self.tasks.unit_of_work.engine, "before_cursor_execute", update_after_count)
+        try:
+            summary = service.summary()
+        finally:
+            event.remove(self.tasks.unit_of_work.engine, "before_cursor_execute", update_after_count)
+
+        self.assertTrue(writer_committed)
+        self.assertEqual(summary["overdueTotal"], 1)
+        self.assertEqual([item["id"] for item in summary["overdue"]], [task.id])
+
+    def test_summary_route_always_returns_empty_buckets_and_validates_limit(self) -> None:
+        app = FastAPI()
+        app.include_router(build_router(self.tasks, type("Runtime", (), {"ready": True, "error": None, "can_write": True})()))
+        with TestClient(app) as client:
+            response = client.get("/api/tasks/summary")
+            invalid = client.get("/api/tasks/summary", params={"limitPerBucket": 101})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {
+            "overdue": [], "overdueTotal": 0, "today": [], "todayTotal": 0,
+            "next7days": [], "next7daysTotal": 0, "dueReminders": [], "dueRemindersTotal": 0,
+        })
+        self.assertEqual(invalid.status_code, 422)
+        self.assertEqual(app.openapi()["paths"]["/api/tasks/summary"]["get"]["operationId"], "getTaskSummary")
+
+    def test_task_request_models_reject_unknown_fields(self) -> None:
+        app = FastAPI()
+        app.include_router(build_router(self.tasks, type("Runtime", (), {"ready": True, "error": None, "can_write": True})()))
+        task = self.tasks.create({"title": "Task"})
+        with TestClient(app) as client:
+            complete = client.post(f"/api/tasks/{task.id}/complete", json={"unexpected": True})
+            reminder = client.post(f"/api/tasks/{task.id}/reminders", json={
+                "remindAtUtc": "2026-01-01T00:00:00+00:00", "unexpected": True,
+            })
+        self.assertEqual(complete.status_code, 422)
+        self.assertEqual(reminder.status_code, 422)
 
     def test_due_filter_cursor_continues_through_empty_and_partial_pages(self) -> None:
         class PagedTasks:

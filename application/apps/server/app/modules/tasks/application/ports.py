@@ -3,11 +3,41 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Protocol, TypeVar
 
 from app.modules.tasks.domain.models import Task, TaskReminder
 
 Result = TypeVar("Result")
+
+
+@dataclass(frozen=True)
+class DueReminderSummary:
+    id: str
+    task_id: str
+    remind_at_utc: str
+    status: str
+    acknowledged_at_utc: str | None
+    dismissed_at_utc: str | None
+    created_at_utc: str
+    task_title: str
+    task_due_at_utc: str | None
+    task_due_timezone: str | None
+    task_is_all_day: bool
+    related_label: str | None
+
+
+@dataclass(frozen=True)
+class TaskSummary:
+    overdue_total: int
+    overdue: list[Task]
+    today_total: int
+    today: list[Task]
+    next7days_total: int
+    next7days: list[Task]
+    due_reminders_total: int
+    due_reminders: list[DueReminderSummary]
 
 
 class TaskTransactionOperations(Protocol):
@@ -57,3 +87,4 @@ class TaskUnitOfWork(Protocol):
              related_entity_type: str | None, related_entity_id: str | None, limit: int,
              cursor: tuple[int, str | None, str, str] | None) -> list[Task]: ...
     def reminders(self, task_id: str | None = None) -> list[TaskReminder]: ...
+    def summary(self, *, now: datetime, limit: int) -> TaskSummary: ...
