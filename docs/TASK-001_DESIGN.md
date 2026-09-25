@@ -1,5 +1,9 @@
 # TASK-001 — Local Task Center
 
+## Status
+
+In progress — summary contract reconciliation. The task and reminder foundation is implemented, but the current `GET /api/tasks/summary` response returns only unbounded `overdue` and `dueReminders` arrays, without complete totals. The target contract in this document also requires bounded `today` and `next7days` collections and totals for every bucket. The filtered `GET /api/tasks` endpoint already supports `due=today` and `due=next7days`, but DASH-001 and UI-001 must not compensate with multiple browser requests, client-side scans, or duplicated time-zone classification. TASK-001 is complete only after the bounded summary contract, typed response, and tests below are implemented.
+
 ## Purpose
 
 `TASK-001` provides a lightweight local “action center” that future modules can rely on for tracking work items with due dates, reminders, and generic record links—without becoming a calendar, communications system, or automation engine.
@@ -18,7 +22,7 @@ TASK-001 provides:
 - Completion/cancellation timestamp and optional outcome note.
 - Generic related-record link captured at creation: `entity_type`, `entity_id`, and a readable `label`.
 - Created/updated timestamps.
-- A summary endpoint (`GET /api/tasks/summary`) returning counts and records for overdue, today, next seven days, and currently due reminders—this is the stable interface for `DASH-001`.
+- A summary endpoint (`GET /api/tasks/summary`) returning total counts and bounded initial records for overdue, today, next seven days, and currently due reminders—this is the stable task-source interface for `DASH-001`.
 
 TASK-001 does not provide:
 
@@ -41,7 +45,7 @@ MVP reminders are not external notifications. The dashboard/task list shows over
 
 ### Overdue definition is explicit
 
-A task is **overdue** when its status is `open` or `in_progress` and its `due_at_utc` is in the past. A task without a due date is never overdue. This rule is applied in the summary endpoint and list queries.
+A timed task is **overdue** when its status is `open` or `in_progress` and its `due_at_utc` is before the captured current instant. An all-day task is overdue only when its local due date in `due_timezone` is before the current date in that timezone; it remains due today throughout its due date. A task without a due date is never overdue. The `overdue`, `today`, and `next7days` classifications are mutually exclusive and use the same rules in the summary endpoint and list queries.
 
 ### Time is stored in UTC; display preserves the operator's timezone
 
@@ -156,14 +160,16 @@ All IDs are UUIDs. Timestamps are timezone-aware UTC text (`YYYY-MM-DDTHH:MM:SSZ
 
 ### Summary endpoint
 
-`GET /api/tasks/summary` returns a single response with:
+`GET /api/tasks/summary?limitPerBucket=20` accepts `limitPerBucket` from 1 through 100 and returns one response with:
 
-- `overdue`: tasks where `status IN ('open','in_progress') AND due_at_utc < now()` — ordered by `due_at_utc` asc.
-- `today`: tasks where `status IN ('open','in_progress') AND due_at_utc` falls on the operator's current local date (in the stored `due_timezone` or fallback) — ordered by `due_at_utc` asc.
-- `next7days`: tasks where `status IN ('open','in_progress') AND due_at_utc` is after today through 7 days — ordered by `due_at_utc` asc.
-- `dueReminders`: `task_reminders` where `status = 'pending' AND remind_at_utc <= now()` — joined with task title, due date, and related label, ordered by `remind_at_utc` asc.
+- `overdue` and `overdueTotal`: the first bounded tasks and complete count where `status IN ('open','in_progress')` and the explicit overdue rule above is true, ordered by `due_at_utc` ascending.
+- `today` and `todayTotal`: the first bounded non-overdue tasks and complete count where `status IN ('open','in_progress')` and the due date in the stored `due_timezone` is today, ordered by `due_at_utc` ascending.
+- `next7days` and `next7daysTotal`: the first bounded tasks and complete count where `status IN ('open','in_progress')` and the task's due date in its stored `due_timezone` is after today through seven days, ordered by `due_at_utc` ascending.
+- `dueReminders` and `dueRemindersTotal`: the first bounded pending reminders and complete count where `remind_at_utc <= now()`, joined with task title, due date, and related label and ordered by `remind_at_utc` ascending.
 
-All times are evaluated using the application's injected clock boundary so tests do not depend on ambient server time. The summary is the contract for `DASH-001`.
+All four collection keys and their four total keys are always present, including when arrays are empty or totals are zero. Totals describe the complete matching set, not just the returned slice. All times are evaluated from one instant captured through the application's injected clock boundary, so every bucket is internally consistent and tests do not depend on ambient server time. The repository computes each count and bounded slice with set-based queries; it does not call the paginated HTTP list endpoint or load an unbounded task history into application memory. The summary is the task-source contract consumed by `DASH-001`.
+
+**Known implementation gap:** the current service emits only unbounded `overdue` and `dueReminders` arrays after loading active tasks and reminders. The current list filters also let a timed task from earlier today match both `overdue` and `today`, and treat an all-day task as overdue after local midnight. Reconciliation must implement the mutually exclusive rules above; add `today`, `next7days`, all four totals, bounded set-based repository queries, and an explicit FastAPI response model; and add cross-time-zone, all-day, boundary-instant, limit, total, and empty-bucket tests. The existing filtered list API remains useful for the Tasks directory, but is not a substitute for this aggregate contract. Until reconciliation is complete, consumers must treat the summary capability as unavailable rather than interpreting absent keys as empty successful results.
 
 ### List and filter tasks
 
@@ -214,7 +220,7 @@ All routes require a ready workspace. Mutations require the writer lock. Request
 | --- | --- | --- |
 | `POST` | `/api/tasks` | Create a task. |
 | `GET` | `/api/tasks` | List tasks with filters and pagination. |
-| `GET` | `/api/tasks/summary` | Return overdue, today, next 7 days, and due reminders for dashboard. |
+| `GET` | `/api/tasks/summary` | Return totals and bounded `overdue`, `today`, `next7days`, and `dueReminders` collections; `limitPerBucket` defaults to 20 and is capped at 100. |
 | `GET` | `/api/tasks/{id}` | Return one task with its reminders. |
 | `PATCH` | `/api/tasks/{id}` | Edit task fields (not status/lifecycle). |
 | `POST` | `/api/tasks/{id}/complete` | Complete a task with optional outcome note. |
@@ -275,7 +281,7 @@ TASK-001 data and audit history are retained in the encrypted workspace backup/e
 1. Add TASK-001 SQLAlchemy models, constraints, indexes, module-owned exact schema validation, and baseline/product/archive validation updates for the greenfield current schema.
 2. Define immutable domain values and validated commands for task lifecycle, reminders, and summary queries; reject floats, invalid status transitions, missing timezone with due date, and unchecked direct construction.
 3. Define task unit-of-work and transaction protocols. Compose concrete adapters in bootstrap; keep task application code independent of Portfolio, Leases, Finance, and other domain SQLAlchemy infrastructure.
-4. Implement overdue/today/next7days projections using the injected clock/time-zone boundary, then expose typed FastAPI routes with ready/writer-lock/error handling.
+4. Reconcile the summary and due-filter implementation with the mutually exclusive timed/all-day rules above. Add `today`, `next7days`, complete totals, and bounded set-based repository queries using one injected clock instant. Add an explicit response model with all required collection and total keys; do not assemble the summary through repeated HTTP calls, unbounded in-memory scans, or browser-side classification.
 5. Register task audit policies (allowlist of auditable fields, no secret rejection needed) and add regression coverage for:
    - Status transitions and timestamp rules (completed_at_utc only on completed, etc.)
    - Due date timezone preservation and all-day rendering
@@ -283,7 +289,7 @@ TASK-001 data and audit history are retained in the encrypted workspace backup/e
    - Reminder acknowledge/dismiss prevents repeat display
    - Generic related-record link portability (text identifiers only)
    - Delete only empty/draft tasks
-   - Summary endpoint shape and ordering
+   - Summary endpoint shape, required empty/zero keys, per-bucket limits, complete totals, ordering, query bounds, and agreement with corresponding list-filter classifications
    - Concurrency (writer lock)
    - Schema rejection and exact validation
    - Encrypted backup/export/restore preservation
@@ -299,7 +305,7 @@ TASK-001 is complete when:
 5. Related-record links remain portable text identifiers and do not require unavailable modules.
 6. Task activity (creation, edits, status transitions, reminder actions, deletion) is audit-recorded via `AUDIT-001` with correct before/after snapshots.
 7. Backup/restore preserves tasks, reminders, and their audit history.
-8. Dashboard consumers can retrieve overdue and upcoming tasks via `GET /api/tasks/summary` without scanning unrelated tables.
+8. Dashboard consumers can retrieve complete totals and bounded `overdue`, `today`, `next7days`, and `dueReminders` collections through one typed `GET /api/tasks/summary` response without unbounded reads, scanning unrelated tables, issuing compensating list requests, or reimplementing time-zone rules.
 
 ## Dependencies and follow-on work
 
@@ -314,7 +320,7 @@ TASK-001 requires completed `LOCAL-001` and `AUDIT-001`. It has no direct depend
 - `LEAD-001` / `LEAD-002` (Leads) — creates lead follow-up and showing tasks.
 - `ADJ-001` / `ADJ-002` (Rent strategy) — creates rent review and notice deadline tasks.
 - `FIN-005` (Recurring expenses) — creates payable reminder tasks.
-- `DASH-001` (Dashboard) — consumes `/api/tasks/summary` for action cards.
+- `DASH-001` (Dashboard) — consumes the reconciled four-collection `/api/tasks/summary` contract for Home composition; it must not treat the current partial response as complete.
 - `RPT-004` (Scheduled reports) — creates report generation tasks.
 - `APT-004` (Unit turnovers) — creates turnover workflow tasks.
 - `BEGIN-003` (Beginner experience) — includes task onboarding.

@@ -14,19 +14,19 @@ PORT-003 is delivered through two formally separate scopes:
 
 | Scope | Contents | Delivery timing |
 | --- | --- | --- |
-| Backend and API | Domain rules, persistence, audit history, schema validation, backup/restore coverage, summaries, filters, and typed API operations. | Current PORT-003 implementation work. |
-| Operator UI | React portfolio summaries and filters, space status cards, review-status prompts, classification forms, and occupancy/availability change, replacement, and cancellation actions. | Delivered by `UI-001`, immediately before `DASH-001`. |
+| Backend and API | Domain rules, persistence, audit history, schema validation, backup/restore coverage, bounded occupancy/availability source facts, filters, status actions, and typed API operations. | Current PORT-003 implementation work. |
+| Operator UI integration | `OPS-001` composes property directory and overview read models from PORT-003 and other source facts. `UI-001` renders portfolio/property summaries and filters, space status cards, review prompts, classification forms, and occupancy/availability change, correction, rescheduling, and cancellation actions. | Delivered by `UI-001`, immediately before `DASH-001`. |
 
 The backend and API scope can be reviewed and verified independently. That does not complete PORT-003 as a user-facing feature. The backlog must remain **In progress** until both scopes meet their acceptance criteria.
 
-PORT-003 provides:
+PORT-003 provides the occupancy and availability source facts that OPS-001 and UI-001 consume:
 
 - A current occupancy state for every active rentable space: **Occupied**, **Vacant**, or **Unknown**.
 - An effective-dated occupancy timeline that preserves prior states.
 - A separate current availability state: **Available now**, **Available on a date**, **Not available**, or **Unknown**.
 - Property-level and portfolio-level counts derived from active spaces.
 - Filters for occupancy and availability, including spaces needing classification.
-- A guided action for changing occupancy and another for changing availability.
+- Guided actions for changing and correcting occupancy, changing availability, and cancelling or rescheduling a future occupancy transition.
 - Atomic audit history for every status change.
 - Explicit source metadata so later lease and listing workflows can become the source of a status without losing manually recorded history.
 
@@ -61,14 +61,16 @@ The UI may suggest a likely availability choice after an occupancy change, but t
 
 ### Occupancy uses effective-dated periods
 
-Each space has a non-overlapping occupancy timeline. A period begins on `starts_on` and ends immediately before `ends_on`; a null end means it is open-ended. The current state is the period active today.
+Each space has a non-overlapping occupancy timeline. A period begins on `starts_on` and ends immediately before `ends_on`; a null end means it is open-ended. The current state is the period active on the property's local calendar date.
+
+Every use case captures one UTC `as_of` instant from an injected clock, converts it through the property's IANA time zone, and uses the resulting local date consistently for validation, derivation, summaries, and archive safeguards. A portfolio response may therefore contain different `effectiveLocalDate` values for properties in different time zones. It returns the shared `asOf` instant and each property's effective local date rather than implying that the host machine's date is authoritative.
 
 Changes are appended in chronological order:
 
-- A change may start today or on a future date.
-- A future change remains scheduled and does not affect today’s status.
+- A change may start on the property's current local date or on a future local date.
+- A future change remains scheduled and does not affect the current local date's status.
 - A change cannot be inserted before an existing later transition.
-- A second change on the same date is rejected by the normal endpoint. A dedicated cancel-and-replace action may revise a scheduled transition atomically.
+- A second change on the same date is rejected by the normal endpoint. Dedicated correction and rescheduling operations revise an existing manual transition atomically without deleting its audit history.
 - Correcting older historical data is deferred until reporting requirements justify a guided timeline-repair workflow.
 
 This matches the effective-date conventions used by ownership relationships and avoids rewriting history.
@@ -78,17 +80,17 @@ This matches the effective-date conventions used by ownership relationships and 
 Availability is kept as one current record per space, with audit history preserving prior values. Its allowed combinations are:
 
 - `available_now`: `available_on` must be null.
-- `available_on`: `available_on` is required and cannot be earlier than today.
+- `available_on`: `available_on` is required and cannot be earlier than the property's current local date.
 - `not_available`: `available_on` must be null.
 - `unknown`: `available_on` must be null.
 
-When the stored `available_on` date arrives, the displayed state becomes **Available now**, but the original entered date remains available for history and reporting. A background job is not required merely to advance the display label.
+When the stored `available_on` date arrives in the property's time zone, the effective state becomes **Available now**, but the recorded status and original entered date remain available for history and reporting. Read contracts expose both `recordedStatus` and `effectiveStatus`; clients do not reconstruct intent from field combinations. A background job is not required merely to advance the effective label.
 
 ### Sources are explicit
 
 PORT-003 writes `source_kind = manual`. Later modules may use `lease` or `listing` with a source record ID. A source does not bypass application invariants or audit requirements.
 
-When a later source owns a status, the UI identifies it—for example, “Occupied from lease ending June 30”—and prevents an unreviewed manual edit from silently contradicting it. The detailed conflict policy belongs to the integrating module.
+When a later source owns a status, the UI identifies it—for example, “Occupied from lease ending June 30”—and prevents an unreviewed manual edit from silently contradicting it. The integrating module owns its domain conflict policy, but it must call a PORT-003 application port that validates the source identity and applies idempotent create, update, end, correction, and ownership-transfer operations under the PORT-003 timeline and audit invariants. Direct table writes are not an integration contract.
 
 ## Data model
 
@@ -139,6 +141,8 @@ Property summaries expose:
 
 Portfolio summaries aggregate the same counts without collapsing the source records. Every count must link to the matching filtered space list when reporting drill-down arrives.
 
+Each space source fact also exposes typed `attentionReasons` rather than only contributing to a count. Initial reasons include `occupancy_unknown`, `availability_unknown`, `source_conflict`, and `missing_status_record`. Each reason carries an applicable action capability or stable resolution identifier. OPS-001 maps those identifiers to routes and presentation; it does not duplicate PORT-003 rules in the browser or composition layer.
+
 For a single-space home, the property can show a direct phrase such as **Occupied · Not available**. For offices, it shows a compact summary such as **3 suites · 2 occupied · 1 available now**.
 
 ## Business rules and workflows
@@ -153,7 +157,7 @@ After a property is created, the property detail page prompts the operator to cl
 
 Both values save atomically under one correlation ID. The operator may leave either value unknown and return later.
 
-The classification operation accepts either occupancy, availability, or both. A value that remains unknown can be completed later without rewriting the value already classified. When an unknown occupancy period began before the classification date, the application ends that historical unknown period and starts the classified period today.
+The classification operation accepts either occupancy, availability, or both. A value that remains unknown can be completed later without rewriting the value already classified. When an unknown occupancy period began before the classification date, the application ends that historical unknown period and starts the classified period on the property's current local date.
 
 ### Change occupancy
 
@@ -161,13 +165,17 @@ The **Change occupancy** action shows the current state and any scheduled next s
 
 The transaction ends the applicable prior period, creates the new period, and writes correlated audit events. If the date is in the future, the current state remains unchanged and the UI labels the transition **Scheduled**.
 
+### Correct the current manual occupancy status
+
+An operator can correct a mistaken current manual transition without using the historical timeline-repair workflow. The action shows the recorded value, requires the corrected value and a reason, and atomically supersedes the mistaken transition while preserving both records and correlated audit evidence. It cannot correct a source-owned transition, insert an arbitrary older period, or conceal a previously valid state. This operation covers an erroneous same-day or currently active manual transition; correction of older closed history remains deferred.
+
 ### Change availability
 
 The **Change availability** action displays occupancy for context but requires an explicit availability selection. The application validates the date combination and replaces the current availability record in the same transaction as its audit event.
 
-### Cancel or replace a scheduled occupancy change
+### Cancel or reschedule a scheduled occupancy change
 
-The operator may cancel the latest future manual transition or replace it with another transition on the same date. The action removes no history: it marks the scheduled period as cancelled or superseded, reopens the preceding valid period when necessary, and records the prior and resulting timeline in the audit ledger. Source-owned future transitions cannot be cancelled outside their owning module.
+The operator may cancel the latest future manual transition or reschedule it with a different future date, state, and note. The reschedule is one atomic operation that validates the complete resulting timeline; it does not expose a cancelled intermediate state. The action removes no history: it marks the scheduled period as cancelled or superseded, adjusts the preceding valid period, inserts the replacement when applicable, and records the prior and resulting timeline in the audit ledger. Source-owned future transitions cannot be changed outside their owning module.
 
 Status responses expose the complete ordered future transition timeline so every scheduled transition has a discoverable stable ID. The singular next-transition field remains a convenience for compact displays.
 
@@ -179,9 +187,9 @@ Status responses expose the complete ordered future transition timeline so every
 - Vacant or unknown spaces still require the existing explicit archive confirmation.
 - Later lease and listing modules add guards for active source records.
 
-## User experience
+## UI-001 consumption requirements
 
-This section defines the required React operator experience. It is a product contract for the deferred UI scope, not a claim that the current API implementation provides these screens. The future UI must consume the typed PORT-003 API instead of duplicating occupancy or availability rules in the browser.
+This section defines the PORT-003 requirements for the deferred UI-001 experience. It is not a separate React delivery owned by this feature. OPS-001 composes property directory and overview read models from the typed PORT-003 source API and other source facts; UI-001 renders those results without duplicating occupancy or availability rules in the browser.
 
 ### Portfolio and property list
 
@@ -196,6 +204,8 @@ Each property row adds a plain-language occupancy summary and an availability in
 
 Unknown states use neutral text and a visible **Review status** action. Colors are supplementary and never the only status signal.
 
+The PORT-003 property source endpoint is bounded even though OPS-001 owns the final cross-domain directory. It uses a stable sort with an ID tie-breaker and an opaque cursor, enforces a maximum page size, and returns `items`, `nextCursor`, `matchingTotal`, and `asOf`. Changing a filter resets the cursor. Occupancy, availability, ownership, lifecycle, and attention filters combine with AND semantics; a multi-space property matches an occupancy or availability filter when any active space matches it. Results and totals use identical predicates and one consistent read snapshot.
+
 ### Property detail
 
 Each rentable-space card shows:
@@ -205,7 +215,8 @@ Each rentable-space card shows:
 - Scheduled next occupancy transition, if present.
 - Current availability and date, if applicable.
 - Source label, such as **Recorded manually**.
-- Primary actions: **Change occupancy** and **Change availability**.
+- Typed attention reasons and the applicable resolution action.
+- Primary actions: **Change occupancy**, **Correct occupancy** when applicable, and **Change availability**.
 
 The page does not show a tenant name or lease link until those modules exist.
 
@@ -215,19 +226,22 @@ All endpoints require a ready workspace. Request models reject unknown fields, a
 
 | Method | Path | Intent |
 | --- | --- | --- |
-| `GET` | `/api/properties` | Add occupancy and availability summaries and filters to property results. |
-| `GET` | `/api/portfolio/status-summary` | Return portfolio-wide active-property and active-space occupancy, availability, nearest-date, and attention totals. |
+| `GET` | `/api/properties` | Provide a bounded, cursor-paged property source list with matching totals and supported occupancy/availability source filters. This is not the final cross-domain property-directory read model. |
+| `GET` | `/api/portfolio/status-summary` | Return bounded portfolio-wide occupancy/availability source totals, nearest-date, and attention facts. OPS-001 or DASH-001 composes broader cross-domain views. |
 | `GET` | `/api/properties/{propertyId}` | Return each current space with current and scheduled occupancy plus availability. |
-| `GET` | `/api/spaces/{spaceId}/status` | Return the space’s current state, next scheduled transition, complete ordered future timeline, availability, and source metadata. |
+| `GET` | `/api/spaces/{spaceId}/status` | Return the space’s current state, next scheduled transition, complete ordered future timeline, recorded and effective availability, source metadata, revision, `asOf`, effective local date, and typed attention reasons. |
 | `PUT` | `/api/spaces/{spaceId}/occupancy` | Append a manual effective-dated occupancy transition. |
+| `POST` | `/api/spaces/{spaceId}/occupancy/{periodId}/correct` | Supersede an erroneous current manual transition with a corrected value and required reason. |
 | `POST` | `/api/spaces/{spaceId}/occupancy/scheduled/{periodId}/cancel` | Cancel the latest future manual transition. |
-| `PUT` | `/api/spaces/{spaceId}/occupancy/scheduled/{periodId}/replace` | Supersede the latest future manual transition with a replacement on the same date. |
+| `PUT` | `/api/spaces/{spaceId}/occupancy/scheduled/{periodId}/reschedule` | Atomically supersede the latest future manual transition with a replacement future date, state, and note. |
 | `PUT` | `/api/spaces/{spaceId}/availability` | Replace the current manual availability intention. |
 | `PUT` | `/api/spaces/{spaceId}/classification` | Atomically classify either or both unknown status values for an existing space. |
 
 PORT-002 property and space creation requests gain optional initial `occupancy` and `availability` objects. Omission creates explicit unknown records.
 
 Date fields are typed ISO calendar dates at the HTTP boundary. Errors distinguish missing resources (`404`), malformed inputs including invalid date text (`422`), invalid business transitions (`400`), and concurrent or source-ownership conflicts (`409`).
+
+Every status mutation accepts an `expectedRevision` and an idempotency key. A successful response returns the resulting revision and operation identity. Replaying the same key and payload returns the recorded result; reusing a key with a different payload is rejected. A stale revision returns `409` with the latest status and revision so the operator can review the conflict. These rules prevent lost updates across multiple windows and make recovery from an interrupted response safe. HTTP and non-HTTP adapters apply the same command contract.
 
 ## Audit, safety, and portability
 
@@ -241,11 +255,11 @@ The new tables participate in exact current-schema validation and `LOCAL-002` ba
 
 1. Add SQLAlchemy models and the current Alembic baseline schema for occupancy periods and one-to-one availability records, including exact module-owned schema validation.
 2. Extend space creation so unknown or supplied initial state records are created atomically with each space.
-3. Add typed application commands and portfolio unit-of-work operations for occupancy transitions, scheduled cancellation, and availability changes.
-4. Extend property queries to load current/scheduled statuses in bounded queries and derive property/portfolio summaries without per-space queries.
+3. Add typed application commands and portfolio unit-of-work operations for occupancy transitions, current correction, scheduled cancellation/rescheduling, and availability changes, including revisions and idempotent operation records.
+4. Extend property queries to load current/scheduled statuses in bounded queries and derive occupancy/availability source summaries without per-space queries. Expose stable cursor paging, matching totals, `asOf`, property-local effective dates, attention reasons, filters, and status actions for OPS-001 composition.
 5. Add typed FastAPI contracts for the backend and API scope.
-6. Add tests for status separation, effective dates, source pairing, overlap prevention, archive guards, atomic audit rollback, summaries, and backup/restore.
-7. In `UI-001`, implement the React portfolio summaries and filters, space status cards, review prompts, and guided classification/change/cancel/replace actions defined in **User experience**.
+6. Add tests for status separation, property-time-zone boundaries, effective dates, source pairing, overlap prevention, correction/rescheduling, stale revisions, idempotent replay, paging/count consistency, archive guards, atomic audit rollback, summaries, and backup/restore.
+7. In `OPS-001`, compose property directory and overview read models from PORT-003 and other source facts. In `UI-001`, render the portfolio summaries and filters, space status cards, review prompts, and guided classification/change/correct/cancel/reschedule actions defined in **UI-001 consumption requirements**.
 
 ## Acceptance criteria
 
@@ -262,18 +276,23 @@ The backend and API scope is complete when:
 7. Every change and scheduled cancellation is audited atomically with one correlation ID per operator action.
 8. Current-schema validation and encrypted backup/restore preserve the complete status records and audit history.
 9. No endpoint requires tenant or lease records before `TEN-001` and `LEASE-001` are implemented.
+10. Current and scheduled states are derived from one injected `asOf` instant using each property's time zone; responses disclose both the instant and effective local date.
+11. An erroneous current manual occupancy transition can be corrected with a required reason, and a future manual transition can be atomically rescheduled to another valid date, without deleting history.
+12. Mutation revisions and idempotency prevent lost updates and make retry after an interrupted response safe.
+13. Property source results are cursor-bounded with stable ordering, matching totals, and documented multi-space filter semantics.
+14. Status responses distinguish recorded from effective availability and expose typed attention reasons with resolution identifiers.
 
-### Operator UI scope
+### UI-001 integration scope
 
-The operator UI scope is complete when:
+The UI-001 integration scope is complete when:
 
 1. The React portfolio view shows portfolio and property occupancy/availability summaries and supports every documented filter.
 2. Property detail shows a status card for each active rentable space, including current occupancy, all discoverable scheduled changes, availability, source, and review status.
-3. Guided forms support initial classification, later completion of either unknown value, occupancy and availability changes, and scheduled change cancellation or replacement.
+3. Guided forms support initial classification, later completion of either unknown value, occupancy and availability changes, current-status correction, and scheduled change cancellation or rescheduling.
 4. The UI uses plain language, provides drill-down from summary counts, and does not rely on color alone.
 5. UI-level tests cover the primary workflows, validation feedback, and API error states.
 
-PORT-003 reaches overall **Done** only after both the backend/API and operator UI scopes pass their respective acceptance criteria. Until then, its backlog status remains **In progress**, even if the backend/API scope is complete.
+PORT-003 reaches overall **Done** only after both the backend/API and UI-001 integration scopes pass their respective acceptance criteria. Until then, its backlog status remains **In progress**, even if the backend/API scope is complete.
 
 ## Dependencies and follow-on work
 

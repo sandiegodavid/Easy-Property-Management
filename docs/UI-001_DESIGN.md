@@ -1,8 +1,6 @@
 # UI-001 Operator Experience Design
 
-## Status
-
-Product design confirmed by the product owner on September 23, 2026 (Q45), including the subsequent D35 correction to use the entire non-editable summary bar as the disclosure trigger. This is the authoritative product/interaction specification for UI-001 and the coordinated DASH-001 experience. Detailed API/schema contracts for new prerequisites remain implementation work; this approval does not mean features are implemented.
+This is the authoritative product, interaction, and frontend technical specification for UI-001 and the coordinated DASH-001 experience. Domain API/schema contracts identified as prerequisites below still require backend design and implementation; this approval does not mean features are implemented.
 
 ## Goals
 
@@ -83,7 +81,7 @@ Settings supports showing, hiding, and reordering destinations, plus Restore def
 
 ### D18: Plan the supporting backend work explicitly
 
-Include structured waiting/follow-up, coverage reviews, and draft recovery in the delivery plan. Keep dashboard aggregation under DASH-001 and shared workflow support under UI-001 or named prerequisites. Do not present nonfunctional controls. The exact dependency breakdown remains to be documented.
+Include structured waiting/follow-up, coverage reviews, and draft recovery in the delivery plan. Keep dashboard aggregation under DASH-001 and shared workflow support under UI-001 or named prerequisites. Do not present nonfunctional controls. The delivery boundaries and technical implementation design below define the dependency breakdown.
 
 ### D19: Keep urgency, appointments, and unscheduled work visible
 
@@ -348,16 +346,56 @@ The actions sit inside the expanded content per D35. AI-assisted preparation fol
 
 ## Backend compatibility findings
 
-These are implementation gaps, not reasons to silently weaken confirmed experience decisions. D18 includes supporting backend work in the delivery plan; the backlog now names its prerequisites.
+These findings follow the ownership, scope, and implementation sequence in [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md). They are implementation gaps or boundary clarifications, not reasons to weaken the confirmed experience. Only backlog items with a specific compatibility finding are listed; omission does not establish that another dependency is ready.
 
-- Structured waiting-for context and attention suppression/snooze are not implemented. Existing task due dates and reminders do not establish separate follow-up semantics.
-- Exact source-linked grouping can compose existing records. Cross-source grouping requires explicit relationships rather than text similarity.
-- Leases, inspections, communications, and deposit settlements have persisted domain drafts. There is no universal partial-form recovery facility.
-- Property coverage, review attestations, and relevant-change freshness need additional persisted state and policy; updated timestamps do not establish review.
-- TASK-001's summary implementation exposes overdue and due reminders, while its design also promises today and next-seven-day buckets. Existing task queries can supply date filtering; the consolidated contract needs reconciliation.
-- Owner views can compose effective-dated relationships and owner-filtered concerns/reports. Owner entitlement, balances, fees, statements, and disbursements require their later domain capabilities.
-- Current ownership must not erase historical or unresolved work. Local-operator ownership has no owner Party ID; the UI must not fabricate one.
-- Existing Maintenance supports a property-level issue without a space, and Communications/Tasks support repeated contact and follow-up. It does not yet persist an HOA responsibility assertion, multiple affected property/unit links, or shared-case deduplication; HOA-001 must add these contracts without treating the association as a provider.
+### PORT-001 — Ownership context
+
+- Effective-dated ownership relationships can support current and historical owner context. A current ownership change must not erase unresolved work or prior relationships.
+- `local_operator` ownership has no owner Party ID. Owner filters and workspaces must use actual client-owner Party IDs and must not invent an owner record for the operator.
+
+### OWNER-003 — Owner-reported rent
+
+- Existing owner-report and verified-receipt links can supply owner-filtered report review. The owner workspace must compose those records without treating a report as additional income.
+- OWNER-003 does not calculate an owner's entitlement, balance, fee, statement, or disbursement.
+
+### OWNER-004 — Owner concerns
+
+- Existing concern context and effective-dated relationships can supply owner-filtered current and historical concerns. Concern status remains independent from communications, tasks, leases, occupancy, and money.
+- The cross-property owner workspace may compose these records, but it must not imply that later owner-accounting capabilities already exist.
+
+### TASK-002 — Follow-up
+
+- TASK-001 supplies tasks, due dates, reminders, related-record links, and independent task/reminder lifecycles. It does not persist structured waiting-for context or a follow-up date that is distinct from the source deadline.
+- TASK-002 must add waiting context, follow-up scheduling, and resurfacing while preserving the source record's urgency and original deadline. A reminder deferral must not become issue resolution or attention suppression.
+
+### OPS-001 — Operator support
+
+- Leases, inspections, communications, and deposit settlements already have domain-specific persisted drafts. OPS-001 must add incomplete-form recovery around the remaining workflows without replacing those domain draft lifecycles or making unfinished input official.
+- Coverage applicability, review attestations, relevant-change triggers, and freshness provenance are not represented by a general updated timestamp. OPS-001 must persist or compose the explicit facts required by D8, D14, and D33.
+- Navigation/appearance preferences and bounded contextual search/read composition do not yet have a shared backend contract. OPS-001 owns those contracts; UI-001 consumes them.
+
+### HOA-001 — HOA coordination
+
+- Maintenance currently supports a property-level issue without a space, while Communications and Tasks support repeated contact and follow-up. Those records can remain authoritative for repair work, contact history, and reminders.
+- The backend does not yet persist an HOA responsibility/coverage assertion, association evidence, multiple affected managed units, or the identity needed to present one shared case without duplicates. HOA-001 must add those links and physical-verification closure facts without treating the association as a provider or copying the underlying Maintenance issue.
+
+### DASH-001 — Home aggregation
+
+- Exact source-linked grouping can compose existing records. Grouping across sources requires explicit stored relationships; DASH-001 must not infer case identity from similar text, addresses, or dates.
+- TASK-001's current summary implementation exposes overdue and due reminders, while its design also calls for today and next-seven-day buckets. Existing task date queries can contribute source data, but DASH-001 must reconcile the bounded Home contract and ordering with TASK-002 semantics.
+- UI-001 owns the Home shell, disclosure components, and source-action adapters. DASH-001 owns the complete Needs action, Waiting, Upcoming, appointments, coverage-gap, and source-backed total composition.
+
+### OWNER-002 — Owner disbursements
+
+- Disbursement calculation, approval, and recording remain unavailable until OWNER-002. General property money activity must not be labeled as money due or paid to the owner.
+
+### OWNER-001 — Owner statements
+
+- Statements remain unavailable until OWNER-001 and its FIN-003 and OWNER-002 dependencies are implemented. UI-001 may show available source records, not a computed or provisional owner statement.
+
+### OWNER-005 — Management fees
+
+- Management-fee agreements and calculations remain unavailable until OWNER-005. The owner workspace must not infer fees from expenses, rent, ownership shares, or operator-entered notes.
 
 ## Delivery boundaries
 
@@ -371,6 +409,312 @@ The design is broader than the existing UI-001 backlog row. Preserve backend-fir
 6. **DASH-001 aggregation:** Compose Needs action, Waiting, Upcoming, appointments, and information review from authoritative sources. Include legal/HOA next actions and retain existing domain-specific semantics. Reconcile the current showing dependency explicitly; never imply showings exist before LEAD-002 is available.
 
 Reports, owner balances/statements, automated sending, remote access, and AI/legal-rule interpretation retain their separately agreed scope. The backlog enumerates the new prerequisites and this document supplies acceptance criteria; it must not mark existing domain items complete merely because a design or sample screen exists.
+
+## Technical implementation design
+
+This section translates the confirmed decisions into an implementation contract. [ARCHITECTURE.md](ARCHITECTURE.md) governs where this section is silent or where a later inconsistency is found. In particular, the browser is a React/Vite client of the FastAPI application; it never reads SQLite or workspace files directly, reimplements domain policy, or treats an optimistic browser state as an official record.
+
+### Technical baseline and delivery unit
+
+- Build the web client in `application/apps/web` with React and TypeScript on the current Node.js LTS release. Use Vite for development and production builds.
+- Keep the Node workspace manifest and one lockfile under `application/`. The workspace includes `apps/web`, `packages/contracts`, and `packages/ui`; do not introduce a second package manager or per-package lockfiles.
+- Use React Router for route and nested-workspace composition, TanStack Query for server state, and React Hook Form for form lifecycle. These libraries manage presentation concerns only; FastAPI/Pydantic and the owning domain service remain authoritative for validation and transitions.
+- Generate TypeScript API types and a typed browser client from FastAPI OpenAPI into `application/packages/contracts`. Generated files are replaced by generation and are never hand-edited. Handwritten feature code must not recreate request or response interfaces already present in OpenAPI.
+- Keep reusable, domain-neutral presentational components in `application/packages/ui`. A component that knows about leases, deposits, HOA notices, or another domain belongs in the corresponding `apps/web/src/features` folder.
+- Do not add a sign-in screen or browser session model for the local single-operator MVP. Access to the local process and workspace follows the local security boundary in the architecture; future SaaS authentication is a separate change.
+- Use relative `/api/...` requests. Vite proxies `/api` to the local FastAPI process during development. A production build is served on the same local origin as FastAPI, so the UI does not require permissive CORS or an operator-entered API URL.
+- The production bootstrap must reserve `/api`, `/health`, `/docs`, `/redoc`, and `/openapi.json` for FastAPI. Apply the SPA fallback only to known browser routes requested with GET/HEAD and an HTML Accept header; missing API routes and assets must retain their real errors. A packaged build must include the compiled static assets; the live workspace remains external to both source and built assets.
+
+The frontend source shape is:
+
+```text
+application/
+├── package.json                         # Node workspaces and shared scripts
+├── package-lock.json
+├── apps/web/
+│   ├── index.html
+│   ├── vite.config.ts
+│   └── src/
+│       ├── app/                         # bootstrap, router, providers, shell, route errors
+│       ├── features/
+│       │   ├── home/
+│       │   ├── properties/
+│       │   ├── owners/
+│       │   ├── leasing/
+│       │   ├── money/
+│       │   ├── maintenance/
+│       │   ├── providers/
+│       │   ├── communications/
+│       │   ├── legal/
+│       │   ├── hoa/
+│       │   ├── imports/
+│       │   ├── ai-review/
+│       │   └── settings/
+│       └── shared/                      # transport, formatting, generic hooks and UI adapters
+├── packages/contracts/
+│   ├── openapi.json                     # reproducible generated snapshot
+│   └── src/generated/                   # generated types/client
+└── packages/ui/src/                     # domain-neutral visual primitives and tokens
+```
+
+Feature folders may contain `api`, `components`, `routes`, `forms`, and `tests` subfolders as needed. Do not create global `services` or `utils` folders. Name shared helpers by purpose, such as `formatMoney`, `normalizeApiError`, or `useDisclosureRows`.
+
+### Application bootstrap and workspace gate
+
+The React tree mounts in this order:
+
+1. application fatal error boundary (with separate route boundaries inside the router);
+2. theme bootstrap;
+3. typed API transport and TanStack Query client;
+4. workspace bootstrap query;
+5. router and `AppShell`.
+
+Before rendering domain routes, obtain a small bootstrap document with:
+
+- application and API contract versions;
+- stable workspace ID and a runtime generation that changes when the active workspace is restored, replaced, or reopened;
+- workspace state: `ready`, `missing`, `busy`, `invalid`, or `migration_required`;
+- a safe operator-facing reason and allowed recovery actions;
+- enabled backend capabilities;
+- operator preferences, including appearance and navigation order/visibility.
+
+This requires a bounded OPS-001/platform read contract; it is not present in the current API. Do not infer readiness by issuing several domain requests. When the workspace is unavailable, show the architecture-defined **Retry**, **Locate workspace**, and **Restore backup** actions as supported by the backend. Do not render empty directories. The current architecture requires this server to hold the single-writer workspace lock before it is ready, so a lock conflict is a `busy` workspace gate rather than a browser read-only mode.
+
+The query client uses finite retry rules: retry an interrupted idempotent read at most once; do not automatically retry mutations; and do not retry structured validation, conflict, not-found, or workspace-readiness failures. Reconnect and window-focus refresh may revalidate active reads, but must not submit work.
+
+Bootstrap must remain readable when domain routes are gated. Return operational states as a typed response, with nullable preferences when the workspace cannot be read. A network failure is distinct from a reported workspace failure. Locate/restore actions require an implemented platform command or explicit setup-script instructions; a browser file picker alone cannot relocate the server workspace.
+
+Prefix all query keys with `[workspaceId, runtimeGeneration]`, followed by feature, resource ID, and normalized filters. When either prefix changes, cancel in-flight reads, discard the old query cache and record forms, and reload bootstrap before enabling writes. A failed request from an earlier generation must not replace the current workspace's state. Recover persisted drafts only within their original workspace.
+
+### Route model
+
+Routes express record identity, durable workspace sections, and shareable filters. Temporary presentation state, such as one open disclosure row, stays outside the route.
+
+| Route | Purpose |
+| --- | --- |
+| `/home` | Portfolio attention, waiting, upcoming, appointments, and information review. `/` redirects here. |
+| `/properties` | Property directory; search, archived state, and applicable filters use query parameters. |
+| `/properties/:propertyId/:section?` | Property workspace; default section is `overview`, followed by `units`, `leases`, `money`, `maintenance`, `conversations`, `documents`, and `details` as capabilities permit. |
+| `/owners` | Owner directory with explicit client-owner/local-operator distinctions where relevant. |
+| `/owners/:ownerId/:section?` | Owner workspace; default section is `overview`, followed by the sections in D11. |
+| `/leasing` | Portfolio lease directory and lease attention. |
+| `/leases/:leaseId/:section?` | Substantial lease workflow and history. |
+| `/tasks` and `/tasks/:taskId` | Task directory and detail, reached from Home or contextual links. |
+| `/inspections/:inspectionId` | Condition-report draft, evidence, and finalization workflow. |
+| `/money/owner-reports/:reportId/review` | Report-to-receipt comparison and verification. |
+| `/money/deposit-settlements/:settlementId` | Substantial settlement draft, approval, and refund workflow. |
+| `/money/:view?` | Portfolio money views with explicit `propertyId`, `ownerId`, date, and status filters. |
+| `/maintenance` | Issue directory, appointments, assignments, and contextual access to Providers. |
+| `/maintenance/issues/:issueId/:section?` | Issue workflow, work journal, evidence, related records, and shared HOA repair context. |
+| `/providers` and `/providers/:providerId/:section?` | Provider directory and provider workspace. |
+| `/legal/:matterId` | Manual legal-matter workflow from D37–D40. Legal matters are contextual links rather than a default permanent destination. |
+| `/hoa/notices/:noticeId` | HOA violation-notice workflow and explicit closure. |
+| `/imports/:importId/review` | Frozen spreadsheet snapshot, mapping, duplicate decisions, validation, and commit result. |
+| `/ai/review/:draftId` | Review of a governed AI or connected-assistant proposal before any official write. |
+| `/settings/:section?` | Appearance, navigation, workspace, imports, built-in AI, connected assistants, and other operator preferences. |
+| `/search` | Full search results. `q` and `includeArchived` are query parameters so the result can be restored after detail navigation. |
+
+Use actual nested routes for workspace tabs so refresh, browser history, and deep links retain context. Main-navigation links always use portfolio routes without inherited property or owner filters. Contextual cross-module links add visible query parameters, such as `/money?propertyId=...`; filter chips expose a one-step removal action.
+
+Directory state belongs in the URL: query text, supported filters, sort, archived visibility, and cursor/page position. On return from a record, restore those parameters and the directory scroll anchor. Use route state as an enhancement for exact scroll restoration, but keep the URL sufficient when route state is lost after a restart.
+
+Declare allowed child sections explicitly rather than accepting arbitrary `:section` values. Resolve detail routes before general money-view routes. Changing a filter resets its cursor. An expired cursor offers a restart with filters retained. Server search results supply typed resource identities; the client route registry maps these to allowed internal routes instead of navigating arbitrary server-supplied URLs.
+
+### Navigation and capability registry
+
+Define one typed destination registry containing each destination's stable ID, label, route, icon token, default position, visibility rule, and required backend capability. `PrimaryNav`, **More**, Settings customization, and route guards all consume this registry. Do not maintain separate lists that can drift.
+
+Home and Settings are fixed. Other destinations can be shown, hidden, and reordered according to D17. A hidden destination remains in **More**, search results, contextual links, and Home obligations. If a capability is absent because its backend prerequisite is not installed, omit the destination and its creation actions; do not present a disabled imitation of an unimplemented feature. Direct navigation to a known but unavailable route presents a capability explanation and a safe return link.
+
+### State ownership
+
+| State | Owner and persistence |
+| --- | --- |
+| Official records, lifecycle, balances, coverage derivation, priorities, and audit history | FastAPI/domain modules and SQLite. The UI holds only query-cache copies. |
+| Route, selected workspace section, directory filters, and global search | URL. |
+| Expanded rows | Local component state keyed by stable source type and record ID. Several rows may be open independently. |
+| Short-form edits | React Hook Form state while mounted; OPS-001 incomplete-form recovery when navigation or restart protection is required. |
+| Substantial workflow drafts | Owning domain's server-side draft record, with explicit draft ID, revision, save state, and resume route. |
+| Navigation and appearance preferences | OPS-001 workspace preference. A non-sensitive cached theme value may prevent a startup color flash, but the workspace preference wins after bootstrap. |
+| Server state | TanStack Query. It must not be copied into a global client store. |
+
+Do not store domain records, evidence, drafts, message bodies, money data, or AI content in `localStorage` or `sessionStorage`. Do not add a global state library unless a demonstrated cross-route client-only state cannot be represented by URL, query cache, context, or form state.
+
+Mutations use the response as the new authoritative record and invalidate only affected query families: the edited record, its directory/workspace projections, relevant related records, and Home summary. Avoid invalidating the entire cache. Domain mutations are pessimistic: keep the current record visible with a saving state, and show committed values only after success. A reversible presentation preference may update optimistically and roll back on failure.
+
+Use Query as the single remote-data cache: route loaders may prefetch through it, but must not retain a second copy. Background refresh never resets dirty form values; retain the form's base revision and show a source-changed notice. Cancel obsolete search requests and debounce typing by 250 ms. Initially refresh active attention/connection regions every 60 seconds while visible and on window focus; stop polling when hidden or workspace-gated. Display server `asOf` times and refresh on property-local date boundaries. These checks do not constitute a background notification service.
+
+### API contracts and read models
+
+Existing domain endpoints remain the source for focused create, update, and lifecycle commands. UI-001 must not join many unbounded browser requests or reproduce domain derivations to assemble a screen. Add bounded read models through the module that owns the composed use case.
+
+| Required contract | Backlog owner | Minimum response behavior |
+| --- | --- | --- |
+| Workspace/operator bootstrap | OPS-001/platform | Readiness, write capability, recovery actions, capabilities, preferences, and contract version. |
+| Navigation and appearance preferences | OPS-001 | Versioned read/update with allowed destination IDs and server validation. |
+| Property directory and property overview | OPS-001 composition over PORT-001/002/003 and source domains; UI-001 presentation | Cursor pagination, counts that match filters, recognition fields, applicable coverage states, and availability metadata. |
+| Owner directory and cross-property overview | OPS-001 composition over PORT-001, OWNER-003/004, and source domains; UI-001 presentation | Bounded related-property, concern, conversation, lease, maintenance, and available money summaries with provenance. OWNER-001/002/005 are later accounting extensions, not prerequisites for the owner directory. |
+| Home composition | DASH-001 | Separate action, waiting, upcoming, appointment, and information-review collections; total counts; priority reason; source identity; next action; and pagination/view-all links. |
+| Global search | OPS-001 | Bounded grouped results, source type/ID, display label, context, archived marker, destination route, and a stable cursor. |
+| Incomplete-form recovery | OPS-001 | Typed form/workflow key, related record identity, schema version, revision, timestamps, payload, discard, and conflict-safe save. |
+| Coverage review facts | OPS-001 using source-domain facts | Area, applicability, derived state, cause, evidence/source revision, last manual review, trigger, and resolution route/action. |
+
+The Home contract is owned by DASH-001. UI-001 supplies the shell, queue components, disclosure behavior, and source-action adapters, but must not label a partial client-side aggregation as the completed Home experience. Until DASH-001 exists, use an explicit unavailable/limited preview state or hide unsupported queue sections.
+
+Every paged collection uses a stable sort and opaque cursor. Responses include `items` and `nextCursor`; screens that show a subset also receive the unfiltered or applicable total needed for “View all (N).” Never derive portfolio totals from the current page. Directory endpoints must add cursor pagination before the UI depends on portfolio growth; current list-returning property, party, and lease endpoints are insufficient as final directory contracts.
+
+Keep totals and slices under identical filters and a consistent read snapshot, with a stable ID tie-breaker. A sparse page with `items: []` and a non-null `nextCursor` is not an empty result; expose continuation. Summary endpoints such as TASK-001 may use explicitly bounded buckets and totals rather than page envelopes; their View all actions open a filtered directory. Composite responses carry `asOf` and per-section `available`, `stale`, or `unavailable` status. A failed money section must not erase successfully loaded maintenance data or produce a zero balance.
+
+Define response models and stable operation IDs before generating clients: generated types from unconstrained dictionaries are insufficient. Export OpenAPI against an isolated configuration without opening the operator's live workspace, pin the generator in the lockfile, and verify a reproducible snapshot. Source modules expose facts through application protocols; OPS-001/reporting composition must not import other modules' persistence or issue a request per displayed row.
+
+Use ISO 8601 instants with an offset on the wire. Render operational dates in the property's time zone when that context exists and label the zone where ambiguity matters. Store and calculate money on the server using its declared decimal/minor-unit representation; the browser formats returned values with `Intl.NumberFormat` and never performs authoritative floating-point totals.
+
+Keep calendar dates (`YYYY-MM-DD`) distinct from instants; never round-trip an all-day due date through browser-local midnight. Task display uses its stored due timezone. Keep entered monetary values as decimal strings and use exact formatting without a lossy conversion through JavaScript `Number`; validate precision and currency through the domain API.
+
+### Error contract and recovery
+
+Add a common API problem shape to OpenAPI and migrate endpoints toward it:
+
+```ts
+type ApiProblem = {
+  code: string;
+  message: string;
+  fieldErrors?: Record<string, string[]>;
+  retryable: boolean;
+  correlationId?: string;
+  currentRevision?: string;
+};
+```
+
+The current FastAPI surface contains both structured and plain `HTTPException.detail` values. Until it converges, one transport-level `normalizeApiError` adapter converts both forms into `ApiProblem`; feature components must not parse raw response bodies independently.
+
+Handle failures consistently:
+
+- `400/422`: keep input, place field errors beside fields, focus the error summary, and retain a general message for non-field errors.
+- `404`: explain that the record is unavailable or was removed, then offer a return to the preserved directory/search context.
+- `409/412`: use the problem code to distinguish stale revision, invalid transition, duplicate, and idempotency-key conflict. Retain input; offer **Review latest** for stale revisions and an appropriate resolution for other conflicts. Never label every conflict as a changed source.
+- `503`: enter the workspace gate only for a workspace problem or a failed bootstrap recheck. Provider/runtime unavailability remains local to its feature so manual work stays usable.
+- lost connection or transient read failure: retain last successful data with an **Out of date** label and retry action. Never convert failure to zero, none, complete, or healthy.
+- partial command success: present the committed result once and isolate the failed step, as in D21. Retry only that step with the same operation identity when supported.
+
+Create/commit commands that could duplicate money, imports, communications, or other official records require an idempotency key accepted by the backend. Generate it once per operator attempt and reuse it only for a byte-equivalent retry. Disable the submit control while the request is in flight, but do not rely on the disabled control as duplicate protection.
+
+For each consequential command, implement `editing → submitting → committed | rejected | outcome_unknown`. A disconnected response after submit is `outcome_unknown`, not proof of failure. Persist the attempt key and request fingerprint with the workspace draft/recovery record before dispatch; resolve through the owning operation receipt or replay the identical request with the same key. Never create a fresh attempt until the earlier result is known. Existing domain operation IDs take precedence over introducing a parallel mechanism. Document receipt lookup or replay semantics, retention, and key/payload mismatch rejection in that domain's OpenAPI contract before enabling retries.
+
+Editable drafts and review commits carry an expected revision/source revision checked atomically by the backend. A single server writer does not prevent stale edits from two browser tabs. Autosaves serialize within a form, while backend revision checks protect across tabs. Cancellation of a browser request does not imply server rollback. Legacy endpoints without revision/idempotency support are explicit readiness gaps for the affected workflow.
+
+### Core component contracts
+
+The shared component vocabulary is deliberately small:
+
+- `AppShell` renders skip link, primary navigation, global search entry, workspace status, main landmark, and the Settings anchor.
+- `DirectoryPage` composes heading, total, filters, sort, result region, empty/unavailable states, pagination, and restore anchor. Property, owner, provider, lease, and issue rows remain feature components.
+- `RecordWorkspace` renders identity header, scoped summary, contextual tabs, related-record links, and a route outlet. It never changes the scope of main-navigation links.
+- `DisclosureList` and `DisclosureRow` implement D35. The summary is one semantic `<button type="button">` spanning the entire top bar, with no inputs, links, nested buttons, menus, or drag handles. It controls the immediately following panel through `aria-expanded` and `aria-controls`. Expanded content is a sibling region with an accessible label.
+- `AsyncRegion` distinguishes initial loading, background refresh, empty, unavailable, stale, partial, and success. Feature code supplies domain wording and recovery actions.
+- `CoveragePanel` renders the D33 states, explanation, provenance, trigger, and resolution action without calculating those states in the browser.
+- `HistoryLink` exposes correction/audit history without crowding the current record.
+- `DraftStatus` uses `Unsaved changes`, `Saving…`, `Draft saved <time>`, and `Save failed`; it never displays success before acknowledgement.
+- `MoneyTable` uses semantic headers, aligned numeric cells, explicit unavailable values, and a narrow-layout transformation that preserves row labels and relationships.
+- `EvidenceComparison` associates each extracted or reported value with its source and current official value, with keyboard-accessible accept/link/skip choices.
+- `InlineNotice`, `ErrorSummary`, `ConfirmDialog`, `Toast`, and `EmptyState` use consistent semantic roles. Toasts supplement the updated page; they are never the sole evidence that an official write occurred.
+
+An expanded disclosure panel remains mounted while collapsed within the same rendered page so unfinished input survives the toggle. Hiding the panel removes it from focus and the accessibility tree. If filtering, pagination, or navigation removes the row, draft/recovery rules apply. The row's chevron rotates as a visual consequence of `aria-expanded`; it is not a separate target. Clicking inside the expanded panel never bubbles into the summary button because the panel is outside that button.
+
+Mount the panel lazily on first expansion, then retain it while dirty or open. Fetch details only when needed; hidden panels stop polling. Use unique DOM IDs even when the same record appears in multiple lists. When a panel is collapsed programmatically while focus is inside it, move focus to its summary button. Do not virtualize rows with active unsaved forms; paginate first.
+
+Each source type registers a secondary-action adapter with a stable source key, a compact summary renderer, and an expanded renderer. Home, Waiting, Upcoming, the calendar strip, and relevant record tabs use the same disclosure primitives. They do not copy a source record into a generic task model.
+
+### Forms and workflow behavior
+
+- Form labels remain visible; placeholders are examples, not labels. Required and optional state is explicit.
+- Run lightweight client checks needed for immediate usability, such as required presence and obvious formatting. Submit to the server for authoritative validation and render its field errors without translating domain rules into browser code.
+- Save substantial drafts on explicit save and after a short idle interval when the domain draft contract supports it. Serialize saves by revision; do not allow an older response to replace a newer draft.
+- Warn before abandoning unsaved short-form input. A successful draft save removes the warning. A failed save does not.
+- Require a confirmation step for consequential lifecycle actions such as void, archive with impact, lease execution/termination, settlement approval, import commit, and explicit closure. The confirmation names the record and irreversible consequence; it does not repeat routine form fields.
+- After a successful command, update the authoritative result in place, announce it, and expose the next relevant step. Do not navigate away automatically when the operator needs to inspect the result or retry a secondary operation.
+- Follow FILE-001's actual upload contract: `POST /api/files` already accepts optional `entity_type`, `entity_id`, and `purpose` to upload with target context. Do not assume a separate generic link-creation API exists. Where the domain requires staged evidence, implement that workflow's staging/link contract explicitly. After an official record commits, retry only its failed attachment operation and retain its record ID; a lost upload response requires operation reconciliation before re-uploading.
+- AI and connected-assistant proposals always enter their review route with evidence, provenance, proposed fields, and an explicit operator commit. The provider or transport does not change the review component's trust boundary.
+
+Internal navigation waits for acknowledged draft persistence or an explicit discard choice. Browser unload prompts are best-effort; asynchronous saves during unload are not a durability guarantee. Track dirty, saving, saved, failed, and conflicted states separately. A commit waits for pending autosave and checks the acknowledged revision. Recovery records exclude secrets and file bytes; retain server file IDs and clearly identify files that need reselection after restart.
+
+### Visual system and responsive behavior
+
+Define design tokens as CSS custom properties in `packages/ui`; components consume semantic tokens rather than raw colors. At minimum define canvas, surface, raised surface, text, muted text, border, accent, focus, info, success, warning, danger, and overlay tokens for both light and dark themes, plus spacing, radius, shadow, type, and motion scales.
+
+Apply theme through `data-theme="light|dark"` on the document root. Set the attribute before React paints using the cached non-sensitive preference or the system preference, then reconcile with the workspace preference. Switching theme changes tokens only and must not remount the router, forms, disclosures, or query client.
+
+Layout adapts by available width:
+
+- at 1200px and wider, use the slim full sidebar and the widest evidence/table layouts;
+- from 768px through 1199px, use a compact sidebar and allow directory/workspace supporting columns to collapse below the primary region;
+- below 768px, use a single content column, an accessible navigation drawer, horizontally safe tables or labeled row cards, and stacked action groups.
+
+These breakpoints implement narrow-window resilience; they do not expand the local MVP into remote/mobile support. Use CSS grid/flex and container-aware feature layouts rather than JavaScript viewport branching. Content remains usable at 200% zoom and at a 320 CSS-pixel viewport without two-dimensional page scrolling; a data table may have its own labeled horizontal scroll region when a faithful table is necessary.
+
+### Accessibility requirements
+
+Target WCAG 2.2 AA for supported workflows.
+
+- Use semantic landmarks, heading order, native controls, and a visible skip link. Route changes move focus to the page heading and announce the new page title without stealing focus during background refresh.
+- Every action works by keyboard. D35 summary buttons respond to Enter and Space natively; arrow-key accordion behavior is unnecessary because several rows may remain open.
+- Use a visible `:focus-visible` treatment with sufficient contrast in both themes. Status is always expressed in text as well as color or icon.
+- Dialogs have an accessible name, initial focus, focus containment, Escape behavior when safe, and focus restoration to the invoking control.
+- Dynamic save, commit, and error outcomes use appropriately restrained live regions. Do not repeatedly announce background polling or decorative counts.
+- Error summaries link to invalid controls. Tables identify headers, numeric meaning, and unavailable values. Evidence previews have text alternatives or an accessible source-file link.
+- Honor `prefers-reduced-motion`; disclosure remains immediate and understandable without animation.
+
+### Security and privacy at the UI boundary
+
+- Keep the API origin fixed to the local application. Never expose a generic URL field that turns the client into an arbitrary network requester.
+- Local deployment still requires server-side loopback binding, Host/Origin validation, and cross-origin request protection for mutations, including multipart uploads. CORS alone is insufficient. This transport protection is not an application account or sign-in feature. Treat it as a platform readiness requirement and test requests from an unrelated browser origin.
+- Do not place credentials, connector tokens, raw financial instrument data, or AI provider secrets in browser storage, generated fixtures, URLs, or logs. Settings shows connection labels and masked status supplied by the backend.
+- Render operator-entered text as text. Rich previews require an explicit sanitizer and restrictive content policy; do not use unsanitized HTML.
+- Open workspace files through FILE-001 API routes after backend authorization/path validation. The browser never constructs filesystem paths.
+- Configure a restrictive production Content Security Policy compatible with bundled assets and declared integrations. External links display their destination and use safe new-window attributes when a new window is necessary.
+- Redact query-cache and mutation payloads from production telemetry. Correlation IDs may be copied for support, but error displays must not reveal stack traces or local workspace paths.
+
+### Testing and verification
+
+Use Vitest and React Testing Library for behavior at component/feature boundaries, Mock Service Worker for generated-client integration states, Playwright for critical browser workflows, and automated accessibility checks as a supplement to keyboard/screen-reader review.
+
+Required automated coverage is intentionally risk-based:
+
+1. `DisclosureRow` toggles from every part of its summary bar by pointer, Enter, and Space; keeps neighboring rows independent; retains mounted form input; and maintains `aria-expanded`, `aria-controls`, focus exclusion, and panel visibility.
+2. Route tests prove portfolio navigation clears contextual filters while contextual tabs and explicit drill-downs retain scope.
+3. Directory tests preserve URL filters, archived state, and return context and distinguish empty, unavailable, and stale responses.
+4. Mutation tests cover validation, conflict, workspace-busy/unavailable, lost-response/idempotent retry, and the partial-success pattern from D21.
+5. Draft tests cover serialized autosave, failure, restart recovery, explicit discard, and exclusion from official summaries.
+6. Money, owner-report, settlement, import, AI-review, legal, and HOA workflows receive end-to-end tests for their consequential commit boundaries and non-duplication rules.
+7. Light/dark, reduced motion, 200% zoom, keyboard-only operation, and the three layout ranges receive focused visual/accessibility checks.
+8. OpenAPI generation runs in verification and fails on an uncommitted generated diff. A browser smoke test starts FastAPI with a temporary workspace and uses only the generated client transport.
+9. Switching/restoring workspaces cannot expose stale records or accept an old in-flight response. Two-tab edits produce a recoverable revision conflict. A committed write with a lost response resolves once through its original operation key.
+10. Mixed-success composite reads, sparse cursor pages, invalid deep links, missing assets/API routes, and connector-only failures preserve accurate screen states. Multipart requests from an unrelated origin are rejected.
+
+Map the numbered design-validation scenarios below to Playwright or integration cases as their backend prerequisites land. A scenario may remain explicitly blocked by its backlog dependency; it may not be marked passing against mocked behavior alone.
+
+### Implementation sequence and readiness gates
+
+1. **Backend readiness before UI-001:** complete the backlog-ordered TASK-002, OPS-001, legal/HOA/import/AI prerequisites and typed domain contracts, including recovery and bounded projections. OPS-001 composes owner views from existing sources without waiting for later owner accounting. Record any remaining command revision/idempotency gaps before enabling their workflows; build no React during this phase.
+2. **Scaffold and contract at UI-001:** create the Node workspace, Vite app, generated contract package, relative API transport, FastAPI static/SPA delivery, checks, and a temporary-workspace browser smoke test.
+3. **Foundation:** implement bootstrap/workspace gate, theme, destination registry, shell, routing, accessibility primitives, async states, error normalization, disclosure components, and directory/workspace layouts.
+4. **Domain and operator workflows:** connect Properties, Owners, Leasing, Money, Maintenance, Providers, Tasks, communications, files, history, preferences, search, draft recovery, coverage, and waiting/follow-up to their completed contracts.
+5. **Review workflows:** connect legal matters, HOA notices/shared repairs, spreadsheet import, and governed AI/assistant review with revision-safe commits and failure recovery.
+6. **Home aggregation:** connect the shared queue/calendar components to DASH-001 and validate grouping, totals, ordering, and all-source expansion behavior.
+7. **Hardening:** complete the risk-based browser suite, accessibility review, failure/restart testing, theme/narrow-window review, and production packaging verification.
+
+A route is ready only when its owning backend capability exists, generated types are current, initial/empty/unavailable/stale states are implemented, keyboard and narrow-layout behavior passes, and at least one real temporary-workspace integration test covers its critical read and write path. Static demo data may be used for visual development but cannot satisfy this gate.
+
+### UI-001 definition of done
+
+UI-001 is complete when:
+
+- the React/Vite application ships through the local FastAPI runtime and uses the generated OpenAPI contract for all domain access;
+- supported permanent destinations, directories, record workspaces, settings, global search, full-bar disclosures, drafts, errors, and contextual navigation meet the decisions above;
+- every visible action either works against an implemented capability or is absent with an accurate capability explanation;
+- the browser contains no duplicated domain policy, authoritative totals, direct workspace-file access, or sensitive persisted state;
+- light and dark themes, keyboard operation, supported responsive layouts, and unavailable/busy workspace behavior pass verification;
+- UI-001-owned validation scenarios pass, while DASH-001 and later-domain scenarios remain traceably gated until their owning backlog items are delivered.
 
 ## Design validation scenarios
 
@@ -403,7 +747,7 @@ These scenarios derive from confirmed decisions and must be included in implemen
 
 ## Screen review
 
-An in-conversation interactive design preview uses fictional sample data to review Home, owner/property directories and workspaces, inline secondary actions, and navigation customization. The product owner approved the overall visual design and requested inline toggles and clarification of browsing multiple records. D35 and D36 document the resulting refinement. The preview is not production UI and does not write application records. The complete product design is confirmed. The illustrative preview is not an implementation contract and predates some final additions, including Providers/legal/HOA/import screens. Its AI Settings now demonstrates D46 with simulated provider/assistant states and full-bar disclosure controls; Use this document as authority for workflows not shown in the demo.
+An in-conversation interactive design preview uses fictional sample data to review Home, owner/property directories and workspaces, inline secondary actions, and navigation customization. The product owner approved the overall visual design and requested inline toggles and clarification of browsing multiple records. D35 and D36 document the resulting refinement. The preview is not production UI and does not write application records. The complete product design is confirmed. The illustrative preview is not an implementation contract and predates some final additions, including Providers/legal/HOA/import screens. Its AI Settings now demonstrates D46 with simulated provider/assistant states and full-bar disclosure controls. Use this document as authority for workflows not shown in the demo.
 
 ## Sources
 
