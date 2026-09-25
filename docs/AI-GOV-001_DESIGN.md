@@ -4,7 +4,7 @@
 
 Proposed backend/API design. No application code is included in this document.
 
-This design is based on the AI-GOV-001 backlog outcome, `ARCHITECTURE.md`, the accepted AI decisions in `DECISIONS.md`, the confirmed UI direction in `UI-001_DESIGN.md`, `AI_INTEGRATION_RESEARCH.md`, the downstream AI/ingestion/MCP backlog, and the current server implementation.
+This design is based on the AI-GOV-001 backlog outcome, [ARCHITECTURE.md](ARCHITECTURE.md), the accepted AI decisions in [DECISIONS.md](DECISIONS.md), the confirmed UI direction in [UI-001_DESIGN.md](UI-001_DESIGN.md), [AI_INTEGRATION_RESEARCH.md](AI_INTEGRATION_RESEARCH.md), the downstream AI/ingestion/MCP backlog, and the current server implementation.
 
 Built-in assistance is provider-neutral. Operators may choose a registered hosted model connection (including Meta Model API or OpenAI) or a validated on-device runtime. Connected personal assistants are separate MCP-001 connections and may use a different vendor. No provider is selected merely by this design; production adapters must pass their capability and disclosure gates. This revision supersedes the former fixed Meta Muse identity.
 
@@ -126,9 +126,13 @@ One singleton row owns workspace-wide settings.
 
 The kill switch is not duplicated on every action-limit row.
 
+### `ai_settings_operations`
+
+This append-only idempotency table records a settings operation key, semantic request fingerprint, immutable response snapshot, and creation time. It prevents an older retry from overwriting newer settings. It is validated and included in encrypted backup/restore.
+
 ### `ai_model_connections`
 
-One row per configured model connection, independent of MCP-001 assistant delegations. This is a sixth governance table.
+One row per configured model connection, independent of MCP-001 assistant delegations. This is a seventh governance table.
 
 | Field | Rule |
 | --- | --- |
@@ -324,7 +328,7 @@ AI-GOV-001 stores token usage when the provider reports it. It stores no cost es
 
 ## Backup, export, and restore
 
-All six tables participate in the encrypted LOCAL-002 database snapshot and exact archive validation. Stable IDs, versions, source/result references, lineage, review history, and correlation IDs survive restore. Static action/profile definitions are application code; historical rows carry their identifiers and versions so the current application can validate them. Supported application releases must retain validators and presentation policies for every historical version they claim to restore.
+All seven tables participate in the encrypted LOCAL-002 database snapshot and exact archive validation. Stable IDs, versions, source/result references, lineage, review history, and correlation IDs survive restore. Static action/profile definitions are application code; historical rows carry their identifiers and versions so the current application can validate them. Supported application releases must retain validators and presentation policies for every historical version they claim to restore.
 
 Provider credentials are not workspace content and never enter the archive. After restore, configured connections remain visible but unavailable until credentials or local runtime readiness and disclosure settings are revalidated on the new device. Model weights, runtime endpoints, and secrets are excluded. If the restored application does not recognize a retained action/profile/schema version, restore validation fails before activation.
 
@@ -349,7 +353,7 @@ AI-GOV-001 should be marked backend-complete but operator-workflow-in-progress u
 
 ## Acceptance criteria
 
-- Exact-schema and retained-data validation cover all six tables and their lifecycle/correlation invariants.
+- Exact-schema and retained-data validation cover all seven tables and their lifecycle/correlation invariants.
 - A synthetic registered action proves redaction, exact provider-input retention, output validation, draft creation, editing, dismissal, approval handoff, audit history, and backup/restore without creating a production AI feature.
 - Unknown actions, provider/model/profile versions, extra fields, secrets, oversized context, and malformed outputs fail closed.
 - Kill switch, destination-bound disclosure permission, disabled action, UTC-day cap, prompt cap, completion cap, registered adapter, and action/model capability allowlist are enforced atomically before provider access.
@@ -364,7 +368,7 @@ AI-GOV-001 should be marked backend-complete but operator-workflow-in-progress u
 
 1. Define the neutral adapter registry and connection/disclosure schema. Qualify one hosted candidate with synthetic data before production enablement; Meta and OpenAI are candidates, not mandatory defaults. AI-LOCAL-001 qualifies local inference separately.
 2. Add AI domain values, action/profile registries, pure redaction, lifecycle, and limit policies with unit tests.
-3. Add the six tables to the current baseline, exact schema/data validation, audit policies, and LOCAL-002 coverage.
+3. Add the seven tables to the current baseline, exact schema/data validation, audit policies, and LOCAL-002 coverage.
 4. Add provider and credential ports plus a deterministic fake adapter; do not claim a production provider until its official protocol is selected.
 5. Add the coordinator with short transaction phases, idempotency, concurrency, limit reservation, and interruption recovery.
 6. Add draft read/edit/dismiss APIs, approval dispatch contracts, and a test-only owning-domain handler proving atomicity.
@@ -430,7 +434,7 @@ These decisions summarize the implementation boundaries established above. They 
 ## Definition of Done
 
 - [ ] Built-in model connections and assistant grants are independent; at least two fake adapters prove provider switching, truthful provenance, destination-specific permission, and no implicit fallback.
-- [ ] The static action/profile registries and all six persistence tables have exact current-schema and retained-data validation.
+- [ ] The static action/profile registries and all seven persistence tables have exact current-schema and retained-data validation.
 - [ ] Redaction is deterministic, versioned, bounded, secret-rejecting, and retains the exact redacted request.
 - [ ] Tenant/owner message content is never sent to a cloud model unless the destination-specific permission and disclosure version are recorded; the permission cannot disable mandatory redaction or minimization.
 - [ ] Limits, kill switch, registered connection selection, transport-qualified model allowlists, idempotency, transaction phases, and interruption recovery behave as specified.

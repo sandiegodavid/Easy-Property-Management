@@ -130,6 +130,12 @@ from app.modules.finance.domain.audit_policy import (
 from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
 from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
 from app.modules.vendors.infrastructure.context_reader import SQLiteProviderContextReader
+from app.modules.ai_governance.api.router import build_router as build_ai_governance_router
+from app.modules.ai_governance.application.service import AiGovernanceService
+from app.modules.ai_governance.application.registry import ACTION_REGISTRY, REDACTION_PROFILE_REGISTRY, ADAPTER_REGISTRY
+from app.modules.ai_governance.domain.audit_policy import AI_ACTIVITY_POLICY
+from app.modules.ai_governance.infrastructure.credentials import KeyringAiTransportCredentialStore
+from app.modules.ai_governance.infrastructure.unit_of_work import SQLiteAiGovernanceUnitOfWork
 from app.platform.version import application_version
 
 logger = logging.getLogger(__name__)
@@ -164,6 +170,14 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     task_transaction_operations = SQLiteTaskTransactionOperations()
     portfolio_context_reader = SQLitePortfolioContextReader()
     inspection_context_reader = SQLiteInspectionContextReader()
+    ai_governance = AiGovernanceService(
+        SQLiteAiGovernanceUnitOfWork(service.paths.database, recorder),
+        # This stable local identity is used only as the keyring namespace.  It
+        # is never persisted or exported as a credential.
+        workspace_id=str(service.paths.database.resolve()),
+        actions=ACTION_REGISTRY, profiles=REDACTION_PROFILE_REGISTRY,
+        adapters=ADAPTER_REGISTRY, credentials=KeyringAiTransportCredentialStore(),
+    )
     lease_context_reader = SQLiteLeaseContextReader()
     party_reads = SQLitePartyReadOperations(party_operations)
     portfolio_lease_operations = SQLitePortfolioLeaseOperations(service.paths.database)
@@ -261,6 +275,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         runtime.start()
         scheduler: asyncio.Task[None] | None = None
         try:
+            if runtime.ready:
+                ai_governance.recover_interrupted()
             if runtime.writer_lock_acquired:
                 scheduler = asyncio.create_task(_automatic_backup_scheduler(backups, runtime))
             elif runtime.error:
@@ -300,6 +316,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.work_journal_service = work_journal
     app.state.owner_rent_report_service = owner_rent_reports
     app.state.owner_concern_service = owner_concerns
+    app.state.ai_governance_service = ai_governance
     app.include_router(build_router(service, runtime))
     policies = AuditSnapshotPolicyRegistry({
         ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -366,6 +383,12 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("owner_rent_report_operation", 1): DEFAULT_SNAPSHOT_POLICY,
         ("owner_concern", 1): DEFAULT_SNAPSHOT_POLICY,
         ("owner_concern_follow_up_operation", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("ai_run", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("ai_draft", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("ai_review_decision", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("ai_settings", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("ai_action_limit", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("ai_model_connection", 1): DEFAULT_SNAPSHOT_POLICY,
     }, activity_policies={
         ("task", 1): TASK_ACTIVITY_POLICY,
         ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
@@ -413,6 +436,12 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("owner_rent_report_operation", 1): OWNER_REPORT_ACTIVITY_POLICY,
         ("owner_concern", 1): OWNER_CONCERN_ACTIVITY_POLICY,
         ("owner_concern_follow_up_operation", 1): OWNER_CONCERN_ACTIVITY_POLICY,
+        ("ai_run", 1): AI_ACTIVITY_POLICY,
+        ("ai_draft", 1): AI_ACTIVITY_POLICY,
+        ("ai_review_decision", 1): AI_ACTIVITY_POLICY,
+        ("ai_settings", 1): AI_ACTIVITY_POLICY,
+        ("ai_action_limit", 1): AI_ACTIVITY_POLICY,
+        ("ai_model_connection", 1): AI_ACTIVITY_POLICY,
     })
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime))
@@ -431,6 +460,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_maintenance_router(maintenance, work_journal, runtime))
     app.include_router(build_owner_rent_report_router(owner_rent_reports, runtime))
     app.include_router(build_owner_concern_router(owner_concerns, runtime))
+    app.include_router(build_ai_governance_router(ai_governance, runtime))
     return app
 
 
