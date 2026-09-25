@@ -1,7 +1,7 @@
 from __future__ import annotations
 import tempfile
 import unittest
-from datetime import UTC, datetime, date
+from datetime import UTC, datetime
 from pathlib import Path
 from sqlalchemy import select, text
 from app.bootstrap.owner_concern_context import SQLiteOwnerConcernContext
@@ -22,12 +22,13 @@ class OwnerConcernTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup);root=Path(self.temp.name)
         self.workspace=WorkspaceService(LocalConfig(root/"config.json",root/"workspace"));self.workspace.initialize();audit=AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database))
-        self.portfolio=PortfolioService(SQLitePortfolioUnitOfWork(self.workspace.paths.database,audit,(),(SQLiteOwnerConcernPropertyArchiveGuard(),)),time_zone_resolver=BundledAddressTimeZoneResolver())
+        self.now=datetime(2026,9,21,23,tzinfo=UTC)
+        self.portfolio=PortfolioService(SQLitePortfolioUnitOfWork(self.workspace.paths.database,audit,(),(SQLiteOwnerConcernPropertyArchiveGuard(),)),time_zone_resolver=BundledAddressTimeZoneResolver(),now=lambda:self.now)
         self.owner=self.portfolio.create_party(PartyCreateCommand("individual","Morgan Owner"))
         self.property=self.portfolio.create_property(PropertyCreateCommand("Maple","10 Maple Street","Portland","US","single_family_home",(OwnershipInput("client_owner",self.owner.id),),region="OR",postal_code="97201"))
-        self.service=OwnerConcernService(SQLiteOwnerConcernUnitOfWork(self.workspace.paths.database,audit,SQLiteOwnerConcernContext(SQLiteTaskTransactionOperations())),now=lambda:datetime(2026,9,21,23,tzinfo=UTC)); self.raised_at=f"{date.today().isoformat()}T00:00:00+00:00"
+        self.service=OwnerConcernService(SQLiteOwnerConcernUnitOfWork(self.workspace.paths.database,audit,SQLiteOwnerConcernContext(SQLiteTaskTransactionOperations())),now=lambda:self.now)
     def _command(self, **overrides):
-        values=dict(owner_party_id=self.owner.id,property_id=self.property.id,concern_type="general_rental",summary="Concern",description="Details",raised_at_utc=f"{date.today().isoformat()}T20:00:00+00:00",idempotency_key="00000000-0000-4000-8000-000000009001")
+        values=dict(owner_party_id=self.owner.id,property_id=self.property.id,concern_type="general_rental",summary="Concern",description="Details",raised_at_utc=self.now.replace(hour=20).isoformat(),idempotency_key="00000000-0000-4000-8000-000000009001")
         values.update(overrides);return ConcernCreateCommand(**values)
     def _delete_audit(self, where, values):
         with self.service.unit_of_work.engine.begin() as connection:

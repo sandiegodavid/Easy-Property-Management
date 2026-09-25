@@ -178,12 +178,13 @@ class MaintenanceWorkflowTests(unittest.TestCase):
 
     def test_party_owner_and_archived_selection_preserve_auditable_attribution(self) -> None:
         local_today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
-        class Yesterday(date):
-            @classmethod
-            def today(cls): return local_today - timedelta(days=1)
         # Establish yesterday's relationship using the owning module's normal
         # creation path, then close it today through the normal lifecycle.
-        with patch("app.modules.portfolio.application.service.date", Yesterday):
+        with patch.object(
+            self.portfolio,
+            "_clock",
+            return_value=self._local_midday(local_today - timedelta(days=1)),
+        ):
             owned = self.portfolio.create_property(PropertyCreateCommand(
                 "Owner home", "2 Main Street", "Portland", "US", "single_family_home",
                 (OwnershipInput("client_owner", inline_party=PartyCreateCommand("individual", "Casey Owner")),), region="OR",
@@ -209,10 +210,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
     def test_archived_party_correction_retains_context_but_redacts_activity(self) -> None:
         local_today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
         reported_at = self._local_midday(local_today - timedelta(days=1))
-        class Yesterday(date):
-            @classmethod
-            def today(cls): return local_today - timedelta(days=1)
-        with patch("app.modules.portfolio.application.service.date", Yesterday):
+        with patch.object(self.portfolio, "_clock", return_value=reported_at):
             owned = self.portfolio.create_property(PropertyCreateCommand(
                 "Correction home", "4 Main Street", "Portland", "US", "single_family_home",
                 (OwnershipInput("client_owner", inline_party=PartyCreateCommand("individual", "Archived Owner")),), region="OR",
