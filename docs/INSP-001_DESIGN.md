@@ -141,6 +141,8 @@ An observation never stores a filesystem path, S3 bucket, object key, or URL. Ea
 
 One observation may have multiple evidence links. A file may be reused through another explicit link when appropriate, without duplicating its bytes. Replacing, correcting, or removing an observation does not silently delete the underlying file; normal FILE-001 reference and retention rules apply.
 
+An operator may archive an incorrect evidence association only while its observation belongs to a draft report. The FILE-001 archive command requires explicit confirmation and a trimmed reason, and the inspection-owned validator rechecks the observation and report state in the archive transaction. Archival hides the association from the draft's active evidence while retaining the file, historical link, reason, and audit events. Evidence links on finalized or superseded reports cannot be archived; the operator creates a correction draft and attaches the corrected evidence there.
+
 `FILE-001` selects and validates the local or S3 content-store adapter. S3 locations persist stable object identifiers, never presigned URLs, and retain application-owned hashes and sizes independently of provider metadata. Finalized inspection evidence cannot be silently replaced: new evidence is attached through an audited correction while the original link and file identity remain in history.
 
 ### `condition_comparisons`
@@ -196,6 +198,7 @@ All requests forbid unknown fields, use typed response models, and repeat critic
 | `POST` | `/api/condition-reports/{reportId}/corrections` | Create a reasoned correction without rewriting the finalized source. |
 | `GET` | `/api/leases/{leaseId}/condition-comparison` | Return aligned pre/post observations and comparison state. |
 | `PUT` | `/api/leases/{leaseId}/condition-comparison` | Save reviewed comparison classifications atomically. |
+| `POST` | `/api/file-links/{linkId}/archive` | Through FILE-001, archive an incorrect draft-observation evidence association with explicit confirmation, reason, and inspection-owned lifecycle validation. |
 
 Errors distinguish malformed requests (`422`), missing records (`404`), invalid workflow rules (`400`), and finalized/source/concurrency conflicts (`409`).
 
@@ -203,7 +206,7 @@ Errors distinguish malformed requests (`422`), missing records (`404`), invalid 
 
 Creating, editing, finalizing, correcting, acknowledging, and comparing reports produces domain-owned audit events. The composition root registers fail-closed presentation policies for `condition_report`, `condition_area`, `condition_observation`, `condition_report_acknowledgment`, `condition_checklist_template`, `condition_checklist_template_item`, and `condition_comparison` before those events can be presented. General activity exposes concise condition metadata and classifications, not evidence filenames or bytes.
 
-Evidence attachment is an inspection-owned use case, not an uncoordinated generic upload: it validates that the target observation is in a draft report, requests the `condition_photo` or `supporting_document` file link through FILE-001's owning-domain validator, and passes one correlation ID to the report/observation/file-link audit changes. Finalized evidence is added only by creating and editing a correction draft.
+Evidence attachment is an inspection-owned use case, not an uncoordinated generic upload: it validates that the target observation is in a draft report, requests the `condition_photo` or `supporting_document` file link through FILE-001's owning-domain validator, and passes one correlation ID to the report/observation/file-link audit changes. The same validator permits reasoned archival only for draft-observation links. Finalized evidence is corrected only by creating and editing a correction draft, leaving the finalized or superseded report's links immutable.
 
 Evidence bytes may reside in the local managed-file store or an enabled S3 content store, while the observation relationship remains a portable FILE-001 link. Backup and export retrieve and hash-verify referenced S3 evidence and embed it in the encrypted archive so restore is not dependent on the original cloud account. Because the product remains greenfield and latest-format-only, implementation extends the current Alembic baseline rather than adding compatibility/adoption behavior. It must add all inspection tables to the product table allowlist and module-owned exact schema validation, register all audit presentation policies, and extend encrypted backup/export and restore validation. Regression tests must round-trip reports, templates, per-party acknowledgments, observations, links, comparisons, and correlated audit history.
 
@@ -218,7 +221,8 @@ INSP-001 is complete when:
 5. Finalized history cannot be silently rewritten; corrections, file links, and comparisons are atomic and audited.
 6. The workflow prompts at appropriate lease milestones but never blocks recording truthful occupancy or lease lifecycle facts.
 7. Typed APIs, current-schema validation, and encrypted backup/export/restore preserve the complete inspection record.
-8. The guided operator UI is delivered before the backlog item is marked done.
+8. An incorrect draft-observation evidence link can be archived with explicit confirmation and reason, while finalized and superseded evidence remains immutable and correction-based.
+9. The guided operator UI is delivered before the backlog item is marked done.
 
 ## Dependencies and follow-on work
 

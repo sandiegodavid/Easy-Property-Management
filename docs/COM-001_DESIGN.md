@@ -19,7 +19,7 @@ COM-001 provides:
 COM-001 does not provide:
 
 - Email, SMS, letter, portal, push, calendar, or any other delivery. `COM-002` later owns connected-account delivery and delivery tracking.
-- Gmail, Outlook, SMS, voice-note, transcript, attachment, thread, source-message, or external-message ingestion. `INGEST-001` later owns those source records and may add a typed source link to this timeline.
+- Gmail, Outlook, SMS, voice-note, transcript, attachment, thread, source-message, or external-message ingestion. `INGEST-001` owns those source records and adds a typed `intake_source` link to this timeline through COM-001's owning-feature validation extension. Importing a source does not create a communication.
 - File attachment upload or document storage. A later communication attachment slice must use FILE-001 through a communication-owned transaction boundary.
 - Automated rent reminders, renewal notices, or dashboard prompts. The operator may create a TASK-001 follow-up manually; dashboard surfacing comes later.
 - React screens. `UI-001`, immediately before `DASH-001`, owns the operator timeline, recording, correction, and follow-up workflow.
@@ -52,9 +52,13 @@ Each communication has one or more `communication_participants`. A participant s
 
 Each communication has zero or more `communication_links`, each with a stable UUID, its communication ID, a typed `entity_type`, and a target UUID. Property-derived links additionally retain a nullable `property_timezone_snapshot`: it is the canonical IANA zone resolved when the draft link was last validated. It is returned as `propertyTimezoneSnapshot` in the link response so callers can explain the preserved local context. COM-001 accepts these typed links, with owning feature slices adding target validation when their aggregate becomes current:
 
-- `party`, `property`, `space`, `lease`, `rent_expectation`, `rent_receipt`, `renewal_option`, `task`, `maintenance_issue`, and `owner_concern`.
+- `party`, `property`, `space`, `lease`, `rent_expectation`, `rent_receipt`, `renewal_option`, `task`, `maintenance_issue`, `owner_concern`, and `intake_source`.
 
-The owning application module validates every link target in the same immediate transaction. Unknown, misspelled, nonexistent, or unsupported target types are rejected; link validation is never fail-open. MAINT-004 supplies `maintenance_issue` target validation and OWNER-004 supplies `owner_concern` target validation. Leads, applications, and ingested-source links remain deferred to their owning feature slices and require an explicit current-schema extension.
+The owning application module validates every link target in the same immediate transaction. Unknown, misspelled, nonexistent, or unsupported target types are rejected; link validation is never fail-open. MAINT-004 supplies `maintenance_issue` target validation, OWNER-004 supplies `owner_concern` target validation, and INGEST-001 supplies `intake_source` target validation. The `intake_source` database vocabulary and validator are activated with INGEST-001, not before a retained-source table exists. Leads and applications remain deferred to their owning feature slices and require an explicit current-schema extension.
+
+An `intake_source` link points to retained evidence; it does not make Communications a second evidence store. COM-001 retains only its operator-authored subject/body and ordinary participant snapshots. It does not copy source bodies, attachments, external message IDs, account identity, provenance, revisions, or fingerprints. Recording or correcting a communication never changes the source, and correcting or superseding a source never rewrites a recorded communication.
+
+A new link requires a current retained `ready` source. Once a communication is recorded, later source correction or supersession does not invalidate its historical link: detail views resolve the exact retained source ID and visibly identify its current/superseded state. A new communication that should cite the replacement selects that replacement explicitly; COM-001 never follows supersession automatically.
 
 ## Recording, correction, and time rules
 
@@ -100,7 +104,7 @@ Contextual communication history may display the recorded subject, body, partici
 
 ## Architecture and persistence boundaries
 
-The `communications` application service depends only on application-level transaction-aware ports for parties/contact methods, portfolio/lease time-zone and context validation, finance link validation, renewal options, and TASK-001 creation/read projection. Bootstrap composes SQLite implementations against the shared transaction connection. Communications must not import other modules' SQLAlchemy models or persistence adapters, and the dependent modules must not import communications persistence.
+The `communications` application service depends only on application-level transaction-aware ports for parties/contact methods, portfolio/lease time-zone and context validation, finance link validation, renewal options, Intake source validation when INGEST-001 is installed, and TASK-001 creation/read projection. Bootstrap composes SQLite implementations against the shared transaction connection. Communications must not import other modules' SQLAlchemy models or persistence adapters, and the dependent modules must not import communications persistence.
 
 OWNER-004 may project bounded communication summaries and validate one optional originating recorded communication through consumer-neutral Communications readers. A communication-linked `owner_concern` remains owned by owner-management; participant role `reporter` is local to the communication and does not establish or change the concern's raising owner. Communication correction never rewrites concern attribution, context, or lifecycle.
 
@@ -116,4 +120,4 @@ The greenfield baseline adds communication tables, exact schema validation, curr
 - local-time display and structured filters; and
 - end-to-end tests for lifecycle, correction, follow-up, privacy, and error states.
 
-COM-001 backend acceptance coverage includes role-neutral party participation; active participant/contact validation; typed context validation; property-time-zone ambiguity; draft immutability boundaries; correction lineage; atomic follow-up creation; idempotency; generalized/contextual audit redaction; exact-schema/data rejection; typed HTTP errors; bounded reads; and encrypted backup/export/restore. UI acceptance remains pending until UI-001 completes.
+COM-001 backend acceptance coverage includes role-neutral party participation; active participant/contact validation; typed context validation; property-time-zone ambiguity; draft immutability boundaries; correction lineage; atomic follow-up creation; idempotency; generalized/contextual audit redaction; exact-schema/data rejection; typed HTTP errors; bounded reads; and encrypted backup/export/restore. INGEST-001 additionally verifies that a missing, malformed, non-ready, or already-superseded target fails closed for a new link; an existing link to a later-superseded retained source remains readable; source import creates no communication; and neither correction path mutates the other module. UI acceptance remains pending until UI-001 completes.
