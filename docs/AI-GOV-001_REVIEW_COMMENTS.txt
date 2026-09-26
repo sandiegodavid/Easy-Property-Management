@@ -1,0 +1,69 @@
+AI-GOV-001 implementation review comments
+Reviewed: 2026-09-26
+Fixed point: a9088992dcb64eb76f393d69df26156d251820f0
+Reviewed head: c6aef1c5aa2a9d7b45a0a9adae857ac95ca84cbc
+
+Standards
+
+No remaining documented-standard or material code-smell findings were identified in this pass. The reservation value object and shared audit-snapshot policy address the previous standards comments.
+
+Specification
+
+1. [P1] Retained validation no longer validates ai_settings_operations rows.
+
+File: application/apps/server/app/modules/ai_governance/infrastructure/schema_validation.py:20-38
+Design: docs/AI-GOV-001_DESIGN.md:323,356,437
+
+The latest change removed the loop that parsed and validated every settings-operation receipt. Exact table-shape checks and immutability triggers remain, but malformed result_json, timestamps, request fingerprints, and replay results are now accepted during workspace-open and restore validation. This was reproduced by inserting a settings operation with result_json="not-json" and created_at="not-a-time"; validate_ai_governance_schema accepted it.
+
+Suggestion: restore a dedicated _validate_settings_operations function. Validate the UUID key, canonical result JSON and exact fields, SHA-256 request fingerprint, referenced connection ID, UTC timestamps, and the createdAt/updatedAt relationship. Add a negative retained-data test that inserts a structurally valid row with malformed content and expects MigrationSchemaError.
+
+2. [P1] Malformed provider metadata can leave a run indefinitely running.
+
+Files: application/apps/server/app/modules/ai_governance/domain/models.py:165-178; application/apps/server/app/modules/ai_governance/application/service.py:144-149,217-239
+Design: docs/AI-GOV-001_DESIGN.md:244,272-279,327,358,361
+
+validate_provider_metadata accepts arbitrarily large nonnegative integers. SQLite rejects values outside its signed 64-bit range after the run has entered running. The admission transaction rolls back and the exception escapes, leaving the run running until a later application restart. This was reproduced with prompt_tokens=2**100, which raised OverflowError and left the retained status as running. A provider returning an object that does not satisfy AiProviderResult can fail through the same unguarded post-call path.
+
+Suggestion: bound reported token values before persistence, at minimum to SQLite's signed 64-bit range and preferably to a documented application ceiling. Validate the provider-result envelope immediately after generate returns. Wrap result admission so unexpected adapter/result errors are converted into one sanitized terminal failed transition. Add tests for an oversized token count and an invalid result object, asserting a failed run and no draft.
+
+3. [P1] The adapter registry cannot prove model context/output ceilings or schema support.
+
+Files: application/apps/server/app/modules/ai_governance/application/service.py:17-22,286-298
+Design: docs/AI-GOV-001_DESIGN.md:102-103,254,258,359,440
+
+AiAdapterDefinition declares a set of model names, capabilities, and modalities, but no per-model context ceiling, completion ceiling, or structured-response/schema support. The coordinator therefore cannot reject an action or override whose registered limits exceed what the selected provider/model was qualified to enforce.
+
+Suggestion: replace the bare models set with registered model specifications, or add an equivalent model-spec registry keyed by the qualified model identity. Each specification should declare input/context and output ceilings plus structured-response/schema capabilities. Validate action definitions at startup and effective overrides during connection selection/preflight; reject combinations that exceed the registered model specification. This design is concrete enough to implement, although the exact model-spec field names should align with the first production adapter qualification.
+
+4. [P2] The confidence contract permits only calibrated numeric confidence, not qualitative labels.
+
+File: application/apps/server/app/modules/ai_governance/domain/models.py:73-105
+Design: docs/AI-GOV-001_DESIGN.md:101,203,426
+
+Any non-null confidence must currently contain a numeric score and calibration_source. The design also permits a named qualitative label with registered provenance and no percentage. Confidence label values themselves are not checked as bounded codes, and provenance-field names can collide with label, score, or calibration_source.
+
+Suggestion: separate the base qualitative contract from an optional calibrated-numeric contract. Always validate a bounded label and declared provenance fields. Require score and calibration_source only when numeric confidence is enabled. Validate registered labels as bounded codes and reject reserved-name collisions in required_provenance_fields. Add one qualitative-only success test and one numeric calibrated success test.
+
+5. [P2] Credential replacement audit records the wrong before-state.
+
+File: application/apps/server/app/modules/ai_governance/application/service.py:386-410
+Design: docs/AI-GOV-001_DESIGN.md:19,315-321
+
+set_credential detects whether a credential is being replaced, but always passes before_present=False to the audit helper. A credential_replaced event therefore claims the credential changed from absent to present.
+
+Suggestion: pass replaced as before_present. Strengthen the test to parse each snapshot and assert false-to-true for credential_set, true-to-true for credential_replaced, and true-to-false for credential_deleted.
+
+6. [P2] Credential storage and its audit event can diverge on failure.
+
+File: application/apps/server/app/modules/ai_governance/application/service.py:386-410
+Design: docs/AI-GOV-001_DESIGN.md:19,256,321
+
+The keyring mutation completes before the separate SQLite audit transaction begins. If that transaction fails, the credential has changed but the API reports failure and no audit event exists. The same problem applies to deletion. SQLite and the OS credential store cannot share one transaction.
+
+Suggestion: keep the prior credential only in memory, perform the keyring mutation, and compensate if the audit write fails: restore the previous credential after a failed replace/delete audit, or delete a newly created credential after a failed set audit. If compensation also fails, raise a dedicated consistency error and surface a repair-required state. Add fault-injection tests for audit failure after set, replace, and delete. A durable two-phase credential-operation ledger would be stronger, but that broader design needs exploration only if compensation is considered insufficient.
+
+Verification
+
+Focused AI Governance and workspace tests: 90 passed, with one unrelated Starlette/AnyIO deprecation warning.
+Whitespace validation: passed.

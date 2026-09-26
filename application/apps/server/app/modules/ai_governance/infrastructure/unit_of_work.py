@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, TypeVar
+from typing import Any, Mapping, TypeVar
 from uuid import uuid4
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
@@ -15,11 +15,14 @@ Result = TypeVar("Result")
 
 
 class SQLiteAiGovernanceUnitOfWork:
-    def __init__(self, database, recorder: AuditRecorder) -> None:
+    def __init__(self, database, recorder: AuditRecorder,
+                 source_validators: Mapping[str, Any] | None = None) -> None:
         self.engine = create_sqlite_engine(database); self.recorder = recorder
+        self.source_validators = dict(source_validators or {})
 
     def write(self, operation: Callable[["AiGovernanceTransaction"], Result]) -> Result:
-        with immediate_transaction(self.engine) as connection: return operation(AiGovernanceTransaction(connection, self.recorder))
+        with immediate_transaction(self.engine) as connection:
+            return operation(AiGovernanceTransaction(connection, self.recorder, self.source_validators))
 
     def read(self, operation: Callable[[Any], Result]) -> Result:
         with self.engine.connect() as connection:
@@ -59,7 +62,10 @@ class SQLiteAiGovernanceUnitOfWork:
 
 
 class AiGovernanceTransaction:
-    def __init__(self, connection: Any, recorder: AuditRecorder) -> None: self.connection=connection; self.recorder=recorder
+    def __init__(self, connection: Any, recorder: AuditRecorder,
+                 source_validators: Mapping[str, Any] | None = None) -> None:
+        self.connection=connection; self.recorder=recorder
+        self.source_validators=dict(source_validators or {})
     def settings(self) -> dict[str, Any]:
         row=self.connection.execute(select(AiSettingsModel)).mappings().first()
         if row is None:
@@ -81,6 +87,16 @@ class AiGovernanceTransaction:
         self.connection.execute(AiActionLimitModel.__table__.insert().values(**values).prefix_with("OR REPLACE"))
     def run_by_key(self, key: str) -> dict[str, Any] | None:
         row=self.connection.execute(AiRunModel.__table__.select().where(AiRunModel.idempotency_key==key)).mappings().first();return dict(row) if row else None
+    def validate_current_source(self, *, source_entity_type: str, source_entity_id: str,
+                                source_revision: str, source_fingerprint: str) -> None:
+        validator=self.source_validators.get(source_entity_type)
+        if validator is None:
+            raise ValueError("AI source validation is unavailable.")
+        validator.validate_current_source(
+            self.connection, source_entity_type=source_entity_type,
+            source_entity_id=source_entity_id, source_revision=source_revision,
+            source_fingerprint=source_fingerprint,
+        )
     def run(self, run_id: str) -> dict[str, Any] | None:
         row=self.connection.execute(AiRunModel.__table__.select().where(AiRunModel.id==run_id)).mappings().first();return dict(row) if row else None
     def insert_run(self, values: dict[str, Any]) -> None: self.connection.execute(AiRunModel.__table__.insert().values(**values))

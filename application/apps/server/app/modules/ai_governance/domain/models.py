@@ -71,6 +71,50 @@ class RedactionProfile:
 
 
 @dataclass(frozen=True)
+class ConfidenceContract:
+    """Registered, bounded provenance for an optional AI confidence value."""
+    labels: frozenset[str]
+    calibration_source: str
+    required_provenance_fields: frozenset[str] = frozenset()
+    numeric_field: str = "score"
+
+    def __post_init__(self) -> None:
+        if (not self.labels or not isinstance(self.calibration_source, str)
+                or not self.calibration_source.strip() or len(self.calibration_source) > 120):
+            raise ValueError("AI confidence contracts require bounded labels and calibration provenance.")
+        if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", self.numeric_field):
+            raise ValueError("AI confidence numeric fields must be bounded codes.")
+        if any(not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", field) for field in self.required_provenance_fields):
+            raise ValueError("AI confidence provenance fields must be bounded codes.")
+
+    def validate(self, confidence: Mapping[str, Any] | None) -> None:
+        if confidence is None:
+            return
+        if not isinstance(confidence, Mapping) or set(confidence) != {
+            "label", self.numeric_field, "calibration_source", *self.required_provenance_fields,
+        }:
+            raise AiValidationError("AI confidence does not match its registered provenance contract.")
+        if confidence["label"] not in self.labels or confidence["calibration_source"] != self.calibration_source:
+            raise AiValidationError("AI confidence provenance is not registered for this action.")
+        numeric = confidence[self.numeric_field]
+        if type(numeric) not in {int, float} or not 0 <= numeric <= 1:
+            raise AiValidationError("AI confidence score must be a number from zero through one.")
+        for field in self.required_provenance_fields:
+            value = confidence[field]
+            if not isinstance(value, str) or not value.strip() or len(value) > 120:
+                raise AiValidationError("AI confidence provenance must contain bounded text.")
+
+
+def qualified_model_identity(adapter_id: str, adapter_version: str, model_identifier: str) -> str:
+    """Stable provider/version-qualified identifier persisted in action allowlists."""
+    if any(not isinstance(value, str) or not value or len(value) > 80 or any(marker in value for marker in "@:") for value in (adapter_id, adapter_version)):
+        raise AiValidationError("AI model identity is invalid.")
+    if not isinstance(model_identifier, str) or not model_identifier or len(model_identifier) > 240 or any(character.isspace() for character in model_identifier):
+        raise AiValidationError("AI model identity is invalid.")
+    return f"{adapter_id}@{adapter_version}:{model_identifier}"
+
+
+@dataclass(frozen=True)
 class AiActionDefinition:
     action_type: str
     owning_module: str
@@ -83,11 +127,14 @@ class AiActionDefinition:
     validate_candidate: Callable[[Mapping[str, Any]], None]
     validate_payload: Callable[[Mapping[str, Any]], None]
     validate_provider_request: Callable[[Mapping[str, Any]], None] | None = None
-    allowed_confidence_labels: frozenset[str] = frozenset()
-    permits_calibrated_confidence: bool = False
+    confidence_contract: ConfidenceContract | None = None
     required_data_classes: frozenset[str] = frozenset()
+    # The action declares what it needs; the selected adapter must declare
+    # that it can safely provide every one of these capabilities/modalities.
+    required_capabilities: frozenset[str] = frozenset()
+    required_input_modalities: frozenset[str] = frozenset({"text"})
     permitted_locations: frozenset[str] = frozenset({"on_device", "cloud"})
-    allowed_models: frozenset[str] = frozenset()
+    allowed_model_identities: frozenset[str] = frozenset()
     max_provider_request_bytes: int = 16_384
     max_prompt_tokens: int = 4_096
     max_completion_tokens: int = 1_024
@@ -102,6 +149,33 @@ class AiActionDefinition:
             raise ValueError("Unsupported AI approval effect.")
         if min(self.max_provider_request_bytes, self.max_prompt_tokens, self.max_completion_tokens, self.max_runs_per_utc_day) < 1:
             raise ValueError("AI action limits must be positive.")
+        if not self.required_input_modalities:
+            raise ValueError("AI actions must declare at least one input modality.")
+        if any(not isinstance(identity, str) or not re.fullmatch(r"[^@:\s]{1,80}@[^@:\s]{1,80}:\S{1,240}", identity) for identity in self.allowed_model_identities):
+            raise ValueError("AI action model allowlists must use provider/version-qualified identities.")
+
+    def validate_confidence(self, confidence: Mapping[str, Any] | None) -> None:
+        if self.confidence_contract is None:
+            if confidence is not None:
+                raise AiValidationError("AI action does not permit confidence metadata.")
+            return
+        self.confidence_contract.validate(confidence)
+
+
+def validate_provider_metadata(
+    prompt_tokens: int | None,
+    completion_tokens: int | None,
+    provider_request_id: str | None,
+) -> tuple[int | None, int | None, str | None]:
+    """Keep provider-provided metadata bounded and safe to retain."""
+    for value in (prompt_tokens, completion_tokens):
+        if value is not None and (type(value) is not int or value < 0):
+            raise AiValidationError("AI provider usage metadata is invalid.")
+    if provider_request_id is not None:
+        if (not isinstance(provider_request_id, str) or not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", provider_request_id)
+                or _SECRET_VALUE.search(provider_request_id)):
+            raise AiValidationError("AI provider request metadata is invalid.")
+    return prompt_tokens, completion_tokens, provider_request_id
 
 
 class AiActionRegistry:

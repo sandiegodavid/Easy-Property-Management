@@ -8,6 +8,7 @@ from typing import Any, Mapping, Protocol, TypeVar
 @dataclass(frozen=True)
 class AiProviderResult:
     payload: Mapping[str, Any]
+    confidence: Mapping[str, Any] | None = None
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     provider_request_id: str | None = None
@@ -19,6 +20,8 @@ class AiProviderError(RuntimeError):
 
 class AiProviderPort(Protocol):
     def estimate_input_tokens(self, provider_request: Mapping[str, Any], model_identifier: str) -> int: ...
+    def probe(self, provider_request: Mapping[str, Any], model_identifier: str,
+              timeout_seconds: int) -> AiProviderResult: ...
     def generate(self, provider_request: Mapping[str, Any], model_identifier: str, max_completion_tokens: int, timeout_seconds: int) -> AiProviderResult: ...
 
 
@@ -57,10 +60,18 @@ class AiApprovalEvidenceValidator(Protocol):
 
 
 class AiSourceValidator(Protocol):
-    """Owning-domain retained-source check; absence must be an explicit tombstone."""
-    def validate_source(self, connection: Any, *, source_entity_type: str,
-                        source_entity_id: str, source_revision: str,
-                        source_fingerprint: str) -> None: ...
+    """Source-owner checks for a live command and for retained history.
+
+    A live reservation must match the current source exactly.  Restore is
+    intentionally different: an old revision is valid evidence when the
+    source still exists, or when its owner retained an explicit tombstone.
+    """
+    def validate_current_source(self, connection: Any, *, source_entity_type: str,
+                                source_entity_id: str, source_revision: str,
+                                source_fingerprint: str) -> None: ...
+    def validate_retained_source(self, connection: Any, *, source_entity_type: str,
+                                 source_entity_id: str, source_revision: str,
+                                 source_fingerprint: str) -> None: ...
 
 
 class AiSourceProjection(Protocol):
@@ -93,6 +104,8 @@ class AiGovernanceTransactionOperations(Protocol):
     def action_limits(self) -> list[Mapping[str, Any]]: ...
     def put_action_limit(self, values: Mapping[str, Any]) -> None: ...
     def run_by_key(self, key: str) -> Mapping[str, Any] | None: ...
+    def validate_current_source(self, *, source_entity_type: str, source_entity_id: str,
+                                source_revision: str, source_fingerprint: str) -> None: ...
     def run(self, run_id: str) -> Mapping[str, Any] | None: ...
     def insert_run(self, values: Mapping[str, Any]) -> None: ...
     def update_run(self, run_id: str, values: Mapping[str, Any]) -> None: ...

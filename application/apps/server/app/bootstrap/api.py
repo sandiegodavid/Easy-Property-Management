@@ -131,8 +131,8 @@ from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextR
 from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
 from app.modules.vendors.infrastructure.context_reader import SQLiteProviderContextReader
 from app.modules.ai_governance.api.router import build_router as build_ai_governance_router
-from app.modules.ai_governance.application.service import AiGovernanceService
-from app.modules.ai_governance.application.registry import ACTION_REGISTRY, REDACTION_PROFILE_REGISTRY, ADAPTER_REGISTRY
+from app.modules.ai_governance.application.service import AiConfigurationService, AiDraftReviewService, AiGenerationCoordinator
+from app.modules.ai_governance.application.registry import ACTION_REGISTRY, REDACTION_PROFILE_REGISTRY, ADAPTER_REGISTRY, SOURCE_VALIDATORS
 from app.modules.ai_governance.domain.audit_policy import AI_ACTIVITY_POLICY
 from app.modules.ai_governance.infrastructure.credentials import KeyringAiTransportCredentialStore
 from app.modules.ai_governance.infrastructure.unit_of_work import SQLiteAiGovernanceUnitOfWork
@@ -170,13 +170,24 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     task_transaction_operations = SQLiteTaskTransactionOperations()
     portfolio_context_reader = SQLitePortfolioContextReader()
     inspection_context_reader = SQLiteInspectionContextReader()
-    ai_governance = AiGovernanceService(
-        SQLiteAiGovernanceUnitOfWork(service.paths.database, recorder),
+    ai_generation = AiGenerationCoordinator(
+        SQLiteAiGovernanceUnitOfWork(
+            service.paths.database, recorder, SOURCE_VALIDATORS,
+        ),
         # This stable local identity is used only as the keyring namespace.  It
         # is never persisted or exported as a credential.
         workspace_id=str(service.paths.database.resolve()),
         actions=ACTION_REGISTRY, profiles=REDACTION_PROFILE_REGISTRY,
         adapters=ADAPTER_REGISTRY, credentials=KeyringAiTransportCredentialStore(),
+    )
+    ai_configuration = AiConfigurationService(
+        ai_generation.unit_of_work, workspace_id=ai_generation.workspace_id,
+        actions=ai_generation.actions, adapters=ai_generation.adapters,
+        providers=ai_generation.providers, credentials=ai_generation.credentials,
+    )
+    ai_drafts = AiDraftReviewService(
+        ai_generation.unit_of_work, actions=ai_generation.actions,
+        approval_handlers={}, source_projections={},
     )
     lease_context_reader = SQLiteLeaseContextReader()
     party_reads = SQLitePartyReadOperations(party_operations)
@@ -276,7 +287,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         scheduler: asyncio.Task[None] | None = None
         try:
             if runtime.ready:
-                ai_governance.recover_interrupted()
+                ai_generation.recover_interrupted()
             if runtime.writer_lock_acquired:
                 scheduler = asyncio.create_task(_automatic_backup_scheduler(backups, runtime))
             elif runtime.error:
@@ -316,7 +327,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.work_journal_service = work_journal
     app.state.owner_rent_report_service = owner_rent_reports
     app.state.owner_concern_service = owner_concerns
-    app.state.ai_governance_service = ai_governance
+    app.state.ai_generation_service = ai_generation
+    app.state.ai_configuration_service = ai_configuration
+    app.state.ai_draft_review_service = ai_drafts
     app.include_router(build_router(service, runtime))
     policies = AuditSnapshotPolicyRegistry({
         ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -460,7 +473,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_maintenance_router(maintenance, work_journal, runtime))
     app.include_router(build_owner_rent_report_router(owner_rent_reports, runtime))
     app.include_router(build_owner_concern_router(owner_concerns, runtime))
-    app.include_router(build_ai_governance_router(ai_governance, runtime))
+    app.include_router(build_ai_governance_router(ai_configuration, ai_generation, ai_drafts, runtime))
     return app
 
 
