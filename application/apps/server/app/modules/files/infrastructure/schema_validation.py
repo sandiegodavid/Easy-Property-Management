@@ -71,7 +71,12 @@ def validate_file_data(connection, policy_registry: Mapping[str, object] | None 
     links.  Retained validation instead delegates to an optional owning policy
     hook so restored data is checked as historical state, not as a new write.
     """
-    policy_registry = policy_registry or {}
+    if policy_registry is None:
+        # Callers that validate a complete workspace must deliberately compose
+        # the owning-domain policies.  Silently accepting unknown targets made
+        # a corrupt restored workspace appear healthy.
+        from app.modules.files.application.policy_registry import build_file_link_policy_registry
+        policy_registry = build_file_link_policy_registry().as_mapping()
     rows = connection.execute(text(
         "SELECT r.id, r.original_name, r.media_type, r.size_bytes, r.content_sha256, r.created_at, "
         "l.storage_provider, l.storage_state, l.local_relative_path, l.s3_bucket, l.s3_object_key, l.s3_version_id, l.verified_at "
@@ -119,14 +124,15 @@ def validate_file_data(connection, policy_registry: Mapping[str, object] | None 
             seen_active.add(association)
         links_by_file[row["file_id"]] = links_by_file.get(row["file_id"], 0) + 1
         policy = policy_registry.get(row["entity_type"])
-        if policy is not None:
-            retained = getattr(policy, "validate_retained", None)
-            if retained is None:
-                raise MigrationSchemaError(f"File-link policy {row['entity_type']} has no retained-data validator.")
-            try:
-                retained(connection, FileLink(**dict(row)))
-            except Exception as error:
-                raise MigrationSchemaError(f"A retained {row['entity_type']} file link is invalid: {error}") from error
+        if policy is None:
+            raise MigrationSchemaError(f"A retained file link has unsupported entity type {row['entity_type']}.")
+        retained = getattr(policy, "validate_retained", None)
+        if retained is None:
+            raise MigrationSchemaError(f"File-link policy {row['entity_type']} has no retained-data validator.")
+        try:
+            retained(connection, FileLink(**dict(row)))
+        except Exception as error:
+            raise MigrationSchemaError(f"A retained {row['entity_type']} file link is invalid: {error}") from error
     missing = {row["id"] for row in rows} - set(links_by_file)
     if missing:
         raise MigrationSchemaError("Every committed file must retain at least one file link.")

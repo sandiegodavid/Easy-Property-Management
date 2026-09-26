@@ -45,6 +45,48 @@ class FileStorageVerificationService:
                 after = {"storageState": state, "verifiedAt": verified_at}
                 self.unit_of_work.replace_storage_verification(item, state, verified_at, FileAuditChange(
                     "file", item.id, "storage_verified", after, "file_storage_verification", str(uuid4()), before,
+                    actor_kind="system",
                 ))
             counts[state] += 1
-        return {"complete": True, "files": len(candidates), "states": counts}
+        # A single-file repair verifies only that file.  A full verification is
+        # also the explicit storage-inventory pass, including orphan discovery.
+        reconciliation = {"local": {"referenced": 0, "orphaned": 0, "missing": 0, "unverifiable": 0},
+                          "s3": {"referenced": 0, "orphaned": 0, "missing": 0, "unverifiable": 0}}
+        complete = file_id is None
+        if file_id is None:
+            by_provider: dict[str, list[object]] = {}
+            for item in candidates:
+                by_provider.setdefault(item.storage_provider, []).append(item)
+            for provider, items in by_provider.items():
+                store = self.stores.get(provider)
+                if store is None:
+                    raise FileError("The configured content store is unavailable.", "file_provider_unavailable")
+                if provider == "local" and hasattr(store, "reconcile"):
+                    result = store.reconcile({item.local_relative_path for item in items if item.local_relative_path})
+                    reconciliation["local"] = {key: len(value) for key, value in result.items()}
+                elif provider == "s3" and hasattr(store, "reconcile"):
+                    retained = {(item.s3_bucket, item.s3_object_key, item.s3_version_id)
+                                for item in items
+                                if item.s3_bucket and item.s3_object_key and item.s3_version_id}
+                    seen: set[tuple[str, str, str]] = set()
+                    orphaned: set[tuple[str, str, str]] = set()
+                    unverifiable: set[tuple[str, str, str]] = set()
+                    cursor = None
+                    cursors: set[str] = set()
+                    while True:
+                        page = store.reconcile(retained, cursor)
+                        seen.update(page.referenced)
+                        orphaned.update(page.orphaned)
+                        unverifiable.update(page.unverifiable)
+                        if not page.incomplete:
+                            break
+                        cursor = page.continuation
+                        if cursor is None or cursor in cursors:  # Defensive: never claim a broken page stream complete.
+                            complete = False
+                            break
+                        cursors.add(cursor)
+                    missing = retained - seen
+                    reconciliation["s3"] = {"referenced": len(seen), "orphaned": len(orphaned),
+                                              "missing": len(missing), "unverifiable": len(unverifiable)}
+        return {"complete": complete, "files": len(candidates), "states": counts,
+                "reconciliation": reconciliation}

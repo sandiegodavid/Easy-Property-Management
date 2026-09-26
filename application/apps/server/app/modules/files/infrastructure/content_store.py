@@ -126,6 +126,28 @@ class FilesystemContentStore:
             raise FileError("Stored file content failed its integrity check.", "file_integrity_failed")
         return path
 
+    def reconcile(self, retained_locations: set[str]) -> dict[str, tuple[str, ...]]:
+        """Read-only comparison of the managed directory and retained locators."""
+        managed = self._managed_directory()
+        found: set[str] = set()
+        unverifiable: set[str] = set()
+        try:
+            for candidate in managed.iterdir():
+                if candidate.is_symlink() or not candidate.is_file():
+                    unverifiable.add(candidate.name)
+                    continue
+                # Only immutable digest object names participate in FILE-001.
+                if len(candidate.name) == 64 and all(char in "0123456789abcdef" for char in candidate.name):
+                    found.add(f"managed/{candidate.name}")
+        except OSError as error:
+            raise FileError("Unable to reconcile local file storage.", "file_provider_unavailable") from error
+        return {
+            "referenced": tuple(sorted(found & retained_locations)),
+            "orphaned": tuple(sorted(found - retained_locations)),
+            "missing": tuple(sorted(retained_locations - found)),
+            "unverifiable": tuple(sorted(unverifiable)),
+        }
+
 
 @dataclass
 class _S3Lease:
@@ -300,6 +322,8 @@ class S3ContentStore:
             raise
         except Exception as error:
             path.unlink(missing_ok=True)
+            if _s3_not_found(error):
+                raise FileError("Stored S3 content is unavailable.", "file_content_unavailable") from error
             raise FileError("S3 content is temporarily unavailable.", "file_provider_unavailable") from error
 
     def materialize(self, bucket: str, object_key: str, version_id: str | None,
@@ -334,16 +358,19 @@ class S3ContentStore:
                 continue
             identity = (self.bucket, key, version)
             (referenced if identity in retained_locations else orphaned).append(identity)
-        # Retained rows in this namespace absent from a completed listing are
-        # reported only when the caller supplied a complete final page.
         next_key = response.get("NextKeyMarker")
         next_version = response.get("NextVersionIdMarker")
         next_cursor = f"{next_key}|{next_version}" if next_key and next_version else None
-        # A single complete page can identify absent retained versions.  Across
-        # continuation pages the Settings coordinator owns the aggregate; a
-        # page must never falsely call a version from an earlier page missing.
-        missing = (sorted(location for location in retained_locations if location[0] == self.bucket and location[1].startswith(prefix) and location not in set(referenced)) if continuation is None and not next_cursor else [])
-        return S3ReconciliationPage(tuple(referenced), tuple(orphaned), tuple(missing), tuple(unverifiable), next_cursor, next_cursor is not None)
+        # Missing versions can only be determined after *all* pages have been
+        # accumulated.  The verification coordinator owns that aggregation.
+        return S3ReconciliationPage(tuple(referenced), tuple(orphaned), (), tuple(unverifiable), next_cursor, next_cursor is not None)
+
+
+def _s3_not_found(error: Exception) -> bool:
+    """Recognise only definitive object/version absence, never outages."""
+    response = getattr(error, "response", None)
+    code = (response or {}).get("Error", {}).get("Code") if isinstance(response, dict) else None
+    return str(code) in {"404", "NoSuchKey", "NoSuchVersion", "NotFound"}
 
 
 def _hash_file(path: Path) -> tuple[str, int]:

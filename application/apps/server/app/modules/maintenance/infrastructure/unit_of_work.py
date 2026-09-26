@@ -379,12 +379,12 @@ class SQLiteMaintenanceTransaction:
             for values in assignments.values(): values.sort(key=lambda item:(item["assigned_at"],item["id"]),reverse=True)
         tasks=self.tasks.tasks_for_related_entities(self.connection,"maintenance_issue",issue_ids)
         expenses=self.finance.expense_contexts(self.connection,[row["expense_id"] for values in links.values() for row in values]) if include_detail else {}
-        issue_files=self.files.links_for_entities(self.connection,"maintenance_issue",issue_ids) if include_detail and self.files else {}
-        appointment_files=self.files.links_for_entities(self.connection,"maintenance_appointment",[row["id"] for values in appointments.values() for row in values]) if include_detail and self.files else {}
-        cost_files=self.files.links_for_entities(self.connection,"maintenance_cost_context",[row["id"] for values in costs.values() for row in values]) if include_detail and self.files else {}
-        quote_files=self.files.links_for_entities(self.connection,"maintenance_quote",[row["id"] for values in quotes.values() for row in values]) if include_detail and self.files else {}
-        assignment_files=self.files.links_for_entities(self.connection,"maintenance_assignment",[row["id"] for values in assignments.values() for row in values]) if include_detail and self.files else {}
-        journal_files=self.files.links_for_entities(self.connection,"maintenance_work_journal_entry",[row["id"] for values in journals.values() for row in values]) if include_detail and self.files else {}
+        issue_files=self.files.active_links_for_entities(self.connection,"maintenance_issue",issue_ids) if include_detail and self.files else {}
+        appointment_files=self.files.active_links_for_entities(self.connection,"maintenance_appointment",[row["id"] for values in appointments.values() for row in values]) if include_detail and self.files else {}
+        cost_files=self.files.active_links_for_entities(self.connection,"maintenance_cost_context",[row["id"] for values in costs.values() for row in values]) if include_detail and self.files else {}
+        quote_files=self.files.active_links_for_entities(self.connection,"maintenance_quote",[row["id"] for values in quotes.values() for row in values]) if include_detail and self.files else {}
+        assignment_files=self.files.active_links_for_entities(self.connection,"maintenance_assignment",[row["id"] for values in assignments.values() for row in values]) if include_detail and self.files else {}
+        journal_files=self.files.active_links_for_entities(self.connection,"maintenance_work_journal_entry",[row["id"] for values in journals.values() for row in values]) if include_detail and self.files else {}
         party_states=(
             self.reporter_party_states([row["reporter_party_id"] for row in issues.values() if row["reporter_party_id"]])
             if include_detail else {}

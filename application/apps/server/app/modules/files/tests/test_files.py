@@ -3,6 +3,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 import json
+import sqlite3
 import types
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -160,6 +161,15 @@ class FileStoreTests(unittest.TestCase):
         )
         link_id = self.files.get(item.id).links[0]["id"]
         self.files.archive_link(link_id, confirmed=True, reason="Contains a private relocation explanation.")
+        # This focused presentation test uses a lightweight fake expense
+        # validator; remove its deliberately non-domain fixture before opening
+        # the real application, whose retained-data validation correctly
+        # rejects links to a missing expense.
+        with sqlite3.connect(self.service.paths.database) as connection:
+            connection.execute("DELETE FROM file_links WHERE file_id=?", (item.id,))
+            connection.execute("DELETE FROM file_content_locations WHERE file_id=?", (item.id,))
+            connection.execute("DELETE FROM file_records WHERE id=?", (item.id,))
+            connection.commit()
         self.service.config.config_path.write_text(
             json.dumps({"localWorkspacePath": str(self.service.paths.root)}), encoding="utf-8"
         )

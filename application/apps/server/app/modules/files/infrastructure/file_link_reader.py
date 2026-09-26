@@ -70,6 +70,13 @@ class SQLiteFileLinkReader:
         ]
 
     def links_for_entities(self, connection, entity_type: str, entity_ids: Sequence[str]) -> dict[str, list[FileLinkWithFile]]:
+        return self._links_for_entities(connection, entity_type, entity_ids, active_only=False)
+
+    def active_links_for_entities(self, connection, entity_type: str, entity_ids: Sequence[str]) -> dict[str, list[FileLinkWithFile]]:
+        """Normal evidence projection: archived links belong only to history."""
+        return self._links_for_entities(connection, entity_type, entity_ids, active_only=True)
+
+    def _links_for_entities(self, connection, entity_type: str, entity_ids: Sequence[str], *, active_only: bool) -> dict[str, list[FileLinkWithFile]]:
         result = {entity_id: [] for entity_id in entity_ids}
         if not entity_ids:
             return result
@@ -93,6 +100,7 @@ class SQLiteFileLinkReader:
         ).where(
             FileLinkModel.entity_type == entity_type,
             FileLinkModel.entity_id.in_(entity_ids),
+            *([FileLinkModel.archived_at.is_(None)] if active_only else []),
         ).order_by(FileLinkModel.created_at, FileLinkModel.id)
         for row in connection.execute(query).mappings():
             item = FileLinkWithFile(**dict(row))

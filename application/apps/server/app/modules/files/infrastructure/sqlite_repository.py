@@ -45,7 +45,8 @@ class SQLiteFileUnitOfWork:
             for change in audit_changes:
                 self.recorder.record_change(raw, entity_type=change.entity_type, entity_id=change.entity_id,
                                             action=change.action, before=change.before, after=change.after,
-                                            reason=change.reason, correlation_id=change.correlation_id)
+                                            reason=change.reason, correlation_id=change.correlation_id,
+                                            actor_kind=change.actor_kind)
 
     def get(self, file_id: str) -> StoredFile | None:
         with Session(self.engine) as session:
@@ -80,7 +81,8 @@ class SQLiteFileUnitOfWork:
                 raise ValueError("File link is already archived or no longer exists.")
             self.recorder.record_change(connection.connection.driver_connection, entity_type=audit_change.entity_type,
                 entity_id=audit_change.entity_id, action=audit_change.action, before=audit_change.before,
-                after=audit_change.after, reason=audit_change.reason, correlation_id=audit_change.correlation_id)
+                after=audit_change.after, reason=audit_change.reason, correlation_id=audit_change.correlation_id,
+                actor_kind=audit_change.actor_kind)
         return link
 
     def link_existing(self, link: FileLink, audit_change: FileAuditChange, validate_link) -> FileLink:
@@ -100,7 +102,8 @@ class SQLiteFileUnitOfWork:
             ))
             self.recorder.record_change(connection.connection.driver_connection, entity_type=audit_change.entity_type,
                 entity_id=audit_change.entity_id, action=audit_change.action, before=audit_change.before,
-                after=audit_change.after, reason=audit_change.reason, correlation_id=audit_change.correlation_id)
+                after=audit_change.after, reason=audit_change.reason, correlation_id=audit_change.correlation_id,
+                actor_kind=audit_change.actor_kind)
         return link
 
     def files_for_verification(self) -> list[StoredFile]:
@@ -123,4 +126,5 @@ class SQLiteFileUnitOfWork:
                 raise ValueError("File record was not found.")
             self.recorder.record_change(connection.connection.driver_connection, entity_type=audit_change.entity_type,
                 entity_id=audit_change.entity_id, action=audit_change.action, before=audit_change.before,
-                after=audit_change.after, reason=audit_change.reason, correlation_id=audit_change.correlation_id)
+                after=audit_change.after, reason=audit_change.reason, correlation_id=audit_change.correlation_id,
+                actor_kind=audit_change.actor_kind)

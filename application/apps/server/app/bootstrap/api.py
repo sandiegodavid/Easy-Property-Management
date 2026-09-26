@@ -19,6 +19,7 @@ from app.modules.workspace.application.runtime import WorkspaceRuntime
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.files.application.service import FileService
 from app.modules.files.application.verification import FileStorageVerificationService
+from app.modules.files.application.policy_registry import build_file_link_policy_registry
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
@@ -206,14 +207,10 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         SQLiteExpenseContextReader(), SQLiteTaskContextReader(), task_transaction_operations, file_link_reader,
         party_operations, lease_context_reader, SQLiteCommunicationLinkReader(), SQLiteProviderContextReader(),
     )
-    file_link_policies = (
-        LeaseFileLinkValidator(lease_unit_of_work),
-        ExpenseFileLinkValidator(SQLiteExpenseFileLinkOperations(file_link_reader)),
-        DepositFileLinkValidator(SQLiteDepositFileLinkOperations(file_link_reader)),
-        MaintenanceFileLinkValidator(SQLiteMaintenanceFileLinkOperations(file_link_reader)),
-        OwnerRentReportFileLinkValidator(SQLiteOwnerRentReportFileLinkOperations(file_link_reader)),
-        ConditionObservationFileLinkValidator(),
-    )
+    # One validator can own several entity types; preserve validator identity
+    # while avoiding duplicate entries from the entity-type mapping.
+    policy_values = build_file_link_policy_registry().as_mapping().values()
+    file_link_policies = tuple(dict.fromkeys(policy_values))
     files = FileService(
         service,
         primary_store,

@@ -31,7 +31,9 @@ def normalize_filename(value: str) -> str:
     name = unicodedata.normalize("NFC", value).strip()
     if not name or name in {".", ".."}:
         raise FileError("File name must be nonblank.")
-    if "/" in name or "\\" in name or any(ord(character) < 32 or ord(character) == 127 for character in name):
+    # Unicode Cc covers both the familiar ASCII controls and C1 controls
+    # (for example U+0085).  They are never meaningful in a display name.
+    if "/" in name or "\\" in name or any(unicodedata.category(character) == "Cc" for character in name):
         raise FileError("File name contains unsafe characters.")
     if len(name.encode("utf-8")) > 255:
         raise FileError("File name must not exceed 255 UTF-8 bytes.")

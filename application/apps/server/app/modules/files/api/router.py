@@ -69,8 +69,11 @@ def build_router(service: FileService, runtime: WorkspaceRuntime, verification: 
             item = service.get(file_id)
             path = service.content_path(item)
             background = BackgroundTask(path.unlink, missing_ok=True) if item.storage_provider == "s3" else None
+            # Starlette performs standards-compliant filename quoting and
+            # RFC 5987 encoding; never interpolate a user filename into a
+            # header ourselves.
             return FileResponse(path, media_type=item.media_type, filename=item.original_name, background=background,
-                                headers={"Content-Disposition": f'attachment; filename="{item.original_name}"', "X-Content-Type-Options": "nosniff"})
+                                headers={"X-Content-Type-Options": "nosniff"})
         except FileError as error: raise _file_http_error(error) from error
 
     @router.post("/api/files/verify")

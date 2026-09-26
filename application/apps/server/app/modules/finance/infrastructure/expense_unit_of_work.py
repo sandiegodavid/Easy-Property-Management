@@ -192,7 +192,7 @@ class _Transaction:
             "refunds": refunds,
             "evidence": {
                 expense_id: [_expense_evidence_view(link) for link in links]
-                for expense_id, links in self.files.links_for_entities(
+                for expense_id, links in self.files.active_links_for_entities(
                     self.connection, "expense", expense_ids
                 ).items()
             },

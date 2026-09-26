@@ -60,9 +60,13 @@ class FileAttachmentBatch:
             except BaseException as error:
                 errors.append(error)
         if errors:
-            raise FileError("File publication completed but its cleanup lease could not be released.", "publication_cleanup_incomplete") from errors[0]
+            publication = self._leases[0] if self._leases else None
+            raise PublicationCleanupIncomplete(
+                str(getattr(publication, "publication_id", getattr(publication, "content_sha256", "unknown"))),
+                str(getattr(publication, "storage_provider", "unknown")), errors[0], errors[0],
+            ) from errors[0]
 
-    def rollback(self) -> None:
+    def rollback(self, original_failure: BaseException | None = None) -> None:
         if self._closed is not None:
             return
         self._closed = "rolled_back"
@@ -73,7 +77,12 @@ class FileAttachmentBatch:
             except BaseException as error:
                 errors.append(error)
         if errors:
-            raise FileError("File publication cleanup could not be completed.", "publication_cleanup_incomplete") from errors[0]
+            publication = self._leases[-1] if self._leases else None
+            failure = original_failure or errors[0]
+            raise PublicationCleanupIncomplete(
+                str(getattr(publication, "publication_id", getattr(publication, "content_sha256", "unknown"))),
+                str(getattr(publication, "storage_provider", "unknown")), failure, errors[0],
+            ) from failure
 
 
 class FileService:
@@ -93,7 +102,9 @@ class FileService:
 
     def add(self, source: Path, original_name: str, media_type: str | None, *, entity_type: str, entity_id: str, purpose: str, correlation_id: str | None = None) -> StoredFile:
         """Create one logical file and one validated association using the primary store."""
-        self.workspace.open()
+        # Runtime opens and validates the workspace before exposing this
+        # command.  Do not reopen it here: an in-process caller may be in the
+        # middle of constructing a single transaction-scoped attachment batch.
         link = self._new_link(entity_type, entity_id, purpose)
         validator = self._validator(link.entity_type, generic_upload=True)
         content = None
@@ -126,9 +137,14 @@ class FileService:
         current = batch or self.attachment_batch(connection)
         try:
             return current.add(source, original_name, media_type, entity_type=entity_type, entity_id=entity_id, purpose=purpose, correlation_id=correlation_id, owning_workflow=owning_workflow), current
-        except Exception:
+        except Exception as error:
             if batch is None:
-                current.rollback()
+                try:
+                    current.rollback(error)
+                except PublicationCleanupIncomplete:
+                    # The structured error keeps the business/database failure
+                    # as its cause instead of silently replacing it.
+                    raise
             raise
 
     def link_existing_file(self, file_id: str, *, entity_type: str, entity_id: str, purpose: str, correlation_id: str | None = None) -> FileLink:
