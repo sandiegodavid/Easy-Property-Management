@@ -322,6 +322,9 @@ def _expense_evidence_view(link: FileLinkWithFile) -> dict[str, object]:
         "createdAt": link.created_at,
         "archivedAt": link.archived_at,
         "archiveReason": link.archive_reason,
+        "storageState": link.storage_state,
+        "available": link.storage_state == "available",
+        "verifiedAt": link.verified_at,
     }
 
 

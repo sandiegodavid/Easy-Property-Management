@@ -1,5 +1,14 @@
-"""Current-format validation owned by FILE-001."""
-from sqlalchemy import inspect
+"""Current-format and retained-data validation owned by FILE-001."""
+from __future__ import annotations
+
+import re
+from datetime import UTC, datetime
+from typing import Mapping
+
+from sqlalchemy import inspect, text
+
+from app.modules.files.application.errors import normalize_filename, normalize_media_type
+from app.modules.files.application.ports import FileLink
 from app.platform.migration_errors import MigrationSchemaError
 
 
@@ -47,5 +56,93 @@ def validate_file_schema(connection) -> None:
     if link_checks != {"archived_atisnullandarchive_reasonisnullorarchived_atisnotnullandarchive_reasonisnotnullandlengthtrimarchive_reasonbetween1and1000"}:
         raise MigrationSchemaError("file_links constraints are incompatible.")
     location_checks = {"".join((item.get("sqltext") or "").lower().replace("(", "").replace(")", "").split()) for item in inspector.get_check_constraints("file_content_locations")}
-    if location_checks != {"storage_providerin'local','s3'", "storage_statein'pending','available','missing','quarantined'", "storage_provider='local'andlocal_relative_pathisnotnullands3_bucketisnullands3_object_keyisnullands3_version_idisnullorstorage_provider='s3'andlocal_relative_pathisnullands3_bucketisnotnullands3_object_keyisnotnull"}:
+    if location_checks != {"storage_providerin'local','s3'", "storage_statein'available','missing','quarantined'", "storage_provider='local'andlocal_relative_pathisnotnullands3_bucketisnullands3_object_keyisnullands3_version_idisnullorstorage_provider='s3'andlocal_relative_pathisnullands3_bucketisnotnullands3_object_keyisnotnullands3_version_idisnotnull"}:
         raise MigrationSchemaError("file content location constraints are incompatible.")
+
+
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def validate_file_data(connection, policy_registry: Mapping[str, object] | None = None) -> None:
+    """Validate persisted FILE-001 facts without reapplying create quotas.
+
+    A create validator sees the prospective association and may count active
+    links.  Retained validation instead delegates to an optional owning policy
+    hook so restored data is checked as historical state, not as a new write.
+    """
+    policy_registry = policy_registry or {}
+    rows = connection.execute(text(
+        "SELECT r.id, r.original_name, r.media_type, r.size_bytes, r.content_sha256, r.created_at, "
+        "l.storage_provider, l.storage_state, l.local_relative_path, l.s3_bucket, l.s3_object_key, l.s3_version_id, l.verified_at "
+        "FROM file_records r LEFT JOIN file_content_locations l ON l.file_id=r.id"
+    )).mappings().all()
+    if len(rows) != connection.execute(text("SELECT count(*) FROM file_records")).scalar_one():
+        raise MigrationSchemaError("Every file record must have exactly one content location.")
+    for row in rows:
+        _uuid(row["id"], "file ID")
+        if normalize_filename(row["original_name"]) != row["original_name"]:
+            raise MigrationSchemaError("A retained file has a non-normalized display name.")
+        if normalize_media_type(row["media_type"]) != row["media_type"]:
+            raise MigrationSchemaError("A retained file has a non-normalized media type.")
+        if type(row["size_bytes"]) is not int or row["size_bytes"] < 0 or not _SHA256.fullmatch(row["content_sha256"]):
+            raise MigrationSchemaError("A retained file has invalid immutable content metadata.")
+        _utc(row["created_at"], "file created_at"); _utc(row["verified_at"], "file verified_at")
+        provider, state = row["storage_provider"], row["storage_state"]
+        if provider not in {"local", "s3"} or state not in {"available", "missing", "quarantined"}:
+            raise MigrationSchemaError("A retained file has unsupported storage state.")
+        if provider == "local":
+            if row["local_relative_path"] != f"managed/{row['content_sha256']}" or any(row[key] is not None for key in ("s3_bucket", "s3_object_key", "s3_version_id")):
+                raise MigrationSchemaError("A retained local file has an invalid location.")
+        elif not all(isinstance(row[key], str) and row[key] for key in ("s3_bucket", "s3_object_key", "s3_version_id")) or row["local_relative_path"] is not None:
+            raise MigrationSchemaError("A retained S3 file has an invalid exact-version location.")
+    link_rows = connection.execute(text(
+        "SELECT id,file_id,entity_type,entity_id,purpose,created_at,archived_at,archive_reason FROM file_links"
+    )).mappings().all()
+    links_by_file: dict[str, int] = {}
+    seen_active: set[tuple[str, str, str, str]] = set()
+    for row in link_rows:
+        _uuid(row["id"], "file link ID"); _uuid(row["file_id"], "file link file ID")
+        if not all(isinstance(row[key], str) and row[key].strip() for key in ("entity_type", "entity_id", "purpose")):
+            raise MigrationSchemaError("A retained file link has missing association fields.")
+        _utc(row["created_at"], "file link created_at")
+        if (row["archived_at"] is None) != (row["archive_reason"] is None):
+            raise MigrationSchemaError("A retained file link has invalid archive fields.")
+        if row["archived_at"] is not None:
+            _utc(row["archived_at"], "file link archived_at")
+            if not isinstance(row["archive_reason"], str) or not (1 <= len(row["archive_reason"].strip()) <= 1000):
+                raise MigrationSchemaError("A retained file link has invalid archive reason.")
+        else:
+            association = (row["file_id"], row["entity_type"], row["entity_id"], row["purpose"])
+            if association in seen_active:
+                raise MigrationSchemaError("A retained file has duplicate active associations.")
+            seen_active.add(association)
+        links_by_file[row["file_id"]] = links_by_file.get(row["file_id"], 0) + 1
+        policy = policy_registry.get(row["entity_type"])
+        if policy is not None:
+            retained = getattr(policy, "validate_retained", None)
+            if retained is None:
+                raise MigrationSchemaError(f"File-link policy {row['entity_type']} has no retained-data validator.")
+            try:
+                retained(connection, FileLink(**dict(row)))
+            except Exception as error:
+                raise MigrationSchemaError(f"A retained {row['entity_type']} file link is invalid: {error}") from error
+    missing = {row["id"] for row in rows} - set(links_by_file)
+    if missing:
+        raise MigrationSchemaError("Every committed file must retain at least one file link.")
+
+
+def _uuid(value: object, label: str) -> None:
+    if not isinstance(value, str) or not _UUID.fullmatch(value):
+        raise MigrationSchemaError(f"A retained {label} is not a UUID.")
+
+
+def _utc(value: object, label: str) -> None:
+    if not isinstance(value, str):
+        raise MigrationSchemaError(f"A retained {label} is not a timestamp.")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise MigrationSchemaError(f"A retained {label} is invalid.") from error
+    if parsed.tzinfo is None or parsed.utcoffset() != UTC.utcoffset(parsed) or not (value.endswith("+00:00") or value.endswith("Z")):
+        raise MigrationSchemaError(f"A retained {label} must be UTC.")

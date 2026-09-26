@@ -18,6 +18,7 @@ from app.modules.workspace.application.backup_service import BackupError, Backup
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.files.application.service import FileService
+from app.modules.files.application.verification import FileStorageVerificationService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
@@ -91,6 +92,7 @@ from app.modules.inspections.api.router import build_router as build_inspection_
 from app.modules.inspections.application.service import InspectionService
 from app.modules.inspections.infrastructure.unit_of_work import SQLiteInspectionUnitOfWork
 from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
+from app.modules.inspections.application.file_links import ConditionObservationFileLinkValidator
 from app.modules.inspections.domain.audit_policy import INSPECTION_ACTIVITY_POLICY
 from app.modules.parties.application.service import SharedPartyFactory
 from app.modules.parties.domain.audit_policy import PARTY_CONTACT_SNAPSHOT_POLICY
@@ -158,7 +160,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
             import boto3
         except ImportError as error:
             raise RuntimeError("S3 file storage requires the boto3 package.") from error
-        s3_store = S3ContentStore(boto3.client("s3"), service.config.s3_bucket, service.config.s3_prefix, service.paths.root / ".file-content-locks")
+        # The stable manifest ID is resolved only when a ready workspace uses
+        # S3; adapter construction itself never initializes a workspace.
+        s3_store = S3ContentStore(boto3.client("s3"), service.config.s3_bucket, service.config.s3_prefix, service.paths.root / ".file-content-locks", lambda: service.open().workspace_id)
         additional_stores["s3"] = s3_store
     if service.config.file_storage_provider == "s3":
         if s3_store is None:
@@ -202,6 +206,14 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         SQLiteExpenseContextReader(), SQLiteTaskContextReader(), task_transaction_operations, file_link_reader,
         party_operations, lease_context_reader, SQLiteCommunicationLinkReader(), SQLiteProviderContextReader(),
     )
+    file_link_policies = (
+        LeaseFileLinkValidator(lease_unit_of_work),
+        ExpenseFileLinkValidator(SQLiteExpenseFileLinkOperations(file_link_reader)),
+        DepositFileLinkValidator(SQLiteDepositFileLinkOperations(file_link_reader)),
+        MaintenanceFileLinkValidator(SQLiteMaintenanceFileLinkOperations(file_link_reader)),
+        OwnerRentReportFileLinkValidator(SQLiteOwnerRentReportFileLinkOperations(file_link_reader)),
+        ConditionObservationFileLinkValidator(),
+    )
     files = FileService(
         service,
         primary_store,
@@ -209,14 +221,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         additional_stores,
         # Inspection evidence is intentionally not a generic FILE-001 upload.
         # Its dedicated endpoint owns the report audit event and correlation ID.
-        (
-            LeaseFileLinkValidator(lease_unit_of_work),
-            ExpenseFileLinkValidator(SQLiteExpenseFileLinkOperations(file_link_reader)),
-            DepositFileLinkValidator(SQLiteDepositFileLinkOperations(file_link_reader)),
-            MaintenanceFileLinkValidator(SQLiteMaintenanceFileLinkOperations(file_link_reader)),
-            OwnerRentReportFileLinkValidator(SQLiteOwnerRentReportFileLinkOperations(file_link_reader)),
-        ),
+        file_link_policies,
     )
+    file_verification = FileStorageVerificationService(files.unit_of_work, files.content_stores)
     remote_materializer = s3_store.materialize if s3_store is not None else None
     backups = BackupService(service, recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)), remote_materializer=remote_materializer)
     tasks = TaskService(SQLiteTaskUnitOfWork(service.paths.database, recorder))
@@ -310,6 +317,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.backup_service = backups
     app.state.workspace_runtime = runtime
     app.state.file_service = files
+    app.state.file_link_policy_registry = files.policy_registry
+    app.state.file_verification_service = file_verification
     app.state.task_service = tasks
     app.state.communication_service = communications
     app.state.portfolio_service = portfolio
@@ -457,7 +466,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("ai_model_connection", 1): AI_ACTIVITY_POLICY,
     })
     app.include_router(build_audit_router(runtime, audit_repository, policies))
-    app.include_router(build_files_router(files, runtime))
+    app.include_router(build_files_router(files, runtime, file_verification))
     app.include_router(build_tasks_router(tasks, runtime))
     app.include_router(build_portfolio_router(portfolio, runtime))
     app.include_router(build_party_router(party_identities, party_contacts, runtime))

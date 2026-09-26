@@ -53,9 +53,12 @@ class FileStoreTests(unittest.TestCase):
             self.service,
             FilesystemContentStore(self.service.paths.files),
             SQLiteFileUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
-            {"s3": s3},
+            {"s3": s3}, link_validators=(_ExpenseLinkValidator(),),
         )
-        item = files.add(self.source, "condition.jpg", "image/jpeg", storage_provider="s3")
+        # HTTP and primary-service uploads are server-owned; an S3 store is
+        # selected here only as the configured primary for this adapter test.
+        files.content_store = s3
+        item = files.add(self.source, "condition.jpg", "image/jpeg", entity_type="expense", entity_id="expense-1", purpose="receipt")
         self.assertEqual(item.storage_provider, "s3")
         self.assertNotIn("storageLocator", item.to_dict())
         downloaded = files.content_path(item)
@@ -70,8 +73,8 @@ class FileStoreTests(unittest.TestCase):
         successful = FileService(
             self.service,
             s3,
-            SQLiteFileUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
-        ).add(self.source, "condition.jpg", "image/jpeg")
+            SQLiteFileUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)), link_validators=(_ExpenseLinkValidator(),),
+        ).add(self.source, "condition.jpg", "image/jpeg", entity_type="expense", entity_id="expense-1", purpose="receipt")
         persisted = self.files.unit_of_work.get(successful.id)
         self.assertIsNotNone(persisted)
         self.assertEqual(persisted.s3_version_id, "version-1")
@@ -79,13 +82,13 @@ class FileStoreTests(unittest.TestCase):
         second = FileService(
             self.service,
             s3,
-            SQLiteFileUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
-        ).add(self.source, "condition-copy.jpg", "image/jpeg")
+            SQLiteFileUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)), link_validators=(_ExpenseLinkValidator(),),
+        ).add(self.source, "condition-copy.jpg", "image/jpeg", entity_type="expense", entity_id="expense-1", purpose="receipt")
         self.assertNotEqual(successful_key, second.s3_object_key)
 
         with self.assertRaises(FileError):
-            FileService(self.service, s3, _FailingFileUnitOfWork()).add(
-                self.source, "condition-failed.jpg", "image/jpeg"
+            FileService(self.service, s3, _FailingFileUnitOfWork(), link_validators=(_ExpenseLinkValidator(),)).add(
+                self.source, "condition-failed.jpg", "image/jpeg", entity_type="expense", entity_id="expense-3", purpose="receipt"
             )
         self.assertIn(("evidence-bucket", successful_key), client.objects)
         self.assertIn(("evidence-bucket", second.s3_object_key), client.objects)
@@ -99,7 +102,8 @@ class FileStoreTests(unittest.TestCase):
                 self.service,
                 s3,
                 SQLiteFileUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
-            ).add(self.source, "condition.jpg", "image/jpeg")
+                link_validators=(_ExpenseLinkValidator(),),
+            ).add(self.source, "condition.jpg", "image/jpeg", entity_type="expense", entity_id="expense-1", purpose="receipt")
         self.assertEqual(client.objects, {})
 
     def test_s3_adapter_remains_available_when_local_is_the_default_upload_provider(self) -> None:
@@ -135,7 +139,7 @@ class FileStoreTests(unittest.TestCase):
         link_id = self.files.get(item.id).links[0]["id"]
         archived = self.files.archive_link(link_id, confirmed=True, reason="Attached to the wrong expense.")
         self.assertEqual(archived["id"], link_id)
-        self.assertEqual(self.files.get(item.id).links, ())
+        self.assertEqual(self.files.get(item.id).links[0]["archivedAt"], archived["archivedAt"])
         self.assertTrue(self.files.content_path(self.files.get(item.id)).is_file())
         archive_event = self.audit.history("file_link", link_id)[-1]
         creation_event = self.audit.history("file_link", link_id)[0]
@@ -188,7 +192,7 @@ class FileStoreTests(unittest.TestCase):
         item = next(result for result in results if result is not None)
         link_id = limited.get(item.id).links[0]["id"]
         limited.archive_link(link_id, confirmed=True, reason="This duplicate was attached in error.")
-        self.assertEqual(limited.get(item.id).links, ())
+        self.assertIsNotNone(limited.get(item.id).links[0]["archivedAt"])
 
     def test_failed_link_authorization_rolls_back_metadata_and_audit(self) -> None:
         with self.assertRaisesRegex(FileError, "invalid"):
@@ -214,14 +218,14 @@ class FileStoreTests(unittest.TestCase):
         self.assertEqual(len(self.audit.history("file_link", link_id)), 1)
 
     def test_deduplication_keeps_separate_metadata_and_path_safety_rejects_escape(self) -> None:
-        first = self.files.add(self.source, "one.pdf", "application/pdf"); second = self.files.add(self.source, "two.pdf", "application/pdf")
+        first = self.files.add(self.source, "one.pdf", "application/pdf", entity_type="expense", entity_id="expense-1", purpose="receipt"); second = self.files.add(self.source, "two.pdf", "application/pdf", entity_type="expense", entity_id="expense-1", purpose="receipt")
         self.assertNotEqual(first.id, second.id); self.assertEqual(first.local_relative_path, second.local_relative_path)
-        with self.assertRaises(FileError): self.files.add(self.source, "../escape.pdf", "application/pdf")
+        with self.assertRaises(FileError): self.files.add(self.source, "../escape.pdf", "application/pdf", entity_type="expense", entity_id="expense-3", purpose="receipt")
 
     def test_file_links_require_nonblank_type_id_and_purpose(self) -> None:
         for fields in (
-            {"entity_type": "", "entity_id": "expense-1"},
-            {"entity_type": "expense", "entity_id": "  "},
+            {"entity_type": "", "entity_id": "expense-1", "purpose": "receipt"},
+            {"entity_type": "expense", "entity_id": "  ", "purpose": "receipt"},
             {"entity_type": "expense", "entity_id": "expense-1", "purpose": ""},
         ):
             with self.assertRaises(FileError):
@@ -235,7 +239,7 @@ class FileStoreTests(unittest.TestCase):
             )
 
     def test_unavailable_file_content_cannot_be_downloaded(self) -> None:
-        item = self.files.add(self.source, "receipt.pdf", "application/pdf")
+        item = self.files.add(self.source, "receipt.pdf", "application/pdf", entity_type="expense", entity_id="expense-1", purpose="receipt")
         with self.files.unit_of_work.engine.begin() as connection:
             connection.execute(text(
                 "UPDATE file_content_locations SET storage_state='quarantined' WHERE file_id=:id"

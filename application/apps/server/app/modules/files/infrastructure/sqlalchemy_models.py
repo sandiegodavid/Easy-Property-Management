@@ -44,7 +44,7 @@ class FileContentLocationModel(LocalBase):
     verified_at: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (
         CheckConstraint("storage_provider IN ('local', 's3')"),
-        CheckConstraint("storage_state IN ('pending', 'available', 'missing', 'quarantined')"),
-        CheckConstraint("(storage_provider = 'local' AND local_relative_path IS NOT NULL AND s3_bucket IS NULL AND s3_object_key IS NULL AND s3_version_id IS NULL) OR (storage_provider = 's3' AND local_relative_path IS NULL AND s3_bucket IS NOT NULL AND s3_object_key IS NOT NULL)"),
+        CheckConstraint("storage_state IN ('available', 'missing', 'quarantined')"),
+        CheckConstraint("(storage_provider = 'local' AND local_relative_path IS NOT NULL AND s3_bucket IS NULL AND s3_object_key IS NULL AND s3_version_id IS NULL) OR (storage_provider = 's3' AND local_relative_path IS NULL AND s3_bucket IS NOT NULL AND s3_object_key IS NOT NULL AND s3_version_id IS NOT NULL)"),
         Index("file_content_locations_provider", "storage_provider", "local_relative_path", "s3_bucket", "s3_object_key"),
     )

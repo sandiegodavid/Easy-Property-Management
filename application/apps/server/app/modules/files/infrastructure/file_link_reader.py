@@ -86,7 +86,11 @@ class SQLiteFileLinkReader:
             FileRecordModel.media_type,
             FileRecordModel.size_bytes,
             FileRecordModel.content_sha256,
-        ).join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id).where(
+            FileContentLocationModel.storage_state,
+            FileContentLocationModel.verified_at,
+        ).join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id).join(
+            FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id,
+        ).where(
             FileLinkModel.entity_type == entity_type,
             FileLinkModel.entity_id.in_(entity_ids),
         ).order_by(FileLinkModel.created_at, FileLinkModel.id)

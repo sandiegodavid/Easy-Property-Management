@@ -19,10 +19,19 @@ from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditReposi
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 from app.modules.files.application.service import FileService
+from app.modules.files.application.ports import FileLink
 from app.modules.files.infrastructure.content_store import FilesystemContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.platform.config import LocalConfig
 from app.platform.product_migrations import ProductSchemaError, validate_latest_schema
+
+
+class _AuditFileLinkValidator:
+    entity_types = frozenset({"audit_test"})
+    allows_generic_upload = True
+    def validate_create(self, connection, link: FileLink) -> None: return None
+    def validate_archive(self, connection, link: FileLink) -> None: return None
+    def validate_retained(self, connection, link: FileLink) -> None: return None
 
 
 class AuditLedgerTests(unittest.TestCase):
@@ -136,7 +145,8 @@ class AuditLedgerTests(unittest.TestCase):
             self.workspace,
             FilesystemContentStore(self.workspace.paths.files),
             SQLiteFileUnitOfWork(self.workspace.paths.database, self.recorder),
-        ).add(source, source.name, "application/pdf")
+            link_validators=(_AuditFileLinkValidator(),),
+        ).add(source, source.name, "application/pdf", entity_type="audit_test", entity_id="record", purpose="attachment")
 
         from app.bootstrap.api import create_app
         with TestClient(create_app(self.workspace.config.config_path)) as client:

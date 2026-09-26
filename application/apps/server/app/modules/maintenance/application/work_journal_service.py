@@ -33,6 +33,8 @@ def _file_view(item):
         "archivedAt": item.archived_at, "archiveReason": item.archive_reason,
         "originalName": item.original_name, "mediaType": item.media_type,
         "sizeBytes": item.size_bytes, "contentSha256": item.content_sha256,
+        "storageState": item.storage_state, "available": item.storage_state == "available",
+        "verifiedAt": item.verified_at,
     }
 
 

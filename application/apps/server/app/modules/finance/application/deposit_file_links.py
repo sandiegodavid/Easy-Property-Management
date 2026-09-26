@@ -16,6 +16,7 @@ class DepositFileLinkValidator:
         self._target(connection, link)
         if self.operations.active_link_count(connection, link.entity_type, link.entity_id) >= 20: raise FileError("A security-deposit record may have at most twenty active evidence links.")
     def validate_archive(self, connection, link: FileLink): self._target(connection, link)
+    def validate_retained(self, connection, link: FileLink): self._target(connection, link)
     def _target(self, connection, link):
         if link.purpose not in self._purposes[link.entity_type]: raise FileError("Unsupported security-deposit evidence purpose.")
         if not self.operations.exists(connection, link.entity_type, link.entity_id): raise FileError("The linked security-deposit record does not exist.")

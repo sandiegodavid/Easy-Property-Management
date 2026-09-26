@@ -105,7 +105,26 @@ def _report_view(session: Session, report_id: str):
         observations = []
         for observation_row in session.execute(select(ConditionObservationModel).where(ConditionObservationModel.condition_area_id == area_row.id).order_by(ConditionObservationModel.sort_order)).scalars():
             item = ConditionObservation(**{name: getattr(observation_row, name) for name in ConditionObservation.__dataclass_fields__}).to_dict()
-            item["files"] = [{"id": file.id, "originalName": file.original_name, "mediaType": file.media_type, "sizeBytes": file.size_bytes, "contentSha256": file.content_sha256, "storageProvider": location.storage_provider, "storageState": location.storage_state, "createdAt": file.created_at, "links": [{"id": link.id, "entityType": link.entity_type, "entityId": link.entity_id, "purpose": link.purpose, "createdAt": link.created_at}]} for link, file, location in session.execute(select(FileLinkModel, FileRecordModel, FileContentLocationModel).join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id).join(FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id).where(FileLinkModel.entity_type == "condition_observation", FileLinkModel.entity_id == observation_row.id))]
+            file_rows = session.execute(
+                select(FileLinkModel, FileRecordModel, FileContentLocationModel)
+                .join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id)
+                .join(FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id)
+                .where(
+                    FileLinkModel.entity_type == "condition_observation",
+                    FileLinkModel.entity_id == observation_row.id,
+                    FileLinkModel.archived_at.is_(None),
+                )
+            )
+            item["files"] = [
+                {"id": file.id, "originalName": file.original_name, "mediaType": file.media_type,
+                 "sizeBytes": file.size_bytes, "contentSha256": file.content_sha256,
+                 "storageProvider": location.storage_provider, "storageState": location.storage_state,
+                 "available": location.storage_state == "available", "verifiedAt": location.verified_at,
+                 "createdAt": file.created_at,
+                 "links": [{"id": link.id, "entityType": link.entity_type, "entityId": link.entity_id,
+                            "purpose": link.purpose, "createdAt": link.created_at}]}
+                for link, file, location in file_rows
+            ]
             observations.append(item)
         area["observations"] = observations; areas.append(area)
     acknowledgments = [ConditionAcknowledgment(**{name: getattr(item, name) for name in ConditionAcknowledgment.__dataclass_fields__}).to_dict() for item in session.execute(select(ConditionAcknowledgmentModel).where(ConditionAcknowledgmentModel.condition_report_id == report_id)).scalars()]

@@ -640,6 +640,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
         try:
             with engine.begin() as connection:
                 connection.execute(text("INSERT INTO file_records (id, original_name, media_type, size_bytes, content_sha256, created_at) VALUES (:id, 'report.txt', 'text/plain', 1, :hash, :at)"), {"id": file_id, "hash": "a" * 64, "at": datetime.now(UTC).isoformat()})
+                connection.execute(text("INSERT INTO file_content_locations (file_id, storage_provider, storage_state, local_relative_path, verified_at) VALUES (:id, 'local', 'available', :path, :at)"), {"id": file_id, "path": f"managed/{'a' * 64}", "at": datetime.now(UTC).isoformat()})
                 connection.execute(text("INSERT INTO file_links (id, file_id, entity_type, entity_id, purpose, created_at) VALUES (:id, :file, 'maintenance_work_journal_entry', :entry, 'supporting_document', :at)"), {"id": link_id, "file": file_id, "entry": entries[0]["id"], "at": datetime.now(UTC).isoformat()})
             detail = self.service.detail(issue["id"])
             self.assertEqual(1, detail["activeCompletionEvidenceCount"])

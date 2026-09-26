@@ -27,6 +27,9 @@ class LeaseFileLinkValidator:
     def validate_archive(self, connection, link: FileLink) -> None:
         self._validate(connection, link)
 
+    def validate_retained(self, connection, link: FileLink) -> None:
+        self._validate(connection, link)
+
     def _validate(self, connection, link: FileLink) -> None:
         if link.purpose not in self._purposes[link.entity_type]:
             raise FileError(f"Unsupported {link.entity_type} file purpose.")

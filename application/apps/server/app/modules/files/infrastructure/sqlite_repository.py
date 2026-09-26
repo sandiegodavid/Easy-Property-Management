@@ -55,13 +55,14 @@ class SQLiteFileUnitOfWork:
             location = session.get(FileContentLocationModel, file_id)
             if location is None:
                 return None
-            links = session.execute(select(FileLinkModel).where(FileLinkModel.file_id == file_id, FileLinkModel.archived_at.is_(None)).order_by(FileLinkModel.created_at, FileLinkModel.id)).scalars()
+            links = session.execute(select(FileLinkModel).where(FileLinkModel.file_id == file_id).order_by(FileLinkModel.created_at, FileLinkModel.id)).scalars()
             return StoredFile(record.id, record.original_name, record.media_type, record.size_bytes,
                               record.content_sha256, location.storage_provider, location.storage_state,
                               location.local_relative_path, location.s3_bucket, location.s3_object_key,
                               location.s3_version_id, location.provider_etag, location.verified_at, record.created_at,
                               links=tuple({"id": link.id, "entityType": link.entity_type, "entityId": link.entity_id,
-                                           "purpose": link.purpose, "createdAt": link.created_at} for link in links))
+                                           "purpose": link.purpose, "createdAt": link.created_at,
+                                           "archivedAt": link.archived_at, "archiveReason": link.archive_reason} for link in links))
     def get_link(self, link_id: str) -> FileLink | None:
         with Session(self.engine) as session:
             row = session.get(FileLinkModel, link_id)
@@ -81,3 +82,45 @@ class SQLiteFileUnitOfWork:
                 entity_id=audit_change.entity_id, action=audit_change.action, before=audit_change.before,
                 after=audit_change.after, reason=audit_change.reason, correlation_id=audit_change.correlation_id)
         return link
+
+    def link_existing(self, link: FileLink, audit_change: FileAuditChange, validate_link) -> FileLink:
+        with immediate_transaction(self.engine) as connection:
+            validate_link(connection, link)
+            location = connection.execute(select(FileContentLocationModel.storage_state).where(
+                FileContentLocationModel.file_id == link.file_id
+            )).scalar_one_or_none()
+            if location is None:
+                raise ValueError("File record was not found.")
+            if location != "available":
+                raise ValueError("Only available file content can be associated.")
+            connection.execute(FileLinkModel.__table__.insert().values(
+                id=link.id, file_id=link.file_id, entity_type=link.entity_type,
+                entity_id=link.entity_id, purpose=link.purpose, created_at=link.created_at,
+                archived_at=None, archive_reason=None,
+            ))
+            self.recorder.record_change(connection.connection.driver_connection, entity_type=audit_change.entity_type,
+                entity_id=audit_change.entity_id, action=audit_change.action, before=audit_change.before,
+                after=audit_change.after, reason=audit_change.reason, correlation_id=audit_change.correlation_id)
+        return link
+
+    def files_for_verification(self) -> list[StoredFile]:
+        with Session(self.engine) as session:
+            rows = session.execute(select(FileRecordModel, FileContentLocationModel).join(
+                FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id,
+            )).all()
+            return [StoredFile(record.id, record.original_name, record.media_type, record.size_bytes,
+                               record.content_sha256, location.storage_provider, location.storage_state,
+                               location.local_relative_path, location.s3_bucket, location.s3_object_key,
+                               location.s3_version_id, location.provider_etag, location.verified_at,
+                               record.created_at) for record, location in rows]
+
+    def replace_storage_verification(self, item: StoredFile, storage_state: str, verified_at: str, audit_change: FileAuditChange) -> None:
+        with immediate_transaction(self.engine) as connection:
+            result = connection.execute(FileContentLocationModel.__table__.update().where(
+                FileContentLocationModel.file_id == item.id,
+            ).values(storage_state=storage_state, verified_at=verified_at))
+            if result.rowcount != 1:
+                raise ValueError("File record was not found.")
+            self.recorder.record_change(connection.connection.driver_connection, entity_type=audit_change.entity_type,
+                entity_id=audit_change.entity_id, action=audit_change.action, before=audit_change.before,
+                after=audit_change.after, reason=audit_change.reason, correlation_id=audit_change.correlation_id)

@@ -20,6 +20,9 @@ class ExpenseFileLinkValidator:
     def validate_archive(self, connection, link: FileLink) -> None:
         self._validate_target(connection, link)
 
+    def validate_retained(self, connection, link: FileLink) -> None:
+        self._validate_target(connection, link)
+
     def _validate_target(self, connection, link: FileLink) -> None:
         if link.purpose not in self._purposes:
             raise FileError("Unsupported expense evidence purpose.")

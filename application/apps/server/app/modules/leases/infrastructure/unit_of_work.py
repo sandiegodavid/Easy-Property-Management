@@ -10,7 +10,7 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.files.infrastructure.sqlalchemy_models import FileLinkModel, FileRecordModel
+from app.modules.files.infrastructure.sqlalchemy_models import FileContentLocationModel, FileLinkModel, FileRecordModel
 from app.modules.inspections.application.ports import InspectionContextReader
 from app.modules.leases.application.ports import (
     LeaseConflictError,
@@ -267,15 +267,18 @@ def _lease_snapshot(connection, lease: Lease):
             "id": row["file_id"], "originalName": row["original_name"],
             "mediaType": row["media_type"], "sizeBytes": row["size_bytes"],
             "contentSha256": row["content_sha256"], "linkId": row["link_id"], "purpose": row["purpose"],
+            "storageState": row["storage_state"], "available": row["storage_state"] == "available", "verifiedAt": row["verified_at"],
         }
         for row in connection.execute(
             select(
                 FileLinkModel.id.label("link_id"), FileLinkModel.purpose,
                 FileRecordModel.id.label("file_id"), FileRecordModel.original_name,
                 FileRecordModel.media_type, FileRecordModel.size_bytes, FileRecordModel.content_sha256,
+                FileContentLocationModel.storage_state, FileContentLocationModel.verified_at,
             )
             .join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id)
-            .where(FileLinkModel.entity_type == "lease", FileLinkModel.entity_id == lease.id)
+            .join(FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id)
+            .where(FileLinkModel.entity_type == "lease", FileLinkModel.entity_id == lease.id, FileLinkModel.archived_at.is_(None))
             .order_by(FileLinkModel.created_at)
         ).mappings()
     ]
@@ -288,11 +291,13 @@ def _termination_record(session: Session, row: LeaseTerminationCaseModel):
     files = [
         {"id": file.id, "originalName": file.original_name, "mediaType": file.media_type,
          "sizeBytes": file.size_bytes, "contentSha256": file.content_sha256,
-         "linkId": link.id, "purpose": link.purpose}
-        for link, file in session.execute(
-            select(FileLinkModel, FileRecordModel)
+         "linkId": link.id, "purpose": link.purpose, "storageState": location.storage_state,
+         "available": location.storage_state == "available", "verifiedAt": location.verified_at}
+        for link, file, location in session.execute(
+            select(FileLinkModel, FileRecordModel, FileContentLocationModel)
             .join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id)
-            .where(FileLinkModel.entity_type == "lease_termination_case", FileLinkModel.entity_id == row.id)
+            .join(FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id)
+            .where(FileLinkModel.entity_type == "lease_termination_case", FileLinkModel.entity_id == row.id, FileLinkModel.archived_at.is_(None))
             .order_by(FileLinkModel.created_at)
         )
     ]

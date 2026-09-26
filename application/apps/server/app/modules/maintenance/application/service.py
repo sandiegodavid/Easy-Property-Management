@@ -313,7 +313,7 @@ class MaintenanceService:
         if issue_id not in projection:raise MaintenanceNotFoundError("Issue was not found.")
         return self._detail_projection(projection[issue_id])
     def _file(self,item):
-        return {"id":item.id,"entityType":item.entity_type,"entityId":item.entity_id,"purpose":item.purpose,"fileId":item.file_id,"createdAt":item.created_at,"archivedAt":item.archived_at,"archiveReason":item.archive_reason,"originalName":item.original_name,"mediaType":item.media_type,"sizeBytes":item.size_bytes,"contentSha256":item.content_sha256}
+        return {"id":item.id,"entityType":item.entity_type,"entityId":item.entity_id,"purpose":item.purpose,"fileId":item.file_id,"createdAt":item.created_at,"archivedAt":item.archived_at,"archiveReason":item.archive_reason,"originalName":item.original_name,"mediaType":item.media_type,"sizeBytes":item.size_bytes,"contentSha256":item.content_sha256,"storageState":item.storage_state,"available":item.storage_state=="available","verifiedAt":item.verified_at}
     def _detail_projection(self,projection):
         issue=projection["issue"]; result=_dict(issue)
         for key in ("reporterRole","reporterSubjectKind","reporterPartyId","reporterDisplayNameSnapshot"):

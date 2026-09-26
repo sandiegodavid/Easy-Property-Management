@@ -13,6 +13,7 @@ from app.bootstrap.api import create_app
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.application.service import FileService
+from app.modules.inspections.application.file_links import ConditionObservationFileLinkValidator
 from app.modules.files.infrastructure.content_store import FilesystemContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.inspections.application.service import AreaInput, InspectionConflictError, InspectionService, ObservationInput
@@ -64,7 +65,7 @@ class InspectionWorkflowTests(unittest.TestCase):
             draft["id"], executed_on=today, confirmed=True,
             expected_revision=portfolio.get_space_status(self.space_id)["revision"], idempotency_key=str(uuid4()),
         )
-        self.files = FileService(self.workspace, FilesystemContentStore(self.workspace.paths.files), SQLiteFileUnitOfWork(self.workspace.paths.database, self.recorder))
+        self.files = FileService(self.workspace, FilesystemContentStore(self.workspace.paths.files), SQLiteFileUnitOfWork(self.workspace.paths.database, self.recorder), link_validators=(ConditionObservationFileLinkValidator(),))
         self.inspections = InspectionService(SQLiteInspectionUnitOfWork(self.workspace.paths.database, self.recorder), self.files)
         self.backups = BackupService(self.workspace, self.recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)))
         self.checklist = (AreaInput("Kitchen", (ObservationInput("Floor", "good", is_completed=True),)),)
@@ -154,8 +155,8 @@ class InspectionWorkflowTests(unittest.TestCase):
         with TestClient(create_app(config)) as client:
             self.assertEqual(client.post("/api/workspace/initialize").status_code, 201)
             response = client.post("/api/files", data={"entity_type":"condition_observation", "entity_id":"observation", "purpose":"condition_photo"}, files={"file": ("evidence.txt", b"evidence", "text/plain")})
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("No owning-domain validator", response.json()["detail"])
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("attached by its owning workflow", response.json()["detail"]["message"])
 
     def test_post_move_out_draft_precedes_confirmed_move_out_but_cannot_finalize(self):
         report = self.inspections.create(self.lease["id"], report_kind="post_move_out", walkthrough_on=date.today(), conducted_by="Operator", areas=self.checklist)
@@ -237,7 +238,8 @@ class InspectionWorkflowTests(unittest.TestCase):
         restored_pre = restored_inspections.get(pre["id"])
         restored_observation = restored_pre["areas"][0]["observations"][0]
         self.assertEqual(restored_observation["id"], observation_id)
-        self.assertEqual(restored_observation["files"], [evidence])
+        self.assertEqual(restored_observation["files"][0]["id"], evidence["id"])
+        self.assertEqual(restored_observation["files"][0]["storageState"], "available")
         restored_file = restored_files.get(evidence["id"])
         self.assertEqual(restored_file.content_sha256, evidence["contentSha256"])
         self.assertEqual(restored_file.storage_state, "available")

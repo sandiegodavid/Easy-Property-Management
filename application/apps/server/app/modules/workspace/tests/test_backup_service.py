@@ -16,6 +16,7 @@ from app.modules.workspace.application.backup_service import BackupError, Backup
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.application.service import FileService
+from app.modules.files.application.ports import FileLink
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
@@ -25,6 +26,26 @@ from app.platform.config import LocalConfig
 from app.platform.locking import WorkspaceOperationLock
 from app.platform.secrets import BackupSecretStore, SecretStoreError
 from app.platform.product_migrations import current_revision
+
+
+class _BackupFileValidator:
+    entity_types = frozenset({"backup_test"})
+    allows_generic_upload = True
+
+    def validate_create(self, connection, link: FileLink) -> None:
+        return None
+
+    def validate_archive(self, connection, link: FileLink) -> None:
+        return None
+
+
+def _test_file_service(workspace, store=None, recorder=None) -> FileService:
+    recorder = recorder or AuditRecorder(SQLiteAuditRepository(workspace.paths.database))
+    return FileService(
+        workspace, store or FilesystemContentStore(workspace.paths.files),
+        SQLiteFileUnitOfWork(workspace.paths.database, recorder),
+        link_validators=(_BackupFileValidator(),),
+    )
 
 
 PASSPHRASE = "a long test backup passphrase"
@@ -98,8 +119,8 @@ class BackupServiceTests(unittest.TestCase):
 
     def test_encrypted_backup_validates_and_restores_to_a_new_workspace(self) -> None:
         source = self.root / "january.txt"; source.write_text("rent receipt", encoding="utf-8")
-        files = FileService(self.workspace, FilesystemContentStore(self.workspace.paths.files), SQLiteFileUnitOfWork(self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database))))
-        attachment = files.add(source, "january.txt", "text/plain")
+        files = _test_file_service(self.workspace)
+        attachment = files.add(source, "january.txt", "text/plain", entity_type="backup_test", entity_id="one", purpose="attachment")
 
         result = self.backups.create_backup(PASSPHRASE)
 
@@ -123,12 +144,8 @@ class BackupServiceTests(unittest.TestCase):
         client = _BackupFakeS3Client()
         s3 = S3ContentStore(client, "evidence-bucket", "documents")
         recorder = AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database))
-        files = FileService(
-            self.workspace,
-            s3,
-            SQLiteFileUnitOfWork(self.workspace.paths.database, recorder),
-        )
-        attachment = files.add(source, "remote.txt", "text/plain")
+        files = _test_file_service(self.workspace, s3, recorder)
+        attachment = files.add(source, "remote.txt", "text/plain", entity_type="backup_test", entity_id="remote", purpose="attachment")
         backups = BackupService(
             self.workspace,
             recorder,
@@ -156,15 +173,8 @@ class BackupServiceTests(unittest.TestCase):
     def test_backup_rejects_file_content_not_marked_available(self) -> None:
         source = self.root / "quarantined.txt"
         source.write_text("quarantined", encoding="utf-8")
-        files = FileService(
-            self.workspace,
-            FilesystemContentStore(self.workspace.paths.files),
-            SQLiteFileUnitOfWork(
-                self.workspace.paths.database,
-                AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
-            ),
-        )
-        item = files.add(source, "quarantined.txt", "text/plain")
+        files = _test_file_service(self.workspace)
+        item = files.add(source, "quarantined.txt", "text/plain", entity_type="backup_test", entity_id="quarantined", purpose="attachment")
         with sqlite3.connect(self.workspace.paths.database) as connection:
             connection.execute(
                 "UPDATE file_content_locations SET storage_state='quarantined' WHERE file_id=?",

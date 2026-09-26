@@ -56,6 +56,8 @@ class FileLinkWithFile:
     media_type: str
     size_bytes: int
     content_sha256: str
+    storage_state: str
+    verified_at: str
 
 
 class FileLinkReader(Protocol):
@@ -90,9 +92,29 @@ class FileLinkValidator(Protocol):
     """Owning-domain boundary for validating polymorphic file links."""
 
     entity_types: frozenset[str]
+    allows_generic_upload: bool
 
     def validate_create(self, connection: Any, link: FileLink) -> None: ...
     def validate_archive(self, connection: Any, link: FileLink) -> None: ...
+    def validate_retained(self, connection: Any, link: FileLink) -> None: ...
+
+
+class FileLinkPolicyRegistry:
+    """One explicit policy composition for mutation and retained-data checks."""
+
+    def __init__(self, validators: Sequence[FileLinkValidator]) -> None:
+        self._by_entity_type: dict[str, FileLinkValidator] = {}
+        for validator in validators:
+            for entity_type in validator.entity_types:
+                if entity_type in self._by_entity_type:
+                    raise ValueError(f"Duplicate FILE-001 policy for {entity_type}.")
+                self._by_entity_type[entity_type] = validator
+
+    def get(self, entity_type: str) -> FileLinkValidator | None:
+        return self._by_entity_type.get(entity_type)
+
+    def as_mapping(self) -> dict[str, FileLinkValidator]:
+        return dict(self._by_entity_type)
 
 
 class FileUnitOfWork(Protocol):
@@ -102,3 +124,6 @@ class FileUnitOfWork(Protocol):
     def get(self, file_id: str) -> StoredFile | None: ...
     def get_link(self, link_id: str) -> FileLink | None: ...
     def archive_link(self, link: FileLink, audit_change: FileAuditChange, validate_link: Callable[[Any, FileLink], None]) -> FileLink: ...
+    def link_existing(self, link: FileLink, audit_change: FileAuditChange, validate_link: Callable[[Any, FileLink], None]) -> FileLink: ...
+    def files_for_verification(self) -> list[StoredFile]: ...
+    def replace_storage_verification(self, item: StoredFile, storage_state: str, verified_at: str, audit_change: FileAuditChange) -> None: ...

@@ -12,3 +12,6 @@ class OwnerRentReportFileLinkValidator:
         report=self.operations.report(connection, link.entity_id)
         if report is None: raise ValueError("Owner rent report evidence target was not found.")
         if report.status=="verified" and self.operations.link_is_active_available(connection,link.id) and self.operations.active_available_count(connection,link.entity_id)<=1: raise ValueError("Verified owner rent reports must retain one active available evidence file.")
+    def validate_retained(self, connection, link: FileLink):
+        if link.purpose not in self.purposes: raise ValueError("File-link purpose is not allowed for owner rent report evidence.")
+        if not self.operations.exists(connection, link.entity_id): raise ValueError("Owner rent report evidence target was not found.")

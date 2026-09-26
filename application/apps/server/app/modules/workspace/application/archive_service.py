@@ -153,7 +153,7 @@ class WorkspaceArchiveService:
             if storage_provider == "s3":
                 if not allow_remote:
                     raise BackupError("Portable archives cannot contain remote file locations.")
-                if self.remote_materializer is None or not s3_bucket or not s3_object_key:
+                if self.remote_materializer is None or not s3_bucket or not s3_object_key or not s3_version_id:
                     raise BackupError("Remote file content cannot be verified by the configured backup service.")
                 with tempfile.TemporaryDirectory(prefix="epm-remote-validation-") as directory:
                     target = Path(directory) / expected_hash
@@ -165,11 +165,10 @@ class WorkspaceArchiveService:
                     except Exception as error:
                         raise BackupError(f"Remote file content failed verification: {error}") from error
                 continue
-            if storage_provider != "local" or relative_path is None:
+            if storage_provider != "local" or relative_path != f"managed/{expected_hash}":
                 raise BackupError("A file record has an unsupported content location.")
-            path = (files_root / relative_path).resolve()
-            if (files_root not in path.parents or not path.is_file() or
-                    str(relative_path) != f"managed/{expected_hash}"):
+            path = files_root / relative_path
+            if path.is_symlink() or not path.is_file():
                 raise BackupError("A file record points outside the managed workspace file store.")
             expected_paths.add(path)
             digest = hashlib.sha256(); size = 0
@@ -220,7 +219,7 @@ class WorkspaceArchiveService:
             if records and self.remote_materializer is None:
                 raise BackupError("Remote file content cannot be included by the configured backup service.")
             for file_id, storage_state, bucket, key, version_id, digest, size in records:
-                if storage_state != "available":
+                if storage_state != "available" or not version_id:
                     raise BackupError("Only available remote file content can be materialized.")
                 target = staged_workspace / "files" / "managed" / digest
                 target.parent.mkdir(parents=True, exist_ok=True)

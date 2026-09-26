@@ -16,3 +16,7 @@ class MaintenanceFileLinkValidator:
         if self.operations.active_link_count(connection,link.entity_type,link.entity_id)>=limit:raise ValueError("Maintenance evidence-link limit has been reached.")
     def validate_archive(self,connection,link):
         if not self.operations.exists(connection,link.entity_type,link.entity_id):raise ValueError("Maintenance evidence target was not found.")
+    def validate_retained(self,connection,link):
+        purposes,_=self._rules[link.entity_type]
+        if link.purpose not in purposes:raise ValueError("File-link purpose is not allowed for maintenance evidence.")
+        if not self.operations.exists(connection,link.entity_type,link.entity_id):raise ValueError("Maintenance evidence target was not found.")
