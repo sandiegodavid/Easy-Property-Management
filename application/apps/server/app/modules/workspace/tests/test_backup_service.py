@@ -10,6 +10,7 @@ import zipfile
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 from unittest.mock import patch
 
 from app.modules.workspace.application.backup_service import BackupError, BackupService
@@ -19,6 +20,10 @@ from app.modules.files.application.service import FileService
 from app.modules.files.application.ports import FileLink
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
+from app.modules.intake.application.file_links import IntakeSourceFileLinkValidator
+from app.modules.intake.application.service import AttachmentInput, IntakeAdmissionCommand, IntakeService
+from app.modules.intake.domain.models import EvidenceEnvelope
+from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.infrastructure.encrypted_archive import APPLICATION_VERSION, ArchiveError, _validate_header, _validate_manifest_consistency, decrypt_archive_to_zip, make_header, write_encrypted_archive
 from app.modules.workspace.application.backup_state import BackupOperationRecord, BackupStateStore, RetentionExecutionError, RetentionRecovery, RetentionResult
@@ -44,7 +49,7 @@ def _test_file_service(workspace, store=None, recorder=None) -> FileService:
     return FileService(
         workspace, store or FilesystemContentStore(workspace.paths.files),
         SQLiteFileUnitOfWork(workspace.paths.database, recorder),
-        link_validators=(_BackupFileValidator(),),
+        link_validators=(IntakeSourceFileLinkValidator(),),
     )
 
 
@@ -117,10 +122,32 @@ class BackupServiceTests(unittest.TestCase):
         self.backups = BackupService(self.workspace, recorder,
                                      lambda database: AuditRecorder(SQLiteAuditRepository(database)), self.secrets)
 
+    def intake_source_id(self) -> str:
+        service = IntakeService(SQLiteIntakeUnitOfWork(
+            self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
+        ))
+        return service.admit(IntakeAdmissionCommand(
+            EvidenceEnvelope("operator_note", "internal", "Backup fixture evidence.", "2026-01-01T00:00:00+00:00"),
+            "manual", str(uuid4()),
+        ))["sourceId"]
+
+    def intake_file(self, files: FileService, source: Path, name: str):
+        intake = IntakeService(
+            SQLiteIntakeUnitOfWork(self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database))),
+            files,
+        )
+        result = intake.admit(IntakeAdmissionCommand(
+            EvidenceEnvelope("operator_note", "internal", "Backup fixture evidence.", "2026-01-01T00:00:00+00:00"),
+            "manual", str(uuid4()), attachments=(AttachmentInput(source, name, "text/plain"),),
+        ))
+        link_id = intake.get(result["sourceId"])["attachments"][0]["fileLinkId"]
+        link = files.unit_of_work.get_link(link_id)
+        return files.get(link.file_id)
+
     def test_encrypted_backup_validates_and_restores_to_a_new_workspace(self) -> None:
         source = self.root / "january.txt"; source.write_text("rent receipt", encoding="utf-8")
         files = _test_file_service(self.workspace)
-        attachment = files.add(source, "january.txt", "text/plain", entity_type="backup_test", entity_id="one", purpose="attachment")
+        attachment = self.intake_file(files, source, "january.txt")
 
         result = self.backups.create_backup(PASSPHRASE)
 
@@ -145,7 +172,7 @@ class BackupServiceTests(unittest.TestCase):
         s3 = S3ContentStore(client, "evidence-bucket", "documents")
         recorder = AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database))
         files = _test_file_service(self.workspace, s3, recorder)
-        attachment = files.add(source, "remote.txt", "text/plain", entity_type="backup_test", entity_id="remote", purpose="attachment")
+        attachment = self.intake_file(files, source, "remote.txt")
         backups = BackupService(
             self.workspace,
             recorder,
@@ -174,7 +201,7 @@ class BackupServiceTests(unittest.TestCase):
         source = self.root / "quarantined.txt"
         source.write_text("quarantined", encoding="utf-8")
         files = _test_file_service(self.workspace)
-        item = files.add(source, "quarantined.txt", "text/plain", entity_type="backup_test", entity_id="quarantined", purpose="attachment")
+        item = self.intake_file(files, source, "quarantined.txt")
         with sqlite3.connect(self.workspace.paths.database) as connection:
             connection.execute(
                 "UPDATE file_content_locations SET storage_state='quarantined' WHERE file_id=?",

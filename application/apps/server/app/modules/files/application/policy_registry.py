@@ -12,6 +12,7 @@ from app.modules.finance.application.deposit_file_links import DepositFileLinkVa
 from app.modules.maintenance.application.file_links import MaintenanceFileLinkValidator
 from app.modules.owner_accounting.application.file_links import OwnerRentReportFileLinkValidator
 from app.modules.inspections.application.file_links import ConditionObservationFileLinkValidator
+from app.modules.intake.application.file_links import IntakeSourceFileLinkValidator
 
 
 class _Targets:
@@ -57,4 +58,5 @@ def build_file_link_policy_registry() -> FileLinkPolicyRegistry:
         LeaseFileLinkValidator(targets), ExpenseFileLinkValidator(targets),
         DepositFileLinkValidator(targets), MaintenanceFileLinkValidator(targets),
         OwnerRentReportFileLinkValidator(targets), ConditionObservationFileLinkValidator(),
+        IntakeSourceFileLinkValidator(),
     ))

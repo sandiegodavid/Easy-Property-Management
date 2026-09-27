@@ -42,6 +42,10 @@ from app.modules.communications.infrastructure.unit_of_work import (
 from app.modules.communications.infrastructure.link_reader import SQLiteCommunicationLinkReader
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.modules.communications.domain.audit_policy import COMMUNICATION_ACTIVITY_POLICY
+from app.modules.intake.api.router import build_router as build_intake_router
+from app.modules.intake.application.service import IntakeService
+from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
+from app.modules.intake.domain.audit_policy import INTAKE_ACTIVITY_POLICY
 from app.modules.maintenance.api.router import build_router as build_maintenance_router
 from app.modules.maintenance.application.service import MaintenanceService
 from app.modules.maintenance.application.work_journal_service import WorkJournalService
@@ -221,6 +225,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         file_link_policies,
     )
     file_verification = FileStorageVerificationService(files.unit_of_work, files.content_stores)
+    intake = IntakeService(SQLiteIntakeUnitOfWork(service.paths.database, recorder), files)
     remote_materializer = s3_store.materialize if s3_store is not None else None
     backups = BackupService(service, recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)), remote_materializer=remote_materializer)
     tasks = TaskService(SQLiteTaskUnitOfWork(service.paths.database, recorder))
@@ -318,6 +323,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.file_verification_service = file_verification
     app.state.task_service = tasks
     app.state.communication_service = communications
+    app.state.intake_service = intake
     app.state.portfolio_service = portfolio
     app.state.tenant_service = tenants
     app.state.party_contact_service = party_contacts
@@ -391,6 +397,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("communication", 1): DEFAULT_SNAPSHOT_POLICY,
         ("communication_participant", 1): DEFAULT_SNAPSHOT_POLICY,
         ("communication_link", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("intake_source", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("intake_evidence_revision", 1): DEFAULT_SNAPSHOT_POLICY,
         ("maintenance_issue", 1): DEFAULT_SNAPSHOT_POLICY,
         ("maintenance_appointment", 1): DEFAULT_SNAPSHOT_POLICY,
         ("maintenance_cost_context", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -444,6 +452,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("communication", 1): COMMUNICATION_ACTIVITY_POLICY,
         ("communication_participant", 1): COMMUNICATION_ACTIVITY_POLICY,
         ("communication_link", 1): COMMUNICATION_ACTIVITY_POLICY,
+        ("intake_source", 1): INTAKE_ACTIVITY_POLICY,
+        ("intake_evidence_revision", 1): INTAKE_ACTIVITY_POLICY,
         ("maintenance_issue", 1): MAINTENANCE_ACTIVITY_POLICY,
         ("maintenance_appointment", 1): MAINTENANCE_ACTIVITY_POLICY,
         ("maintenance_cost_context", 1): MAINTENANCE_ACTIVITY_POLICY,
@@ -476,6 +486,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_expense_router(expenses, runtime))
     app.include_router(build_deposit_router(deposits, runtime))
     app.include_router(build_communications_router(communications, runtime))
+    app.include_router(build_intake_router(intake, runtime))
     app.include_router(build_maintenance_router(maintenance, work_journal, runtime))
     app.include_router(build_owner_rent_report_router(owner_rent_reports, runtime))
     app.include_router(build_owner_concern_router(owner_concerns, runtime))

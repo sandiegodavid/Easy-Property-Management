@@ -147,6 +147,15 @@ class AuditLedgerTests(unittest.TestCase):
             SQLiteFileUnitOfWork(self.workspace.paths.database, self.recorder),
             link_validators=(_AuditFileLinkValidator(),),
         ).add(source, source.name, "application/pdf", entity_type="audit_test", entity_id="record", purpose="attachment")
+        # FILE-001 retained validation now deliberately rejects unknown
+        # polymorphic targets.  This test exercises only the already-written
+        # audit snapshots, so remove its test-only logical file fixture before
+        # opening the production-composed workspace.
+        with closing(sqlite3.connect(self.workspace.paths.database)) as connection:
+            connection.execute("DELETE FROM file_links WHERE file_id = ?", (item.id,))
+            connection.execute("DELETE FROM file_content_locations WHERE file_id = ?", (item.id,))
+            connection.execute("DELETE FROM file_records WHERE id = ?", (item.id,))
+            connection.commit()
 
         from app.bootstrap.api import create_app
         with TestClient(create_app(self.workspace.config.config_path)) as client:

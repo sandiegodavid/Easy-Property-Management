@@ -24,6 +24,7 @@ from app.modules.maintenance.infrastructure.schema_validation import validate_ma
 from app.modules.owner_accounting.infrastructure.schema_validation import validate_owner_accounting_schema
 from app.modules.owner_management.infrastructure.schema_validation import validate_owner_concern_schema
 from app.modules.ai_governance.infrastructure.schema_validation import validate_ai_governance_schema
+from app.modules.intake.infrastructure.schema_validation import validate_intake_schema
 from app.modules.ai_governance.application.registry import ACTION_REGISTRY, REDACTION_PROFILE_REGISTRY, ADAPTER_REGISTRY, APPROVAL_EVIDENCE_VALIDATORS, SOURCE_VALIDATORS
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.platform.migration_errors import MigrationSchemaError
@@ -87,6 +88,7 @@ def validate_latest_schema(database_path: Path) -> None:
                 "owner_rent_reports", "owner_rent_report_operations",
                 "owner_concerns", "owner_concern_follow_up_operations",
                 "ai_settings", "ai_settings_operations", "ai_model_connections", "ai_action_limits", "ai_runs", "ai_drafts", "ai_review_decisions",
+                "intake_sources", "intake_evidence_revisions", "intake_revision_file_links", "intake_source_operations", "intake_source_duplicate_candidates",
             }
             if actual_tables != expected_tables:
                 raise ProductSchemaError("Workspace database contains unsupported application tables.")
@@ -96,6 +98,7 @@ def validate_latest_schema(database_path: Path) -> None:
             for validator in (validate_workspace_schema, validate_audit_schema, validate_file_schema, validate_task_schema, validate_portfolio_schema, validate_tenant_schema, validate_lease_schema, validate_inspection_schema, validate_vendor_schema, validate_finance_schema, validate_maintenance_schema, validate_owner_accounting_schema, validate_owner_concern_schema):
                 validator(connection)
             validate_file_data(connection, build_file_link_policy_registry().as_mapping())
+            validate_intake_schema(connection)
             validate_ai_governance_schema(connection, ACTION_REGISTRY, REDACTION_PROFILE_REGISTRY, ADAPTER_REGISTRY, APPROVAL_EVIDENCE_VALIDATORS, SOURCE_VALIDATORS)
             validate_communication_schema(connection, SQLiteCommunicationContextOperations(SQLiteTaskTransactionOperations()))
             validate_finance_data(connection)

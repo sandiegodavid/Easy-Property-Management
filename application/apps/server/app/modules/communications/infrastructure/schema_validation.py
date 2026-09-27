@@ -115,7 +115,8 @@ def _validate_data(connection, context: CommunicationContextOperations | None) -
             raise MigrationSchemaError("COM-001 follow-up task reference is invalid.") from error
         for row in link_rows:
             try:
-                current_zone = context.validate_link(connection, row["entity_type"], row["entity_id"])
+                validator = getattr(context, "validate_retained_link", context.validate_link)
+                current_zone = validator(connection, row["entity_type"], row["entity_id"])
             except (KeyError, ValueError) as error:
                 raise MigrationSchemaError("COM-001 typed link target is invalid.") from error
             snapshot = row["property_timezone_snapshot"]

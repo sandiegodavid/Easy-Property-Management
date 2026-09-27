@@ -16,6 +16,7 @@ from app.modules.tasks.application.service import TaskCreateCommand, new_task
 from app.modules.tasks.infrastructure.sqlalchemy_models import TaskModel
 from app.modules.maintenance.infrastructure.sqlalchemy_models import MaintenanceIssueModel
 from app.modules.owner_management.infrastructure.sqlalchemy_models import OwnerConcernModel
+from app.modules.intake.infrastructure.sqlalchemy_models import IntakeSourceModel
 
 
 class SQLiteCommunicationContextOperations:
@@ -76,7 +77,25 @@ class SQLiteCommunicationContextOperations:
             if zone is None:
                 raise KeyError("Linked owner concern was not found.")
             return zone
+        if entity_type == "intake_source":
+            source = connection.execute(select(IntakeSourceModel.id).where(
+                IntakeSourceModel.id == entity_id,
+                IntakeSourceModel.technical_status == "ready",
+                IntakeSourceModel.superseded_by_source_id.is_(None),
+            )).scalar_one_or_none()
+            if source is None:
+                raise KeyError("Linked intake source was not found or is not ready.")
+            return None
         raise ValueError("Communication link type is unsupported.")
+
+    def validate_retained_link(self, connection: Any, entity_type: str, entity_id: str) -> str | None:
+        """Historical links retain their original target instead of following
+        mutable source lifecycle state (notably intake supersession)."""
+        if entity_type == "intake_source":
+            if connection.execute(select(IntakeSourceModel.id).where(IntakeSourceModel.id == entity_id)).scalar_one_or_none() is None:
+                raise KeyError("Linked intake source was not found.")
+            return None
+        return self.validate_link(connection, entity_type, entity_id)
 
     def create_follow_up(self, connection: Any, *, communication: Communication, title: str, notes: str | None,
                          due_at_utc: str | None, due_timezone: str | None, correlation_id: str) -> dict[str, object]:

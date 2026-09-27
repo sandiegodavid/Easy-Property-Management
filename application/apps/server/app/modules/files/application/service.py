@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -47,7 +48,9 @@ class FileAttachmentBatch:
             self._leases.append(content)
         item = self.service._stored_item(content, original_name, media_type)
         self.service._write_on_connection(self.connection, item, link, correlation_id)
-        return item
+        # The caller-owned batch needs the stable association ID to create
+        # its own immutable aggregate reference without rereading the link.
+        return replace(item, links=({"id": link.id, "entityId": link.entity_id},))
 
     def commit(self) -> None:
         if self._closed is not None:
