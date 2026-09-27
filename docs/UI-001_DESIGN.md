@@ -314,6 +314,22 @@ The actions sit inside the expanded content per D35. AI-assisted preparation fol
   - Settled: appearance switch, visible inline-toggle guidance, Excel/read-only Google Sheets snapshots, create/link/skip import behavior, and independent model/assistant selections, credentials, pause, limits, governed-input, disclosure, and redaction controls (D42–D46).
   - Complete: consolidated product design confirmed. Detailed API/schema design and implementation follow separately.
 
+## Feature-owned implementation designs
+
+This document remains the product interaction and shared web-client specification for `UI-001`. The following feature documents are the authoritative implementation contracts for the backend capability and its feature-specific UI handoff. Where a feature document is more specific, it takes precedence over the corresponding product decision here.
+
+| Backlog item | Dedicated design | Owns |
+| --- | --- | --- |
+| TASK-002 | [Waiting and Follow-up](TASK-002_DESIGN.md) | Waiting context, follow-up scheduling, resurfacing, and source-deadline separation. |
+| OPS-001 | [Operator Support](OPS-001_DESIGN.md) | Bootstrap, preferences, contextual compositions, search, coverage provenance, and short-form recovery. |
+| LEGAL-001 | [Manual Legal Matters](LEGAL-001_DESIGN.md) | Manual case facts, links, milestones, deadlines, closure, and safety boundaries. |
+| HOA-001 | [HOA Notice and Shared-Repair Coordination](HOA-001_DESIGN.md) | Violation notices and HOA coordination for a Maintenance-owned shared repair. |
+| DATA-002 | [Spreadsheet Intake](DATA-002_DESIGN.md) | Excel snapshot intake, create/link/skip decisions, commits, and outcomes. |
+| DATA-003 | [Read-Only Google Sheets Intake](DATA-003_DESIGN.md) | Google Sheets authorization and immutable source snapshots. |
+| HOA-002 | [Deferred Association Management](HOA-002_DESIGN.md) | Post-MVP association documents/profiles and approval workflows. |
+
+UI-001 owns the React/Vite shell, generated-client boundary, route composition, shared presentation components, accessibility, and end-to-end operator interactions. It consumes the feature contracts above and must not recreate their policy in browser code.
+
 ## Working glossary
 
 - **Needs action:** Supported work requiring an operator action now. Urgent issues lead, followed by overdue, due-today, and undated decision work.
@@ -748,6 +764,8 @@ These scenarios derive from confirmed decisions and must be included in implemen
 ## Screen review
 
 An in-conversation interactive design preview uses fictional sample data to review Home, owner/property directories and workspaces, inline secondary actions, and navigation customization. The product owner approved the overall visual design and requested inline toggles and clarification of browsing multiple records. D35 and D36 document the resulting refinement. The preview is not production UI and does not write application records. The complete product design is confirmed. The illustrative preview is not an implementation contract and predates some final additions, including Providers/legal/HOA/import screens. Its AI Settings now demonstrates D46 with simulated provider/assistant states and full-bar disclosure controls. Use this document as authority for workflows not shown in the demo.
+
+The [operator experience visual reference](../demo/operator-experience.html) is a local, fictional-data prototype for reviewing the visual direction, layout, and interaction feel. It is supplementary only: it does not define API contracts, domain behavior, feature readiness, or acceptance criteria.
 
 ## Sources
 
