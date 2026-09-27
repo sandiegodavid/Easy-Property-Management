@@ -19,7 +19,7 @@ from app.modules.workspace.application.runtime import WorkspaceRuntime
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.files.application.service import FileService
 from app.modules.files.application.verification import FileStorageVerificationService
-from app.modules.files.application.policy_registry import build_file_link_policy_registry
+from app.bootstrap.file_link_policies import build_file_link_policy_registry
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
@@ -347,6 +347,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
         ("file", 1): DEFAULT_SNAPSHOT_POLICY,
         ("file_link", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("file_publication_cleanup", 1): DEFAULT_SNAPSHOT_POLICY,
         ("task", 1): DEFAULT_SNAPSHOT_POLICY,
         ("task_reminder", 1): DEFAULT_SNAPSHOT_POLICY,
         ("property", 1): DEFAULT_SNAPSHOT_POLICY,

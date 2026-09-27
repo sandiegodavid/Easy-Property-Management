@@ -7,6 +7,7 @@ from app.modules.finance.application.expense_ports import ExpenseFileLinkOperati
 
 class ExpenseFileLinkValidator:
     entity_types = frozenset({"expense"})
+    allows_generic_upload = True
     _purposes = frozenset({"receipt", "invoice", "proof_of_payment", "supporting_document"})
 
     def __init__(self, operations: ExpenseFileLinkOperations) -> None:
@@ -22,6 +23,11 @@ class ExpenseFileLinkValidator:
 
     def validate_retained(self, connection, link: FileLink) -> None:
         self._validate_target(connection, link)
+        # Retained validation sees the complete, committed aggregate.  Unlike
+        # create validation, the prospective link is already part of the
+        # count, so only a count *over* the policy limit is corrupt.
+        if self.operations.active_link_count(connection, link.entity_id) > 20:
+            raise FileError("An expense may have at most twenty active evidence links.")
 
     def _validate_target(self, connection, link: FileLink) -> None:
         if link.purpose not in self._purposes:

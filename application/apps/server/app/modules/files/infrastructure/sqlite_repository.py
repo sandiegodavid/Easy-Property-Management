@@ -11,6 +11,7 @@ from app.modules.files.application.ports import FileAuditChange, FileLink
 from app.modules.files.domain.models import StoredFile
 from app.modules.files.infrastructure.sqlalchemy_models import FileContentLocationModel, FileLinkModel, FileRecordModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
+from uuid import uuid4
 
 
 class SQLiteFileUnitOfWork:
@@ -128,3 +129,18 @@ class SQLiteFileUnitOfWork:
                 entity_id=audit_change.entity_id, action=audit_change.action, before=audit_change.before,
                 after=audit_change.after, reason=audit_change.reason, correlation_id=audit_change.correlation_id,
                 actor_kind=audit_change.actor_kind)
+
+    def record_cleanup_incomplete(self, publication_id: str, provider: str, correlation_id: str) -> None:
+        """Durable, privacy-safe integrity attention after failed cleanup."""
+        with immediate_transaction(self.engine) as connection:
+            self.recorder.record_change(connection.connection.driver_connection,
+                entity_type="file_publication_cleanup", entity_id=str(uuid4()), action="cleanup_incomplete",
+                before=None, after={"publicationId": publication_id, "provider": provider},
+                reason="cleanup_incomplete", correlation_id=correlation_id, actor_kind="system")
+
+    def record_cleanup_resolved(self, correlation_id: str) -> None:
+        with immediate_transaction(self.engine) as connection:
+            self.recorder.record_change(connection.connection.driver_connection,
+                entity_type="file_publication_cleanup", entity_id=str(uuid4()), action="cleanup_resolved",
+                before=None, after={"verified": True}, reason="storage_verification_complete",
+                correlation_id=correlation_id, actor_kind="system")

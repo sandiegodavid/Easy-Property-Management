@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from app.modules.audit.infrastructure.schema_validation import validate_audit_schema
 from app.modules.files.infrastructure.schema_validation import validate_file_data, validate_file_schema
-from app.modules.files.application.policy_registry import build_file_link_policy_registry
+from app.bootstrap.file_link_policies import build_file_link_policy_registry
 from app.modules.tasks.infrastructure.schema_validation import validate_task_schema
 from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
 from app.modules.tenants.infrastructure.schema_validation import validate_tenant_schema

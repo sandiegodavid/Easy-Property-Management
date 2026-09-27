@@ -29,10 +29,12 @@ class FileAttachmentBatch:
         self._leases: list[Any] = []
         self._by_digest: dict[str, Any] = {}
         self._closed: str | None = None
+        self._correlation_id: str | None = None
 
     def add(self, source: Path, original_name: str, media_type: str | None, *, entity_type: str, entity_id: str, purpose: str, correlation_id: str, owning_workflow: bool = False) -> StoredFile:
         if self._closed is not None:
             raise FileError("The attachment batch is already complete.")
+        self._correlation_id = self._correlation_id or correlation_id
         link = self.service._new_link(entity_type, entity_id, purpose)
         self.service._validate_link(self.connection, link, generic_upload=not owning_workflow)
         digest = _source_digest(source)
@@ -56,36 +58,40 @@ class FileAttachmentBatch:
         if self._closed is not None:
             return
         self._closed = "committed"
-        errors: list[BaseException] = []
+        errors: list[tuple[Any, BaseException]] = []
         for content in self._leases:
             try:
                 content.commit()
             except BaseException as error:
-                errors.append(error)
+                errors.append((content, error))
         if errors:
-            publication = self._leases[0] if self._leases else None
-            raise PublicationCleanupIncomplete(
+            publication, error = errors[0]
+            incomplete = PublicationCleanupIncomplete(
                 str(getattr(publication, "publication_id", getattr(publication, "content_sha256", "unknown"))),
-                str(getattr(publication, "storage_provider", "unknown")), errors[0], errors[0],
-            ) from errors[0]
+                str(getattr(publication, "storage_provider", "unknown")), error, error,
+            )
+            self.service._record_cleanup_attention(incomplete, self._correlation_id or str(uuid4()))
+            raise incomplete from error
 
     def rollback(self, original_failure: BaseException | None = None) -> None:
         if self._closed is not None:
             return
         self._closed = "rolled_back"
-        errors: list[BaseException] = []
+        errors: list[tuple[Any, BaseException]] = []
         for content in reversed(self._leases):
             try:
                 content.rollback()
             except BaseException as error:
-                errors.append(error)
+                errors.append((content, error))
         if errors:
-            publication = self._leases[-1] if self._leases else None
-            failure = original_failure or errors[0]
-            raise PublicationCleanupIncomplete(
+            publication, cleanup_error = errors[0]
+            failure = original_failure or cleanup_error
+            incomplete = PublicationCleanupIncomplete(
                 str(getattr(publication, "publication_id", getattr(publication, "content_sha256", "unknown"))),
-                str(getattr(publication, "storage_provider", "unknown")), failure, errors[0],
-            ) from failure
+                str(getattr(publication, "storage_provider", "unknown")), failure, cleanup_error,
+            )
+            self.service._record_cleanup_attention(incomplete, self._correlation_id or str(uuid4()))
+            raise incomplete from failure
 
 
 class FileService:
@@ -126,7 +132,12 @@ class FileService:
                     content.rollback()
                 except BaseException as cleanup_error:
                     publication_id = getattr(content, "publication_id", "unknown")
-                    raise PublicationCleanupIncomplete(publication_id, getattr(content, "storage_provider", "unknown"), error, cleanup_error) from error
+                    incomplete = PublicationCleanupIncomplete(publication_id, getattr(content, "storage_provider", "unknown"), error, cleanup_error)
+                    self._record_cleanup_attention(incomplete, correlation)
+                    raise incomplete from error
+            if isinstance(error, PublicationCleanupIncomplete):
+                self._record_cleanup_attention(error, correlation)
+                raise
             if isinstance(error, FileError):
                 raise
             if isinstance(error, OSError):
@@ -208,7 +219,7 @@ class FileService:
         validator = self.link_validators.get(entity_type)
         if validator is None:
             raise FileError(f"No owning-domain validator is configured for {entity_type} links.")
-        if generic_upload and not getattr(validator, "allows_generic_upload", True):
+        if generic_upload and not validator.allows_generic_upload:
             raise FileError("This evidence type must be attached by its owning workflow.", "file_lifecycle_conflict")
         return validator
 
@@ -228,6 +239,16 @@ class FileService:
         if writer is None:
             raise FileError("The configured file store does not support caller-owned transactions.")
         writer(connection, item, link, self._audit_changes(item, link, correlation_id))
+
+    def _record_cleanup_attention(self, error: PublicationCleanupIncomplete, correlation_id: str) -> None:
+        recorder = getattr(self.unit_of_work, "record_cleanup_incomplete", None)
+        if recorder is not None:
+            try:
+                recorder(error.publication_id, error.provider, correlation_id)
+            except Exception:
+                # The structured failure remains the primary operational
+                # signal; a second audit failure must not leak provider data.
+                pass
 
 
 def _source_digest(source: Path) -> str:

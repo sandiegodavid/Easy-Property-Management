@@ -64,19 +64,13 @@ _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
-def validate_file_data(connection, policy_registry: Mapping[str, object] | None = None) -> None:
+def validate_file_data(connection, policy_registry: Mapping[str, object]) -> None:
     """Validate persisted FILE-001 facts without reapplying create quotas.
 
     A create validator sees the prospective association and may count active
     links.  Retained validation instead delegates to an optional owning policy
     hook so restored data is checked as historical state, not as a new write.
     """
-    if policy_registry is None:
-        # Callers that validate a complete workspace must deliberately compose
-        # the owning-domain policies.  Silently accepting unknown targets made
-        # a corrupt restored workspace appear healthy.
-        from app.modules.files.application.policy_registry import build_file_link_policy_registry
-        policy_registry = build_file_link_policy_registry().as_mapping()
     rows = connection.execute(text(
         "SELECT r.id, r.original_name, r.media_type, r.size_bytes, r.content_sha256, r.created_at, "
         "l.storage_provider, l.storage_state, l.local_relative_path, l.s3_bucket, l.s3_object_key, l.s3_version_id, l.verified_at "

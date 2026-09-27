@@ -9,6 +9,7 @@ from app.modules.leases.application.ports import LeaseUnitOfWork
 
 class LeaseFileLinkValidator:
     entity_types = frozenset({"lease", "lease_termination_case"})
+    allows_generic_upload = True
 
     _purposes = {
         "lease": frozenset({"executed_lease", "addendum", "renewal_offer", "supporting_document"}),

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from starlette.background import BackgroundTask
@@ -77,12 +77,12 @@ def build_router(service: FileService, runtime: WorkspaceRuntime, verification: 
         except FileError as error: raise _file_http_error(error) from error
 
     @router.post("/api/files/verify")
-    def verify_storage() -> dict[str, object]:
+    def verify_storage(continuation: str | None = Query(default=None)) -> dict[str, object]:
         require_ready(write=True)
         if verification is None:
             raise HTTPException(status_code=503, detail={"code": "file_provider_unavailable", "message": "Storage verification is unavailable."})
         try:
-            return verification.verify()
+            return verification.verify(continuation=continuation)
         except FileError as error:
             raise _file_http_error(error) from error
 

@@ -150,7 +150,9 @@ class SQLiteMaintenanceTransaction:
     def work_journal_files(self, entry_ids):
         if not entry_ids or not self.files:
             return {}
-        return self.files.links_for_entities(self.connection, "maintenance_work_journal_entry", entry_ids)
+        # Work-journal rows are a normal evidence projection.  Archived
+        # attachments remain available only through contextual history.
+        return self.files.active_links_for_entities(self.connection, "maintenance_work_journal_entry", entry_ids)
     def work_journal_assignment_start_seconds(self, assignment_ids):
         """Return the earliest effective work-start duration for each assignment."""
         assignment_ids=list(dict.fromkeys(item for item in assignment_ids if item is not None))

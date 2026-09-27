@@ -107,6 +107,10 @@ class FileLinkPolicyRegistry:
     def __init__(self, validators: Sequence[FileLinkValidator]) -> None:
         self._by_entity_type: dict[str, FileLinkValidator] = {}
         for validator in validators:
+            if not isinstance(getattr(validator, "allows_generic_upload", None), bool):
+                raise ValueError("Every FILE-001 link policy must explicitly declare allows_generic_upload.")
+            if not callable(getattr(validator, "validate_retained", None)):
+                raise ValueError("Every FILE-001 link policy must implement retained-data validation.")
             for entity_type in validator.entity_types:
                 if entity_type in self._by_entity_type:
                     raise ValueError(f"Duplicate FILE-001 policy for {entity_type}.")
@@ -129,3 +133,5 @@ class FileUnitOfWork(Protocol):
     def link_existing(self, link: FileLink, audit_change: FileAuditChange, validate_link: Callable[[Any, FileLink], None]) -> FileLink: ...
     def files_for_verification(self) -> list[StoredFile]: ...
     def replace_storage_verification(self, item: StoredFile, storage_state: str, verified_at: str, audit_change: FileAuditChange) -> None: ...
+    def record_cleanup_incomplete(self, publication_id: str, provider: str, correlation_id: str) -> None: ...
+    def record_cleanup_resolved(self, correlation_id: str) -> None: ...

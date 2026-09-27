@@ -350,6 +350,7 @@ class _FakeS3Client:
 
 class _ExpenseLinkValidator:
     entity_types = frozenset({"expense"})
+    allows_generic_upload = True
 
     def validate_create(self, connection, link: FileLink) -> None:
         if link.entity_id != "expense-1" or link.purpose != "receipt":
@@ -358,10 +359,12 @@ class _ExpenseLinkValidator:
     def validate_archive(self, connection, link: FileLink) -> None:
         if link.entity_id != "expense-1" or link.purpose != "receipt":
             raise FileError("Expense link is invalid.")
+    def validate_retained(self, connection, link: FileLink) -> None: self.validate_create(connection, link)
 
 
 class _LimitedExpenseLinkValidator:
     entity_types = frozenset({"expense"})
+    allows_generic_upload = True
 
     def __init__(self, limit: int) -> None:
         self.limit = limit
@@ -379,16 +382,19 @@ class _LimitedExpenseLinkValidator:
 
     def validate_archive(self, connection, link: FileLink) -> None:
         return None
+    def validate_retained(self, connection, link: FileLink) -> None: return None
 
 
 class _RejectingArchiveValidator:
     entity_types = frozenset({"expense"})
+    allows_generic_upload = True
 
     def validate_create(self, connection, link: FileLink) -> None:
         return None
 
     def validate_archive(self, connection, link: FileLink) -> None:
         raise FileError("Archive is not authorized.")
+    def validate_retained(self, connection, link: FileLink) -> None: return None
 
 
 class _VersionlessFakeS3Client(_FakeS3Client):

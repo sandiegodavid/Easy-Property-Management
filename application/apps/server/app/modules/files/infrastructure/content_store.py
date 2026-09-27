@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable
 from uuid import uuid4
 
-from app.modules.files.application.errors import FileError, MAX_FILE_BYTES
+from app.modules.files.application.errors import FileError, MAX_FILE_BYTES, PublicationCleanupIncomplete
 from app.modules.files.domain.models import StoredFile
 from app.platform.locking import WorkspaceOperationInProgressError, WorkspaceOperationLock
 
@@ -29,6 +29,11 @@ class _Lease:
     s3_object_key: str | None = None
     s3_version_id: str | None = None
     provider_etag: str | None = None
+
+    @property
+    def publication_id(self) -> str:
+        # Local managed objects are immutable and digest-addressed.
+        return self.content_sha256
 
     @property
     def local_relative_path(self) -> str:
@@ -163,6 +168,7 @@ class _S3Lease:
     s3_version_id: str | None = None
     provider_etag: str | None = None
     lock: WorkspaceOperationLock | None = None
+    publication_id: str | None = None
 
     def commit(self) -> None:
         self._release()
@@ -232,7 +238,8 @@ class S3ContentStore:
                 self._delete_unidentified_publication(key)
                 raise FileError("S3 publication did not return a durable version identity.", "file_provider_unavailable")
             lease = _S3Lease(self, key, size, digest, True, s3_bucket=self.bucket,
-                             s3_version_id=version, provider_etag=response.get("ETag"), lock=lock)
+                             s3_version_id=version, provider_etag=response.get("ETag"), lock=lock,
+                             publication_id=publication_id)
             self._verify_existing(key, version, digest, size)
             return lease
         except Exception as error:
@@ -242,9 +249,9 @@ class S3ContentStore:
                 else:
                     lock.__exit__(None, None, None)
             except Exception as cleanup_error:
-                raise FileError(
-                    "S3 publication failed and its private object could not be cleaned up."
-                ) from cleanup_error
+                raise PublicationCleanupIncomplete(
+                    publication_id, "s3", error, cleanup_error,
+                ) from error
             if isinstance(error, FileError):
                 raise
             raise FileError("Unable to publish S3 content.", "file_provider_unavailable") from error
