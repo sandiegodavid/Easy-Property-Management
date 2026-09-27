@@ -215,22 +215,24 @@ class InspectionService:
         if self.files is None: raise InspectionError("Inspection evidence storage is not configured.")
         if purpose not in {"condition_photo", "supporting_document"}: raise InspectionError("Unsupported evidence purpose.")
         correlation = str(uuid4())
-        staged_content = []
+        batch = None
         def attach(tx):
+            nonlocal batch
             context = tx.observation_context(observation_id)
             if context is None: raise InspectionNotFoundError("Condition observation was not found.")
             if context["status"] != "draft": raise InspectionConflictError("Evidence can be attached only to a draft report.")
-            item, content = self.files.add_in_transaction(tx.file_transaction(), source, original_name, media_type, entity_type="condition_observation", entity_id=observation_id, purpose=purpose, correlation_id=correlation)
-            staged_content.append(content)
+            batch = self.files.attachment_batch(tx.file_transaction())
+            item = batch.add(source, original_name, media_type, entity_type="condition_observation", entity_id=observation_id,
+                             purpose=purpose, correlation_id=correlation, owning_workflow=True)
             self._audit(tx, "condition_observation", observation_id, "evidence_attached", None, {"fileId": item.id, "purpose": purpose}, correlation)
-            return item, content
+            return item
         try:
-            item, content = self.unit_of_work.write(attach)
-        except Exception:
-            if staged_content: staged_content[0].rollback()
+            item = self.unit_of_work.write(attach)
+        except Exception as error:
+            if batch is not None:
+                batch.rollback(error)
             raise
-        try: content.commit()
-        except OSError: pass
+        batch.commit()
         return self.files.get(item.id).to_dict()
     def _draft(self, tx, report_id):
         report = tx.report(report_id)
