@@ -97,6 +97,21 @@ class SQLiteCommunicationContextOperations:
             return None
         return self.validate_link(connection, entity_type, entity_id)
 
+    def link_context(self, connection: Any, entity_type: str, entity_id: str) -> dict[str, object] | None:
+        """Mutable context is a read projection only; the stored COM link is immutable."""
+        if entity_type != "intake_source":
+            return None
+        row = connection.execute(select(
+            IntakeSourceModel.technical_status, IntakeSourceModel.current_revision_id,
+            IntakeSourceModel.superseded_by_source_id,
+        ).where(IntakeSourceModel.id == entity_id)).mappings().first()
+        if row is None:
+            return {"targetExists": False}
+        return {"targetExists": True, "technicalStatus": row["technical_status"],
+                "currentRevision": row["current_revision_id"],
+                "supersededBySourceId": row["superseded_by_source_id"],
+                "isCurrent": row["technical_status"] == "ready" and row["superseded_by_source_id"] is None}
+
     def create_follow_up(self, connection: Any, *, communication: Communication, title: str, notes: str | None,
                          due_at_utc: str | None, due_timezone: str | None, correlation_id: str) -> dict[str, object]:
         task = new_task(TaskCreateCommand(

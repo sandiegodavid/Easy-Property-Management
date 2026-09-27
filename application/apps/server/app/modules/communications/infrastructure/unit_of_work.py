@@ -61,6 +61,7 @@ class _Transaction:
     def validate_link(self, entity_type, entity_id): return self.context.validate_link(self.connection, entity_type, entity_id)
     def create_follow_up(self, **kwargs): return self.context.create_follow_up(self.connection, **kwargs)
     def task_views(self, communication_id): return self.context.task_views(self.connection, communication_id)
+    def link_context(self, entity_type, entity_id): return self.context.link_context(self.connection, entity_type, entity_id)
     def list_views(self, status, direction=None, channel=None, party_id=None, entity_type=None, entity_id=None, limit=100, cursor=None, occurred_on_or_after=None, occurred_on_or_before=None, task_status=None):
         query = select(CommunicationModel).order_by(CommunicationModel.occurred_at_utc.desc(), CommunicationModel.id.desc())
         if status: query = query.where(CommunicationModel.status == status)

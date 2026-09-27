@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 from sqlalchemy import inspect, text
 from sqlalchemy.dialects import sqlite
-from app.modules.intake.domain.models import EvidenceEnvelope, fingerprint
+from app.modules.intake.domain.models import EvidenceEnvelope, canonical_json, fingerprint
 from app.modules.intake.infrastructure.sqlalchemy_models import IntakeDuplicateCandidateModel, IntakeEvidenceRevisionModel, IntakeRevisionFileLinkModel, IntakeSourceModel, IntakeSourceOperationModel
 from app.platform.migration_errors import MigrationSchemaError
 
@@ -43,29 +43,52 @@ def validate_intake_data(connection) -> None:
         revision=revisions.get(source["current_revision_id"])
         if revision is None or revision["source_id"] != source["id"]: raise MigrationSchemaError("INGEST-001 current revision is invalid.")
         if source["technical_status"] == "superseded" and not source["superseded_by_source_id"]: raise MigrationSchemaError("INGEST-001 superseded source is invalid.")
+        if source["technical_status"] == "failed" and not source["failure_code"]: raise MigrationSchemaError("INGEST-001 failed source is missing a failure code.")
+        if source["technical_status"] != "failed" and source["failure_code"] is not None: raise MigrationSchemaError("INGEST-001 nonfailed source has a failure code.")
         for pointer, inverse in (("supersedes_source_id","superseded_by_source_id"),("superseded_by_source_id","supersedes_source_id")):
             target=source[pointer]
             if target and (target not in sources or sources[target][inverse] != source["id"]): raise MigrationSchemaError("INGEST-001 source lineage is invalid.")
+    for source_id in sources:
+        seen: set[str] = set(); current = source_id
+        while sources[current]["supersedes_source_id"] is not None:
+            if current in seen: raise MigrationSchemaError("INGEST-001 source lineage has a cycle.")
+            seen.add(current); current = sources[current]["supersedes_source_id"]
     for revision in revisions.values():
         _uuid(revision["id"]); _timestamp(revision["created_at"])
         if revision["source_id"] not in sources: raise MigrationSchemaError("INGEST-001 revision source is invalid.")
         try:
             envelope=json.loads(revision["envelope_json"])
-            evidence=EvidenceEnvelope(envelope["sourceKind"], envelope["channel"], envelope["body"], envelope["occurredAtUtc"], envelope.get("subject"), tuple(envelope.get("participants",[])), envelope.get("provider"), envelope.get("conversationRef"), envelope.get("externalSourceId"))
+            required = {"schemaVersion", "sourceKind", "channel", "subject", "body", "participants", "occurredAtUtc", "occurredAtContext", "provider", "conversationRef", "externalSourceId", "attachments"}
+            if set(envelope) != required or envelope["schemaVersion"] != 1 or canonical_json(envelope) != revision["envelope_json"]: raise ValueError
+            evidence=EvidenceEnvelope(envelope["sourceKind"], envelope["channel"], envelope["body"], envelope["occurredAtUtc"], envelope.get("subject"), tuple(envelope.get("participants",[])), envelope.get("provider"), envelope.get("conversationRef"), envelope.get("externalSourceId"), envelope.get("occurredAtContext"))
         except (KeyError, TypeError, ValueError) as error: raise MigrationSchemaError("INGEST-001 evidence envelope is invalid.") from error
         if fingerprint(envelope) != revision["content_fingerprint"] or evidence.source_kind != sources[revision["source_id"]]["source_kind"]: raise MigrationSchemaError("INGEST-001 evidence fingerprint is invalid.")
         if revision["revision_number"] == 1 and revision["revision_kind"] != "submitted": raise MigrationSchemaError("INGEST-001 initial revision is invalid.")
     for source_id in sources:
         chain=sorted((r for r in revisions.values() if r["source_id"]==source_id),key=lambda r:r["revision_number"])
         if [r["revision_number"] for r in chain] != list(range(1,len(chain)+1)): raise MigrationSchemaError("INGEST-001 revision sequence is invalid.")
+        if chain[-1]["id"] != sources[source_id]["current_revision_id"]: raise MigrationSchemaError("INGEST-001 current revision is not the lineage tip.")
+        for index, revision in enumerate(chain):
+            previous = chain[index - 1] if index else None
+            if previous is None:
+                if revision["supersedes_revision_id"] is not None: raise MigrationSchemaError("INGEST-001 initial revision has a predecessor.")
+            elif revision["supersedes_revision_id"] != previous["id"] or previous["superseded_by_revision_id"] != revision["id"]:
+                raise MigrationSchemaError("INGEST-001 revision lineage is invalid.")
     links=list(connection.execute(text("SELECT * FROM intake_revision_file_links")).mappings())
     for link in links:
         revision=revisions.get(link["revision_id"])
-        row=connection.execute(text("SELECT entity_type,entity_id,purpose,archived_at FROM file_links WHERE id=:id"),{"id":link["file_link_id"]}).mappings().first()
+        row=connection.execute(text("SELECT l.entity_type,l.entity_id,l.purpose,l.archived_at,f.content_sha256,c.storage_state FROM file_links l JOIN file_records f ON f.id=l.file_id JOIN file_content_locations c ON c.file_id=f.id WHERE l.id=:id"),{"id":link["file_link_id"]}).mappings().first()
+        # Availability is mutable FILE-001 lifecycle state.  It is verified
+        # when admitted and later changes source technical status; historical
+        # Intake evidence must remain valid and explainable while unavailable.
         if revision is None or row is None or row["entity_type"]!="intake_source" or row["entity_id"]!=revision["source_id"] or row["purpose"]!=link["attachment_role"] or row["archived_at"] is not None: raise MigrationSchemaError("INGEST-001 attachment association is invalid.")
     for revision in revisions.values():
-        declared=json.loads(revision["envelope_json"]).get("attachments",[]); actual=[link for link in links if link["revision_id"]==revision["id"]]
-        if len(declared)!=len(actual): raise MigrationSchemaError("INGEST-001 attachment manifest is invalid.")
+        declared=json.loads(revision["envelope_json"])["attachments"]; actual=sorted((link for link in links if link["revision_id"]==revision["id"]),key=lambda link:link["display_order"])
+        manifest=[]
+        for link in actual:
+            row=connection.execute(text("SELECT f.content_sha256 FROM file_links l JOIN file_records f ON f.id=l.file_id WHERE l.id=:id"),{"id":link["file_link_id"]}).mappings().one()
+            manifest.append({"role":link["attachment_role"],"contentSha256":row["content_sha256"]})
+        if declared != manifest or [link["display_order"] for link in actual] != list(range(len(actual))): raise MigrationSchemaError("INGEST-001 attachment manifest is invalid.")
     for operation in connection.execute(text("SELECT * FROM intake_source_operations")).mappings():
         _uuid(operation["id"]); _uuid(operation["idempotency_key"]); _uuid(operation["correlation_id"]); _timestamp(operation["created_at"])
         if operation["source_id"] not in sources or len(operation["request_fingerprint"])!=64 or any(c not in "0123456789abcdef" for c in operation["request_fingerprint"]): raise MigrationSchemaError("INGEST-001 operation is invalid.")

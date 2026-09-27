@@ -372,7 +372,14 @@ class CommunicationService:
 
     def _view(self, tx: CommunicationTransaction, communication_id: str) -> dict[str, object]:
         item = self._require(tx, communication_id)
-        return {**item.to_dict(), "participants": [x.to_dict() for x in tx.participants(item.id)], "links": [x.to_dict() for x in tx.links(item.id)], "followUpTasks": tx.task_views(item.id)}
+        links = []
+        for link in tx.links(item.id):
+            value = link.to_dict()
+            context = tx.link_context(link.entity_type, link.entity_id)
+            if context is not None:
+                value["context"] = dict(context)
+            links.append(value)
+        return {**item.to_dict(), "participants": [x.to_dict() for x in tx.participants(item.id)], "links": links, "followUpTasks": tx.task_views(item.id)}
 
 
 def _text(value: object, name: str, maximum: int) -> str:

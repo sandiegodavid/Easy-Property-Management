@@ -81,10 +81,17 @@ class EvidenceEnvelope:
     provider: str | None = None
     conversation_ref: str | None = None
     external_source_id: str | None = None
+    # The instant is normalized for ordering, while the original offset (or
+    # IANA-bearing value supplied by a future transport) remains evidence.
+    occurred_at_context: str | None = None
 
     def __post_init__(self) -> None:
         if self.source_kind not in SOURCE_KINDS or self.channel != KIND_CHANNEL.get(self.source_kind): raise IntakeError("source kind and channel are incompatible.")
-        object.__setattr__(self, "body", body(self.body)); object.__setattr__(self, "occurred_at_utc", utc(self.occurred_at_utc, "occurredAtUtc"))
+        object.__setattr__(self, "body", body(self.body))
+        reported = self.occurred_at_context or self.occurred_at_utc
+        if not isinstance(reported, str): raise IntakeError("occurredAtUtc must be an aware UTC timestamp.")
+        object.__setattr__(self, "occurred_at_context", reported)
+        object.__setattr__(self, "occurred_at_utc", utc(self.occurred_at_utc, "occurredAtUtc"))
         for key in ("subject", "provider", "conversation_ref", "external_source_id"):
             object.__setattr__(self, key, bounded(getattr(self, key), key, 500))
         if len(self.participants) > 50: raise IntakeError("Too many participants.")
@@ -98,5 +105,6 @@ class EvidenceEnvelope:
     def canonical(self, attachments: tuple[dict[str, str], ...] = ()) -> dict[str, object]:
         return {"schemaVersion": 1, "sourceKind": self.source_kind, "channel": self.channel, "subject": self.subject,
                 "body": self.body, "participants": list(self.participants), "occurredAtUtc": self.occurred_at_utc,
+                "occurredAtContext": self.occurred_at_context,
                 "provider": self.provider, "conversationRef": self.conversation_ref, "externalSourceId": self.external_source_id,
                 "attachments": list(attachments)}

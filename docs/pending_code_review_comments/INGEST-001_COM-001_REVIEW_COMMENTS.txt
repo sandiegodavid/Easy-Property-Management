@@ -1,0 +1,136 @@
+INGEST-001 / COM-001 IMPLEMENTATION RE-REVIEW
+
+Review fixed point: 00048d6e11dac2a04a64dea340f41b98c14b25d0
+Reviewed through: 3cf0f2a4ddfec3308cb088a8b6af598cdc4c06a6
+Design sources: docs/INGEST-001_DESIGN.md and docs/COM-001_DESIGN.md
+
+SPECIFICATION FINDINGS
+
+1. [P1] Trusted external sources cannot be superseded, so attachment-set corrections cannot use the required source lineage.
+
+Files:
+- application/apps/server/app/modules/intake/application/service.py:66-74, 87-95, 118-121
+- application/apps/server/app/modules/intake/infrastructure/sqlalchemy_models.py:41-42
+- docs/INGEST-001_DESIGN.md:115, 131, 176, 248
+
+The supersede path delegates to admit(), but admit() performs exact-identity replay before it considers supersedes_source_id. If the replacement has the same trusted provider identity and the same evidence, the endpoint returns the existing source without superseding it. If the evidence or attachment manifest differs, it raises intake_exact_identity_conflict. The unique trusted-identity index also prevents retaining the old and replacement sources with the same identity. A direct probe confirmed both outcomes. This makes the documented attachment-membership correction path impossible for trusted email/chat sources.
+
+Suggestion: give supersession an explicit identity-resolution path before normal replay handling. Define how historical and current records share a trusted identity, for example by making uniqueness apply only to the current lineage tip or by retaining identity in a separate lineage-aware table. Replays must still resolve deterministically while both source records remain retained.
+
+2. [P1] The transaction-aware attention port can change state without an Intake operation or audit event.
+
+Files:
+- application/apps/server/app/modules/intake/application/ports.py:23-24
+- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py:95-99
+- application/apps/server/app/modules/intake/application/service.py:170-189
+- docs/INGEST-001_DESIGN.md:183-188, 225-230, 256
+
+The public service path records an operation and audit event, but the downstream transaction method only updates intake_sources. It does not implement the declared connection-accepting adapter signature, is not composed for consumers, and has no idempotency/revision guard, operation row, or audit write. A caller using the intended INGEST-002 boundary could therefore move unprocessed to in_review with no durable reasoned history. A direct probe left both operation and Intake audit counts unchanged.
+
+Suggestion: implement and compose one Intake-owned attention adapter that runs on the caller's connection, checks technical state plus expected revision/status, writes the attention_transition operation, updates the source, and records the correlated audit event. Have both operator and downstream workflows share the same transition policy.
+
+3. [P1] FILE-001 verification never propagates later evidence loss or restoration to Intake technical state.
+
+Files:
+- application/apps/server/app/modules/files/application/verification.py:30-71
+- application/apps/server/app/modules/files/infrastructure/sqlite_repository.py:121-131
+- application/apps/server/app/modules/intake/application/service.py:191-211
+- application/apps/server/app/bootstrap/api.py:227-228
+- docs/INGEST-001_DESIGN.md:64, 174, 250, 280, 293
+
+IntakeService.set_integrity() exists, but nothing calls or composes it. File verification updates only file_content_locations and FILE audit history. A missing or quarantined attachment therefore leaves its Intake source marked ready, and a repaired attachment cannot create the required integrity_restored operation. The operator can receive an evidence-complete Intake projection after FILE-001 has already established that its bytes are unavailable.
+
+Suggestion: add a transaction-aware, set-based consequence coordinator for verification state changes. It should locate affected Intake associations, transition each non-superseded source once with a registered failure code, record the Intake operation/audit set, and restore only after every attachment for the current revision verifies available.
+
+4. [P1] The required trusted internal admission boundary rejects every non-operator caller.
+
+Files:
+- application/apps/server/app/modules/intake/application/service.py:21-44
+- application/apps/server/app/modules/intake/application/ports.py:51-52
+- docs/INGEST-001_DESIGN.md:160-165, 225-229, 290, 294, 307
+
+IntakeAdmissionPort is only a loose protocol over the same admit() method, while IntakeAdmissionCommand.__post_init__ unconditionally rejects assistant_connection and voice_workflow submitters. This protects the public endpoint, but it also makes the application-trusted path promised to MCP-001 and VOICE-AI-001 unusable.
+
+Suggestion: separate the public request factory from the internal trusted command/context. The public API must always construct local_operator provenance; a bootstrap-composed internal adapter should accept authenticated application context that request data cannot manufacture.
+
+5. [P1] Retained-data validation still does not validate required operation, duplicate-candidate, and audit consistency.
+
+Files:
+- application/apps/server/app/modules/intake/infrastructure/schema_validation.py:38-94
+- docs/INGEST-001_DESIGN.md:266-278, 309
+
+The validator now checks canonical envelopes, revision chains, source lineage, and attachment manifests, but operation validation stops at UUID/fingerprint/source existence. It does not verify that result_revision_id belongs to the operation's source, operation type/outcome/error combinations, operation-to-lifecycle consequences, or correlated audit evidence. It does not validate intake_source_duplicate_candidates at all. A direct probe deleted all Intake audit events and validate_latest_schema() still passed.
+
+Suggestion: validate each operation against its source/revision and expected lifecycle consequence; validate candidate ordering, distinct source ownership, disposition metadata, timestamps, and registered values; and require the correlated audit events identified by the design for admissions, revisions, lifecycle decisions, and sensitive reads.
+
+6. [P2] Replaying an earlier correction returns the latest correction rather than the original operation result.
+
+Files:
+- application/apps/server/app/modules/intake/application/service.py:153-167
+- docs/INGEST-001_DESIGN.md:148, 301
+
+On an idempotent correction replay, the code ignores operation.result_revision_id and returns the source's current detail. After correction v2 and then correction v3, replaying v2's key returns v3's revision and body. That is not the same result promised by the idempotency contract.
+
+Suggestion: resolve replay output from the recorded result_revision_id, or persist the stable operation response needed to reproduce the original result. Add a test that replays an old correction after a newer correction has committed.
+
+7. [P2] The consumer source reader implements only one of the four required read shapes.
+
+Files:
+- application/apps/server/app/modules/intake/application/ports.py:8-9
+- application/apps/server/app/modules/intake/infrastructure/source_reader.py:7-15
+- docs/INGEST-001_DESIGN.md:225-236, 294
+
+The reader exposes only current source_projection(). Exact-revision lookup, bounded evidence detail, and batched summary reads are absent. Future AI governance/review consumers would have to query Intake persistence directly or open unbounded per-source reads.
+
+Suggestion: finish the consumer-neutral protocol and implement its reads on the caller-owned connection with explicit bounds and set-based batching.
+
+8. [P2] The operator API still lacks one required filter and returns the wrong class of error for oversized imports.
+
+Files:
+- application/apps/server/app/modules/intake/api/router.py:46-79
+- application/apps/server/app/modules/intake/application/service.py:134-142
+- docs/INGEST-001_DESIGN.md:240-252
+
+GET /api/intake/sources has no trusted/unverified provenance filter even though the design lists it. Multipart size overflow returns 413, while the design explicitly assigns malformed or oversized input to typed 422 outcomes.
+
+Suggestion: add a typed accountIdentityState/provenance filter through the router, service, and bounded query; return the registered Intake validation envelope with status 422 for per-file and aggregate size violations.
+
+STANDARDS FINDINGS
+
+1. [P2] Intake builds FILE-001 projections by importing FILE persistence models directly.
+
+Files:
+- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py:83-94
+- docs/ARCHITECTURE.md:90, 97-101
+
+detail_projection() imports FileLinkModel, FileRecordModel, and FileContentLocationModel and joins their tables. This couples Intake to FILE-001's private schema and bypasses the required cross-module application protocol.
+
+Suggestion: inject a transaction-aware FILE metadata reader with the bounded batch shape Intake needs, and keep FILE table knowledge inside FILE infrastructure.
+
+2. [P2] Intake-to-COM source facts are duplicated in an unused application-layer adapter and in bootstrap SQL.
+
+Files:
+- application/apps/server/app/modules/intake/application/link_validator.py:1-14
+- application/apps/server/app/bootstrap/communication_context.py:19, 80-113
+- application/apps/server/app/modules/intake/infrastructure/source_reader.py:1-15
+- docs/ARCHITECTURE.md:97-101, 183-190
+
+IntakeSourceLinkValidator imports an Intake infrastructure model from the application layer but is not wired. Bootstrap separately repeats the new-link, retained-link, and mutable-context queries against the same model. The source module therefore does not expose one consumer-neutral fact reader, and bootstrap contains persistence behavior instead of composition alone.
+
+Suggestion: move the SQLite fact reader into Intake infrastructure behind a neutral application protocol, inject it into Communication context operations, and delete the unused duplicate adapter.
+
+3. [P3] Source summaries are assembled twice and can drift.
+
+Files:
+- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py:50-54, 77-80
+
+source_projection() and list_projections() independently construct the same response shape. The supersession fields already had to be added in both places in the latest fix.
+
+Suggestion: extract one row-to-summary projection helper that receives the revision and attachment count, then use it for both detail and list paths.
+
+VALIDATION
+
+Focused Intake, Communications, and backup tests: 72 passed.
+Full test suite: 404 passed, with one unrelated Starlette/AnyIO deprecation warning.
+
+No additional COM-001 behavior defect was found. The remaining COM-related comments concern the cross-module implementation boundary described in Standards finding 2.

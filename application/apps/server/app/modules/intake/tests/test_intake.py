@@ -38,3 +38,35 @@ class IntakeTests(TestCase):
         detail=self.service.correct(source["sourceId"], EvidenceEnvelope("operator_note", "internal", "Corrected evidence.", "2026-01-01T12:00:00+00:00"), "clarified", str(uuid4()))
         self.assertEqual(2, len(detail["revisions"])); self.assertEqual("Corrected evidence.", detail["evidence"]["body"])
         validate_latest_schema(self.database)
+
+    def test_trusted_external_replay_compares_evidence_and_reserves_each_key(self) -> None:
+        def trusted(key: str, body: str) -> IntakeAdmissionCommand:
+            return IntakeAdmissionCommand(
+                EvidenceEnvelope("email_message", "email", body, "2026-01-01T12:00:00+00:00", external_source_id="mail-1"),
+                "gmail", key, "a" * 64, "transport_verified",
+            )
+        first = self.service.admit(trusted(str(uuid4()), "A retained email."))
+        replay_key = str(uuid4())
+        self.assertEqual(first["sourceId"], self.service.admit(trusted(replay_key, "A retained email."))["sourceId"])
+        with self.assertRaises(IntakeConflictError):
+            self.service.admit(trusted(replay_key, "Changed evidence."))
+        with self.assertRaises(IntakeConflictError):
+            self.service.admit(trusted(str(uuid4()), "Changed evidence."))
+
+    def test_pagination_uses_last_returned_cursor_without_a_gap(self) -> None:
+        ids = [self.service.admit(self.command(body=f"Evidence {index}"))["sourceId"] for index in range(3)]
+        first, cursor = self.service.list(limit=1)
+        second, cursor = self.service.list(limit=1, cursor=tuple(cursor.split("|", 1)))
+        third, cursor = self.service.list(limit=1, cursor=tuple(cursor.split("|", 1)))
+        self.assertEqual(set(ids), {first[0]["sourceId"], second[0]["sourceId"], third[0]["sourceId"]})
+
+    def test_supersession_is_atomic_and_preserves_lineage(self) -> None:
+        original = self.service.admit(self.command())
+        replacement = self.service.supersede(
+            original["sourceId"],
+            self.command(body="Replacement source evidence."),
+        )
+        old = self.service.get(original["sourceId"])
+        self.assertEqual("superseded", old["technicalStatus"])
+        self.assertEqual(replacement["sourceId"], old["supersededBySourceId"])
+        validate_latest_schema(self.database)
