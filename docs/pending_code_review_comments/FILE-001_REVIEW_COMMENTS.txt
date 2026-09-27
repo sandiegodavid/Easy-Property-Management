@@ -1,0 +1,97 @@
+FILE-001 implementation re-review comments
+Date: 2026-09-26
+Reviewed change: 234f784...53ded39
+Specification: docs/FILE-001_DESIGN.md
+
+SPECIFICATION
+
+1. [P1] A versionless S3 publication with failed cleanup still loses the cleanup identity and returns the wrong error.
+
+When put_object succeeds without returning VersionId, _delete_unidentified_publication tries to discover and delete the exact version. If discovery or deletion fails, that helper raises an ordinary FileError. Because no lease was created, store() only releases the lock and re-raises the FileError. The publication_id is discarded, FileService does not receive PublicationCleanupIncomplete, and no cleanup attention is recorded. This is the uncertain-publication case for which the design requires a typed publication_cleanup_incomplete response and exact operation-owned cleanup identity.
+
+Suggestion: have the failed exact-version cleanup path raise PublicationCleanupIncomplete(publication_id, "s3", original_failure, cleanup_failure). Preserve the original missing-version failure separately from the discovery/deletion failure, and add a test where put_object omits VersionId and exact-version discovery cannot identify one version.
+
+References:
+application/apps/server/app/modules/files/infrastructure/content_store.py:236-257
+application/apps/server/app/modules/files/infrastructure/content_store.py:267-285
+application/apps/server/app/modules/files/application/service.py:138-140
+docs/FILE-001_DESIGN.md:118,138,233
+
+2. [P1] Cleanup attention is represented by unrelated audit events, so Settings cannot show or reliably clear an outstanding condition.
+
+record_cleanup_incomplete and record_cleanup_resolved each create a fresh random entity_id. No retained state, query, or Settings-facing projection correlates an unresolved publication with its resolution. A clean verification also writes cleanup_resolved unconditionally, including when no attention exists. This does not implement an event keyed by publication ID or a workspace-integrity attention that remains until a clean full verification clears it. In caller-owned workflows, cleanup recording may also open a second immediate SQLite transaction while the failed owning transaction still holds the writer lock; _record_cleanup_attention suppresses every resulting persistence error, so a writable database can silently lose the required event.
+
+Suggestion: persist a small cleanup-attention record keyed by publication ID, write the audit event with that same stable entity identity, expose outstanding attention through the Settings read model, and resolve only currently open records after a clean full verification. Arrange caller-owned rollback reporting after its transaction releases the writer lock, or use the caller connection where safe. Do not silently suppress a failed attention write without retaining another repair-required signal.
+
+References:
+application/apps/server/app/modules/files/infrastructure/sqlite_repository.py:133-146
+application/apps/server/app/modules/files/application/service.py:243-251
+application/apps/server/app/modules/files/application/verification.py:105-110
+application/apps/server/app/modules/intake/application/service.py:57-89
+docs/FILE-001_DESIGN.md:138,233
+
+3. [P1] Full verification can report complete and clear cleanup attention while retained content is missing or quarantined.
+
+The clean predicate examines only reconciliation counts. It ignores the per-file states computed immediately above it. A corrupt object whose exact locator is still present is marked quarantined by path_for, then counted as referenced by reconciliation; complete becomes true and record_cleanup_resolved runs. The same flaw applies to any missing result suppressed by accumulated cursor state. A direct probe produced complete=true, states.quarantined=1, and invoked record_cleanup_resolved.
+
+Suggestion: define clean as scanComplete plus zero missing/quarantined file states plus zero reconciliation orphaned/missing/unverifiable results. Add local and S3 tests in which the exact locator exists but its bytes fail size/hash verification, and assert complete=false with no attention resolution.
+
+References:
+application/apps/server/app/modules/files/application/verification.py:44-71
+application/apps/server/app/modules/files/application/verification.py:102-110
+docs/FILE-001_DESIGN.md:120,138,172,178,224,233
+
+4. [P1] The continuation is neither opaque nor bounded and exposes unrestricted S3 locators in an HTTP query parameter.
+
+The continuation is unsigned base64 JSON containing every previously seen, orphaned, and unverifiable bucket/key/version triple. A caller can decode and alter it, including adding retained identities to seen to suppress missing results. The response also exposes exact provider locators that the API contract says must not be returned. Because all accumulated identities are copied into every next token, its size grows with the complete namespace and will exceed practical request-line limits, preventing a large reconciliation from being resumed to completion. Cursor validation is also partial: a token with only {"seen": []} is accepted and later causes an uncaught KeyError.
+
+Suggestion: return a bounded opaque operation token that references server-owned scan state, or use an authenticated encrypted token with a strict versioned schema and bounded state. Keep bucket/key/version identities out of the client-visible token, bind it to the workspace/provider/scan, reject malformed tokens as the stable 400 error, and add multi-page size, tampering, and malformed-token tests.
+
+References:
+application/apps/server/app/modules/files/application/verification.py:13-27
+application/apps/server/app/modules/files/application/verification.py:83-104
+application/apps/server/app/modules/files/api/router.py:79-87
+docs/FILE-001_DESIGN.md:120,180,230
+
+5. [P2] Retained validation still permits a verified owner rent report with no active available evidence.
+
+Mutation-time archival protects the last active available link on a verified report, but validate_retained checks only purpose, target existence, and the maximum active-link count. A restored or directly corrupted verified report whose evidence is all archived, missing, or quarantined therefore passes FILE-001 retained validation. The owner-accounting schema check proves only that evidence was available when the historical verification audit was written; it does not prove that active available evidence remains now.
+
+Suggestion: in retained validation, load the report and require at least one active available evidence link whenever status is verified. Add restore/open tests for verified reports whose only evidence is archived and whose only active evidence has storage_state missing.
+
+References:
+application/apps/server/app/modules/owner_accounting/application/file_links.py:12-19
+application/apps/server/app/modules/owner_accounting/infrastructure/schema_validation.py:67-78
+docs/FILE-001_DESIGN.md:142-147,197,223
+
+STANDARDS
+
+6. [P2] The bootstrap policy composition still owns other modules' persistence knowledge instead of wiring source-owned fact adapters.
+
+Moving the registry out of files fixes the inward dependency, but bootstrap/file_link_policies.py now contains a central table-name switch, raw SQL for lease, finance, maintenance, and owner-accounting tables, maintenance correction semantics, and SELECT * projected into SimpleNamespace. ARCHITECTURE.md requires cross-module facts to come through small application protocols and says each source module's adapter should expose consumer-neutral facts. A source schema change now requires editing this central composition module, and bootstrap is doing persistence and projection work rather than composition.
+
+Suggestion: keep bootstrap limited to construction. Implement transaction-aware readers inside each source module's infrastructure layer using that module's models, expose only the small fact protocol its policy needs, and wire those adapters here. Replace SELECT * and SimpleNamespace with the minimum typed owner-report facts.
+
+References:
+application/apps/server/app/bootstrap/file_link_policies.py:24-75
+docs/ARCHITECTURE.md:97-101
+
+7. [P2] The response commit removes the repository guidance that defines the issue workflow it simultaneously uses.
+
+The commit adds .scratch/file-001/spec.md and two issue files following the local Markdown tracker convention, but deletes AGENTS.md, docs/agents/issue-tracker.md, and docs/agents/domain.md. Future work can no longer discover the tracker rules, map/issue conventions, domain-document lookup, glossary guidance, or ADR conflict policy. This leaves the new records without an active documented workflow.
+
+Suggestion: restore those guidance files. If the repository is intentionally changing workflows, add the replacement guidance and migrate the new FILE-001 records in the same change.
+
+References:
+AGENTS.md (deleted by 53ded39; parent lines 1-9)
+docs/agents/issue-tracker.md (deleted by 53ded39; parent lines 1-37)
+docs/agents/domain.md (deleted by 53ded39; parent lines 1-35)
+.scratch/file-001/spec.md:1-17
+
+VALIDATION
+
+Complete server suite: 401 passed, 1 unrelated AnyIO deprecation warning.
+
+Focused behavioral probe: a file whose bytes fail integrity verification while its locator remains present returned complete=true with states.quarantined=1 and invoked cleanup resolution, confirming finding 3.
+
+Summary: five specification findings (four P1, one P2) and two standards findings (both P2). The highest-risk specification issue is false-clean verification clearing unresolved integrity attention; the highest-risk standards issue is cross-module persistence logic concentrated in bootstrap.
