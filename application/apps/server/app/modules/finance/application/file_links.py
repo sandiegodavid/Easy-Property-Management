@@ -1,7 +1,7 @@
 """Finance-owned authorization for FILE-001 expense evidence."""
 
 from app.modules.files.application.errors import FileError
-from app.modules.files.application.ports import FileLink
+from app.modules.files.application.ports import FileLink, FileLinkReader
 from app.modules.finance.application.expense_ports import ExpenseFileLinkOperations
 
 
@@ -10,12 +10,13 @@ class ExpenseFileLinkValidator:
     allows_generic_upload = True
     _purposes = frozenset({"receipt", "invoice", "proof_of_payment", "supporting_document"})
 
-    def __init__(self, operations: ExpenseFileLinkOperations) -> None:
+    def __init__(self, operations: ExpenseFileLinkOperations, links: FileLinkReader) -> None:
         self.operations = operations
+        self.links = links
 
     def validate_create(self, connection, link: FileLink) -> None:
         self._validate_target(connection, link)
-        if self.operations.active_link_count(connection, link.entity_id) >= 20:
+        if self.links.active_link_count(connection, link.entity_type, link.entity_id) >= 20:
             raise FileError("An expense may have at most twenty active evidence links.")
 
     def validate_archive(self, connection, link: FileLink) -> None:
@@ -26,7 +27,7 @@ class ExpenseFileLinkValidator:
         # Retained validation sees the complete, committed aggregate.  Unlike
         # create validation, the prospective link is already part of the
         # count, so only a count *over* the policy limit is corrupt.
-        if self.operations.active_link_count(connection, link.entity_id) > 20:
+        if self.links.active_link_count(connection, link.entity_type, link.entity_id) > 20:
             raise FileError("An expense may have at most twenty active evidence links.")
 
     def _validate_target(self, connection, link: FileLink) -> None:

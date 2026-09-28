@@ -30,7 +30,7 @@ from app.modules.finance.domain.expense_models import (
 )
 from app.modules.finance.domain.models import FinanceConflictError, FinanceError, VoidCommand
 from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpenseUnitOfWork
-from app.modules.finance.infrastructure.file_links import SQLiteExpenseFileLinkOperations
+from app.modules.finance.infrastructure.file_link_facts import SQLiteExpenseFileLinkFacts
 from app.modules.finance.infrastructure.schema_validation import validate_finance_schema
 from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations
 from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
@@ -81,7 +81,7 @@ class ExpenseWorkflowTests(unittest.TestCase):
             self.workspace,
             FilesystemContentStore(self.workspace.paths.files),
             SQLiteFileUnitOfWork(database, recorder),
-            link_validators=(ExpenseFileLinkValidator(SQLiteExpenseFileLinkOperations(file_link_reader)),),
+            link_validators=(ExpenseFileLinkValidator(SQLiteExpenseFileLinkFacts(), file_link_reader),),
         )
         self.category_id = self.expenses.list_categories()[0]["id"]
 

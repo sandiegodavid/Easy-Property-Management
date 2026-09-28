@@ -18,13 +18,14 @@ def validate_file_schema(connection) -> None:
         "file_records": {"id", "original_name", "media_type", "size_bytes", "content_sha256", "created_at"},
         "file_links": {"id", "file_id", "entity_type", "entity_id", "purpose", "created_at", "archived_at", "archive_reason"},
         "file_content_locations": {"file_id", "storage_provider", "storage_state", "local_relative_path", "s3_bucket", "s3_object_key", "s3_version_id", "provider_etag", "verified_at"},
+        "file_publication_cleanup_attentions": {"publication_id", "provider", "opened_at", "resolved_at"},
     }
     all_indexes = []
     for table, columns in expected.items():
         actual_columns = inspector.get_columns(table)
         if table not in inspector.get_table_names() or {item["name"] for item in actual_columns} != columns:
             raise MigrationSchemaError(f"{table} has an incompatible shape.")
-        expected_pk = {"file_id"} if table == "file_content_locations" else {"id"}
+        expected_pk = {"file_id"} if table == "file_content_locations" else ({"publication_id"} if table == "file_publication_cleanup_attentions" else {"id"})
         if {item["name"] for item in actual_columns if item["primary_key"]} != expected_pk:
             raise MigrationSchemaError(f"{table} has an incompatible primary key.")
         for column in actual_columns:
@@ -32,7 +33,7 @@ def validate_file_schema(connection) -> None:
             actual_type = str(column["type"]).upper()
             if (expected_integer and "INT" not in actual_type) or (not expected_integer and not ("TEXT" in actual_type or "CHAR" in actual_type)):
                 raise MigrationSchemaError(f"{table} has incompatible column types.")
-            nullable = (table == "file_content_locations" and column["name"] in {"local_relative_path", "s3_bucket", "s3_object_key", "s3_version_id", "provider_etag"}) or (table == "file_links" and column["name"] in {"archived_at", "archive_reason"})
+            nullable = (table == "file_content_locations" and column["name"] in {"local_relative_path", "s3_bucket", "s3_object_key", "s3_version_id", "provider_etag"}) or (table == "file_links" and column["name"] in {"archived_at", "archive_reason"}) or (table == "file_publication_cleanup_attentions" and column["name"] == "resolved_at")
             if bool(column["nullable"]) != nullable and not column["primary_key"]:
                 raise MigrationSchemaError(f"{table} has incompatible nullability.")
         all_indexes.extend(inspector.get_indexes(table))
@@ -130,6 +131,14 @@ def validate_file_data(connection, policy_registry: Mapping[str, object]) -> Non
     missing = {row["id"] for row in rows} - set(links_by_file)
     if missing:
         raise MigrationSchemaError("Every committed file must retain at least one file link.")
+    for row in connection.execute(text(
+        "SELECT publication_id,provider,opened_at,resolved_at FROM file_publication_cleanup_attentions"
+    )).mappings():
+        if not isinstance(row["publication_id"], str) or not row["publication_id"].strip() or row["provider"] not in {"local", "s3"}:
+            raise MigrationSchemaError("A retained file cleanup attention is invalid.")
+        _utc(row["opened_at"], "cleanup attention opened_at")
+        if row["resolved_at"] is not None:
+            _utc(row["resolved_at"], "cleanup attention resolved_at")
 
 
 def _uuid(value: object, label: str) -> None:

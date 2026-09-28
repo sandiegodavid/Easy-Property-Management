@@ -69,6 +69,8 @@ def upgrade() -> None:
         sa.Column("entity_type", sa.String(), nullable=False), sa.Column("entity_id", sa.String(), nullable=False), sa.Column("purpose", sa.String(), nullable=False), sa.Column("created_at", sa.String(), nullable=False), sa.Column("archived_at", sa.String()), sa.Column("archive_reason", sa.String()), sa.CheckConstraint("(archived_at IS NULL AND archive_reason IS NULL) OR (archived_at IS NOT NULL AND archive_reason IS NOT NULL AND length(trim(archive_reason)) BETWEEN 1 AND 1000)"))
     op.create_index("file_links_entity", "file_links", ["entity_type", "entity_id"])
     op.create_index("file_links_one_active_association", "file_links", ["file_id", "entity_type", "entity_id", "purpose"], unique=True, sqlite_where=sa.text("archived_at IS NULL"))
+    op.create_table("file_publication_cleanup_attentions", sa.Column("publication_id", sa.String(), primary_key=True),
+        sa.Column("provider", sa.String(), nullable=False), sa.Column("opened_at", sa.String(), nullable=False), sa.Column("resolved_at", sa.String()))
     op.create_table("tasks", sa.Column("id", sa.String(), primary_key=True), sa.Column("title", sa.String(), nullable=False), sa.Column("notes", sa.String()), sa.Column("status", sa.String(), nullable=False),
         sa.Column("priority", sa.String(), nullable=False), sa.Column("due_at_utc", sa.String()), sa.Column("due_timezone", sa.String()), sa.Column("is_all_day", sa.Integer(), nullable=False),
         sa.Column("completed_at_utc", sa.String()), sa.Column("cancelled_at_utc", sa.String()), sa.Column("outcome_note", sa.String()), sa.Column("related_entity_type", sa.String()), sa.Column("related_entity_id", sa.String()), sa.Column("related_label", sa.String()),
@@ -177,5 +179,5 @@ def downgrade() -> None:
     op.drop_table("provider_reputation_links"); op.drop_table("provider_references"); op.drop_table("provider_work_history"); op.drop_table("provider_service_areas"); op.drop_table("provider_services"); op.drop_table("provider_profiles")
     op.drop_table("lease_termination_proposals"); op.drop_table("lease_termination_cases"); op.drop_table("lease_renewal_options"); op.drop_table("lease_participants"); op.drop_table("lease_term_versions"); op.drop_table("leases")
     op.drop_table("space_status_operations"); op.drop_table("space_availability"); op.drop_table("space_occupancy_periods"); op.drop_table("spaces"); op.drop_table("property_ownerships"); op.drop_table("properties"); op.drop_table("tenant_profiles"); op.drop_table("party_contact_methods"); op.drop_table("parties")
-    op.drop_table("task_reminders"); op.drop_table("tasks"); op.drop_table("file_links"); op.drop_table("file_content_locations"); op.drop_table("file_records")
+    op.drop_table("task_reminders"); op.drop_table("tasks"); op.drop_table("file_publication_cleanup_attentions"); op.drop_table("file_links"); op.drop_table("file_content_locations"); op.drop_table("file_records")
     op.execute("DROP TRIGGER audit_events_no_delete"); op.execute("DROP TRIGGER audit_events_no_update"); op.drop_table("audit_events"); op.drop_table("workspace_metadata")

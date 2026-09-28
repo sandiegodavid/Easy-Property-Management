@@ -23,6 +23,7 @@ class PublicationCleanupIncomplete(FileError):
         self.provider = provider
         self.original_failure = original_failure
         self.cleanup_failure = cleanup_failure
+        self.attention_recording_failure: BaseException | None = None
 
 
 def normalize_filename(value: str) -> str:

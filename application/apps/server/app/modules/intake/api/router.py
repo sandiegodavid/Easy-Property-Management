@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel, ConfigDict, Field
+from app.modules.files.application.errors import PublicationCleanupIncomplete
 from app.modules.intake.application.service import AttachmentInput, IntakeAdmissionCommand, IntakeService
 from app.modules.intake.domain.models import EvidenceEnvelope, IntakeConflictError, IntakeError, IntakeNotFoundError
 from app.modules.workspace.application.runtime import WorkspaceRuntime
@@ -35,6 +36,13 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
         if not runtime.can_write: raise HTTPException(503,"Workspace writer lock is unavailable.")
     def call(op):
         try:return op()
+        except PublicationCleanupIncomplete as error:
+            # FILE-001 deliberately keeps provider locations and cleanup
+            # failures private.  If attention persistence also failed, this
+            # response is the operator's immediate repair signal.
+            raise HTTPException(503, {"code": error.code, "message": str(error),
+                                      "repairRequired": True,
+                                      "attentionRecorded": error.attention_recording_failure is None}) from error
         except IntakeNotFoundError as error: raise HTTPException(404,{"code":error.code,"message":str(error)}) from error
         except IntakeConflictError as error: raise HTTPException(409,{"code":error.code,"message":str(error)}) from error
         except IntakeError as error: raise HTTPException(422,{"code":error.code,"message":str(error)}) from error

@@ -1,11 +1,12 @@
 FILE-001 implementation re-review comments
-Date: 2026-09-26
-Reviewed change: 234f784...53ded39
+Date: 2026-09-28
+Reviewed change: f602b0b531493bd0c1c5bfa21eaf1e829503acf3...ebb4e75ed5e4e1a59f591a88e6a94591f885134e
 Specification: docs/FILE-001_DESIGN.md
+Follow-up scope: previously reported finding 2 only; all other findings are carried forward unchanged and were not re-reviewed
 
 SPECIFICATION
 
-1. [P1] A versionless S3 publication with failed cleanup still loses the cleanup identity and returns the wrong error.
+1. [P1] [still open] A versionless S3 publication with failed cleanup still loses the cleanup identity and returns the wrong error.
 
 When put_object succeeds without returning VersionId, _delete_unidentified_publication tries to discover and delete the exact version. If discovery or deletion fails, that helper raises an ordinary FileError. Because no lease was created, store() only releases the lock and re-raises the FileError. The publication_id is discarded, FileService does not receive PublicationCleanupIncomplete, and no cleanup attention is recorded. This is the uncertain-publication case for which the design requires a typed publication_cleanup_incomplete response and exact operation-owned cleanup identity.
 
@@ -17,31 +18,7 @@ application/apps/server/app/modules/files/infrastructure/content_store.py:267-28
 application/apps/server/app/modules/files/application/service.py:138-140
 docs/FILE-001_DESIGN.md:118,138,233
 
-2. [P1] Cleanup attention is represented by unrelated audit events, so Settings cannot show or reliably clear an outstanding condition.
-
-record_cleanup_incomplete and record_cleanup_resolved each create a fresh random entity_id. No retained state, query, or Settings-facing projection correlates an unresolved publication with its resolution. A clean verification also writes cleanup_resolved unconditionally, including when no attention exists. This does not implement an event keyed by publication ID or a workspace-integrity attention that remains until a clean full verification clears it. In caller-owned workflows, cleanup recording may also open a second immediate SQLite transaction while the failed owning transaction still holds the writer lock; _record_cleanup_attention suppresses every resulting persistence error, so a writable database can silently lose the required event.
-
-Suggestion: persist a small cleanup-attention record keyed by publication ID, write the audit event with that same stable entity identity, expose outstanding attention through the Settings read model, and resolve only currently open records after a clean full verification. Arrange caller-owned rollback reporting after its transaction releases the writer lock, or use the caller connection where safe. Do not silently suppress a failed attention write without retaining another repair-required signal.
-
-References:
-application/apps/server/app/modules/files/infrastructure/sqlite_repository.py:133-146
-application/apps/server/app/modules/files/application/service.py:243-251
-application/apps/server/app/modules/files/application/verification.py:105-110
-application/apps/server/app/modules/intake/application/service.py:57-89
-docs/FILE-001_DESIGN.md:138,233
-
-3. [P1] Full verification can report complete and clear cleanup attention while retained content is missing or quarantined.
-
-The clean predicate examines only reconciliation counts. It ignores the per-file states computed immediately above it. A corrupt object whose exact locator is still present is marked quarantined by path_for, then counted as referenced by reconciliation; complete becomes true and record_cleanup_resolved runs. The same flaw applies to any missing result suppressed by accumulated cursor state. A direct probe produced complete=true, states.quarantined=1, and invoked record_cleanup_resolved.
-
-Suggestion: define clean as scanComplete plus zero missing/quarantined file states plus zero reconciliation orphaned/missing/unverifiable results. Add local and S3 tests in which the exact locator exists but its bytes fail size/hash verification, and assert complete=false with no attention resolution.
-
-References:
-application/apps/server/app/modules/files/application/verification.py:44-71
-application/apps/server/app/modules/files/application/verification.py:102-110
-docs/FILE-001_DESIGN.md:120,138,172,178,224,233
-
-4. [P1] The continuation is neither opaque nor bounded and exposes unrestricted S3 locators in an HTTP query parameter.
+4. [P1] [still open] The continuation is neither opaque nor bounded and exposes unrestricted S3 locators in an HTTP query parameter.
 
 The continuation is unsigned base64 JSON containing every previously seen, orphaned, and unverifiable bucket/key/version triple. A caller can decode and alter it, including adding retained identities to seen to suppress missing results. The response also exposes exact provider locators that the API contract says must not be returned. Because all accumulated identities are copied into every next token, its size grows with the complete namespace and will exceed practical request-line limits, preventing a large reconciliation from being resumed to completion. Cursor validation is also partial: a token with only {"seen": []} is accepted and later causes an uncaught KeyError.
 
@@ -53,45 +30,72 @@ application/apps/server/app/modules/files/application/verification.py:83-104
 application/apps/server/app/modules/files/api/router.py:79-87
 docs/FILE-001_DESIGN.md:120,180,230
 
-5. [P2] Retained validation still permits a verified owner rent report with no active available evidence.
-
-Mutation-time archival protects the last active available link on a verified report, but validate_retained checks only purpose, target existence, and the maximum active-link count. A restored or directly corrupted verified report whose evidence is all archived, missing, or quarantined therefore passes FILE-001 retained validation. The owner-accounting schema check proves only that evidence was available when the historical verification audit was written; it does not prove that active available evidence remains now.
-
-Suggestion: in retained validation, load the report and require at least one active available evidence link whenever status is verified. Add restore/open tests for verified reports whose only evidence is archived and whose only active evidence has storage_state missing.
-
-References:
-application/apps/server/app/modules/owner_accounting/application/file_links.py:12-19
-application/apps/server/app/modules/owner_accounting/infrastructure/schema_validation.py:67-78
-docs/FILE-001_DESIGN.md:142-147,197,223
-
 STANDARDS
 
-6. [P2] The bootstrap policy composition still owns other modules' persistence knowledge instead of wiring source-owned fact adapters.
+No open findings in the re-reviewed scope.
 
-Moving the registry out of files fixes the inward dependency, but bootstrap/file_link_policies.py now contains a central table-name switch, raw SQL for lease, finance, maintenance, and owner-accounting tables, maintenance correction semantics, and SELECT * projected into SimpleNamespace. ARCHITECTURE.md requires cross-module facts to come through small application protocols and says each source module's adapter should expose consumer-neutral facts. A source schema change now requires editing this central composition module, and bootstrap is doing persistence and projection work rather than composition.
+RESOLVED FINDINGS
 
-Suggestion: keep bootstrap limited to construction. Implement transaction-aware readers inside each source module's infrastructure layer using that module's models, expose only the small fact protocol its policy needs, and wire those adapters here. Replace SELECT * and SimpleNamespace with the minimum typed owner-report facts.
+3. [resolved 2026-09-28] Full verification retains cleanup attention while content is missing or quarantined.
+
+Full verification now requires a complete inventory scan, zero reconciliation problems, and zero missing or quarantined file states before reporting complete and resolving attention. The regression test corrupts retained local content and confirms complete is false, the file is quarantined, and attention remains outstanding. The same state predicate covers missing content and S3 integrity failures.
 
 References:
-application/apps/server/app/bootstrap/file_link_policies.py:24-75
+application/apps/server/app/modules/files/application/verification.py:44-71,105-117
+application/apps/server/app/modules/files/tests/test_files.py:140-149
+docs/FILE-001_DESIGN.md:120,138,172,178,224,233
+
+5. [resolved 2026-09-28] Retained validation rejects a verified owner rent report with no active available evidence.
+
+OwnerRentReportFileLinkValidator now rejects a verified report when its global active-available evidence count is below one. That count includes only unarchived links whose content location is available. FILE-001 retained validation invokes the owning policy for each retained link, so archived-only evidence and active evidence in missing or quarantined storage state fail workspace-open and restore validation.
+
+References:
+application/apps/server/app/modules/owner_accounting/application/file_links.py:16-22
+application/apps/server/app/modules/owner_accounting/infrastructure/file_link_facts.py:20-26
+application/apps/server/app/modules/files/infrastructure/file_link_reader.py:38-42
+application/apps/server/app/modules/files/infrastructure/schema_validation.py:121-130
+docs/FILE-001_DESIGN.md:142-147,190-199,223-225
+
+7. [resolved 2026-09-28] Repository workflow guidance is restored.
+
+The project guidance, local issue-tracker workflow, and domain-document lookup rules are present again, and the FILE-001 tracker record remains compatible with that workflow.
+
+References:
+AGENTS.md:1-42
+docs/agents/issue-tracker.md:1-37
+docs/agents/domain.md:1-35
+.scratch/file-001/spec.md:1-17
+
+6. [resolved 2026-09-28] Source modules expose their own facts separately from FILE-001 link facts.
+
+Bootstrap now performs composition only: it constructs one Files-owned FileLinkReader, separate source-owned fact adapters, and the consuming validators. Finance, Leasing, Maintenance, and Owner Accounting adapters contain only persistence knowledge owned by their modules, while FILE-001 active-link and availability reads are injected separately into the validators that own the workflow policy. The duplicate source adapters were removed.
+
+References:
+application/apps/server/app/bootstrap/file_link_policies.py:24-33
+application/apps/server/app/modules/finance/infrastructure/file_link_facts.py:12-24
+application/apps/server/app/modules/leases/infrastructure/file_link_facts.py:9-16
+application/apps/server/app/modules/maintenance/infrastructure/file_link_facts.py:12-28
+application/apps/server/app/modules/owner_accounting/infrastructure/file_link_facts.py:10-20
+application/apps/server/app/modules/finance/application/file_links.py:13-20
+application/apps/server/app/modules/maintenance/application/file_links.py:6-19
+application/apps/server/app/modules/owner_accounting/application/file_links.py:7-23
 docs/ARCHITECTURE.md:97-101
 
-7. [P2] The response commit removes the repository guidance that defines the issue workflow it simultaneously uses.
+2. [resolved 2026-09-28] Intake returns the repair-required cleanup result when deferred attention persistence fails.
 
-The commit adds .scratch/file-001/spec.md and two issue files following the local Markdown tracker convention, but deletes AGENTS.md, docs/agents/issue-tracker.md, and docs/agents/domain.md. Future work can no longer discover the tracker rules, map/issue conventions, domain-document lookup, glossary guidance, or ADR conflict policy. This leaves the new records without an active documented workflow.
-
-Suggestion: restore those guidance files. If the repository is intentionally changing workflows, add the replacement guidance and migrate the new FILE-001 records in the same change.
+Intake's shared HTTP boundary now translates PublicationCleanupIncomplete into the stable privacy-safe 503 response. It returns the cleanup code and public message, repairRequired=true, and attentionRecorded=false when the deferred attention write failed. The endpoint regression test models the cleanup and attention-write failures and asserts the exact response from POST /api/intake/sources/import.
 
 References:
-AGENTS.md (deleted by 53ded39; parent lines 1-9)
-docs/agents/issue-tracker.md (deleted by 53ded39; parent lines 1-37)
-docs/agents/domain.md (deleted by 53ded39; parent lines 1-35)
-.scratch/file-001/spec.md:1-17
+application/apps/server/app/modules/intake/api/router.py:37-48
+application/apps/server/app/modules/intake/application/service.py:109-121
+application/apps/server/app/modules/files/application/service.py:262-270
+application/apps/server/app/modules/intake/tests/test_intake.py:79-107
+docs/FILE-001_DESIGN.md:138,233
 
 VALIDATION
 
-Complete server suite: 401 passed, 1 unrelated AnyIO deprecation warning.
+Focused Files and Intake suites: 29 passed, 1 unrelated AnyIO deprecation warning.
 
-Focused behavioral probe: a file whose bytes fail integrity verification while its locator remains present returned complete=true with states.quarantined=1 and invoked cleanup resolution, confirming finding 3.
+Whitespace validation passed. No general re-review was performed, and S3-specific findings 1 and 4 were not revalidated or changed.
 
-Summary: five specification findings (four P1, one P2) and two standards findings (both P2). The highest-risk specification issue is false-clean verification clearing unresolved integrity attention; the highest-risk standards issue is cross-module persistence logic concentrated in bootstrap.
+Summary: finding 2 is resolved. Findings 1, 3, 4, 5, 6, and 7 remain unchanged.

@@ -18,7 +18,6 @@ class PartyExpenseOperations(Protocol):
 
 class ExpenseFileLinkOperations(Protocol):
     def expense_exists(self, connection: Any, expense_id: str) -> bool: ...
-    def active_link_count(self, connection: Any, expense_id: str) -> int: ...
 
 
 class ExpenseTransaction(Protocol):

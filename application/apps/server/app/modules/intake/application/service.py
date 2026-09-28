@@ -110,7 +110,14 @@ class IntakeService:
             result, batch = self.unit_of_work.write(operation)
         except BaseException as error:
             batch = batch_holder.get("batch")
-            if batch is not None: batch.rollback(error)
+            if batch is not None:
+                try:
+                    batch.rollback(error)
+                finally:
+                    # The immediate transaction has exited, so this
+                    # independent FILE-001 attention write cannot contend
+                    # with its writer lock, including when cleanup fails.
+                    batch.persist_cleanup_attention()
             raise
         if batch is not None: batch.commit()
         return result

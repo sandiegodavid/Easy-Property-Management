@@ -69,7 +69,7 @@ def validate_latest_schema(database_path: Path) -> None:
             )).scalars())
             expected_tables = {
                 "alembic_version", "workspace_metadata", "audit_events", "file_records", "file_content_locations",
-                "file_links", "tasks", "task_reminders", "parties", "properties", "property_ownerships", "spaces",
+                "file_links", "file_publication_cleanup_attentions", "tasks", "task_reminders", "parties", "properties", "property_ownerships", "spaces",
                 "space_occupancy_periods", "space_availability", "space_status_operations", "tenant_profiles", "party_contact_methods",
                 "leases", "lease_term_versions", "lease_participants", "lease_renewal_options",
                 "lease_termination_cases", "lease_termination_proposals",

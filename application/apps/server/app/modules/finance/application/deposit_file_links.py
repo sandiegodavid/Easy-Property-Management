@@ -1,6 +1,6 @@
 """FIN-008 owns authorization for deposit evidence links."""
 from app.modules.files.application.errors import FileError
-from app.modules.files.application.ports import FileLink
+from app.modules.files.application.ports import FileLink, FileLinkReader
 
 
 class DepositFileLinkValidator:
@@ -12,14 +12,16 @@ class DepositFileLinkValidator:
         "security_deposit_refund": frozenset({"proof_of_refund", "payment_confirmation", "supporting_document"}),
         "security_deposit_settlement": frozenset({"settlement_statement", "correspondence", "supporting_document"}),
     }
-    def __init__(self, operations): self.operations = operations
+    def __init__(self, operations, links: FileLinkReader):
+        self.operations = operations
+        self.links = links
     def validate_create(self, connection, link: FileLink):
         self._target(connection, link)
-        if self.operations.active_link_count(connection, link.entity_type, link.entity_id) >= 20: raise FileError("A security-deposit record may have at most twenty active evidence links.")
+        if self.links.active_link_count(connection, link.entity_type, link.entity_id) >= 20: raise FileError("A security-deposit record may have at most twenty active evidence links.")
     def validate_archive(self, connection, link: FileLink): self._target(connection, link)
     def validate_retained(self, connection, link: FileLink):
         self._target(connection, link)
-        if self.operations.active_link_count(connection, link.entity_type, link.entity_id) > 20:
+        if self.links.active_link_count(connection, link.entity_type, link.entity_id) > 20:
             raise FileError("A security-deposit record may have at most twenty active evidence links.")
     def _target(self, connection, link):
         if link.purpose not in self._purposes[link.entity_type]: raise FileError("Unsupported security-deposit evidence purpose.")

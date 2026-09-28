@@ -102,12 +102,16 @@ class FileStorageVerificationService:
                     missing = retained - seen if not page.incomplete else set()
                     reconciliation[provider] = {"referenced": len(seen), "orphaned": len(orphaned),
                                                  "missing": len(missing), "unverifiable": len(unverifiable)}
-        problems = any(value for result in reconciliation.values() for key, value in result.items() if key != "referenced")
-        complete = scan_complete and not problems
+        reconciliation_problems = any(value for result in reconciliation.values() for key, value in result.items() if key != "referenced")
+        content_problems = counts["missing"] > 0 or counts["quarantined"] > 0
+        # A completed inventory is not necessarily clean.  In particular a
+        # corrupt object can remain present at its recorded locator.
+        complete = scan_complete and not reconciliation_problems and not content_problems
         if complete and file_id is None:
             resolved = getattr(self.unit_of_work, "record_cleanup_resolved", None)
             if resolved is not None:
                 resolved(str(uuid4()))
+        outstanding = getattr(self.unit_of_work, "outstanding_cleanup_attentions", lambda: [])()
         return {"complete": complete, "scanComplete": scan_complete,
                 "continuation": next_continuation, "files": len(candidates), "states": counts,
-                "reconciliation": reconciliation}
+                "reconciliation": reconciliation, "cleanupAttention": {"outstanding": len(outstanding)}}

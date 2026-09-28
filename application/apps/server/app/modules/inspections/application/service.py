@@ -230,7 +230,10 @@ class InspectionService:
             item = self.unit_of_work.write(attach)
         except Exception as error:
             if batch is not None:
-                batch.rollback(error)
+                try:
+                    batch.rollback(error)
+                finally:
+                    batch.persist_cleanup_attention()
             raise
         batch.commit()
         return self.files.get(item.id).to_dict()

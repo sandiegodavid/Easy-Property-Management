@@ -30,6 +30,7 @@ class FileAttachmentBatch:
         self._by_digest: dict[str, Any] = {}
         self._closed: str | None = None
         self._correlation_id: str | None = None
+        self._cleanup_incomplete: PublicationCleanupIncomplete | None = None
 
     def add(self, source: Path, original_name: str, media_type: str | None, *, entity_type: str, entity_id: str, purpose: str, correlation_id: str, owning_workflow: bool = False) -> StoredFile:
         if self._closed is not None:
@@ -70,7 +71,8 @@ class FileAttachmentBatch:
                 str(getattr(publication, "publication_id", getattr(publication, "content_sha256", "unknown"))),
                 str(getattr(publication, "storage_provider", "unknown")), error, error,
             )
-            self.service._record_cleanup_attention(incomplete, self._correlation_id or str(uuid4()))
+            self._cleanup_incomplete = incomplete
+            self.service._try_record_cleanup_attention(incomplete, self._correlation_id or str(uuid4()))
             raise incomplete from error
 
     def rollback(self, original_failure: BaseException | None = None) -> None:
@@ -90,8 +92,20 @@ class FileAttachmentBatch:
                 str(getattr(publication, "publication_id", getattr(publication, "content_sha256", "unknown"))),
                 str(getattr(publication, "storage_provider", "unknown")), failure, cleanup_error,
             )
-            self.service._record_cleanup_attention(incomplete, self._correlation_id or str(uuid4()))
+            # Caller-owned transactions can still hold SQLite's single writer
+            # lock here.  Leave attention persistence retryable until their
+            # rollback has released it.
+            self._cleanup_incomplete = incomplete
             raise incomplete from failure
+
+    def persist_cleanup_attention(self) -> PublicationCleanupIncomplete | None:
+        """Persist a deferred cleanup warning after the owning transaction ends."""
+        incomplete = self._cleanup_incomplete
+        if incomplete is not None:
+            self.service._try_record_cleanup_attention(
+                incomplete, self._correlation_id or str(uuid4())
+            )
+        return incomplete
 
 
 class FileService:
@@ -133,10 +147,10 @@ class FileService:
                 except BaseException as cleanup_error:
                     publication_id = getattr(content, "publication_id", "unknown")
                     incomplete = PublicationCleanupIncomplete(publication_id, getattr(content, "storage_provider", "unknown"), error, cleanup_error)
-                    self._record_cleanup_attention(incomplete, correlation)
+                    self._try_record_cleanup_attention(incomplete, correlation)
                     raise incomplete from error
             if isinstance(error, PublicationCleanupIncomplete):
-                self._record_cleanup_attention(error, correlation)
+                self._try_record_cleanup_attention(error, correlation)
                 raise
             if isinstance(error, FileError):
                 raise
@@ -243,12 +257,17 @@ class FileService:
     def _record_cleanup_attention(self, error: PublicationCleanupIncomplete, correlation_id: str) -> None:
         recorder = getattr(self.unit_of_work, "record_cleanup_incomplete", None)
         if recorder is not None:
-            try:
-                recorder(error.publication_id, error.provider, correlation_id)
-            except Exception:
-                # The structured failure remains the primary operational
-                # signal; a second audit failure must not leak provider data.
-                pass
+            recorder(error.publication_id, error.provider, correlation_id)
+
+    def _try_record_cleanup_attention(self, error: PublicationCleanupIncomplete, correlation_id: str) -> None:
+        """Keep cleanup failure primary, but never discard failed attention persistence."""
+        try:
+            self._record_cleanup_attention(error, correlation_id)
+        except BaseException as attention_error:
+            # The public error remains privacy-safe and retains the exact
+            # cleanup identity; callers can surface this repair-required
+            # secondary failure without losing the original business error.
+            error.attention_recording_failure = attention_error
 
 
 def _source_digest(source: Path) -> str:

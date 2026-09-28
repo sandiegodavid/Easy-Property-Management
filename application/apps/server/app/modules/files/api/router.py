@@ -7,7 +7,7 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, sta
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 from starlette.background import BackgroundTask
-from app.modules.files.application.errors import FileError, MAX_FILE_BYTES
+from app.modules.files.application.errors import FileError, MAX_FILE_BYTES, PublicationCleanupIncomplete
 from app.modules.files.application.service import FileService
 from app.modules.files.application.verification import FileStorageVerificationService
 from app.modules.workspace.application.runtime import WorkspaceRuntime
@@ -28,7 +28,14 @@ def _file_http_error(error: FileError) -> HTTPException:
         "publication_cleanup_incomplete": 503,
         "file_lifecycle_conflict": 409,
     }
-    return HTTPException(status_code=status_by_code.get(error.code, 400), detail={"code": error.code, "message": str(error)})
+    detail: dict[str, object] = {"code": error.code, "message": str(error)}
+    if isinstance(error, PublicationCleanupIncomplete):
+        # Never expose provider locators or cleanup internals.  Operators do
+        # get a durable, actionable signal when attention recording itself
+        # needs repair after the owning transaction has released its lock.
+        detail["repairRequired"] = True
+        detail["attentionRecorded"] = error.attention_recording_failure is None
+    return HTTPException(status_code=status_by_code.get(error.code, 400), detail=detail)
 
 
 def build_router(service: FileService, runtime: WorkspaceRuntime, verification: FileStorageVerificationService | None = None) -> APIRouter:
@@ -55,6 +62,13 @@ def build_router(service: FileService, runtime: WorkspaceRuntime, verification: 
         finally:
             if staged_path: staged_path.unlink(missing_ok=True)
         return item.to_dict()
+
+    @router.get("/api/files/integrity-attention")
+    def integrity_attention() -> dict[str, object]:
+        """Read-only Settings projection for unresolved publication cleanup."""
+        require_ready(write=False)
+        outstanding = service.unit_of_work.outstanding_cleanup_attentions()
+        return {"count": len(outstanding), "outstanding": outstanding}
 
     @router.get("/api/files/{file_id}")
     def metadata(file_id: str) -> dict[str, object]:

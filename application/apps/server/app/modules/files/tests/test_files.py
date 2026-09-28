@@ -5,6 +5,8 @@ import unittest
 import json
 import sqlite3
 import types
+import hashlib
+from uuid import uuid4
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
@@ -14,7 +16,9 @@ from fastapi.testclient import TestClient
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
+from app.modules.files.application.errors import PublicationCleanupIncomplete
 from app.modules.files.application.service import FileError, FileService
+from app.modules.files.application.verification import FileStorageVerificationService
 from app.modules.files.application.ports import FileLink
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
@@ -22,7 +26,7 @@ from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfW
 from app.modules.workspace.application.service import WorkspaceService
 from app.platform.config import LocalConfig
 from app.modules.files.infrastructure.sqlalchemy_models import FileLinkModel
-from app.platform.sqlite_engine import create_sqlite_engine
+from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 from sqlalchemy import text
 
 
@@ -134,6 +138,61 @@ class FileStoreTests(unittest.TestCase):
         file_event = self.audit.history("file", item.id)[0]
         link_event = self.audit.history("file_link")[0]
         self.assertEqual(file_event.correlation_id, link_event.correlation_id)
+
+    def test_full_verification_does_not_clear_cleanup_attention_for_quarantined_content(self) -> None:
+        item = self.files.add(self.source, "receipt.pdf", "application/pdf", entity_type="expense", entity_id="expense-1", purpose="receipt")
+        self.files.content_path(item).write_bytes(b"corrupt retained bytes")
+        self.files.unit_of_work.record_cleanup_incomplete("publication-test", "local", str(uuid4()))
+
+        result = FileStorageVerificationService(self.files.unit_of_work, self.files.content_stores).verify()
+
+        self.assertFalse(result["complete"])
+        self.assertEqual(result["states"]["quarantined"], 1)
+        self.assertEqual(result["cleanupAttention"]["outstanding"], 1)
+
+    def test_cleanup_attention_is_visible_before_a_verification_run(self) -> None:
+        self.files.unit_of_work.record_cleanup_incomplete("publication-test", "local", str(uuid4()))
+        self.service.config.config_path.write_text(
+            json.dumps({"localWorkspacePath": str(self.service.paths.root)}), encoding="utf-8"
+        )
+        from app.bootstrap.api import create_app
+        with TestClient(create_app(self.service.config.config_path)) as client:
+            response = client.get("/api/files/integrity-attention")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 1)
+        self.assertEqual(response.json()["outstanding"][0]["publicationId"], "publication-test")
+
+    def test_caller_owned_rollback_persists_cleanup_attention_after_writer_releases(self) -> None:
+        digest = hashlib.sha256(self.source.read_bytes()).hexdigest()
+
+        class FailedRollbackContent:
+            publication_id = "publication-after-rollback"
+            storage_provider = "local"
+            storage_state = "available"
+            local_relative_path = f"managed/{digest}"
+            s3_bucket = s3_object_key = s3_version_id = provider_etag = None
+            size_bytes = len(b"receipt bytes")
+            content_sha256 = digest
+            def commit(self): pass
+            def rollback(self): raise OSError("simulated cleanup failure")
+
+        self.files.content_store = types.SimpleNamespace(store=lambda source: FailedRollbackContent())
+        engine = create_sqlite_engine(self.service.paths.database)
+        try:
+            try:
+                with immediate_transaction(engine) as connection:
+                    batch = self.files.attachment_batch(connection)
+                    batch.add(self.source, "receipt.pdf", "application/pdf", entity_type="expense", entity_id="expense-1", purpose="receipt", correlation_id=str(uuid4()))
+                    with self.assertRaises(PublicationCleanupIncomplete):
+                        batch.rollback(ValueError("database write failed"))
+                    raise RuntimeError("rollback owning transaction")
+            except RuntimeError:
+                pass
+            batch.persist_cleanup_attention()
+        finally:
+            engine.dispose()
+        attentions = self.files.unit_of_work.outstanding_cleanup_attentions()
+        self.assertEqual([row["publicationId"] for row in attentions], ["publication-after-rollback"])
 
     def test_incorrect_link_is_archived_without_deleting_the_file_or_history(self) -> None:
         item = self.files.add(self.source, "receipt.pdf", "application/pdf", entity_type="expense", entity_id="expense-1", purpose="receipt")

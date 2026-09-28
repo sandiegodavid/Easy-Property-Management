@@ -42,7 +42,7 @@ from app.modules.files.infrastructure.content_store import FilesystemContentStor
 from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.finance.application.deposit_file_links import DepositFileLinkValidator
-from app.modules.finance.infrastructure.deposit_file_links import SQLiteDepositFileLinkOperations
+from app.modules.finance.infrastructure.file_link_facts import SQLiteDepositFileLinkFacts
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
 from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
@@ -69,7 +69,7 @@ class FinanceWorkflowTests(unittest.TestCase):
         self.files = FileService(
             self.workspace, FilesystemContentStore(self.workspace.paths.files),
             SQLiteFileUnitOfWork(db, recorder),
-            link_validators=(DepositFileLinkValidator(SQLiteDepositFileLinkOperations(self.file_reader)),),
+            link_validators=(DepositFileLinkValidator(SQLiteDepositFileLinkFacts(), self.file_reader),),
         )
 
     def test_security_deposit_account_receipt_and_zero_settlement_lifecycle(self):

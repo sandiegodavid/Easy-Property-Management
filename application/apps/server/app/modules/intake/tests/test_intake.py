@@ -4,8 +4,13 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from uuid import uuid4
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
+from app.modules.files.application.errors import PublicationCleanupIncomplete
+from app.modules.intake.api.router import build_router
 from app.modules.intake.application.service import IntakeAdmissionCommand, IntakeService
 from app.modules.intake.domain.models import EvidenceEnvelope, IntakeConflictError
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
@@ -70,3 +75,33 @@ class IntakeTests(TestCase):
         self.assertEqual("superseded", old["technicalStatus"])
         self.assertEqual(replacement["sourceId"], old["supersededBySourceId"])
         validate_latest_schema(self.database)
+
+    def test_import_reports_cleanup_repair_when_deferred_attention_recording_fails(self) -> None:
+        """The owning HTTP boundary preserves FILE-001's safe 503 contract."""
+        class FailingService:
+            def admit(self, _command):
+                failure = PublicationCleanupIncomplete(
+                    "publication-1", "local", RuntimeError("admission failed"),
+                    RuntimeError("cleanup failed"),
+                )
+                failure.attention_recording_failure = RuntimeError("attention write failed")
+                raise failure
+
+        class ReadyRuntime:
+            ready = True
+            can_write = True
+            error = None
+
+        app = FastAPI()
+        app.include_router(build_router(FailingService(), ReadyRuntime()))
+        response = TestClient(app).post(
+            "/api/intake/sources/import",
+            data={"metadata": '{"sourceKind":"operator_note","channel":"internal",'
+                              '"body":"Leaking sink.","occurredAtUtc":"2026-01-01T12:00:00Z",'
+                              '"originSystem":"manual","idempotencyKey":"' + str(uuid4()) + '"}'},
+        )
+
+        self.assertEqual(503, response.status_code)
+        self.assertEqual({"code": "publication_cleanup_incomplete",
+                          "message": "File publication cleanup could not be completed.",
+                          "repairRequired": True, "attentionRecorded": False}, response.json()["detail"])

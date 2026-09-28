@@ -31,7 +31,7 @@ from app.modules.maintenance.domain.audit_policy import MAINTENANCE_ACTIVITY_POL
 from app.modules.maintenance.domain.models import AppointmentCreate, AssignmentCreate, IssueCreate, QuoteCreate, ReporterAttribution, ReporterCorrection, MaintenanceConflictError, MaintenanceError
 from app.modules.maintenance.domain.work_journal import WorkJournalCreate
 from app.modules.maintenance.infrastructure.unit_of_work import SQLiteMaintenanceUnitOfWork
-from app.modules.maintenance.infrastructure.file_links import SQLiteMaintenanceFileLinkOperations
+from app.modules.maintenance.infrastructure.file_link_facts import SQLiteMaintenanceFileLinkFacts
 from app.modules.maintenance.application.file_links import MaintenanceFileLinkValidator
 from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
 from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
@@ -682,7 +682,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             outcome_status="partially_completed", outcome_summary="Correction outcome", follow_up_required=True, operator_verified=True,
             corrects_entry_id=original["id"], corrected_entry_kind="work_completed", correction_reason="New evidence changed the conclusion",
         ), str(uuid4()))
-        validator = MaintenanceFileLinkValidator(SQLiteMaintenanceFileLinkOperations(SQLiteFileLinkReader()))
+        validator = MaintenanceFileLinkValidator(SQLiteMaintenanceFileLinkFacts(), SQLiteFileLinkReader())
         engine = create_sqlite_engine(self.workspace.paths.database)
         file_id = str(uuid4())
         try:

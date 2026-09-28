@@ -33,7 +33,7 @@ from app.modules.files.application.service import FileService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
-from app.modules.owner_accounting.infrastructure.file_links import SQLiteOwnerRentReportFileLinkOperations
+from app.modules.owner_accounting.infrastructure.file_link_facts import SQLiteOwnerRentReportFileLinkFacts
 from app.modules.owner_accounting.infrastructure.schema_validation import validate_owner_accounting_schema
 from app.modules.leases.application.service import LeaseCreateCommand, LeaseService, ParticipantCommand, TermCommand
 from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
@@ -144,16 +144,16 @@ class OwnerRentReportEvidenceTests(unittest.TestCase):
         class Operations:
             def report(self, connection, report_id): return SimpleNamespace(status="verified")
             def link_is_active_available(self, connection, link_id): return False
-            def active_available_count(self, connection, report_id): return 1
-        validator = OwnerRentReportFileLinkValidator(Operations())
+            def active_available_link_count(self, connection, entity_type, entity_id): return 1
+        validator = OwnerRentReportFileLinkValidator(Operations(), Operations())
         validator.validate_archive(None, FileLink(str(uuid4()), "owner_rent_report", str(uuid4()), "supporting_document", "2026-01-01T00:00:00+00:00"))
 
     def test_archiving_last_available_link_is_rejected(self):
         class Operations:
             def report(self, connection, report_id): return SimpleNamespace(status="verified")
             def link_is_active_available(self, connection, link_id): return True
-            def active_available_count(self, connection, report_id): return 1
-        validator = OwnerRentReportFileLinkValidator(Operations())
+            def active_available_link_count(self, connection, entity_type, entity_id): return 1
+        validator = OwnerRentReportFileLinkValidator(Operations(), Operations())
         with self.assertRaises(ValueError):
             validator.validate_archive(None, FileLink(str(uuid4()), "owner_rent_report", str(uuid4()), "supporting_document", "2026-01-01T00:00:00+00:00"))
 
@@ -240,7 +240,7 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
         self.receipt_operations = SQLiteReceiptTransactionOperations(recorder, SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), parties)
         self.finance = FinanceService(SQLiteFinanceUnitOfWork(database, recorder, SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), parties), now=lambda: self.now)
         self.service = OwnerRentReportService(SQLiteOwnerRentReportUnitOfWork(database, recorder, SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), parties, self.files_reader, self.receipt_operations), now=lambda: self.now)
-        self.files = FileService(self.workspace, FilesystemContentStore(self.workspace.paths.files), SQLiteFileUnitOfWork(database, recorder), link_validators=(OwnerRentReportFileLinkValidator(SQLiteOwnerRentReportFileLinkOperations(self.files_reader)),))
+        self.files = FileService(self.workspace, FilesystemContentStore(self.workspace.paths.files), SQLiteFileUnitOfWork(database, recorder), link_validators=(OwnerRentReportFileLinkValidator(SQLiteOwnerRentReportFileLinkFacts(), self.files_reader),))
 
     def _expectation(self):
         term = self.lease["terms"][0]

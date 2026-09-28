@@ -48,3 +48,17 @@ class FileContentLocationModel(LocalBase):
         CheckConstraint("(storage_provider = 'local' AND local_relative_path IS NOT NULL AND s3_bucket IS NULL AND s3_object_key IS NULL AND s3_version_id IS NULL) OR (storage_provider = 's3' AND local_relative_path IS NULL AND s3_bucket IS NOT NULL AND s3_object_key IS NOT NULL AND s3_version_id IS NOT NULL)"),
         Index("file_content_locations_provider", "storage_provider", "local_relative_path", "s3_bucket", "s3_object_key"),
     )
+
+
+class FilePublicationCleanupAttentionModel(LocalBase):
+    """Durable operational attention for a publication that could not be cleaned up.
+
+    The publication ID is deliberately the primary key: it is the only safe
+    identity available when storage metadata could not be committed.
+    """
+
+    __tablename__ = "file_publication_cleanup_attentions"
+    publication_id: Mapped[str] = mapped_column(String, primary_key=True)
+    provider: Mapped[str] = mapped_column(String, nullable=False)
+    opened_at: Mapped[str] = mapped_column(String, nullable=False)
+    resolved_at: Mapped[str | None] = mapped_column(String)
