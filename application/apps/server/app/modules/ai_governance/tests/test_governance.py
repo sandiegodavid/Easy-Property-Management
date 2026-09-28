@@ -12,7 +12,7 @@ from uuid import uuid4
 from sqlalchemy import text
 
 from app.modules.ai_governance.application.ports import AiProviderError, AiProviderResult
-from app.modules.ai_governance.application.service import AiAdapterDefinition, AiAdapterRegistry, AiConfigurationService, AiDraftReviewService, AiGenerationCoordinator, AiRunReservation, _operation_fingerprint
+from app.modules.ai_governance.application.service import AiAdapterDefinition, AiAdapterRegistry, AiConfigurationService, AiDraftReviewService, AiGenerationCoordinator, AiModelSpecification, AiRunReservation, _operation_fingerprint, validate_ai_composition
 from app.modules.ai_governance.domain.models import AiActionDefinition, AiActionRegistry, AiConflictError, AiValidationError, ConfidenceContract, RedactionProfile, RedactionProfileRegistry, RedactionRule, fingerprint, qualified_model_identity
 from app.modules.ai_governance.infrastructure.unit_of_work import SQLiteAiGovernanceUnitOfWork
 from app.modules.ai_governance.infrastructure.schema_validation import validate_ai_governance_schema
@@ -131,7 +131,7 @@ class AiGovernanceTests(TestCase):
         action=AiActionDefinition("synthetic_action","test",frozenset({"synthetic"}),("synthetic_profile",1),"synthetic",1,1,"synthetic",lambda value:None,lambda value: None if isinstance(value.get("summary"),str) else (_ for _ in ()).throw(ValueError()),allowed_model_identities=frozenset({qualified_model_identity("synthetic","1","synthetic-model")}),approval_effect="create",requires_result_reference=True)
         profile=RedactionProfile("synthetic_profile",1,{"message":RedactionRule("allow"),"private":RedactionRule("drop")},{"message":"included","private":"dropped"})
         source=_SyntheticSource()
-        self.service=_Services(SQLiteAiGovernanceUnitOfWork(self.database,AuditRecorder(SQLiteAuditRepository(self.database)),{"synthetic":source}),workspace_id="test",actions=AiActionRegistry((action,)),profiles=RedactionProfileRegistry((profile,)),adapters=AiAdapterRegistry((AiAdapterDefinition("synthetic","1","on_device",frozenset({"synthetic-model"}),False),)),providers={"synthetic":self.provider},source_projections={"synthetic":source})
+        self.service=_Services(SQLiteAiGovernanceUnitOfWork(self.database,AuditRecorder(SQLiteAuditRepository(self.database)),{"synthetic":source}),workspace_id="test",actions=AiActionRegistry((action,)),profiles=RedactionProfileRegistry((profile,)),adapters=AiAdapterRegistry((AiAdapterDefinition("synthetic","1","on_device",frozenset({"synthetic-model"}),False,model_specs={"synthetic-model":AiModelSpecification(16_384,4_096)}),)),providers={"synthetic":self.provider},source_projections={"synthetic":source})
         self.generation=self.service.generation; self.configuration=self.service.configuration; self.drafts=self.service.drafts
         self.actions=self.generation.actions; self.profiles=self.generation.profiles; self.adapters=self.generation.adapters; self.unit_of_work=self.generation.unit_of_work
         connection=self.configuration.create_connection({"label":"Synthetic","adapter_id":"synthetic","adapter_version":"1","model_identifier":"synthetic-model","execution_location":"on_device","model_artifact_digest":"digest","quantization":"q","runtime_id":"runtime","runtime_version":"1"})
@@ -193,7 +193,7 @@ class AiGovernanceTests(TestCase):
     def test_explicit_connection_switches_provider_and_never_falls_back(self):
         original=self.actions.require("synthetic_action")
         action=replace(original,allowed_model_identities=frozenset({qualified_model_identity("synthetic","1","synthetic-model"),qualified_model_identity("alternate","1","alternate-model")}),required_data_classes=frozenset({"public"}))
-        alternate=AiAdapterDefinition("alternate","1","cloud",frozenset({"alternate-model"}),False)
+        alternate=AiAdapterDefinition("alternate","1","cloud",frozenset({"alternate-model"}),False,model_specs={"alternate-model":AiModelSpecification(16_384,4_096)})
         self.actions=AiActionRegistry((action,)); self.adapters=AiAdapterRegistry((self.adapters.require("synthetic","1"),alternate))
         self.generation.actions=self.actions; self.configuration.actions=self.actions
         self.generation.adapters=self.adapters; self.configuration.adapters=self.adapters
@@ -217,7 +217,7 @@ class AiGovernanceTests(TestCase):
 
     def test_model_allowlist_requires_adapter_and_version_identity(self):
         original=self.actions.require("synthetic_action")
-        alternate=AiAdapterDefinition("alternate","1","on_device",frozenset({"synthetic-model"}),False)
+        alternate=AiAdapterDefinition("alternate","1","on_device",frozenset({"synthetic-model"}),False,model_specs={"synthetic-model":AiModelSpecification(16_384,4_096)})
         self.adapters=AiAdapterRegistry((self.adapters.require("synthetic","1"),alternate))
         self.generation.adapters=self.adapters; self.configuration.adapters=self.adapters
         connection=self.configuration.create_connection({"label":"Same model, other adapter","adapter_id":"alternate","adapter_version":"1","model_identifier":"synthetic-model","execution_location":"on_device","model_artifact_digest":"digest","quantization":"q","runtime_id":"runtime","runtime_version":"1"})
@@ -235,6 +235,13 @@ class AiGovernanceTests(TestCase):
         invalid=self.generation.run(action_type="synthetic_action",source_entity_type="synthetic",source_entity_id="source",source_revision="1",source_fingerprint="a"*64,candidate={"message":"safe"},idempotency_key=str(uuid4()))
         self.assertEqual("ai_output_invalid",invalid["errorCode"])
 
+    def test_qualitative_confidence_does_not_require_a_numeric_score(self):
+        action=replace(self.actions.require("synthetic_action"),confidence_contract=ConfidenceContract(frozenset({"high"}),required_provenance_fields=frozenset({"review_basis"})))
+        self.generation.actions=AiActionRegistry((action,))
+        self.provider.generate=lambda *args: AiProviderResult({"summary":"safe"},confidence={"label":"high","review_basis":"rule_set"})
+        result=self.generation.run(action_type="synthetic_action",source_entity_type="synthetic",source_entity_id="source",source_revision="1",source_fingerprint="a"*64,candidate={"message":"safe"},idempotency_key=str(uuid4()))
+        self.assertEqual("succeeded",result["status"])
+
     def test_credential_changes_are_audited_without_secret_content(self):
         connection_id=self.configuration.connections()[0]["id"]
         self.configuration.credentials=_Credentials()
@@ -244,6 +251,8 @@ class AiGovernanceTests(TestCase):
         with create_sqlite_engine(self.database).connect() as connection:
             rows=list(connection.execute(text("SELECT action,before_snapshot,after_snapshot FROM audit_events WHERE entity_type='ai_model_connection' AND entity_id=:id AND action LIKE 'credential_%' ORDER BY occurred_at,id"),{"id":connection_id}).mappings())
         self.assertEqual(["credential_set","credential_replaced","credential_deleted"],[row["action"] for row in rows])
+        snapshots=[(json.loads(row["before_snapshot"]),json.loads(row["after_snapshot"])) for row in rows]
+        self.assertEqual([(False,True),(True,True),(True,False)],[(before["credentialPresent"],after["credentialPresent"]) for before,after in snapshots])
         self.assertNotIn("secret",json.dumps([dict(row) for row in rows]))
 
     def test_approval_note_is_bounded_before_owning_domain_dispatch(self):
@@ -303,12 +312,102 @@ class AiGovernanceTests(TestCase):
         self.assertEqual("failed",result["status"])
         self.assertEqual("ai_output_invalid",result["errorCode"])
 
+    def test_oversized_provider_metadata_and_invalid_envelopes_terminalize_runs(self):
+        self.provider.generate=lambda *args: AiProviderResult({"summary":"safe"},prompt_tokens=2**100)
+        oversized=self.generation.run(action_type="synthetic_action",source_entity_type="synthetic",source_entity_id="source",source_revision="1",source_fingerprint="a"*64,candidate={"message":"safe"},idempotency_key=str(uuid4()))
+        self.assertEqual(("failed","ai_output_invalid"),(oversized["status"],oversized["errorCode"]))
+        self.provider.generate=lambda *args: object()
+        malformed=self.generation.run(action_type="synthetic_action",source_entity_type="synthetic",source_entity_id="source",source_revision="1",source_fingerprint="a"*64,candidate={"message":"safe"},idempotency_key=str(uuid4()))
+        self.assertEqual(("failed","ai_output_invalid"),(malformed["status"],malformed["errorCode"]))
+
     def test_action_requires_adapter_capability_and_modality(self):
         action=AiActionDefinition("restricted","test",frozenset({"synthetic"}),("synthetic_profile",1),"synthetic",1,1,"synthetic",lambda value:None,lambda value:None,allowed_model_identities=frozenset({qualified_model_identity("synthetic","1","synthetic-model")}),required_capabilities=frozenset({"vision"}),required_input_modalities=frozenset({"image"}))
         self.generation.actions=AiActionRegistry((self.actions.require("synthetic_action"),action))
         result=self.generation.run(action_type="restricted",source_entity_type="synthetic",source_entity_id="source",source_revision="1",source_fingerprint="a"*64,candidate={"message":"safe"},idempotency_key=str(uuid4()))
         self.assertEqual("blocked",result["status"])
         self.assertEqual("ai_capability_not_allowed",result["errorCode"])
+
+    def test_model_qualification_rejects_action_limits_beyond_its_ceiling(self):
+        action=replace(self.actions.require("synthetic_action"),max_prompt_tokens=20_000)
+        self.generation.actions=AiActionRegistry((action,))
+        result=self.generation.run(action_type="synthetic_action",source_entity_type="synthetic",source_entity_id="source",source_revision="1",source_fingerprint="a"*64,candidate={"message":"safe"},idempotency_key=str(uuid4()))
+        self.assertEqual(("blocked","ai_model_ceiling_exceeded"),(result["status"],result["errorCode"]))
+
+    def test_model_qualification_is_immutable_and_fails_fast(self):
+        specifications={"synthetic-model":AiModelSpecification(16_384,4_096)}
+        adapter=AiAdapterDefinition("immutable","1","on_device",frozenset({"synthetic-model"}),False,model_specs=specifications)
+        specifications["synthetic-model"]=AiModelSpecification(1,1)
+        self.assertEqual(16_384,adapter.specification("synthetic-model").context_tokens)
+        with self.assertRaises(ValueError):
+            AiAdapterDefinition("invalid","1","on_device",frozenset({"synthetic-model"}),False,model_specs={"synthetic-model":object()})
+        oversized=replace(self.actions.require("synthetic_action"),max_prompt_tokens=14_000,max_completion_tokens=4_000)
+        with self.assertRaises(ValueError):
+            validate_ai_composition(AiActionRegistry((oversized,)),self.adapters)
+
+    def test_nested_model_qualification_collections_are_immutable(self):
+        models={"synthetic-model"}; capabilities={"structured_output"}; modalities={"text"}; versions={1}
+        adapter=AiAdapterDefinition(
+            "synthetic","1","on_device",models,False,
+            capabilities=capabilities, input_modalities=modalities,
+            model_specs={"synthetic-model":AiModelSpecification(16_384,4_096,supported_schema_versions=versions)},
+        )
+        registry=AiAdapterRegistry((adapter,))
+        AiGenerationCoordinator(
+            self.unit_of_work, workspace_id="test", actions=self.actions,
+            profiles=self.profiles, adapters=registry,
+        )
+        models.clear(); capabilities.clear(); modalities.clear(); versions.clear()
+        self.assertEqual(frozenset({"synthetic-model"}),adapter.models)
+        self.assertEqual(frozenset({"structured_output"}),adapter.capabilities)
+        self.assertEqual(frozenset({"text"}),adapter.input_modalities)
+        self.assertEqual(frozenset({1}),adapter.specification("synthetic-model").supported_schema_versions)
+        validate_ai_composition(self.actions,registry)
+
+    def test_composition_rejects_incompatible_structured_output_and_schema(self):
+        action=self.actions.require("synthetic_action")
+        unsupported=AiAdapterRegistry((AiAdapterDefinition(
+            "synthetic","1","on_device",frozenset({"synthetic-model"}),False,
+            model_specs={"synthetic-model":AiModelSpecification(16_384,4_096,supports_structured_output=False)},
+        ),))
+        with self.assertRaises(ValueError):
+            validate_ai_composition(AiActionRegistry((replace(action,required_capabilities=frozenset({"structured_output"})),)),unsupported)
+        with self.assertRaises(ValueError):
+            validate_ai_composition(AiActionRegistry((replace(action,output_schema_version=2),)),self.adapters)
+
+    def test_runtime_model_qualification_checks_combined_and_individual_limits(self):
+        connection=self.configuration.connections()[0]
+        action=replace(self.actions.require("synthetic_action"),max_prompt_tokens=16_000,max_completion_tokens=5_000)
+        self.generation.actions=AiActionRegistry((action,)); self.configuration.actions=self.generation.actions
+        self.configuration.put_limit("synthetic_action",{"connection_id":connection["id"],"max_prompt_tokens":14_000,"max_completion_tokens":4_000})
+        result=self.generation.run(action_type="synthetic_action",source_entity_type="synthetic",source_entity_id="source",source_revision="1",source_fingerprint="a"*64,candidate={"message":"safe"},idempotency_key=str(uuid4()))
+        self.assertEqual(("blocked","ai_model_ceiling_exceeded"),(result["status"],result["errorCode"]))
+        self.configuration.put_limit("synthetic_action",{"enabled":True,"max_prompt_tokens":4_000,"max_completion_tokens":4_097})
+        result=self.generation.run(action_type="synthetic_action",source_entity_type="synthetic",source_entity_id="source",source_revision="1",source_fingerprint="a"*64,candidate={"message":"safe"},idempotency_key=str(uuid4()))
+        self.assertEqual(("blocked","ai_model_ceiling_exceeded"),(result["status"],result["errorCode"]))
+
+    def test_runtime_model_qualification_rejects_prompt_completion_output_and_schema_overrides(self):
+        action=self.actions.require("synthetic_action")
+        incompatible_adapter=AiAdapterRegistry((AiAdapterDefinition(
+            "synthetic","1","on_device",frozenset({"synthetic-model"}),False,
+            model_specs={"synthetic-model":AiModelSpecification(16_384,4_096,supports_structured_output=False)},
+        ),))
+        cases=(
+            (replace(action,max_prompt_tokens=20_000),self.adapters),
+            (replace(action,max_completion_tokens=5_000),self.adapters),
+            (replace(action,required_capabilities=frozenset({"structured_output"})),incompatible_adapter),
+            (replace(action,output_schema_version=2),self.adapters),
+        )
+        for definition, adapters in cases:
+            with self.subTest(definition=definition):
+                self.generation.actions=AiActionRegistry((definition,)); self.generation.adapters=adapters
+                result=self.generation.run(action_type="synthetic_action",source_entity_type="synthetic",source_entity_id="source",source_revision="1",source_fingerprint="a"*64,candidate={"message":"safe"},idempotency_key=str(uuid4()))
+                self.assertEqual(("blocked","ai_model_ceiling_exceeded"),(result["status"],result["errorCode"]))
+
+    def test_confidence_contract_rejects_reserved_numeric_fields(self):
+        with self.assertRaises(ValueError):
+            ConfidenceContract(frozenset({"high"}),calibration_source="calibration",numeric_field="label")
+        with self.assertRaises(ValueError):
+            ConfidenceContract(frozenset({"high"}),calibration_source="calibration",numeric_field="calibration_source")
 
     def test_settings_replay_and_changed_reuse_are_durable(self):
         key=str(uuid4())
@@ -320,6 +419,24 @@ class AiGovernanceTests(TestCase):
         self.assertTrue(self.configuration.settings()["killSwitch"])
         with self.assertRaises(AiConflictError):
             self.configuration.update_settings(kill_switch=True,idempotency_key=key)
+
+    def test_malformed_settings_operation_is_rejected_during_retained_validation(self):
+        with create_sqlite_engine(self.database).begin() as connection:
+            connection.execute(text("INSERT INTO ai_settings_operations (idempotency_key,request_fingerprint,result_json,created_at) VALUES (:key,:fingerprint,:result,:created)"),{"key":str(uuid4()),"fingerprint":"a"*64,"result":"not-json","created":"not-a-time"})
+        with create_sqlite_engine(self.database).connect() as connection:
+            with self.assertRaises(MigrationSchemaError):
+                validate_ai_governance_schema(connection,self.actions,self.profiles,self.adapters,source_validators={"synthetic":_SyntheticSource()})
+
+    def test_settings_operation_replay_timestamp_must_equal_its_write_timestamp(self):
+        with create_sqlite_engine(self.database).begin() as connection:
+            connection.execute(text("INSERT INTO ai_settings_operations (idempotency_key,request_fingerprint,result_json,created_at) VALUES (:key,:fingerprint,:result,:created)"),{
+                "key":str(uuid4()),"fingerprint":"a"*64,
+                "result":json.dumps({"killSwitch":False,"builtInEnabled":False,"defaultConnectionId":None,"updatedAt":"2026-01-01T00:00:00+00:00"},sort_keys=True,separators=(",",":")),
+                "created":"2026-01-01T00:00:01+00:00",
+            })
+        with create_sqlite_engine(self.database).connect() as connection:
+            with self.assertRaises(MigrationSchemaError):
+                validate_ai_governance_schema(connection,self.actions,self.profiles,self.adapters,source_validators={"synthetic":_SyntheticSource()})
 
     def test_recovered_reservation_is_failed_without_transport_start(self):
         request_fingerprint=_operation_fingerprint({"action":"synthetic_action","source":"synthetic","sourceId":"source","sourceRevision":"1","sourceFingerprint":"a"*64,"governedInput":{"message":"safe"},"profile":("synthetic_profile",1),"supersedesDraftId":None})
@@ -377,7 +494,7 @@ class AiGovernanceTests(TestCase):
             connection.execute(text("INSERT INTO parties (id,party_kind,display_name,created_at,updated_at,archived_at) VALUES (:id,'individual','Archive source',:stamp,:stamp,NULL)"),{"id":party_id,"stamp":stamp})
         action=AiActionDefinition("backup_action","test",frozenset({"party"}),("backup_profile",1),"backup",1,1,"backup",lambda value:None,lambda value:None,allowed_model_identities=frozenset({qualified_model_identity("backup","1","backup-model")}))
         profile=RedactionProfile("backup_profile",1,{"message":RedactionRule("allow")},{"message":"included"})
-        actions=AiActionRegistry((action,)); profiles=RedactionProfileRegistry((profile,)); adapters=AiAdapterRegistry((AiAdapterDefinition("backup","1","on_device",frozenset({"backup-model"}),True),))
+        actions=AiActionRegistry((action,)); profiles=RedactionProfileRegistry((profile,)); adapters=AiAdapterRegistry((AiAdapterDefinition("backup","1","on_device",frozenset({"backup-model"}),True,model_specs={"backup-model":AiModelSpecification(16_384,4_096)}),))
         credentials=_Credentials(); recorder=AuditRecorder(SQLiteAuditRepository(workspace.paths.database))
         service=_Services(SQLiteAiGovernanceUnitOfWork(workspace.paths.database,recorder,{"party":_PartySource()}),workspace_id="archive",actions=actions,profiles=profiles,adapters=adapters,providers={"backup":self.provider},credentials=credentials,source_projections={"party":_PartySource()})
         backup_configuration=service.configuration; backup_generation=service.generation; backup_drafts=service.drafts

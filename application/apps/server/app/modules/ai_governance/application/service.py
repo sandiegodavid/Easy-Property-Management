@@ -6,12 +6,33 @@ from hashlib import sha256
 import json
 import re
 from typing import Any, Callable, Mapping
+from types import MappingProxyType
 from uuid import uuid4
-from app.modules.ai_governance.application.ports import AiApprovalContext, AiApprovalHandler, AiGovernanceUnitOfWork, AiProviderError, AiProviderPort, AiTransportCredentialStore
+from app.modules.ai_governance.application.ports import AiApprovalContext, AiApprovalHandler, AiGovernanceUnitOfWork, AiProviderError, AiProviderPort, AiProviderResult, AiTransportCredentialStore
 from app.modules.ai_governance.domain.audit_policy import ai_audit_snapshot
-from app.modules.ai_governance.domain.models import AiActionDefinition, AiActionRegistry, AiConflictError, AiNotFoundError, AiValidationError, RedactionProfileRegistry, canonical_json, fingerprint, qualified_model_identity, validate_provider_metadata, validate_uuid
+from app.modules.ai_governance.domain.models import AiActionDefinition, AiActionRegistry, AiConflictError, AiCredentialConsistencyError, AiNotFoundError, AiValidationError, RedactionProfileRegistry, canonical_json, fingerprint, qualified_model_identity, validate_provider_metadata, validate_uuid
 
 _UNSET = object()
+
+
+@dataclass(frozen=True)
+class AiModelSpecification:
+    """Qualification facts for one adapter/version/model identity."""
+    context_tokens: int
+    completion_tokens: int
+    supports_structured_output: bool = True
+    supported_schema_versions: frozenset[int] = frozenset({1})
+
+    def __post_init__(self) -> None:
+        if type(self.context_tokens) is not int or type(self.completion_tokens) is not int or min(self.context_tokens, self.completion_tokens) < 1:
+            raise ValueError("AI model ceilings must be positive integers.")
+        try:
+            schema_versions = frozenset(self.supported_schema_versions)
+        except TypeError as error:
+            raise ValueError("AI model schema support is invalid.") from error
+        if not schema_versions or any(type(version) is not int or version < 1 for version in schema_versions):
+            raise ValueError("AI model schema support is invalid.")
+        object.__setattr__(self, "supported_schema_versions", schema_versions)
 
 
 @dataclass(frozen=True)
@@ -20,6 +41,40 @@ class AiAdapterDefinition:
     requires_credential: bool = True; timeout_seconds: int = 30
     capabilities: frozenset[str] = frozenset({"structured_output"})
     input_modalities: frozenset[str] = frozenset({"text"})
+    model_specs: Mapping[str, AiModelSpecification] | None = None
+
+    def specification(self, model_identifier: str) -> AiModelSpecification:
+        if model_identifier not in self.models:
+            raise AiValidationError("AI model adapter does not qualify this model.")
+        if self.model_specs is None:
+            raise AiValidationError("AI model adapter lacks qualification specifications.")
+        try:
+            return self.model_specs[model_identifier]
+        except KeyError as error:
+            raise AiValidationError("AI model adapter lacks a qualification specification.") from error
+
+    def __post_init__(self) -> None:
+        try:
+            models = frozenset(self.models)
+            capabilities = frozenset(self.capabilities)
+            input_modalities = frozenset(self.input_modalities)
+        except TypeError as error:
+            raise ValueError("AI adapter qualification facts must be immutable collections.") from error
+        if (not models
+                or any(not isinstance(model, str) or not model or len(model) > 240 or any(character.isspace() for character in model) for model in models)
+                or any(not isinstance(value, str) or not value for value in capabilities | input_modalities)):
+            raise ValueError("AI adapter qualification facts are invalid.")
+        if self.model_specs is None or set(self.model_specs) != set(models):
+            raise ValueError("AI adapter model specifications must cover exactly its models.")
+        # Definitions are release-owned qualification facts.  Do not retain a
+        # caller's mutable mapping simply because the dataclass is frozen.
+        specifications = dict(self.model_specs)
+        if any(not isinstance(item, AiModelSpecification) for item in specifications.values()):
+            raise ValueError("AI adapter model specifications must be typed qualification facts.")
+        object.__setattr__(self, "models", models)
+        object.__setattr__(self, "capabilities", capabilities)
+        object.__setattr__(self, "input_modalities", input_modalities)
+        object.__setattr__(self, "model_specs", MappingProxyType(specifications))
 
 
 @dataclass(frozen=True)
@@ -100,6 +155,36 @@ class AiAdapterRegistry:
     def all(self)->tuple[AiAdapterDefinition,...]:return tuple(self._items[key] for key in sorted(self._items))
 
 
+def validate_ai_composition(actions: AiActionRegistry, adapters: AiAdapterRegistry) -> None:
+    """Fail fast when release-owned actions cannot run on their declared models."""
+    for definition in actions.all():
+        if not definition.allowed_model_identities:
+            raise ValueError("AI actions must declare at least one qualified model identity.")
+        for identity in definition.allowed_model_identities:
+            adapter_id, adapter_version, model_identifier = _split_model_identity(identity)
+            adapter = adapters.require(adapter_id, adapter_version)
+            specification = adapter.specification(model_identifier)
+            if definition.max_prompt_tokens + definition.max_completion_tokens > specification.context_tokens:
+                raise ValueError("AI action limits exceed a model context window.")
+            if definition.max_completion_tokens > specification.completion_tokens:
+                raise ValueError("AI action completion limit exceeds model qualification.")
+            if not definition.required_capabilities <= adapter.capabilities:
+                raise ValueError("AI action requires an unsupported adapter capability.")
+            if not definition.required_input_modalities <= adapter.input_modalities:
+                raise ValueError("AI action requires an unsupported adapter input modality.")
+            if ("structured_output" in definition.required_capabilities and not specification.supports_structured_output
+                    or definition.output_schema_version not in specification.supported_schema_versions):
+                raise ValueError("AI action output schema is not qualified for its model.")
+
+
+def _split_model_identity(identity: str) -> tuple[str, str, str]:
+    adapter_id, separator, remainder = identity.partition("@")
+    adapter_version, separator2, model_identifier = remainder.partition(":")
+    if not separator or not separator2:
+        raise ValueError("AI action model identity is invalid.")
+    return adapter_id, adapter_version, model_identifier
+
+
 class AiGenerationCoordinator:
     def __init__(self, unit_of_work: AiGovernanceUnitOfWork, *, workspace_id: str,
                  actions: AiActionRegistry, profiles: RedactionProfileRegistry,
@@ -108,6 +193,7 @@ class AiGenerationCoordinator:
                  now: Callable[[],datetime] | None=None) -> None:
         self.unit_of_work=unit_of_work; self.workspace_id=workspace_id; self.actions=actions; self.profiles=profiles; self.adapters=adapters
         self.providers=dict(providers or {}); self.credentials=credentials; self._clock=now or (lambda:datetime.now(UTC))
+        validate_ai_composition(actions, adapters)
 
     def run(self, *, action_type:str, source_entity_type:str, source_entity_id:str, source_revision:str, source_fingerprint:str, candidate:Mapping[str,Any], idempotency_key:str, supersedes_draft_id: str | None = None)->dict[str,Any]:
         definition=self.actions.require(action_type);validate_uuid(idempotency_key,"idempotencyKey");definition.validate_candidate(candidate)
@@ -145,8 +231,17 @@ class AiGenerationCoordinator:
         except AiProviderError as error:
             return self._fail(run_id,_provider_error_code(error),_provider_error_detail(error))
         except Exception:return self._fail(run_id,"ai_provider_failure","The AI provider did not complete the request.")
-        admission_preflight=self._preflight(definition, governed)
-        return self.unit_of_work.write(lambda tx:self._succeed(tx,run_id,definition,result.payload,result.confidence,result.prompt_tokens,result.completion_tokens,result.provider_request_id,admission_preflight,supersedes_draft_id))
+        try:
+            if not isinstance(result, AiProviderResult):
+                raise ValueError("Provider did not return an AI result envelope.")
+            # Validate all fields before opening the terminal admission write.
+            # This turns adapter contract violations into a durable terminal
+            # failure instead of stranding a running reservation.
+            validate_provider_metadata(result.prompt_tokens, result.completion_tokens, result.provider_request_id)
+            admission_preflight=self._preflight(definition, governed)
+            return self.unit_of_work.write(lambda tx:self._succeed(tx,run_id,definition,result.payload,result.confidence,result.prompt_tokens,result.completion_tokens,result.provider_request_id,admission_preflight,supersedes_draft_id))
+        except Exception:
+            return self._fail(run_id,"ai_output_invalid","AI provider output is invalid.")
 
     def recover_interrupted(self)->int:
         def operation(tx):
@@ -294,6 +389,15 @@ class AiGenerationCoordinator:
         except AiValidationError:return ("ai_adapter_unregistered","AI model adapter is not registered.")
         if not definition.required_capabilities <= adapter.capabilities or not definition.required_input_modalities <= adapter.input_modalities:
             return ("ai_capability_not_allowed","AI adapter does not support this action's required capabilities or input modalities.")
+        try:
+            model_spec = adapter.specification(connection["model_identifier"])
+        except AiValidationError:
+            return ("ai_model_not_allowed", "AI model is not qualified for this action.")
+        if (limits["max_prompt_tokens"] + limits["max_completion_tokens"] > model_spec.context_tokens
+                or limits["max_completion_tokens"] > model_spec.completion_tokens
+                or ("structured_output" in definition.required_capabilities and not model_spec.supports_structured_output)
+                or definition.output_schema_version not in model_spec.supported_schema_versions):
+            return ("ai_model_ceiling_exceeded", "AI model qualification does not support this action's limits.")
         if connection["execution_location"]=="cloud" and (not connection["disclosure_version"] or not definition.required_data_classes<=set(json.loads(connection["cloud_data_classes"]))):return ("ai_disclosure_required","AI disclosure is required for this destination.")
         return None
     @staticmethod
@@ -315,6 +419,7 @@ class AiConfigurationService:
         self.unit_of_work=unit_of_work; self.workspace_id=workspace_id
         self.actions=actions; self.adapters=adapters; self.providers=dict(providers or {})
         self.credentials=credentials; self._clock=now or (lambda: datetime.now(UTC))
+        validate_ai_composition(actions, adapters)
     def _settings_row(self,row):return {"killSwitch":bool(row["kill_switch"]),"builtInEnabled":bool(row["built_in_enabled"]),"defaultConnectionId":row["default_connection_id"],"updatedAt":row["updated_at"]}
     def _connection_view(self,row):
         present=False
@@ -386,17 +491,32 @@ class AiConfigurationService:
     def set_credential(self,connection_id,credential):
         if self.credentials is None:raise AiValidationError("AI credential storage is unavailable.")
         if self.unit_of_work.connection_row(connection_id) is None:raise AiNotFoundError("AI model connection was not found.")
-        try: replaced=self.credentials.get_credential(self.workspace_id,connection_id) is not None
-        except Exception: replaced=False
+        try: previous=self.credentials.get_credential(self.workspace_id,connection_id)
+        except Exception as error: raise AiValidationError("AI credential storage is unavailable.") from error
         self.credentials.set_credential(self.workspace_id,connection_id,credential)
-        self._record_credential_audit(connection_id,"credential_replaced" if replaced else "credential_set",False,True)
+        try:
+            self._record_credential_audit(connection_id,"credential_replaced" if previous is not None else "credential_set",previous is not None,True)
+        except Exception as audit_error:
+            try:
+                if previous is None:self.credentials.delete_credential(self.workspace_id,connection_id)
+                else:self.credentials.set_credential(self.workspace_id,connection_id,previous)
+            except Exception as compensation_error:
+                raise AiCredentialConsistencyError("AI credential audit failed and credential repair is required.") from compensation_error
+            raise
     def delete_credential(self,connection_id):
         if self.credentials is None:raise AiValidationError("AI credential storage is unavailable.")
         if self.unit_of_work.connection_row(connection_id) is None:raise AiNotFoundError("AI model connection was not found.")
-        try: present=self.credentials.get_credential(self.workspace_id,connection_id) is not None
-        except Exception: present=False
+        try: previous=self.credentials.get_credential(self.workspace_id,connection_id)
+        except Exception as error: raise AiValidationError("AI credential storage is unavailable.") from error
         self.credentials.delete_credential(self.workspace_id,connection_id)
-        self._record_credential_audit(connection_id,"credential_deleted",present,False)
+        try:
+            self._record_credential_audit(connection_id,"credential_deleted",previous is not None,False)
+        except Exception:
+            try:
+                if previous is not None:self.credentials.set_credential(self.workspace_id,connection_id,previous)
+            except Exception as compensation_error:
+                raise AiCredentialConsistencyError("AI credential audit failed and credential repair is required.") from compensation_error
+            raise
     def _record_credential_audit(self, connection_id, action, before_present, after_present):
         def operation(tx):
             if tx.model_connection(connection_id) is None:

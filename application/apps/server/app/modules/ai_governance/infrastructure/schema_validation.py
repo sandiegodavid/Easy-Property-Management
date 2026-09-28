@@ -27,6 +27,7 @@ def validate_ai_governance_schema(connection, actions: AiActionRegistry | None =
     settings_row=connection.execute(text("SELECT * FROM ai_settings WHERE singleton=1")).mappings().one()
     if settings_row["default_connection_id"] and connection.execute(text("SELECT 1 FROM ai_model_connections WHERE id=:id"),{"id":settings_row["default_connection_id"]}).first() is None:raise MigrationSchemaError("AI settings reference an unknown connection.")
     _utc_timestamp(settings_row["updated_at"])
+    _validate_settings_operations(connection)
     for limit in connection.execute(text("SELECT * FROM ai_action_limits")).mappings():
         try:
             action=actions.require(limit["action_type"])
@@ -48,6 +49,7 @@ def validate_ai_governance_schema(connection, actions: AiActionRegistry | None =
             if adapters is not None:
                 adapter=adapters.require(model["adapter_id"],model["adapter_version"])
                 if model["execution_location"] != adapter.execution_location or model["model_identifier"] not in adapter.models:raise ValueError
+                adapter.specification(model["model_identifier"])
         except Exception as error:raise MigrationSchemaError("AI model-connection retained data is incompatible.") from error
     for run in connection.execute(text("SELECT * FROM ai_runs")).mappings():
         try:
@@ -64,6 +66,7 @@ def validate_ai_governance_schema(connection, actions: AiActionRegistry | None =
                 if adapters is not None:
                     adapter=adapters.require(run["transport_provider"],run["adapter_version"])
                     if run["execution_location"] != adapter.execution_location or run["model_identifier"] not in adapter.models:raise ValueError
+                    adapter.specification(run["model_identifier"])
                     if not action.required_capabilities <= adapter.capabilities or not action.required_input_modalities <= adapter.input_modalities:raise ValueError
                 if qualified_model_identity(run["transport_provider"],run["adapter_version"],run["model_identifier"]) not in action.allowed_model_identities:raise ValueError
                 if action.validate_provider_request is not None:action.validate_provider_request(governed)
@@ -205,6 +208,34 @@ def _utc_timestamp(value: str) -> datetime:
     if parsed.tzinfo is None or parsed.utcoffset() != UTC.utcoffset(parsed):
         raise MigrationSchemaError("AI retained timestamp is not UTC.")
     return parsed
+
+
+def _validate_settings_operations(connection) -> None:
+    """Validate durable settings replays, not only their immutable shape."""
+    for row in connection.execute(text("SELECT * FROM ai_settings_operations")).mappings():
+        try:
+            import uuid
+            if str(uuid.UUID(str(row["idempotency_key"]))) != row["idempotency_key"]:
+                raise ValueError
+            if not isinstance(row["request_fingerprint"], str) or not re.fullmatch(r"[0-9a-f]{64}", row["request_fingerprint"]):
+                raise ValueError
+            result = json.loads(row["result_json"])
+            required = {"killSwitch", "builtInEnabled", "defaultConnectionId", "updatedAt"}
+            if set(result) != required or canonical_json(result) != row["result_json"]:
+                raise ValueError
+            if type(result["killSwitch"]) is not bool or type(result["builtInEnabled"]) is not bool:
+                raise ValueError
+            if result["defaultConnectionId"] is not None:
+                if str(uuid.UUID(str(result["defaultConnectionId"]))) != result["defaultConnectionId"]:
+                    raise ValueError
+                if connection.execute(text("SELECT 1 FROM ai_model_connections WHERE id=:id"), {"id": result["defaultConnectionId"]}).first() is None:
+                    raise ValueError
+            created = _utc_timestamp(row["created_at"])
+            updated = _utc_timestamp(result["updatedAt"])
+            if updated != created:
+                raise ValueError
+        except Exception as error:
+            raise MigrationSchemaError("AI settings-operation retained data is incompatible.") from error
 
 
 def _normalized_sql(value: str) -> str:

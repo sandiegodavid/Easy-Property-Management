@@ -28,6 +28,11 @@ class AiValidationError(AiGovernanceError):
     code = "ai_validation"
 
 
+class AiCredentialConsistencyError(AiGovernanceError):
+    """Credential-store compensation failed after a failed durable audit."""
+    code = "ai_credential_repair_required"
+
+
 @dataclass(frozen=True)
 class RedactionRule:
     mode: str
@@ -74,31 +79,39 @@ class RedactionProfile:
 class ConfidenceContract:
     """Registered, bounded provenance for an optional AI confidence value."""
     labels: frozenset[str]
-    calibration_source: str
+    calibration_source: str | None = None
     required_provenance_fields: frozenset[str] = frozenset()
     numeric_field: str = "score"
 
     def __post_init__(self) -> None:
-        if (not self.labels or not isinstance(self.calibration_source, str)
-                or not self.calibration_source.strip() or len(self.calibration_source) > 120):
-            raise ValueError("AI confidence contracts require bounded labels and calibration provenance.")
+        if (not self.labels or any(not isinstance(label, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", label) for label in self.labels)
+                or (self.calibration_source is not None and (not isinstance(self.calibration_source, str)
+                    or not self.calibration_source.strip() or len(self.calibration_source) > 120))):
+            raise ValueError("AI confidence contracts require bounded registered labels and provenance.")
         if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", self.numeric_field):
             raise ValueError("AI confidence numeric fields must be bounded codes.")
-        if any(not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", field) for field in self.required_provenance_fields):
+        if self.numeric_field in {"label", "calibration_source"}:
+            raise ValueError("AI confidence numeric fields cannot use reserved names.")
+        reserved={"label", self.numeric_field, "calibration_source"}
+        if any(not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", field) or field in reserved for field in self.required_provenance_fields):
             raise ValueError("AI confidence provenance fields must be bounded codes.")
 
     def validate(self, confidence: Mapping[str, Any] | None) -> None:
         if confidence is None:
             return
-        if not isinstance(confidence, Mapping) or set(confidence) != {
-            "label", self.numeric_field, "calibration_source", *self.required_provenance_fields,
-        }:
+        numeric = self.calibration_source is not None
+        fields = {"label", *self.required_provenance_fields}
+        if numeric: fields |= {self.numeric_field, "calibration_source"}
+        if not isinstance(confidence, Mapping) or set(confidence) != fields:
             raise AiValidationError("AI confidence does not match its registered provenance contract.")
-        if confidence["label"] not in self.labels or confidence["calibration_source"] != self.calibration_source:
+        if confidence["label"] not in self.labels:
             raise AiValidationError("AI confidence provenance is not registered for this action.")
-        numeric = confidence[self.numeric_field]
-        if type(numeric) not in {int, float} or not 0 <= numeric <= 1:
-            raise AiValidationError("AI confidence score must be a number from zero through one.")
+        if numeric:
+            if confidence["calibration_source"] != self.calibration_source:
+                raise AiValidationError("AI confidence provenance is not registered for this action.")
+            score = confidence[self.numeric_field]
+            if type(score) not in {int, float} or not 0 <= score <= 1:
+                raise AiValidationError("AI confidence score must be a number from zero through one.")
         for field in self.required_provenance_fields:
             value = confidence[field]
             if not isinstance(value, str) or not value.strip() or len(value) > 120:
@@ -169,7 +182,7 @@ def validate_provider_metadata(
 ) -> tuple[int | None, int | None, str | None]:
     """Keep provider-provided metadata bounded and safe to retain."""
     for value in (prompt_tokens, completion_tokens):
-        if value is not None and (type(value) is not int or value < 0):
+        if value is not None and (type(value) is not int or not 0 <= value <= 9_223_372_036_854_775_807):
             raise AiValidationError("AI provider usage metadata is invalid.")
     if provider_request_id is not None:
         if (not isinstance(provider_request_id, str) or not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", provider_request_id)
