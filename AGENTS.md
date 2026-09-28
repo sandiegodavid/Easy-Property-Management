@@ -27,3 +27,15 @@
   - persistence/schema validation;
   - backup/restore;
   - query-budget or N+1 constraints.
+
+## Backlog and design
+
+- When designing a backlog, if not already read, read [PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md), and [FEATURE_BACKLOG.md](docs/FEATURE_BACKLOG.md). If missing decisions are encountered, also read [DECISIONS.md](docs/DECISIONS.md).
+- When designing a UI backlog, if not already read, also read [UI-001_DESIGN.md](docs/UI-001_DESIGN.md).
+- When designing, do not write code.
+
+## MVP greenfield scope
+
+- Treat all MVP backlog items as part of the greenfield project.
+- Keep only the latest format and schema.
+- Do not add migration effort or migration compatibility work.
