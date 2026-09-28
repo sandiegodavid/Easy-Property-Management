@@ -10,6 +10,7 @@
 - In reviews, group findings by module or boundary.
 - For a follow-up implementation re-review, review only the previously reported findings.
 - For each finding, mark it as `resolved`, `still open`, or `regressed`, and include file and line references.
+- Move resolved findings to the end of their list, add the review date, and remove them after 30 days.
 - Do not perform a general re-review unless explicitly requested.
 
 ## Implementation scope

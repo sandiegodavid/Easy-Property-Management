@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed backend/API design. No application code is included in this document.
+Backend/API design authority. The original single-effect governance baseline is implemented; the operator-selectable approval-mode and domain-dismissal extensions in this revision are required before INGEST-002 begins. No application code is included in this document.
 
 This design is based on the AI-GOV-001 backlog outcome, [ARCHITECTURE.md](ARCHITECTURE.md), the accepted AI decisions in [DECISIONS.md](DECISIONS.md), the confirmed UI direction in [UI-001_DESIGN.md](UI-001_DESIGN.md), [AI_INTEGRATION_RESEARCH.md](AI_INTEGRATION_RESEARCH.md), the downstream AI/ingestion/MCP backlog, and the current server implementation.
 
@@ -24,26 +24,11 @@ AI-GOV-001 is infrastructure and governance, not an AI feature. It does not extr
 
 ## Current implementation baseline
 
-The repository already provides the foundations AI-GOV-001 must reuse:
+The repository implements the AI Governance module, seven-table persistence model, exact-schema and retained-data validation, provider/credential ports, synchronous coordinator, settings and disclosure controls, run/draft/review APIs, transaction-aware approval completion, audit policies, and LOCAL-002 backup/restore coverage. Its static production action, approval-handler, source-validator, and source-projection registries remain empty by design; tests use a synthetic action.
 
-- a single external workspace with one SQLite writer and short immediate transactions;
-- exact current-schema validation and a greenfield Alembic baseline;
-- append-only AUDIT-001 events with `local_operator`, `system`, `connector`, and `ai_assistant` actor kinds;
-- encrypted LOCAL-002 archive validation, backup, and restore;
-- FILE-001 stable file records and domain-owned link validation;
-- FastAPI/Pydantic contracts that reject unknown fields; and
-- an OS-keyring implementation currently specialized for automatic-backup passphrases.
+The implemented action contract still permits only one `approval_effect` (`create`, `update`, or `advisory_only`) and one result-reference rule. Review decisions do not persist a selected mode, the generic dismiss route has no domain-handler dispatch, and terminal approval/dismissal has no generic idempotent response replay. INGEST-002 therefore extends this current schema and registry contract rather than working around it.
 
-The following do **not** exist yet and must not be assumed:
-
-- an `ai_governance`, `intake`, `connectors`, `documents`, jobs, or outbox module;
-- a general external-provider credential abstraction;
-- a durable background worker;
-- AI action, prompt, redaction-profile, or approval-handler registries;
-- application-wide record-version columns; or
-- any production AI capability that can create a real draft.
-
-Consequently AI-GOV-001 uses synchronous provider execution outside database transactions, introduces the minimum provider-secret port it needs, and verifies its extension contracts with a test-only action definition. It does not invent a generic job system or production AI action.
+There is still no durable background worker, application-wide record-version convention, or production AI capability that creates an issue proposal. Provider execution remains synchronous and outside database transactions. INGEST-002 supplies the first production review contract, while ISSUE-AI-001 or MCP-001 later supplies a real producer.
 
 ## Scope
 
@@ -55,7 +40,7 @@ AI-GOV-001 includes:
 - a versioned redaction-profile registry and deterministic redaction engine;
 - governed run, draft, review-action, settings, and action-limit persistence;
 - provider credential set/delete/status operations through the OS credential store;
-- generic draft list/detail/edit/dismiss APIs and approval dispatch to an owning-domain handler;
+- generic draft list/detail/edit APIs and terminal-decision dispatch to owning-domain handlers;
 - atomic limit reservation, idempotency, lifecycle, audit, and crash-recovery rules; and
 - LOCAL-002 backup/export/restore and retained-data validation.
 
@@ -81,8 +66,9 @@ AI-GOV-001 excludes:
 | Provider invocation and provider error translation | Provider adapter behind `AiProviderPort` |
 | Run, exact redacted request, draft shell, review actions, limits | AI Governance |
 | Draft payload schema and edit validation | Capability-owning domain, registered as a pure validator |
-| Approval eligibility and official-record consequences | Capability-owning domain |
-| Atomic review completion inside the approval transaction | AI Governance transaction operations called by the owning domain |
+| Approval eligibility, selected mode, and official-record consequences | Capability-owning domain |
+| Domain-specific terminal dismissal consequences | Capability-owning domain through a registered handler |
+| Atomic review completion inside a terminal decision transaction | AI Governance transaction operations called by the owning domain |
 | Source attachments | FILE-001 plus the source domain's file-link policy |
 
 Neither side imports the other's SQLAlchemy models. Cross-module calls use application protocols composed at bootstrap. AI Governance never mutates an authoritative source or result record itself.
@@ -101,8 +87,8 @@ Every production action type must have one immutable code definition registered 
 - allowed confidence labels, their provenance fields, and whether a calibrated numeric value is permitted;
 - required capabilities/input modalities, permitted execution locations, and allowed provider/model/version ceilings;
 - maximum prompt and completion tokens permitted by code;
-- the explicit approval effect (`create`, `update`, or `advisory_only`) and whether it requires a result reference; and
-- validator/approval-handler identifiers supplied by the owning module.
+- a non-empty closed set of operator-selectable approval modes drawn from `create`, `update`, `link`, and `advisory_only`, with result-reference requirements for each mode; and
+- validator, approval-handler, and optional domain-dismissal-handler identifiers supplied by the owning module.
 
 The registry is code, not mutable workspace data. Operator settings may disable an action or narrow its limits/provider choices, but may never expand beyond the registered definition. Historical rows retain all version identifiers needed to interpret them after the active definition changes.
 
@@ -218,6 +204,7 @@ This append-only table records every operator review action, including edits.
 | `id` | Stable UUID primary key. |
 | `draft_id` | Required foreign key. |
 | `decision` | `edited`, `approved`, or `dismissed`. |
+| `approval_mode` | Required for `approved` and null for edit/dismiss. It must be one of the action definition's allowed modes. |
 | `draft_version_before`, `draft_version_after` | Required monotonic versions proving which payload was reviewed. |
 | `operator_note` | Nullable bounded operator text. Domain snapshot policy determines history redaction. |
 | `result_entity_type`, `result_entity_id` | Present for approval when the action definition requires a resulting record; absent for edit/dismiss and for approved advisory-only actions. |
@@ -280,11 +267,11 @@ Because there is no durable job runner, provider execution is synchronous in AI-
 
 ## Draft review and atomic approval
 
-List, detail, edit, and dismiss are generic governance operations. Approval is domain-owned.
+List, detail, and edit are generic governance operations. Approval is domain-owned. Dismissal is generic only when the action has no registered domain dismissal handler.
 
 - `PATCH` requires the current draft `version`, validates the entire replacement payload with the registered domain schema, increments the version, writes an `edited` review row, and audits the before/after payload through the AI-specific snapshot policy.
-- Dismiss requires the current version, moves the draft to `dismissed`, inserts the terminal review row, and audits the decision in one AI Governance transaction.
-- Approve resolves the registered owning-domain handler. That handler opens its normal immediate transaction, reloads the draft through transaction-aware `AiReviewOperations`, verifies status/version and the current source revision, performs the official domain consequence, then calls `AiReviewOperations.complete_approval(...)` on the **same connection** to insert the decision and make the draft terminal. All domain and AI audit events share the run's correlation ID.
+- Dismiss requires the current version. If the action has a registered domain dismissal handler, governance dispatches to it so source state and the AI decision commit in one owning-domain transaction. Otherwise governance moves the draft to `dismissed`, inserts the terminal review row, and audits the decision in one AI Governance transaction.
+- Approve requires an allowed approval mode and resolves the registered owning-domain handler. That handler opens its normal immediate transaction, reloads the draft through transaction-aware `AiReviewOperations`, verifies status/version, selected mode, and the current source revision, performs the official domain consequence, then calls `AiReviewOperations.complete_approval(...)` with the selected mode on the **same connection** to insert the decision and make the draft terminal. All domain and AI audit events share the run's correlation ID.
 - A source revision mismatch returns `409 ai_stale_draft`. The draft remains reviewable; there is no automatic rebase. The operator may explicitly rerun or dismiss it.
 - Approval never sends a message, signs a document, initiates a payment, contacts a provider, or silently changes lease, occupancy, financial, assignment, or communication-delivery state. A later owning-domain design must name the exact approved consequence.
 
@@ -303,8 +290,8 @@ All request models reject unknown fields. Pages use bounded cursor pagination.
 - `GET /api/ai/drafts` returns a bounded page filtered by status, owning module, entity kind, action type, or source reference.
 - `GET /api/ai/drafts/{draftId}` returns run metadata, exact governed input, current draft payload, confidence, source reference/revision, review history, and source-comparison availability.
 - `PATCH /api/ai/drafts/{draftId}` records an operator edit.
-- `POST /api/ai/drafts/{draftId}/approve` dispatches to the registered owning-domain approval handler.
-- `POST /api/ai/drafts/{draftId}/dismiss` records an explicit dismissal.
+- `POST /api/ai/drafts/{draftId}/approve` requires the selected mode when the action permits more than one and dispatches to the registered owning-domain approval handler. A capability may expose a richer domain endpoint that invokes the same handler.
+- `POST /api/ai/drafts/{draftId}/dismiss` records an explicit dismissal or dispatches to the registered domain dismissal handler. It cannot bypass a registered source-state consequence.
 
 There is deliberately no generic public `POST /api/ai/runs`. A public arbitrary-action endpoint would let clients bypass the owning domain's source projection and redaction preparation. Later capability endpoints invoke the coordinator through an application port. MCP-001 may add an authenticated external-proposal admission port, not a provider-generation endpoint.
 
@@ -320,7 +307,7 @@ AI-GOV-001 registers dedicated snapshot and activity policies for `ai_run`, `ai_
 - General activity hides provider-input and draft bodies while record history may show domain-redacted values.
 - Audit snapshots never contain provider credentials or raw provider error bodies.
 
-Workspace-open and restore validation checks more than table shape. It verifies status/timestamp combinations, registered action/version references, canonical JSON and fingerprints, run-to-draft cardinality, legal draft transitions reconstructed from audit/review rows, monotonic draft versions, a single terminal decision, acyclic non-branching supersession, result-reference requirements, idempotency/request-fingerprint consistency, and correlated approval/domain audit evidence where the owning module has registered a validator. Unknown action/profile/schema versions fail closed rather than rendering ungoverned historical data.
+Workspace-open and restore validation checks more than table shape. It verifies status/timestamp combinations, registered action/version references, canonical JSON and fingerprints, run-to-draft cardinality, legal draft transitions reconstructed from audit/review rows, monotonic draft versions, a single terminal decision, acyclic non-branching supersession, selected-mode eligibility and its result-reference requirement, idempotency/request-fingerprint consistency, and correlated approval/domain audit evidence where the owning module has registered a validator. Unknown action/profile/schema versions fail closed rather than rendering ungoverned historical data.
 
 The source domain must retain the referenced source or an explicit tombstone. AI Governance does not cascade-delete source records or drafts. Automatic AI-history deletion is out of scope; the MVP retains runs, redacted inputs, drafts, decisions, and audit history in the workspace.
 
@@ -338,10 +325,10 @@ AI-GOV-001 delivers backend/API behavior only. UI-001 must provide:
 
 - Settings → AI assistance with separate Built-in AI and Connected assistants cards, registered cloud/on-device selections, capability-aware readiness, a global pause, write-only credential controls, per-action limits, redaction visibility, and per-destination disclosure controls that cannot disable mandatory redaction;
 - a review queue that distinguishes source content, exact governed/redacted input, AI output, operator edits, confidence labels, and stale-source warnings;
-- approve/edit/dismiss controls only when a registered owning-domain handler exists; and
+- approve controls only when a registered owning-domain approval handler exists; dismiss uses a registered domain handler when the action declares one and otherwise uses the generic governance operation; and
 - explicit unavailable states for missing credentials, unsupported providers, unregistered historical versions, and missing sources.
 
-AI-GOV-001 should be marked backend-complete but operator-workflow-in-progress until UI-001 delivers these surfaces, consistent with other pre-UI features.
+AI-GOV-001 remains in progress until the selected-mode/domain-dismissal extension and pending implementation review findings are complete. After that backend work is verified, it remains operator-workflow-in-progress until UI-001 delivers these surfaces, consistent with other pre-UI features.
 
 ## Query and performance bounds
 
@@ -354,13 +341,13 @@ AI-GOV-001 should be marked backend-complete but operator-workflow-in-progress u
 ## Acceptance criteria
 
 - Exact-schema and retained-data validation cover all seven tables and their lifecycle/correlation invariants.
-- A synthetic registered action proves redaction, exact provider-input retention, output validation, draft creation, editing, dismissal, approval handoff, audit history, and backup/restore without creating a production AI feature.
+- Synthetic registered actions prove redaction, exact provider-input retention, output validation, draft creation, editing, generic dismissal, domain-owned dismissal, single-mode and multi-mode approval handoff, audit history, and backup/restore without creating a production AI feature.
 - Unknown actions, provider/model/profile versions, extra fields, secrets, oversized context, and malformed outputs fail closed.
 - Kill switch, destination-bound disclosure permission, disabled action, UTC-day cap, prompt cap, completion cap, registered adapter, and action/model capability allowlist are enforced atomically before provider access.
 - Concurrent duplicate submissions make at most one provider call; same-key/different-request conflicts are stable and typed.
 - Provider calls occur outside SQLite transactions; interruption recovery leaves no indefinitely running row.
 - Terminal drafts are immutable; supersession is acyclic and non-branching; stale-source approval cannot create an official record.
-- Approval writes the official record, review decision, terminal draft state, and all correlated audit events in one owning-domain transaction.
+- Approval writes the selected allowed mode, official record when applicable, review decision, terminal draft state, and all correlated audit events in one owning-domain transaction.
 - Credential values are absent from SQLite, audit snapshots, logs, API responses, backups, exports, and restored workspaces.
 - Backup/restore preserves stable IDs, exact redacted inputs, payloads, history, lineage, settings, and limits.
 
@@ -371,7 +358,7 @@ AI-GOV-001 should be marked backend-complete but operator-workflow-in-progress u
 3. Add the seven tables to the current baseline, exact schema/data validation, audit policies, and LOCAL-002 coverage.
 4. Add provider and credential ports plus a deterministic fake adapter; do not claim a production provider until its official protocol is selected.
 5. Add the coordinator with short transaction phases, idempotency, concurrency, limit reservation, and interruption recovery.
-6. Add draft read/edit/dismiss APIs, approval dispatch contracts, and a test-only owning-domain handler proving atomicity.
+6. Extend draft terminal-decision contracts with selected approval modes, optional domain dismissal dispatch, and transaction-aware completion; keep synthetic handlers proving generic and domain-owned atomicity.
 7. Add provider credential/settings APIs and secret-exclusion tests.
 8. INGEST-002 registers issue review/approval contracts for retained sources; MCP-001 admits agent-produced proposals through them. Later model capabilities register their own actions. React remains UI-001 work.
 
@@ -407,7 +394,7 @@ These decisions summarize the implementation boundaries established above. They 
 ### Integration and domain ownership
 
 - **Model inference and assistant access are independent.** Registered hosted or local adapters generate bounded drafts. MCP/file connections admit external proposals. Neither connection authorizes the other's accounts, credentials, or schedules. Provenance identifies the actual provider or submitting connection.
-- **Domains control generation and approval effects.** Capability-owned endpoints prepare bounded context and invoke the coordinator internally; there is no generic public `POST /api/ai/runs`. Each action declares `create`, `update`, or `advisory_only` and whether approval requires a result reference. Approval and retained-data validation enforce that declaration; “Approved” never implies an unspecified domain mutation.
+- **Domains control generation and approval modes.** Capability-owned endpoints prepare bounded context and invoke the coordinator internally; there is no generic public `POST /api/ai/runs`. Each action declares a closed non-empty set of allowed modes drawn from `create`, `update`, `link`, and `advisory_only`, including the result-reference rule for each. The operator selects among those modes; approval records the selected mode, and the owning handler plus retained-data validation enforce it. An action with one mode keeps the same simple review flow. “Approved” never implies an unspecified domain mutation.
 - **External proposals use a separate admission path.** Runs distinguish `provider_generation` from `external_proposal`; admitting an assistant proposal does not call a model again. External activity uses the existing `ai_assistant` audit actor kind with connection/delegation metadata.
 - **Intake and sending remain application-controlled.** Authorized assistants or manual entry supply evidence; the app does not fetch mail. INGEST-001 retains that evidence and INGEST-002 owns source comparison and approval. COM-002 prepares drafts for manual sending. A heartbeat establishes contact, not complete message coverage; calendar synchronization requires its own capability and authority contract.
 
@@ -421,7 +408,7 @@ These decisions summarize the implementation boundaries established above. They 
 
 - **Retain the exact governed input.** Store the bounded canonical redacted request and its fingerprint, not an unredacted duplicate or a fingerprint alone. External proposals retain their validated envelope so reviewers can distinguish source evidence, submitted interpretation, and operator edits.
 - **Sources own revision and retention semantics.** Source adapters return opaque revisions and content fingerprints; no universal database version column is required. The source module retains the referenced record or an explicit tombstone. Source deletion never cascades into runs, drafts, or decisions.
-- **Edits and approval are different review actions.** Review rows are append-only. An edit creates no official result; only a terminal approval can require a result reference, according to the action definition. Official-record consequences remain atomic with the owning domain's review completion.
+- **Edits and terminal decisions are different review actions.** Review rows are append-only. An edit creates no official result. Approval records its selected allowed mode and may require a result reference according to that mode. When dismissal changes source-domain state, the registered domain handler commits that consequence with governance completion. Official-record consequences remain atomic with the owning domain's review completion.
 - **Governed history is retained for the local MVP.** Runs, exact redacted inputs, drafts, decisions, lineage, and audit history remain in the workspace and portable archives until a dedicated retention design defines deletion/redaction and referential behavior.
 - **Confidence and usage must have provenance.** Each action declares allowed confidence labels and their provenance. Percentages require a documented calibrated value permitted by that action; missing confidence or usage remains unknown. Retain provider-reported token usage, but omit cost estimates until a design supplies provider, currency, pricing snapshot/version, and an explicitly non-financial estimate label.
 
@@ -438,8 +425,8 @@ These decisions summarize the implementation boundaries established above. They 
 - [ ] Redaction is deterministic, versioned, bounded, secret-rejecting, and retains the exact redacted request.
 - [ ] Tenant/owner message content is never sent to a cloud model unless the destination-specific permission and disclosure version are recorded; the permission cannot disable mandatory redaction or minimization.
 - [ ] Limits, kill switch, registered connection selection, transport-qualified model allowlists, idempotency, transaction phases, and interruption recovery behave as specified.
-- [ ] Draft edit/dismiss and owning-domain atomic approval contracts are verified with a synthetic capability.
-- [ ] Source revisions/fingerprints, tombstones, indefinite MVP retention, confidence provenance, and declared approval effects are enforced and validated on workspace open and restore.
+- [ ] Draft editing, generic and domain-owned dismissal, and owning-domain atomic approval contracts are verified with synthetic capabilities.
+- [ ] Source revisions/fingerprints, tombstones, indefinite MVP retention, confidence provenance, allowed and selected approval modes, and domain terminal handlers are enforced and validated on workspace open and restore.
 - [ ] AI-GOV-001 persists no file links and no cost estimate; provider-reported token usage remains available.
 - [ ] AI-specific audit presentation is registered and correlation chains validate on workspace open and restore.
 - [ ] Provider credentials are write-only OS secrets and pass database/log/archive exclusion tests.
