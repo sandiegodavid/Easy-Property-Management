@@ -45,6 +45,7 @@ from app.modules.communications.domain.audit_policy import COMMUNICATION_ACTIVIT
 from app.modules.intake.api.router import build_router as build_intake_router
 from app.modules.intake.application.service import IntakeService
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
+from app.modules.intake.infrastructure.integrity_consequences import SQLiteIntakeIntegrityConsequences
 from app.modules.intake.domain.audit_policy import INTAKE_ACTIVITY_POLICY
 from app.modules.maintenance.api.router import build_router as build_maintenance_router
 from app.modules.maintenance.application.service import MaintenanceService
@@ -220,8 +221,12 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         # Its dedicated endpoint owns the report audit event and correlation ID.
         file_link_policies,
     )
-    file_verification = FileStorageVerificationService(files.unit_of_work, files.content_stores)
-    intake = IntakeService(SQLiteIntakeUnitOfWork(service.paths.database, recorder), files)
+    intake_unit_of_work = SQLiteIntakeUnitOfWork(service.paths.database, recorder)
+    intake = IntakeService(intake_unit_of_work, files)
+    file_verification = FileStorageVerificationService(
+        files.unit_of_work, files.content_stores,
+        SQLiteIntakeIntegrityConsequences(recorder, file_link_reader),
+    )
     remote_materializer = s3_store.materialize if s3_store is not None else None
     backups = BackupService(service, recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)), remote_materializer=remote_materializer)
     tasks = TaskService(SQLiteTaskUnitOfWork(service.paths.database, recorder))

@@ -7,7 +7,8 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.modules.files.application.errors import FileError
-from app.modules.files.application.ports import FileAuditChange, FileContentStore, FileUnitOfWork
+from app.modules.files.application.ports import (FileAuditChange, FileContentStore,
+                                                 FileUnitOfWork, FileVerificationConsequences)
 
 
 def _decode_cursor(value: str | None) -> dict[str, object]:
@@ -28,9 +29,11 @@ def _encode_cursor(state: dict[str, object]) -> str:
 
 
 class FileStorageVerificationService:
-    def __init__(self, unit_of_work: FileUnitOfWork, stores: dict[str, FileContentStore]) -> None:
+    def __init__(self, unit_of_work: FileUnitOfWork, stores: dict[str, FileContentStore],
+                 consequences: FileVerificationConsequences | None = None) -> None:
         self.unit_of_work = unit_of_work
         self.stores = stores
+        self.consequences = consequences
 
     def verify(self, file_id: str | None = None, *, continuation: str | None = None) -> dict[str, object]:
         """Verify retained bytes and process one bounded S3 inventory page."""
@@ -67,7 +70,7 @@ class FileStorageVerificationService:
                 self.unit_of_work.replace_storage_verification(item, state, verified_at, FileAuditChange(
                     "file", item.id, "storage_verified", after, "file_storage_verification", str(uuid4()), before,
                     actor_kind="system",
-                ))
+                ), self.consequences)
             counts[state] += 1
         # A single-file repair verifies only that file.  A full verification is
         # also the explicit storage-inventory pass, including orphan discovery.

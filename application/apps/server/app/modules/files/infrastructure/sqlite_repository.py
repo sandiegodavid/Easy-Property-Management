@@ -118,7 +118,8 @@ class SQLiteFileUnitOfWork:
                                location.s3_version_id, location.provider_etag, location.verified_at,
                                record.created_at) for record, location in rows]
 
-    def replace_storage_verification(self, item: StoredFile, storage_state: str, verified_at: str, audit_change: FileAuditChange) -> None:
+    def replace_storage_verification(self, item: StoredFile, storage_state: str, verified_at: str,
+                                     audit_change: FileAuditChange, consequences=None) -> None:
         with immediate_transaction(self.engine) as connection:
             result = connection.execute(FileContentLocationModel.__table__.update().where(
                 FileContentLocationModel.file_id == item.id,
@@ -129,6 +130,10 @@ class SQLiteFileUnitOfWork:
                 entity_id=audit_change.entity_id, action=audit_change.action, before=audit_change.before,
                 after=audit_change.after, reason=audit_change.reason, correlation_id=audit_change.correlation_id,
                 actor_kind=audit_change.actor_kind)
+            if consequences is not None:
+                consequences.apply_storage_verification(
+                    connection, item.id, storage_state, audit_change.correlation_id
+                )
 
     def record_cleanup_incomplete(self, publication_id: str, provider: str, correlation_id: str) -> None:
         """Durable, privacy-safe integrity attention after failed cleanup."""

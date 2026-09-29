@@ -23,6 +23,15 @@ from app.modules.files.application.ports import FileLink
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
+from app.modules.intake.application.file_links import IntakeSourceFileLinkValidator
+from app.modules.intake.application.service import (
+    AttachmentInput,
+    IntakeAdmissionCommand,
+    IntakeService,
+)
+from app.modules.intake.domain.models import EvidenceEnvelope
+from app.modules.intake.infrastructure.integrity_consequences import SQLiteIntakeIntegrityConsequences
+from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
 from app.platform.config import LocalConfig
 from app.modules.files.infrastructure.sqlalchemy_models import FileLinkModel
@@ -149,6 +158,136 @@ class FileStoreTests(unittest.TestCase):
         self.assertFalse(result["complete"])
         self.assertEqual(result["states"]["quarantined"], 1)
         self.assertEqual(result["cleanupAttention"]["outstanding"], 1)
+
+    def test_verification_transitions_current_intake_evidence_and_restores_it(self) -> None:
+        """FILE-001 and INGEST-001 state/audit changes share one transaction."""
+        intake_files = FileService(
+            self.service, FilesystemContentStore(self.service.paths.files),
+            SQLiteFileUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
+            link_validators=(IntakeSourceFileLinkValidator(),),
+        )
+        intake = IntakeService(
+            SQLiteIntakeUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
+            intake_files,
+        )
+        admitted = intake.admit(IntakeAdmissionCommand(
+            EvidenceEnvelope("operator_note", "internal", "Attached source.",
+                             "2026-01-01T12:00:00+00:00"),
+            "manual", str(uuid4()),
+            attachments=(AttachmentInput(self.source, "receipt.pdf", "application/pdf"),),
+        ))
+        detail = intake.get(admitted["sourceId"])
+        file_id = detail["attachments"][0]["file"]["file_id"]
+        item = intake_files.get(file_id)
+        self.assertIsNotNone(item)
+        managed = intake_files.content_path(item)
+        managed.unlink()
+        verification = FileStorageVerificationService(
+            intake_files.unit_of_work, intake_files.content_stores,
+            SQLiteIntakeIntegrityConsequences(AuditRecorder(self.audit), SQLiteFileLinkReader()),
+        )
+
+        verification.verify(file_id)
+        failed = intake.get(admitted["sourceId"])
+        self.assertEqual("failed", failed["technicalStatus"])
+        self.assertEqual("attachment_content_unavailable", failed["failureCode"])
+        failed_event = next(event for event in reversed(
+            self.audit.history("intake_source", admitted["sourceId"])
+        ) if event.action == "integrity_failed")
+        self.assertEqual(
+            self.audit.history("file", file_id)[-1].correlation_id,
+            failed_event.correlation_id,
+        )
+
+        managed.write_bytes(b"receipt bytes")
+        verification.verify(file_id)
+        restored = intake.get(admitted["sourceId"])
+        self.assertEqual("ready", restored["technicalStatus"])
+        self.assertIsNone(restored["failureCode"])
+        self.assertTrue(any(
+            event.action == "integrity_restored"
+            for event in self.audit.history("intake_source", admitted["sourceId"])
+        ))
+
+    def test_intake_restoration_waits_for_every_current_attachment(self) -> None:
+        second = Path(self.temp.name) / "second.pdf"
+        second.write_bytes(b"second receipt bytes")
+        intake_files = FileService(
+            self.service, FilesystemContentStore(self.service.paths.files),
+            SQLiteFileUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
+            link_validators=(IntakeSourceFileLinkValidator(),),
+        )
+        intake = IntakeService(
+            SQLiteIntakeUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
+            intake_files,
+        )
+        admitted = intake.admit(IntakeAdmissionCommand(
+            EvidenceEnvelope("operator_note", "internal", "Two attachments.",
+                             "2026-01-01T12:00:00+00:00"),
+            "manual", str(uuid4()),
+            attachments=(
+                AttachmentInput(self.source, "receipt.pdf", "application/pdf"),
+                AttachmentInput(second, "second.pdf", "application/pdf"),
+            ),
+        ))
+        detail = intake.get(admitted["sourceId"])
+        items = [intake_files.get(attachment["file"]["file_id"])
+                 for attachment in detail["attachments"]]
+        self.assertTrue(all(items))
+        paths = [intake_files.content_path(item) for item in items]
+        verification = FileStorageVerificationService(
+            intake_files.unit_of_work, intake_files.content_stores,
+            SQLiteIntakeIntegrityConsequences(AuditRecorder(self.audit), SQLiteFileLinkReader()),
+        )
+
+        paths[0].unlink()
+        verification.verify(items[0].id)
+        self.assertEqual("failed", intake.get(admitted["sourceId"])["technicalStatus"])
+        paths[1].unlink()
+        verification.verify(items[1].id)
+        paths[0].write_bytes(b"receipt bytes")
+        verification.verify(items[0].id)
+        self.assertEqual("failed", intake.get(admitted["sourceId"])["technicalStatus"])
+        paths[1].write_bytes(b"second receipt bytes")
+        verification.verify(items[1].id)
+        self.assertEqual("ready", intake.get(admitted["sourceId"])["technicalStatus"])
+
+    def test_verification_does_not_change_a_superseded_intake_source(self) -> None:
+        intake_files = FileService(
+            self.service, FilesystemContentStore(self.service.paths.files),
+            SQLiteFileUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
+            link_validators=(IntakeSourceFileLinkValidator(),),
+        )
+        intake = IntakeService(
+            SQLiteIntakeUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
+            intake_files,
+        )
+        original = intake.admit(IntakeAdmissionCommand(
+            EvidenceEnvelope("operator_note", "internal", "Historical attachment.",
+                             "2026-01-01T12:00:00+00:00"),
+            "manual", str(uuid4()),
+            attachments=(AttachmentInput(self.source, "receipt.pdf", "application/pdf"),),
+        ))
+        replacement = intake.supersede(original["sourceId"], IntakeAdmissionCommand(
+            EvidenceEnvelope("operator_note", "internal", "Replacement evidence.",
+                             "2026-01-01T12:00:00+00:00"),
+            "manual", str(uuid4()),
+        ))
+        detail = intake.get(original["sourceId"])
+        item = intake_files.get(detail["attachments"][0]["file"]["file_id"])
+        self.assertIsNotNone(item)
+        intake_files.content_path(item).unlink()
+        FileStorageVerificationService(
+            intake_files.unit_of_work, intake_files.content_stores,
+            SQLiteIntakeIntegrityConsequences(AuditRecorder(self.audit), SQLiteFileLinkReader()),
+        ).verify(item.id)
+
+        self.assertEqual("superseded", intake.get(original["sourceId"])["technicalStatus"])
+        self.assertEqual("ready", intake.get(replacement["sourceId"])["technicalStatus"])
+        self.assertFalse(any(
+            event.action == "integrity_failed"
+            for event in self.audit.history("intake_source", original["sourceId"])
+        ))
 
     def test_cleanup_attention_is_visible_before_a_verification_run(self) -> None:
         self.files.unit_of_work.record_cleanup_incomplete("publication-test", "local", str(uuid4()))

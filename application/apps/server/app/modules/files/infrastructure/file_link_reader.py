@@ -131,6 +131,13 @@ class SQLiteFileLinkReader:
             FileLinkModel.archived_at.is_(None),
         )).scalars())
 
+    def active_entity_ids_for_file(self, connection, file_id: str, entity_type: str) -> set[str]:
+        return set(connection.execute(select(FileLinkModel.entity_id).where(
+            FileLinkModel.file_id == file_id,
+            FileLinkModel.entity_type == entity_type,
+            FileLinkModel.archived_at.is_(None),
+        )).scalars())
+
     def active_link_counts_for_entities(self, connection, entity_type: str, entity_ids: Sequence[str]) -> dict[str, int]:
         entity_ids = list(dict.fromkeys(entity_ids))
         if not entity_ids:

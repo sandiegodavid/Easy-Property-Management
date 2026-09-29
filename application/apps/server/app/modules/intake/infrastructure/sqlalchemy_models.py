@@ -34,6 +34,7 @@ class IntakeSourceModel(LocalBase):
         CheckConstraint("account_identity_state IN ('transport_verified','operator_confirmed','unverified_claim','not_applicable')"),
         CheckConstraint("submitter_kind IN ('local_operator','assistant_connection','voice_workflow')"),
         CheckConstraint("technical_status IN ('ready','failed','superseded')"),
+        CheckConstraint("(technical_status != 'failed' AND failure_code IS NULL) OR (technical_status = 'failed' AND failure_code IN ('attachment_content_unavailable'))"),
         CheckConstraint("attention_status IN ('unprocessed','in_review','resolved','dismissed')"),
         CheckConstraint("length(trim(origin_system)) BETWEEN 1 AND 500"),
         Index("intake_sources_received", "received_at_utc", "id"),

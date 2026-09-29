@@ -14,6 +14,7 @@ from app.modules.intake.api.router import build_router
 from app.modules.intake.application.service import IntakeAdmissionCommand, IntakeService
 from app.modules.intake.domain.models import EvidenceEnvelope, IntakeConflictError
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
+from app.platform.migration_errors import MigrationSchemaError
 from app.platform.product_migrations import initialize_latest_schema, validate_latest_schema
 
 
@@ -37,6 +38,19 @@ class IntakeTests(TestCase):
     def test_changed_idempotency_payload_is_a_conflict(self) -> None:
         key=str(uuid4()); self.service.admit(self.command(key))
         with self.assertRaises(IntakeConflictError): self.service.admit(self.command(key, "Different evidence."))
+
+    def test_workspace_validation_rejects_an_unregistered_integrity_failure_code(self) -> None:
+        source = self.service.admit(self.command())
+        import sqlite3
+        with sqlite3.connect(self.database) as connection:
+            connection.execute("PRAGMA ignore_check_constraints = ON")
+            connection.execute(
+                "UPDATE intake_sources SET technical_status='failed', failure_code='arbitrary_failure' WHERE id=?",
+                (source["sourceId"],),
+            )
+            connection.commit()
+        with self.assertRaises(MigrationSchemaError):
+            validate_latest_schema(self.database)
 
     def test_correction_keeps_the_original_revision(self) -> None:
         source=self.service.admit(self.command())

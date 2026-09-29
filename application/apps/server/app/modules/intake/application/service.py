@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import uuid4
 from app.modules.intake.application.ports import IntakeFileOperations, IntakeUnitOfWork
-from app.modules.intake.domain.models import EvidenceEnvelope, IDENTITY_STATES, IntakeConflictError, IntakeError, IntakeNotFoundError, bounded, canonical_json, fingerprint, utc, utc_now, uuid
+from app.modules.intake.domain.models import EvidenceEnvelope, IDENTITY_STATES, IntakeConflictError, IntakeError, IntakeNotFoundError, bounded, canonical_json, failure_code, fingerprint, utc, utc_now, uuid
 
 
 @dataclass(frozen=True)
@@ -198,7 +198,7 @@ class IntakeService:
     def set_integrity(self, source_id: str, *, available: bool, reason: str, idempotency_key: str) -> dict[str, object]:
         """Synchronous FILE-001 consequence: evidence failures never masquerade as attention decisions."""
         uuid(source_id, "sourceId"); uuid(idempotency_key, "idempotencyKey")
-        code = bounded(reason, "failureCode", 200, required=True)
+        code = failure_code(reason)
         def operation(tx):
             source = tx.source(source_id)
             if source is None: raise IntakeNotFoundError("Intake source was not found.")

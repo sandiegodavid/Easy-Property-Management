@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 from sqlalchemy import inspect, text
 from sqlalchemy.dialects import sqlite
-from app.modules.intake.domain.models import EvidenceEnvelope, canonical_json, fingerprint
+from app.modules.intake.domain.models import FAILURE_CODES, EvidenceEnvelope, canonical_json, fingerprint
 from app.modules.intake.infrastructure.sqlalchemy_models import IntakeDuplicateCandidateModel, IntakeEvidenceRevisionModel, IntakeRevisionFileLinkModel, IntakeSourceModel, IntakeSourceOperationModel
 from app.platform.migration_errors import MigrationSchemaError
 
@@ -43,7 +43,7 @@ def validate_intake_data(connection) -> None:
         revision=revisions.get(source["current_revision_id"])
         if revision is None or revision["source_id"] != source["id"]: raise MigrationSchemaError("INGEST-001 current revision is invalid.")
         if source["technical_status"] == "superseded" and not source["superseded_by_source_id"]: raise MigrationSchemaError("INGEST-001 superseded source is invalid.")
-        if source["technical_status"] == "failed" and not source["failure_code"]: raise MigrationSchemaError("INGEST-001 failed source is missing a failure code.")
+        if source["technical_status"] == "failed" and source["failure_code"] not in FAILURE_CODES: raise MigrationSchemaError("INGEST-001 failed source has an unsupported failure code.")
         if source["technical_status"] != "failed" and source["failure_code"] is not None: raise MigrationSchemaError("INGEST-001 nonfailed source has a failure code.")
         for pointer, inverse in (("supersedes_source_id","superseded_by_source_id"),("superseded_by_source_id","supersedes_source_id")):
             target=source[pointer]

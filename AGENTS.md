@@ -8,12 +8,12 @@
 ## Implementation reviews
 
 - Report only actionable findings, grouped by module or boundary, with priority and precise file and line references.
-- Create a PR branch for each finding.
+- Create a PR branch for each finding if one does not already exist.
 
 ### Re-reviews and Follow-up implementation reviews
 
 - Assess only the findings reported by the preceding review unless a broader review is explicitly requested.
-- For each finding, mark it as `resolved`, `still open`, or `regressed`, and include file and line references.
+- For each finding, mark it as `resolved`, `still open`, or `regressed`.
 - Move resolved findings to the end of their list, add the review date, and remove them after 30 days.
 - Do not perform a general re-review unless explicitly requested.
 

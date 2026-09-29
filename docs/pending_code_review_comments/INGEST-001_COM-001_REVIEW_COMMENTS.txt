@@ -2,6 +2,7 @@ INGEST-001 / COM-001 IMPLEMENTATION RE-REVIEW
 
 Review fixed point: 00048d6e11dac2a04a64dea340f41b98c14b25d0
 Reviewed through: 3cf0f2a4ddfec3308cb088a8b6af598cdc4c06a6
+SPECIFICATION Finding 8 final follow-up [resolved 2026-09-28]: fb6873e7af99fad98d5e030540d2d1a8b1a6286b...e8d0f1f8e35aa97f7c361b1159d9d07ee0f8ef3d
 Design sources: docs/INGEST-001_DESIGN.md and docs/COM-001_DESIGN.md
 
 SPECIFICATION FINDINGS
@@ -88,18 +89,19 @@ Suggestion: finish the consumer-neutral protocol and implement its reads on the 
 
 FILE-001 → INTAKE INTEGRITY BOUNDARY
 
-8. [P1] FILE-001 verification never propagates later evidence loss or restoration to Intake technical state.
+8. [resolved 2026-09-28] Integrity propagation uses a registered, schema-validated failure code.
 
 Files:
-- application/apps/server/app/modules/files/application/verification.py:30-71
-- application/apps/server/app/modules/files/infrastructure/sqlite_repository.py:121-131
-- application/apps/server/app/modules/intake/application/service.py:191-211
-- application/apps/server/app/bootstrap/api.py:227-228
-- docs/INGEST-001_DESIGN.md:64, 174, 250, 280, 293
+- application/apps/server/app/modules/intake/domain/models.py:18, 59-62
+- application/apps/server/app/modules/intake/application/service.py:198-214
+- application/apps/server/app/modules/intake/infrastructure/integrity_consequences.py:63-73
+- application/apps/server/app/modules/intake/infrastructure/sqlalchemy_models.py:36-37
+- application/apps/server/app/modules/intake/infrastructure/schema_validation.py:38-47
+- application/apps/server/app/modules/intake/tests/test_intake.py:42-53
+- application/apps/server/app/modules/files/tests/test_files.py:162-290
+- docs/INGEST-001_DESIGN.md:112-117, 266-280, 309
 
-IntakeService.set_integrity() exists, but nothing calls or composes it. File verification updates only file_content_locations and FILE audit history. A missing or quarantined attachment therefore leaves its Intake source marked ready, and a repaired attachment cannot create the required integrity_restored operation. The operator can receive an evidence-complete Intake projection after FILE-001 has already established that its bytes are unavailable.
-
-Suggestion: add a transaction-aware, set-based consequence coordinator for verification state changes. It should locate affected Intake associations, transition each non-superseded source once with a registered failure code, record the Intake operation/audit set, and restore only after every attachment for the current revision verifies available.
+Intake now owns the attachment_content_unavailable registry and validator, and both integrity write paths use it. The latest SQLite schema constrains failure_code to the registered value and legal technical-status combination, while retained-data validation independently rejects unsupported codes. A tamper test bypasses SQLite checks and confirms workspace validation rejects an arbitrary value. Propagation coverage includes loss/restoration with correlated FILE and Intake audits, restoration only after every current attachment is available, and superseded-source exclusion.
 
 STANDARDS FINDINGS
 
@@ -144,5 +146,6 @@ VALIDATION
 
 Focused Intake, Communications, and backup tests: 72 passed.
 Full test suite: 404 passed, with one unrelated Starlette/AnyIO deprecation warning.
+
 
 No additional COM-001 behavior defect was found. The remaining COM-related comments concern the cross-module implementation boundary described in Standards finding 2.

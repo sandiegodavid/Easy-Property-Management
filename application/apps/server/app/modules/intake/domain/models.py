@@ -12,6 +12,10 @@ SOURCE_KINDS = frozenset({"email_message", "sms_message", "chat_message", "opera
 CHANNELS = frozenset({"email", "sms", "chat", "internal", "voice"})
 KIND_CHANNEL = {"email_message": "email", "sms_message": "sms", "chat_message": "chat", "operator_note": "internal", "voice_transcript": "voice"}
 IDENTITY_STATES = frozenset({"transport_verified", "operator_confirmed", "unverified_claim", "not_applicable"})
+# Failure codes are intentionally small, non-sensitive retained facts.  The
+# owning workflow may store detailed diagnostics only in its correlated audit
+# history; Intake state itself must stay portable and safe to project.
+FAILURE_CODES = frozenset({"attachment_content_unavailable"})
 
 
 class IntakeError(ValueError):
@@ -50,6 +54,12 @@ def utc(value: object, label: str) -> str:
     except ValueError as error: raise IntakeError(f"{label} must be an aware UTC timestamp.") from error
     if parsed.tzinfo is None or parsed.utcoffset() is None: raise IntakeError(f"{label} must be an aware UTC timestamp.")
     return parsed.astimezone(UTC).isoformat()
+
+
+def failure_code(value: object) -> str:
+    if not isinstance(value, str) or value not in FAILURE_CODES:
+        raise IntakeError("failureCode is invalid.")
+    return value
 
 
 def bounded(value: object, label: str, maximum: int, *, required: bool = False) -> str | None:
