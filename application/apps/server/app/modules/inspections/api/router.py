@@ -9,6 +9,8 @@ from typing import Literal
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
+from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
+
 from app.modules.files.application.errors import MAX_FILE_BYTES, FileError
 from app.modules.inspections.application.service import (
     AreaInput,
@@ -61,12 +63,12 @@ def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRo
     router = APIRouter(tags=["inspections"])
     def ready():
         try: runtime.require_ready(write=True)
-        except Exception as error: raise HTTPException(503, str(error)) from error
+        except Exception as error: raise workspace_unavailable(str(error)) from error
     def invoke(operation):
         try: return operation()
-        except InspectionNotFoundError as error: raise HTTPException(404, str(error)) from error
-        except InspectionConflictError as error: raise HTTPException(409, str(error)) from error
-        except InspectionError as error: raise HTTPException(400, str(error)) from error
+        except InspectionNotFoundError as error: raise domain_problem(error, status_code=404, code="inspection_not_found") from error
+        except InspectionConflictError as error: raise domain_problem(error, status_code=409, code="inspection_conflict") from error
+        except InspectionError as error: raise domain_problem(error, status_code=400, code="inspection_validation") from error
     def areas(values): return tuple(AreaInput(value.displayName, tuple(ObservationInput(x.itemName,x.conditionState,x.cleanlinessState,None if x.observedOn is None else x.observedOn.isoformat(),x.isCompleted,x.notes) for x in value.observations), value.notes) for value in values)
     @router.post("/api/leases/{lease_id}/condition-reports", status_code=status.HTTP_201_CREATED, response_model=ReportResponse)
     def create(lease_id: str, request: CreateReportRequest):
@@ -98,11 +100,11 @@ def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRo
                 size = 0
                 while chunk := await file.read(1024 * 1024):
                     size += len(chunk)
-                    if size > MAX_FILE_BYTES: raise HTTPException(status_code=413, detail="File exceeds the 50 MiB local upload limit.")
+                    if size > MAX_FILE_BYTES: raise api_problem(413, "request_payload_too_large", "File exceeds the 50 MiB local upload limit.")
                     staged.write(chunk)
             return invoke(lambda: service.attach_evidence(observation_id, staged_path, file.filename or "evidence", file.content_type or "application/octet-stream", purpose))
-        except FileError as error: raise HTTPException(status_code=400, detail=str(error)) from error
-        except OSError as error: raise HTTPException(status_code=507, detail=f"Unable to stage evidence: {error}") from error
+        except FileError as error: raise domain_problem(error, status_code=400) from error
+        except OSError as error: raise api_problem(507, "evidence_staging_failed", "Unable to stage evidence.") from error
         finally:
             if staged_path is not None: staged_path.unlink(missing_ok=True)
     @router.post("/api/condition-reports/{report_id}/finalize", response_model=ReportResponse)

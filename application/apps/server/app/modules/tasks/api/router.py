@@ -4,6 +4,8 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
+from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
+
 from app.modules.tasks.application.service import TaskConflictError, TaskError, TaskNotFoundError, TaskService
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 
@@ -11,13 +13,13 @@ from app.modules.workspace.application.runtime import WorkspaceRuntime
 def build_router(service: TaskService, runtime: WorkspaceRuntime) -> APIRouter:
     router = APIRouter(prefix="/api/tasks", tags=["tasks"])
     def ready(write: bool = False) -> None:
-        if not runtime.ready or runtime.error: raise HTTPException(503, str(runtime.error or "Workspace is not ready."))
-        if write and not runtime.can_write: raise HTTPException(503, "Workspace writer lock is unavailable.")
+        if not runtime.ready or runtime.error: raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
+        if write and not runtime.can_write: raise workspace_unavailable("Workspace writer lock is unavailable.")
     def invoke(fn):
         try: return fn()
-        except TaskNotFoundError as error: raise HTTPException(404, str(error)) from error
-        except TaskConflictError as error: raise HTTPException(409, str(error)) from error
-        except TaskError as error: raise HTTPException(400, str(error)) from error
+        except TaskNotFoundError as error: raise domain_problem(error, status_code=404, code="task_not_found") from error
+        except TaskConflictError as error: raise domain_problem(error, status_code=409, code="task_conflict") from error
+        except TaskError as error: raise domain_problem(error, status_code=400, code="task_validation") from error
     @router.post("", status_code=status.HTTP_201_CREATED)
     def create(data: TaskCreateRequest): ready(True); return invoke(lambda: service.create(data.model_dump()).to_dict())
     @router.get("")
@@ -27,7 +29,7 @@ def build_router(service: TaskService, runtime: WorkspaceRuntime) -> APIRouter:
                    cursor: str | None = None):
         ready()
         if (relatedEntityType is None) != (relatedEntityId is None):
-            raise HTTPException(422, "relatedEntityType and relatedEntityId must be supplied together.")
+            raise api_problem(422, "task_validation", "relatedEntityType and relatedEntityId must be supplied together.")
         tasks, next_cursor = invoke(lambda: service.page(
             status=status, due=due, priority=priority, include_voided=includeVoided,
             related_entity_type=relatedEntityType,

@@ -5,6 +5,8 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
+from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
+
 from app.modules.maintenance.application.service import MaintenanceService
 from app.modules.maintenance.application.work_journal_service import WorkJournalService
 from app.modules.maintenance.domain.models import (
@@ -66,13 +68,13 @@ class WorkJournalPageResponse(Contract): items:list[WorkJournalEntryResponse]; n
 def build_router(service:MaintenanceService,journal:WorkJournalService,runtime:WorkspaceRuntime):
  router=APIRouter(prefix="/api",tags=["maintenance"])
  def ready(write=False):
-  if not runtime.ready or runtime.error:raise HTTPException(503,str(runtime.error or "Workspace is not ready."))
-  if write and not runtime.can_write:raise HTTPException(503,"Workspace writer lock is unavailable.")
+  if not runtime.ready or runtime.error:raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
+  if write and not runtime.can_write:raise workspace_unavailable("Workspace writer lock is unavailable.")
  def invoke(fn):
   try:return fn()
-  except MaintenanceNotFoundError as e:raise HTTPException(404,{"code":e.code,"message":str(e)}) from e
-  except MaintenanceConflictError as e:raise HTTPException(409,{"code":e.code,"message":str(e)}) from e
-  except MaintenanceError as e:raise HTTPException(400,{"code":e.code,"message":str(e)}) from e
+  except MaintenanceNotFoundError as e:raise domain_problem(e, status_code=404) from e
+  except MaintenanceConflictError as e:raise domain_problem(e, status_code=409) from e
+  except MaintenanceError as e:raise domain_problem(e, status_code=400) from e
  @router.post("/maintenance-issues",response_model=IssueResponse,status_code=status.HTTP_201_CREATED)
  def create(data:IssueInput):
   ready(True); reporter=data.reporter
@@ -87,7 +89,7 @@ def build_router(service:MaintenanceService,journal:WorkJournalService,runtime:W
     if priority_value not in {"urgent","high","normal","low"}: raise ValueError
     if datetime.fromisoformat(reported).tzinfo is None: raise ValueError
     parsed=(priority_value,reported,str(UUID(item_id)))
-   except (ValueError,AttributeError) as error:raise HTTPException(422,{"code":"maintenance_validation","message":"cursor is invalid."}) from error
+   except (ValueError,AttributeError) as error:raise api_problem(422, "maintenance_validation", "cursor is invalid.") from error
   return invoke(lambda:service.list_issues(property_id=str(propertyId) if propertyId else None,space_id=str(spaceId) if spaceId else None,category=category,priority=priority,status=status,reporter_role=reporterRole,reporter_party_id=str(reporterPartyId) if reporterPartyId else None,reporter_subject_kind=reporterSubjectKind,provider_party_id=str(providerPartyId) if providerPartyId else None,has_active_quote=hasActiveQuote,has_current_assignment=hasCurrentAssignment,reported_from=reportedFrom.isoformat() if reportedFrom else None,reported_to=reportedTo.isoformat() if reportedTo else None,appointment_from=appointmentFrom.isoformat() if appointmentFrom else None,appointment_to=appointmentTo.isoformat() if appointmentTo else None,has_evidence=hasEvidence,has_linked_expense=hasLinkedExpense,has_active_task=hasActiveTask,cursor=parsed,page_size=pageSize))
  @router.post("/maintenance-issues/{issue_id}/work-journal",response_model=WorkJournalEntryResponse,status_code=201)
  def record_work(issue_id:UUID,data:WorkJournalInput):
@@ -155,4 +157,4 @@ def _journal_cursor(value):
   occurred, recorded, item_id=value.split("|",2)
   if datetime.fromisoformat(occurred).tzinfo is None or datetime.fromisoformat(recorded).tzinfo is None:raise ValueError
   return occurred,recorded,str(UUID(item_id))
- except (ValueError,AttributeError) as error:raise HTTPException(422,{"code":"maintenance_validation","message":"cursor is invalid."}) from error
+ except (ValueError,AttributeError) as error:raise api_problem(422, "maintenance_validation", "cursor is invalid.") from error

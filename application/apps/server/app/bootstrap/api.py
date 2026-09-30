@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
+from app.platform.api_errors import register_api_error_handlers
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.bootstrap.file_link_policies import build_file_link_policy_registry
 from app.bootstrap.owner_concern_context import SQLiteOwnerConcernContext
@@ -334,6 +335,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
                 runtime.stop()
 
     app = FastAPI(title="Easy Property Management", version=application_version(), lifespan=lifespan)
+    register_api_error_handlers(app)
     app.state.backup_service = backups
     app.state.workspace_runtime = runtime
     app.state.file_service = files

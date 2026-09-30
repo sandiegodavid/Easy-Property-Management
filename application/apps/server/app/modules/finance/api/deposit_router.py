@@ -6,6 +6,8 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
+from app.platform.api_errors import domain_problem, workspace_unavailable
+
 from app.modules.finance.application.deposit_service import (
     DepositService,
     PossibleDuplicateDepositReceiptError,
@@ -55,15 +57,15 @@ class SettlementResponse(Contract):
 def build_router(service: DepositService, runtime: WorkspaceRuntime):
     router=APIRouter(tags=["security deposits"])
     def ready(write=False):
-        if not runtime.ready or runtime.error: raise HTTPException(503,str(runtime.error or "Workspace is not ready."))
-        if write and not runtime.can_write: raise HTTPException(503,"Workspace writer lock is unavailable.")
+        if not runtime.ready or runtime.error: raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
+        if write and not runtime.can_write: raise workspace_unavailable("Workspace writer lock is unavailable.")
     def invoke(fn):
         try:return fn()
-        except PossibleDuplicateDepositReceiptError as error: raise HTTPException(409,{"code":"possible_duplicate_deposit_receipt","candidates":error.candidates}) from error
-        except PossibleDuplicateDepositRefundError as error: raise HTTPException(409,{"code":"possible_duplicate_deposit_refund","candidates":error.candidates}) from error
-        except FinanceNotFoundError as error: raise HTTPException(404,str(error)) from error
-        except FinanceConflictError as error: raise HTTPException(409,{"code":"finance_conflict","message":str(error)}) from error
-        except FinanceError as error: raise HTTPException(422,str(error)) from error
+        except PossibleDuplicateDepositReceiptError as error: raise domain_problem(error, status_code=409, code="possible_duplicate_deposit_receipt", candidates=error.candidates) from error
+        except PossibleDuplicateDepositRefundError as error: raise domain_problem(error, status_code=409, code="possible_duplicate_deposit_refund", candidates=error.candidates) from error
+        except FinanceNotFoundError as error: raise domain_problem(error, status_code=404, code="finance_not_found") from error
+        except FinanceConflictError as error: raise domain_problem(error, status_code=409, code="finance_conflict") from error
+        except FinanceError as error: raise domain_problem(error, status_code=422, code="finance_validation") from error
     @router.post("/api/leases/{lease_id}/security-deposit",response_model=DepositResponse,status_code=status.HTTP_201_CREATED)
     def create(lease_id:UUID,data:AccountInput): ready(True);return invoke(lambda:service.create_account(str(lease_id),DepositAccountCreateCommand(str(data.leaseTermId))))
     @router.get("/api/leases/{lease_id}/security-deposit",response_model=DepositResponse)

@@ -9,8 +9,9 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from app.platform.api_errors import api_problem, domain_problem, validation_problem, workspace_unavailable
 from app.modules.files.application.errors import PublicationCleanupIncomplete
 from app.modules.intake.application.service import AttachmentInput, IntakeAdmissionCommand, IntakeService, MAX_ATTACHMENT_AGGREGATE_BYTES, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_COUNT
 from app.modules.intake.domain.models import EvidenceEnvelope, IntakeConflictError, IntakeError, IntakeNotFoundError, IntakePayloadTooLargeError
@@ -35,8 +36,8 @@ class AttentionInput(Contract):
 def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter:
     router=APIRouter(prefix="/api/intake/sources",tags=["intake"])
     def ready():
-        if not runtime.ready or runtime.error: raise HTTPException(503,str(runtime.error or "Workspace is not ready."))
-        if not runtime.can_write: raise HTTPException(503,"Workspace writer lock is unavailable.")
+        if not runtime.ready or runtime.error: raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
+        if not runtime.can_write: raise workspace_unavailable("Workspace writer lock is unavailable.")
     def call(op):
         try:return op()
         except (PublicationCleanupIncomplete, IntakeError) as error:
@@ -49,13 +50,14 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
     @router.post("/import", dependencies=[Depends(ready)])
     async def import_source(metadata: str = Form(...), attachmentRoles: str | None = Form(default=None), files: list[UploadFile] = File(default=[])):
         try: data = SourceInput.model_validate(json.loads(metadata))
-        except Exception as error: raise HTTPException(422, {"code": "intake_validation", "message": "Import metadata is invalid."}) from error
+        except ValidationError as error: raise validation_problem(error) from error
+        except Exception as error: raise api_problem(422, "intake_validation", "Import metadata is invalid.") from error
         if len(files) > MAX_ATTACHMENT_COUNT: raise _intake_http_error(IntakePayloadTooLargeError("Attachment count exceeds the 20-file limit."))
         try:
             roles = json.loads(attachmentRoles) if attachmentRoles is not None else ["source_attachment"] * len(files)
             if not isinstance(roles, list) or len(roles) != len(files) or any(role not in {"source_attachment", "raw_source"} for role in roles): raise ValueError
         except (TypeError, ValueError, json.JSONDecodeError):
-            raise HTTPException(422, {"code":"intake_validation", "message":"Attachment roles are invalid."})
+            raise api_problem(422, "intake_validation", "Attachment roles are invalid.")
         with TemporaryDirectory(prefix="intake-import-") as temporary:
             attachments=[]
             total = 0
@@ -82,7 +84,7 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
         parsed=None
         if cursor:
             try: parsed=tuple(cursor.split("|",1)); assert len(parsed)==2
-            except (AssertionError,ValueError): raise HTTPException(422,{"code":"intake_validation","message":"cursor is invalid."})
+            except (AssertionError,ValueError): raise api_problem(422, "intake_validation", "cursor is invalid.")
         items,next_cursor=call(lambda:service.list(limit=limit,cursor=parsed,source_kind=sourceKind,technical_status=technicalStatus,attention_status=attentionStatus,channel=channel,origin_system=originSystem,account_identity_state=accountIdentityState,received_from=None if receivedFrom is None else receivedFrom.isoformat(),received_to=None if receivedTo is None else receivedTo.isoformat(),has_duplicate=hasDuplicate)); return {"items":items,"nextCursor":next_cursor}
     @router.get("/{source_id}",dependencies=[Depends(ready)])
     def get(source_id:UUID): return call(lambda:service.get(str(source_id)))
@@ -103,8 +105,8 @@ def _intake_http_error(error: PublicationCleanupIncomplete | IntakeError) -> HTT
         # FILE-001 deliberately keeps provider locations and cleanup failures
         # private. If attention persistence also failed, this response is the
         # operator's immediate repair signal.
-        return HTTPException(503, {"code": error.code, "message": str(error),
-                                   "repairRequired": True,
-                                   "attentionRecorded": error.attention_recording_failure is None})
+        return api_problem(503, error.code, str(error),
+                           repairRequired=True,
+                           attentionRecorded=error.attention_recording_failure is None)
     status_code = 413 if isinstance(error, IntakePayloadTooLargeError) else 404 if isinstance(error, IntakeNotFoundError) else 409 if isinstance(error, IntakeConflictError) else 422
-    return HTTPException(status_code, {"code": error.code, "message": str(error)})
+    return domain_problem(error, status_code=status_code)

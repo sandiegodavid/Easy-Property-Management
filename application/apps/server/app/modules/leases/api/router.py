@@ -8,6 +8,8 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 
+from app.platform.api_errors import domain_problem, workspace_unavailable
+
 from app.modules.leases.application.ports import LeaseConflictError
 from app.modules.leases.application.service import (
     LeaseCreateCommand,
@@ -287,22 +289,24 @@ def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
 
     def ready(write: bool = False) -> None:
         if not runtime.ready or runtime.error:
-            raise HTTPException(503, str(runtime.error or "Workspace is not ready."))
+            raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
         if write and not runtime.can_write:
-            raise HTTPException(503, "Workspace writer lock is unavailable.")
+            raise workspace_unavailable("Workspace writer lock is unavailable.")
 
     def invoke(operation):
         try:
             return operation()
         except LeaseNotFoundError as error:
-            raise HTTPException(404, str(error)) from error
+            raise domain_problem(error, status_code=404, code="lease_not_found") from error
         except LeaseConflictError as error:
             detail: str | dict[str, object] = str(error)
             if error.current_status is not None:
                 detail = {"message": str(error), "currentStatus": error.current_status}
-            raise HTTPException(409, detail) from error
+            if isinstance(detail, dict):
+                raise domain_problem(error, status_code=409, code="lease_conflict", **{key: value for key, value in detail.items() if key != "message"}) from error
+            raise domain_problem(error, status_code=409, code="lease_conflict") from error
         except LeaseError as error:
-            raise HTTPException(400, str(error)) from error
+            raise domain_problem(error, status_code=400, code="lease_validation") from error
 
     @leases.post("", status_code=status.HTTP_201_CREATED, response_model=LeaseResponse)
     def create(data: LeaseCreateRequest):

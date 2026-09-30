@@ -6,6 +6,8 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
+from app.platform.api_errors import domain_problem, workspace_unavailable
+
 from app.modules.finance.application.prepaid_check_service import PrepaidCheckService
 from app.modules.finance.domain.models import (
     FinanceConflictError,
@@ -59,16 +61,16 @@ class PrepaidCheckPageResponse(Contract): items:list[PrepaidCheckResponse]; next
 def build_router(service: PrepaidCheckService, runtime: WorkspaceRuntime) -> APIRouter:
     router = APIRouter(prefix="/api/prepaid-checks", tags=["finance"])
     def ready(write: bool = False):
-        if not runtime.ready or runtime.error: raise HTTPException(503, str(runtime.error or "Workspace is not ready."))
-        if write and not runtime.can_write: raise HTTPException(503, "Workspace writer lock is unavailable.")
+        if not runtime.ready or runtime.error: raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
+        if write and not runtime.can_write: raise workspace_unavailable("Workspace writer lock is unavailable.")
     def invoke(fn):
         try: return fn()
         except FinanceNotFoundError as error:
-            raise HTTPException(404, {"code": "prepaid_check_not_found", "message": str(error)}) from error
+            raise domain_problem(error, status_code=404, code="prepaid_check_not_found") from error
         except FinanceConflictError as error:
-            raise HTTPException(409, {"code": error.code, "message": str(error), **error.details}) from error
+            raise domain_problem(error, status_code=409, **error.details) from error
         except FinanceError as error:
-            raise HTTPException(422, {"code": "prepaid_check_validation_error", "message": str(error)}) from error
+            raise domain_problem(error, status_code=422, code="prepaid_check_validation_error") from error
     def create_command(data: CreateInput) -> PrepaidCheckCommand:
         return PrepaidCheckCommand(str(data.expectationId), str(data.payerPartyId), data.receivedOn.isoformat(), data.checkDatedOn.isoformat(), data.maskedReference, str(data.idempotencyKey))
     def deposit_command(data: DepositInput) -> PrepaidCheckTransitionCommand:

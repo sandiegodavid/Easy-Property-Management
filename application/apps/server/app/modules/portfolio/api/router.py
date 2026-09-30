@@ -8,6 +8,8 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
+from app.platform.api_errors import domain_problem, workspace_unavailable
+
 from app.modules.parties.application.service import PartyValidationError
 from app.modules.portfolio.application.ports import PortfolioConflictError
 from app.modules.portfolio.application.service import (
@@ -308,24 +310,26 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
 
     def require_ready(*, write: bool = False) -> None:
         if not runtime.ready or runtime.error:
-            raise HTTPException(503, str(runtime.error or "Workspace is not ready."))
+            raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
         if write and not runtime.can_write:
-            raise HTTPException(503, "Workspace writer lock is unavailable.")
+            raise workspace_unavailable("Workspace writer lock is unavailable.")
 
     def invoke(operation):
         try:
             return operation()
         except PortfolioNotFoundError as error:
-            raise HTTPException(404, str(error)) from error
+            raise domain_problem(error, status_code=404, code="portfolio_not_found") from error
         except PortfolioConflictError as error:
             detail: object = str(error)
             if error.current_status is not None:
                 detail = {"message": str(error), "currentStatus": error.current_status}
-            raise HTTPException(409, detail) from error
+            if isinstance(detail, dict):
+                raise domain_problem(error, status_code=409, code="portfolio_conflict", **{key: value for key, value in detail.items() if key != "message"}) from error
+            raise domain_problem(error, status_code=409, code="portfolio_conflict") from error
         except PortfolioError as error:
-            raise HTTPException(400, str(error)) from error
+            raise domain_problem(error, status_code=400, code="portfolio_validation") from error
         except PartyValidationError as error:
-            raise HTTPException(400, str(error)) from error
+            raise domain_problem(error, status_code=400, code="portfolio_validation") from error
 
     @router.post("/api/properties", response_model=PropertyResponse, status_code=status.HTTP_201_CREATED)
     def create_property(data: PropertyCreateRequest):

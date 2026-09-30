@@ -5,6 +5,8 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import AwareDatetime, Field, StrictBool, StrictInt, model_validator
 
+from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
+
 from app.modules.finance.api.router import Contract
 from app.modules.finance.domain.models import (
     PAYMENT_METHOD_KINDS,
@@ -60,16 +62,16 @@ class OwnerRentReportPageResponse(Contract): items:list[OwnerRentReportResponse]
 def build_router(service:OwnerRentReportService,runtime):
     router=APIRouter(prefix="/api",tags=["owner-accounting"])
     def ready(write=False):
-        if not runtime.ready or runtime.error:raise HTTPException(503,str(runtime.error or "Workspace is not ready."))
-        if write and not runtime.can_write:raise HTTPException(503,"Workspace writer lock is unavailable.")
+        if not runtime.ready or runtime.error:raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
+        if write and not runtime.can_write:raise workspace_unavailable("Workspace writer lock is unavailable.")
     def invoke(call):
         try:return call()
-        except OwnerReportNotFoundError as error:raise HTTPException(404,{"code":error.code,"message":str(error)}) from error
-        except OwnerReportConflictError as error:raise HTTPException(409,{"code":error.code,"message":str(error),"details":error.details}) from error
-        except OwnerReportError as error:raise HTTPException(400,{"code":error.code,"message":str(error)}) from error
-        except FinanceNotFoundError as error:raise HTTPException(404,{"code":"owner_rent_report_not_found","message":str(error)}) from error
-        except FinanceConflictError as error:raise HTTPException(409,{"code":"owner_rent_report_conflict","message":str(error)}) from error
-        except FinanceError as error:raise HTTPException(400,{"code":"owner_rent_report_validation","message":str(error)}) from error
+        except OwnerReportNotFoundError as error:raise domain_problem(error, status_code=404) from error
+        except OwnerReportConflictError as error:raise domain_problem(error, status_code=409, details=error.details) from error
+        except OwnerReportError as error:raise domain_problem(error, status_code=400) from error
+        except FinanceNotFoundError as error:raise domain_problem(error, status_code=404, code="owner_rent_report_not_found") from error
+        except FinanceConflictError as error:raise domain_problem(error, status_code=409, code="owner_rent_report_conflict") from error
+        except FinanceError as error:raise domain_problem(error, status_code=400, code="owner_rent_report_validation") from error
     @router.post("/owner-rent-reports",status_code=status.HTTP_201_CREATED,response_model=OwnerRentReportResponse)
     def create(data:ReportInput):
         ready(True);return invoke(lambda:service.create(OwnerRentReportCommand(str(data.leaseId),str(data.ownerPartyId),data.receivedOn.isoformat(),data.amountMinor,data.paymentMethodKind.value,str(data.idempotencyKey),data.reportedAtUtc.isoformat(),data.paymentMethodLabel,data.maskedReference,data.otherPaymentMethodNote,data.sourceNote,str(data.replacesReportId) if data.replacesReportId else None)))
@@ -79,9 +81,9 @@ def build_router(service:OwnerRentReportService,runtime):
         parsed=None
         if cursor is not None:
             parts=cursor.split("|",1)
-            if len(parts)!=2: raise HTTPException(422,"Cursor must contain a received date and report ID.")
+            if len(parts)!=2: raise api_problem(422, "owner_rent_report_validation", "Cursor must contain a received date and report ID.")
             try: parsed=(date.fromisoformat(parts[0]).isoformat(),str(UUID(parts[1])))
-            except ValueError as error: raise HTTPException(422,"Cursor is invalid.") from error
+            except ValueError as error: raise api_problem(422, "owner_rent_report_validation", "Cursor is invalid.") from error
         return invoke(lambda:service.list(owner_party_id=str(ownerPartyId) if ownerPartyId else None,property_id=str(propertyId) if propertyId else None,space_id=str(spaceId) if spaceId else None,lease_id=str(leaseId) if leaseId else None,received_from=None if receivedFrom is None else receivedFrom.isoformat(),received_to=None if receivedTo is None else receivedTo.isoformat(),status=None if status is None else status.value,has_evidence=hasEvidence,receipt_lifecycle=None if receiptLifecycle is None else receiptLifecycle.value,cursor=parsed,page_size=pageSize))
     @router.get("/owner-rent-reports/{report_id}",response_model=OwnerRentReportResponse)
     def detail(report_id:UUID):ready();return invoke(lambda:service.detail(str(report_id)))

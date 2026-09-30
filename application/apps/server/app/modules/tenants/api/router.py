@@ -5,6 +5,8 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
+from app.platform.api_errors import domain_problem, workspace_unavailable
+
 from app.modules.parties.application.service import PartyValidationError
 from app.modules.tenants.application.service import (
     PossibleDuplicatePartyError,
@@ -106,26 +108,23 @@ def build_router(service: TenantService, runtime: WorkspaceRuntime) -> APIRouter
 
     def ready(write: bool = False) -> None:
         if not runtime.ready or runtime.error:
-            raise HTTPException(503, str(runtime.error or "Workspace is not ready."))
+            raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
         if write and not runtime.can_write:
-            raise HTTPException(503, "Workspace writer lock is unavailable.")
+            raise workspace_unavailable("Workspace writer lock is unavailable.")
 
     def invoke(operation):
         try:
             return operation()
         except TenantNotFoundError as error:
-            raise HTTPException(404, str(error)) from error
+            raise domain_problem(error, status_code=404, code="tenant_not_found") from error
         except PossibleDuplicatePartyError as error:
-            raise HTTPException(409, detail={
-                "code": "possible_duplicate_party",
-                "candidatePartyIds": error.candidate_party_ids,
-            }) from error
+            raise domain_problem(error, status_code=409, code="possible_duplicate_party", candidatePartyIds=error.candidate_party_ids) from error
         except TenantConflictError as error:
-            raise HTTPException(409, str(error)) from error
+            raise domain_problem(error, status_code=409, code="tenant_conflict") from error
         except TenantError as error:
-            raise HTTPException(400, str(error)) from error
+            raise domain_problem(error, status_code=400, code="tenant_validation") from error
         except PartyValidationError as error:
-            raise HTTPException(400, str(error)) from error
+            raise domain_problem(error, status_code=400, code="tenant_validation") from error
 
     @router.post("", status_code=status.HTTP_201_CREATED, response_model=TenantResponse,
                  responses={409: {"model": PossibleDuplicateResponse}})

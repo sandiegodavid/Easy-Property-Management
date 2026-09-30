@@ -5,6 +5,8 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
+from app.platform.api_errors import domain_problem, workspace_unavailable
+
 from app.modules.finance.application.service import FinanceService
 from app.modules.finance.domain.models import (
     FinanceConflictError,
@@ -55,14 +57,14 @@ class ReceiptPageResponse(Contract): items:list[ReceiptResponse]; nextCursor:str
 def build_router(service:FinanceService,runtime:WorkspaceRuntime):
     router=APIRouter(tags=["finance"])
     def ready(write=False):
-        if not runtime.ready or runtime.error: raise HTTPException(503,str(runtime.error or "Workspace is not ready."))
-        if write and not runtime.can_write: raise HTTPException(503,"Workspace writer lock is unavailable.")
+        if not runtime.ready or runtime.error: raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
+        if write and not runtime.can_write: raise workspace_unavailable("Workspace writer lock is unavailable.")
     def invoke(fn):
         try:return fn()
-        except FinanceNotFoundError as e: raise HTTPException(404,str(e)) from e
-        except FinanceConflictError as e: raise HTTPException(409,str(e)) from e
-        except FinanceValidationError as e: raise HTTPException(422,str(e)) from e
-        except FinanceError as e: raise HTTPException(400,str(e)) from e
+        except FinanceNotFoundError as e: raise domain_problem(e, status_code=404, code="finance_not_found") from e
+        except FinanceConflictError as e: raise domain_problem(e, status_code=409, code="finance_conflict") from e
+        except FinanceValidationError as e: raise domain_problem(e, status_code=422, code="finance_validation") from e
+        except FinanceError as e: raise domain_problem(e, status_code=400, code="finance_validation") from e
     @router.post("/api/leases/{lease_id}/rent-expectations/synchronize",response_model=list[ExpectationResponse],status_code=201)
     def synchronize(lease_id:str,data:SynchronizeInput):
         ready(True); return invoke(lambda:service.synchronize(lease_id,SynchronizeExpectationsCommand(data.leaseTermId,data.throughOn.isoformat(),data.scheduleAnchorOn.isoformat() if data.scheduleAnchorOn else None,data.responsibilityEndsOnOverride.isoformat() if data.responsibilityEndsOnOverride else None,data.overrideReason,data.overrideConfirmed)))

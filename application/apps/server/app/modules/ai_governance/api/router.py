@@ -6,6 +6,8 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
+from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
+
 from app.modules.ai_governance.application.service import (
     AiConfigurationService,
     AiDraftReviewService,
@@ -34,14 +36,14 @@ def build_router(configuration: AiConfigurationService, generation: AiGeneration
                  drafts_service: AiDraftReviewService, runtime: WorkspaceRuntime)->APIRouter:
     router=APIRouter(prefix="/api/ai",tags=["ai-governance"])
     def ready(write=False):
-        if not runtime.ready or runtime.error:raise HTTPException(503,str(runtime.error or "Workspace is not ready."))
-        if write and not runtime.can_write:raise HTTPException(503,"Workspace writer lock is unavailable.")
+        if not runtime.ready or runtime.error:raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
+        if write and not runtime.can_write:raise workspace_unavailable("Workspace writer lock is unavailable.")
     def invoke(call):
         try:return call()
-        except AiNotFoundError as error:raise HTTPException(404,{"code":error.code,"message":str(error)}) from error
-        except AiConflictError as error:raise HTTPException(409,{"code":str(error) if str(error).startswith("ai_") else error.code,"message":str(error)}) from error
-        except AiValidationError as error:raise HTTPException(422,{"code":error.code,"message":str(error)}) from error
-        except AiGovernanceError as error:raise HTTPException(400,{"code":error.code,"message":str(error)}) from error
+        except AiNotFoundError as error:raise domain_problem(error, status_code=404) from error
+        except AiConflictError as error:raise domain_problem(error, status_code=409, code=str(error) if str(error).startswith("ai_") else error.code) from error
+        except AiValidationError as error:raise domain_problem(error, status_code=422) from error
+        except AiGovernanceError as error:raise domain_problem(error, status_code=400) from error
     @router.get("/settings",operation_id="getAiSettings")
     def settings():ready();return invoke(configuration.settings)
     @router.put("/settings",operation_id="updateAiSettings")
@@ -80,7 +82,7 @@ def build_router(configuration: AiConfigurationService, generation: AiGeneration
         ready();parsed=None
         if cursor:
             parts=cursor.split("|",1)
-            if len(parts)!=2:raise HTTPException(422,"Invalid AI draft cursor.")
+            if len(parts)!=2:raise api_problem(422, "ai_validation", "Invalid AI draft cursor.")
             parsed=(parts[0],parts[1])
         return invoke(lambda:drafts_service.list_drafts(status=status,owning_module=owningModule,entity_kind=entityKind,action_type=actionType,source_entity_type=sourceEntityType,source_entity_id=sourceEntityId,cursor=parsed,page_size=pageSize))
     @router.get("/drafts/{draft_id}",operation_id="getAiDraft")

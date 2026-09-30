@@ -6,6 +6,8 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
+from app.platform.api_errors import domain_problem, workspace_unavailable
+
 from app.modules.parties.application.service import ContactMethodCommand, PartyCreateCommand, PartyValidationError
 from app.modules.vendors.application.service import (
     UNSET,
@@ -105,14 +107,14 @@ class ProviderListResponse(Contract): party: PartyResponse; profile: ProfileResp
 def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -> APIRouter:
     router = APIRouter(prefix="/api/providers", tags=["providers"])
     def ready(write=False):
-        if not runtime.ready or runtime.error: raise HTTPException(503, str(runtime.error or "Workspace is not ready."))
-        if write and not runtime.can_write: raise HTTPException(503, "Workspace writer lock is unavailable.")
+        if not runtime.ready or runtime.error: raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
+        if write and not runtime.can_write: raise workspace_unavailable("Workspace writer lock is unavailable.")
     def invoke(operation):
         try: return operation()
-        except ProviderNotFoundError as error: raise HTTPException(404, str(error)) from error
-        except PossibleDuplicateParty as error: raise HTTPException(409, {"code":"possible_duplicate_party", "candidatePartyIds":error.candidate_party_ids}) from error
-        except ProviderLifecycleConflict as error: raise HTTPException(409, str(error)) from error
-        except (ProviderError, PartyValidationError) as error: raise HTTPException(400, str(error)) from error
+        except ProviderNotFoundError as error: raise domain_problem(error, status_code=404, code="provider_not_found") from error
+        except PossibleDuplicateParty as error: raise domain_problem(error, status_code=409, code="possible_duplicate_party", candidatePartyIds=error.candidate_party_ids) from error
+        except ProviderLifecycleConflict as error: raise domain_problem(error, status_code=409, code="provider_conflict") from error
+        except (ProviderError, PartyValidationError) as error: raise domain_problem(error, status_code=400, code="provider_validation") from error
     @router.post("", response_model=ProviderResponse, status_code=status.HTTP_201_CREATED)
     def create(data: CreateProviderInput):
         ready(True); return invoke(lambda: provider_service.create(PartyCreateCommand(data.party.partyKind, data.party.displayName), _profile(data), contacts=tuple(_contact(item) for item in data.contacts), services=tuple(ServiceCommand(item.displayName) for item in data.services), areas=tuple(ServiceAreaCommand(item.displayName, item.countryCode) for item in data.serviceAreas), work_history=tuple(WorkHistoryCommand(item.performedOn.isoformat(), item.summary, item.propertyId, item.outcomeNotes) for item in data.workHistory), references=tuple(_command(item) for item in data.references), confirmed_new_party=data.confirmedNewParty))

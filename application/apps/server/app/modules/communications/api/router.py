@@ -9,6 +9,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
+
 from app.modules.communications.application.service import (
     CommunicationCommand,
     CommunicationConflictError,
@@ -81,15 +83,15 @@ def build_router(service: CommunicationService, runtime: WorkspaceRuntime) -> AP
     router = APIRouter(prefix="/api/communications", tags=["communications"])
     def ready() -> None:
         if not runtime.ready or runtime.error:
-            raise HTTPException(503, str(runtime.error or "Workspace is not ready."))
+            raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
         if not runtime.can_write:
-            raise HTTPException(503, "Workspace writer lock is unavailable.")
+            raise workspace_unavailable("Workspace writer lock is unavailable.")
     def invoke(operation):
         try: return operation()
-        except CommunicationNotFoundError as error: raise HTTPException(404, {"code": error.code, "message": str(error)}) from error
-        except CommunicationConflictError as error: raise HTTPException(409, {"code": error.code, "message": str(error)}) from error
-        except CommunicationError as error: raise HTTPException(422, {"code": error.code, "message": str(error)}) from error
-        except (KeyError, ValueError) as error: raise HTTPException(422, {"code": "communication_validation", "message": str(error)}) from error
+        except CommunicationNotFoundError as error: raise domain_problem(error, status_code=404) from error
+        except CommunicationConflictError as error: raise domain_problem(error, status_code=409) from error
+        except CommunicationError as error: raise domain_problem(error, status_code=422) from error
+        except (KeyError, ValueError) as error: raise api_problem(422, "communication_validation", str(error)) from error
     def command(data: CommunicationInput | CorrectionInput, *, record: bool | None = None) -> CommunicationCommand:
         return CommunicationCommand(data.direction, data.channel, data.subject, data.body, data.occurredAtUtc.isoformat(), data.occurredTimezone,
             tuple(ParticipantInput(str(x.partyId), x.role, str(x.partyContactMethodId) if x.partyContactMethodId else None) for x in data.participants),
@@ -111,9 +113,9 @@ def build_router(service: CommunicationService, runtime: WorkspaceRuntime) -> AP
     ):
         contextual = [("property", propertyId), ("space", spaceId), ("lease", leaseId), (entityType, entityId)]
         if (entityType is None) != (entityId is None):
-            raise HTTPException(422, {"code": "communication_validation", "message": "entityType and entityId must be provided together."})
+            raise api_problem(422, "communication_validation", "entityType and entityId must be provided together.")
         supplied = [(kind, value) for kind, value in contextual if value is not None]
-        if len(supplied) > 1: raise HTTPException(422, {"code": "communication_validation", "message": "Use one context-link filter."})
+        if len(supplied) > 1: raise api_problem(422, "communication_validation", "Use one context-link filter.")
         link_type, link_id = supplied[0] if supplied else (None, None)
         items, next_cursor = invoke(lambda: service.list(status=status, direction=direction, channel=channel,
             party_id=str(partyId) if partyId else None, entity_type=link_type, entity_id=str(link_id) if link_id else None, limit=pageSize, cursor=cursor,

@@ -9,6 +9,8 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 
+from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
+
 from app.modules.finance.application.expense_service import ExpenseService, PossibleDuplicateExpenseError
 from app.modules.finance.domain.expense_models import (
     CategoryCreateCommand,
@@ -217,21 +219,21 @@ def build_router(service: ExpenseService, runtime: WorkspaceRuntime) -> APIRoute
 
     def ready(write=False):
         if not runtime.ready or runtime.error:
-            raise HTTPException(503, str(runtime.error or "Workspace is not ready."))
+            raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
         if write and not runtime.can_write:
-            raise HTTPException(503, "Workspace writer lock is unavailable.")
+            raise workspace_unavailable("Workspace writer lock is unavailable.")
 
     def invoke(operation):
         try:
             return operation()
         except PossibleDuplicateExpenseError as error:
-            raise HTTPException(409, {"code": "possible_duplicate_expense", "candidates": error.candidates}) from error
+            raise domain_problem(error, status_code=409, code="possible_duplicate_expense", candidates=error.candidates) from error
         except FinanceNotFoundError as error:
-            raise HTTPException(404, str(error)) from error
+            raise domain_problem(error, status_code=404, code="finance_not_found") from error
         except FinanceConflictError as error:
-            raise HTTPException(409, str(error)) from error
+            raise domain_problem(error, status_code=409, code="finance_conflict") from error
         except FinanceError as error:
-            raise HTTPException(400, str(error)) from error
+            raise domain_problem(error, status_code=400, code="finance_validation") from error
 
     @router.get("/api/expense-categories", response_model=list[CategoryResponse])
     def categories(includeArchived: bool = False):
