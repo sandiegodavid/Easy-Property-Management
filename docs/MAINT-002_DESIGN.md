@@ -223,7 +223,7 @@ All routes require a ready workspace; mutations require the writer lock. Request
 | `GET` | `/api/maintenance-issues` | Add optional provider/quote/assignment filters and summary fields. |
 | `GET` | `/api/maintenance-issues/{issueId}` | Include quote summaries, assignment history, and linked files. |
 
-Malformed requests return `422`; missing issues, quotes, assignments, Parties, or provider profiles return controlled `404`; invalid amounts, dates, direct-assignment confirmation, and provider override inputs return `400`; lifecycle, stale replacement, changed idempotency, quote mismatch, and concurrent-current-assignment conflicts return typed `409` responses.
+Malformed requests return `422`; oversized request content returns `413`; missing issues, quotes, assignments, Parties, or provider profiles return controlled `404`; invalid amounts, dates, direct-assignment confirmation, and provider override inputs return `400`; lifecycle, stale replacement, changed idempotency, quote mismatch, and concurrent-current-assignment conflicts return typed `409` responses.
 
 ## Audit, privacy, schema, and portability
 

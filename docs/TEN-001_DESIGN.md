@@ -153,7 +153,7 @@ All routes require a ready workspace. Request models forbid unknown fields; appl
 
 Responses use explicit Pydantic models. They return stable IDs, party identity, tenant profile fields, and party-owned contact methods. They do not expose future lease, applicant, screening, financial, or portal fields. Duplicate conflicts use `{ "detail": { "code": "possible_duplicate_party", "candidatePartyIds": [...] } }`, capped at 10 active candidate IDs in stable display-name/ID order; they never disclose contact values or archived identities. `confirmedNewParty` is accepted only as an explicit boolean and bypasses this conflict without merging or modifying a candidate.
 
-Errors distinguish missing records (`404`), malformed requests (`422`), invalid business rules (`400`), and duplicate, lifecycle, role/contact-reference, lease-participation, or concurrent-write conflicts (`409`).
+Errors distinguish missing records (`404`), malformed requests (`422`), oversized request content (`413`), invalid business rules (`400`), and duplicate, lifecycle, role/contact-reference, lease-participation, or concurrent-write conflicts (`409`).
 
 ## Audit, privacy, and portability
 

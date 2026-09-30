@@ -612,6 +612,7 @@ The current FastAPI surface contains both structured and plain `HTTPException.de
 Handle failures consistently:
 
 - `400/422`: keep input, place field errors beside fields, focus the error summary, and retain a general message for non-field errors.
+- `413`: keep input, explain the applicable size limit, identify the oversized content when safe, and let the operator retry with smaller content.
 - `404`: explain that the record is unavailable or was removed, then offer a return to the preserved directory/search context.
 - `409/412`: use the problem code to distinguish stale revision, invalid transition, duplicate, and idempotency-key conflict. Retain input; offer **Review latest** for stale revisions and an appropriate resolution for other conflicts. Never label every conflict as a changed source.
 - `503`: enter the workspace gate only for a workspace problem or a failed bootstrap recheck. Provider/runtime unavailability remains local to its feature so manual work stays usable.

@@ -234,7 +234,7 @@ All routes require a ready workspace. Request models forbid unknown fields; appl
 | `POST` | `/api/termination-cases/{caseId}/accept` | Accept one open proposal with explicit confirmation. |
 | `POST` | `/api/termination-cases/{caseId}/complete` | Confirm actual move-out and atomically complete the case and lease termination. |
 
-File upload and link operations remain the generic `FILE-001` API; the lease detail response exposes linked file metadata. Errors distinguish malformed data (`422`), missing resources (`404`), invalid lifecycle/data rules (`400`), and source, overlap, archive, or concurrent-transition conflicts (`409`).
+File upload and link operations remain the generic `FILE-001` API; the lease detail response exposes linked file metadata. Errors distinguish malformed data (`422`), oversized request content (`413`), missing resources (`404`), invalid lifecycle/data rules (`400`), and source, overlap, archive, or concurrent-transition conflicts (`409`).
 
 ## Audit, privacy, backup, and export
 
@@ -276,7 +276,7 @@ LEASE-001 is complete when:
 3. Current and future lease occupancy is conflict-checked against valid space history, and manual routes cannot overwrite lease-owned records.
 4. Lease participants reuse active tenant profiles without duplicating shared identity or contact data, and active/scheduled relationships enforce archive guards.
 5. Terms, deposits, dates, renewal options, document links, and lifecycle state are audit-backed and survive encrypted backup/export/restore.
-6. The API has explicit request/response contracts and controlled `400`, `404`, `409`, and `422` behavior.
+6. The API has explicit request/response contracts and controlled `400`, `404`, `409`, `413`, and `422` behavior.
 7. The UI provides the deferred operator workflows before the backlog item is marked done.
 8. An operator can record and negotiate a job-relocation termination request, retain proposal history, accept an agreement without premature vacancy, and complete it only with confirmed actual move-out.
 9. Every term exposed to FIN-001 has positive integer base rent and the fixed `USD` currency code enforced at both application and database boundaries.

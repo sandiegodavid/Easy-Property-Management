@@ -252,7 +252,7 @@ There is no destructive delete endpoint.
 
 List filters include owner, property, space, lease, tenant, concern type, priority, status, raised local-date range, active-task state, and linked-communication presence. Default ordering is urgent/high priority first, then raised time descending and ID descending. Cursor pagination defaults to 100 and allows at most 500.
 
-Malformed requests return `422`; missing records return `404`; invalid relationships, bounds, time, or context return `400`; stale lifecycle, duplicate review, idempotency reuse, replacement, and concurrency conflicts return typed `409` with machine-readable codes and bounded candidate identifiers.
+Malformed requests return `422`; oversized request content returns `413`; missing records return `404`; invalid relationships, bounds, time, or context return `400`; stale lifecycle, duplicate review, idempotency reuse, replacement, and concurrency conflicts return typed `409` with machine-readable codes and bounded candidate identifiers.
 
 ## Read behavior and performance
 

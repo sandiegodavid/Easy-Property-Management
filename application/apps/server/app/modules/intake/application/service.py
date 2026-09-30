@@ -5,7 +5,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import uuid4
 from app.modules.intake.application.ports import IntakeFileOperations, IntakeUnitOfWork
-from app.modules.intake.domain.models import EvidenceEnvelope, IDENTITY_STATES, IntakeConflictError, IntakeError, IntakeNotFoundError, bounded, canonical_json, fingerprint, utc, utc_now, uuid
+from app.modules.intake.domain.models import EvidenceEnvelope, IDENTITY_STATES, IntakeConflictError, IntakeError, IntakeNotFoundError, IntakePayloadTooLargeError, bounded, canonical_json, fingerprint, utc, utc_now, uuid
+
+MAX_ATTACHMENT_COUNT = 20
+MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024
+MAX_ATTACHMENT_AGGREGATE_BYTES = 100 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -38,7 +42,8 @@ class IntakeAdmissionCommand:
             raise IntakeError("account scope hash is invalid.")
         if self.account_identity_state in {"transport_verified", "operator_confirmed"} and not self.account_scope_hash:
             raise IntakeError("trusted account identity requires accountScopeHash.")
-        if len(self.attachments) > 20 or any(not isinstance(item, AttachmentInput) for item in self.attachments): raise IntakeError("attachments are invalid.")
+        if len(self.attachments) > MAX_ATTACHMENT_COUNT: raise IntakePayloadTooLargeError("Attachment count exceeds the 20-file limit.")
+        if any(not isinstance(item, AttachmentInput) for item in self.attachments): raise IntakeError("attachments are invalid.")
         if self.submitter_kind not in {"local_operator", "assistant_connection", "voice_workflow"}: raise IntakeError("submitter kind is invalid.")
         if self.submitter_kind != "local_operator": raise IntakeError("Public intake cannot claim trusted submitter provenance.")
         if self.supersedes_source_id is not None: uuid(self.supersedes_source_id, "supersedesSourceId")
@@ -51,9 +56,11 @@ class IntakeService:
     def admit(self, command: IntakeAdmissionCommand) -> dict[str, object]:
         # This is only a bounded preflight.  The immutable manifest below is
         # built from FILE-001's verified StoredFile values, never this read.
+        attachment_sizes = tuple(item.source.stat().st_size for item in command.attachments)
+        if any(size > MAX_ATTACHMENT_BYTES for size in attachment_sizes): raise IntakePayloadTooLargeError("An attachment exceeds the 50 MiB limit.")
+        if sum(attachment_sizes) > MAX_ATTACHMENT_AGGREGATE_BYTES: raise IntakePayloadTooLargeError("Attachment aggregate exceeds the 100 MiB limit.")
         preflight_hashes = tuple(_digest(item.source) for item in command.attachments)
         if len(set(preflight_hashes)) != len(preflight_hashes): raise IntakeError("Duplicate attachment content is not allowed.")
-        if sum(item.source.stat().st_size for item in command.attachments) > 100 * 1024 * 1024: raise IntakeError("Attachment aggregate is too large.")
         provisional = command.envelope.canonical(tuple({"role": item.role, "contentSha256": digest} for item, digest in zip(command.attachments, preflight_hashes)))
         request_fingerprint = fingerprint({"admit": provisional, "origin": command.origin_system, "scope": command.account_scope_hash, "identity": command.account_identity_state, "supersedes": command.supersedes_source_id})
         source_id = str(uuid4()); revision_id = str(uuid4()); correlation_id = str(uuid4()); now = utc_now()
@@ -138,12 +145,14 @@ class IntakeService:
             return result
         return self.unit_of_work.write(operation)
 
-    def list(self, *, limit: int = 50, cursor: tuple[str, str] | None = None, source_kind: str | None = None, technical_status: str | None = None, attention_status: str | None = None, channel: str | None = None, origin_system: str | None = None, received_from: str | None = None, received_to: str | None = None, has_duplicate: bool | None = None) -> tuple[list[dict[str, object]], str | None]:
+    def list(self, *, limit: int = 50, cursor: tuple[str, str] | None = None, source_kind: str | None = None, technical_status: str | None = None, attention_status: str | None = None, channel: str | None = None, origin_system: str | None = None, account_identity_state: str | None = None, received_from: str | None = None, received_to: str | None = None, has_duplicate: bool | None = None) -> tuple[list[dict[str, object]], str | None]:
         if not isinstance(limit, int) or not 1 <= limit <= 200: raise IntakeError("limit must be between 1 and 200.")
+        if account_identity_state is not None and account_identity_state not in IDENTITY_STATES: raise IntakeError("account identity state is invalid.")
         def operation(tx):
             rows, next_value = tx.list_projections(limit=limit, cursor=cursor, source_kind=source_kind,
                 technical_status=technical_status, attention_status=attention_status, channel=channel,
-                origin_system=origin_system, received_from=received_from, received_to=received_to,
+                origin_system=origin_system, account_identity_state=account_identity_state,
+                received_from=received_from, received_to=received_to,
                 has_duplicate=has_duplicate)
             return rows, None if next_value is None else f"{next_value[0]}|{next_value[1]}"
         return self.unit_of_work.read(operation)

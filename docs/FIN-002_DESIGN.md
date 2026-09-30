@@ -204,7 +204,7 @@ All routes require a ready workspace. Mutations require the writer lock. Request
 
 Create-expense requests contain `idempotencyKey`, `propertyId`, optional `spaceId`, `categoryId`, optional `providerPartyId`, `paidByKind`, optional `paidByPartyId`, `paidOn`, `amount`, `currencyCode`, `description`, optional `reference`, optional `notes`, optional `replacesExpenseId`, `duplicateConfirmed`, and the optional historical-entry confirmation/reason pair. `payeeName` is required exactly when `providerPartyId` is absent and is otherwise forbidden because the service derives the provider-name snapshot. Refund requests contain `idempotencyKey`, `receivedOn`, `amount`, `currencyCode`, optional `notes`, and optional `replacesRefundId`.
 
-Malformed input returns `422`; missing records return `404`; invalid business data returns `400`; likely duplicates, idempotency mismatches, lifecycle conflicts, cumulative over-refunds, stale state, and concurrent writes return `409`.
+Malformed input returns `422`; oversized request content returns `413`; missing records return `404`; invalid business data returns `400`; likely duplicates, idempotency mismatches, lifecycle conflicts, cumulative over-refunds, stale state, and concurrent writes return `409`.
 
 ## Module and transaction boundaries
 

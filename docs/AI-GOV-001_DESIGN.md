@@ -295,7 +295,7 @@ All request models reject unknown fields. Pages use bounded cursor pagination.
 
 There is deliberately no generic public `POST /api/ai/runs`. A public arbitrary-action endpoint would let clients bypass the owning domain's source projection and redaction preparation. Later capability endpoints invoke the coordinator through an application port. MCP-001 may add an authenticated external-proposal admission port, not a provider-generation endpoint.
 
-Malformed requests return `422`; missing resources `404`; provider transport failures `502`/`503`; and lifecycle, source-staleness, idempotency, disabled-action, limit, and kill-switch conflicts return typed `409` responses with stable codes.
+Malformed requests return `422`; oversized request content returns `413`; missing resources `404`; provider transport failures `502`/`503`; and lifecycle, source-staleness, idempotency, disabled-action, limit, and kill-switch conflicts return typed `409` responses with stable codes.
 
 ## Audit, privacy, and retained-data validation
 

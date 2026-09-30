@@ -249,7 +249,7 @@ All contracts forbid unknown fields and return stable typed errors.
 
 Attachment acquisition and integrity recovery are owning-service operations rather than general browser APIs. Future transports submit one complete admission command or introduce a separately designed durable import-session contract; they do not assemble a partially visible source through generic file routes.
 
-Malformed or oversized input returns `422`; missing records return `404`; idempotency reuse, exact-identity payload mismatch, illegal lifecycle transition, stale revision, and correction/supersession conflicts return typed `409` responses. Storage or verification failures use registered retryable `5xx` errors without exposing local paths.
+Malformed input returns `422`; oversized request content returns `413`; missing records return `404`; idempotency reuse, exact-identity payload mismatch, illegal lifecycle transition, stale revision, and correction/supersession conflicts return typed `409` responses. Storage or verification failures use registered retryable `5xx` errors without exposing local paths.
 
 ## Audit, privacy, and security
 

@@ -214,7 +214,7 @@ Synchronization requests contain `leaseTermId`, `throughOn`, optional `scheduleA
 
 Expectation responses expose IDs, schedule dates, expected/received/outstanding minor units, currency, frequency, proration evidence, responsibility-boundary evidence, lifecycle timestamps, settlement/timeliness status, effective missed review, and the bounded allocation summary defined above. Receipt responses expose receipt, recipient, idempotency, correction-lineage, lifecycle, and allocation fields. The API returns canonical UUID and ISO-date strings and never substitutes display labels for stable references.
 
-Malformed request data returns `422`; missing leases, terms, parties, expectations, or receipts return `404`; invalid business data returns `400`; stale state, mismatched idempotency payloads, duplicate scheduling, over-allocation, lifecycle, and concurrent-write conflicts return `409`.
+Malformed request data returns `422`; oversized request content returns `413`; missing leases, terms, parties, expectations, or receipts return `404`; invalid business data returns `400`; stale state, mismatched idempotency payloads, duplicate scheduling, over-allocation, lifecycle, and concurrent-write conflicts return `409`.
 
 ## Audit, privacy, and portability
 
@@ -241,7 +241,7 @@ FIN-001 is complete when:
 3. A receipt can be allocated across one lease’s eligible expectations atomically; totals, currency, lifecycle, and over-allocation rules are enforced under concurrency.
 4. Receipt corrections are explicit void-and-replace chains; expectation corrections are void-only until a future adjustment workflow. Both retain correlated audit history and use no physical deletion.
 5. FIN-006 actual receipt-method snapshots and FIN-007 check/deposit status extend this slice under their own designs; reusable expected-method storage, bank integration, and automatic collection remain absent.
-6. Typed HTTP and application contracts provide controlled `400`, `404`, `409`, and `422` outcomes.
+6. Typed HTTP and application contracts provide controlled `400`, `404`, `409`, `413`, and `422` outcomes.
 7. Exact schema validation and encrypted backup/export/restore preserve all FIN-001 data and audit history.
 
 ## Dependencies and follow-on work

@@ -200,7 +200,7 @@ All requests forbid unknown fields, use typed response models, and repeat critic
 | `PUT` | `/api/leases/{leaseId}/condition-comparison` | Save reviewed comparison classifications atomically. |
 | `POST` | `/api/file-links/{linkId}/archive` | Through FILE-001, archive an incorrect draft-observation evidence association with explicit confirmation, reason, and inspection-owned lifecycle validation. |
 
-Errors distinguish malformed requests (`422`), missing records (`404`), invalid workflow rules (`400`), and finalized/source/concurrency conflicts (`409`).
+Errors distinguish malformed requests (`422`), oversized request content (`413`), missing records (`404`), invalid workflow rules (`400`), and finalized/source/concurrency conflicts (`409`).
 
 ## Audit, privacy, and portability
 

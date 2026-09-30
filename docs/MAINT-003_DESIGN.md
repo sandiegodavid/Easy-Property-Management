@@ -238,7 +238,7 @@ All routes require a ready workspace; mutations require the writer lock. Request
 
 There is no PATCH, archive, restore, or delete endpoint for a journal entry.
 
-Malformed requests return `422`; missing issues, assignments, or correction targets return controlled `404`; invalid text, occurrence time, kind-specific fields, or terminal-issue confirmation return `400`; changed idempotency, assignment mismatch, correction mismatch/branching, and concurrent conflicts return typed `409` responses.
+Malformed requests return `422`; oversized request content returns `413`; missing issues, assignments, or correction targets return controlled `404`; invalid text, occurrence time, kind-specific fields, or terminal-issue confirmation return `400`; changed idempotency, assignment mismatch, correction mismatch/branching, and concurrent conflicts return typed `409` responses.
 
 ## Read behavior and performance
 
