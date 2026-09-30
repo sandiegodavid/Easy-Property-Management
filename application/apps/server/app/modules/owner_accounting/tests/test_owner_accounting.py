@@ -229,6 +229,11 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
         # boundaries and prevents a test from crossing midnight mid-run.
         self.now = datetime.now(UTC).replace(microsecond=0)
         today = self.now.astimezone(ZoneInfo("America/Los_Angeles")).date()
+        # Start the monthly fixture on its due date. A one-day initial stub is
+        # deliberately invalid in FIN-001 and is covered by finance tests.
+        if today.day != 1:
+            today = (today.replace(day=28) + timedelta(days=4)).replace(day=1)
+        self.now = datetime.combine(today, datetime.min.time(), UTC) + timedelta(hours=12)
         leases = LeaseService(SQLiteLeaseUnitOfWork(database, recorder, SQLiteTenantProfileAvailability(), SQLitePortfolioLeaseOperations(database), SQLiteInspectionContextReader()))
         lease = leases.create(LeaseCreateCommand(space_id, "residential", today, today + timedelta(days=365), today, TermCommand(100_000, "USD", "monthly", 1, 0), (ParticipantCommand(tenant["id"], "primary_tenant"),)))
         self.lease = leases.execute(
