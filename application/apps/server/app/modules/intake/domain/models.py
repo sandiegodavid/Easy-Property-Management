@@ -31,6 +31,43 @@ class IntakeNotFoundError(IntakeError):
     code = "intake_not_found"
 
 
+@dataclass(frozen=True)
+class AttentionTransition:
+    """The complete concurrency and audit contract for an Intake review decision."""
+    source_id: str
+    target: str
+    reason: str
+    idempotency_key: str
+    expected_revision: str
+    expected_status: str
+    correlation_id: str
+    actor_kind: str = "local_operator"
+    actor_reference: str | None = None
+
+    def __post_init__(self) -> None:
+        uuid(self.source_id, "sourceId")
+        uuid(self.idempotency_key, "idempotencyKey")
+        uuid(self.expected_revision, "expectedRevision")
+        uuid(self.correlation_id, "correlationId")
+        if self.target not in {"unprocessed", "in_review", "resolved", "dismissed"}:
+            raise IntakeError("attention status is invalid.")
+        if self.expected_status not in {"unprocessed", "in_review", "resolved", "dismissed"}:
+            raise IntakeError("expected attention status is invalid.")
+        object.__setattr__(self, "reason", bounded(self.reason, "reason", 1000, required=True))
+        if self.actor_kind not in {"local_operator", "assistant_connection", "system"}:
+            raise IntakeError("attention actor kind is invalid.")
+        if self.actor_kind == "assistant_connection":
+            actor_reference = bounded(self.actor_reference, "actorReference", 500, required=True)
+            if actor_reference is None:
+                raise IntakeError("assistant attention requires an actor reference.")
+            # Intake's connection vocabulary deliberately does not leak into
+            # AUDIT-001.  The durable audit actor is the registered equivalent.
+            object.__setattr__(self, "actor_kind", "ai_assistant")
+            object.__setattr__(self, "actor_reference", actor_reference)
+        elif self.actor_reference is not None:
+            object.__setattr__(self, "actor_reference", bounded(self.actor_reference, "actorReference", 500))
+
+
 def utc_now() -> str: return datetime.now(UTC).isoformat()
 
 

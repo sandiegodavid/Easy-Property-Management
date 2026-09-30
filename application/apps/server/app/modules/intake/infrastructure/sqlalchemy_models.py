@@ -79,6 +79,7 @@ class IntakeSourceOperationModel(LocalBase):
     request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
     source_id: Mapped[str] = mapped_column(ForeignKey("intake_sources.id"), nullable=False)
     result_revision_id: Mapped[str | None] = mapped_column(ForeignKey("intake_evidence_revisions.id"))
+    result_json: Mapped[str | None] = mapped_column(String)
     outcome: Mapped[str] = mapped_column(String, nullable=False)
     error_code: Mapped[str | None] = mapped_column(String)
     correlation_id: Mapped[str] = mapped_column(String, nullable=False)

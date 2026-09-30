@@ -6,6 +6,8 @@ from pathlib import Path
 from uuid import uuid4
 from app.modules.intake.application.ports import IntakeFileOperations, IntakeUnitOfWork
 from app.modules.intake.domain.models import EvidenceEnvelope, IDENTITY_STATES, IntakeConflictError, IntakeError, IntakeNotFoundError, bounded, canonical_json, failure_code, fingerprint, utc, utc_now, uuid
+from app.modules.intake.application.ports import IntakeAttentionOperations, IntakeFileOperations, IntakeUnitOfWork
+from app.modules.intake.domain.models import AttentionTransition, EvidenceEnvelope, IDENTITY_STATES, IntakeConflictError, IntakeError, IntakeNotFoundError, bounded, canonical_json, fingerprint, utc, utc_now, uuid
 
 
 @dataclass(frozen=True)
@@ -45,8 +47,10 @@ class IntakeAdmissionCommand:
 
 
 class IntakeService:
-    def __init__(self, unit_of_work: IntakeUnitOfWork, files: IntakeFileOperations | None = None) -> None:
+    def __init__(self, unit_of_work: IntakeUnitOfWork, files: IntakeFileOperations | None = None,
+                 *, attention_operations: IntakeAttentionOperations) -> None:
         self.unit_of_work = unit_of_work; self.files = files
+        self.attention_operations = attention_operations
 
     def admit(self, command: IntakeAdmissionCommand) -> dict[str, object]:
         # This is only a bounded preflight.  The immutable manifest below is
@@ -186,23 +190,13 @@ class IntakeService:
 
     def attention(self, source_id: str, *, target: str, reason: str, idempotency_key: str,
                   expected_revision: str, expected_status: str) -> dict[str, object]:
-        if target not in {"unprocessed", "in_review", "resolved", "dismissed"}: raise IntakeError("attention status is invalid.")
-        uuid(source_id, "sourceId"); uuid(idempotency_key, "idempotencyKey"); uuid(expected_revision, "expectedRevision"); reason = bounded(reason, "reason", 1000, required=True)
+        transition = AttentionTransition(
+            source_id=source_id, target=target, reason=reason,
+            idempotency_key=idempotency_key, expected_revision=expected_revision,
+            expected_status=expected_status, correlation_id=str(uuid4()),
+        )
         def operation(tx):
-            source = tx.source(source_id)
-            if source is None: raise IntakeNotFoundError("Intake source was not found.")
-            request = fingerprint({"attention": source_id, "target": target, "reason": reason, "expectedRevision": expected_revision, "expectedStatus": expected_status}); prior = tx.operation(idempotency_key)
-            if prior:
-                if prior["request_fingerprint"] != request: raise IntakeConflictError("Idempotency key was reused with different input.", "intake_idempotency_conflict")
-                return self._view(tx, source_id)
-            if source["technical_status"] != "ready": raise IntakeConflictError("Only ready sources can change attention.", "intake_lifecycle_conflict")
-            if source["current_revision_id"] != expected_revision or source["attention_status"] != expected_status:
-                raise IntakeConflictError("Intake attention state changed concurrently.", "intake_attention_conflict")
-            if target == source["attention_status"]: raise IntakeConflictError("Attention status is unchanged.")
-            allowed = {"unprocessed": {"in_review", "dismissed"}, "in_review": {"resolved", "dismissed", "unprocessed"}, "dismissed": {"unprocessed"}, "resolved": set()}
-            if target not in allowed[source["attention_status"]]:
-                raise IntakeConflictError("Attention transition is not allowed.", "intake_lifecycle_conflict")
-            now=utc_now(); correlation_id=str(uuid4()); tx.update_source(source_id, {"attention_status":target,"updated_at":now}); tx.insert_operation({"id":str(uuid4()),"operation_type":"attention_transition","idempotency_key":idempotency_key,"request_fingerprint":request,"source_id":source_id,"result_revision_id":source["current_revision_id"],"outcome":"succeeded","error_code":None,"correlation_id":correlation_id,"actor_kind":"local_operator","actor_reference":None,"created_at":now}); tx.record(entity_type="intake_source",entity_id=source_id,action="attention_changed",before={"attentionStatus":source["attention_status"]},after={"attentionStatus":target},reason="intake_attention_transition",correlation_id=correlation_id); return self._view(tx,source_id)
+            return self.attention_operations.transition_attention(tx.file_connection(), transition)
         return self.unit_of_work.write(operation)
 
     def set_integrity(self, source_id: str, *, available: bool, reason: str, idempotency_key: str) -> dict[str, object]:

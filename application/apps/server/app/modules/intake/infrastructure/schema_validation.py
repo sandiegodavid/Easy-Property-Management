@@ -113,6 +113,16 @@ def validate_intake_data(connection) -> None:
     for operation in connection.execute(text("SELECT * FROM intake_source_operations")).mappings():
         _uuid(operation["id"]); _uuid(operation["idempotency_key"]); _uuid(operation["correlation_id"]); _timestamp(operation["created_at"])
         if operation["source_id"] not in sources or len(operation["request_fingerprint"])!=64 or any(c not in "0123456789abcdef" for c in operation["request_fingerprint"]): raise MigrationSchemaError("INGEST-001 operation is invalid.")
+        if operation["operation_type"] == "attention_transition":
+            try:
+                result = json.loads(operation["result_json"])
+                if (canonical_json(result) != operation["result_json"]
+                        or result["sourceId"] != operation["source_id"]
+                        or result["revision"] != operation["result_revision_id"]
+                        or result["attentionStatus"] not in {"unprocessed", "in_review", "resolved", "dismissed"}):
+                    raise ValueError
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
+                raise MigrationSchemaError("INGEST-001 attention operation result is invalid.") from error
 
 def _uuid(value):
     try: UUID(str(value))

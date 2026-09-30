@@ -1,4 +1,3 @@
-"""FastAPI composition for the local application."""
 
 from __future__ import annotations
 
@@ -44,6 +43,7 @@ from app.bootstrap.communication_context import SQLiteCommunicationContextOperat
 from app.modules.communications.domain.audit_policy import COMMUNICATION_ACTIVITY_POLICY
 from app.modules.intake.api.router import build_router as build_intake_router
 from app.modules.intake.application.service import IntakeService
+from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.modules.intake.infrastructure.integrity_consequences import SQLiteIntakeIntegrityConsequences
 from app.modules.intake.domain.audit_policy import INTAKE_ACTIVITY_POLICY
@@ -222,7 +222,11 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         file_link_policies,
     )
     intake_unit_of_work = SQLiteIntakeUnitOfWork(service.paths.database, recorder)
-    intake = IntakeService(intake_unit_of_work, files)
+    intake = IntakeService(
+        intake_unit_of_work,
+        files,
+        attention_operations=SQLiteIntakeAttentionOperations(recorder),
+    )
     file_verification = FileStorageVerificationService(
         files.unit_of_work, files.content_stores,
         SQLiteIntakeIntegrityConsequences(recorder, file_link_reader),

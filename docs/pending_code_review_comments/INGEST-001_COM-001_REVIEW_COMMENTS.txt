@@ -8,18 +8,6 @@ SPECIFICATION FINDINGS
 
 INTAKE ADMISSION AND SOURCE LIFECYCLE
 
-2. [P1] The transaction-aware attention port can change state without an Intake operation or audit event.
-
-Files:
-- application/apps/server/app/modules/intake/application/ports.py:23-24
-- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py:95-99
-- application/apps/server/app/modules/intake/application/service.py:170-189
-- docs/INGEST-001_DESIGN.md:183-188, 225-230, 256
-
-The public service path records an operation and audit event, but the downstream transaction method only updates intake_sources. It does not implement the declared connection-accepting adapter signature, is not composed for consumers, and has no idempotency/revision guard, operation row, or audit write. A caller using the intended INGEST-002 boundary could therefore move unprocessed to in_review with no durable reasoned history. A direct probe left both operation and Intake audit counts unchanged.
-
-Suggestion: implement and compose one Intake-owned attention adapter that runs on the caller's connection, checks technical state plus expected revision/status, writes the attention_transition operation, updates the source, and records the correlated audit event. Have both operator and downstream workflows share the same transition policy.
-
 3. [P1] The required trusted internal admission boundary rejects every non-operator caller.
 
 Files:
@@ -106,6 +94,24 @@ Files:
 - docs/INGEST-001_DESIGN.md:112-117, 266-280, 309
 
 Intake now owns the attachment_content_unavailable registry and validator, and both integrity write paths use it. The latest SQLite schema constrains failure_code to the registered value and legal technical-status combination, while retained-data validation independently rejects unsupported codes. A tamper test bypasses SQLite checks and confirms workspace validation rejects an arbitrary value. Propagation coverage includes loss/restoration with correlated FILE and Intake audits, restoration only after every current attachment is available, and superseded-source exclusion.
+
+RESOLVED SPECIFICATION FINDINGS
+
+2. [P1] [resolved 2026-09-29] Attention transitions commit and replay atomically with protected, replay-bound actor identity.
+
+Files:
+- application/apps/server/app/modules/intake/domain/models.py:43-64
+- application/apps/server/app/modules/intake/infrastructure/attention_operations.py:34-59, 72-108, 119-128
+- application/apps/server/app/modules/intake/infrastructure/sqlalchemy_models.py:73-88
+- application/apps/server/app/modules/intake/domain/audit_policy.py:7-20
+- application/apps/server/app/modules/audit/domain/models.py:19-53, 123-133
+- application/apps/server/app/modules/audit/api/router.py:35-50
+- application/apps/server/app/modules/intake/tests/test_intake.py:88-210
+- docs/INGEST-001_DESIGN.md:141-148, 183-188, 254-256, 301, 305
+
+Resolved. The transition persists state, operation result, actor attribution, reasoned audit evidence, and rollback behavior atomically. Historical replay returns its original canonical result. `assistant_connection` is normalized to `ai_assistant`, and general activity routes actor-reference presentation through the Intake policy so the retained connection reference and reason are redacted. The canonical request fingerprint now includes normalized actor kind and reference while excluding retry correlation ID, so the original actor can replay the operation and a different operator or assistant connection receives an idempotency conflict.
+
+Focused validation: Intake, Audit, and backup tests passed (67 passed, one unrelated Starlette/AnyIO deprecation warning). Standards follow-up found no actionable documented-standard violation or Fowler baseline smell in this remedy. The dedicated branch remains INGEST-001-SPECIFICATION-finding-2.
 
 STANDARDS FINDINGS
 

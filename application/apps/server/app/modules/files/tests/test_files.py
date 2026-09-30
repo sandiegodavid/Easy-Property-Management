@@ -30,6 +30,7 @@ from app.modules.intake.application.service import (
     IntakeService,
 )
 from app.modules.intake.domain.models import EvidenceEnvelope
+from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
 from app.modules.intake.infrastructure.integrity_consequences import SQLiteIntakeIntegrityConsequences
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
@@ -51,6 +52,14 @@ class FileStoreTests(unittest.TestCase):
             link_validators=(_ExpenseLinkValidator(),),
         )
         self.source = root / "receipt.pdf"; self.source.write_bytes(b"receipt bytes")
+
+    def intake_service(self, files: FileService) -> IntakeService:
+        recorder = AuditRecorder(self.audit)
+        return IntakeService(
+            SQLiteIntakeUnitOfWork(self.service.paths.database, recorder),
+            files,
+            attention_operations=SQLiteIntakeAttentionOperations(recorder),
+        )
 
     def test_storage_links_and_audit_are_recorded(self) -> None:
         item = self.files.add(self.source, "receipt.pdf", "application/pdf", entity_type="expense", entity_id="expense-1", purpose="receipt")
@@ -166,10 +175,7 @@ class FileStoreTests(unittest.TestCase):
             SQLiteFileUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
             link_validators=(IntakeSourceFileLinkValidator(),),
         )
-        intake = IntakeService(
-            SQLiteIntakeUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
-            intake_files,
-        )
+        intake = self.intake_service(intake_files)
         admitted = intake.admit(IntakeAdmissionCommand(
             EvidenceEnvelope("operator_note", "internal", "Attached source.",
                              "2026-01-01T12:00:00+00:00"),
@@ -217,10 +223,7 @@ class FileStoreTests(unittest.TestCase):
             SQLiteFileUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
             link_validators=(IntakeSourceFileLinkValidator(),),
         )
-        intake = IntakeService(
-            SQLiteIntakeUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
-            intake_files,
-        )
+        intake = self.intake_service(intake_files)
         admitted = intake.admit(IntakeAdmissionCommand(
             EvidenceEnvelope("operator_note", "internal", "Two attachments.",
                              "2026-01-01T12:00:00+00:00"),
@@ -258,10 +261,7 @@ class FileStoreTests(unittest.TestCase):
             SQLiteFileUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
             link_validators=(IntakeSourceFileLinkValidator(),),
         )
-        intake = IntakeService(
-            SQLiteIntakeUnitOfWork(self.service.paths.database, AuditRecorder(self.audit)),
-            intake_files,
-        )
+        intake = self.intake_service(intake_files)
         original = intake.admit(IntakeAdmissionCommand(
             EvidenceEnvelope("operator_note", "internal", "Historical attachment.",
                              "2026-01-01T12:00:00+00:00"),

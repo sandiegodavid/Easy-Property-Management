@@ -2,6 +2,7 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable, Protocol, TypeVar
+from app.modules.intake.domain.models import AttentionTransition
 T = TypeVar("T")
 
 
@@ -21,7 +22,12 @@ class IntakeFileOperations(Protocol):
 
 
 class IntakeAttentionOperations(Protocol):
-    def transition_attention(self, connection: Any, source_id: str, *, from_status: str, to_status: str, reason: str, correlation_id: str) -> None: ...
+    """Apply one reasoned attention transition on the caller's transaction."""
+    def transition_attention(
+        self,
+        connection: Any,
+        transition: AttentionTransition,
+    ) -> dict[str, object]: ...
 
 
 class IntakeTransaction(Protocol):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
+import sqlite3
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 from uuid import uuid4
@@ -9,6 +10,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.modules.audit.application.recorder import AuditRecorder
+from app.modules.audit.api.router import build_router as build_audit_router
+from app.modules.audit.domain.models import AuditSnapshotPolicyRegistry, DEFAULT_SNAPSHOT_POLICY
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.application.errors import PublicationCleanupIncomplete
 from app.modules.files.application.service import FileService
@@ -20,6 +23,12 @@ from app.modules.intake.application.service import AttachmentInput, IntakeAdmiss
 from app.modules.intake.domain.models import EvidenceEnvelope, IntakeConflictError
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.platform.migration_errors import MigrationSchemaError
+from app.modules.intake.application.service import IntakeAdmissionCommand, IntakeService
+from app.modules.intake.domain.audit_policy import INTAKE_ACTIVITY_POLICY
+from app.modules.intake.domain.models import AttentionTransition, EvidenceEnvelope, IntakeConflictError
+from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
+from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
+from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 from app.platform.product_migrations import initialize_latest_schema, validate_latest_schema
 from app.platform.migration_errors import MigrationSchemaError
 
@@ -28,7 +37,12 @@ class IntakeTests(TestCase):
     def setUp(self) -> None:
         self.temporary = TemporaryDirectory(); self.addCleanup(self.temporary.cleanup)
         self.database = Path(self.temporary.name) / "workspace.sqlite"; initialize_latest_schema(self.database)
-        self.service = IntakeService(SQLiteIntakeUnitOfWork(self.database, AuditRecorder(SQLiteAuditRepository(self.database))))
+        self.recorder = AuditRecorder(SQLiteAuditRepository(self.database))
+        self.attention_operations = SQLiteIntakeAttentionOperations(self.recorder)
+        self.service = IntakeService(
+            SQLiteIntakeUnitOfWork(self.database, self.recorder),
+            attention_operations=self.attention_operations,
+        )
 
     def command(self, key: str | None = None, body: str = "The sink leaks.") -> IntakeAdmissionCommand:
         return IntakeAdmissionCommand(EvidenceEnvelope("operator_note", "internal", body, "2026-01-01T12:00:00+00:00"), "manual", key or str(uuid4()))
@@ -112,9 +126,12 @@ class IntakeTests(TestCase):
             SQLiteFileUnitOfWork(self.database, AuditRecorder(SQLiteAuditRepository(self.database))),
             link_validators=(IntakeSourceFileLinkValidator(),),
         )
-        service = IntakeService(SQLiteIntakeUnitOfWork(
-            self.database, AuditRecorder(SQLiteAuditRepository(self.database))
-        ), files)
+        recorder = AuditRecorder(SQLiteAuditRepository(self.database))
+        service = IntakeService(
+            SQLiteIntakeUnitOfWork(self.database, recorder),
+            files,
+            attention_operations=SQLiteIntakeAttentionOperations(recorder),
+        )
 
         def trusted(key: str, attachment: Path) -> IntakeAdmissionCommand:
             return IntakeAdmissionCommand(
@@ -216,6 +233,128 @@ class IntakeTests(TestCase):
         self.assertEqual("superseded", old["technicalStatus"])
         self.assertEqual(replacement["sourceId"], old["supersededBySourceId"])
         validate_latest_schema(self.database)
+
+    def test_transaction_attention_operation_normalizes_actors_and_records_reason(self) -> None:
+        """Every Intake caller identity maps to AUDIT-001 and retains its reason."""
+        engine = create_sqlite_engine(self.database)
+        actors = (
+            ("local_operator", None, "local_operator"),
+            ("assistant_connection", "connection-42", "ai_assistant"),
+            ("system", None, "system"),
+        )
+        for actor_kind, actor_reference, audit_actor in actors:
+            source = self.service.admit(self.command())
+            transition = AttentionTransition(
+                source_id=source["sourceId"], target="in_review",
+                reason="review was admitted", idempotency_key=str(uuid4()),
+                expected_revision=source["revision"], expected_status="unprocessed",
+                correlation_id=str(uuid4()), actor_kind=actor_kind,
+                actor_reference=actor_reference,
+            )
+            with immediate_transaction(engine) as connection:
+                result = self.attention_operations.transition_attention(connection, transition)
+
+            self.assertEqual("in_review", result["attentionStatus"])
+            with sqlite3.connect(self.database) as connection:
+                operation = connection.execute(
+                    "SELECT actor_kind FROM intake_source_operations WHERE idempotency_key = ?",
+                    (transition.idempotency_key,),
+                ).fetchone()
+                audit = connection.execute(
+                    "SELECT actor_kind, actor_reference, reason FROM audit_events "
+                    "WHERE entity_type = 'intake_source' AND entity_id = ? "
+                    "AND action = 'attention_changed' AND correlation_id = ?",
+                    (source["sourceId"], transition.correlation_id),
+                ).fetchone()
+            self.assertEqual((audit_actor,), operation)
+            self.assertEqual((audit_actor, actor_reference, "review was admitted"), audit)
+        self.assertEqual("[redacted]", INTAKE_ACTIVITY_POLICY.redact_reason("review was admitted"))
+        validate_latest_schema(self.database)
+
+    def test_transaction_attention_replay_returns_original_result_and_rollback_leaves_no_history(self) -> None:
+        engine = create_sqlite_engine(self.database)
+        source = self.service.admit(self.command())
+        first = AttentionTransition(
+            source_id=source["sourceId"], target="in_review", reason="review admitted",
+            idempotency_key=str(uuid4()), expected_revision=source["revision"],
+            expected_status="unprocessed", correlation_id=str(uuid4()),
+        )
+        with immediate_transaction(engine) as connection:
+            original = self.attention_operations.transition_attention(connection, first)
+        second = AttentionTransition(
+            source_id=source["sourceId"], target="dismissed", reason="not actionable",
+            idempotency_key=str(uuid4()), expected_revision=source["revision"],
+            expected_status="in_review", correlation_id=str(uuid4()),
+        )
+        with immediate_transaction(engine) as connection:
+            self.attention_operations.transition_attention(connection, second)
+        with immediate_transaction(engine) as connection:
+            replay = self.attention_operations.transition_attention(connection, first)
+        self.assertEqual(original, replay)
+        self.assertEqual("in_review", replay["attentionStatus"])
+
+        rolled_back = self.service.admit(self.command())
+        aborted = AttentionTransition(
+            source_id=rolled_back["sourceId"], target="in_review", reason="must not persist",
+            idempotency_key=str(uuid4()), expected_revision=rolled_back["revision"],
+            expected_status="unprocessed", correlation_id=str(uuid4()),
+        )
+        with self.assertRaisesRegex(RuntimeError, "rollback"):
+            with immediate_transaction(engine) as connection:
+                self.attention_operations.transition_attention(connection, aborted)
+                raise RuntimeError("rollback")
+        with sqlite3.connect(self.database) as connection:
+            self.assertEqual(0, connection.execute(
+                "SELECT COUNT(*) FROM intake_source_operations WHERE idempotency_key = ?",
+                (aborted.idempotency_key,),
+            ).fetchone()[0])
+            self.assertEqual(0, connection.execute(
+                "SELECT COUNT(*) FROM audit_events WHERE correlation_id = ?",
+                (aborted.correlation_id,),
+            ).fetchone()[0])
+
+    def test_attention_idempotency_binds_actor_and_activity_redacts_connection(self) -> None:
+        engine = create_sqlite_engine(self.database)
+        source = self.service.admit(self.command())
+        key = str(uuid4())
+        assistant = AttentionTransition(
+            source_id=source["sourceId"], target="in_review", reason="assistant triage",
+            idempotency_key=key, expected_revision=source["revision"],
+            expected_status="unprocessed", correlation_id=str(uuid4()),
+            actor_kind="assistant_connection", actor_reference="connection-42",
+        )
+        with immediate_transaction(engine) as connection:
+            original = self.attention_operations.transition_attention(connection, assistant)
+        with immediate_transaction(engine) as connection:
+            self.assertEqual(original, self.attention_operations.transition_attention(connection, assistant))
+
+        different_actor = AttentionTransition(
+            source_id=source["sourceId"], target="in_review", reason="assistant triage",
+            idempotency_key=key, expected_revision=source["revision"],
+            expected_status="unprocessed", correlation_id=str(uuid4()),
+            actor_kind="assistant_connection", actor_reference="connection-99",
+        )
+        with self.assertRaisesRegex(IntakeConflictError, "Idempotency key"):
+            with immediate_transaction(engine) as connection:
+                self.attention_operations.transition_attention(connection, different_actor)
+
+        class ReadyRuntime:
+            ready = True
+            error = None
+
+        policies = AuditSnapshotPolicyRegistry(
+            {("intake_source", 1): DEFAULT_SNAPSHOT_POLICY},
+            activity_policies={("intake_source", 1): INTAKE_ACTIVITY_POLICY},
+        )
+        app = FastAPI()
+        app.include_router(build_audit_router(ReadyRuntime(), SQLiteAuditRepository(self.database), policies))
+        activity = TestClient(app).get(
+            "/api/audit/events", params={"correlation_id": assistant.correlation_id},
+        ).json()["events"]
+        event = next(item for item in activity if item["correlationId"] == assistant.correlation_id)
+        self.assertEqual("ai_assistant", event["actorKind"])
+        self.assertEqual("[redacted]", event["actorReference"])
+        self.assertEqual("[redacted]", event["reason"])
 
     def test_import_reports_cleanup_repair_when_deferred_attention_recording_fails(self) -> None:
         """The owning HTTP boundary preserves FILE-001's safe 503 contract."""

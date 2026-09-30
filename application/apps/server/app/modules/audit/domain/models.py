@@ -25,6 +25,10 @@ class AuditSnapshotPolicy(Protocol):
 
     def redact(self, snapshot: Mapping[str, Any] | None) -> dict[str, Any] | None: ...
 
+    def redact_reason(self, reason: str | None) -> str | None: ...
+
+    def redact_actor_reference(self, actor_kind: ActorKind, actor_reference: str | None) -> str | None: ...
+
 
 @dataclass(frozen=True)
 class DefaultAuditSnapshotPolicy:
@@ -41,6 +45,12 @@ class DefaultAuditSnapshotPolicy:
 
     def redact(self, snapshot: Mapping[str, Any] | None) -> dict[str, Any] | None:
         return None if snapshot is None else _redact_value(snapshot)
+
+    def redact_reason(self, reason: str | None) -> str | None:
+        return reason
+
+    def redact_actor_reference(self, actor_kind: ActorKind, actor_reference: str | None) -> str | None:
+        return actor_reference
 
     def redact_entity_id(
         self,
@@ -116,7 +126,10 @@ class AuditEvent:
                     self.entity_id, self.before_snapshot, self.after_snapshot,
                 ), "action": self.action, "before": snapshot_policy.redact(self.before_snapshot),
                 "after": snapshot_policy.redact(self.after_snapshot), "changedFields": list(self.changed_fields),
-                "reason": self.reason, "actorKind": self.actor_kind, "actorReference": self.actor_reference,
+                "reason": getattr(snapshot_policy, "redact_reason", lambda value: value)(self.reason), "actorKind": self.actor_kind,
+                "actorReference": getattr(snapshot_policy, "redact_actor_reference", lambda _kind, value: value)(
+                    self.actor_kind, self.actor_reference,
+                ),
                 "correlationId": self.correlation_id, "schemaVersion": self.schema_version}
 
 

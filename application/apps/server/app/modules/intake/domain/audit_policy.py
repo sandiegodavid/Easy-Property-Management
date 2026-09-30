@@ -13,6 +13,10 @@ class IntakeActivityPolicy(DefaultAuditSnapshotPolicy):
             if isinstance(value, list): return [visit(item) for item in value]
             return value
         return visit(dict(snapshot))
+    def redact_reason(self, reason: str | None) -> str | None:
+        return None if reason is None else "[redacted]"
+    def redact_actor_reference(self, actor_kind: str, actor_reference: str | None) -> str | None:
+        return None if actor_reference is None else "[redacted]"
     def redact_entity_id(self, entity_id: str, *args: object) -> str: return "[redacted]"
 
 

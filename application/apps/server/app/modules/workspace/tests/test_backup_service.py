@@ -23,6 +23,7 @@ from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfW
 from app.modules.intake.application.file_links import IntakeSourceFileLinkValidator
 from app.modules.intake.application.service import AttachmentInput, IntakeAdmissionCommand, IntakeService
 from app.modules.intake.domain.models import EvidenceEnvelope
+from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.infrastructure.encrypted_archive import APPLICATION_VERSION, ArchiveError, _validate_header, _validate_manifest_consistency, decrypt_archive_to_zip, make_header, write_encrypted_archive
@@ -125,6 +126,8 @@ class BackupServiceTests(unittest.TestCase):
     def intake_source_id(self) -> str:
         service = IntakeService(SQLiteIntakeUnitOfWork(
             self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
+        ), attention_operations=SQLiteIntakeAttentionOperations(
+            AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
         ))
         return service.admit(IntakeAdmissionCommand(
             EvidenceEnvelope("operator_note", "internal", "Backup fixture evidence.", "2026-01-01T00:00:00+00:00"),
@@ -135,6 +138,9 @@ class BackupServiceTests(unittest.TestCase):
         intake = IntakeService(
             SQLiteIntakeUnitOfWork(self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database))),
             files,
+            attention_operations=SQLiteIntakeAttentionOperations(
+                AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
+            ),
         )
         result = intake.admit(IntakeAdmissionCommand(
             EvidenceEnvelope("operator_note", "internal", "Backup fixture evidence.", "2026-01-01T00:00:00+00:00"),
