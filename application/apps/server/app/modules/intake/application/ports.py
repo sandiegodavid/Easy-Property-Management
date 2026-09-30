@@ -1,9 +1,12 @@
 """Narrow transaction-aware ports exposed by INGEST-001."""
 from __future__ import annotations
 from pathlib import Path
-from typing import Any, Callable, Protocol, TypeVar
-from app.modules.intake.domain.models import AttentionTransition
+from typing import Any, Callable, Protocol, TYPE_CHECKING, TypeVar
+from app.modules.intake.domain.models import AttentionTransition, IntakeAdmissionContext
 T = TypeVar("T")
+
+if TYPE_CHECKING:
+    from app.modules.intake.application.service import IntakeAdmissionCommand
 
 
 class IntakeSourceReader(Protocol):
@@ -57,7 +60,8 @@ class IntakeTransaction(Protocol):
 
 
 class IntakeAdmissionPort(Protocol):
-    def admit(self, command: Any) -> dict[str, object]: ...
+    """Internal-only admission boundary for authenticated transports."""
+    def admit(self, command: IntakeAdmissionCommand, context: IntakeAdmissionContext) -> dict[str, object]: ...
 
 
 class IntakeUnitOfWork(Protocol):

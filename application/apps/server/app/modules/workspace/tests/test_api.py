@@ -45,6 +45,9 @@ class WorkspaceApiTests(unittest.TestCase):
         self.assertEqual(reported.status_code, 200)
         self.assertEqual(reported.json()["manifest"]["formatVersion"], 1)
 
+    def test_bootstrap_composes_the_internal_intake_admission_port(self) -> None:
+        self.assertTrue(callable(self.client.app.state.intake_admission.admit))
+
     def test_database_failure_returns_a_controlled_api_error(self) -> None:
         self.client.post("/api/workspace/initialize")
         with patch(

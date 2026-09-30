@@ -21,7 +21,6 @@ class SourceInput(Contract):
     body: str=Field(min_length=1,max_length=131072); occurredAtUtc: datetime; subject: str|None=Field(default=None,max_length=500)
     participants: list[Participant]=Field(default_factory=list,max_length=50); provider: str|None=Field(default=None,max_length=500); conversationRef: str|None=Field(default=None,max_length=500); externalSourceId: str|None=Field(default=None,max_length=500)
     originSystem: str=Field(min_length=1,max_length=500); idempotencyKey: UUID
-    accountScopeHash: str|None=Field(default=None,min_length=64,max_length=64); accountIdentityState: Literal["operator_confirmed","unverified_claim","not_applicable"]="not_applicable"; accountDisplayHint: str|None=Field(default=None,max_length=500)
 class CorrectInput(SourceInput): correctionReason: str=Field(min_length=1,max_length=1000)
 class AttentionInput(Contract):
     reason: str=Field(min_length=1,max_length=1000)
@@ -48,7 +47,7 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
         except IntakeError as error: raise HTTPException(422,{"code":error.code,"message":str(error)}) from error
     def command(data: SourceInput):
         envelope=EvidenceEnvelope(data.sourceKind,data.channel,data.body,data.occurredAtUtc.isoformat(),data.subject,tuple(x.model_dump(exclude_none=True) for x in data.participants),data.provider,data.conversationRef,data.externalSourceId)
-        return IntakeAdmissionCommand(envelope,data.originSystem,str(data.idempotencyKey),data.accountScopeHash,data.accountIdentityState,data.accountDisplayHint)
+        return IntakeAdmissionCommand(envelope, data.originSystem, str(data.idempotencyKey))
     @router.post("",dependencies=[Depends(ready)])
     def admit(payload:SourceInput): return call(lambda:service.admit(command(payload)))
     @router.post("/import", dependencies=[Depends(ready)])
@@ -76,7 +75,7 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
                         output.write(chunk)
                 attachments.append(AttachmentInput(destination, name, upload.content_type, roles[position]))
             base=command(data)
-            payload=IntakeAdmissionCommand(base.envelope,base.origin_system,base.idempotency_key,base.account_scope_hash,base.account_identity_state,base.account_display_hint,tuple(attachments))
+            payload=IntakeAdmissionCommand(base.envelope, base.origin_system, base.idempotency_key, tuple(attachments))
             return call(lambda: service.admit(payload))
     @router.get("",dependencies=[Depends(ready)])
     def list_sources(limit:int=Query(50,ge=1,le=200),cursor:str|None=None,sourceKind:str|None=None,technicalStatus:str|None=None,attentionStatus:str|None=None,channel:str|None=None,originSystem:str|None=None,receivedFrom:datetime|None=None,receivedTo:datetime|None=None,hasDuplicate:bool|None=None):

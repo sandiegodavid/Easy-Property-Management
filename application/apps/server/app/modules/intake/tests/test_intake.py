@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import replace
 from pathlib import Path
 import sqlite3
 from tempfile import TemporaryDirectory
@@ -19,8 +20,8 @@ from app.modules.files.infrastructure.content_store import FilesystemContentStor
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.intake.application.file_links import IntakeSourceFileLinkValidator
 from app.modules.intake.api.router import build_router
-from app.modules.intake.application.service import AttachmentInput, IntakeAdmissionCommand, IntakeService
-from app.modules.intake.domain.models import EvidenceEnvelope, IntakeConflictError
+from app.modules.intake.application.service import AttachmentInput, IntakeAdmissionCommand, IntakeService, TrustedIntakeAdmission
+from app.modules.intake.domain.models import EvidenceEnvelope, IntakeAdmissionContext, IntakeConflictError, IntakeError
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.platform.migration_errors import MigrationSchemaError
 from app.modules.intake.application.service import IntakeAdmissionCommand, IntakeService
@@ -43,6 +44,16 @@ class IntakeTests(TestCase):
             SQLiteIntakeUnitOfWork(self.database, self.recorder),
             attention_operations=self.attention_operations,
         )
+        self.trusted_admission = TrustedIntakeAdmission(self.service)
+
+    def admit_trusted(self, command: IntakeAdmissionCommand, reference: str = "connection-1") -> dict[str, object]:
+        return self.trusted_admission.admit(
+            command,
+            IntakeAdmissionContext("assistant_connection", reference, "a" * 64, "transport_verified"),
+        )
+
+    def supersede_trusted(self, source_id: str, replacement: IntakeAdmissionCommand) -> dict[str, object]:
+        return self.admit_trusted(replace(replacement, supersedes_source_id=source_id))
 
     def command(self, key: str | None = None, body: str = "The sink leaks.") -> IntakeAdmissionCommand:
         return IntakeAdmissionCommand(EvidenceEnvelope("operator_note", "internal", body, "2026-01-01T12:00:00+00:00"), "manual", key or str(uuid4()))
@@ -82,36 +93,72 @@ class IntakeTests(TestCase):
         def trusted(key: str, body: str) -> IntakeAdmissionCommand:
             return IntakeAdmissionCommand(
                 EvidenceEnvelope("email_message", "email", body, "2026-01-01T12:00:00+00:00", external_source_id="mail-1"),
-                "gmail", key, "a" * 64, "transport_verified",
+                "gmail", key,
             )
-        first = self.service.admit(trusted(str(uuid4()), "A retained email."))
         replay_key = str(uuid4())
-        self.assertEqual(first["sourceId"], self.service.admit(trusted(replay_key, "A retained email."))["sourceId"])
+        first = self.admit_trusted(trusted(replay_key, "A retained email."))
+        self.assertEqual(first, self.admit_trusted(trusted(replay_key, "A retained email.")))
         with self.assertRaises(IntakeConflictError):
-            self.service.admit(trusted(replay_key, "Changed evidence."))
-        with self.assertRaises(IntakeConflictError):
-            self.service.admit(trusted(str(uuid4()), "Changed evidence."))
+            self.admit_trusted(trusted(replay_key, "A retained email."), "connection-2")
+        self.assertEqual(first["sourceId"], self.admit_trusted(trusted(str(uuid4()), "A retained email."), "connection-2")["sourceId"])
+
+    def test_trusted_admission_audits_authenticated_actors(self) -> None:
+        assistant = self.admit_trusted(self.command(), "connection-7")
+        voice_context = IntakeAdmissionContext("voice_workflow", "voice-grant-8", "a" * 64, "transport_verified")
+        voice = self.trusted_admission.admit(self.command(), voice_context)
+        replacement = self.trusted_admission.admit(
+            replace(self.command(body="Replacement evidence."), supersedes_source_id=assistant["sourceId"]),
+            voice_context,
+        )
+
+        with sqlite3.connect(self.database) as connection:
+            for result, actor_kind, reference in (
+                (assistant, "ai_assistant", "connection-7"),
+                (voice, "connector", "voice-grant-8"),
+            ):
+                source_audit = connection.execute(
+                    "SELECT actor_kind, actor_reference FROM audit_events WHERE entity_type='intake_source' AND entity_id=? AND action='admitted'",
+                    (result["sourceId"],),
+                ).fetchone()
+                revision_audit = connection.execute(
+                    "SELECT actor_kind, actor_reference FROM audit_events WHERE entity_type='intake_evidence_revision' AND entity_id=? AND action='created'",
+                    (result["revision"],),
+                ).fetchone()
+                self.assertEqual((actor_kind, reference), source_audit)
+                self.assertEqual((actor_kind, reference), revision_audit)
+            superseded = connection.execute(
+                "SELECT actor_kind, actor_reference FROM audit_events WHERE entity_type='intake_source' AND entity_id=? AND action='superseded'",
+                (assistant["sourceId"],),
+            ).fetchone()
+        self.assertEqual(("connector", "voice-grant-8"), superseded)
+        self.assertNotEqual(assistant["sourceId"], replacement["sourceId"])
+
+    def test_trusted_context_normalizes_submitter_reference(self) -> None:
+        self.assertEqual("connection-9", IntakeAdmissionContext("assistant_connection", " connection-9 ").submitter_reference)
+        for invalid in ("bad\u0085reference", "x" * 501):
+            with self.assertRaises(IntakeError):
+                IntakeAdmissionContext("assistant_connection", invalid)
 
     def test_trusted_external_supersession_replaces_the_current_identity_tip(self) -> None:
         def trusted(key: str, body: str) -> IntakeAdmissionCommand:
             return IntakeAdmissionCommand(
                 EvidenceEnvelope("email_message", "email", body,
                                  "2026-01-01T12:00:00+00:00", external_source_id="mail-1"),
-                "gmail", key, "a" * 64, "transport_verified",
+                "gmail", key,
             )
 
-        original = self.service.admit(trusted(str(uuid4()), "Original retained email."))
-        replacement = self.service.supersede(
+        original = self.admit_trusted(trusted(str(uuid4()), "Original retained email."))
+        replacement = self.supersede_trusted(
             original["sourceId"], trusted(str(uuid4()), "Corrected retained email."),
         )
 
         self.assertNotEqual(original["sourceId"], replacement["sourceId"])
         self.assertEqual("superseded", self.service.get(original["sourceId"])["technicalStatus"])
-        self.assertEqual(replacement["sourceId"], self.service.admit(
+        self.assertEqual(replacement["sourceId"], self.admit_trusted(
             trusted(str(uuid4()), "Corrected retained email.")
         )["sourceId"])
         with self.assertRaises(IntakeConflictError) as conflict:
-            self.service.admit(trusted(str(uuid4()), "Conflicting retained email."))
+            self.admit_trusted(trusted(str(uuid4()), "Conflicting retained email."))
         self.assertEqual("intake_exact_identity_conflict", conflict.exception.code)
         validate_latest_schema(self.database)
 
@@ -137,24 +184,25 @@ class IntakeTests(TestCase):
             return IntakeAdmissionCommand(
                 EvidenceEnvelope("email_message", "email", "Retained email.",
                                  "2026-01-01T12:00:00+00:00", external_source_id="mail-1"),
-                "gmail", key, "a" * 64, "transport_verified",
+                "gmail", key,
                 attachments=(AttachmentInput(attachment, attachment.name, "message/rfc822"),),
             )
 
+        trusted_admission = TrustedIntakeAdmission(service)
+        context = IntakeAdmissionContext("assistant_connection", "connection-1", "a" * 64, "transport_verified")
+        admit = lambda command: trusted_admission.admit(command, context)
         original_command = trusted(str(uuid4()), original_attachment)
-        original = service.admit(original_command)
-        replacement = service.supersede(
-            original["sourceId"], trusted(str(uuid4()), replacement_attachment)
-        )
-        historical = service.admit(trusted(str(uuid4()), original_attachment))
-        current = service.admit(trusted(str(uuid4()), replacement_attachment))
+        original = admit(original_command)
+        replacement = admit(replace(trusted(str(uuid4()), replacement_attachment), supersedes_source_id=original["sourceId"]))
+        historical = admit(trusted(str(uuid4()), original_attachment))
+        current = admit(trusted(str(uuid4()), replacement_attachment))
         self.assertEqual(original["sourceId"], historical["sourceId"])
         self.assertEqual(replacement["sourceId"], current["sourceId"])
         with self.assertRaises(IntakeConflictError):
-            service.admit(IntakeAdmissionCommand(
+            admit(IntakeAdmissionCommand(
                 EvidenceEnvelope("email_message", "email", "Changed body.",
                                  "2026-01-01T12:00:00+00:00", external_source_id="mail-1"),
-                "gmail", str(uuid4()), "a" * 64, "transport_verified",
+                "gmail", str(uuid4()),
                 attachments=(AttachmentInput(replacement_attachment, replacement_attachment.name,
                                              "message/rfc822"),),
             ))
@@ -165,24 +213,24 @@ class IntakeTests(TestCase):
             return IntakeAdmissionCommand(
                 EvidenceEnvelope("email_message", "email", body,
                                  "2026-01-01T12:00:00+00:00", external_source_id="mail-1"),
-                "gmail", key, "a" * 64, "transport_verified",
+                "gmail", key,
             )
 
-        original = self.service.admit(trusted(str(uuid4()), "Original retained email."))
+        original = self.admit_trusted(trusted(str(uuid4()), "Original retained email."))
         corrected = self.service.correct(
             original["sourceId"],
             EvidenceEnvelope("email_message", "email", "Corrected source evidence.",
                              "2026-01-01T12:00:00+00:00", external_source_id="mail-1"),
             "corrected source evidence", str(uuid4()),
         )
-        replacement = self.service.supersede(
+        replacement = self.supersede_trusted(
             original["sourceId"], trusted(str(uuid4()), "Replacement source evidence."),
         )
 
-        replay = self.service.admit(trusted(str(uuid4()), "Original retained email."))
+        replay = self.admit_trusted(trusted(str(uuid4()), "Original retained email."))
         self.assertEqual(original["sourceId"], replay["sourceId"])
         self.assertEqual(corrected["revision"], replay["revision"])
-        self.assertEqual(replacement["sourceId"], self.service.admit(
+        self.assertEqual(replacement["sourceId"], self.admit_trusted(
             trusted(str(uuid4()), "Replacement source evidence.")
         )["sourceId"])
         validate_latest_schema(self.database)
@@ -192,10 +240,10 @@ class IntakeTests(TestCase):
             return IntakeAdmissionCommand(
                 EvidenceEnvelope("email_message", "email", body,
                                  "2026-01-01T12:00:00+00:00", external_source_id="mail-1"),
-                "gmail", key, "a" * 64, "transport_verified",
+                "gmail", key,
             )
-        original = self.service.admit(trusted(str(uuid4()), "Original email."))
-        self.service.supersede(original["sourceId"], trusted(str(uuid4()), "Replacement email."))
+        original = self.admit_trusted(trusted(str(uuid4()), "Original email."))
+        self.supersede_trusted(original["sourceId"], trusted(str(uuid4()), "Replacement email."))
         with sqlite3.connect(self.database) as connection:
             connection.execute("UPDATE intake_sources SET origin_system='tampered' WHERE id=?", (original["sourceId"],))
             connection.commit()
@@ -203,18 +251,18 @@ class IntakeTests(TestCase):
             validate_latest_schema(self.database)
 
     def test_trusted_supersession_rejects_a_changed_identity(self) -> None:
-        original = self.service.admit(IntakeAdmissionCommand(
+        original = self.admit_trusted(IntakeAdmissionCommand(
             EvidenceEnvelope("email_message", "email", "Original retained email.",
                              "2026-01-01T12:00:00+00:00", external_source_id="mail-1"),
-            "gmail", str(uuid4()), "a" * 64, "transport_verified",
+            "gmail", str(uuid4()),
         ))
         changed = IntakeAdmissionCommand(
             EvidenceEnvelope("email_message", "email", "Replacement email.",
                              "2026-01-01T12:00:00+00:00", external_source_id="mail-2"),
-            "gmail", str(uuid4()), "a" * 64, "transport_verified",
+            "gmail", str(uuid4()),
         )
         with self.assertRaisesRegex(IntakeConflictError, "identity"):
-            self.service.supersede(original["sourceId"], changed)
+            self.supersede_trusted(original["sourceId"], changed)
 
     def test_pagination_uses_last_returned_cursor_without_a_gap(self) -> None:
         ids = [self.service.admit(self.command(body=f"Evidence {index}"))["sourceId"] for index in range(3)]
@@ -385,3 +433,18 @@ class IntakeTests(TestCase):
         self.assertEqual({"code": "publication_cleanup_incomplete",
                           "message": "File publication cleanup could not be completed.",
                           "repairRequired": True, "attentionRecorded": False}, response.json()["detail"])
+
+    def test_operator_api_rejects_trusted_provenance_fields(self) -> None:
+        class ReadyRuntime:
+            ready = True
+            can_write = True
+            error = None
+
+        app = FastAPI()
+        app.include_router(build_router(self.service, ReadyRuntime()))
+        response = TestClient(app).post("/api/intake/sources", json={
+            "sourceKind": "operator_note", "channel": "internal", "body": "Operator evidence.",
+            "occurredAtUtc": "2026-01-01T12:00:00Z", "originSystem": "manual",
+            "idempotencyKey": str(uuid4()), "accountIdentityState": "transport_verified",
+        })
+        self.assertEqual(422, response.status_code)

@@ -42,7 +42,7 @@ from app.modules.communications.infrastructure.link_reader import SQLiteCommunic
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.modules.communications.domain.audit_policy import COMMUNICATION_ACTIVITY_POLICY
 from app.modules.intake.api.router import build_router as build_intake_router
-from app.modules.intake.application.service import IntakeService
+from app.modules.intake.application.service import IntakeService, TrustedIntakeAdmission
 from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.modules.intake.infrastructure.integrity_consequences import SQLiteIntakeIntegrityConsequences
@@ -227,6 +227,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         files,
         attention_operations=SQLiteIntakeAttentionOperations(recorder),
     )
+    intake_admission = TrustedIntakeAdmission(intake)
     file_verification = FileStorageVerificationService(
         files.unit_of_work, files.content_stores,
         SQLiteIntakeIntegrityConsequences(recorder, file_link_reader),
@@ -329,6 +330,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.task_service = tasks
     app.state.communication_service = communications
     app.state.intake_service = intake
+    app.state.intake_admission = intake_admission
     app.state.portfolio_service = portfolio
     app.state.tenant_service = tenants
     app.state.party_contact_service = party_contacts
