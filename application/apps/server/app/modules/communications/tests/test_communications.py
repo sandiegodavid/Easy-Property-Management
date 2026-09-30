@@ -2,33 +2,39 @@
 
 from __future__ import annotations
 
+import inspect
+import json
 import tempfile
 import unittest
-import json
-import inspect
 from pathlib import Path
 
+from fastapi.testclient import TestClient
 from sqlalchemy import event, text
 
+from app.bootstrap.api import create_app
+from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.communications.application.service import (
-    CommunicationCommand, CommunicationConflictError, CommunicationError, FollowUpInput,
-    CommunicationService, LinkInput, ParticipantInput, PatchCommand,
+    CommunicationCommand,
+    CommunicationConflictError,
+    CommunicationError,
+    CommunicationService,
+    FollowUpInput,
+    LinkInput,
+    ParticipantInput,
+    PatchCommand,
 )
-from app.modules.communications.infrastructure.schema_validation import validate_communication_schema
-from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
-from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
-from app.modules.communications.infrastructure.unit_of_work import SQLiteCommunicationUnitOfWork
 from app.modules.communications.infrastructure.link_reader import SQLiteCommunicationLinkReader
-from app.platform.product_migrations import ProductSchemaError, initialize_latest_schema, validate_latest_schema
-from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
-from app.modules.workspace.application.service import WorkspaceService
+from app.modules.communications.infrastructure.schema_validation import validate_communication_schema
+from app.modules.communications.infrastructure.unit_of_work import SQLiteCommunicationUnitOfWork
+from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
 from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.platform.config import LocalConfig
-from app.bootstrap.api import create_app
-from fastapi.testclient import TestClient
+from app.platform.product_migrations import ProductSchemaError, initialize_latest_schema, validate_latest_schema
+from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 PARTY_ID = "11111111-1111-4111-8111-111111111111"
 

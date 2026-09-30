@@ -1,15 +1,18 @@
 """SQLite transaction adapter for tenant profiles and creation."""
 from collections.abc import Callable
 from typing import Any, TypeVar
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.parties.application.ports import PartyReadOperations, PartyTransactionOperations
 from app.modules.parties.domain.models import Party, PartyContactMethod
-from app.modules.tenants.infrastructure.sqlalchemy_models import TenantProfileModel
 from app.modules.tenants.application.ports import LeaseParticipationGuard, TenantTransaction
 from app.modules.tenants.domain.models import TenantProfile
+from app.modules.tenants.infrastructure.sqlalchemy_models import TenantProfileModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
+
 Result = TypeVar("Result")
 
 class SQLiteTenantUnitOfWork:

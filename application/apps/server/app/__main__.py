@@ -6,11 +6,11 @@ import argparse
 from getpass import getpass
 from pathlib import Path
 
-from app.modules.workspace.application.backup_service import BackupError, BackupService
-from app.modules.workspace.application.service import WorkspaceService
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.infrastructure.content_store import S3ContentStore
+from app.modules.workspace.application.backup_service import BackupError, BackupService
+from app.modules.workspace.application.service import WorkspaceService
 
 
 def _config_path(value: str | None) -> Path | None:
@@ -135,8 +135,9 @@ def main() -> None:
         print(f"Automatic backup created: {result.archive_path}" if result else "No automatic backup is due.")
         return
 
-    from app.bootstrap.api import create_app
     import uvicorn
+
+    from app.bootstrap.api import create_app
 
     uvicorn.run(create_app(config_path), host="127.0.0.1", port=args.port)
 

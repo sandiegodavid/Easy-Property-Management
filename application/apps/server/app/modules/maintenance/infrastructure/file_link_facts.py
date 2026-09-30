@@ -4,8 +4,12 @@ from __future__ import annotations
 from sqlalchemy import exists, select
 
 from app.modules.maintenance.infrastructure.sqlalchemy_models import (
-    MaintenanceAppointmentModel, MaintenanceAssignmentModel, MaintenanceCostContextModel,
-    MaintenanceIssueModel, MaintenanceQuoteModel, MaintenanceWorkJournalEntryModel,
+    MaintenanceAppointmentModel,
+    MaintenanceAssignmentModel,
+    MaintenanceCostContextModel,
+    MaintenanceIssueModel,
+    MaintenanceQuoteModel,
+    MaintenanceWorkJournalEntryModel,
 )
 
 

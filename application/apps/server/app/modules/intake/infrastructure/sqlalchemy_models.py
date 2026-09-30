@@ -1,6 +1,7 @@
 """Current SQLite persistence schema for INGEST-001."""
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
+
 from app.platform.sqlalchemy_models import LocalBase
 
 

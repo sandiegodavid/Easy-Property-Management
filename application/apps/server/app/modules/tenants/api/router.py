@@ -4,8 +4,8 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
-from app.modules.parties.application.service import PartyValidationError
 
+from app.modules.parties.application.service import PartyValidationError
 from app.modules.tenants.application.service import (
     PossibleDuplicatePartyError,
     TenantConflictError,

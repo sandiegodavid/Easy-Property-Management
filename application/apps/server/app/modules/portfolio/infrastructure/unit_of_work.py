@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from collections import defaultdict
+from collections.abc import Callable
 from json import dumps, loads
 from typing import Any, TypeVar
 
@@ -12,10 +12,30 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.portfolio.application.ports import PartyRoleActivityGuard, PropertyArchiveGuard, PortfolioConflictError, PortfolioTransaction
+from app.modules.portfolio.application.ports import (
+    PartyRoleActivityGuard,
+    PortfolioConflictError,
+    PortfolioTransaction,
+    PropertyArchiveGuard,
+)
 from app.modules.portfolio.application.source_timeline import PortfolioSourceTimelineService, SourceTimelineChangeSet
-from app.modules.portfolio.domain.models import Party, Property, PropertyOwnership, Space, SpaceAvailability, SpaceOccupancyPeriod
-from app.modules.portfolio.infrastructure.sqlalchemy_models import PartyModel, PropertyModel, PropertyOwnershipModel, SpaceAvailabilityModel, SpaceModel, SpaceOccupancyPeriodModel, SpaceStatusOperationModel
+from app.modules.portfolio.domain.models import (
+    Party,
+    Property,
+    PropertyOwnership,
+    Space,
+    SpaceAvailability,
+    SpaceOccupancyPeriod,
+)
+from app.modules.portfolio.infrastructure.sqlalchemy_models import (
+    PartyModel,
+    PropertyModel,
+    PropertyOwnershipModel,
+    SpaceAvailabilityModel,
+    SpaceModel,
+    SpaceOccupancyPeriodModel,
+    SpaceStatusOperationModel,
+)
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 Result = TypeVar("Result")

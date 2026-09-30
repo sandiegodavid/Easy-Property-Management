@@ -1,8 +1,11 @@
 """SQLAlchemy-owned FILE-001 schema."""
 from __future__ import annotations
+
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
+
 from app.platform.sqlalchemy_models import LocalBase
+
 
 class FileRecordModel(LocalBase):
     __tablename__ = "file_records"

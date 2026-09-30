@@ -1,9 +1,14 @@
 from collections.abc import Callable
 from typing import Any, TypeVar
+
 from sqlalchemy import case, select
+
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.owner_management.domain.models import Concern
-from app.modules.owner_management.infrastructure.sqlalchemy_models import OwnerConcernFollowUpOperationModel, OwnerConcernModel
+from app.modules.owner_management.infrastructure.sqlalchemy_models import (
+    OwnerConcernFollowUpOperationModel,
+    OwnerConcernModel,
+)
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 Result = TypeVar("Result")

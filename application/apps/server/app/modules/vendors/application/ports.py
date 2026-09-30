@@ -6,8 +6,12 @@ from typing import Any, Protocol, TypeVar
 from app.modules.parties.application.ports import PartyTransactionOperations
 from app.modules.parties.domain.models import Party, PartyContactMethod
 from app.modules.vendors.domain.models import (
-    ProviderProfile, ProviderReference, ProviderReputationLink, ProviderService,
-    ProviderServiceArea, ProviderWorkHistory,
+    ProviderProfile,
+    ProviderReference,
+    ProviderReputationLink,
+    ProviderService,
+    ProviderServiceArea,
+    ProviderWorkHistory,
 )
 
 Result = TypeVar("Result")

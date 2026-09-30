@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import tempfile
 import unittest
-import json
-from uuid import uuid4
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo
 from unittest.mock import patch
+from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from fastapi.testclient import TestClient
 from sqlalchemy import event
@@ -17,11 +17,22 @@ from app.bootstrap.api import create_app
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.portfolio.application.ports import PortfolioConflictError
-from app.modules.portfolio.application.service import AvailabilityCommand, OccupancyCommand, OccupancyCorrectionCommand, OwnershipInput, PartyCreateCommand, PortfolioError, PortfolioService, PropertyCreateCommand, SpaceClassificationCommand, SpaceCreateCommand
-from app.modules.portfolio.infrastructure.schema_validation import _normalise_sql, validate_portfolio_schema
+from app.modules.portfolio.application.service import (
+    AvailabilityCommand,
+    OccupancyCommand,
+    OccupancyCorrectionCommand,
+    OwnershipInput,
+    PartyCreateCommand,
+    PortfolioError,
+    PortfolioService,
+    PropertyCreateCommand,
+    SpaceClassificationCommand,
+    SpaceCreateCommand,
+)
 from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
-from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
+from app.modules.portfolio.infrastructure.schema_validation import _normalise_sql, validate_portfolio_schema
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
+from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
 from app.platform.config import LocalConfig
 from app.platform.migration_errors import MigrationSchemaError

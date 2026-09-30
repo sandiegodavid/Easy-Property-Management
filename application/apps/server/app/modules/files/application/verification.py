@@ -7,8 +7,12 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.modules.files.application.errors import FileError
-from app.modules.files.application.ports import (FileAuditChange, FileContentStore,
-                                                 FileUnitOfWork, FileVerificationConsequences)
+from app.modules.files.application.ports import (
+    FileAuditChange,
+    FileContentStore,
+    FileUnitOfWork,
+    FileVerificationConsequences,
+)
 
 
 def _decode_cursor(value: str | None) -> dict[str, object]:

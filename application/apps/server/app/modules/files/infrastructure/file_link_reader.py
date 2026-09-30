@@ -5,11 +5,7 @@ from collections.abc import Sequence
 from sqlalchemy import and_, func, or_, select
 
 from app.modules.files.application.ports import FileLink, FileLinkWithFile
-from app.modules.files.infrastructure.sqlalchemy_models import (
-    FileContentLocationModel,
-    FileLinkModel,
-    FileRecordModel,
-)
+from app.modules.files.infrastructure.sqlalchemy_models import FileContentLocationModel, FileLinkModel, FileRecordModel
 
 
 class SQLiteFileLinkReader:

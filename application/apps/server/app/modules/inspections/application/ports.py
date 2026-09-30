@@ -1,10 +1,20 @@
 """Application-owned contracts for INSP-001 persistence and evidence."""
 from __future__ import annotations
+
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
+
 from app.modules.files.domain.models import StoredFile
-from app.modules.inspections.domain.models import ConditionAcknowledgment, ConditionArea, ConditionChecklistTemplate, ConditionChecklistTemplateItem, ConditionComparison, ConditionObservation, ConditionReport
+from app.modules.inspections.domain.models import (
+    ConditionAcknowledgment,
+    ConditionArea,
+    ConditionChecklistTemplate,
+    ConditionChecklistTemplateItem,
+    ConditionComparison,
+    ConditionObservation,
+    ConditionReport,
+)
 
 Result = TypeVar("Result")
 

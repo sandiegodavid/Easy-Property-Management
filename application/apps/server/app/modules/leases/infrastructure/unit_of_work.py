@@ -18,16 +18,23 @@ from app.modules.leases.application.ports import (
     PortfolioLeaseOperations,
     TenantProfileAvailability,
 )
-from app.modules.portfolio.application.ports import PortfolioConflictError
-from app.modules.leases.domain.models import Lease, LeaseParticipant, LeaseRenewalOption, LeaseTerm, LeaseTerminationCase, LeaseTerminationProposal
+from app.modules.leases.domain.models import (
+    Lease,
+    LeaseParticipant,
+    LeaseRenewalOption,
+    LeaseTerm,
+    LeaseTerminationCase,
+    LeaseTerminationProposal,
+)
 from app.modules.leases.infrastructure.sqlalchemy_models import (
     LeaseModel,
     LeaseParticipantModel,
     LeaseRenewalOptionModel,
-    LeaseTermModel,
     LeaseTerminationCaseModel,
     LeaseTerminationProposalModel,
+    LeaseTermModel,
 )
+from app.modules.portfolio.application.ports import PortfolioConflictError
 from app.modules.portfolio.domain.models import Property, Space, SpaceOccupancyPeriod
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 

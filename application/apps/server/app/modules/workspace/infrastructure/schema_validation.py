@@ -1,5 +1,6 @@
 """Current-format validation owned by the workspace module."""
 from sqlalchemy import inspect
+
 from app.platform.migration_errors import MigrationSchemaError
 
 

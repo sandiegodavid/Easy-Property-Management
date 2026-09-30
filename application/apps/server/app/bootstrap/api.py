@@ -8,77 +8,125 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-from app.modules.workspace.api.router import build_router
-from app.modules.audit.api.router import build_router as build_audit_router
-from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
-from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.audit.domain.models import AuditSnapshotPolicyRegistry, DEFAULT_SNAPSHOT_POLICY
-from app.modules.workspace.application.backup_service import BackupError, BackupService
-from app.modules.workspace.application.runtime import WorkspaceRuntime
-from app.modules.workspace.application.service import WorkspaceService
-from app.modules.files.application.service import FileService
-from app.modules.files.application.verification import FileStorageVerificationService
+from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.bootstrap.file_link_policies import build_file_link_policy_registry
-from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
-from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
-from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
-from app.modules.files.api.router import build_router as build_files_router
-from app.modules.files.domain.audit_policy import (
-    FILE_ACTIVITY_SNAPSHOT_POLICY,
-    FILE_LINK_ACTIVITY_SNAPSHOT_POLICY,
+from app.bootstrap.owner_concern_context import SQLiteOwnerConcernContext
+from app.modules.ai_governance.api.router import build_router as build_ai_governance_router
+from app.modules.ai_governance.application.registry import (
+    ACTION_REGISTRY,
+    ADAPTER_REGISTRY,
+    REDACTION_PROFILE_REGISTRY,
+    SOURCE_VALIDATORS,
 )
-from app.modules.tasks.api.router import build_router as build_tasks_router
-from app.modules.tasks.application.service import TaskService
-from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork
-from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
-from app.modules.tasks.infrastructure.context_reader import SQLiteTaskContextReader
-from app.modules.tasks.domain.audit_policy import TASK_ACTIVITY_POLICY
+from app.modules.ai_governance.application.service import (
+    AiConfigurationService,
+    AiDraftReviewService,
+    AiGenerationCoordinator,
+)
+from app.modules.ai_governance.domain.audit_policy import AI_ACTIVITY_POLICY
+from app.modules.ai_governance.infrastructure.credentials import KeyringAiTransportCredentialStore
+from app.modules.ai_governance.infrastructure.unit_of_work import SQLiteAiGovernanceUnitOfWork
+from app.modules.audit.api.router import build_router as build_audit_router
+from app.modules.audit.application.recorder import AuditRecorder
+from app.modules.audit.domain.models import DEFAULT_SNAPSHOT_POLICY, AuditSnapshotPolicyRegistry
+from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.communications.api.router import build_router as build_communications_router
 from app.modules.communications.application.service import CommunicationService
-from app.modules.communications.infrastructure.unit_of_work import (
-    SQLiteCommunicationUnitOfWork,
-)
-from app.modules.communications.infrastructure.link_reader import SQLiteCommunicationLinkReader
-from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.modules.communications.domain.audit_policy import COMMUNICATION_ACTIVITY_POLICY
+from app.modules.communications.infrastructure.link_reader import SQLiteCommunicationLinkReader
+from app.modules.communications.infrastructure.unit_of_work import SQLiteCommunicationUnitOfWork
+from app.modules.files.api.router import build_router as build_files_router
+from app.modules.files.application.service import FileService
+from app.modules.files.application.verification import FileStorageVerificationService
+from app.modules.files.domain.audit_policy import FILE_ACTIVITY_SNAPSHOT_POLICY, FILE_LINK_ACTIVITY_SNAPSHOT_POLICY
+from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
+from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
+from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
+from app.modules.finance.api.deposit_router import build_router as build_deposit_router
+from app.modules.finance.api.expense_router import build_router as build_expense_router
+from app.modules.finance.api.prepaid_check_router import build_router as build_prepaid_check_router
+from app.modules.finance.api.router import build_router as build_finance_router
+from app.modules.finance.application.deposit_file_links import DepositFileLinkValidator
+from app.modules.finance.application.deposit_service import DepositService
+from app.modules.finance.application.expense_service import ExpenseService
+from app.modules.finance.application.file_links import ExpenseFileLinkValidator
+from app.modules.finance.application.prepaid_check_service import PrepaidCheckService
+from app.modules.finance.application.service import FinanceService
+from app.modules.finance.domain.audit_policy import (
+    ALLOCATION_ACTIVITY_POLICY,
+    DEPOSIT_ACTIVITY_POLICY,
+    EXPECTATION_ACTIVITY_POLICY,
+    EXPENSE_ACTIVITY_POLICY,
+    EXPENSE_CATEGORY_ACTIVITY_POLICY,
+    EXPENSE_REFUND_ACTIVITY_POLICY,
+    PREPAID_CHECK_ACTIVITY_POLICY,
+    RECEIPT_ACTIVITY_POLICY,
+    REVIEW_ACTIVITY_POLICY,
+)
+from app.modules.finance.infrastructure.deposit_unit_of_work import SQLiteDepositUnitOfWork
+from app.modules.finance.infrastructure.expense_context_reader import SQLiteExpenseContextReader
+from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpenseUnitOfWork
+from app.modules.finance.infrastructure.receipt_transaction_operations import SQLiteReceiptTransactionOperations
+from app.modules.finance.infrastructure.unit_of_work import SQLiteFinanceUnitOfWork
+from app.modules.inspections.api.router import build_router as build_inspection_router
+from app.modules.inspections.application.file_links import ConditionObservationFileLinkValidator
+from app.modules.inspections.application.service import InspectionService
+from app.modules.inspections.domain.audit_policy import INSPECTION_ACTIVITY_POLICY
+from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
+from app.modules.inspections.infrastructure.unit_of_work import SQLiteInspectionUnitOfWork
 from app.modules.intake.api.router import build_router as build_intake_router
 from app.modules.intake.application.service import IntakeService, TrustedIntakeAdmission
-from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
-from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
-from app.modules.intake.infrastructure.integrity_consequences import SQLiteIntakeIntegrityConsequences
 from app.modules.intake.domain.audit_policy import INTAKE_ACTIVITY_POLICY
+from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
+from app.modules.intake.infrastructure.integrity_consequences import SQLiteIntakeIntegrityConsequences
+from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
+from app.modules.leases.api.router import build_router as build_lease_router
+from app.modules.leases.application.file_links import LeaseFileLinkValidator
+from app.modules.leases.application.service import LeaseService
+from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
+from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard, SQLiteLeaseUnitOfWork
 from app.modules.maintenance.api.router import build_router as build_maintenance_router
+from app.modules.maintenance.application.file_links import MaintenanceFileLinkValidator
 from app.modules.maintenance.application.service import MaintenanceService
 from app.modules.maintenance.application.work_journal_service import WorkJournalService
-from app.modules.maintenance.application.file_links import MaintenanceFileLinkValidator
-from app.modules.maintenance.infrastructure.unit_of_work import SQLiteMaintenanceUnitOfWork
 from app.modules.maintenance.domain.audit_policy import MAINTENANCE_ACTIVITY_POLICY
+from app.modules.maintenance.infrastructure.unit_of_work import SQLiteMaintenanceUnitOfWork
 from app.modules.owner_accounting.api.router import build_router as build_owner_rent_report_router
-from app.modules.owner_accounting.application.service import OwnerRentReportService
 from app.modules.owner_accounting.application.file_links import OwnerRentReportFileLinkValidator
-from app.modules.owner_accounting.infrastructure.unit_of_work import SQLiteOwnerRentReportUnitOfWork
+from app.modules.owner_accounting.application.service import OwnerRentReportService
 from app.modules.owner_accounting.domain.audit_policy import OWNER_REPORT_ACTIVITY_POLICY
+from app.modules.owner_accounting.infrastructure.unit_of_work import SQLiteOwnerRentReportUnitOfWork
 from app.modules.owner_management.api.router import build_router as build_owner_concern_router
 from app.modules.owner_management.application.service import OwnerConcernService
-from app.modules.owner_management.infrastructure.unit_of_work import SQLiteOwnerConcernPropertyArchiveGuard, SQLiteOwnerConcernUnitOfWork
 from app.modules.owner_management.domain.audit_policy import OWNER_CONCERN_ACTIVITY_POLICY
-from app.bootstrap.owner_concern_context import SQLiteOwnerConcernContext
+from app.modules.owner_management.infrastructure.unit_of_work import (
+    SQLiteOwnerConcernPropertyArchiveGuard,
+    SQLiteOwnerConcernUnitOfWork,
+)
+from app.modules.parties.api.router import build_router as build_party_router
+from app.modules.parties.application.service import PartyContactService, PartyIdentityService, SharedPartyFactory
+from app.modules.parties.domain.audit_policy import PARTY_CONTACT_SNAPSHOT_POLICY
+from app.modules.parties.infrastructure.unit_of_work import (
+    SQLitePartyOperations,
+    SQLitePartyReadOperations,
+    SQLitePartyUnitOfWork,
+)
 from app.modules.portfolio.api.router import build_router as build_portfolio_router
 from app.modules.portfolio.application.service import PortfolioService
+from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
+from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.portfolio.infrastructure.unit_of_work import (
     SQLitePortfolioLeaseOperations,
     SQLitePortfolioPartyRoleActivityGuard,
     SQLitePortfolioRoleSummaryReader,
     SQLitePortfolioUnitOfWork,
 )
-from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
-from app.modules.parties.api.router import build_router as build_party_router
-from app.modules.parties.application.service import PartyContactService, PartyIdentityService
-from app.modules.parties.infrastructure.unit_of_work import (
-    SQLitePartyOperations,
-    SQLitePartyReadOperations,
-    SQLitePartyUnitOfWork,
-)
+from app.modules.tasks.api.router import build_router as build_tasks_router
+from app.modules.tasks.application.service import TaskService
+from app.modules.tasks.domain.audit_policy import TASK_ACTIVITY_POLICY
+from app.modules.tasks.infrastructure.context_reader import SQLiteTaskContextReader
+from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
+from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork
 from app.modules.tenants.api.router import build_router as build_tenant_router
 from app.modules.tenants.application.service import TenantService
 from app.modules.tenants.infrastructure.unit_of_work import (
@@ -88,58 +136,22 @@ from app.modules.tenants.infrastructure.unit_of_work import (
     SQLiteTenantRoleSummaryReader,
     SQLiteTenantUnitOfWork,
 )
-from app.modules.leases.api.router import build_router as build_lease_router
-from app.modules.leases.application.service import LeaseService
-from app.modules.leases.application.file_links import LeaseFileLinkValidator
-from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard, SQLiteLeaseUnitOfWork
-from app.modules.inspections.api.router import build_router as build_inspection_router
-from app.modules.inspections.application.service import InspectionService
-from app.modules.inspections.infrastructure.unit_of_work import SQLiteInspectionUnitOfWork
-from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
-from app.modules.inspections.application.file_links import ConditionObservationFileLinkValidator
-from app.modules.inspections.domain.audit_policy import INSPECTION_ACTIVITY_POLICY
-from app.modules.parties.application.service import SharedPartyFactory
-from app.modules.parties.domain.audit_policy import PARTY_CONTACT_SNAPSHOT_POLICY
 from app.modules.vendors.api.router import build_router as build_provider_router
 from app.modules.vendors.application.service import ProviderService
-from app.modules.vendors.infrastructure.unit_of_work import (
-    SQLiteProviderRoleActivityGuard, SQLiteProviderRoleSummaryReader, SQLiteProviderUnitOfWork,
-)
 from app.modules.vendors.domain.audit_policy import (
-    PROVIDER_ACTIVITY_SNAPSHOT_POLICY, PROVIDER_REPUTATION_LINK_ACTIVITY_POLICY,
+    PROVIDER_ACTIVITY_SNAPSHOT_POLICY,
+    PROVIDER_REPUTATION_LINK_ACTIVITY_POLICY,
 )
-from app.modules.finance.api.router import build_router as build_finance_router
-from app.modules.finance.api.expense_router import build_router as build_expense_router
-from app.modules.finance.api.deposit_router import build_router as build_deposit_router
-from app.modules.finance.api.prepaid_check_router import build_router as build_prepaid_check_router
-from app.modules.finance.application.expense_service import ExpenseService
-from app.modules.finance.application.deposit_service import DepositService
-from app.modules.finance.application.file_links import ExpenseFileLinkValidator
-from app.modules.finance.application.deposit_file_links import DepositFileLinkValidator
-from app.modules.finance.application.service import FinanceService
-from app.modules.finance.infrastructure.expense_context_reader import SQLiteExpenseContextReader
-from app.modules.finance.application.prepaid_check_service import PrepaidCheckService
-from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpenseUnitOfWork
-from app.modules.finance.infrastructure.unit_of_work import SQLiteFinanceUnitOfWork
-from app.modules.finance.infrastructure.receipt_transaction_operations import SQLiteReceiptTransactionOperations
-from app.modules.finance.infrastructure.deposit_unit_of_work import SQLiteDepositUnitOfWork
-from app.modules.finance.domain.audit_policy import (
-    EXPECTATION_ACTIVITY_POLICY, REVIEW_ACTIVITY_POLICY,
-    RECEIPT_ACTIVITY_POLICY, ALLOCATION_ACTIVITY_POLICY,
-    PREPAID_CHECK_ACTIVITY_POLICY,
-    EXPENSE_ACTIVITY_POLICY, EXPENSE_CATEGORY_ACTIVITY_POLICY,
-    EXPENSE_REFUND_ACTIVITY_POLICY,
-    DEPOSIT_ACTIVITY_POLICY,
-)
-from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
-from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
 from app.modules.vendors.infrastructure.context_reader import SQLiteProviderContextReader
-from app.modules.ai_governance.api.router import build_router as build_ai_governance_router
-from app.modules.ai_governance.application.service import AiConfigurationService, AiDraftReviewService, AiGenerationCoordinator
-from app.modules.ai_governance.application.registry import ACTION_REGISTRY, REDACTION_PROFILE_REGISTRY, ADAPTER_REGISTRY, SOURCE_VALIDATORS
-from app.modules.ai_governance.domain.audit_policy import AI_ACTIVITY_POLICY
-from app.modules.ai_governance.infrastructure.credentials import KeyringAiTransportCredentialStore
-from app.modules.ai_governance.infrastructure.unit_of_work import SQLiteAiGovernanceUnitOfWork
+from app.modules.vendors.infrastructure.unit_of_work import (
+    SQLiteProviderRoleActivityGuard,
+    SQLiteProviderRoleSummaryReader,
+    SQLiteProviderUnitOfWork,
+)
+from app.modules.workspace.api.router import build_router
+from app.modules.workspace.application.backup_service import BackupError, BackupService
+from app.modules.workspace.application.runtime import WorkspaceRuntime
+from app.modules.workspace.application.service import WorkspaceService
 from app.platform.version import application_version
 
 logger = logging.getLogger(__name__)

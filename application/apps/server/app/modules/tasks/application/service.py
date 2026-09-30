@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
-from base64 import urlsafe_b64decode, urlsafe_b64encode
 from json import dumps, loads
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.modules.tasks.application.ports import DueReminderSummary, TaskTransaction, TaskUnitOfWork
-from app.modules.tasks.domain.models import ACTIVE_TASK_STATUSES, Task, TaskReminder, dismiss, due_bucket, is_terminal, transition
+from app.modules.tasks.domain.models import (
+    ACTIVE_TASK_STATUSES,
+    Task,
+    TaskReminder,
+    dismiss,
+    due_bucket,
+    is_terminal,
+    transition,
+)
 
 TASK_STATUSES = {"open", "in_progress", "completed", "cancelled"}
 INITIAL_TASK_STATUSES = ACTIVE_TASK_STATUSES

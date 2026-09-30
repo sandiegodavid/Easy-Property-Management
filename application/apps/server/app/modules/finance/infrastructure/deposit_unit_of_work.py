@@ -6,11 +6,19 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.modules.finance.domain.models import FinanceConflictError
 from app.modules.finance.infrastructure.sqlalchemy_models import (
-    SecurityDepositAccountModel, SecurityDepositReceiptModel, SecurityDepositSettlementModel,
-    SecurityDepositSettlementReceiptModel, SecurityDepositDeductionModel,
-    SecurityDepositDeductionSourceModel, SecurityDepositCreditModel, SecurityDepositRefundModel,
+    ExpenseModel,
+    RentExpectationModel,
+    RentReceiptAllocationModel,
+    RentReceiptModel,
+    SecurityDepositAccountModel,
+    SecurityDepositCreditModel,
+    SecurityDepositDeductionModel,
+    SecurityDepositDeductionSourceModel,
+    SecurityDepositReceiptModel,
+    SecurityDepositRefundModel,
+    SecurityDepositSettlementModel,
+    SecurityDepositSettlementReceiptModel,
 )
-from app.modules.finance.infrastructure.sqlalchemy_models import ExpenseModel, RentExpectationModel, RentReceiptAllocationModel, RentReceiptModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 _MODELS = {"account": SecurityDepositAccountModel, "receipt": SecurityDepositReceiptModel,

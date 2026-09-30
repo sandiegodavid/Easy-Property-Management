@@ -10,17 +10,17 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint, inspect, text
 
 from app.platform.migration_errors import MigrationSchemaError
+
 from .sqlalchemy_models import (
     MaintenanceAppointmentModel,
+    MaintenanceAssignmentModel,
     MaintenanceCostContextModel,
     MaintenanceFollowUpOperationModel,
     MaintenanceIssueExpenseLinkModel,
     MaintenanceIssueModel,
     MaintenanceQuoteModel,
-    MaintenanceAssignmentModel,
     MaintenanceWorkJournalEntryModel,
 )
-
 
 MODELS = (
     MaintenanceIssueModel, MaintenanceAppointmentModel, MaintenanceCostContextModel,

@@ -1,16 +1,39 @@
 """SQLite persistence boundary for INSP-001."""
 from __future__ import annotations
+
 from collections.abc import Callable
 from typing import Any, TypeVar
+
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, OperationalError
-from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
+from sqlalchemy.orm import Session
+
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.leases.infrastructure.sqlalchemy_models import LeaseModel, LeaseParticipantModel, LeaseTerminationCaseModel
 from app.modules.files.infrastructure.sqlalchemy_models import FileContentLocationModel, FileLinkModel, FileRecordModel
-from app.modules.inspections.domain.models import (ConditionAcknowledgment, ConditionArea, ConditionChecklistTemplate, ConditionChecklistTemplateItem, ConditionComparison, ConditionObservation, ConditionReport)
-from app.modules.inspections.infrastructure.sqlalchemy_models import (ConditionAcknowledgmentModel, ConditionAreaModel, ConditionChecklistTemplateItemModel, ConditionChecklistTemplateModel, ConditionComparisonModel, ConditionObservationModel, ConditionReportModel)
+from app.modules.inspections.domain.models import (
+    ConditionAcknowledgment,
+    ConditionArea,
+    ConditionChecklistTemplate,
+    ConditionChecklistTemplateItem,
+    ConditionComparison,
+    ConditionObservation,
+    ConditionReport,
+)
+from app.modules.inspections.infrastructure.sqlalchemy_models import (
+    ConditionAcknowledgmentModel,
+    ConditionAreaModel,
+    ConditionChecklistTemplateItemModel,
+    ConditionChecklistTemplateModel,
+    ConditionComparisonModel,
+    ConditionObservationModel,
+    ConditionReportModel,
+)
+from app.modules.leases.infrastructure.sqlalchemy_models import (
+    LeaseModel,
+    LeaseParticipantModel,
+    LeaseTerminationCaseModel,
+)
+from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 Result = TypeVar("Result")
 

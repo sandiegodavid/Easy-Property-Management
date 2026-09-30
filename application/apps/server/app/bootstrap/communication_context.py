@@ -8,15 +8,15 @@ from sqlalchemy import select
 
 from app.modules.communications.domain.models import Communication
 from app.modules.finance.infrastructure.sqlalchemy_models import RentExpectationModel, RentReceiptModel
+from app.modules.intake.infrastructure.sqlalchemy_models import IntakeSourceModel
 from app.modules.leases.infrastructure.sqlalchemy_models import LeaseModel, LeaseRenewalOptionModel
+from app.modules.maintenance.infrastructure.sqlalchemy_models import MaintenanceIssueModel
+from app.modules.owner_management.infrastructure.sqlalchemy_models import OwnerConcernModel
 from app.modules.parties.infrastructure.sqlalchemy_models import PartyContactMethodModel, PartyModel
 from app.modules.portfolio.infrastructure.sqlalchemy_models import PropertyModel, SpaceModel
 from app.modules.tasks.application.ports import TaskTransactionOperations
 from app.modules.tasks.application.service import TaskCreateCommand, new_task
 from app.modules.tasks.infrastructure.sqlalchemy_models import TaskModel
-from app.modules.maintenance.infrastructure.sqlalchemy_models import MaintenanceIssueModel
-from app.modules.owner_management.infrastructure.sqlalchemy_models import OwnerConcernModel
-from app.modules.intake.infrastructure.sqlalchemy_models import IntakeSourceModel
 
 
 class SQLiteCommunicationContextOperations:

@@ -1,43 +1,39 @@
 from __future__ import annotations
 
-import tempfile
-import unittest
+import hashlib
 import json
 import sqlite3
+import tempfile
 import types
-import hashlib
-from uuid import uuid4
+import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
-from sqlalchemy import event, func, select
-from sqlalchemy.exc import IntegrityError
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
+from sqlalchemy import event, func, select, text
+from sqlalchemy.exc import IntegrityError
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.application.errors import PublicationCleanupIncomplete
+from app.modules.files.application.ports import FileLink
 from app.modules.files.application.service import FileError, FileService
 from app.modules.files.application.verification import FileStorageVerificationService
-from app.modules.files.application.ports import FileLink
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
+from app.modules.files.infrastructure.sqlalchemy_models import FileLinkModel
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.intake.application.file_links import IntakeSourceFileLinkValidator
-from app.modules.intake.application.service import (
-    AttachmentInput,
-    IntakeAdmissionCommand,
-    IntakeService,
-)
+from app.modules.intake.application.service import AttachmentInput, IntakeAdmissionCommand, IntakeService
 from app.modules.intake.domain.models import EvidenceEnvelope
 from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
 from app.modules.intake.infrastructure.integrity_consequences import SQLiteIntakeIntegrityConsequences
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
 from app.platform.config import LocalConfig
-from app.modules.files.infrastructure.sqlalchemy_models import FileLinkModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
-from sqlalchemy import text
 
 
 class FileStoreTests(unittest.TestCase):

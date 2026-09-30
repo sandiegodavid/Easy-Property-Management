@@ -1,19 +1,19 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import tempfile
 import unittest
-import json
-from alembic import command as alembic_command
 from pathlib import Path
 from unittest.mock import patch
 
+from alembic import command as alembic_command
 from fastapi.testclient import TestClient
 
 from app.bootstrap.api import create_app
-
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
+from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard
 from app.modules.parties.application.service import (
     ContactMethodCommand,
     ContactReferenceResolution,
@@ -22,11 +22,15 @@ from app.modules.parties.application.service import (
     PartyValidationError,
     SharedPartyFactory,
 )
-from app.modules.parties.infrastructure.unit_of_work import SQLitePartyUnitOfWork
-from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations, SQLitePartyReadOperations
+from app.modules.parties.domain.contact_values import contact_search_terms
+from app.modules.parties.infrastructure.unit_of_work import (
+    SQLitePartyOperations,
+    SQLitePartyReadOperations,
+    SQLitePartyUnitOfWork,
+)
 from app.modules.portfolio.application.service import PartyCreateCommand, PortfolioService
-from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
+from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
 from app.modules.tenants.application.service import (
     TenantConflictError,
     TenantCreateCommand,
@@ -34,18 +38,16 @@ from app.modules.tenants.application.service import (
     TenantProfilePatchCommand,
     TenantService,
 )
+from app.modules.tenants.infrastructure.schema_validation import validate_tenant_schema
 from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantContactReferenceGuard, SQLiteTenantUnitOfWork
-from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard
-from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.platform.config import LocalConfig
 from app.platform.migration_errors import MigrationSchemaError
-from app.platform.sqlite_engine import create_sqlite_engine
-from app.platform.sqlite_engine import immediate_transaction
-from app.platform.product_migrations import _config as alembic_config, initialize_latest_schema
-from app.modules.tenants.infrastructure.schema_validation import validate_tenant_schema
-from app.modules.parties.domain.contact_values import contact_search_terms
+from app.platform.product_migrations import _config as alembic_config
+from app.platform.product_migrations import initialize_latest_schema
+from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 
 class TenantTests(unittest.TestCase):

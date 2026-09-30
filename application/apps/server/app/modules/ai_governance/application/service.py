@@ -1,16 +1,39 @@
 """Synchronous coordinator for bounded, reviewable AI generations."""
 from __future__ import annotations
+
+import json
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
-import json
-import re
-from typing import Any, Callable, Mapping
 from types import MappingProxyType
+from typing import Any, Callable, Mapping
 from uuid import uuid4
-from app.modules.ai_governance.application.ports import AiApprovalContext, AiApprovalHandler, AiGovernanceUnitOfWork, AiProviderError, AiProviderPort, AiProviderResult, AiTransportCredentialStore
+
+from app.modules.ai_governance.application.ports import (
+    AiApprovalContext,
+    AiApprovalHandler,
+    AiGovernanceUnitOfWork,
+    AiProviderError,
+    AiProviderPort,
+    AiProviderResult,
+    AiTransportCredentialStore,
+)
 from app.modules.ai_governance.domain.audit_policy import ai_audit_snapshot
-from app.modules.ai_governance.domain.models import AiActionDefinition, AiActionRegistry, AiConflictError, AiCredentialConsistencyError, AiNotFoundError, AiValidationError, RedactionProfileRegistry, canonical_json, fingerprint, qualified_model_identity, validate_provider_metadata, validate_uuid
+from app.modules.ai_governance.domain.models import (
+    AiActionDefinition,
+    AiActionRegistry,
+    AiConflictError,
+    AiCredentialConsistencyError,
+    AiNotFoundError,
+    AiValidationError,
+    RedactionProfileRegistry,
+    canonical_json,
+    fingerprint,
+    qualified_model_identity,
+    validate_provider_metadata,
+    validate_uuid,
+)
 
 _UNSET = object()
 

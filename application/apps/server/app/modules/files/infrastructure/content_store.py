@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable
 from uuid import uuid4
 
-from app.modules.files.application.errors import FileError, MAX_FILE_BYTES, PublicationCleanupIncomplete
+from app.modules.files.application.errors import MAX_FILE_BYTES, FileError, PublicationCleanupIncomplete
 from app.modules.files.domain.models import StoredFile
 from app.platform.locking import WorkspaceOperationInProgressError, WorkspaceOperationLock
 

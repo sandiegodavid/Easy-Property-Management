@@ -1,10 +1,16 @@
 from __future__ import annotations
+
 from collections.abc import Callable
 from typing import TypeVar
+
 from sqlalchemy import and_, or_, select
+
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.owner_accounting.domain.models import OwnerRentReport
-from app.modules.owner_accounting.infrastructure.sqlalchemy_models import OwnerRentReportModel, OwnerRentReportOperationModel
+from app.modules.owner_accounting.infrastructure.sqlalchemy_models import (
+    OwnerRentReportModel,
+    OwnerRentReportOperationModel,
+)
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 Result = TypeVar("Result")

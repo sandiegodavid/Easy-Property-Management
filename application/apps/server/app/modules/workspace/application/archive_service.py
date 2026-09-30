@@ -2,23 +2,23 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import shutil
 import sqlite3
 import tempfile
+from collections.abc import Callable
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
-from collections.abc import Callable
 
 from app.modules.workspace.application.backup_models import BackupError, BackupResult, PackageType
 from app.modules.workspace.application.backup_policy import secure_directory, secure_file
 from app.modules.workspace.application.service import WorkspaceError, WorkspacePaths, WorkspaceService
 from app.modules.workspace.domain.models import WorkspaceManifest
 from app.modules.workspace.infrastructure.encrypted_archive import (
-    ARCHIVE_FORMAT_VERSION,
     APPLICATION_VERSION,
+    ARCHIVE_FORMAT_VERSION,
     ArchiveContents,
     ArchiveError,
     create_payload_zip,
@@ -31,7 +31,6 @@ from app.modules.workspace.infrastructure.encrypted_archive import (
 )
 from app.platform.config import LocalConfig
 from app.platform.product_migrations import current_revision
-
 
 RemoteMaterializer = Callable[[str, str, str | None, Path, str, int], None]
 

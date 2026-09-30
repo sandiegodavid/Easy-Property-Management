@@ -1,12 +1,26 @@
 """INSP-001 report, acknowledgement, and comparison workflows."""
 from __future__ import annotations
+
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
-from uuid import uuid4
 from pathlib import Path
+from uuid import uuid4
+
 from app.modules.inspections.application.attention import inspection_attention
-from app.modules.inspections.application.ports import InspectionEvidenceStore, InspectionTransaction, InspectionUnitOfWork
-from app.modules.inspections.domain.models import ConditionAcknowledgment, ConditionArea, ConditionChecklistTemplate, ConditionChecklistTemplateItem, ConditionComparison, ConditionObservation, ConditionReport
+from app.modules.inspections.application.ports import (
+    InspectionEvidenceStore,
+    InspectionTransaction,
+    InspectionUnitOfWork,
+)
+from app.modules.inspections.domain.models import (
+    ConditionAcknowledgment,
+    ConditionArea,
+    ConditionChecklistTemplate,
+    ConditionChecklistTemplateItem,
+    ConditionComparison,
+    ConditionObservation,
+    ConditionReport,
+)
 
 REPORT_KINDS = {"pre_move_in", "post_move_out"}; STATES = {"good", "fair", "poor", "damaged", "missing", "not_tested", "not_applicable"}; CLEAN = {"clean", "needs_cleaning", "not_assessed"}; ACKS = {"acknowledged", "disputed", "declined", "not_requested", "pending"}; COMPARES = {"unchanged", "improved", "normal_wear", "possible_tenant_damage", "maintenance_needed", "not_comparable"}
 class InspectionError(ValueError): pass

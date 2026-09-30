@@ -2,23 +2,21 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import sqlite3
 import tempfile
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
+from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.workspace.application.archive_service import WorkspaceArchiveService
 from app.modules.workspace.application.backup_models import BackupError, BackupResult, PackageType, RestoreResult
 from app.modules.workspace.application.backup_policy import BackupDestinationPolicy, WorkspaceLockCoordinator
 from app.modules.workspace.application.backup_state import BackupStateStore, RetentionExecutionError
 from app.modules.workspace.application.service import WorkspaceService
-from app.modules.workspace.infrastructure.sqlite_store import SQLiteWorkspaceStore
-from app.platform.product_migrations import validate_latest_schema
-from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.workspace.infrastructure.encrypted_archive import (
     ArchiveContents,
     ArchiveError,
@@ -27,6 +25,8 @@ from app.modules.workspace.infrastructure.encrypted_archive import (
     inspect_payload_zip,
     require_passphrase,
 )
+from app.modules.workspace.infrastructure.sqlite_store import SQLiteWorkspaceStore
+from app.platform.product_migrations import validate_latest_schema
 from app.platform.secrets import BackupSecretStore, KeyringBackupSecretStore, SecretStoreError
 
 

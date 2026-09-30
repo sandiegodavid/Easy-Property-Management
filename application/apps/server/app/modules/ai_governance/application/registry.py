@@ -3,8 +3,8 @@
 Later capability slices extend these tuples in code; workspace validation uses
 the same objects so recognized historical runs remain restorable.
 """
-from app.modules.ai_governance.domain.models import AiActionRegistry, RedactionProfileRegistry
 from app.modules.ai_governance.application.service import AiAdapterRegistry
+from app.modules.ai_governance.domain.models import AiActionRegistry, RedactionProfileRegistry
 
 ACTION_REGISTRY = AiActionRegistry()
 REDACTION_PROFILE_REGISTRY = RedactionProfileRegistry()

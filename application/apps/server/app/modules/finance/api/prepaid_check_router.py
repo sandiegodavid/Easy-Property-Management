@@ -7,7 +7,13 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from app.modules.finance.application.prepaid_check_service import PrepaidCheckService
-from app.modules.finance.domain.models import FinanceConflictError, FinanceError, FinanceNotFoundError, PrepaidCheckCommand, PrepaidCheckTransitionCommand
+from app.modules.finance.domain.models import (
+    FinanceConflictError,
+    FinanceError,
+    FinanceNotFoundError,
+    PrepaidCheckCommand,
+    PrepaidCheckTransitionCommand,
+)
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 
 

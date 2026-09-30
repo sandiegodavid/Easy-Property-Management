@@ -1,7 +1,7 @@
 """Finance activity presentation keeps monetary and correction detail contextual."""
 from typing import Any, Mapping
-from app.modules.audit.domain.models import DEFAULT_SNAPSHOT_POLICY
-from app.modules.audit.domain.models import AuditSnapshotPolicy
+
+from app.modules.audit.domain.models import DEFAULT_SNAPSHOT_POLICY, AuditSnapshotPolicy
 
 
 class DepositActivitySnapshotPolicy(AuditSnapshotPolicy):

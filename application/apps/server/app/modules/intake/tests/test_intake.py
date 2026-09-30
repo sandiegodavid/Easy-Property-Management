@@ -1,37 +1,44 @@
 from __future__ import annotations
+
+import sqlite3
 from dataclasses import replace
 from pathlib import Path
-import sqlite3
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 from uuid import uuid4
-import sqlite3
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.api.router import build_router as build_audit_router
-from app.modules.audit.domain.models import AuditSnapshotPolicyRegistry, DEFAULT_SNAPSHOT_POLICY
+from app.modules.audit.application.recorder import AuditRecorder
+from app.modules.audit.domain.models import DEFAULT_SNAPSHOT_POLICY, AuditSnapshotPolicyRegistry
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.application.errors import PublicationCleanupIncomplete
 from app.modules.files.application.service import FileService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
-from app.modules.intake.application.file_links import IntakeSourceFileLinkValidator
 from app.modules.intake.api.router import build_router
-from app.modules.intake.application.service import AttachmentInput, IntakeAdmissionCommand, IntakeService, TrustedIntakeAdmission
-from app.modules.intake.domain.models import EvidenceEnvelope, IntakeAdmissionContext, IntakeConflictError, IntakeError
-from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
-from app.platform.migration_errors import MigrationSchemaError
-from app.modules.intake.application.service import IntakeAdmissionCommand, IntakeService
+from app.modules.intake.application.file_links import IntakeSourceFileLinkValidator
+from app.modules.intake.application.service import (
+    AttachmentInput,
+    IntakeAdmissionCommand,
+    IntakeService,
+    TrustedIntakeAdmission,
+)
 from app.modules.intake.domain.audit_policy import INTAKE_ACTIVITY_POLICY
-from app.modules.intake.domain.models import AttentionTransition, EvidenceEnvelope, IntakeConflictError
+from app.modules.intake.domain.models import (
+    AttentionTransition,
+    EvidenceEnvelope,
+    IntakeAdmissionContext,
+    IntakeConflictError,
+    IntakeError,
+)
 from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
-from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
-from app.platform.product_migrations import initialize_latest_schema, validate_latest_schema
 from app.platform.migration_errors import MigrationSchemaError
+from app.platform.product_migrations import initialize_latest_schema, validate_latest_schema
+from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 
 class IntakeTests(TestCase):

@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
-import base64
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.modules.communications.application.ports import CommunicationTransaction, CommunicationUnitOfWork
-from app.modules.communications.domain.models import Communication, CommunicationLink, CommunicationOperation, CommunicationParticipant
+from app.modules.communications.domain.models import (
+    Communication,
+    CommunicationLink,
+    CommunicationOperation,
+    CommunicationParticipant,
+)
 
 DIRECTIONS = frozenset({"inbound", "outbound", "internal"})
 CHANNELS = frozenset({"phone", "email", "sms", "in_person", "letter", "other"})

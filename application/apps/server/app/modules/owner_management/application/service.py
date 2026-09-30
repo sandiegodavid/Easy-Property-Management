@@ -1,15 +1,28 @@
 from __future__ import annotations
 
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from json import dumps, loads
-from base64 import urlsafe_b64decode, urlsafe_b64encode
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from app.modules.owner_management.application.ports import OwnerConcernUnitOfWork
-from app.modules.owner_management.domain.models import ACTIVE_STATUSES, Concern, ConcernCreateCommand, FollowUpInput, OwnerConcernConflictError, OwnerConcernError, OwnerConcernNotFoundError, PRIORITIES, TERMINAL_STATUSES, text, timestamp, uuid
+from app.modules.owner_management.domain.models import (
+    ACTIVE_STATUSES,
+    PRIORITIES,
+    TERMINAL_STATUSES,
+    Concern,
+    ConcernCreateCommand,
+    FollowUpInput,
+    OwnerConcernConflictError,
+    OwnerConcernError,
+    OwnerConcernNotFoundError,
+    text,
+    timestamp,
+    uuid,
+)
 
 
 class OwnerConcernService:

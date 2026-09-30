@@ -1,12 +1,13 @@
 """Neutral transaction-scoped access to the FIN-001 receipt policy."""
-from app.modules.finance.infrastructure.unit_of_work import _Tx
+from sqlalchemy import select
+
+from app.modules.finance.application.ports import RecordedReceipt
 from app.modules.finance.application.receipt_handoff import record_receipt_in_transaction
 from app.modules.finance.application.service import _command_payload, _receipt_payload
-from app.modules.finance.domain.models import FinanceConflictError
-from sqlalchemy import select
+from app.modules.finance.domain.models import FinanceConflictError, RentReceipt
 from app.modules.finance.infrastructure.sqlalchemy_models import RentReceiptModel
-from app.modules.finance.domain.models import RentReceipt
-from app.modules.finance.application.ports import RecordedReceipt
+from app.modules.finance.infrastructure.unit_of_work import _Tx
+
 
 class SQLiteReceiptTransactionOperations:
     def __init__(self, recorder, lease_operations, portfolio_operations, party_operations):

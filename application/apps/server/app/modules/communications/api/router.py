@@ -10,10 +10,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.communications.application.service import (
-    CommunicationCommand, CommunicationConflictError, CommunicationError, CommunicationNotFoundError,
-    CommunicationService, FollowUpInput, LinkInput, ParticipantInput, PatchCommand,
+    CommunicationCommand,
+    CommunicationConflictError,
+    CommunicationError,
+    CommunicationNotFoundError,
+    CommunicationService,
+    FollowUpInput,
+    LinkInput,
+    ParticipantInput,
+    PatchCommand,
 )
 from app.modules.workspace.application.runtime import WorkspaceRuntime
+
 
 class Contract(BaseModel): model_config = ConfigDict(extra="forbid")
 class ParticipantInputModel(Contract):

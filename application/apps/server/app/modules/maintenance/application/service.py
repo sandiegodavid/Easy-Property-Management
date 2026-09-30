@@ -1,11 +1,14 @@
 """Maintenance aggregate workflows."""
 from __future__ import annotations
+
 from datetime import UTC, datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo
+
+from app.modules.maintenance.application.ports import MaintenanceUnitOfWork
 from app.modules.maintenance.domain.models import *
 from app.modules.maintenance.domain.models import text as maintenance_text
-from app.modules.maintenance.application.ports import MaintenanceUnitOfWork
+
 
 def _stamp(): return datetime.now(UTC).isoformat()
 def _dict(row):

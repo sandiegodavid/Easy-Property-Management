@@ -5,7 +5,12 @@ from datetime import UTC, datetime
 from typing import Protocol
 from uuid import uuid4
 
-from app.modules.parties.application.ports import PartyReadOperations, PartyRoleSummaryReader, PartyTransaction, PartyUnitOfWork
+from app.modules.parties.application.ports import (
+    PartyReadOperations,
+    PartyRoleSummaryReader,
+    PartyTransaction,
+    PartyUnitOfWork,
+)
 from app.modules.parties.domain.contact_values import normalize_contact_value
 from app.modules.parties.domain.models import Party, PartyContactMethod
 

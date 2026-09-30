@@ -1,11 +1,11 @@
 """FIN-008 command validation and neutral deposit records."""
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass
 from datetime import date
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from hashlib import sha256
-import json
 from typing import Literal
 
 from app.modules.finance.domain.expense_models import amount_minor, amount_text, identifier, local_date, text

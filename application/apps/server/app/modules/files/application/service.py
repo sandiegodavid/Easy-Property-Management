@@ -10,8 +10,21 @@ from uuid import uuid4
 
 from sqlalchemy.exc import IntegrityError
 
-from app.modules.files.application.errors import MAX_FILE_BYTES, FileError, PublicationCleanupIncomplete, normalize_filename, normalize_media_type
-from app.modules.files.application.ports import FileAuditChange, FileContentStore, FileLink, FileLinkPolicyRegistry, FileLinkValidator, FileUnitOfWork
+from app.modules.files.application.errors import (
+    MAX_FILE_BYTES,
+    FileError,
+    PublicationCleanupIncomplete,
+    normalize_filename,
+    normalize_media_type,
+)
+from app.modules.files.application.ports import (
+    FileAuditChange,
+    FileContentStore,
+    FileLink,
+    FileLinkPolicyRegistry,
+    FileLinkValidator,
+    FileUnitOfWork,
+)
 from app.modules.files.domain.models import StoredFile
 from app.modules.workspace.application.service import WorkspaceService
 

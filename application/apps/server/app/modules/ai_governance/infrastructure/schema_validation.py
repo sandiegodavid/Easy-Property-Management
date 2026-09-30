@@ -1,14 +1,32 @@
 """Fail closed on unsupported governed-AI retained state."""
 from __future__ import annotations
+
 import json
 import re
-from hashlib import sha256
 from datetime import UTC, datetime
+from hashlib import sha256
+
 from sqlalchemy import text
+
 from app.modules.ai_governance.domain.audit_policy import ai_audit_snapshot
-from app.modules.ai_governance.domain.models import AiActionRegistry, RedactionProfileRegistry, canonical_json, fingerprint, qualified_model_identity, validate_provider_metadata
+from app.modules.ai_governance.domain.models import (
+    AiActionRegistry,
+    RedactionProfileRegistry,
+    canonical_json,
+    fingerprint,
+    qualified_model_identity,
+    validate_provider_metadata,
+)
+from app.modules.ai_governance.infrastructure.sqlalchemy_models import (
+    AiActionLimitModel,
+    AiDraftModel,
+    AiModelConnectionModel,
+    AiReviewDecisionModel,
+    AiRunModel,
+    AiSettingsModel,
+    AiSettingsOperationModel,
+)
 from app.platform.migration_errors import MigrationSchemaError
-from app.modules.ai_governance.infrastructure.sqlalchemy_models import AiSettingsModel, AiSettingsOperationModel, AiModelConnectionModel, AiActionLimitModel, AiRunModel, AiDraftModel, AiReviewDecisionModel
 
 
 def validate_ai_governance_schema(connection, actions: AiActionRegistry | None = None, profiles: RedactionProfileRegistry | None = None, adapters=None, approval_validators=None, source_validators=None) -> None:

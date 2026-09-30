@@ -5,7 +5,6 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from uuid import UUID
 
-
 CONCERN_TYPES = frozenset({"general_rental", "lease", "tenant", "vacancy"})
 PRIORITIES = frozenset({"low", "normal", "high", "urgent"})
 ACTIVE_STATUSES = frozenset({"open", "in_progress"})

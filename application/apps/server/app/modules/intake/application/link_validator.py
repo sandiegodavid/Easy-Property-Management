@@ -1,7 +1,10 @@
 """COM-001's narrow Intake target validator."""
 from __future__ import annotations
+
 from typing import Any
+
 from sqlalchemy import select
+
 from app.modules.intake.infrastructure.sqlalchemy_models import IntakeSourceModel
 
 

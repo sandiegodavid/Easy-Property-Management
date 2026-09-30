@@ -1,7 +1,9 @@
 """SQLAlchemy metadata owned by FIN-001."""
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
+
 from app.platform.sqlalchemy_models import LocalBase
+
 
 class RentExpectationModel(LocalBase):
     __tablename__ = "rent_expectations"

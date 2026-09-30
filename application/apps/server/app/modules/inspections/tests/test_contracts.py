@@ -1,14 +1,22 @@
 """Focused INSP-001 contract regressions."""
 from __future__ import annotations
+
 import ast
+import unittest
 from datetime import datetime
 from pathlib import Path
-import unittest
+
 from pydantic import ValidationError
-from app.modules.inspections.api.router import ComparisonItemResponse, ObservationResponse, TemplateItemResponse
+
 from app.modules.files.application.errors import FileError
 from app.modules.files.application.service import FileService
-from app.modules.inspections.application.service import AreaInput, InspectionConflictError, InspectionService, ObservationInput
+from app.modules.inspections.api.router import ComparisonItemResponse, ObservationResponse, TemplateItemResponse
+from app.modules.inspections.application.service import (
+    AreaInput,
+    InspectionConflictError,
+    InspectionService,
+    ObservationInput,
+)
 
 
 class _Transaction:

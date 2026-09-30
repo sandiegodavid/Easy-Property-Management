@@ -4,7 +4,9 @@ Direct generic uploads are deliberately rejected: intake must persist the
 immutable revision/file association in the same transaction as its source.
 """
 from __future__ import annotations
+
 from sqlalchemy import text
+
 from app.modules.files.application.ports import FileLink
 
 

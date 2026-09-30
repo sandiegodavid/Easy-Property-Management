@@ -1,5 +1,6 @@
 """Current-format validation owned by the audit module."""
 from sqlalchemy import inspect
+
 APPEND_ONLY_TRIGGERS = {"audit_events_no_update", "audit_events_no_delete"}
 from app.platform.migration_errors import MigrationSchemaError
 

@@ -1,4 +1,6 @@
 from app.modules.audit.domain.models import DefaultAuditSnapshotPolicy
+
+
 class MaintenanceActivitySnapshotPolicy(DefaultAuditSnapshotPolicy):
     def redact(self,snapshot):
         result=dict(snapshot or {})

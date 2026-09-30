@@ -11,7 +11,12 @@ from sqlalchemy import inspect, text
 from sqlalchemy.dialects import sqlite
 
 from app.modules.communications.application.ports import CommunicationContextOperations
-from app.modules.communications.infrastructure.sqlalchemy_models import CommunicationLinkModel, CommunicationModel, CommunicationOperationModel, CommunicationParticipantModel
+from app.modules.communications.infrastructure.sqlalchemy_models import (
+    CommunicationLinkModel,
+    CommunicationModel,
+    CommunicationOperationModel,
+    CommunicationParticipantModel,
+)
 from app.platform.migration_errors import MigrationSchemaError
 
 MODELS = (CommunicationModel, CommunicationParticipantModel, CommunicationLinkModel, CommunicationOperationModel)

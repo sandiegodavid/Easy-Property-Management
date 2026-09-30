@@ -4,15 +4,19 @@ Cross-module facts are provided by owner-owned, transaction-aware readers.  This
 adapter deliberately knows only maintenance tables.
 """
 from __future__ import annotations
+
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from typing import Callable
 from zoneinfo import ZoneInfo
+
 from sqlalchemy import and_, case, create_engine, desc, exists, func, select
 from sqlalchemy.exc import IntegrityError
+
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.maintenance.domain.models import MaintenanceConflictError
 from app.platform.sqlite_engine import immediate_transaction
+
 from .sqlalchemy_models import *
 
 MODELS={"issue":MaintenanceIssueModel,"appointment":MaintenanceAppointmentModel,"cost":MaintenanceCostContextModel,"expense_link":MaintenanceIssueExpenseLinkModel,"follow_up_operation":MaintenanceFollowUpOperationModel,"quote":MaintenanceQuoteModel,"assignment":MaintenanceAssignmentModel,"work_journal":MaintenanceWorkJournalEntryModel}

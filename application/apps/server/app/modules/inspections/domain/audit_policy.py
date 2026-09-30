@@ -1,6 +1,8 @@
 from collections.abc import Mapping
 from typing import Any
+
 from app.modules.audit.domain.models import DefaultAuditSnapshotPolicy
+
 
 class InspectionActivityPolicy(DefaultAuditSnapshotPolicy):
     def redact(self, snapshot: Mapping[str, Any] | None):

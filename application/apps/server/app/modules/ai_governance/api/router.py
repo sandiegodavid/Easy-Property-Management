@@ -1,11 +1,24 @@
 """Typed, deliberately non-generative HTTP surface for AI governance."""
 from __future__ import annotations
+
 from uuid import UUID
+
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
-from app.modules.ai_governance.application.service import AiConfigurationService, AiDraftReviewService, AiGenerationCoordinator
-from app.modules.ai_governance.domain.models import AiConflictError, AiGovernanceError, AiNotFoundError, AiValidationError
+
+from app.modules.ai_governance.application.service import (
+    AiConfigurationService,
+    AiDraftReviewService,
+    AiGenerationCoordinator,
+)
+from app.modules.ai_governance.domain.models import (
+    AiConflictError,
+    AiGovernanceError,
+    AiNotFoundError,
+    AiValidationError,
+)
 from app.modules.workspace.application.runtime import WorkspaceRuntime
+
 
 class Contract(BaseModel): model_config=ConfigDict(extra="forbid")
 class SettingsInput(Contract): killSwitch:StrictBool|None=None; builtInEnabled:StrictBool|None=None; defaultConnectionId:UUID|None=None; idempotencyKey:UUID|None=None

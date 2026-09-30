@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from collections.abc import Collection, Mapping
+from collections.abc import Callable, Collection, Mapping
 from typing import Any, Protocol, TypeVar
 
 from app.modules.communications.domain.models import (
-    Communication, CommunicationLink, CommunicationOperation, CommunicationParticipant,
+    Communication,
+    CommunicationLink,
+    CommunicationOperation,
+    CommunicationParticipant,
 )
 
 Result = TypeVar("Result")

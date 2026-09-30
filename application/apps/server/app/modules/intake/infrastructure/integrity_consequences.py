@@ -8,10 +8,7 @@ from sqlalchemy import select
 
 from app.modules.files.application.ports import FileLinkReader
 from app.modules.intake.domain.models import failure_code, fingerprint
-from app.modules.intake.infrastructure.sqlalchemy_models import (
-    IntakeRevisionFileLinkModel,
-    IntakeSourceModel,
-)
+from app.modules.intake.infrastructure.sqlalchemy_models import IntakeRevisionFileLinkModel, IntakeSourceModel
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeTransaction
 
 

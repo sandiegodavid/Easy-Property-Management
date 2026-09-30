@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from typing import Any, Protocol, TypeVar
+
 from app.modules.owner_accounting.domain.models import OwnerRentReport
 
 Result = TypeVar("Result")

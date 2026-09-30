@@ -1,22 +1,34 @@
 from __future__ import annotations
+
 import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+
 from sqlalchemy import select, text
+
 from app.bootstrap.owner_concern_context import SQLiteOwnerConcernContext
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.owner_management.application.service import OwnerConcernService
 from app.modules.owner_management.domain.models import ConcernCreateCommand, FollowUpInput, OwnerConcernConflictError
-from app.modules.owner_management.infrastructure.unit_of_work import SQLiteOwnerConcernPropertyArchiveGuard, SQLiteOwnerConcernUnitOfWork
 from app.modules.owner_management.infrastructure.sqlalchemy_models import OwnerConcernModel
-from app.modules.portfolio.application.service import OwnershipInput, PartyCreateCommand, PortfolioService, PropertyCreateCommand
+from app.modules.owner_management.infrastructure.unit_of_work import (
+    SQLiteOwnerConcernPropertyArchiveGuard,
+    SQLiteOwnerConcernUnitOfWork,
+)
+from app.modules.portfolio.application.service import (
+    OwnershipInput,
+    PartyCreateCommand,
+    PortfolioService,
+    PropertyCreateCommand,
+)
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
 from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
 from app.modules.workspace.application.service import WorkspaceService
 from app.platform.config import LocalConfig
+
 
 class OwnerConcernTests(unittest.TestCase):
     def setUp(self):

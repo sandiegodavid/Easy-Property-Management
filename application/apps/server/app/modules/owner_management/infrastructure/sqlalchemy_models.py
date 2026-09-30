@@ -1,5 +1,6 @@
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
+
 from app.platform.sqlalchemy_models import LocalBase
 
 _UUID = "length({})=36 AND substr({},9,1)='-' AND substr({},14,1)='-' AND substr({},19,1)='-' AND substr({},24,1)='-' AND replace(lower({}),'-','') NOT GLOB '*[^0-9a-f]*'"

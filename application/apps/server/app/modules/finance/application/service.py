@@ -1,13 +1,26 @@
 """FIN-001 schedule, receipt, allocation, and review workflows."""
 from __future__ import annotations
+
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
+
 from app.modules.finance.application.ports import FinanceUnitOfWork
 from app.modules.finance.application.receipt_handoff import record_receipt_in_transaction, void_receipt_in_transaction
-from app.modules.finance.domain.models import FinanceConflictError, FinanceError, FinanceNotFoundError, RentExpectation, RentReceipt, RecordReceiptCommand, SynchronizeExpectationsCommand, TimelinessReviewCommand, VoidCommand
+from app.modules.finance.domain.models import (
+    FinanceConflictError,
+    FinanceError,
+    FinanceNotFoundError,
+    RecordReceiptCommand,
+    RentExpectation,
+    RentReceipt,
+    SynchronizeExpectationsCommand,
+    TimelinessReviewCommand,
+    VoidCommand,
+)
+
 
 class FinanceService:
     def __init__(self, unit_of_work: FinanceUnitOfWork, *, now=lambda: datetime.now(UTC)): self.unit_of_work=unit_of_work; self.now=now

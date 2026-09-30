@@ -38,12 +38,12 @@ from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioC
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
 from app.modules.vendors.infrastructure.context_reader import SQLiteProviderContextReader
-from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
+from app.platform.config import LocalConfig
 from app.platform.migration_errors import MigrationSchemaError
 from app.platform.sqlite_engine import create_sqlite_engine
-from app.platform.config import LocalConfig
 
 
 class ExpenseWorkflowTests(unittest.TestCase):

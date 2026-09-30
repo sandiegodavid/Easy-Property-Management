@@ -1,5 +1,6 @@
 from app.modules.files.application.ports import FileLink, FileLinkReader
 
+
 class OwnerRentReportFileLinkValidator:
     entity_types=frozenset({"owner_rent_report"})
     allows_generic_upload=True

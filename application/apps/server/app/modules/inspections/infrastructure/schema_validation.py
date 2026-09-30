@@ -1,8 +1,17 @@
 """Exact current INSP-001 schema validation."""
 from sqlalchemy import inspect
 from sqlalchemy.dialects import sqlite
+
+from app.modules.inspections.infrastructure.sqlalchemy_models import (
+    ConditionAcknowledgmentModel,
+    ConditionAreaModel,
+    ConditionChecklistTemplateItemModel,
+    ConditionChecklistTemplateModel,
+    ConditionComparisonModel,
+    ConditionObservationModel,
+    ConditionReportModel,
+)
 from app.platform.migration_errors import MigrationSchemaError
-from app.modules.inspections.infrastructure.sqlalchemy_models import ConditionAcknowledgmentModel, ConditionAreaModel, ConditionChecklistTemplateItemModel, ConditionChecklistTemplateModel, ConditionComparisonModel, ConditionObservationModel, ConditionReportModel
 
 MODELS = (ConditionReportModel, ConditionAreaModel, ConditionObservationModel, ConditionAcknowledgmentModel, ConditionComparisonModel, ConditionChecklistTemplateModel, ConditionChecklistTemplateItemModel)
 def _sql(value): return " ".join(str(value).replace('"','').replace("'", "'").replace("condition_reports.", "").replace("condition_comparisons.", "").split()).casefold()

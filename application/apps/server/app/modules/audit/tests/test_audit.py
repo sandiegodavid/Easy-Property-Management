@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import sqlite3
 import json
 import math
-from dataclasses import replace
+import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
+from dataclasses import replace
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -14,14 +14,19 @@ from fastapi.testclient import TestClient
 
 from app.modules.audit.api.router import build_router
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.audit.domain.models import AuditEvent, AuditSnapshotPolicyRegistry, DefaultAuditSnapshotPolicy, changed_paths
+from app.modules.audit.domain.models import (
+    AuditEvent,
+    AuditSnapshotPolicyRegistry,
+    DefaultAuditSnapshotPolicy,
+    changed_paths,
+)
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
-from app.modules.workspace.application.service import WorkspaceService
-from app.modules.workspace.application.runtime import WorkspaceRuntime
-from app.modules.files.application.service import FileService
 from app.modules.files.application.ports import FileLink
+from app.modules.files.application.service import FileService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
+from app.modules.workspace.application.runtime import WorkspaceRuntime
+from app.modules.workspace.application.service import WorkspaceService
 from app.platform.config import LocalConfig
 from app.platform.product_migrations import ProductSchemaError, validate_latest_schema
 

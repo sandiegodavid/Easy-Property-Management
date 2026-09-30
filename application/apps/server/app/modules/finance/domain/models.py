@@ -1,9 +1,9 @@
 """Immutable FIN-001 records and command validation."""
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass
 from datetime import date
-import re
 from uuid import UUID
 
 

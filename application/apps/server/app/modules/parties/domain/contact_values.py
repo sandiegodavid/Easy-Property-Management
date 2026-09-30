@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 import unicodedata
 
-
 _EXTENSION = re.compile(r"(?i)\s*(?:x|ext\.?|extension|#)\s*([0-9]{1,6})\s*$")
 _PHONE_SEPARATORS = frozenset({
     "+", "(", ")", ".", "/", " ",

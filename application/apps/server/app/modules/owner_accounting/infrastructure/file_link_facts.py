@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+
 from sqlalchemy import select
 
 from app.modules.owner_accounting.infrastructure.sqlalchemy_models import OwnerRentReportModel

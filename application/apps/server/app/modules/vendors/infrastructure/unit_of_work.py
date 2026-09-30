@@ -11,16 +11,27 @@ from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.parties.application.ports import PartyTransactionOperations
 from app.modules.parties.domain.models import Party, PartyContactMethod
 from app.modules.vendors.application.ports import (
-    PropertyAvailability, ProviderRoleActivityGuard, ProviderTransaction, ProviderUnitOfWork,
+    PropertyAvailability,
+    ProviderRoleActivityGuard,
     ProviderStorageConflict,
+    ProviderTransaction,
+    ProviderUnitOfWork,
 )
 from app.modules.vendors.domain.models import (
-    ProviderProfile, ProviderReference, ProviderReputationLink, ProviderService,
-    ProviderServiceArea, ProviderWorkHistory,
+    ProviderProfile,
+    ProviderReference,
+    ProviderReputationLink,
+    ProviderService,
+    ProviderServiceArea,
+    ProviderWorkHistory,
 )
 from app.modules.vendors.infrastructure.sqlalchemy_models import (
-    ProviderProfileModel, ProviderReferenceModel, ProviderReputationLinkModel,
-    ProviderServiceAreaModel, ProviderServiceModel, ProviderWorkHistoryModel,
+    ProviderProfileModel,
+    ProviderReferenceModel,
+    ProviderReputationLinkModel,
+    ProviderServiceAreaModel,
+    ProviderServiceModel,
+    ProviderWorkHistoryModel,
 )
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 

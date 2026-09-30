@@ -16,21 +16,29 @@ from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditReposi
 from app.modules.parties.application.service import PartyCreateCommand, SharedPartyFactory
 from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations
 from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
-from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations, SQLitePortfolioUnitOfWork
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
+from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations, SQLitePortfolioUnitOfWork
 from app.modules.vendors.application.service import (
-    ProviderLifecycleConflict, ProviderProfileCommand, ProviderService, ServiceAreaCommand,
-    ProviderError, ProviderSearchCommand, ServiceCommand, WorkHistoryCommand, ReferenceCommand,
-    ReputationLinkCommand, ReputationLinkPatchCommand,
+    ProviderError,
+    ProviderLifecycleConflict,
+    ProviderProfileCommand,
+    ProviderSearchCommand,
+    ProviderService,
+    ReferenceCommand,
+    ReputationLinkCommand,
+    ReputationLinkPatchCommand,
+    ServiceAreaCommand,
+    ServiceCommand,
+    WorkHistoryCommand,
 )
-from app.modules.vendors.infrastructure.unit_of_work import SQLiteProviderUnitOfWork
-from app.modules.workspace.application.service import WorkspaceService
-from app.modules.workspace.application.backup_service import BackupService
-from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.modules.vendors.infrastructure.schema_validation import validate_vendor_schema
+from app.modules.vendors.infrastructure.unit_of_work import SQLiteProviderUnitOfWork
+from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.application.service import WorkspaceService
+from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
+from app.platform.config import LocalConfig
 from app.platform.migration_errors import MigrationSchemaError
 from app.platform.sqlite_engine import create_sqlite_engine
-from app.platform.config import LocalConfig
 
 
 class ProviderTests(unittest.TestCase):

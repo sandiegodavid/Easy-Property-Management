@@ -1,6 +1,7 @@
 """SQLAlchemy adapter for FILE-001 metadata and its audit transaction."""
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import select
@@ -9,8 +10,12 @@ from sqlalchemy.orm import Session
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.files.application.ports import FileAuditChange, FileLink
 from app.modules.files.domain.models import StoredFile
-from app.modules.files.infrastructure.sqlalchemy_models import FileContentLocationModel, FileLinkModel, FilePublicationCleanupAttentionModel, FileRecordModel
-from datetime import UTC, datetime
+from app.modules.files.infrastructure.sqlalchemy_models import (
+    FileContentLocationModel,
+    FileLinkModel,
+    FilePublicationCleanupAttentionModel,
+    FileRecordModel,
+)
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 

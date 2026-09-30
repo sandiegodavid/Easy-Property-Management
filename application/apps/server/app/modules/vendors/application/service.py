@@ -1,22 +1,25 @@
 """Provider-directory use cases and invariants."""
 
+import unicodedata
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
-import unicodedata
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 from uuid import uuid4
 
 from app.modules.parties.application.service import (
-    ContactMethodCommand, PartyCreateCommand, PartyFactory, SharedPartyFactory,
+    ContactMethodCommand,
+    PartyCreateCommand,
+    PartyFactory,
+    SharedPartyFactory,
 )
 from app.modules.parties.domain.models import Party, PartyContactMethod
 from app.modules.vendors.application.ports import ProviderStorageConflict, ProviderTransaction, ProviderUnitOfWork
-from app.modules.vendors.domain.models import (
-    ProviderProfile, ProviderReference as ProviderReferenceRecord,
-    ProviderReputationLink,
-    ProviderService as ProviderServiceRecord, ProviderServiceArea as ProviderServiceAreaRecord,
-    ProviderWorkHistory as ProviderWorkHistoryRecord,
-)
+from app.modules.vendors.domain.models import ProviderProfile
+from app.modules.vendors.domain.models import ProviderReference as ProviderReferenceRecord
+from app.modules.vendors.domain.models import ProviderReputationLink
+from app.modules.vendors.domain.models import ProviderService as ProviderServiceRecord
+from app.modules.vendors.domain.models import ProviderServiceArea as ProviderServiceAreaRecord
+from app.modules.vendors.domain.models import ProviderWorkHistory as ProviderWorkHistoryRecord
 
 
 class ProviderError(RuntimeError):

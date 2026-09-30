@@ -1,5 +1,6 @@
 """Latest-format-only Alembic schema initialization and validation."""
 from __future__ import annotations
+
 from pathlib import Path
 
 from alembic import command
@@ -7,26 +8,32 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import text
 
-from app.modules.audit.infrastructure.schema_validation import validate_audit_schema
-from app.modules.files.infrastructure.schema_validation import validate_file_data, validate_file_schema
+from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.bootstrap.file_link_policies import build_file_link_policy_registry
-from app.modules.tasks.infrastructure.schema_validation import validate_task_schema
-from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
-from app.modules.tenants.infrastructure.schema_validation import validate_tenant_schema
-from app.modules.leases.infrastructure.schema_validation import validate_lease_schema
-from app.modules.inspections.infrastructure.schema_validation import validate_inspection_schema
-from app.modules.vendors.infrastructure.schema_validation import validate_vendor_schema
-from app.modules.portfolio.infrastructure.schema_validation import validate_portfolio_schema
-from app.modules.workspace.infrastructure.schema_validation import validate_workspace_schema
-from app.modules.finance.infrastructure.schema_validation import validate_finance_data, validate_finance_schema
+from app.modules.ai_governance.application.registry import (
+    ACTION_REGISTRY,
+    ADAPTER_REGISTRY,
+    APPROVAL_EVIDENCE_VALIDATORS,
+    REDACTION_PROFILE_REGISTRY,
+    SOURCE_VALIDATORS,
+)
+from app.modules.ai_governance.infrastructure.schema_validation import validate_ai_governance_schema
+from app.modules.audit.infrastructure.schema_validation import validate_audit_schema
 from app.modules.communications.infrastructure.schema_validation import validate_communication_schema
+from app.modules.files.infrastructure.schema_validation import validate_file_data, validate_file_schema
+from app.modules.finance.infrastructure.schema_validation import validate_finance_data, validate_finance_schema
+from app.modules.inspections.infrastructure.schema_validation import validate_inspection_schema
+from app.modules.intake.infrastructure.schema_validation import validate_intake_schema
+from app.modules.leases.infrastructure.schema_validation import validate_lease_schema
 from app.modules.maintenance.infrastructure.schema_validation import validate_maintenance_schema
 from app.modules.owner_accounting.infrastructure.schema_validation import validate_owner_accounting_schema
 from app.modules.owner_management.infrastructure.schema_validation import validate_owner_concern_schema
-from app.modules.ai_governance.infrastructure.schema_validation import validate_ai_governance_schema
-from app.modules.intake.infrastructure.schema_validation import validate_intake_schema
-from app.modules.ai_governance.application.registry import ACTION_REGISTRY, REDACTION_PROFILE_REGISTRY, ADAPTER_REGISTRY, APPROVAL_EVIDENCE_VALIDATORS, SOURCE_VALIDATORS
-from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
+from app.modules.portfolio.infrastructure.schema_validation import validate_portfolio_schema
+from app.modules.tasks.infrastructure.schema_validation import validate_task_schema
+from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
+from app.modules.tenants.infrastructure.schema_validation import validate_tenant_schema
+from app.modules.vendors.infrastructure.schema_validation import validate_vendor_schema
+from app.modules.workspace.infrastructure.schema_validation import validate_workspace_schema
 from app.platform.migration_errors import MigrationSchemaError
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 

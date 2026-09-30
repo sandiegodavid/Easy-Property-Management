@@ -5,7 +5,11 @@ from sqlalchemy import select
 
 from app.modules.files.application.errors import FileError
 from app.modules.files.application.ports import FileLink
-from app.modules.inspections.infrastructure.sqlalchemy_models import ConditionAreaModel, ConditionObservationModel, ConditionReportModel
+from app.modules.inspections.infrastructure.sqlalchemy_models import (
+    ConditionAreaModel,
+    ConditionObservationModel,
+    ConditionReportModel,
+)
 
 
 class ConditionObservationFileLinkValidator:

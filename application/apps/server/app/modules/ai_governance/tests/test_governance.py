@@ -1,31 +1,54 @@
 from __future__ import annotations
-from datetime import UTC, datetime
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
-from pathlib import Path
+
 import json
 import threading
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
+from datetime import UTC, datetime
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import patch
 from uuid import uuid4
+
 from sqlalchemy import text
 
 from app.modules.ai_governance.application.ports import AiProviderError, AiProviderResult
-from app.modules.ai_governance.application.service import AiAdapterDefinition, AiAdapterRegistry, AiConfigurationService, AiDraftReviewService, AiGenerationCoordinator, AiModelSpecification, AiRunReservation, _operation_fingerprint, validate_ai_composition
-from app.modules.ai_governance.domain.models import AiActionDefinition, AiActionRegistry, AiConflictError, AiValidationError, ConfidenceContract, RedactionProfile, RedactionProfileRegistry, RedactionRule, fingerprint, qualified_model_identity
-from app.modules.ai_governance.infrastructure.unit_of_work import SQLiteAiGovernanceUnitOfWork
+from app.modules.ai_governance.application.service import (
+    AiAdapterDefinition,
+    AiAdapterRegistry,
+    AiConfigurationService,
+    AiDraftReviewService,
+    AiGenerationCoordinator,
+    AiModelSpecification,
+    AiRunReservation,
+    _operation_fingerprint,
+    validate_ai_composition,
+)
+from app.modules.ai_governance.domain.models import (
+    AiActionDefinition,
+    AiActionRegistry,
+    AiConflictError,
+    AiValidationError,
+    ConfidenceContract,
+    RedactionProfile,
+    RedactionProfileRegistry,
+    RedactionRule,
+    fingerprint,
+    qualified_model_identity,
+)
 from app.modules.ai_governance.infrastructure.schema_validation import validate_ai_governance_schema
+from app.modules.ai_governance.infrastructure.unit_of_work import SQLiteAiGovernanceUnitOfWork
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
-from app.platform.product_migrations import initialize_latest_schema, validate_latest_schema
-from app.platform.migration_errors import MigrationSchemaError
-from app.platform.sqlite_engine import create_sqlite_engine
-from app.platform.config import LocalConfig
-from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.modules.workspace.tests.test_backup_service import MemorySecretStore
+from app.platform.config import LocalConfig
+from app.platform.migration_errors import MigrationSchemaError
+from app.platform.product_migrations import initialize_latest_schema, validate_latest_schema
+from app.platform.sqlite_engine import create_sqlite_engine
 
 
 class _Provider:

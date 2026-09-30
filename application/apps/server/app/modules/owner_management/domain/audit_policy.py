@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Mapping
+
 from app.modules.audit.domain.models import DefaultAuditSnapshotPolicy
 
 _SENSITIVE = frozenset({"description", "ownerPartyId", "ownerDisplayNameSnapshot", "tenantPartyId", "tenantDisplayNameSnapshot", "leaseId", "leaseDisplaySnapshot", "originatingCommunicationId", "resolutionSummary", "dismissalReason", "reopenReason", "historicalSelectionReason", "duplicateReason", "idempotencyKey", "requestFingerprint", "taskId", "notes"})

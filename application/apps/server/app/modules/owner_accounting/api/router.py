@@ -1,12 +1,28 @@
 from datetime import date, datetime
 from enum import Enum
 from uuid import UUID
+
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import AwareDatetime, Field, StrictBool, StrictInt, model_validator
+
 from app.modules.finance.api.router import Contract
-from app.modules.finance.domain.models import FinanceConflictError, FinanceError, FinanceNotFoundError, PAYMENT_METHOD_KINDS, ReceiptAllocationCommand
+from app.modules.finance.domain.models import (
+    PAYMENT_METHOD_KINDS,
+    FinanceConflictError,
+    FinanceError,
+    FinanceNotFoundError,
+    ReceiptAllocationCommand,
+)
 from app.modules.owner_accounting.application.service import OwnerRentReportService
-from app.modules.owner_accounting.domain.models import OwnerRentReportCommand, OwnerReportConflictError, OwnerReportError, OwnerReportNotFoundError, RejectOwnerRentReportCommand, VerifyOwnerRentReportCommand
+from app.modules.owner_accounting.domain.models import (
+    OwnerRentReportCommand,
+    OwnerReportConflictError,
+    OwnerReportError,
+    OwnerReportNotFoundError,
+    RejectOwnerRentReportCommand,
+    VerifyOwnerRentReportCommand,
+)
+
 
 class PaymentMethodKind(str, Enum):
     automatic_bank_payment="automatic_bank_payment"; bank_transfer="bank_transfer"; check="check"; cash="cash"; online_payment="online_payment"; other="other"

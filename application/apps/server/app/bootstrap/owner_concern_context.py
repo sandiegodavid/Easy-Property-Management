@@ -2,17 +2,30 @@
 from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
+
 from sqlalchemy import func, select, union_all
-from app.modules.communications.infrastructure.sqlalchemy_models import CommunicationLinkModel, CommunicationModel, CommunicationParticipantModel
-from app.modules.leases.infrastructure.sqlalchemy_models import LeaseModel, LeaseParticipantModel
-from app.modules.parties.infrastructure.sqlalchemy_models import PartyModel
-from app.modules.portfolio.infrastructure.sqlalchemy_models import PropertyModel, PropertyOwnershipModel, SpaceAvailabilityModel, SpaceModel, SpaceOccupancyPeriodModel
+
+from app.modules.communications.infrastructure.sqlalchemy_models import (
+    CommunicationLinkModel,
+    CommunicationModel,
+    CommunicationParticipantModel,
+)
 from app.modules.finance.infrastructure.sqlalchemy_models import RentExpectationModel
+from app.modules.leases.infrastructure.sqlalchemy_models import LeaseModel, LeaseParticipantModel
 from app.modules.maintenance.infrastructure.sqlalchemy_models import MaintenanceIssueModel
 from app.modules.owner_management.infrastructure.sqlalchemy_models import OwnerConcernModel
-from app.modules.tenants.infrastructure.sqlalchemy_models import TenantProfileModel
+from app.modules.parties.infrastructure.sqlalchemy_models import PartyModel
+from app.modules.portfolio.infrastructure.sqlalchemy_models import (
+    PropertyModel,
+    PropertyOwnershipModel,
+    SpaceAvailabilityModel,
+    SpaceModel,
+    SpaceOccupancyPeriodModel,
+)
 from app.modules.tasks.application.service import TaskCreateCommand
 from app.modules.tasks.infrastructure.sqlalchemy_models import TaskModel
+from app.modules.tenants.infrastructure.sqlalchemy_models import TenantProfileModel
+
 
 class SQLiteOwnerConcernContext:
     def __init__(self, task_operations): self.task_operations=task_operations

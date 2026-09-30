@@ -1,7 +1,9 @@
 """AI transport secrets stay device-local and never enter SQLite."""
 from __future__ import annotations
+
 import keyring
 from keyring.errors import KeyringError
+
 from app.modules.ai_governance.application.ports import AiTransportCredentialStore
 
 

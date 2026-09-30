@@ -13,10 +13,7 @@ from app.modules.parties.application.ports import (
     PartyTransaction,
     PartyTransactionOperations,
 )
-from app.modules.parties.domain.contact_values import (
-    contact_search_terms,
-    like_contains_pattern,
-)
+from app.modules.parties.domain.contact_values import contact_search_terms, like_contains_pattern
 from app.modules.parties.domain.models import Party, PartyContactMethod
 from app.modules.parties.infrastructure.sqlalchemy_models import PartyContactMethodModel, PartyModel
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction

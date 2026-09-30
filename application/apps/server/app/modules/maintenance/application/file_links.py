@@ -1,4 +1,6 @@
 from app.modules.files.application.ports import FileLink, FileLinkReader
+
+
 class MaintenanceFileLinkValidator:
     entity_types=frozenset({"maintenance_issue","maintenance_appointment","maintenance_cost_context","maintenance_quote","maintenance_assignment","maintenance_work_journal_entry"})
     allows_generic_upload=True

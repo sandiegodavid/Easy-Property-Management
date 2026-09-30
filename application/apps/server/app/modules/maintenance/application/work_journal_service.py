@@ -4,8 +4,15 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from app.modules.maintenance.domain.models import MaintenanceConflictError, MaintenanceError, MaintenanceNotFoundError, fingerprint, uuid
+from app.modules.maintenance.domain.models import (
+    MaintenanceConflictError,
+    MaintenanceError,
+    MaintenanceNotFoundError,
+    fingerprint,
+    uuid,
+)
 from app.modules.maintenance.domain.work_journal import WorkJournalCreate
+
 from .ports import MaintenanceUnitOfWork
 
 

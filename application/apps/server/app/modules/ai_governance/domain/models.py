@@ -1,10 +1,10 @@
 """Portable values and fail-closed policies for governed AI work."""
 from __future__ import annotations
 
-from dataclasses import dataclass
-from hashlib import sha256
 import json
 import re
+from dataclasses import dataclass
+from hashlib import sha256
 from typing import Any, Callable, Mapping, Protocol
 from uuid import UUID
 

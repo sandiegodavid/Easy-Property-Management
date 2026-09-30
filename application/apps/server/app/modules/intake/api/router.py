@@ -1,17 +1,21 @@
 """Operator-only API for retained Intake evidence."""
 from __future__ import annotations
-from datetime import datetime
-from typing import Literal
-from uuid import UUID
+
 import json
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from typing import Literal
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
+
 from app.modules.files.application.errors import PublicationCleanupIncomplete
 from app.modules.intake.application.service import AttachmentInput, IntakeAdmissionCommand, IntakeService
 from app.modules.intake.domain.models import EvidenceEnvelope, IntakeConflictError, IntakeError, IntakeNotFoundError
 from app.modules.workspace.application.runtime import WorkspaceRuntime
+
 
 class Contract(BaseModel): model_config=ConfigDict(extra="forbid")
 class Participant(Contract): role: str=Field(min_length=1,max_length=500); display: str|None=Field(default=None,max_length=500); address: str|None=Field(default=None,max_length=500)

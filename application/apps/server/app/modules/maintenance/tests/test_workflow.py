@@ -1,64 +1,75 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
-import json
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
-from uuid import uuid4
 from unittest.mock import patch
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from fastapi.testclient import TestClient
 from sqlalchemy import event, text
 
+from app.bootstrap.api import create_app
+from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
-from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
-from app.modules.files.application.ports import FileLink
+from app.modules.communications.application.service import (
+    CommunicationCommand,
+    CommunicationService,
+    LinkInput,
+    ParticipantInput,
+)
 from app.modules.communications.infrastructure.link_reader import SQLiteCommunicationLinkReader
-from app.modules.communications.application.service import CommunicationCommand, CommunicationService, LinkInput, ParticipantInput
 from app.modules.communications.infrastructure.unit_of_work import SQLiteCommunicationUnitOfWork
-from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
+from app.modules.files.application.ports import FileLink
+from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
 from app.modules.finance.application.expense_service import ExpenseService
 from app.modules.finance.domain.expense_models import ExpenseCreateCommand
 from app.modules.finance.domain.models import VoidCommand
 from app.modules.finance.infrastructure.expense_context_reader import SQLiteExpenseContextReader
 from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpenseUnitOfWork
-from app.modules.maintenance.application.service import MaintenanceService
 from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
+from app.modules.leases.application.service import LeaseCreateCommand, LeaseService, ParticipantCommand, TermCommand
+from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
+from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseUnitOfWork
+from app.modules.maintenance.application.file_links import MaintenanceFileLinkValidator
+from app.modules.maintenance.application.service import MaintenanceService
 from app.modules.maintenance.application.work_journal_service import WorkJournalService
 from app.modules.maintenance.domain.audit_policy import MAINTENANCE_ACTIVITY_POLICY
-from app.modules.maintenance.domain.models import AppointmentCreate, AssignmentCreate, IssueCreate, QuoteCreate, ReporterAttribution, ReporterCorrection, MaintenanceConflictError, MaintenanceError
+from app.modules.maintenance.domain.models import (
+    AppointmentCreate,
+    AssignmentCreate,
+    IssueCreate,
+    MaintenanceConflictError,
+    MaintenanceError,
+    QuoteCreate,
+    ReporterAttribution,
+    ReporterCorrection,
+)
 from app.modules.maintenance.domain.work_journal import WorkJournalCreate
-from app.modules.maintenance.infrastructure.unit_of_work import SQLiteMaintenanceUnitOfWork
 from app.modules.maintenance.infrastructure.file_link_facts import SQLiteMaintenanceFileLinkFacts
-from app.modules.maintenance.application.file_links import MaintenanceFileLinkValidator
+from app.modules.maintenance.infrastructure.unit_of_work import SQLiteMaintenanceUnitOfWork
+from app.modules.parties.application.service import PartyCreateCommand, SharedPartyFactory
+from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations, SQLitePartyReadOperations
 from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
 from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
-from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
-from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations
-from app.modules.parties.application.service import PartyCreateCommand
-from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
-from app.modules.leases.application.service import LeaseCreateCommand, LeaseService, ParticipantCommand, TermCommand
-from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseUnitOfWork
-from app.modules.tenants.application.service import TenantCreateCommand, TenantService
-from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantProfileAvailability, SQLiteTenantUnitOfWork
-from app.modules.parties.application.service import SharedPartyFactory
-from app.modules.parties.infrastructure.unit_of_work import SQLitePartyReadOperations
-from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations
+from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations, SQLitePortfolioUnitOfWork
 from app.modules.tasks.infrastructure.context_reader import SQLiteTaskContextReader
 from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
-from app.modules.workspace.application.service import WorkspaceError, WorkspaceService
+from app.modules.tenants.application.service import TenantCreateCommand, TenantService
+from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantProfileAvailability, SQLiteTenantUnitOfWork
+from app.modules.vendors.application.service import ProviderProfileCommand, ProviderService
+from app.modules.vendors.infrastructure.context_reader import SQLiteProviderContextReader
+from app.modules.vendors.infrastructure.unit_of_work import SQLiteProviderUnitOfWork
 from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.application.service import WorkspaceError, WorkspaceService
 from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.platform.config import LocalConfig
 from app.platform.sqlite_engine import create_sqlite_engine
-from app.modules.vendors.infrastructure.context_reader import SQLiteProviderContextReader
-from app.modules.vendors.application.service import ProviderProfileCommand, ProviderService
-from app.modules.vendors.infrastructure.unit_of_work import SQLiteProviderUnitOfWork
-from app.bootstrap.api import create_app
-from fastapi.testclient import TestClient
 
 
 class MaintenanceWorkflowTests(unittest.TestCase):

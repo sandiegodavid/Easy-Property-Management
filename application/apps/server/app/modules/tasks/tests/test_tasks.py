@@ -13,9 +13,9 @@ from sqlalchemy import event
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
-from app.modules.tasks.application.service import TaskError, TaskService
-from app.modules.tasks.application.ports import DueReminderSummary
 from app.modules.tasks.api.router import build_router
+from app.modules.tasks.application.ports import DueReminderSummary
+from app.modules.tasks.application.service import TaskError, TaskService
 from app.modules.tasks.domain.models import Task, TaskReminder, dismiss
 from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
 from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork

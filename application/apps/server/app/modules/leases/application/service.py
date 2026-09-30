@@ -6,11 +6,18 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
-from app.modules.leases.application.ports import LeaseConflictError, LeaseTransaction, LeaseUnitOfWork
 from app.modules.inspections.application.attention import inspection_attention
-from app.modules.leases.domain.models import Lease, LeaseParticipant, LeaseRenewalOption, LeaseTerm, LeaseTerminationCase, LeaseTerminationProposal
-from app.modules.portfolio.domain.models import SpaceOccupancyPeriod
+from app.modules.leases.application.ports import LeaseConflictError, LeaseTransaction, LeaseUnitOfWork
+from app.modules.leases.domain.models import (
+    Lease,
+    LeaseParticipant,
+    LeaseRenewalOption,
+    LeaseTerm,
+    LeaseTerminationCase,
+    LeaseTerminationProposal,
+)
 from app.modules.portfolio.application.source_timeline import SourceTimelineChangeSet
+from app.modules.portfolio.domain.models import SpaceOccupancyPeriod
 
 LEASE_KINDS = {"residential", "commercial"}
 LEASE_STATUSES = {"draft", "executed", "ended", "terminated", "void"}

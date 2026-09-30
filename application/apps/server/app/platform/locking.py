@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import TextIO
 from types import TracebackType
+from typing import TextIO
 
 try:  # POSIX systems, including the supported macOS local-first deployment.
     import fcntl

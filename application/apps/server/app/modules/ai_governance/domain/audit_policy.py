@@ -1,6 +1,8 @@
 """AI records are intentionally terse in generalized activity history."""
 from __future__ import annotations
+
 from typing import Any, Mapping
+
 from app.modules.audit.domain.models import DefaultAuditSnapshotPolicy
 
 AI_AUDIT_HIDDEN_FIELDS = frozenset({

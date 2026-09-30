@@ -13,8 +13,8 @@ from app.modules.leases.domain.models import (
     LeaseTerminationCase,
     LeaseTerminationProposal,
 )
-from app.modules.portfolio.domain.models import Property, Space, SpaceOccupancyPeriod
 from app.modules.portfolio.application.source_timeline import SourceTimelineChangeSet
+from app.modules.portfolio.domain.models import Property, Space, SpaceOccupancyPeriod
 
 Result = TypeVar("Result")
 

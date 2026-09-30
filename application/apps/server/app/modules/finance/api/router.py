@@ -1,11 +1,25 @@
 """Typed FIN-001 HTTP contract."""
 from datetime import date
 from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
+
 from app.modules.finance.application.service import FinanceService
-from app.modules.finance.domain.models import FinanceConflictError, FinanceError, FinanceNotFoundError, FinanceValidationError, ReceiptAllocationCommand, RecordReceiptCommand, SynchronizeExpectationsCommand, TimelinessReviewCommand, VoidCommand
+from app.modules.finance.domain.models import (
+    FinanceConflictError,
+    FinanceError,
+    FinanceNotFoundError,
+    FinanceValidationError,
+    ReceiptAllocationCommand,
+    RecordReceiptCommand,
+    SynchronizeExpectationsCommand,
+    TimelinessReviewCommand,
+    VoidCommand,
+)
 from app.modules.workspace.application.runtime import WorkspaceRuntime
+
+
 class Contract(BaseModel): model_config=ConfigDict(extra="forbid")
 class SynchronizeInput(Contract): leaseTermId:str; throughOn:date; scheduleAnchorOn:date|None=None; responsibilityEndsOnOverride:date|None=None; overrideReason:str|None=Field(None,max_length=1000); overrideConfirmed:StrictBool=False
 class AllocationInput(Contract): expectationId:str; amountMinor:StrictInt=Field(gt=0)

@@ -1,11 +1,20 @@
 """SQLite persistence adapter for the retained source aggregate."""
 from __future__ import annotations
+
 import json
 from pathlib import Path
 from typing import Any, Callable, TypeVar
+
 from sqlalchemy import func, or_, select
+
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.intake.infrastructure.sqlalchemy_models import (IntakeDuplicateCandidateModel, IntakeEvidenceRevisionModel, IntakeRevisionFileLinkModel, IntakeSourceModel, IntakeSourceOperationModel)
+from app.modules.intake.infrastructure.sqlalchemy_models import (
+    IntakeDuplicateCandidateModel,
+    IntakeEvidenceRevisionModel,
+    IntakeRevisionFileLinkModel,
+    IntakeSourceModel,
+    IntakeSourceOperationModel,
+)
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 T = TypeVar("T")
@@ -119,6 +128,10 @@ class SQLiteIntakeTransaction:
         links = list(self.connection.execute(select(IntakeRevisionFileLinkModel).where(IntakeRevisionFileLinkModel.revision_id == source["current_revision_id"]).order_by(IntakeRevisionFileLinkModel.display_order)).mappings())
         operations = list(self.connection.execute(select(IntakeSourceOperationModel).where(IntakeSourceOperationModel.source_id == source_id).order_by(IntakeSourceOperationModel.created_at)).mappings())
         candidates = list(self.connection.execute(select(IntakeDuplicateCandidateModel).where(or_(IntakeDuplicateCandidateModel.source_id == source_id, IntakeDuplicateCandidateModel.candidate_source_id == source_id))).mappings())
-        from app.modules.files.infrastructure.sqlalchemy_models import FileContentLocationModel, FileLinkModel, FileRecordModel
+        from app.modules.files.infrastructure.sqlalchemy_models import (
+            FileContentLocationModel,
+            FileLinkModel,
+            FileRecordModel,
+        )
         metadata = {row["link_id"]: row for row in self.connection.execute(select(FileLinkModel.id.label("link_id"), FileRecordModel.id.label("file_id"), FileRecordModel.original_name, FileRecordModel.media_type, FileRecordModel.size_bytes, FileRecordModel.content_sha256, FileContentLocationModel.storage_state, FileContentLocationModel.verified_at).join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id).join(FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id).where(FileLinkModel.id.in_([row["file_link_id"] for row in links]))).mappings()}
         return {**projection, "evidence": json.loads(current["envelope_json"]), "revisions": [{"id": row["id"], "number": row["revision_number"], "kind": row["revision_kind"], "createdAt": row["created_at"], "correctionReason": row["correction_reason"]} for row in revisions], "attachments": [{"fileLinkId": row["file_link_id"], "role": row["attachment_role"], "displayOrder": row["display_order"], "file": dict(metadata[row["file_link_id"]]) if row["file_link_id"] in metadata else None} for row in links], "operations": [{"type": row["operation_type"], "outcome": row["outcome"], "createdAt": row["created_at"]} for row in operations], "duplicateCandidates": [{"sourceId": row["source_id"], "candidateSourceId": row["candidate_source_id"], "reason": row["reason"], "disposition": row["disposition"]} for row in candidates]}

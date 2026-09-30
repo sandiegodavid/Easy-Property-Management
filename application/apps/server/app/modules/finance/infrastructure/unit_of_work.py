@@ -1,19 +1,30 @@
 """SQLite implementation of FIN-001's transaction port."""
 from __future__ import annotations
+
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, TypeVar
 from uuid import uuid4
+
 from sqlalchemy import and_, func, or_, select, text
+
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.finance.application.ports import FinanceTransaction, LeaseTermFinanceSnapshot, PartyFinanceOperations
 from app.modules.finance.domain.models import PrepaidCheck, RentExpectation, RentReceipt
-from app.modules.finance.infrastructure.sqlalchemy_models import PrepaidCheckModel, PrepaidCheckOperationModel, RentExpectationModel, RentExpectationTimelinessReviewModel, RentReceiptModel, RentReceiptAllocationModel
-from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
-from app.modules.tasks.application.ports import TaskTransactionOperations
-from app.modules.tasks.domain.models import Task, TaskReminder, dismiss
+from app.modules.finance.infrastructure.sqlalchemy_models import (
+    PrepaidCheckModel,
+    PrepaidCheckOperationModel,
+    RentExpectationModel,
+    RentExpectationTimelinessReviewModel,
+    RentReceiptAllocationModel,
+    RentReceiptModel,
+)
 from app.modules.leases.application.ports import LeaseContextReader
 from app.modules.portfolio.application.ports import PortfolioContextReader
+from app.modules.tasks.application.ports import TaskTransactionOperations
+from app.modules.tasks.domain.models import Task, TaskReminder, dismiss
+from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
+
 Result = TypeVar("Result")
 _PORTFOLIO_CONTEXT_UNSET = object()
 class SQLiteFinanceUnitOfWork:

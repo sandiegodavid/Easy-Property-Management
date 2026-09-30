@@ -1,5 +1,13 @@
 from unittest import TestCase
-from app.modules.maintenance.domain.models import AppointmentCreate, CostCreate, IssueCreate, ReporterAttribution, MaintenanceError
+
+from app.modules.maintenance.domain.models import (
+    AppointmentCreate,
+    CostCreate,
+    IssueCreate,
+    MaintenanceError,
+    ReporterAttribution,
+)
+
 
 class MaintenanceCommandTests(TestCase):
     property_id="00000000-0000-4000-8000-000000000001"

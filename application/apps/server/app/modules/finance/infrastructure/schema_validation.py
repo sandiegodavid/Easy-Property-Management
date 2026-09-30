@@ -1,21 +1,31 @@
 """Exact current FIN-001 schema validation."""
-from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint, inspect, text
-from uuid import UUID
 from datetime import datetime
+from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint, inspect, text
+
+from app.modules.finance.domain.models import PAYMENT_METHOD_KINDS, FinanceError, validate_masked_reference
 from app.modules.finance.infrastructure.sqlalchemy_models import (
-    ExpenseCategoryModel, ExpenseModel, ExpenseRefundModel,
-    RentExpectationModel, RentExpectationTimelinessReviewModel,
-    RentReceiptModel, RentReceiptAllocationModel,
-    PrepaidCheckModel, PrepaidCheckOperationModel,
-    SecurityDepositAccountModel, SecurityDepositReceiptModel,
-    SecurityDepositSettlementModel, SecurityDepositSettlementReceiptModel,
-    SecurityDepositDeductionModel, SecurityDepositDeductionSourceModel,
-    SecurityDepositCreditModel, SecurityDepositRefundModel,
+    ExpenseCategoryModel,
+    ExpenseModel,
+    ExpenseRefundModel,
+    PrepaidCheckModel,
+    PrepaidCheckOperationModel,
+    RentExpectationModel,
+    RentExpectationTimelinessReviewModel,
+    RentReceiptAllocationModel,
+    RentReceiptModel,
+    SecurityDepositAccountModel,
+    SecurityDepositCreditModel,
+    SecurityDepositDeductionModel,
+    SecurityDepositDeductionSourceModel,
+    SecurityDepositReceiptModel,
+    SecurityDepositRefundModel,
+    SecurityDepositSettlementModel,
+    SecurityDepositSettlementReceiptModel,
 )
 from app.platform.migration_errors import MigrationSchemaError
-from app.modules.finance.domain.models import FinanceError, PAYMENT_METHOD_KINDS, validate_masked_reference
 
 MODELS = (
     RentExpectationModel, RentExpectationTimelinessReviewModel,

@@ -4,8 +4,11 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.modules.finance.infrastructure.sqlalchemy_models import (
-    ExpenseModel, SecurityDepositDeductionModel, SecurityDepositReceiptModel,
-    SecurityDepositRefundModel, SecurityDepositSettlementModel,
+    ExpenseModel,
+    SecurityDepositDeductionModel,
+    SecurityDepositReceiptModel,
+    SecurityDepositRefundModel,
+    SecurityDepositSettlementModel,
 )
 
 

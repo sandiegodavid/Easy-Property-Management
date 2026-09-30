@@ -1,6 +1,8 @@
 """Consumer-neutral transaction-aware projection of retained evidence."""
 from __future__ import annotations
+
 from typing import Any
+
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeTransaction
 
 

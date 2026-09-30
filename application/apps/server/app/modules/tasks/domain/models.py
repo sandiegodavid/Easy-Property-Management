@@ -1,8 +1,8 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
-
 
 ACTIVE_TASK_STATUSES = frozenset({"open", "in_progress"})
 

@@ -8,21 +8,21 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
+from app.modules.parties.application.service import PartyValidationError
+from app.modules.portfolio.application.ports import PortfolioConflictError
 from app.modules.portfolio.application.service import (
+    AvailabilityCommand,
+    OccupancyCommand,
+    OccupancyCorrectionCommand,
     OwnershipInput,
     PartyCreateCommand,
     PortfolioError,
     PortfolioNotFoundError,
     PortfolioService,
     PropertyCreateCommand,
-    OccupancyCommand,
-    AvailabilityCommand,
-    OccupancyCorrectionCommand,
     SpaceClassificationCommand,
     SpaceCreateCommand,
 )
-from app.modules.parties.application.service import PartyValidationError
-from app.modules.portfolio.application.ports import PortfolioConflictError
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 
 

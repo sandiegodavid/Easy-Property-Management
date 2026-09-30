@@ -18,10 +18,10 @@ from typing import Any, Callable
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+
 from app.modules.workspace.domain.models import WORKSPACE_FORMAT_VERSION
 from app.platform.product_migrations import current_revision
 from app.platform.version import application_version
-
 
 ARCHIVE_MAGIC = b"EPMB"
 ARCHIVE_FORMAT_VERSION = 1

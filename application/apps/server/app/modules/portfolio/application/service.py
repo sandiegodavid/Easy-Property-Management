@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import unicodedata
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from base64 import urlsafe_b64decode, urlsafe_b64encode
 from datetime import UTC, date, datetime
 from json import dumps, loads
-import unicodedata
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from app.modules.parties.application.ports import PartyReadOperations
+from app.modules.parties.application.service import PartyCreateCommand, PartyFactory, SharedPartyFactory
 from app.modules.portfolio.application.ports import (
     AddressTimeZoneResolver,
     PortfolioConflictError,
@@ -28,8 +30,6 @@ from app.modules.portfolio.domain.models import (
     active_on,
     ownership_context,
 )
-from app.modules.parties.application.service import PartyCreateCommand, PartyFactory, SharedPartyFactory
-from app.modules.parties.application.ports import PartyReadOperations
 
 
 class PortfolioError(RuntimeError):

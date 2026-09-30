@@ -1,12 +1,11 @@
 """Shared SQLAlchemy engine configuration for local SQLite workspaces."""
 from __future__ import annotations
 
-from pathlib import Path
 from contextlib import contextmanager
+from pathlib import Path
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.engine import Engine
-from sqlalchemy.engine import URL
+from sqlalchemy.engine import URL, Engine
 
 
 def sqlite_url(database: Path) -> URL:

@@ -1,21 +1,27 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
-import json
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
 from unittest.mock import patch
-from sqlalchemy import event, inspect
-from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
+from sqlalchemy import event, inspect, text
+from sqlalchemy.exc import IntegrityError
 
 from app.bootstrap.api import create_app
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
+from app.modules.files.application.service import FileError, FileService
+from app.modules.files.infrastructure.content_store import FilesystemContentStore
+from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
+from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
+from app.modules.leases.application.file_links import LeaseFileLinkValidator
+from app.modules.leases.application.ports import LeaseConflictError
 from app.modules.leases.application.service import (
     LeaseCreateCommand,
     LeasePatchCommand,
@@ -26,28 +32,20 @@ from app.modules.leases.application.service import (
     TerminationCaseCommand,
     TerminationProposalCommand,
 )
-from app.modules.leases.application.file_links import LeaseFileLinkValidator
-from app.modules.leases.application.ports import LeaseConflictError
-from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseUnitOfWork
-from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
 from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
 from app.modules.leases.infrastructure.schema_validation import _normalise, validate_lease_schema
-from app.modules.files.application.service import FileError, FileService
-from app.modules.files.infrastructure.content_store import FilesystemContentStore
-from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
+from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard, SQLiteLeaseUnitOfWork
 from app.modules.parties.application.service import SharedPartyFactory
-from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
-from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
-from app.modules.tenants.application.service import TenantCreateCommand, TenantService
-from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantProfileAvailability, SQLiteTenantUnitOfWork
-from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard
 from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations, SQLitePartyReadOperations
-from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations
+from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
 from app.modules.portfolio.application.source_timeline import SourceTimelineChangeSet
 from app.modules.portfolio.domain.models import SpaceOccupancyPeriod
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
-from app.modules.workspace.application.service import WorkspaceService
+from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations, SQLitePortfolioUnitOfWork
+from app.modules.tenants.application.service import TenantCreateCommand, TenantService
+from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantProfileAvailability, SQLiteTenantUnitOfWork
 from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.platform.config import LocalConfig
 from app.platform.migration_errors import MigrationSchemaError

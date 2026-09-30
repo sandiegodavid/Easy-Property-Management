@@ -6,16 +6,16 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from app.modules.parties.application.service import (
-    ContactReferenceResolution,
     ContactMethodCommand,
+    ContactReferenceResolution,
     PartyConflictError,
     PartyContactService,
+    PartyCreateCommand,
     PartyIdentityService,
     PartyNotFoundError,
-    PartyCreateCommand,
     PartyPatchCommand,
-    PossibleDuplicatePartyError,
     PartyValidationError,
+    PossibleDuplicatePartyError,
 )
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 

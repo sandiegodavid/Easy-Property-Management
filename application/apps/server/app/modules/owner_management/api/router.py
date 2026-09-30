@@ -1,11 +1,20 @@
 from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
+
 from app.modules.owner_management.application.service import OwnerConcernService, _cursor
-from app.modules.owner_management.domain.models import ConcernCreateCommand, FollowUpInput, OwnerConcernConflictError, OwnerConcernError, OwnerConcernNotFoundError
+from app.modules.owner_management.domain.models import (
+    ConcernCreateCommand,
+    FollowUpInput,
+    OwnerConcernConflictError,
+    OwnerConcernError,
+    OwnerConcernNotFoundError,
+)
 from app.modules.workspace.application.runtime import WorkspaceRuntime
+
 
 class Contract(BaseModel): model_config=ConfigDict(extra="forbid")
 class FollowUpRequest(Contract):

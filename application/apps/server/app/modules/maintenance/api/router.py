@@ -1,13 +1,28 @@
 from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
+
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
+
 from app.modules.maintenance.application.service import MaintenanceService
 from app.modules.maintenance.application.work_journal_service import WorkJournalService
+from app.modules.maintenance.domain.models import (
+    AppointmentCreate,
+    AssignmentCreate,
+    CostCreate,
+    IssueCreate,
+    MaintenanceConflictError,
+    MaintenanceError,
+    MaintenanceNotFoundError,
+    QuoteCreate,
+    ReporterAttribution,
+    ReporterCorrection,
+)
 from app.modules.maintenance.domain.work_journal import WorkJournalCreate
-from app.modules.maintenance.domain.models import AppointmentCreate, AssignmentCreate, CostCreate, IssueCreate, QuoteCreate, ReporterAttribution, ReporterCorrection, MaintenanceConflictError, MaintenanceError, MaintenanceNotFoundError
 from app.modules.workspace.application.runtime import WorkspaceRuntime
+
+
 class Contract(BaseModel): model_config=ConfigDict(extra="forbid")
 class ReporterInput(Contract): role:Literal["owner","tenant","manager","staff"]; subjectKind:Literal["party","local_operator"]; partyId:UUID|None=None; historicalSelectionConfirmed:StrictBool|None=None; historicalSelectionReason:str|None=Field(None,min_length=1,max_length=1000)
 class IssueInput(Contract): propertyId: UUID; spaceId: UUID|None=None; summary:str=Field(min_length=1,max_length=240); description:str=Field(min_length=1,max_length=10000); category:Literal["plumbing","electrical","heating_cooling","appliance","structural","safety_security","pest","exterior_grounds","cleaning","other"]; categoryDetail:str|None=Field(None,max_length=200); priority:Literal["low","normal","high","urgent"]="normal"; reportedAtUtc:datetime; reporter:ReporterInput; idempotencyKey:UUID

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, TypeVar
 from datetime import datetime
+from typing import Any, TypeVar
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -12,8 +12,18 @@ from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.communications.application.ports import CommunicationContextOperations
-from app.modules.communications.domain.models import Communication, CommunicationLink, CommunicationOperation, CommunicationParticipant
-from app.modules.communications.infrastructure.sqlalchemy_models import CommunicationLinkModel, CommunicationModel, CommunicationOperationModel, CommunicationParticipantModel
+from app.modules.communications.domain.models import (
+    Communication,
+    CommunicationLink,
+    CommunicationOperation,
+    CommunicationParticipant,
+)
+from app.modules.communications.infrastructure.sqlalchemy_models import (
+    CommunicationLinkModel,
+    CommunicationModel,
+    CommunicationOperationModel,
+    CommunicationParticipantModel,
+)
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 Result = TypeVar("Result")

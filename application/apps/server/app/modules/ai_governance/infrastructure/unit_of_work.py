@@ -1,13 +1,24 @@
 """Transaction-aware persistence for AI governance records."""
 from __future__ import annotations
+
 import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Mapping, TypeVar
 from uuid import uuid4
+
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
-from app.modules.ai_governance.infrastructure.sqlalchemy_models import AiActionLimitModel, AiDraftModel, AiModelConnectionModel, AiReviewDecisionModel, AiRunModel, AiSettingsModel, AiSettingsOperationModel
+
+from app.modules.ai_governance.infrastructure.sqlalchemy_models import (
+    AiActionLimitModel,
+    AiDraftModel,
+    AiModelConnectionModel,
+    AiReviewDecisionModel,
+    AiRunModel,
+    AiSettingsModel,
+    AiSettingsOperationModel,
+)
 from app.modules.audit.application.recorder import AuditRecorder
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 

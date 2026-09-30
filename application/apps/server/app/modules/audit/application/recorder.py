@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Protocol
 
-from app.modules.audit.domain.models import ActorKind, AuditEvent, AuditSnapshotPolicy, DEFAULT_SNAPSHOT_POLICY
+from app.modules.audit.domain.models import DEFAULT_SNAPSHOT_POLICY, ActorKind, AuditEvent, AuditSnapshotPolicy
 
 
 class AuditEventRepository(Protocol):

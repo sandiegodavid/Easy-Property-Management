@@ -8,9 +8,21 @@ from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from app.modules.parties.application.service import ContactMethodCommand, PartyCreateCommand, PartyValidationError
 from app.modules.vendors.application.service import (
-    PossibleDuplicateParty, ProviderError, ProviderLifecycleConflict, ProviderNotFoundError,
-    ProviderProfileCommand, ProviderProfilePatchCommand, ProviderSearchCommand, ProviderService, ReferenceCommand, ServiceAreaCommand, ServiceCommand, UNSET,
-    ReputationLinkCommand, ReputationLinkPatchCommand, WorkHistoryCommand,
+    UNSET,
+    PossibleDuplicateParty,
+    ProviderError,
+    ProviderLifecycleConflict,
+    ProviderNotFoundError,
+    ProviderProfileCommand,
+    ProviderProfilePatchCommand,
+    ProviderSearchCommand,
+    ProviderService,
+    ReferenceCommand,
+    ReputationLinkCommand,
+    ReputationLinkPatchCommand,
+    ServiceAreaCommand,
+    ServiceCommand,
+    WorkHistoryCommand,
     canonical_reputation_url,
 )
 from app.modules.workspace.application.runtime import WorkspaceRuntime

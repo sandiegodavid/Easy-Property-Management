@@ -1,11 +1,27 @@
 """INGEST-001 admission and immutable evidence lifecycle."""
 from __future__ import annotations
+
 import json
 from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import uuid4
+
 from app.modules.intake.application.ports import IntakeAttentionOperations, IntakeFileOperations, IntakeUnitOfWork
-from app.modules.intake.domain.models import AttentionTransition, EvidenceEnvelope, IntakeAdmissionContext, IntakeConflictError, IntakeError, IntakeNotFoundError, bounded, canonical_json, failure_code, fingerprint, utc, utc_now, uuid
+from app.modules.intake.domain.models import (
+    AttentionTransition,
+    EvidenceEnvelope,
+    IntakeAdmissionContext,
+    IntakeConflictError,
+    IntakeError,
+    IntakeNotFoundError,
+    bounded,
+    canonical_json,
+    failure_code,
+    fingerprint,
+    utc,
+    utc_now,
+    uuid,
+)
 
 
 @dataclass(frozen=True)

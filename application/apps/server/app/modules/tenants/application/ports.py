@@ -1,8 +1,9 @@
 """Transaction ports for tenant profile and atomic tenant creation changes."""
 from collections.abc import Callable
 from typing import Any, Protocol, TypeVar
-from app.modules.parties.domain.models import Party, PartyContactMethod
+
 from app.modules.parties.application.ports import PartyReadOperations, PartyTransactionOperations
+from app.modules.parties.domain.models import Party, PartyContactMethod
 from app.modules.tenants.domain.models import TenantProfile
 
 Result = TypeVar("Result")

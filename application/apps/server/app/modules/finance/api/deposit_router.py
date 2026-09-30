@@ -2,12 +2,26 @@
 from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
+
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
-from app.modules.finance.application.deposit_service import DepositService, PossibleDuplicateDepositReceiptError, PossibleDuplicateDepositRefundError
-from app.modules.finance.domain.deposit_models import CreditCommand, DeductionCommand, DepositAccountCreateCommand, DepositReceiptCommand, DepositRefundCommand, SettlementCreateCommand
+
+from app.modules.finance.application.deposit_service import (
+    DepositService,
+    PossibleDuplicateDepositReceiptError,
+    PossibleDuplicateDepositRefundError,
+)
+from app.modules.finance.domain.deposit_models import (
+    CreditCommand,
+    DeductionCommand,
+    DepositAccountCreateCommand,
+    DepositReceiptCommand,
+    DepositRefundCommand,
+    SettlementCreateCommand,
+)
 from app.modules.finance.domain.models import FinanceConflictError, FinanceError, FinanceNotFoundError, VoidCommand
 from app.modules.workspace.application.runtime import WorkspaceRuntime
+
 
 class Contract(BaseModel): model_config = ConfigDict(extra="forbid")
 class AccountInput(Contract): leaseTermId: UUID

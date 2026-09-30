@@ -1,8 +1,11 @@
 """Narrow transaction-aware ports exposed by INGEST-001."""
 from __future__ import annotations
+
 from pathlib import Path
-from typing import Any, Callable, Protocol, TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Protocol, TypeVar
+
 from app.modules.intake.domain.models import AttentionTransition, IntakeAdmissionContext
+
 T = TypeVar("T")
 
 if TYPE_CHECKING:

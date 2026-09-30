@@ -5,11 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 
 from app.modules.workspace.application.runtime import WorkspaceRuntime
-from app.modules.workspace.application.service import (
-    WorkspaceError,
-    WorkspaceNotInitializedError,
-    WorkspaceService,
-)
+from app.modules.workspace.application.service import WorkspaceError, WorkspaceNotInitializedError, WorkspaceService
 
 
 def build_router(service: WorkspaceService, runtime: WorkspaceRuntime | None = None) -> APIRouter:

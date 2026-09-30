@@ -3,10 +3,16 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
-from app.modules.parties.application.service import ContactMethodCommand, PartyCreateCommand, PartyFactory, PartyValidationError
+from app.modules.parties.application.service import (
+    ContactMethodCommand,
+    PartyCreateCommand,
+    PartyFactory,
+    PartyValidationError,
+)
 from app.modules.parties.domain.models import PartyContactMethod
 from app.modules.tenants.application.ports import TenantTransaction, TenantUnitOfWork
 from app.modules.tenants.domain.models import TenantProfile
+
 
 class TenantError(RuntimeError): pass
 class TenantNotFoundError(TenantError): pass

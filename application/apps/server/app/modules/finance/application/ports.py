@@ -1,8 +1,10 @@
 """FIN-001 transaction boundaries."""
 from __future__ import annotations
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar
+
 from app.modules.finance.domain.models import PrepaidCheck, RentExpectation, RentReceipt
 
 Result = TypeVar("Result")

@@ -3,10 +3,13 @@ from datetime import UTC, date, datetime
 from json import loads
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint, inspect, text
+
 from app.platform.migration_errors import MigrationSchemaError
-from .sqlalchemy_models import OwnerConcernFollowUpOperationModel, OwnerConcernModel
+
 from ..domain.models import Concern
+from .sqlalchemy_models import OwnerConcernFollowUpOperationModel, OwnerConcernModel
 
 MODELS=(OwnerConcernModel,OwnerConcernFollowUpOperationModel)
 TRIGGERS={"owner_concern_follow_up_operations_no_update":"CREATE TRIGGER owner_concern_follow_up_operations_no_update BEFORE UPDATE ON owner_concern_follow_up_operations BEGIN SELECT RAISE(ABORT, 'owner concern operations are immutable'); END","owner_concern_follow_up_operations_no_delete":"CREATE TRIGGER owner_concern_follow_up_operations_no_delete BEFORE DELETE ON owner_concern_follow_up_operations BEGIN SELECT RAISE(ABORT, 'owner concern operations are immutable'); END"}

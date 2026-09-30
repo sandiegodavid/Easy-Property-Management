@@ -1,16 +1,30 @@
 from __future__ import annotations
+
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from hashlib import sha256
 from json import dumps
 from uuid import uuid4
 from zoneinfo import ZoneInfo
-from app.modules.finance.domain.models import FinanceConflictError, FinanceError, FinanceNotFoundError, RecordReceiptCommand, ReceiptAllocationCommand
+
+from app.modules.finance.domain.models import (
+    FinanceConflictError,
+    FinanceError,
+    FinanceNotFoundError,
+    ReceiptAllocationCommand,
+    RecordReceiptCommand,
+)
 from app.modules.owner_accounting.application.ports import OwnerRentReportUnitOfWork
 from app.modules.owner_accounting.domain.models import (
-    OwnerRentReport, OwnerRentReportCommand, OwnerReportConflictError, OwnerReportError,
-    OwnerReportNotFoundError, RejectOwnerRentReportCommand, VerifyOwnerRentReportCommand,
+    OwnerRentReport,
+    OwnerRentReportCommand,
+    OwnerReportConflictError,
+    OwnerReportError,
+    OwnerReportNotFoundError,
+    RejectOwnerRentReportCommand,
+    VerifyOwnerRentReportCommand,
 )
+
 
 class OwnerRentReportService:
     def __init__(self, unit_of_work: OwnerRentReportUnitOfWork, *, now=lambda: datetime.now(UTC)):

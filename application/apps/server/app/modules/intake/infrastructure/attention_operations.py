@@ -7,10 +7,16 @@ from uuid import uuid4
 from sqlalchemy import select
 
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.intake.domain.models import AttentionTransition, IntakeConflictError, IntakeNotFoundError, canonical_json, fingerprint, utc_now
+from app.modules.intake.domain.models import (
+    AttentionTransition,
+    IntakeConflictError,
+    IntakeNotFoundError,
+    canonical_json,
+    fingerprint,
+    utc_now,
+)
 from app.modules.intake.infrastructure.sqlalchemy_models import IntakeSourceModel, IntakeSourceOperationModel
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeTransaction
-
 
 _ALLOWED_TRANSITIONS = {
     "unprocessed": {"in_review", "dismissed"},

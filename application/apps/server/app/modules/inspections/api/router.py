@@ -1,14 +1,25 @@
 """Typed HTTP boundary for INSP-001."""
 from __future__ import annotations
-from datetime import date, datetime
-from typing import Literal
+
 import tempfile
+from datetime import date, datetime
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form, status
+from typing import Literal
+
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
-from app.modules.inspections.application.service import AreaInput, InspectionConflictError, InspectionError, InspectionNotFoundError, InspectionService, ObservationInput
+
+from app.modules.files.application.errors import MAX_FILE_BYTES, FileError
+from app.modules.inspections.application.service import (
+    AreaInput,
+    InspectionConflictError,
+    InspectionError,
+    InspectionNotFoundError,
+    InspectionService,
+    ObservationInput,
+)
 from app.modules.workspace.application.runtime import WorkspaceRuntime
-from app.modules.files.application.errors import FileError, MAX_FILE_BYTES
+
 
 class Contract(BaseModel): model_config = ConfigDict(extra="forbid")
 class ObservationRequest(Contract):

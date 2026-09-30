@@ -1,6 +1,8 @@
 """Privacy policy for evidence retained by INGEST-001."""
 from __future__ import annotations
+
 from typing import Any, Mapping
+
 from app.modules.audit.domain.models import DefaultAuditSnapshotPolicy
 
 

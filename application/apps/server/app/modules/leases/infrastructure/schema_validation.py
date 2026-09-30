@@ -4,7 +4,6 @@ from sqlalchemy import inspect
 
 from app.platform.migration_errors import MigrationSchemaError
 
-
 EXPECTED = {
     "leases": {
         "columns": {"id", "space_id", "lease_kind", "status", "contract_starts_on", "contract_ends_on", "occupancy_starts_on", "executed_on", "actual_move_out_on", "end_reason", "notes", "created_at", "updated_at"},

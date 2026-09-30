@@ -1,5 +1,6 @@
 """SQLite-backed INSP-001 workflow regressions."""
 from __future__ import annotations
+
 import json
 import sqlite3
 import tempfile
@@ -7,31 +8,36 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 from uuid import uuid4
-from sqlalchemy import event, text
+
 from fastapi.testclient import TestClient
+from sqlalchemy import event, text
+
 from app.bootstrap.api import create_app
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.application.service import FileService
-from app.modules.inspections.application.file_links import ConditionObservationFileLinkValidator
 from app.modules.files.infrastructure.content_store import FilesystemContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
-from app.modules.inspections.application.service import AreaInput, InspectionConflictError, InspectionService, ObservationInput
-from app.modules.inspections.infrastructure.unit_of_work import SQLiteInspectionUnitOfWork
+from app.modules.inspections.application.file_links import ConditionObservationFileLinkValidator
+from app.modules.inspections.application.service import (
+    AreaInput,
+    InspectionConflictError,
+    InspectionService,
+    ObservationInput,
+)
 from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
+from app.modules.inspections.infrastructure.unit_of_work import SQLiteInspectionUnitOfWork
 from app.modules.leases.application.service import LeaseCreateCommand, LeaseService, ParticipantCommand, TermCommand
-from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseUnitOfWork
+from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard, SQLiteLeaseUnitOfWork
 from app.modules.parties.application.service import SharedPartyFactory
+from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations, SQLitePartyReadOperations
 from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
-from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
+from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations, SQLitePortfolioUnitOfWork
 from app.modules.tenants.application.service import TenantCreateCommand, TenantService
 from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantProfileAvailability, SQLiteTenantUnitOfWork
-from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations, SQLitePartyReadOperations
-from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations
-from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard
-from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.application.backup_service import BackupService
+from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.platform.config import LocalConfig
 

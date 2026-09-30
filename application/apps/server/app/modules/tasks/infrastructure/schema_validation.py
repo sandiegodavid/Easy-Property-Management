@@ -1,5 +1,6 @@
 """TASK-001 schema validation owned by the task module."""
 from sqlalchemy import inspect
+
 from app.platform.migration_errors import MigrationSchemaError
 
 

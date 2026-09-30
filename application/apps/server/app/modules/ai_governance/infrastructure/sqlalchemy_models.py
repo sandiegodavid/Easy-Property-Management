@@ -1,7 +1,9 @@
 """SQLite persistence owned by the AI governance module."""
 from __future__ import annotations
+
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
+
 from app.platform.sqlalchemy_models import LocalBase
 
 

@@ -1,12 +1,21 @@
 """Exact-schema and retained graph validation for INGEST-001."""
 from __future__ import annotations
+
 import json
 from datetime import UTC, datetime
 from uuid import UUID
+
 from sqlalchemy import inspect, text
 from sqlalchemy.dialects import sqlite
+
 from app.modules.intake.domain.models import FAILURE_CODES, EvidenceEnvelope, canonical_json, fingerprint
-from app.modules.intake.infrastructure.sqlalchemy_models import IntakeDuplicateCandidateModel, IntakeEvidenceRevisionModel, IntakeRevisionFileLinkModel, IntakeSourceModel, IntakeSourceOperationModel
+from app.modules.intake.infrastructure.sqlalchemy_models import (
+    IntakeDuplicateCandidateModel,
+    IntakeEvidenceRevisionModel,
+    IntakeRevisionFileLinkModel,
+    IntakeSourceModel,
+    IntakeSourceOperationModel,
+)
 from app.platform.migration_errors import MigrationSchemaError
 
 MODELS = (IntakeSourceModel, IntakeEvidenceRevisionModel, IntakeRevisionFileLinkModel, IntakeSourceOperationModel, IntakeDuplicateCandidateModel)

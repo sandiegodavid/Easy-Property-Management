@@ -10,14 +10,13 @@ import zipfile
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from uuid import uuid4
 from unittest.mock import patch
+from uuid import uuid4
 
-from app.modules.workspace.application.backup_service import BackupError, BackupService
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
-from app.modules.files.application.service import FileService
 from app.modules.files.application.ports import FileLink
+from app.modules.files.application.service import FileService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.intake.application.file_links import IntakeSourceFileLinkValidator
@@ -25,13 +24,28 @@ from app.modules.intake.application.service import AttachmentInput, IntakeAdmiss
 from app.modules.intake.domain.models import EvidenceEnvelope
 from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
+from app.modules.workspace.application.backup_service import BackupError, BackupService
+from app.modules.workspace.application.backup_state import (
+    BackupOperationRecord,
+    BackupStateStore,
+    RetentionExecutionError,
+    RetentionRecovery,
+    RetentionResult,
+)
 from app.modules.workspace.application.service import WorkspaceService
-from app.modules.workspace.infrastructure.encrypted_archive import APPLICATION_VERSION, ArchiveError, _validate_header, _validate_manifest_consistency, decrypt_archive_to_zip, make_header, write_encrypted_archive
-from app.modules.workspace.application.backup_state import BackupOperationRecord, BackupStateStore, RetentionExecutionError, RetentionRecovery, RetentionResult
+from app.modules.workspace.infrastructure.encrypted_archive import (
+    APPLICATION_VERSION,
+    ArchiveError,
+    _validate_header,
+    _validate_manifest_consistency,
+    decrypt_archive_to_zip,
+    make_header,
+    write_encrypted_archive,
+)
 from app.platform.config import LocalConfig
 from app.platform.locking import WorkspaceOperationLock
-from app.platform.secrets import BackupSecretStore, SecretStoreError
 from app.platform.product_migrations import current_revision
+from app.platform.secrets import BackupSecretStore, SecretStoreError
 
 
 class _BackupFileValidator:

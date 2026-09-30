@@ -1,5 +1,7 @@
 from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint, inspect, text
+
 from app.platform.migration_errors import MigrationSchemaError
+
 from .sqlalchemy_models import OwnerRentReportModel, OwnerRentReportOperationModel
 
 MODELS=(OwnerRentReportModel,OwnerRentReportOperationModel)
