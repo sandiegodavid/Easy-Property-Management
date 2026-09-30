@@ -2,23 +2,11 @@ INGEST-001 / COM-001 IMPLEMENTATION RE-REVIEW
 
 Review fixed point: 00048d6e11dac2a04a64dea340f41b98c14b25d0
 Reviewed through: 3cf0f2a4ddfec3308cb088a8b6af598cdc4c06a6
-SPECIFICATION Finding 8 final follow-up [resolved 2026-09-28]: fb6873e7af99fad98d5e030540d2d1a8b1a6286b...e8d0f1f8e35aa97f7c361b1159d9d07ee0f8ef3d
 Design sources: docs/INGEST-001_DESIGN.md and docs/COM-001_DESIGN.md
 
 SPECIFICATION FINDINGS
 
 INTAKE ADMISSION AND SOURCE LIFECYCLE
-
-1. [P1] Trusted external sources cannot be superseded, so attachment-set corrections cannot use the required source lineage.
-
-Files:
-- application/apps/server/app/modules/intake/application/service.py:66-74, 87-95, 118-121
-- application/apps/server/app/modules/intake/infrastructure/sqlalchemy_models.py:41-42
-- docs/INGEST-001_DESIGN.md:115, 131, 176, 248
-
-The supersede path delegates to admit(), but admit() performs exact-identity replay before it considers supersedes_source_id. If the replacement has the same trusted provider identity and the same evidence, the endpoint returns the existing source without superseding it. If the evidence or attachment manifest differs, it raises intake_exact_identity_conflict. The unique trusted-identity index also prevents retaining the old and replacement sources with the same identity. A direct probe confirmed both outcomes. This makes the documented attachment-membership correction path impossible for trusted email/chat sources.
-
-Suggestion: give supersession an explicit identity-resolution path before normal replay handling. Define how historical and current records share a trusted identity, for example by making uniqueness apply only to the current lineage tip or by retaining identity in a separate lineage-aware table. Replays must still resolve deterministically while both source records remain retained.
 
 2. [P1] The transaction-aware attention port can change state without an Intake operation or audit event.
 
@@ -87,6 +75,22 @@ The reader exposes only current source_projection(). Exact-revision lookup, boun
 
 Suggestion: finish the consumer-neutral protocol and implement its reads on the caller-owned connection with explicit bounds and set-based batching.
 
+RESOLVED SPECIFICATION FINDINGS
+
+1. [P1] [resolved 2026-09-29] Trusted replay resolves retained evidence across source and revision lineage.
+
+Files:
+- application/apps/server/app/modules/intake/application/ports.py:33-35
+- application/apps/server/app/modules/intake/application/service.py:74-88
+- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py:41-64
+- application/apps/server/app/modules/intake/infrastructure/schema_validation.py:56-76
+- application/apps/server/app/modules/intake/tests/test_intake.py:67-88, 90-157
+- docs/INGEST-001_DESIGN.md:131, 154, 301, 304
+
+The lookup starts from the unique current trusted-identity tip, walks backward through supersedes_source_id, and matches the canonical fingerprint against every retained evidence revision in that lineage. A replay of a corrected source's non-current original revision returns the owning historical source while preserving that source's current corrected revision. Replacement evidence still resolves to the replacement source, and changed evidence still returns intake_exact_identity_conflict. Retained-data validation enforces one consistent trusted identity tuple throughout the lineage.
+
+Focused regression coverage now exercises trusted admission, correction, supersession, replay of the non-current original revision with a fresh idempotency key, replacement replay, changed-evidence conflict, attachment-set replacement, and tampered lineage identity. No further action is required for this finding.
+
 FILE-001 → INTAKE INTEGRITY BOUNDARY
 
 8. [resolved 2026-09-28] Integrity propagation uses a registered, schema-validated failure code.
@@ -146,6 +150,5 @@ VALIDATION
 
 Focused Intake, Communications, and backup tests: 72 passed.
 Full test suite: 404 passed, with one unrelated Starlette/AnyIO deprecation warning.
-
 
 No additional COM-001 behavior defect was found. The remaining COM-related comments concern the cross-module implementation boundary described in Standards finding 2.

@@ -53,6 +53,27 @@ def validate_intake_data(connection) -> None:
         while sources[current]["supersedes_source_id"] is not None:
             if current in seen: raise MigrationSchemaError("INGEST-001 source lineage has a cycle.")
             seen.add(current); current = sources[current]["supersedes_source_id"]
+    trusted = {"transport_verified", "operator_confirmed"}
+    for root in (row for row in sources.values() if row["supersedes_source_id"] is None):
+        lineage = [root]
+        while lineage[-1]["superseded_by_source_id"] is not None:
+            lineage.append(sources[lineage[-1]["superseded_by_source_id"]])
+        if any(row["account_identity_state"] in trusted for row in lineage):
+            identity = tuple(root[key] for key in (
+                "origin_system", "account_scope_hash", "source_kind",
+                "external_source_id", "account_identity_state",
+            ))
+            if any(
+                row["account_identity_state"] not in trusted
+                or tuple(row[key] for key in (
+                    "origin_system", "account_scope_hash", "source_kind",
+                    "external_source_id", "account_identity_state",
+                )) != identity
+                for row in lineage
+            ):
+                raise MigrationSchemaError("INGEST-001 trusted source lineage has inconsistent identity.")
+            if sum(row["superseded_by_source_id"] is None for row in lineage) != 1:
+                raise MigrationSchemaError("INGEST-001 trusted source lineage has an invalid current tip.")
     for revision in revisions.values():
         _uuid(revision["id"]); _timestamp(revision["created_at"])
         if revision["source_id"] not in sources: raise MigrationSchemaError("INGEST-001 revision source is invalid.")

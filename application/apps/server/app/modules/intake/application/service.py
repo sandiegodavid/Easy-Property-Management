@@ -63,15 +63,29 @@ class IntakeService:
             if prior:
                 if prior["request_fingerprint"] != request_fingerprint: raise IntakeConflictError("Idempotency key was reused with different input.", "intake_idempotency_conflict")
                 return self._view(tx, prior["source_id"]), None
+            previous = None
+            if command.supersedes_source_id is not None:
+                previous = tx.source(command.supersedes_source_id)
+                if previous is None or previous["technical_status"] != "ready" or previous["superseded_by_source_id"] is not None:
+                    raise IntakeConflictError("The source cannot be superseded.", "intake_lifecycle_conflict")
+                self._validate_superseding_identity(command, previous)
             exact = None
+            exact_evidence = None
             if command.account_scope_hash and command.account_identity_state in {"transport_verified", "operator_confirmed"} and command.envelope.external_source_id:
                 exact = tx.exact_source(command.origin_system, command.account_scope_hash, command.envelope.source_kind, command.envelope.external_source_id)
-            if exact is not None:
+                if exact is not None:
+                    exact_evidence = tx.exact_source_for_evidence(
+                        exact["id"], command.origin_system, command.account_scope_hash,
+                        command.envelope.source_kind, command.envelope.external_source_id,
+                        fingerprint(provisional),
+                    )
+            if exact is not None and command.supersedes_source_id is None:
                 existing = tx.revision(exact["current_revision_id"])
-                if existing is None or existing["content_fingerprint"] != fingerprint(provisional):
+                matched = exact if existing is not None and existing["content_fingerprint"] == fingerprint(provisional) else exact_evidence
+                if matched is None:
                     raise IntakeConflictError("Trusted external source identity conflicts with retained evidence.", "intake_exact_identity_conflict")
-                tx.insert_operation({"id": str(uuid4()), "operation_type": "admit", "idempotency_key": command.idempotency_key, "request_fingerprint": request_fingerprint, "source_id": exact["id"], "result_revision_id": exact["current_revision_id"], "outcome": "succeeded", "error_code": None, "correlation_id": correlation_id, "actor_kind": command.submitter_kind, "actor_reference": command.submitter_reference, "created_at": now})
-                return self._view(tx, exact["id"]), None
+                tx.insert_operation({"id": str(uuid4()), "operation_type": "admit", "idempotency_key": command.idempotency_key, "request_fingerprint": request_fingerprint, "source_id": matched["id"], "result_revision_id": matched["current_revision_id"], "outcome": "succeeded", "error_code": None, "correlation_id": correlation_id, "actor_kind": command.submitter_kind, "actor_reference": command.submitter_reference, "created_at": now})
+                return self._view(tx, matched["id"]), None
             batch = self.files.attachment_batch(tx.file_connection()) if command.attachments and self.files else None
             if batch is not None: batch_holder["batch"] = batch
             try:
@@ -84,15 +98,11 @@ class IntakeService:
                 if len({entry["contentSha256"] for entry in attachment_manifest}) != len(attachment_manifest): raise IntakeError("Duplicate attachment content is not allowed.")
                 envelope = command.envelope.canonical(attachment_manifest)
                 final_request_fingerprint = fingerprint({"admit": envelope, "origin": command.origin_system, "scope": command.account_scope_hash, "identity": command.account_identity_state, "supersedes": command.supersedes_source_id})
-                if command.supersedes_source_id is not None:
-                    previous = tx.source(command.supersedes_source_id)
-                    if previous is None or previous["technical_status"] != "ready" or previous["superseded_by_source_id"] is not None:
-                        raise IntakeConflictError("The source cannot be superseded.", "intake_lifecycle_conflict")
                 source = {"id": source_id, "source_kind": command.envelope.source_kind, "channel": command.envelope.channel, "origin_system": command.origin_system, "external_source_id": command.envelope.external_source_id, "conversation_ref": command.envelope.conversation_ref, "account_scope_hash": command.account_scope_hash, "account_identity_state": command.account_identity_state, "account_display_hint": bounded(command.account_display_hint, "accountDisplayHint", 500), "submitter_kind": command.submitter_kind, "submitter_reference": command.submitter_reference, "occurred_at_utc": command.envelope.occurred_at_utc, "received_at_utc": now, "technical_status": "ready", "attention_status": "unprocessed", "current_revision_id": revision_id, "supersedes_source_id": command.supersedes_source_id, "superseded_by_source_id": None, "failure_code": None, "created_at": now, "updated_at": now}
                 revision = {"id": revision_id, "source_id": source_id, "revision_number": 1, "envelope_schema_version": 1, "revision_kind": "submitted", "envelope_json": canonical_json(envelope), "content_fingerprint": fingerprint(envelope), "correction_reason": None, "actor_kind": command.submitter_kind, "actor_reference": command.submitter_reference, "created_at": now, "supersedes_revision_id": None, "superseded_by_revision_id": None}
-                tx.insert_source(source); tx.insert_revision(revision)
                 if command.supersedes_source_id is not None:
                     tx.update_source(command.supersedes_source_id, {"technical_status": "superseded", "superseded_by_source_id": source_id, "updated_at": now})
+                tx.insert_source(source); tx.insert_revision(revision)
                 for order, (stored, role) in enumerate(links):
                     link_id = next(link["id"] for link in stored.links if link["entityId"] == source_id)
                     tx.insert_attachment({"revision_id": revision_id, "file_link_id": link_id, "attachment_role": role, "display_order": order})
@@ -233,6 +243,23 @@ class IntakeService:
 
     @staticmethod
     def _safe_source(source: dict[str, object]) -> dict[str, object]: return {"id":source["id"],"sourceKind":source["source_kind"],"technicalStatus":source["technical_status"],"attentionStatus":source["attention_status"],"receivedAtUtc":source["received_at_utc"]}
+
+    @staticmethod
+    def _validate_superseding_identity(command: IntakeAdmissionCommand,
+                                      previous: dict[str, object]) -> None:
+        """A trusted external identity belongs to its lineage, not one row."""
+        trusted = {"transport_verified", "operator_confirmed"}
+        prior_trusted = previous["account_identity_state"] in trusted
+        next_trusted = command.account_identity_state in trusted
+        if prior_trusted != next_trusted:
+            raise IntakeConflictError("Trusted source identity must be retained by its replacement.", "intake_exact_identity_conflict")
+        if prior_trusted and (
+            previous["origin_system"] != command.origin_system
+            or previous["account_scope_hash"] != command.account_scope_hash
+            or previous["source_kind"] != command.envelope.source_kind
+            or previous["external_source_id"] != command.envelope.external_source_id
+        ):
+            raise IntakeConflictError("Trusted source identity must be retained by its replacement.", "intake_exact_identity_conflict")
 
 
 def _digest(path: Path) -> str:

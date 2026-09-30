@@ -30,7 +30,38 @@ class SQLiteIntakeTransaction:
     def revision(self, revision_id: str): return self.connection.execute(select(IntakeEvidenceRevisionModel).where(IntakeEvidenceRevisionModel.id == revision_id)).mappings().first()
     def operation(self, key: str): return self.connection.execute(select(IntakeSourceOperationModel).where(IntakeSourceOperationModel.idempotency_key == key)).mappings().first()
     def exact_source(self, origin: str, scope: str, kind: str, external_id: str):
-        return self.connection.execute(select(IntakeSourceModel).where(IntakeSourceModel.origin_system == origin, IntakeSourceModel.account_scope_hash == scope, IntakeSourceModel.source_kind == kind, IntakeSourceModel.external_source_id == external_id)).mappings().first()
+        return self.connection.execute(select(IntakeSourceModel).where(
+            IntakeSourceModel.origin_system == origin,
+            IntakeSourceModel.account_scope_hash == scope,
+            IntakeSourceModel.source_kind == kind,
+            IntakeSourceModel.external_source_id == external_id,
+            IntakeSourceModel.account_identity_state.in_(("transport_verified", "operator_confirmed")),
+            IntakeSourceModel.superseded_by_source_id.is_(None),
+        )).mappings().first()
+    def exact_source_for_evidence(self, current_source_id: str, origin: str, scope: str, kind: str,
+                                  external_id: str, content_fingerprint: str):
+        lineage = select(
+            IntakeSourceModel.id, IntakeSourceModel.supersedes_source_id,
+        ).where(IntakeSourceModel.id == current_source_id).cte("intake_source_lineage", recursive=True)
+        lineage = lineage.union_all(select(
+            IntakeSourceModel.id, IntakeSourceModel.supersedes_source_id,
+        ).join(lineage, IntakeSourceModel.id == lineage.c.supersedes_source_id))
+        return self.connection.execute(select(IntakeSourceModel).join(
+            IntakeEvidenceRevisionModel,
+            IntakeEvidenceRevisionModel.source_id == IntakeSourceModel.id,
+        ).where(
+            IntakeSourceModel.id.in_(select(lineage.c.id)),
+            IntakeSourceModel.origin_system == origin,
+            IntakeSourceModel.account_scope_hash == scope,
+            IntakeSourceModel.source_kind == kind,
+            IntakeSourceModel.external_source_id == external_id,
+            IntakeSourceModel.account_identity_state.in_(("transport_verified", "operator_confirmed")),
+            IntakeEvidenceRevisionModel.content_fingerprint == content_fingerprint,
+        ).order_by(
+            IntakeEvidenceRevisionModel.created_at.desc(),
+            IntakeEvidenceRevisionModel.id.desc(),
+            IntakeSourceModel.id.desc(),
+        )).mappings().first()
     def duplicate_source(self, content_fingerprint: str, source_id: str) -> str | None:
         return self.connection.execute(select(IntakeEvidenceRevisionModel.source_id).where(IntakeEvidenceRevisionModel.content_fingerprint == content_fingerprint, IntakeEvidenceRevisionModel.source_id != source_id).limit(1)).scalar_one_or_none()
     def insert_source(self, values: dict[str, object]) -> None: self.connection.execute(IntakeSourceModel.__table__.insert().values(**values))

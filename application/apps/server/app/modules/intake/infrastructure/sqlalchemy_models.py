@@ -40,7 +40,7 @@ class IntakeSourceModel(LocalBase):
         Index("intake_sources_received", "received_at_utc", "id"),
         Index("intake_sources_status", "technical_status", "attention_status", "received_at_utc", "id"),
         Index("intake_sources_trusted_external", "origin_system", "account_scope_hash", "source_kind", "external_source_id", unique=True,
-              sqlite_where=text("account_identity_state IN ('transport_verified','operator_confirmed') AND external_source_id IS NOT NULL")),
+              sqlite_where=text("account_identity_state IN ('transport_verified','operator_confirmed') AND external_source_id IS NOT NULL AND superseded_by_source_id IS NULL")),
     )
 
 
