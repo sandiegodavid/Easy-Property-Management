@@ -141,7 +141,7 @@ Every referenced file link must target the same `intake_source`, use an allowed 
 Append-only operations provide idempotency and recovery independently of Audit. Each row records:
 
 - operation ID and type (`admit`, `integrity_failed`, `integrity_restored`, `correct`, `supersede`, `attention_transition`);
-- caller-supplied idempotency UUID and canonical request fingerprint;
+- caller-supplied idempotency UUID, immutable canonical request payload, and its recomputable fingerprint;
 - source ID, optional resulting revision ID, outcome, and registered error code;
 - correlation ID, trusted actor context, and timestamps.
 

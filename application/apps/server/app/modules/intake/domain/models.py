@@ -12,6 +12,16 @@ SOURCE_KINDS = frozenset({"email_message", "sms_message", "chat_message", "opera
 CHANNELS = frozenset({"email", "sms", "chat", "internal", "voice"})
 KIND_CHANNEL = {"email_message": "email", "sms_message": "sms", "chat_message": "chat", "operator_note": "internal", "voice_transcript": "voice"}
 IDENTITY_STATES = frozenset({"transport_verified", "operator_confirmed", "unverified_claim", "not_applicable"})
+ATTENTION_TRANSITIONS = {
+    "unprocessed": frozenset({"in_review", "dismissed"}),
+    "in_review": frozenset({"resolved", "dismissed", "unprocessed"}),
+    "dismissed": frozenset({"unprocessed"}),
+    "resolved": frozenset(),
+}
+
+
+def attention_transition_allowed(before: str, after: str) -> bool:
+    return after in ATTENTION_TRANSITIONS.get(before, frozenset())
 
 
 class IntakeError(ValueError):

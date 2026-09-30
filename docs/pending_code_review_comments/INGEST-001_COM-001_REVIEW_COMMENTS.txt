@@ -63,18 +63,6 @@ GET /api/intake/sources has no trusted/unverified provenance filter even though 
 
 Suggestion: add a typed accountIdentityState/provenance filter through the router, service, and bounded query; return the registered Intake validation envelope with status 422 for per-file and aggregate size violations.
 
-INTAKE RETAINED DATA AND CONSUMER READ CONTRACTS
-
-6. [P1] Retained-data validation still does not validate required operation, duplicate-candidate, and audit consistency.
-
-Files:
-- application/apps/server/app/modules/intake/infrastructure/schema_validation.py:38-94
-- docs/INGEST-001_DESIGN.md:266-278, 309
-
-The validator now checks canonical envelopes, revision chains, source lineage, and attachment manifests, but operation validation stops at UUID/fingerprint/source existence. It does not verify that result_revision_id belongs to the operation's source, operation type/outcome/error combinations, operation-to-lifecycle consequences, or correlated audit evidence. It does not validate intake_source_duplicate_candidates at all. A direct probe deleted all Intake audit events and validate_latest_schema() still passed.
-
-Suggestion: validate each operation against its source/revision and expected lifecycle consequence; validate candidate ordering, distinct source ownership, disposition metadata, timestamps, and registered values; and require the correlated audit events identified by the design for admissions, revisions, lifecycle decisions, and sensitive reads.
-
 7. [P2] The consumer source reader implements only one of the four required read shapes.
 
 Files:
@@ -100,6 +88,26 @@ Files:
 IntakeService.set_integrity() exists, but nothing calls or composes it. File verification updates only file_content_locations and FILE audit history. A missing or quarantined attachment therefore leaves its Intake source marked ready, and a repaired attachment cannot create the required integrity_restored operation. The operator can receive an evidence-complete Intake projection after FILE-001 has already established that its bytes are unavailable.
 
 Suggestion: add a transaction-aware, set-based consequence coordinator for verification state changes. It should locate affected Intake associations, transition each non-superseded source once with a registered failure code, record the Intake operation/audit set, and restore only after every attachment for the current revision verifies available.
+
+RESOLVED SPECIFICATION FINDINGS — 2026-09-30
+
+6. [P1] RESOLVED — Intake retained-data validation now binds operations, canonical request payloads, fingerprints, lifecycle consequences, duplicate candidates, and correlated audit evidence.
+
+Files:
+- application/apps/server/app/modules/intake/infrastructure/sqlalchemy_models.py:73-88
+- application/apps/server/app/modules/intake/infrastructure/schema_validation.py:99-179, 219-258, 325-381
+- application/apps/server/app/modules/intake/domain/models.py:15-24
+- application/apps/server/app/modules/intake/application/service.py:55-104, 162-221
+- application/apps/server/app/modules/intake/tests/test_intake.py:82-196
+- docs/INGEST-001_DESIGN.md:139-148, 264-278
+
+6a. Operation correlations are unique, so one audit set cannot satisfy multiple retry receipts.
+
+6b. Command handling and retained validation share the attention transition policy; validation replays ordered technical and attention consequences and compares terminal state with the source row.
+
+6c. Candidate-correlation corruption is tested through Intake data validation rather than failing early on a missing schema trigger.
+
+6d. Every operation retains a bounded canonical request payload. Startup and restore validation recomputes its fingerprint and cross-checks operation-specific source, revision, and audit facts. The original fingerprint-corruption probe is rejected, while an unchanged retry remains idempotent.
 
 STANDARDS FINDINGS
 

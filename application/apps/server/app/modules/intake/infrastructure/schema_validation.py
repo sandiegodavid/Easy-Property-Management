@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 from sqlalchemy import inspect, text
 from sqlalchemy.dialects import sqlite
-from app.modules.intake.domain.models import EvidenceEnvelope, canonical_json, fingerprint
+from app.modules.intake.domain.models import EvidenceEnvelope, attention_transition_allowed, canonical_json, fingerprint
 from app.modules.intake.infrastructure.sqlalchemy_models import IntakeDuplicateCandidateModel, IntakeEvidenceRevisionModel, IntakeRevisionFileLinkModel, IntakeSourceModel, IntakeSourceOperationModel
 from app.platform.migration_errors import MigrationSchemaError
 
@@ -89,9 +89,318 @@ def validate_intake_data(connection) -> None:
             row=connection.execute(text("SELECT f.content_sha256 FROM file_links l JOIN file_records f ON f.id=l.file_id WHERE l.id=:id"),{"id":link["file_link_id"]}).mappings().one()
             manifest.append({"role":link["attachment_role"],"contentSha256":row["content_sha256"]})
         if declared != manifest or [link["display_order"] for link in actual] != list(range(len(actual))): raise MigrationSchemaError("INGEST-001 attachment manifest is invalid.")
-    for operation in connection.execute(text("SELECT * FROM intake_source_operations")).mappings():
+    audits = list(connection.execute(text("SELECT id,entity_type,entity_id,action,before_snapshot,after_snapshot,correlation_id FROM audit_events")).mappings())
+    operations, expected_audits = _validate_operations(connection, sources, revisions, audits)
+    expected_audits.update(_validate_duplicate_candidates(connection, sources, revisions, audits, operations))
+    _validate_intake_audit_stream(audits, sources, revisions, expected_audits)
+    _validate_lifecycle_consequences(sources, operations, audits)
+
+
+def _validate_operations(connection, sources, revisions, audits):
+    """Reconstruct the immutable operation ledger against its audit evidence.
+
+    The operation row is the retry receipt; audit is the independent retained
+    record of its lifecycle consequence.  Neither may stand in for the other.
+    """
+    operations = list(connection.execute(text("SELECT * FROM intake_source_operations")).mappings())
+    if len({operation["correlation_id"] for operation in operations}) != len(operations):
+        raise MigrationSchemaError("INGEST-001 operation correlations must be unique.")
+    expected_audits: set[tuple[str, str, str, str]] = set()
+    for operation in operations:
         _uuid(operation["id"]); _uuid(operation["idempotency_key"]); _uuid(operation["correlation_id"]); _timestamp(operation["created_at"])
-        if operation["source_id"] not in sources or len(operation["request_fingerprint"])!=64 or any(c not in "0123456789abcdef" for c in operation["request_fingerprint"]): raise MigrationSchemaError("INGEST-001 operation is invalid.")
+        payload = _operation_payload(operation)
+        if operation["source_id"] not in sources or not _sha256(operation["request_fingerprint"]) or operation["actor_kind"] not in {"local_operator", "assistant_connection", "voice_workflow", "system"}:
+            raise MigrationSchemaError("INGEST-001 operation is invalid.")
+        result = revisions.get(operation["result_revision_id"]) if operation["result_revision_id"] else None
+        if result is not None and result["source_id"] != operation["source_id"]:
+            raise MigrationSchemaError("INGEST-001 operation result revision belongs to another source.")
+        if operation["outcome"] == "failed":
+            if result is not None or not operation["error_code"]:
+                raise MigrationSchemaError("INGEST-001 failed operation outcome is invalid.")
+            continue
+        if operation["outcome"] != "succeeded" or result is None or operation["error_code"] is not None:
+            raise MigrationSchemaError("INGEST-001 successful operation outcome is invalid.")
+        related = [event for event in audits if event["correlation_id"] == operation["correlation_id"]]
+        kind = operation["operation_type"]
+        _validate_operation_payload(operation, payload, result, sources, related)
+        if kind == "admit":
+            admitted = _audit(related, "intake_source", operation["source_id"], "admitted")
+            replayed = _audit(related, "intake_source", operation["source_id"], "admission_replayed")
+            if admitted:
+                if result["revision_number"] != 1 or result["revision_kind"] != "submitted":
+                    raise MigrationSchemaError("INGEST-001 admission result is invalid.")
+                _require_snapshot(admitted, None, _admitted_snapshot(sources[operation["source_id"]]))
+                created = _require_audit(related, "intake_evidence_revision", result["id"], "created")
+                _require_snapshot(created, None, _revision_snapshot(result))
+                expected_audits.update({_audit_key(admitted), _audit_key(created)})
+            elif not replayed:
+                raise MigrationSchemaError("INGEST-001 admission audit evidence is missing.")
+            else:
+                _require_snapshot(replayed, None, {"sourceId": operation["source_id"], "revision": result["id"]})
+                expected_audits.add(_audit_key(replayed))
+        elif kind == "supersede":
+            if result["revision_number"] != 1 or result["revision_kind"] != "submitted":
+                raise MigrationSchemaError("INGEST-001 supersession result is invalid.")
+            predecessor = sources[operation["source_id"]]["supersedes_source_id"]
+            if predecessor is None:
+                raise MigrationSchemaError("INGEST-001 supersession has no predecessor.")
+            admitted = _require_audit(related, "intake_source", operation["source_id"], "admitted")
+            superseded = _require_audit(related, "intake_source", predecessor, "superseded")
+            created = _require_audit(related, "intake_evidence_revision", result["id"], "created")
+            _require_snapshot(admitted, None, _admitted_snapshot(sources[operation["source_id"]]))
+            _require_snapshot(superseded, {"technicalStatus": "ready"}, {"supersededBySourceId": operation["source_id"], "technicalStatus": "superseded"})
+            _require_snapshot(created, None, _revision_snapshot(result))
+            expected_audits.update({_audit_key(admitted), _audit_key(superseded), _audit_key(created)})
+        elif kind == "correct":
+            if result["revision_number"] <= 1 or result["revision_kind"] not in {"operator_correction", "transcript_revision"}:
+                raise MigrationSchemaError("INGEST-001 correction result is invalid.")
+            corrected = _require_audit(related, "intake_source", operation["source_id"], "corrected")
+            created = _require_audit(related, "intake_evidence_revision", result["id"], "created")
+            _require_snapshot(corrected, {"revision": result["supersedes_revision_id"]}, {"revision": result["id"]})
+            _require_snapshot(created, None, _revision_snapshot(result))
+            expected_audits.update({_audit_key(corrected), _audit_key(created)})
+        elif kind == "attention_transition":
+            event = _require_audit(related, "intake_source", operation["source_id"], "attention_changed")
+            before, after = _snapshots(event)
+            if set(before) != {"attentionStatus"} or set(after) != {"attentionStatus"} or not attention_transition_allowed(before["attentionStatus"], after["attentionStatus"]):
+                raise MigrationSchemaError("INGEST-001 attention operation audit is invalid.")
+            expected_audits.add(_audit_key(event))
+        elif kind in {"integrity_failed", "integrity_restored"}:
+            action = kind
+            event = _require_audit(related, "intake_source", operation["source_id"], action)
+            before, after = _snapshots(event)
+            expected = "failed" if kind == "integrity_failed" else "ready"
+            required_before = "ready" if kind == "integrity_failed" else "failed"
+            if set(before) != {"technicalStatus"} or before["technicalStatus"] != required_before or after.get("technicalStatus") != expected or set(after) != ({"technicalStatus", "failureCode"}) or (expected == "failed" and not after.get("failureCode")) or (expected == "ready" and after.get("failureCode") is not None):
+                raise MigrationSchemaError("INGEST-001 integrity operation audit is invalid.")
+            expected_audits.add(_audit_key(event))
+        else:
+            raise MigrationSchemaError("INGEST-001 operation type is invalid.")
+    return operations, expected_audits
+
+
+def _validate_duplicate_candidates(connection, sources, revisions, audits, operations):
+    expected_audits: set[tuple[str, str, str, str]] = set()
+    for candidate in connection.execute(text("SELECT * FROM intake_source_duplicate_candidates")).mappings():
+        _uuid(candidate["id"]); _timestamp(candidate["created_at"])
+        if candidate["source_id"] not in sources or candidate["candidate_source_id"] not in sources or candidate["source_id"] >= candidate["candidate_source_id"]:
+            raise MigrationSchemaError("INGEST-001 duplicate candidate pair is invalid.")
+        if candidate["reason"] not in {"content_fingerprint", "conversation_similarity"} or candidate["confidence_label"] not in {"low", "medium", "high"} or not isinstance(candidate["confidence_provenance"], str) or not candidate["confidence_provenance"].strip():
+            raise MigrationSchemaError("INGEST-001 duplicate candidate classification is invalid.")
+        if candidate["reason"] == "content_fingerprint":
+            if candidate["confidence_label"] != "high" or candidate["confidence_provenance"] != "exact_canonical_evidence":
+                raise MigrationSchemaError("INGEST-001 duplicate candidate confidence is invalid.")
+        if candidate["disposition"] == "unreviewed":
+            if candidate["decided_at"] is not None or candidate["decision_reason"] is not None:
+                raise MigrationSchemaError("INGEST-001 unreviewed duplicate candidate is invalid.")
+        else:
+            if candidate["disposition"] not in {"distinct", "same_source"} or candidate["decided_at"] is None or not candidate["decision_reason"]:
+                raise MigrationSchemaError("INGEST-001 duplicate candidate disposition is invalid.")
+            _timestamp(candidate["decided_at"])
+        event = _require_audit(audits, "intake_source_duplicate_candidate", candidate["id"], "created")
+        _, after = _snapshots(event)
+        if set(after) != {"sourceId", "candidateSourceId", "introducedSourceId", "reason", "disposition"} or after.get("sourceId") != candidate["source_id"] or after.get("candidateSourceId") != candidate["candidate_source_id"] or after.get("reason") != candidate["reason"] or after.get("disposition") != candidate["disposition"]:
+            raise MigrationSchemaError("INGEST-001 duplicate candidate audit evidence is invalid.")
+        operation = next((operation for operation in operations if operation["correlation_id"] == event["correlation_id"] and operation["operation_type"] in {"admit", "supersede"} and operation["source_id"] == after["introducedSourceId"]), None)
+        if operation is None or operation["source_id"] not in {candidate["source_id"], candidate["candidate_source_id"]}:
+            raise MigrationSchemaError("INGEST-001 duplicate candidate audit correlation is invalid.")
+        other_source_id = candidate["candidate_source_id"] if operation["source_id"] == candidate["source_id"] else candidate["source_id"]
+        result = revisions[operation["result_revision_id"]]
+        if candidate["reason"] == "content_fingerprint" and not any(revision["source_id"] == other_source_id and revision["content_fingerprint"] == result["content_fingerprint"] and _before_or_equal(revision["created_at"], candidate["created_at"]) for revision in revisions.values()):
+            raise MigrationSchemaError("INGEST-001 duplicate candidate evidence is invalid.")
+        expected_audits.add(_audit_key(event))
+        if candidate["disposition"] != "unreviewed":
+            decision = _require_audit(audits, "intake_source_duplicate_candidate", candidate["id"], "decision_recorded")
+            _require_snapshot(decision, {"disposition": "unreviewed"}, {"disposition": candidate["disposition"], "decisionReason": candidate["decision_reason"]})
+            expected_audits.add(_audit_key(decision))
+    return expected_audits
+
+
+def _operation_payload(operation):
+    try:
+        payload = json.loads(operation["request_payload_json"])
+    except (TypeError, ValueError) as error:
+        raise MigrationSchemaError("INGEST-001 operation request payload is invalid.") from error
+    if not isinstance(payload, dict) or canonical_json(payload) != operation["request_payload_json"] or fingerprint(payload) != operation["request_fingerprint"]:
+        raise MigrationSchemaError("INGEST-001 operation request fingerprint is invalid.")
+    return payload
+
+
+def _validate_operation_payload(operation, payload, result, sources, related) -> None:
+    """Bind every retry receipt to the canonical command facts it represents."""
+    source = sources[operation["source_id"]]
+    kind = operation["operation_type"]
+    if kind in {"admit", "supersede"}:
+        expected = {"admit": json.loads(result["envelope_json"]), "origin": source["origin_system"],
+                    "scope": source["account_scope_hash"], "identity": source["account_identity_state"],
+                    "supersedes": source["supersedes_source_id"]}
+        if payload != expected:
+            raise MigrationSchemaError("INGEST-001 admission request payload is invalid.")
+    elif kind == "correct":
+        expected = {"correct": operation["source_id"], "envelope": json.loads(result["envelope_json"]),
+                    "reason": result["correction_reason"]}
+        if payload != expected:
+            raise MigrationSchemaError("INGEST-001 correction request payload is invalid.")
+    elif kind == "attention_transition":
+        event = _require_audit(related, "intake_source", operation["source_id"], "attention_changed")
+        before, after = _snapshots(event)
+        if set(payload) != {"attention", "target", "reason", "expectedRevision", "expectedStatus"} or payload["attention"] != operation["source_id"] or payload["target"] != after["attentionStatus"] or payload["expectedRevision"] != result["id"] or payload["expectedStatus"] != before["attentionStatus"] or not _payload_text(payload["reason"], 1000):
+            raise MigrationSchemaError("INGEST-001 attention request payload is invalid.")
+    elif kind in {"integrity_failed", "integrity_restored"}:
+        event = _require_audit(related, "intake_source", operation["source_id"], kind)
+        _, after = _snapshots(event)
+        expected = "failed" if kind == "integrity_failed" else "ready"
+        if set(payload) != {"integrity", "target", "reason"} or payload["integrity"] != operation["source_id"] or payload["target"] != expected or after["technicalStatus"] != expected or not _payload_text(payload["reason"], 200) or (expected == "failed" and payload["reason"] != after["failureCode"]):
+            raise MigrationSchemaError("INGEST-001 integrity request payload is invalid.")
+
+
+def _payload_text(value, maximum: int) -> bool:
+    return isinstance(value, str) and bool(value.strip()) and len(value) <= maximum
+
+
+def _audit(events, entity_type, entity_id, action):
+    matching = [event for event in events if event["entity_type"] == entity_type and event["entity_id"] == entity_id and event["action"] == action]
+    if len(matching) > 1:
+        raise MigrationSchemaError("INGEST-001 audit evidence is duplicated.")
+    return matching[0] if matching else None
+
+
+def _require_audit(events, entity_type, entity_id, action):
+    event = _audit(events, entity_type, entity_id, action)
+    if event is None:
+        raise MigrationSchemaError("INGEST-001 correlated audit evidence is missing.")
+    return event
+
+
+def _snapshots(event):
+    try:
+        before = None if event["before_snapshot"] is None else json.loads(event["before_snapshot"])
+        after = None if event["after_snapshot"] is None else json.loads(event["after_snapshot"])
+    except (TypeError, ValueError) as error:
+        raise MigrationSchemaError("INGEST-001 audit snapshot is invalid.") from error
+    if (before is not None and not isinstance(before, dict)) or (after is not None and not isinstance(after, dict)):
+        raise MigrationSchemaError("INGEST-001 audit snapshot is invalid.")
+    return before, after
+
+
+def _require_snapshot(event, expected_before, expected_after) -> None:
+    before, after = _snapshots(event)
+    if before != expected_before or after != expected_after:
+        raise MigrationSchemaError("INGEST-001 audit snapshot contradicts retained data.")
+
+
+def _audit_key(event) -> tuple[str, str, str, str]:
+    return event["correlation_id"], event["entity_type"], event["entity_id"], event["action"]
+
+
+def _admitted_snapshot(source) -> dict[str, object]:
+    return {"id": source["id"], "sourceKind": source["source_kind"], "technicalStatus": "ready",
+            "attentionStatus": "unprocessed", "receivedAtUtc": source["received_at_utc"]}
+
+
+def _revision_snapshot(revision) -> dict[str, object]:
+    return {"sourceId": revision["source_id"], "revisionNumber": revision["revision_number"],
+            "contentFingerprint": revision["content_fingerprint"]}
+
+
+def _before_or_equal(left, right) -> bool:
+    try:
+        return datetime.fromisoformat(str(left).replace("Z", "+00:00")) <= datetime.fromisoformat(str(right).replace("Z", "+00:00"))
+    except ValueError as error:
+        raise MigrationSchemaError("INGEST-001 timestamp is invalid.") from error
+
+
+def _validate_intake_audit_stream(audits, sources, revisions, expected_audits) -> None:
+    """Reject contradictory Intake audits while allowing unrelated module audits."""
+    for event in audits:
+        if event["entity_type"] == "intake_source" and event["action"] == "evidence_read":
+            _validate_evidence_read(event, sources, revisions)
+            continue
+        if event["entity_type"] not in {"intake_source", "intake_evidence_revision", "intake_source_duplicate_candidate"}:
+            continue
+        if _audit_key(event) not in expected_audits:
+            raise MigrationSchemaError("INGEST-001 audit event has no retained lifecycle consequence.")
+
+
+def _validate_lifecycle_consequences(sources, operations, audits) -> None:
+    """Replay reasoned operations and require their terminal state to be retained.
+
+    Operations are append-only receipts.  Reconstructing their ordered effects
+    prevents an individually plausible audit snapshot from describing an
+    impossible source lifecycle.
+    """
+    state: dict[str, dict[str, str | None]] = {}
+    ordered = sorted(operations, key=lambda operation: (_parsed_timestamp(operation["created_at"]), operation["id"]))
+    for operation in ordered:
+        if operation["outcome"] != "succeeded":
+            continue
+        source_id = operation["source_id"]
+        related = [event for event in audits if event["correlation_id"] == operation["correlation_id"]]
+        kind = operation["operation_type"]
+        if kind == "admit":
+            if _audit(related, "intake_source", source_id, "admitted") is not None:
+                if source_id in state:
+                    raise MigrationSchemaError("INGEST-001 source was admitted more than once.")
+                state[source_id] = {"technical": "ready", "attention": "unprocessed", "failure": None}
+            elif source_id not in state:
+                raise MigrationSchemaError("INGEST-001 admission replay precedes its admission.")
+        elif kind == "supersede":
+            if source_id in state:
+                raise MigrationSchemaError("INGEST-001 source was superseded more than once.")
+            predecessor = sources[source_id]["supersedes_source_id"]
+            if predecessor not in state or state[predecessor]["technical"] != "ready":
+                raise MigrationSchemaError("INGEST-001 supersession lifecycle is invalid.")
+            state[source_id] = {"technical": "ready", "attention": "unprocessed", "failure": None}
+            state[predecessor]["technical"] = "superseded"
+            state[predecessor]["failure"] = None
+        elif kind == "correct":
+            if source_id not in state or state[source_id]["technical"] == "superseded":
+                raise MigrationSchemaError("INGEST-001 correction lifecycle is invalid.")
+        elif kind == "attention_transition":
+            current = state.get(source_id)
+            event = _require_audit(related, "intake_source", source_id, "attention_changed")
+            before, after = _snapshots(event)
+            if current is None or current["technical"] != "ready" or before["attentionStatus"] != current["attention"] or not attention_transition_allowed(before["attentionStatus"], after["attentionStatus"]):
+                raise MigrationSchemaError("INGEST-001 attention lifecycle is invalid.")
+            current["attention"] = after["attentionStatus"]
+        elif kind in {"integrity_failed", "integrity_restored"}:
+            current = state.get(source_id)
+            event = _require_audit(related, "intake_source", source_id, kind)
+            before, after = _snapshots(event)
+            expected_before = "ready" if kind == "integrity_failed" else "failed"
+            expected_after = "failed" if kind == "integrity_failed" else "ready"
+            if current is None or current["technical"] != expected_before or before["technicalStatus"] != expected_before or after["technicalStatus"] != expected_after:
+                raise MigrationSchemaError("INGEST-001 integrity lifecycle is invalid.")
+            current["technical"] = expected_after
+            current["failure"] = after["failureCode"]
+    if set(state) != set(sources):
+        raise MigrationSchemaError("INGEST-001 source admission lifecycle is incomplete.")
+    for source_id, source in sources.items():
+        current = state[source_id]
+        if current["technical"] != source["technical_status"] or current["attention"] != source["attention_status"] or current["failure"] != source["failure_code"]:
+            raise MigrationSchemaError("INGEST-001 retained source lifecycle contradicts operations.")
+
+
+def _parsed_timestamp(value):
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError as error:
+        raise MigrationSchemaError("INGEST-001 timestamp is invalid.") from error
+
+
+def _validate_evidence_read(event, sources, revisions) -> None:
+    if event["entity_id"] not in sources:
+        raise MigrationSchemaError("INGEST-001 evidence read source is invalid.")
+    before, after = _snapshots(event)
+    if before is not None or not isinstance(after, dict) or set(after) != {"sourceId", "revision"} or after["sourceId"] != event["entity_id"]:
+        raise MigrationSchemaError("INGEST-001 evidence read audit is invalid.")
+    revision = revisions.get(after["revision"])
+    if revision is None or revision["source_id"] != event["entity_id"]:
+        raise MigrationSchemaError("INGEST-001 evidence read revision is invalid.")
+
+
+def _sha256(value) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(character in "0123456789abcdef" for character in value)
 
 def _uuid(value):
     try: UUID(str(value))
