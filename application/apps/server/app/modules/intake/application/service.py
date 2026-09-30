@@ -181,17 +181,24 @@ class IntakeService:
             prior = tx.operation(idempotency_key)
             if prior:
                 if prior["request_fingerprint"] != request: raise IntakeConflictError("Idempotency key was reused with different input.", "intake_idempotency_conflict")
-                return self._view(tx, source_id, detail=True)
+                if prior["operation_type"] != "correct" or prior["result_json"] is None:
+                    raise IntakeConflictError("Idempotency key is not a correction.", "intake_idempotency_conflict")
+                return _operation_result(prior["result_json"])
             if source["technical_status"] == "superseded": raise IntakeConflictError("Superseded source cannot be corrected.")
             now = utc_now(); revision_id = str(uuid4()); correlation_id = str(uuid4())
             revision = {"id": revision_id, "source_id": source_id, "revision_number": old["revision_number"] + 1, "envelope_schema_version": 1, "revision_kind": "transcript_revision" if source["source_kind"] == "voice_transcript" else "operator_correction", "envelope_json": canonical_json(payload), "content_fingerprint": fingerprint(payload), "correction_reason": reason, "actor_kind": "local_operator", "actor_reference": None, "created_at": now, "supersedes_revision_id": old["id"], "superseded_by_revision_id": None}
             tx.insert_revision(revision); tx.update_source(source_id, {"current_revision_id": revision_id, "updated_at": now})
             tx.replace_revision(old["id"], {"superseded_by_revision_id": revision_id})
             tx.copy_attachments(old["id"], revision_id)
-            tx.insert_operation({"id": str(uuid4()), "operation_type": "correct", "idempotency_key": idempotency_key, "request_fingerprint": request, "source_id": source_id, "result_revision_id": revision_id, "outcome": "succeeded", "error_code": None, "correlation_id": correlation_id, "actor_kind": "local_operator", "actor_reference": None, "created_at": now})
+            self._candidate(tx, source_id, revision["content_fingerprint"], now, correlation_id)
+            operation = {"id": str(uuid4()), "operation_type": "correct", "idempotency_key": idempotency_key, "request_fingerprint": request, "source_id": source_id, "result_revision_id": revision_id, "outcome": "succeeded", "error_code": None, "correlation_id": correlation_id, "actor_kind": "local_operator", "actor_reference": None, "created_at": now}
+            result = tx.detail_projection(source_id, pending_operation=operation)
+            if result is None: raise IntakeNotFoundError("Intake source was not found.")
+            operation["result_json"] = canonical_json(result)
+            tx.insert_operation(operation)
             tx.record(entity_type="intake_source", entity_id=source_id, action="corrected", before={"revision": old["id"]}, after={"revision": revision_id}, reason="intake_corrected", correlation_id=correlation_id)
             tx.record(entity_type="intake_evidence_revision", entity_id=revision_id, action="created", before=None, after={"sourceId": source_id, "revisionNumber": revision["revision_number"], "contentFingerprint": revision["content_fingerprint"]}, reason="intake_revision_corrected", correlation_id=correlation_id)
-            return self._view(tx, source_id, detail=True)
+            return result
         return self.unit_of_work.write(operation)
 
     def attention(self, source_id: str, *, target: str, reason: str, idempotency_key: str,
@@ -284,6 +291,16 @@ def _audit_actor(context: IntakeAdmissionContext) -> tuple[str, str | None]:
         "assistant_connection": ("ai_assistant", context.submitter_reference),
         "voice_workflow": ("connector", context.submitter_reference),
     }[context.submitter_kind]
+
+
+def _operation_result(value: object) -> dict[str, object]:
+    try:
+        result = json.loads(str(value))
+    except json.JSONDecodeError as error:
+        raise IntakeConflictError("Correction replay result is unavailable.", "intake_lifecycle_conflict") from error
+    if not isinstance(result, dict):
+        raise IntakeConflictError("Correction replay result is unavailable.", "intake_lifecycle_conflict")
+    return result
 
 
 def _digest(path: Path) -> str:

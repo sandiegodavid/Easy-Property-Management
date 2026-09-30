@@ -119,19 +119,26 @@ class SQLiteIntakeTransaction:
         results = [{"sourceId": row["id"], "sourceKind": row["source_kind"], "channel": row["channel"], "revision": row["current_revision_id"], "fingerprint": revisions[row["current_revision_id"]]["content_fingerprint"], "technicalStatus": row["technical_status"], "failureCode": row["failure_code"], "attentionStatus": row["attention_status"], "occurredAtUtc": row["occurred_at_utc"], "receivedAtUtc": row["received_at_utc"], "supersedesSourceId": row["supersedes_source_id"], "supersededBySourceId": row["superseded_by_source_id"], "provenance": {"originSystem": row["origin_system"], "accountIdentityState": row["account_identity_state"], "submitterKind": row["submitter_kind"]}, "attachmentCount": counts.get(row["current_revision_id"], 0), "comparisonAvailable": row["technical_status"] == "ready"} for row in page]
         next_cursor = None if len(rows) <= limit else (page[-1]["received_at_utc"], page[-1]["id"])
         return results, next_cursor
-    def detail_projection(self, source_id: str) -> dict[str, object] | None:
+    def detail_projection(self, source_id: str, pending_operation: dict[str, object] | None = None) -> dict[str, object] | None:
         source = self.source(source_id)
         if source is None: return None
         projection = self.source_projection(source_id)
         current = self.revision(source["current_revision_id"])
-        revisions = list(self.connection.execute(select(IntakeEvidenceRevisionModel).where(IntakeEvidenceRevisionModel.source_id == source_id).order_by(IntakeEvidenceRevisionModel.revision_number)).mappings())
-        links = list(self.connection.execute(select(IntakeRevisionFileLinkModel).where(IntakeRevisionFileLinkModel.revision_id == source["current_revision_id"]).order_by(IntakeRevisionFileLinkModel.display_order)).mappings())
-        operations = list(self.connection.execute(select(IntakeSourceOperationModel).where(IntakeSourceOperationModel.source_id == source_id).order_by(IntakeSourceOperationModel.created_at)).mappings())
-        candidates = list(self.connection.execute(select(IntakeDuplicateCandidateModel).where(or_(IntakeDuplicateCandidateModel.source_id == source_id, IntakeDuplicateCandidateModel.candidate_source_id == source_id))).mappings())
+        revisions = list(self.connection.execute(select(IntakeEvidenceRevisionModel).where(
+            IntakeEvidenceRevisionModel.source_id == source_id,
+        ).order_by(IntakeEvidenceRevisionModel.revision_number)).mappings())
+        links = list(self.connection.execute(select(IntakeRevisionFileLinkModel).where(IntakeRevisionFileLinkModel.revision_id == current["id"]).order_by(IntakeRevisionFileLinkModel.display_order)).mappings())
+        operations = list(self.connection.execute(select(IntakeSourceOperationModel).where(
+            IntakeSourceOperationModel.source_id == source_id,
+        ).order_by(IntakeSourceOperationModel.created_at)).mappings())
+        if pending_operation is not None: operations.append(pending_operation)
+        candidates = list(self.connection.execute(select(IntakeDuplicateCandidateModel).where(
+            or_(IntakeDuplicateCandidateModel.source_id == source_id, IntakeDuplicateCandidateModel.candidate_source_id == source_id),
+        )).mappings())
         from app.modules.files.infrastructure.sqlalchemy_models import (
             FileContentLocationModel,
             FileLinkModel,
             FileRecordModel,
         )
         metadata = {row["link_id"]: row for row in self.connection.execute(select(FileLinkModel.id.label("link_id"), FileRecordModel.id.label("file_id"), FileRecordModel.original_name, FileRecordModel.media_type, FileRecordModel.size_bytes, FileRecordModel.content_sha256, FileContentLocationModel.storage_state, FileContentLocationModel.verified_at).join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id).join(FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id).where(FileLinkModel.id.in_([row["file_link_id"] for row in links]))).mappings()}
-        return {**projection, "evidence": json.loads(current["envelope_json"]), "revisions": [{"id": row["id"], "number": row["revision_number"], "kind": row["revision_kind"], "createdAt": row["created_at"], "correctionReason": row["correction_reason"]} for row in revisions], "attachments": [{"fileLinkId": row["file_link_id"], "role": row["attachment_role"], "displayOrder": row["display_order"], "file": dict(metadata[row["file_link_id"]]) if row["file_link_id"] in metadata else None} for row in links], "operations": [{"type": row["operation_type"], "outcome": row["outcome"], "createdAt": row["created_at"]} for row in operations], "duplicateCandidates": [{"sourceId": row["source_id"], "candidateSourceId": row["candidate_source_id"], "reason": row["reason"], "disposition": row["disposition"]} for row in candidates]}
+        return {**projection, "revision": current["id"], "fingerprint": current["content_fingerprint"], "attachmentCount": len(links), "evidence": json.loads(current["envelope_json"]), "revisions": [{"id": row["id"], "number": row["revision_number"], "kind": row["revision_kind"], "createdAt": row["created_at"], "correctionReason": row["correction_reason"]} for row in revisions], "attachments": [{"fileLinkId": row["file_link_id"], "role": row["attachment_role"], "displayOrder": row["display_order"], "file": dict(metadata[row["file_link_id"]]) if row["file_link_id"] in metadata else None} for row in links], "operations": [{"type": row["operation_type"], "outcome": row["outcome"], "createdAt": row["created_at"]} for row in operations], "duplicateCandidates": [{"sourceId": row["source_id"], "candidateSourceId": row["candidate_source_id"], "reason": row["reason"], "disposition": row["disposition"]} for row in candidates]}

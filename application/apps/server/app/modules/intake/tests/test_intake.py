@@ -96,6 +96,57 @@ class IntakeTests(TestCase):
         self.assertEqual(2, len(detail["revisions"])); self.assertEqual("Corrected evidence.", detail["evidence"]["body"])
         validate_latest_schema(self.database)
 
+    def test_correction_replay_returns_its_recorded_revision_after_a_later_correction(self) -> None:
+        source = self.service.admit(self.command())
+        first_key = str(uuid4())
+        first_envelope = EvidenceEnvelope("operator_note", "internal", "First correction.", "2026-01-01T12:00:00+00:00")
+        first = self.service.correct(source["sourceId"], first_envelope, "first clarification", first_key)
+        second = self.service.correct(
+            source["sourceId"],
+            EvidenceEnvelope("operator_note", "internal", "Second correction.", "2026-01-01T12:00:00+00:00"),
+            "second clarification", str(uuid4()),
+        )
+
+        replay = self.service.correct(source["sourceId"], first_envelope, "first clarification", first_key)
+
+        self.assertEqual(first, replay)
+        self.assertNotEqual(second["revision"], replay["revision"])
+        self.assertEqual(2, len(replay["revisions"]))
+
+    def test_correction_replay_is_unchanged_after_later_attention_integrity_and_duplicate_changes(self) -> None:
+        source = self.service.admit(self.command())
+        key = str(uuid4())
+        envelope = EvidenceEnvelope("operator_note", "internal", "Corrected evidence.", "2026-01-01T12:00:00+00:00")
+        first = self.service.correct(source["sourceId"], envelope, "clarified", key)
+
+        self.service.attention(
+            source["sourceId"], target="in_review", reason="review needed",
+            idempotency_key=str(uuid4()), expected_revision=first["revision"], expected_status="unprocessed",
+        )
+        self.service.set_integrity(
+            source["sourceId"], available=False, reason="attachment_content_unavailable",
+            idempotency_key=str(uuid4()),
+        )
+        self.service.admit(self.command(body="Corrected evidence."))
+
+        self.assertEqual(
+            first,
+            self.service.correct(source["sourceId"], envelope, "clarified", key),
+        )
+
+    def test_correction_replay_is_unchanged_after_source_supersession(self) -> None:
+        source = self.service.admit(self.command())
+        key = str(uuid4())
+        envelope = EvidenceEnvelope("operator_note", "internal", "Corrected evidence.", "2026-01-01T12:00:00+00:00")
+        first = self.service.correct(source["sourceId"], envelope, "clarified", key)
+
+        self.service.supersede(source["sourceId"], self.command(body="Replacement evidence."))
+
+        self.assertEqual(
+            first,
+            self.service.correct(source["sourceId"], envelope, "clarified", key),
+        )
+
     def test_trusted_external_replay_compares_evidence_and_reserves_each_key(self) -> None:
         def trusted(key: str, body: str) -> IntakeAdmissionCommand:
             return IntakeAdmissionCommand(

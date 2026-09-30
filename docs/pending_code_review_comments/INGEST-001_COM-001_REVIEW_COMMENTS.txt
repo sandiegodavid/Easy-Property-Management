@@ -19,16 +19,6 @@ IntakeAdmissionPort is only a loose protocol over the same admit() method, while
 
 Suggestion: separate the public request factory from the internal trusted command/context. The public API must always construct local_operator provenance; a bootstrap-composed internal adapter should accept authenticated application context that request data cannot manufacture.
 
-4. [P2] Replaying an earlier correction returns the latest correction rather than the original operation result.
-
-Files:
-- application/apps/server/app/modules/intake/application/service.py:153-167
-- docs/INGEST-001_DESIGN.md:148, 301
-
-On an idempotent correction replay, the code ignores operation.result_revision_id and returns the source's current detail. After correction v2 and then correction v3, replaying v2's key returns v3's revision and body. That is not the same result promised by the idempotency contract.
-
-Suggestion: resolve replay output from the recorded result_revision_id, or persist the stable operation response needed to reproduce the original result. Add a test that replays an old correction after a newer correction has committed.
-
 5. [P2] The operator API still lacks one required filter and returns the wrong class of error for oversized imports.
 
 Files:
@@ -64,6 +54,19 @@ The reader exposes only current source_projection(). Exact-revision lookup, boun
 Suggestion: finish the consumer-neutral protocol and implement its reads on the caller-owned connection with explicit bounds and set-based batching.
 
 RESOLVED SPECIFICATION FINDINGS
+
+4. [P2] [resolved 2026-09-30] Correction replay returns the complete original operation result after later mutable changes.
+
+Files:
+- application/apps/server/app/modules/intake/application/ports.py:55-62
+- application/apps/server/app/modules/intake/application/service.py:181-201, 296-303
+- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py:23-31, 122-144
+- application/apps/server/app/modules/intake/tests/test_intake.py:99-148
+- docs/INGEST-001_DESIGN.md:141-148, 301
+
+Resolved. A successful correction constructs its complete response inside the owning transaction, includes the pending correction operation in that response, stores the canonical response as the operation's `result_json`, and returns the same stored value for later replay. Full-equality tests cover replay after a newer correction, attention and integrity changes, duplicate-candidate creation, and source supersession. The previous historical projection that mixed recorded revision data with current mutable source and FILE state has been removed.
+
+Focused validation: Intake tests passed (22 passed, one unrelated Starlette/AnyIO deprecation warning). Standards follow-up found no actionable documented-standard violation or Fowler baseline smell in this remedy. Validation of retained operation/result consistency remains covered by active Specification finding 6 and is unchanged by this re-review. The dedicated branch is INGEST-001-SPECIFICATION-finding-4.
 
 1. [P1] [resolved 2026-09-29] Trusted replay resolves retained evidence across source and revision lineage.
 
