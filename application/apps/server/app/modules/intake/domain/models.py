@@ -27,6 +27,47 @@ class IntakeNotFoundError(IntakeError):
     code = "intake_not_found"
 
 
+@dataclass(frozen=True)
+class IntakeAdmissionContext:
+    """Provenance supplied by an authenticated application boundary.
+
+    The operator API never accepts this value from request data. Connected
+    transports compose it only after their own grant and account checks.
+    """
+
+    submitter_kind: str
+    submitter_reference: str | None = None
+    account_scope_hash: str | None = None
+    account_identity_state: str = "not_applicable"
+    account_display_hint: str | None = None
+
+    @classmethod
+    def local_operator(cls) -> "IntakeAdmissionContext":
+        return cls("local_operator")
+
+    def __post_init__(self) -> None:
+        if self.submitter_kind not in {"local_operator", "assistant_connection", "voice_workflow"}:
+            raise IntakeError("submitter kind is invalid.")
+        if self.submitter_kind == "local_operator":
+            if (self.submitter_reference is not None or self.account_scope_hash is not None
+                    or self.account_identity_state != "not_applicable" or self.account_display_hint is not None):
+                raise IntakeError("Operator admission cannot claim trusted provenance.")
+        elif not isinstance(self.submitter_reference, str) or not self.submitter_reference.strip():
+            raise IntakeError("Trusted admission requires a submitter reference.")
+        elif self.submitter_reference is not None:
+            object.__setattr__(
+                self, "submitter_reference",
+                bounded(self.submitter_reference, "submitterReference", 500, required=True),
+            )
+        if self.account_identity_state not in IDENTITY_STATES:
+            raise IntakeError("account identity state is invalid.")
+        if self.account_scope_hash is not None and (len(self.account_scope_hash) != 64 or any(c not in "0123456789abcdef" for c in self.account_scope_hash)):
+            raise IntakeError("account scope hash is invalid.")
+        if self.account_identity_state in {"transport_verified", "operator_confirmed"} and not self.account_scope_hash:
+            raise IntakeError("trusted account identity requires accountScopeHash.")
+        object.__setattr__(self, "account_display_hint", bounded(self.account_display_hint, "accountDisplayHint", 500))
+
+
 def utc_now() -> str: return datetime.now(UTC).isoformat()
 
 

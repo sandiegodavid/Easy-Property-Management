@@ -43,7 +43,7 @@ from app.modules.communications.infrastructure.link_reader import SQLiteCommunic
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.modules.communications.domain.audit_policy import COMMUNICATION_ACTIVITY_POLICY
 from app.modules.intake.api.router import build_router as build_intake_router
-from app.modules.intake.application.service import IntakeService
+from app.modules.intake.application.service import IntakeService, TrustedIntakeAdmission
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.modules.intake.domain.audit_policy import INTAKE_ACTIVITY_POLICY
 from app.modules.maintenance.api.router import build_router as build_maintenance_router
@@ -222,6 +222,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     )
     file_verification = FileStorageVerificationService(files.unit_of_work, files.content_stores)
     intake = IntakeService(SQLiteIntakeUnitOfWork(service.paths.database, recorder), files)
+    # Keep this service construction independent from the FastAPI app.  The
+    # app state is populated after the application object is created below.
+    intake_admission = TrustedIntakeAdmission(intake)
     remote_materializer = s3_store.materialize if s3_store is not None else None
     backups = BackupService(service, recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)), remote_materializer=remote_materializer)
     tasks = TaskService(SQLiteTaskUnitOfWork(service.paths.database, recorder))
@@ -320,6 +323,9 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.task_service = tasks
     app.state.communication_service = communications
     app.state.intake_service = intake
+    # Authenticated future transports receive this internal-only port; the
+    # operator router intentionally receives only the local-admission service.
+    app.state.intake_admission = intake_admission
     app.state.portfolio_service = portfolio
     app.state.tenant_service = tenants
     app.state.party_contact_service = party_contacts

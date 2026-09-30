@@ -11,8 +11,8 @@ from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.application.errors import PublicationCleanupIncomplete
 from app.modules.intake.api.router import build_router
-from app.modules.intake.application.service import IntakeAdmissionCommand, IntakeService
-from app.modules.intake.domain.models import EvidenceEnvelope, IntakeConflictError
+from app.modules.intake.application.service import IntakeAdmissionCommand, IntakeService, TrustedIntakeAdmission
+from app.modules.intake.domain.models import EvidenceEnvelope, IntakeAdmissionContext, IntakeConflictError, IntakeError
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.platform.product_migrations import initialize_latest_schema, validate_latest_schema
 
@@ -21,7 +21,9 @@ class IntakeTests(TestCase):
     def setUp(self) -> None:
         self.temporary = TemporaryDirectory(); self.addCleanup(self.temporary.cleanup)
         self.database = Path(self.temporary.name) / "workspace.sqlite"; initialize_latest_schema(self.database)
-        self.service = IntakeService(SQLiteIntakeUnitOfWork(self.database, AuditRecorder(SQLiteAuditRepository(self.database))))
+        self.audit_repository = SQLiteAuditRepository(self.database)
+        self.service = IntakeService(SQLiteIntakeUnitOfWork(self.database, AuditRecorder(self.audit_repository)))
+        self.trusted_admission = TrustedIntakeAdmission(self.service)
 
     def command(self, key: str | None = None, body: str = "The sink leaks.") -> IntakeAdmissionCommand:
         return IntakeAdmissionCommand(EvidenceEnvelope("operator_note", "internal", body, "2026-01-01T12:00:00+00:00"), "manual", key or str(uuid4()))
@@ -48,15 +50,66 @@ class IntakeTests(TestCase):
         def trusted(key: str, body: str) -> IntakeAdmissionCommand:
             return IntakeAdmissionCommand(
                 EvidenceEnvelope("email_message", "email", body, "2026-01-01T12:00:00+00:00", external_source_id="mail-1"),
-                "gmail", key, "a" * 64, "transport_verified",
+                "gmail", key,
             )
-        first = self.service.admit(trusted(str(uuid4()), "A retained email."))
+        context = IntakeAdmissionContext("assistant_connection", " connection-1 ", "a" * 64, "transport_verified")
         replay_key = str(uuid4())
-        self.assertEqual(first["sourceId"], self.service.admit(trusted(replay_key, "A retained email."))["sourceId"])
+        first = self.trusted_admission.admit(trusted(replay_key, "A retained email."), context)
+        self.assertEqual(first, self.trusted_admission.admit(trusted(replay_key, "A retained email."), context))
         with self.assertRaises(IntakeConflictError):
-            self.service.admit(trusted(replay_key, "Changed evidence."))
-        with self.assertRaises(IntakeConflictError):
-            self.service.admit(trusted(str(uuid4()), "Changed evidence."))
+            self.trusted_admission.admit(trusted(replay_key, "A retained email."), IntakeAdmissionContext("assistant_connection", "connection-2", "a" * 64, "transport_verified"))
+        self.assertEqual(
+            first["sourceId"],
+            self.trusted_admission.admit(
+                trusted(str(uuid4()), "A retained email."),
+                IntakeAdmissionContext("assistant_connection", "connection-2", "a" * 64, "transport_verified"),
+            )["sourceId"],
+        )
+
+    def test_trusted_admission_persists_authenticated_provenance(self) -> None:
+        result = self.trusted_admission.admit(
+            IntakeAdmissionCommand(
+                EvidenceEnvelope("chat_message", "chat", "Trusted transport evidence.", "2026-01-01T12:00:00+00:00"),
+                "connected-chat", str(uuid4()),
+            ),
+            IntakeAdmissionContext("voice_workflow", "voice-grant-7", "b" * 64, "transport_verified", "Voice account"),
+        )
+        self.assertEqual(
+            {"originSystem": "connected-chat", "accountIdentityState": "transport_verified", "submitterKind": "voice_workflow"},
+            self.service.get(result["sourceId"])["provenance"],
+        )
+
+    def test_trusted_admission_audits_the_authenticated_actor(self) -> None:
+        assistant = IntakeAdmissionContext("assistant_connection", "connection-7", "a" * 64, "transport_verified")
+        assistant_result = self.trusted_admission.admit(self.command(), assistant)
+        voice = IntakeAdmissionContext("voice_workflow", "voice-grant-8", "b" * 64, "transport_verified")
+        voice_result = self.trusted_admission.admit(self.command(), voice)
+        replacement = self.trusted_admission.admit(
+            IntakeAdmissionCommand(
+                EvidenceEnvelope("operator_note", "internal", "Replacement evidence.", "2026-01-01T12:00:00+00:00"),
+                "manual", str(uuid4()), supersedes_source_id=assistant_result["sourceId"],
+            ),
+            voice,
+        )
+
+        for result, actor_kind, reference in (
+            (assistant_result, "ai_assistant", "connection-7"),
+            (voice_result, "connector", "voice-grant-8"),
+        ):
+            source_event = self.audit_repository.history(entity_type="intake_source", entity_id=result["sourceId"], action="admitted")[0]
+            revision_event = self.audit_repository.history(entity_type="intake_evidence_revision", entity_id=result["revision"], action="created")[0]
+            self.assertEqual((actor_kind, reference), (source_event.actor_kind, source_event.actor_reference))
+            self.assertEqual((actor_kind, reference), (revision_event.actor_kind, revision_event.actor_reference))
+        supersession = self.audit_repository.history(entity_type="intake_source", entity_id=assistant_result["sourceId"], action="superseded")[0]
+        self.assertEqual(("connector", "voice-grant-8"), (supersession.actor_kind, supersession.actor_reference))
+        self.assertEqual(replacement["sourceId"], supersession.after_snapshot["supersededBySourceId"])
+
+    def test_trusted_context_normalizes_and_bounds_submitter_references(self) -> None:
+        context = IntakeAdmissionContext("assistant_connection", " connection-9 ")
+        self.assertEqual("connection-9", context.submitter_reference)
+        for invalid in ("bad\u0085reference", "x" * 501):
+            with self.assertRaises(IntakeError):
+                IntakeAdmissionContext("assistant_connection", invalid)
 
     def test_pagination_uses_last_returned_cursor_without_a_gap(self) -> None:
         ids = [self.service.admit(self.command(body=f"Evidence {index}"))["sourceId"] for index in range(3)]
@@ -105,3 +158,18 @@ class IntakeTests(TestCase):
         self.assertEqual({"code": "publication_cleanup_incomplete",
                           "message": "File publication cleanup could not be completed.",
                           "repairRequired": True, "attentionRecorded": False}, response.json()["detail"])
+
+    def test_operator_api_rejects_trusted_provenance_fields(self) -> None:
+        class ReadyRuntime:
+            ready = True
+            can_write = True
+            error = None
+
+        app = FastAPI()
+        app.include_router(build_router(self.service, ReadyRuntime()))
+        response = TestClient(app).post("/api/intake/sources", json={
+            "sourceKind": "operator_note", "channel": "internal", "body": "Operator evidence.",
+            "occurredAtUtc": "2026-01-01T12:00:00Z", "originSystem": "manual",
+            "idempotencyKey": str(uuid4()), "accountIdentityState": "transport_verified",
+        })
+        self.assertEqual(422, response.status_code)

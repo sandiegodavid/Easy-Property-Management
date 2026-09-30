@@ -62,7 +62,12 @@ class FinanceWorkflowTests(unittest.TestCase):
         property_record=portfolio.create_property(PropertyCreateCommand("Rent home","1 Main Street","Portland","US","single_family_home",(OwnershipInput("local_operator"),),region="OR")); space_id=portfolio.get_property(property_record.id)["spaces"][0]["id"]
         tenant=TenantService(SQLiteTenantUnitOfWork(db,recorder,SQLiteLeaseParticipationGuard(),party_operations,SQLitePartyReadOperations(party_operations)),SharedPartyFactory()).create(TenantCreateCommand("individual","Rent Tenant"))
         leases=LeaseService(SQLiteLeaseUnitOfWork(db,recorder,SQLiteTenantProfileAvailability(),SQLitePortfolioLeaseOperations(db),SQLiteInspectionContextReader()))
-        today=date.today(); lease=leases.create(LeaseCreateCommand(space_id,"residential",today,today+timedelta(days=90),today,TermCommand(100_000,"USD","monthly",1,0),(ParticipantCommand(tenant["id"],"primary_tenant"),))); self.lease=leases.execute(lease["id"],executed_on=today,confirmed=True,expected_revision=portfolio.get_space_status(space_id)["revision"],idempotency_key=str(uuid4()))
+        # Start the ordinary monthly fixture on a due date.  A one-day initial
+        # stub is intentionally invalid and is covered by its dedicated test.
+        today = date.today()
+        if today.day != 1:
+            today = date(today.year + (today.month == 12), 1 if today.month == 12 else today.month + 1, 1)
+        lease=leases.create(LeaseCreateCommand(space_id,"residential",today,today+timedelta(days=90),today,TermCommand(100_000,"USD","monthly",1,0),(ParticipantCommand(tenant["id"],"primary_tenant"),))); self.lease=leases.execute(lease["id"],executed_on=today,confirmed=True,expected_revision=portfolio.get_space_status(space_id)["revision"],idempotency_key=str(uuid4()))
         self.finance=FinanceService(SQLiteFinanceUnitOfWork(db,recorder,SQLiteLeaseContextReader(),SQLitePortfolioContextReader(),party_operations),now=lambda:datetime.now(UTC))
         self.file_reader = SQLiteFileLinkReader()
         self.deposits=DepositService(SQLiteDepositUnitOfWork(db,recorder,SQLiteLeaseContextReader(),SQLitePortfolioContextReader(),party_operations,SQLiteInspectionContextReader(),self.file_reader),now=lambda:datetime.now(UTC))
@@ -214,7 +219,7 @@ class FinanceWorkflowTests(unittest.TestCase):
         prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
             db, AuditRecorder(SQLiteAuditRepository(db)),
             SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), SQLitePartyOperations(db), SQLiteTaskTransactionOperations(),
-        ))
+        ), now=lambda: datetime.combine(date.fromisoformat(expectation["periodStartsOn"]), datetime.min.time(), UTC) + timedelta(hours=12))
         check = prepaid.create(PrepaidCheckCommand(
             expectation["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(),
             (date.today() + timedelta(days=3)).isoformat(), None, str(uuid4()),
@@ -232,12 +237,16 @@ class FinanceWorkflowTests(unittest.TestCase):
         expectations = self.finance.synchronize(self.lease["id"], SynchronizeExpectationsCommand(
             term["id"], (date.today() + timedelta(days=60)).isoformat(), date.today().replace(day=1).isoformat(),
         ))
-        prorated = next(item for item in expectations if item["isProrated"])
         complete = next(item for item in expectations if not item["isProrated"])
+        prorated = self.finance.synchronize(self.lease["id"], SynchronizeExpectationsCommand(
+            term["id"], (date.today() + timedelta(days=60)).isoformat(), None,
+            (date.fromisoformat(complete["periodEndsOn"]) + timedelta(days=15)).isoformat(),
+            "Approved short responsibility boundary", True,
+        ))[0]
         prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
             self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
             SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), SQLitePartyOperations(self.workspace.paths.database), SQLiteTaskTransactionOperations(),
-        ))
+        ), now=lambda: datetime.combine(date.fromisoformat(complete["periodStartsOn"]), datetime.min.time(), UTC) + timedelta(hours=12))
         with self.assertRaises(FinanceConflictError):
             prepaid.create(PrepaidCheckCommand(prorated["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(), (date.today() + timedelta(days=2)).isoformat(), None, str(uuid4())))
         check = prepaid.create(PrepaidCheckCommand(complete["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(), (date.today() + timedelta(days=2)).isoformat(), None, str(uuid4())))
@@ -279,7 +288,7 @@ class FinanceWorkflowTests(unittest.TestCase):
         prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
             self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
             SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), SQLitePartyOperations(self.workspace.paths.database), SQLiteTaskTransactionOperations(),
-        ))
+        ), now=lambda: datetime.combine(date.fromisoformat(expectation["periodStartsOn"]), datetime.min.time(), UTC) + timedelta(hours=12))
         original = prepaid.create(PrepaidCheckCommand(expectation["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(), (date.today() + timedelta(days=2)).isoformat(), None, str(uuid4())))
         prepaid.void(original["id"], PrepaidCheckTransitionCommand(str(uuid4()), True, "Spoiled"))
         prepaid.replace(original["id"], PrepaidCheckCommand(expectation["id"], self.lease["participants"][0]["tenantPartyId"], date.today().isoformat(), (date.today() + timedelta(days=3)).isoformat(), None, str(uuid4())), confirmed=True, reason="Reissued")

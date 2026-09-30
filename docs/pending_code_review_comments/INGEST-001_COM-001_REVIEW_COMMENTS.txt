@@ -31,17 +31,6 @@ The public service path records an operation and audit event, but the downstream
 
 Suggestion: implement and compose one Intake-owned attention adapter that runs on the caller's connection, checks technical state plus expected revision/status, writes the attention_transition operation, updates the source, and records the correlated audit event. Have both operator and downstream workflows share the same transition policy.
 
-3. [P1] The required trusted internal admission boundary rejects every non-operator caller.
-
-Files:
-- application/apps/server/app/modules/intake/application/service.py:21-44
-- application/apps/server/app/modules/intake/application/ports.py:51-52
-- docs/INGEST-001_DESIGN.md:160-165, 225-229, 290, 294, 307
-
-IntakeAdmissionPort is only a loose protocol over the same admit() method, while IntakeAdmissionCommand.__post_init__ unconditionally rejects assistant_connection and voice_workflow submitters. This protects the public endpoint, but it also makes the application-trusted path promised to MCP-001 and VOICE-AI-001 unusable.
-
-Suggestion: separate the public request factory from the internal trusted command/context. The public API must always construct local_operator provenance; a bootstrap-composed internal adapter should accept authenticated application context that request data cannot manufacture.
-
 4. [P2] Replaying an earlier correction returns the latest correction rather than the original operation result.
 
 Files:
@@ -100,6 +89,25 @@ Files:
 IntakeService.set_integrity() exists, but nothing calls or composes it. File verification updates only file_content_locations and FILE audit history. A missing or quarantined attachment therefore leaves its Intake source marked ready, and a repaired attachment cannot create the required integrity_restored operation. The operator can receive an evidence-complete Intake projection after FILE-001 has already established that its bytes are unavailable.
 
 Suggestion: add a transaction-aware, set-based consequence coordinator for verification state changes. It should locate affected Intake associations, transition each non-superseded source once with a registered failure code, record the Intake operation/audit set, and restore only after every attachment for the current revision verifies available.
+
+RESOLVED SPECIFICATION FINDINGS
+
+3. [P1] [resolved 2026-09-30] The trusted internal admission boundary is composed and preserves validated authenticated provenance.
+
+Files:
+- application/apps/server/app/bootstrap/api.py:224-227, 317-328
+- application/apps/server/app/modules/intake/api/router.py:16-24, 48-55
+- application/apps/server/app/modules/intake/application/ports.py:53-57
+- application/apps/server/app/modules/intake/application/service.py:39-66, 75-96, 231-252
+- application/apps/server/app/modules/intake/domain/models.py:30-68, 96-102
+- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py:48-49
+- application/apps/server/app/modules/intake/tests/test_intake.py:49-112
+- application/apps/server/app/modules/workspace/tests/test_api.py:30-32, 48-49
+- docs/INGEST-001_DESIGN.md:141-148, 160-171, 190-200, 204-217, 225-229, 290, 294, 301, 307
+
+Resolved. Bootstrap constructs the internal admission service independently and attaches it after FastAPI exists. The public request contract cannot supply trusted provenance, while the internal port accepts a validated application context. Connected submitter references are normalized, bounded, and control-checked. Admission fingerprints bind the normalized submitter kind/reference, while exact provider/source deduplication remains connection-neutral for distinct idempotency keys. Source, revision, operation, and correlated audit records retain consistent authenticated attribution through registered Audit actor kinds.
+
+Focused validation: Intake and workspace API composition tests passed (19 passed, one unrelated Starlette/AnyIO deprecation warning). Standards follow-up found no actionable documented-standard violation or Fowler baseline smell in this remedy. The dedicated branch is INGEST-001-SPECIFICATION-finding-3.
 
 STANDARDS FINDINGS
 
