@@ -95,12 +95,14 @@ class SQLiteIntakeTransaction:
                          source_kind: str | None, technical_status: str | None,
                          attention_status: str | None, channel: str | None = None,
                          origin_system: str | None = None,
+                         account_identity_state: str | None = None,
                          received_from: str | None = None, received_to: str | None = None,
                          has_duplicate: bool | None = None) -> tuple[list[dict[str, object]], tuple[str, str] | None]:
         query = select(IntakeSourceModel)
         for column, value in ((IntakeSourceModel.source_kind, source_kind), (IntakeSourceModel.technical_status, technical_status),
                               (IntakeSourceModel.attention_status, attention_status), (IntakeSourceModel.channel, channel),
-                              (IntakeSourceModel.origin_system, origin_system)):
+                              (IntakeSourceModel.origin_system, origin_system),
+                              (IntakeSourceModel.account_identity_state, account_identity_state)):
             if value is not None: query = query.where(column == value)
         if received_from is not None: query = query.where(IntakeSourceModel.received_at_utc >= received_from)
         if received_to is not None: query = query.where(IntakeSourceModel.received_at_utc <= received_to)

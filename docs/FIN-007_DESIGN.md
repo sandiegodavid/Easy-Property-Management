@@ -102,7 +102,7 @@ The backend provides:
 
 All payloads forbid unknown fields, use strict booleans for destructive confirmations, and require UUID idempotency keys. Responses include the immutable check facts, lifecycle, derived eligibility, expectation period summary, linked receipt summary when present, and reminder status. They never expose raw check or bank information.
 
-Malformed data returns `422`; missing records return `404`; lifecycle, duplicate, stale, idempotency, schedule, and concurrent conflicts return typed `409`; an oversized page returns `422`; and a missing required confirmation returns `422`. Errors carry stable machine-readable codes rather than requiring UI-001 to parse prose.
+Malformed data returns `422`; missing records return `404`; lifecycle, duplicate, stale, idempotency, schedule, and concurrent conflicts return typed `409`; an oversized page or request content returns `413`; and a missing required confirmation returns `422`. Errors carry stable machine-readable codes rather than requiring UI-001 to parse prose.
 
 ## UI-001 scope
 

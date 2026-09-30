@@ -201,7 +201,7 @@ reporter: {
 | `GET` | `/api/maintenance-issues/{issueId}` | Return reporter detail and linked communication summaries. |
 | `POST/GET` | Existing COM-001 endpoints | Accept and filter `entityType = maintenance_issue`. |
 
-Malformed reporter shapes return `422`; missing issue, Party, property, space, or relationship sources return controlled `404` where appropriate; unsupported role/subject combinations and invalid business relationships return `400`; changed idempotency payloads, stale corrections, and concurrent changes return typed `409`.
+Malformed reporter shapes return `422`; oversized request content returns `413`; missing issue, Party, property, space, or relationship sources return controlled `404` where appropriate; unsupported role/subject combinations and invalid business relationships return `400`; changed idempotency payloads, stale corrections, and concurrent changes return typed `409`.
 
 ## Read behavior and performance
 

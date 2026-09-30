@@ -31,6 +31,10 @@ class IntakeNotFoundError(IntakeError):
     code = "intake_not_found"
 
 
+class IntakePayloadTooLargeError(IntakeError):
+    code = "intake_payload_too_large"
+
+
 @dataclass(frozen=True)
 class IntakeAdmissionContext:
     """Provenance supplied by an authenticated application boundary."""
@@ -145,7 +149,9 @@ def bounded(value: object, label: str, maximum: int, *, required: bool = False) 
 def body(value: object) -> str:
     if not isinstance(value, str): raise IntakeError("body must be text.")
     result = unicodedata.normalize("NFC", value).replace("\r\n", "\n").replace("\r", "\n")
-    if not result or len(result.encode("utf-8")) > 131_072 or "\x00" in result:
+    if len(result.encode("utf-8")) > 131_072:
+        raise IntakePayloadTooLargeError("Body exceeds the 131,072-byte limit.")
+    if not result or "\x00" in result:
         raise IntakeError("body is invalid.")
     if any(unicodedata.category(c) == "Cc" and c not in "\t\n" for c in result): raise IntakeError("body is invalid.")
     return result

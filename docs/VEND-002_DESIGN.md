@@ -109,7 +109,7 @@ All routes require a ready workspace. Mutations require the workspace writer loc
 
 `GET /api/providers/{partyId}` includes `reputationLinks`; `GET /api/providers/{partyId}?includeArchived=true` includes both active and archived records. `GET /api/providers` adds `reputationLinkCount` to each summary.
 
-Malformed request shapes, invalid URL/date/source values, and unknown fields return `422` at the HTTP boundary; command violations return controlled `400`; missing provider or link records return `404`; lifecycle, duplicate, and concurrent-write conflicts return `409`.
+Malformed request shapes, invalid URL/date/source values, and unknown fields return `422` at the HTTP boundary; oversized request content returns `413`; command violations return controlled `400`; missing provider or link records return `404`; lifecycle, duplicate, and concurrent-write conflicts return `409`.
 
 ## Audit, privacy, and portability
 

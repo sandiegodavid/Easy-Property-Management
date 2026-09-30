@@ -244,6 +244,8 @@ All routes require a ready workspace. Mutations require the writer lock. Request
 
 **Error codes:**
 
+- `413`: Oversized request content (payload too large).
+
 - `400`: Invalid business data (e.g., due_at_utc without due_timezone, invalid status transition).
 - `404`: Task or reminder not found.
 - `409`: Invalid lifecycle transition (e.g., complete an already completed task, delete a task with history, duplicate reminder time).

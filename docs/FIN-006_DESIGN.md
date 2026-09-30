@@ -45,7 +45,7 @@ The UI uses that response only to prefill a new receipt form. The operator may r
 
 `POST /api/rent-receipts` requires the method snapshot fields above. `GET /api/rent-receipts` and `GET /api/rent-receipts/{receiptId}` return the same fields. Receipt correction creates a separate replacement snapshot. The suggestion route is read-only and never creates a record.
 
-All request models forbid unknown fields and use typed response models. Malformed method fields return `422`; missing lease or receipt records return `404`; changed idempotency payloads, stale receipt lifecycle, invalid correction order, and concurrent allocation conflicts return typed `409` errors.
+All request models forbid unknown fields and use typed response models. Malformed method fields return `422`; oversized request content returns `413`; missing lease or receipt records return `404`; changed idempotency payloads, stale receipt lifecycle, invalid correction order, and concurrent allocation conflicts return typed `409` errors.
 
 ## Audit, privacy, and portability
 

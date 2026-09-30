@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import replace
 from pathlib import Path
@@ -35,6 +36,7 @@ from app.modules.intake.domain.models import (
     IntakeError,
 )
 from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
+from app.modules.intake.domain.models import IntakePayloadTooLargeError
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.platform.migration_errors import MigrationSchemaError
 from app.platform.product_migrations import initialize_latest_schema, validate_latest_schema
@@ -328,6 +330,119 @@ class IntakeTests(TestCase):
         second, cursor = self.service.list(limit=1, cursor=tuple(cursor.split("|", 1)))
         third, cursor = self.service.list(limit=1, cursor=tuple(cursor.split("|", 1)))
         self.assertEqual(set(ids), {first[0]["sourceId"], second[0]["sourceId"], third[0]["sourceId"]})
+
+    def test_list_api_filters_by_account_identity_state(self) -> None:
+        confirmed = self.trusted_admission.admit(
+            IntakeAdmissionCommand(
+                EvidenceEnvelope("operator_note", "internal", "Confirmed source.", "2026-01-01T12:00:00+00:00"),
+                "manual", str(uuid4()),
+            ),
+            IntakeAdmissionContext("assistant_connection", "confirmed-connection", "a" * 64, "operator_confirmed"),
+        )
+        self.trusted_admission.admit(
+            IntakeAdmissionCommand(
+                EvidenceEnvelope("operator_note", "internal", "Unverified source.", "2026-01-01T12:00:00+00:00"),
+                "manual", str(uuid4()),
+            ),
+            IntakeAdmissionContext("assistant_connection", "unverified-connection", None, "unverified_claim"),
+        )
+
+        class ReadyRuntime:
+            ready = True
+            can_write = True
+            error = None
+
+        app = FastAPI()
+        app.include_router(build_router(self.service, ReadyRuntime()))
+        response = TestClient(app).get(
+            "/api/intake/sources", params={"accountIdentityState": "operator_confirmed"},
+        )
+
+        self.assertEqual(200, response.status_code)
+        self.assertEqual([confirmed["sourceId"]], [item["sourceId"] for item in response.json()["items"]])
+        invalid = TestClient(app).get(
+            "/api/intake/sources", params={"accountIdentityState": "invented"},
+        )
+        self.assertEqual(422, invalid.status_code)
+        self.assertEqual("intake_validation", invalid.json()["detail"]["code"])
+
+    def test_oversized_json_and_import_content_return_413(self) -> None:
+        class ReadyRuntime:
+            ready = True
+            can_write = True
+            error = None
+
+        app = FastAPI()
+        app.include_router(build_router(self.service, ReadyRuntime()))
+        client = TestClient(app)
+        payload = {
+            "sourceKind": "operator_note", "channel": "internal", "body": "x" * 131_073,
+            "occurredAtUtc": "2026-01-01T12:00:00Z", "originSystem": "manual",
+            "idempotencyKey": str(uuid4()),
+        }
+
+        json_response = client.post("/api/intake/sources", json=payload)
+        import_response = client.post(
+            "/api/intake/sources/import", data={"metadata": json.dumps(payload)},
+        )
+
+        for response in (json_response, import_response):
+            self.assertEqual(413, response.status_code)
+            self.assertEqual("intake_payload_too_large", response.json()["detail"]["code"])
+
+    def test_too_many_import_attachments_returns_413(self) -> None:
+        class ReadyRuntime:
+            ready = True
+            can_write = True
+            error = None
+
+        app = FastAPI()
+        app.include_router(build_router(self.service, ReadyRuntime()))
+        metadata = {
+            "sourceKind": "operator_note", "channel": "internal", "body": "Bounded evidence.",
+            "occurredAtUtc": "2026-01-01T12:00:00Z", "originSystem": "manual",
+            "idempotencyKey": str(uuid4()),
+        }
+        response = TestClient(app).post(
+            "/api/intake/sources/import",
+            data={"metadata": json.dumps(metadata)},
+            files=[("files", (f"attachment-{index}.txt", b"", "text/plain")) for index in range(21)],
+        )
+
+        self.assertEqual(413, response.status_code)
+        self.assertEqual("intake_payload_too_large", response.json()["detail"]["code"])
+
+    def test_direct_admission_classifies_all_attachment_limit_overflows(self) -> None:
+        root = Path(self.temporary.name)
+        small = root / "small.bin"
+        small.write_bytes(b"x")
+        with self.assertRaises(IntakePayloadTooLargeError):
+            IntakeAdmissionCommand(
+                self.command().envelope, "manual", str(uuid4()),
+                attachments=tuple(AttachmentInput(small, f"{index}.bin", None) for index in range(21)),
+            )
+
+        oversized = root / "oversized.bin"
+        with oversized.open("wb") as handle:
+            handle.seek(50 * 1024 * 1024)
+            handle.write(b"x")
+        with self.assertRaises(IntakePayloadTooLargeError):
+            self.service.admit(IntakeAdmissionCommand(
+                self.command().envelope, "manual", str(uuid4()),
+                attachments=(AttachmentInput(oversized, "oversized.bin", None),),
+            ))
+
+        aggregate = []
+        for index, size in enumerate((50 * 1024 * 1024, 50 * 1024 * 1024, 1)):
+            path = root / f"aggregate-{index}.bin"
+            with path.open("wb") as handle:
+                handle.seek(size - 1)
+                handle.write(b"x")
+            aggregate.append(AttachmentInput(path, path.name, None))
+        with self.assertRaises(IntakePayloadTooLargeError):
+            self.service.admit(IntakeAdmissionCommand(
+                self.command().envelope, "manual", str(uuid4()), attachments=tuple(aggregate),
+            ))
 
     def test_supersession_is_atomic_and_preserves_lineage(self) -> None:
         original = self.service.admit(self.command())

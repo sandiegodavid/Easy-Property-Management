@@ -219,7 +219,7 @@ All routes require a ready workspace. Mutations require the writer lock. Request
 | `POST` | `/api/providers/{partyId}/archive` | Archive a provider profile after explicit confirmation. |
 | `POST` | `/api/providers/{partyId}/restore` | Restore a provider profile. |
 
-Errors are explicit: malformed request models return `422`; missing parties, profiles, child records, or properties return `404`; business-rule errors return `400`; lifecycle, active-role, uniqueness, and concurrent-write conflicts return `409`.
+Errors are explicit: malformed request models return `422`; oversized request content returns `413`; missing parties, profiles, child records, or properties return `404`; business-rule errors return `400`; lifecycle, active-role, uniqueness, and concurrent-write conflicts return `409`.
 
 ## Audit, privacy, and portability
 
@@ -248,7 +248,7 @@ VEND-001 is complete when:
 4. `avoid` always includes an explicit reason, active normalized service/area duplicates are rejected, and provider work records never impersonate maintenance records.
 5. Shared-party archive respects role guards; provider archive never destroys party identity or child history.
 6. Provider and party writes are atomic with correlated append-only audit events; generalized activity redacts contact and sensitive internal-context fields.
-7. Typed APIs reject unknown/malformed input and return controlled 404/400/409/422 outcomes.
+7. Typed APIs reject unknown/malformed input and return controlled 404/400/409/413/422 outcomes.
 8. Exact latest-schema validation and encrypted backup/export/restore preserve provider data, relationships, and audit history.
 9. VEND-001 leaves configurable categories, reputation links, discovery, quote selection, assignments, costs, and communications to their owning backlog items.
 

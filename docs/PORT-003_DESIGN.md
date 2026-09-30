@@ -239,7 +239,7 @@ All endpoints require a ready workspace. Request models reject unknown fields, a
 
 PORT-002 property and space creation requests gain optional initial `occupancy` and `availability` objects. Omission creates explicit unknown records.
 
-Date fields are typed ISO calendar dates at the HTTP boundary. Errors distinguish missing resources (`404`), malformed inputs including invalid date text (`422`), invalid business transitions (`400`), and concurrent or source-ownership conflicts (`409`).
+Date fields are typed ISO calendar dates at the HTTP boundary. Errors distinguish missing resources (`404`), malformed inputs including invalid date text (`422`), oversized request content (`413`), invalid business transitions (`400`), and concurrent or source-ownership conflicts (`409`).
 
 Every status mutation accepts an `expectedRevision` and an idempotency key. A successful response returns the resulting revision and operation identity. Replaying the same key and payload returns the recorded result; reusing a key with a different payload is rejected. A stale revision returns `409` with the latest status and revision so the operator can review the conflict. These rules prevent lost updates across multiple windows and make recovery from an interrupted response safe. HTTP and non-HTTP adapters apply the same command contract.
 

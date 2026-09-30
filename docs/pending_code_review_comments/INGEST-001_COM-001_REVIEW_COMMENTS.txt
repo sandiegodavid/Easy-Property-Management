@@ -19,17 +19,6 @@ IntakeAdmissionPort is only a loose protocol over the same admit() method, while
 
 Suggestion: separate the public request factory from the internal trusted command/context. The public API must always construct local_operator provenance; a bootstrap-composed internal adapter should accept authenticated application context that request data cannot manufacture.
 
-5. [P2] The operator API still lacks one required filter and returns the wrong class of error for oversized imports.
-
-Files:
-- application/apps/server/app/modules/intake/api/router.py:46-79
-- application/apps/server/app/modules/intake/application/service.py:134-142
-- docs/INGEST-001_DESIGN.md:240-252
-
-GET /api/intake/sources has no trusted/unverified provenance filter even though the design lists it. Multipart size overflow returns 413, while the design explicitly assigns malformed or oversized input to typed 422 outcomes.
-
-Suggestion: add a typed accountIdentityState/provenance filter through the router, service, and bounded query; return the registered Intake validation envelope with status 422 for per-file and aggregate size violations.
-
 INTAKE RETAINED DATA AND CONSUMER READ CONTRACTS
 
 6. [P1] Retained-data validation still does not validate required operation, duplicate-candidate, and audit consistency.
@@ -115,6 +104,22 @@ Files:
 Resolved. The transition persists state, operation result, actor attribution, reasoned audit evidence, and rollback behavior atomically. Historical replay returns its original canonical result. `assistant_connection` is normalized to `ai_assistant`, and general activity routes actor-reference presentation through the Intake policy so the retained connection reference and reason are redacted. The canonical request fingerprint now includes normalized actor kind and reference while excluding retry correlation ID, so the original actor can replay the operation and a different operator or assistant connection receives an idempotency conflict.
 
 Focused validation: Intake, Audit, and backup tests passed (67 passed, one unrelated Starlette/AnyIO deprecation warning). Standards follow-up found no actionable documented-standard violation or Fowler baseline smell in this remedy. The dedicated branch remains INGEST-001-SPECIFICATION-finding-2.
+
+RESOLVED SPECIFICATION FINDINGS
+
+5. [P2] Resolved 2026-09-30 — The operator API now supports the required provenance filter and consistently classifies oversized content as HTTP 413.
+
+Files:
+- application/apps/server/app/modules/intake/api/router.py:37-40, 46-81, 96-105
+- application/apps/server/app/modules/intake/application/service.py:10-12, 37-46, 56-63, 145-158
+- application/apps/server/app/modules/intake/domain/models.py:30-31, 68-76
+- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py:55-84
+- application/apps/server/app/modules/intake/tests/test_intake.py:69-174
+- docs/INGEST-001_DESIGN.md:204-215, 238-252
+
+The exact `accountIdentityState` filter now passes through the route, application validation, and the existing bounded set-based query. Invalid values return the stable `intake_validation` 422 envelope. Malformed content remains 422, while oversized body content and attachment count, per-file, and aggregate limits raise `intake_payload_too_large` and map through the shared Intake error function to HTTP 413. The API and direct admission path reuse the same attachment limit constants, and direct admission rejects oversized attachments before hashing or publication.
+
+Focused Intake validation: 11 passed, with one unrelated Starlette/AnyIO deprecation warning. The scoped Specification and Standards re-reviews found no remaining issue or regression for finding 5.
 
 STANDARDS FINDINGS
 

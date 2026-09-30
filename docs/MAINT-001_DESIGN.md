@@ -338,7 +338,7 @@ All endpoints require a ready workspace. Mutations require the writer lock. Requ
 | `POST` | `/api/maintenance-expense-links/{linkId}/archive` | Archive an incorrect expense link. |
 | `POST` | `/api/maintenance-issues/{issueId}/follow-ups` | Create a related TASK-001 follow-up. |
 
-Malformed requests return `422`; missing targets return `404`; business validation returns `400`; lifecycle, duplicate-link, replacement, stale-state, and concurrent conflicts return typed `409` errors with stable machine-readable codes.
+Malformed requests return `422`; oversized request content returns `413`; missing targets return `404`; business validation returns `400`; lifecycle, duplicate-link, replacement, stale-state, and concurrent conflicts return typed `409` errors with stable machine-readable codes.
 
 ## Audit, privacy, and portability
 
@@ -378,7 +378,7 @@ MAINT-001 backend/API scope is complete when:
 7. Maintenance-created TASK-001 follow-ups are atomic with their creation audit and remain lifecycle-independent from the issue.
 8. List/detail projections use bounded set-based queries and expose no N+1 behavior as page size or linked-record count grows.
 9. All retained maintenance records, links, task relations, evidence, audit events, and correction lineage survive encrypted backup/restore with stable IDs.
-10. Typed APIs reject unknown or malformed fields and return controlled `404`, `400`, `409`, and `422` outcomes.
+10. Typed APIs reject unknown or malformed fields and return controlled `404`, `400`, `409`, `413`, and `422` outcomes.
 11. Retrying any create command with the same key and semantic payload returns the same resource identity and current representation without duplicate domain rows, tasks, or audit events; changed-payload key reuse returns `409`.
 
 Overall MAINT-001 must not be marked as a finished operator workflow until `UI-001` delivers the maintenance interface and MAINT-004 delivers reporter attribution.

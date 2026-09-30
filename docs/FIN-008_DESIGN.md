@@ -265,7 +265,7 @@ The REST API uses camelCase JSON, UUID identifiers, ISO dates, UTC timestamps, a
 
 Lists default to 100 items and accept a maximum page size of 500. Filters exclude voided financial rows and archived selectable source records by default, with explicit history flags for retained records. Detail responses expose both backward and forward correction links.
 
-Validation errors return `422`; missing records return `404`; stale lifecycle, changed idempotency payloads, duplicate-review requirements, concurrent aggregate conflicts, and invalid correction order return typed `409` errors. Retrying a successful idempotent command returns the original response without changing timestamps or audit history.
+Validation errors return `422`; oversized request content returns `413`; missing records return `404`; stale lifecycle, changed idempotency payloads, duplicate-review requirements, concurrent aggregate conflicts, and invalid correction order return typed `409` errors. Retrying a successful idempotent command returns the original response without changing timestamps or audit history.
 
 ## Module and transaction boundaries
 

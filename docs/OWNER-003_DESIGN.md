@@ -220,7 +220,7 @@ All endpoints require a ready workspace; mutations require the writer lock. Requ
 
 The create response may be returned before evidence exists and clearly shows `pending`. Verification accepts a tagged existing-receipt or create-receipt choice; it must not infer which candidate the operator intended. Receipt creation includes a separate FIN-001 idempotency key and the allocation set, while claimed payment-method facts come from the report.
 
-Malformed requests return `422`; missing report, lease, owner, receipt, or expectation returns `404`; invalid dates, unsafe method data, or missing evidence returns `400`; stale lifecycle, ownership mismatch, incompatible receipt, possible duplicate, changed idempotency payload, over-allocation, replacement, and concurrency conflicts return typed `409` with stable codes and bounded candidate identifiers where applicable.
+Malformed requests return `422`; oversized request content returns `413`; missing report, lease, owner, receipt, or expectation returns `404`; invalid dates, unsafe method data, or missing evidence returns `400`; stale lifecycle, ownership mismatch, incompatible receipt, possible duplicate, changed idempotency payload, over-allocation, replacement, and concurrency conflicts return typed `409` with stable codes and bounded candidate identifiers where applicable.
 
 ## Read semantics and downstream accounting
 
