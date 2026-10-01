@@ -19,6 +19,7 @@ from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditReposi
 from app.modules.files.application.errors import PublicationCleanupIncomplete
 from app.modules.files.application.service import FileService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore
+from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.intake.api.router import build_router
 from app.modules.intake.application.file_links import IntakeSourceFileLinkValidator
@@ -57,9 +58,9 @@ class IntakeTests(TestCase):
         self.temporary = TemporaryDirectory(); self.addCleanup(self.temporary.cleanup)
         self.database = Path(self.temporary.name) / "workspace.sqlite"; initialize_latest_schema(self.database)
         self.recorder = AuditRecorder(SQLiteAuditRepository(self.database))
-        self.attention_operations = SQLiteIntakeAttentionOperations(self.recorder)
+        self.attention_operations = SQLiteIntakeAttentionOperations(self.recorder, SQLiteIntakeSourceReader())
         self.service = IntakeService(
-            SQLiteIntakeUnitOfWork(self.database, self.recorder),
+            SQLiteIntakeUnitOfWork(self.database, self.recorder, SQLiteFileLinkReader()),
             attention_operations=self.attention_operations,
         )
         self.trusted_admission = TrustedIntakeAdmission(self.service)
@@ -155,7 +156,7 @@ class IntakeTests(TestCase):
 
         failed_correlation = str(uuid4())
         failing = IntakeService(
-            SQLiteIntakeUnitOfWork(self.database, FailingRecorder()),
+            SQLiteIntakeUnitOfWork(self.database, FailingRecorder(), SQLiteFileLinkReader()),
             attention_operations=self.attention_operations,
         )
         with self.assertRaisesRegex(RuntimeError, "audit unavailable"):
@@ -362,9 +363,9 @@ class IntakeTests(TestCase):
         )
         recorder = AuditRecorder(SQLiteAuditRepository(self.database))
         service = IntakeService(
-            SQLiteIntakeUnitOfWork(self.database, recorder),
+            SQLiteIntakeUnitOfWork(self.database, recorder, SQLiteFileLinkReader()),
             files,
-            attention_operations=SQLiteIntakeAttentionOperations(recorder),
+            attention_operations=SQLiteIntakeAttentionOperations(recorder, SQLiteIntakeSourceReader()),
         )
 
         def trusted(key: str, attachment: Path) -> IntakeAdmissionCommand:

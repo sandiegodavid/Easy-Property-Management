@@ -30,7 +30,7 @@ class SQLiteIntakeIntegrityConsequences:
         )
         if not source_ids:
             return
-        transaction = SQLiteIntakeTransaction(connection, self.recorder)
+        transaction = SQLiteIntakeTransaction(connection, self.recorder, self.file_links)
         sources = connection.execute(select(IntakeSourceModel).where(
             IntakeSourceModel.id.in_(source_ids),
             IntakeSourceModel.technical_status != "superseded",

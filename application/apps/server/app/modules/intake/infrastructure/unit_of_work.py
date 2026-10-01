@@ -8,6 +8,7 @@ from typing import Any, Callable, TypeVar
 from sqlalchemy import func, or_, select
 
 from app.modules.audit.application.recorder import AuditRecorder
+from app.modules.files.application.ports import FileLinkReader
 from app.modules.intake.infrastructure.sqlalchemy_models import (
     IntakeDuplicateCandidateModel,
     IntakeEvidenceRevisionModel,
@@ -21,19 +22,35 @@ from app.platform.sqlite_engine import create_sqlite_engine, immediate_transacti
 T = TypeVar("T")
 
 
+def _file_metadata(item: Any) -> dict[str, object] | None:
+    if item is None:
+        return None
+    return {
+        "link_id": item.id,
+        "file_id": item.file_id,
+        "original_name": item.original_name,
+        "media_type": item.media_type,
+        "size_bytes": item.size_bytes,
+        "content_sha256": item.content_sha256,
+        "storage_state": item.storage_state,
+        "verified_at": item.verified_at,
+    }
+
+
 class SQLiteIntakeUnitOfWork:
-    def __init__(self, database: Path, recorder: AuditRecorder) -> None:
-        self.engine = create_sqlite_engine(database); self.recorder = recorder
+    def __init__(self, database: Path, recorder: AuditRecorder, file_links: FileLinkReader) -> None:
+        self.engine = create_sqlite_engine(database); self.recorder = recorder; self.file_links = file_links
     def write(self, operation: Callable[["SQLiteIntakeTransaction"], T]) -> T:
         with immediate_transaction(self.engine) as connection:
             connection.exec_driver_sql("PRAGMA defer_foreign_keys = ON")
-            return operation(SQLiteIntakeTransaction(connection, self.recorder))
+            return operation(SQLiteIntakeTransaction(connection, self.recorder, self.file_links))
     def read(self, operation: Callable[["SQLiteIntakeTransaction"], T]) -> T:
-        with self.engine.connect() as connection: return operation(SQLiteIntakeTransaction(connection, self.recorder))
+        with self.engine.connect() as connection: return operation(SQLiteIntakeTransaction(connection, self.recorder, self.file_links))
 
 
 class SQLiteIntakeTransaction:
-    def __init__(self, connection: Any, recorder: AuditRecorder) -> None: self.connection = connection; self.recorder = recorder
+    def __init__(self, connection: Any, recorder: AuditRecorder, file_links: FileLinkReader) -> None:
+        self.connection = connection; self.recorder = recorder; self.file_links = file_links
     def source(self, source_id: str): return self.connection.execute(select(IntakeSourceModel).where(IntakeSourceModel.id == source_id)).mappings().first()
     def file_connection(self): return self.connection
     def revision(self, revision_id: str): return self.connection.execute(select(IntakeEvidenceRevisionModel).where(IntakeEvidenceRevisionModel.id == revision_id)).mappings().first()
@@ -138,13 +155,10 @@ class SQLiteIntakeTransaction:
         candidates = list(self.connection.execute(select(IntakeDuplicateCandidateModel).where(
             or_(IntakeDuplicateCandidateModel.source_id == source_id, IntakeDuplicateCandidateModel.candidate_source_id == source_id),
         )).mappings())
-        from app.modules.files.infrastructure.sqlalchemy_models import (
-            FileContentLocationModel,
-            FileLinkModel,
-            FileRecordModel,
+        metadata = self.file_links.links_with_files_for_ids(
+            self.connection, [row["file_link_id"] for row in links],
         )
-        metadata = {row["link_id"]: row for row in self.connection.execute(select(FileLinkModel.id.label("link_id"), FileRecordModel.id.label("file_id"), FileRecordModel.original_name, FileRecordModel.media_type, FileRecordModel.size_bytes, FileRecordModel.content_sha256, FileContentLocationModel.storage_state, FileContentLocationModel.verified_at).join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id).join(FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id).where(FileLinkModel.id.in_([row["file_link_id"] for row in links]))).mappings()}
-        return {**projection, "revision": current["id"], "fingerprint": current["content_fingerprint"], "attachmentCount": len(links), "evidence": json.loads(current["envelope_json"]), "revisions": [{"id": row["id"], "number": row["revision_number"], "kind": row["revision_kind"], "createdAt": row["created_at"], "correctionReason": row["correction_reason"]} for row in revisions], "attachments": [{"fileLinkId": row["file_link_id"], "role": row["attachment_role"], "displayOrder": row["display_order"], "file": dict(metadata[row["file_link_id"]]) if row["file_link_id"] in metadata else None} for row in links], "operations": [{"type": row["operation_type"], "outcome": row["outcome"], "createdAt": row["created_at"]} for row in operations], "duplicateCandidates": [{"sourceId": row["source_id"], "candidateSourceId": row["candidate_source_id"], "reason": row["reason"], "disposition": row["disposition"]} for row in candidates]}
+        return {**projection, "revision": current["id"], "fingerprint": current["content_fingerprint"], "attachmentCount": len(links), "evidence": json.loads(current["envelope_json"]), "revisions": [{"id": row["id"], "number": row["revision_number"], "kind": row["revision_kind"], "createdAt": row["created_at"], "correctionReason": row["correction_reason"]} for row in revisions], "attachments": [{"fileLinkId": row["file_link_id"], "role": row["attachment_role"], "displayOrder": row["display_order"], "file": _file_metadata(metadata.get(row["file_link_id"]))} for row in links], "operations": [{"type": row["operation_type"], "outcome": row["outcome"], "createdAt": row["created_at"]} for row in operations], "duplicateCandidates": [{"sourceId": row["source_id"], "candidateSourceId": row["candidate_source_id"], "reason": row["reason"], "disposition": row["disposition"]} for row in candidates]}
 
     def evidence_detail_projection(self, source_id: str, revision_id: str, *, max_history: int,
                                    max_attachments: int) -> dict[str, object] | None:

@@ -127,15 +127,17 @@ STANDARDS FINDINGS
 
 FILE-001 → INTAKE READ BOUNDARY
 
-1. [P2] Intake builds FILE-001 projections by importing FILE persistence models directly.
+1. [P2] RESOLVED (2026-10-01) — Intake consumes FILE-001 metadata through its transaction-aware application reader.
 
 Files:
-- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py:83-94
+- application/apps/server/app/modules/files/application/ports.py
+- application/apps/server/app/modules/files/infrastructure/file_link_reader.py
+- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py
 - docs/ARCHITECTURE.md:90, 97-101
 
-detail_projection() imports FileLinkModel, FileRecordModel, and FileContentLocationModel and joins their tables. This couples Intake to FILE-001's private schema and bypasses the required cross-module application protocol.
+`FileLinkReader.links_with_files_for_ids()` supplies the bounded immutable file metadata projection on Intake's caller-owned transaction. Intake no longer imports FILE SQLAlchemy models or joins FILE tables directly.
 
-Suggestion: inject a transaction-aware FILE metadata reader with the bounded batch shape Intake needs, and keep FILE table knowledge inside FILE infrastructure.
+Composition injects the shared reader at bootstrap and focused Intake, Files, and workspace-backup tests cover the read paths.
 
 INTAKE → COMMUNICATIONS COMPOSITION BOUNDARY
 

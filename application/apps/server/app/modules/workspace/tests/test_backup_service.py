@@ -18,11 +18,13 @@ from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditReposi
 from app.modules.files.application.ports import FileLink
 from app.modules.files.application.service import FileService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
+from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.intake.application.file_links import IntakeSourceFileLinkValidator
 from app.modules.intake.application.service import AttachmentInput, IntakeAdmissionCommand, IntakeService
 from app.modules.intake.domain.models import EvidenceEnvelope
 from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
+from app.modules.intake.infrastructure.source_reader import SQLiteIntakeSourceReader
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.modules.workspace.application.backup_service import BackupError, BackupService
 from app.modules.workspace.application.backup_state import (
@@ -139,9 +141,9 @@ class BackupServiceTests(unittest.TestCase):
 
     def intake_source_id(self) -> str:
         service = IntakeService(SQLiteIntakeUnitOfWork(
-            self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
+            self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)), SQLiteFileLinkReader(),
         ), attention_operations=SQLiteIntakeAttentionOperations(
-            AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
+            AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)), SQLiteIntakeSourceReader(),
         ))
         return service.admit(IntakeAdmissionCommand(
             EvidenceEnvelope("operator_note", "internal", "Backup fixture evidence.", "2026-01-01T00:00:00+00:00"),
@@ -150,10 +152,10 @@ class BackupServiceTests(unittest.TestCase):
 
     def intake_file(self, files: FileService, source: Path, name: str):
         intake = IntakeService(
-            SQLiteIntakeUnitOfWork(self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database))),
+            SQLiteIntakeUnitOfWork(self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)), SQLiteFileLinkReader()),
             files,
             attention_operations=SQLiteIntakeAttentionOperations(
-                AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
+                AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)), SQLiteIntakeSourceReader(),
             ),
         )
         result = intake.admit(IntakeAdmissionCommand(

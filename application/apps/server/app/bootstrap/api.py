@@ -80,6 +80,7 @@ from app.modules.intake.application.service import IntakeService, TrustedIntakeA
 from app.modules.intake.domain.audit_policy import INTAKE_ACTIVITY_POLICY
 from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
 from app.modules.intake.infrastructure.integrity_consequences import SQLiteIntakeIntegrityConsequences
+from app.modules.intake.infrastructure.source_reader import SQLiteIntakeSourceReader
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.modules.leases.api.router import build_router as build_lease_router
 from app.modules.leases.application.file_links import LeaseFileLinkValidator
@@ -234,11 +235,11 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         # Its dedicated endpoint owns the report audit event and correlation ID.
         file_link_policies,
     )
-    intake_unit_of_work = SQLiteIntakeUnitOfWork(service.paths.database, recorder)
+    intake_unit_of_work = SQLiteIntakeUnitOfWork(service.paths.database, recorder, file_link_reader)
     intake = IntakeService(
         intake_unit_of_work,
         files,
-        attention_operations=SQLiteIntakeAttentionOperations(recorder),
+        attention_operations=SQLiteIntakeAttentionOperations(recorder, SQLiteIntakeSourceReader()),
     )
     intake_admission = TrustedIntakeAdmission(intake)
     file_verification = FileStorageVerificationService(

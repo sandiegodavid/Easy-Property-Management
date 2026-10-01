@@ -7,6 +7,7 @@ from uuid import uuid4
 from sqlalchemy import select
 
 from app.modules.audit.application.recorder import AuditRecorder
+from app.modules.intake.application.ports import IntakeSourceReader
 from app.modules.intake.domain.models import (
     AttentionTransition,
     IntakeConflictError,
@@ -17,13 +18,13 @@ from app.modules.intake.domain.models import (
     utc_now,
 )
 from app.modules.intake.infrastructure.sqlalchemy_models import IntakeSourceModel, IntakeSourceOperationModel
-from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeTransaction
 
 class SQLiteIntakeAttentionOperations:
     """The one transaction-aware adapter shared by operator and review flows."""
 
-    def __init__(self, recorder: AuditRecorder) -> None:
+    def __init__(self, recorder: AuditRecorder, source_reader: IntakeSourceReader) -> None:
         self.recorder = recorder
+        self.source_reader = source_reader
 
     def transition_attention(
         self,
@@ -80,7 +81,7 @@ class SQLiteIntakeAttentionOperations:
                 IntakeSourceModel.id == transition.source_id,
             ).values(attention_status=transition.target, updated_at=now),
         )
-        result = SQLiteIntakeTransaction(connection, self.recorder).source_projection(transition.source_id)
+        result = self.source_reader.source_projection(connection, transition.source_id)
         if result is None:
             raise IntakeNotFoundError("Intake source was not found.")
         connection.execute(IntakeSourceOperationModel.__table__.insert().values(

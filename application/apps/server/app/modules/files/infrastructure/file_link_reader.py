@@ -65,6 +65,34 @@ class SQLiteFileLinkReader:
             ).mappings()
         ]
 
+    def links_with_files_for_ids(self, connection, link_ids: Sequence[str]) -> dict[str, FileLinkWithFile]:
+        """Load immutable file metadata for a bounded set of link identities."""
+        ids = tuple(dict.fromkeys(link_ids))
+        if not ids:
+            return {}
+        rows = connection.execute(
+            select(
+                FileLinkModel.id,
+                FileLinkModel.entity_type,
+                FileLinkModel.entity_id,
+                FileLinkModel.purpose,
+                FileLinkModel.created_at,
+                FileLinkModel.file_id,
+                FileLinkModel.archived_at,
+                FileLinkModel.archive_reason,
+                FileRecordModel.original_name,
+                FileRecordModel.media_type,
+                FileRecordModel.size_bytes,
+                FileRecordModel.content_sha256,
+                FileContentLocationModel.storage_state,
+                FileContentLocationModel.verified_at,
+            )
+            .join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id)
+            .join(FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id)
+            .where(FileLinkModel.id.in_(ids)),
+        ).mappings()
+        return {row["id"]: FileLinkWithFile(**dict(row)) for row in rows}
+
     def links_for_entities(self, connection, entity_type: str, entity_ids: Sequence[str]) -> dict[str, list[FileLinkWithFile]]:
         return self._links_for_entities(connection, entity_type, entity_ids, active_only=False)
 

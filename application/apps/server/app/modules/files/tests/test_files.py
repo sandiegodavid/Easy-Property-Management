@@ -29,6 +29,7 @@ from app.modules.intake.application.file_links import IntakeSourceFileLinkValida
 from app.modules.intake.application.service import AttachmentInput, IntakeAdmissionCommand, IntakeService
 from app.modules.intake.domain.models import EvidenceEnvelope
 from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
+from app.modules.intake.infrastructure.source_reader import SQLiteIntakeSourceReader
 from app.modules.intake.infrastructure.integrity_consequences import SQLiteIntakeIntegrityConsequences
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.modules.workspace.application.service import WorkspaceService
@@ -52,9 +53,9 @@ class FileStoreTests(unittest.TestCase):
     def intake_service(self, files: FileService) -> IntakeService:
         recorder = AuditRecorder(self.audit)
         return IntakeService(
-            SQLiteIntakeUnitOfWork(self.service.paths.database, recorder),
+            SQLiteIntakeUnitOfWork(self.service.paths.database, recorder, SQLiteFileLinkReader()),
             files,
-            attention_operations=SQLiteIntakeAttentionOperations(recorder),
+            attention_operations=SQLiteIntakeAttentionOperations(recorder, SQLiteIntakeSourceReader()),
         )
 
     def test_storage_links_and_audit_are_recorded(self) -> None:
