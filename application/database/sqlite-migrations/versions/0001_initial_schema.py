@@ -25,6 +25,7 @@ def upgrade() -> None:
         ProviderCategoryAssignmentModel, ProviderCategoryModel, ProviderProfileModel, ProviderReferenceModel, ProviderReputationLinkModel,
         ProviderServiceAreaModel, ProviderServiceModel, ProviderWorkHistoryModel,
     )
+    from app.modules.vendors.domain.category_normalization import normalize_provider_category_name
     from app.modules.finance.infrastructure.sqlalchemy_models import (
         ExpenseCategoryModel, ExpenseModel, ExpenseRefundModel,
         RentExpectationModel, RentExpectationTimelinessReviewModel,
@@ -163,7 +164,7 @@ def upgrade() -> None:
         ("00000000-0000-4000-8000-000000000307", "General maintenance"),
     )
     op.bulk_insert(ProviderCategoryModel.__table__, [
-        {"id": category_id, "display_name": name, "normalized_name": name.casefold(),
+        {"id": category_id, "display_name": name, "normalized_name": normalize_provider_category_name(name),
          "description": None, "display_order": order, "created_at": stamp, "updated_at": stamp,
          "archived_at": None, "archive_reason": None,
          "create_idempotency_key": f"00000000-0000-4000-8000-{300 + order:012d}",

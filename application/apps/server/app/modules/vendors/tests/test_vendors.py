@@ -34,6 +34,7 @@ from app.modules.vendors.application.service import (
     WorkHistoryCommand,
 )
 from app.modules.vendors.infrastructure.schema_validation import validate_vendor_schema
+from app.modules.vendors.infrastructure.schema_validation import validate_vendor_data
 from app.modules.vendors.infrastructure.unit_of_work import SQLiteProviderUnitOfWork
 from app.modules.workspace.application.backup_service import BackupService
 from app.modules.workspace.application.service import WorkspaceService
@@ -118,6 +119,30 @@ class ProviderTests(unittest.TestCase):
         )
         self.assertEqual(len(assigned["categories"]), 2)
         self.workspace.open()
+
+    def test_category_normalization_collapses_unicode_whitespace(self) -> None:
+        category = self.providers.create_category(ProviderCategoryCommand(
+            "  Specialty\u00a0 /\tRestoration  ", 8,
+            "00000000-0000-4000-8000-000000000922",
+        ))
+        self.assertEqual(category["normalizedName"], "specialty / restoration")
+        self.assertEqual(
+            [item["id"] for item in self.providers.list_categories(search="Specialty  /  Restoration")],
+            [category["id"]],
+        )
+        with self.assertRaises(ProviderLifecycleConflict):
+            self.providers.create_category(ProviderCategoryCommand(
+                "Specialty  /  Restoration", 9,
+                "00000000-0000-4000-8000-000000000923",
+            ))
+        with create_sqlite_engine(self.workspace.paths.database).begin() as connection:
+            connection.exec_driver_sql(
+                "UPDATE provider_categories SET normalized_name = ? WHERE id = ?",
+                ("specialty  / restoration", category["id"]),
+            )
+        with create_sqlite_engine(self.workspace.paths.database).connect() as connection:
+            with self.assertRaises(MigrationSchemaError):
+                validate_vendor_data(connection)
 
     def test_category_http_contract_and_provider_page(self) -> None:
         with TestClient(create_app(self.config)) as client:

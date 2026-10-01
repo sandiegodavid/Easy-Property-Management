@@ -16,6 +16,7 @@ from app.modules.parties.application.service import (
 )
 from app.modules.parties.domain.models import Party, PartyContactMethod
 from app.modules.vendors.application.ports import ProviderStorageConflict, ProviderTransaction, ProviderUnitOfWork
+from app.modules.vendors.domain.category_normalization import normalize_provider_category_name
 from app.modules.vendors.domain.models import ProviderCategory, ProviderCategoryAssignment, ProviderProfile
 from app.modules.vendors.domain.models import ProviderReference as ProviderReferenceRecord
 from app.modules.vendors.domain.models import ProviderReputationLink
@@ -360,7 +361,9 @@ class ProviderService:
     def list_categories(self, *, archive_state: str = "active", search: str | None = None) -> list[dict[str, object]]:
         if archive_state not in {"active", "archived", "all"}:
             raise ProviderError("Archive state is invalid.")
-        search = _normalized_filter(search, "Category search", 160)
+        search = None if search is None else normalize_provider_category_name(
+            _required(search, "Category search", 160),
+        )
         categories = self.unit_of_work.categories(archive_state, search)
         counts = self.unit_of_work.effective_assignment_counts([item.id for item in categories])
         return [{**item.to_dict(), "effectiveProviderCount": counts.get(item.id, 0)} for item in categories]
@@ -375,10 +378,15 @@ class ProviderService:
                 if replay.create_request_fingerprint != fingerprint:
                     raise ProviderCategoryIdempotencyConflict("Category idempotency key was reused with different content.")
                 return replay.id
-            active = next((item for item in tx.categories("active") if item.normalized_name == _normalized(command.display_name)), None)
+            active = next((
+                item for item in tx.categories("active")
+                if item.normalized_name == normalize_provider_category_name(command.display_name)
+            ), None)
             if active:
                 raise ProviderLifecycleConflict("An active category already uses this name.")
-            item = ProviderCategory(str(uuid4()), command.display_name, _normalized(command.display_name), command.description,
+            item = ProviderCategory(
+                str(uuid4()), command.display_name,
+                normalize_provider_category_name(command.display_name), command.description,
                                     command.display_order, now, now, None, None, command.idempotency_key, fingerprint)
             tx.insert_category(item)
             tx.record_change(entity_type="provider_category", entity_id=item.id, action="created", before=None,
@@ -395,7 +403,10 @@ class ProviderService:
             if current.archived_at is not None: raise ProviderLifecycleConflict("An archived category cannot be edited.")
             updated = replace(current,
                 display_name=current.display_name if command.display_name is UNSET else command.display_name,
-                normalized_name=current.normalized_name if command.display_name is UNSET else _normalized(command.display_name),
+                normalized_name=(
+                    current.normalized_name if command.display_name is UNSET
+                    else normalize_provider_category_name(command.display_name)
+                ),
                 description=current.description if command.description is UNSET else command.description,
                 display_order=current.display_order if command.display_order is UNSET else command.display_order,
                 updated_at=now,

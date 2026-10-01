@@ -2,10 +2,10 @@
 
 from datetime import datetime
 from uuid import UUID
-import unicodedata
 
 from sqlalchemy import inspect
 
+from app.modules.vendors.domain.category_normalization import normalize_provider_category_name
 from app.platform.migration_errors import MigrationSchemaError
 
 
@@ -125,7 +125,7 @@ def validate_vendor_data(connection) -> None:
         _uuid(row["id"]); _uuid(row["create_idempotency_key"]); _timestamp(row["created_at"]); _timestamp(row["updated_at"])
         if row["updated_at"] < row["created_at"] or not row["display_name"].strip() or len(row["display_name"]) > 160:
             raise MigrationSchemaError("Provider category data is invalid.")
-        if row["normalized_name"] != unicodedata.normalize("NFKC", row["display_name"]).strip().casefold() or row["display_order"] < 0:
+        if row["normalized_name"] != normalize_provider_category_name(row["display_name"]) or row["display_order"] < 0:
             raise MigrationSchemaError("Provider category data is invalid.")
         archived = row["archived_at"] is not None
         if archived:
