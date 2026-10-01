@@ -34,6 +34,10 @@ from app.modules.vendors.application.service import (
     WorkHistoryCommand,
 )
 from app.modules.vendors.infrastructure.schema_validation import validate_vendor_schema
+from app.modules.vendors.infrastructure.context_reader import (
+    MAX_PROVIDER_CONTEXTS,
+    SQLiteProviderContextReader,
+)
 from app.modules.vendors.infrastructure.unit_of_work import SQLiteProviderUnitOfWork
 from app.modules.workspace.application.backup_service import BackupService
 from app.modules.workspace.application.service import WorkspaceService
@@ -118,6 +122,46 @@ class ProviderTests(unittest.TestCase):
         )
         self.assertEqual(len(assigned["categories"]), 2)
         self.workspace.open()
+
+    def test_archived_provider_has_no_effective_categories_but_keeps_history(self) -> None:
+        category_id = self.providers.list_categories()[0]["id"]
+        party_id = self.providers.create(
+            PartyCreateCommand("organization", "Archived Categorized Provider"),
+            ProviderProfileCommand(), category_ids=(category_id,),
+        )["party"]["id"]
+        self.providers.archive(party_id, confirmed=True)
+
+        all_records = self.providers.list(ProviderSearchCommand(archive_state="all"))
+        summary = next(item for item in all_records if item["party"]["id"] == party_id)
+        self.assertEqual(summary["categories"], [])
+        self.assertNotIn(
+            party_id,
+            [item["party"]["id"] for item in self.providers.list(ProviderSearchCommand(
+                archive_state="all", category_state="categorized",
+            ))],
+        )
+        self.assertIn(
+            party_id,
+            [item["party"]["id"] for item in self.providers.list(ProviderSearchCommand(
+                archive_state="all", category_state="uncategorized",
+            ))],
+        )
+        self.assertEqual(len(self.providers.detail(party_id, include_archived=True)["categories"]), 1)
+
+    def test_provider_context_reader_enforces_batch_limit(self) -> None:
+        reader = SQLiteProviderContextReader()
+        ids = {f"provider-{number}" for number in range(MAX_PROVIDER_CONTEXTS)}
+        engine = self.providers.unit_of_work.engine
+        with engine.connect() as connection:
+            self.assertEqual(reader.profile_contexts(connection, ids), {})
+            self.assertEqual(reader.effective_categories_for_providers(connection, ids), {
+                party_id: [] for party_id in ids
+            })
+            oversized = {*ids, "provider-over-limit"}
+            with self.assertRaises(ValueError):
+                reader.profile_contexts(connection, oversized)
+            with self.assertRaises(ValueError):
+                reader.effective_categories_for_providers(connection, oversized)
 
     def test_category_http_contract_and_provider_page(self) -> None:
         with TestClient(create_app(self.config)) as client:

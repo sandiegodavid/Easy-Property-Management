@@ -140,7 +140,11 @@ class SQLiteProviderUnitOfWork(ProviderUnitOfWork):
             active_work = _group(session, ProviderWorkHistoryModel, party_ids)
             active_references = _group(session, ProviderReferenceModel, party_ids)
             active_reputation_links = _group(session, ProviderReputationLinkModel, party_ids)
-            effective_categories = _assignment_pairs(session, party_ids, include_archived=False)
+            # Effective categories are a current-provider projection.  Keep the
+            # assignments themselves for historical detail, but do not let an
+            # archived profile retain a current categorization in list results.
+            active_party_ids = [item.party_id for item in profiles if item.archived_at is None]
+            effective_categories = _assignment_pairs(session, active_party_ids, include_archived=False)
             needle = search.casefold() if search else None
             results = []
             for profile in profiles:
