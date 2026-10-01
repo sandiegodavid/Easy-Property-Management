@@ -255,10 +255,16 @@ class FinanceWorkflowTests(unittest.TestCase):
         expectations = self.finance.synchronize(self.lease["id"], SynchronizeExpectationsCommand(
             term["id"], (date.today() + timedelta(days=60)).isoformat(), date.today().replace(day=1).isoformat(),
         ))
-        complete = next(item for item in expectations if not item["isProrated"])
+        # A 60-day horizon can contain two complete periods when the fixture
+        # starts on the first of a month. Shorten the period after the final
+        # persisted complete occurrence, never an immutable stored schedule.
+        complete = max(
+            (item for item in expectations if not item["isProrated"]),
+            key=lambda item: item["periodEndsOn"],
+        )
+        boundary = date.fromisoformat(complete["periodEndsOn"]) + timedelta(days=15)
         prorated = self.finance.synchronize(self.lease["id"], SynchronizeExpectationsCommand(
-            term["id"], (date.today() + timedelta(days=60)).isoformat(), None,
-            (date.fromisoformat(complete["periodEndsOn"]) + timedelta(days=15)).isoformat(),
+            term["id"], boundary.isoformat(), None, boundary.isoformat(),
             "Approved short responsibility boundary", True,
         ))[0]
         prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(

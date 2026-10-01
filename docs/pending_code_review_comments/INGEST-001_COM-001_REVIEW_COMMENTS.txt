@@ -125,20 +125,6 @@ Focused Intake validation: 11 passed, with one unrelated Starlette/AnyIO depreca
 
 STANDARDS FINDINGS
 
-FILE-001 → INTAKE READ BOUNDARY
-
-1. [P2] RESOLVED (2026-10-01) — Intake consumes FILE-001 metadata through its transaction-aware application reader.
-
-Files:
-- application/apps/server/app/modules/files/application/ports.py
-- application/apps/server/app/modules/files/infrastructure/file_link_reader.py
-- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py
-- docs/ARCHITECTURE.md:90, 97-101
-
-`FileLinkReader.links_with_files_for_ids()` supplies the bounded immutable file metadata projection on Intake's caller-owned transaction. Intake no longer imports FILE SQLAlchemy models or joins FILE tables directly.
-
-Composition injects the shared reader at bootstrap and focused Intake, Files, and workspace-backup tests cover the read paths.
-
 INTAKE → COMMUNICATIONS COMPOSITION BOUNDARY
 
 2. [P2] Intake-to-COM source facts are duplicated in an unused application-layer adapter and in bootstrap SQL.
@@ -163,6 +149,23 @@ Files:
 source_projection() and list_projections() independently construct the same response shape. The supersession fields already had to be added in both places in the latest fix.
 
 Suggestion: extract one row-to-summary projection helper that receives the revision and attachment count, then use it for both detail and list paths.
+
+RESOLVED STANDARDS FINDINGS — 2026-10-01
+
+FILE-001 → INTAKE READ BOUNDARY
+
+1. [P2] RESOLVED — Intake consumes FILE-001 metadata through its transaction-aware application reader.
+
+Files:
+- application/apps/server/app/modules/files/application/ports.py:63-79
+- application/apps/server/app/modules/files/infrastructure/file_link_reader.py:68-94
+- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py:11, 25-37, 40-53, 142-161
+- application/apps/server/app/bootstrap/api.py:189, 238-243
+- docs/ARCHITECTURE.md:90, 97-101
+
+`FileLinkReader.links_with_files_for_ids()` supplies the bounded immutable FILE metadata projection using Intake's caller-owned connection. `SQLiteIntakeTransaction.detail_projection()` now depends only on that application protocol and Intake-owned persistence models; it no longer imports FILE SQLAlchemy models or constructs FILE table joins. Bootstrap creates one FILE reader and injects it into the Intake unit of work, preserving transaction scope and one bounded set-based metadata query.
+
+Focused validation: Intake, FILE, and workspace-backup tests passed (100 passed, with one unrelated Starlette/AnyIO deprecation warning). No regression or new actionable issue remains for this finding.
 
 VALIDATION
 
