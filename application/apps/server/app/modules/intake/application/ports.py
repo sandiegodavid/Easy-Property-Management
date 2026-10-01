@@ -1,39 +1,15 @@
 """Narrow transaction-aware ports exposed by INGEST-001."""
 from __future__ import annotations
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Collection, Literal, Mapping, Protocol, TypeVar
-from app.modules.intake.domain.models import bounded, uuid
+from typing import Any, Callable, Collection, Mapping, Protocol, TypeVar
 T = TypeVar("T")
 MAX_INTAKE_SOURCE_BATCH = 200
-
-
-@dataclass(frozen=True)
-class IntakeEvidenceReadContext:
-    """Trusted, non-sensitive audit facts required before disclosing evidence."""
-    actor_kind: Literal["local_operator", "system", "connector", "ai_assistant"]
-    actor_reference: str | None
-    reason: str
-    correlation_id: str
-
-    def __post_init__(self) -> None:
-        if self.actor_kind not in {"local_operator", "system", "connector", "ai_assistant"}:
-            raise ValueError("actor_kind is invalid.")
-        object.__setattr__(self, "actor_reference", bounded(self.actor_reference, "actorReference", 500))
-        if self.actor_kind in {"connector", "ai_assistant"} and self.actor_reference is None:
-            raise ValueError("actor_reference is required for connected actors.")
-        reason = bounded(self.reason, "reason", 64, required=True)
-        if not reason.replace("_", "").isalnum() or reason.lower() != reason:
-            raise ValueError("reason must be a non-sensitive identifier.")
-        object.__setattr__(self, "reason", reason)
-        object.__setattr__(self, "correlation_id", uuid(self.correlation_id, "correlationId"))
 
 
 class IntakeSourceReader(Protocol):
     def source_projection(self, connection: Any, source_id: str) -> dict[str, object] | None: ...
     def source_projections(self, connection: Any, source_ids: Collection[str]) -> Mapping[str, Mapping[str, object]]: ...
     def revision_projection(self, connection: Any, source_id: str, revision_id: str) -> Mapping[str, object] | None: ...
-    def evidence_detail(self, connection: Any, source_id: str, revision_id: str, *, audit: IntakeEvidenceReadContext, max_history: int = 100) -> Mapping[str, object] | None: ...
 
 
 class IntakeAttachmentBatch(Protocol):

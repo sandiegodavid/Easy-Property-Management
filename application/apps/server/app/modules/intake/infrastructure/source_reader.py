@@ -1,16 +1,11 @@
 """Consumer-neutral, connection-owned reads of retained Intake evidence."""
 from __future__ import annotations
 
-import json
 from typing import Any, Collection, Mapping
 
 from sqlalchemy import func, select
 
-from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.intake.application.ports import (
-    MAX_INTAKE_SOURCE_BATCH,
-    IntakeEvidenceReadContext,
-)
+from app.modules.intake.application.ports import MAX_INTAKE_SOURCE_BATCH
 from app.modules.intake.domain.models import IntakeReadLimitError
 from app.modules.intake.infrastructure.sqlalchemy_models import (
     IntakeEvidenceRevisionModel,
@@ -21,12 +16,6 @@ from app.modules.intake.infrastructure.sqlalchemy_models import (
 
 class SQLiteIntakeSourceReader:
     """Read current and historical Intake facts without opening a transaction."""
-
-    _MAX_HISTORY = 100
-    _MAX_ATTACHMENTS = 20
-
-    def __init__(self, recorder: AuditRecorder) -> None:
-        self._recorder = recorder
 
     def source_projection(self, connection: Any, source_id: str) -> dict[str, object] | None:
         return dict(self.source_projections(connection, (source_id,)).get(source_id, {})) or None
@@ -119,90 +108,6 @@ class SQLiteIntakeSourceReader:
             "correctionReason": row["correction_reason"],
             "revisionCreatedAt": row["revision_created_at"],
         }
-
-    def evidence_detail(
-        self,
-        connection: Any,
-        source_id: str,
-        revision_id: str,
-        *,
-        audit: IntakeEvidenceReadContext,
-        max_history: int = _MAX_HISTORY,
-    ) -> Mapping[str, object] | None:
-        if isinstance(max_history, bool) or not isinstance(max_history, int) or not 1 <= max_history <= self._MAX_HISTORY:
-            raise ValueError("max_history must be between 1 and 100.")
-        revision = self.revision_projection(connection, source_id, revision_id)
-        if revision is None:
-            return None
-        evidence = connection.execute(
-            select(IntakeEvidenceRevisionModel.envelope_json).where(
-                IntakeEvidenceRevisionModel.id == revision_id,
-                IntakeEvidenceRevisionModel.source_id == source_id,
-            ),
-        ).scalar_one()
-        attachments = list(connection.execute(
-            select(
-                IntakeRevisionFileLinkModel.file_link_id,
-                IntakeRevisionFileLinkModel.attachment_role,
-                IntakeRevisionFileLinkModel.display_order,
-            )
-            .where(IntakeRevisionFileLinkModel.revision_id == revision_id)
-            .order_by(IntakeRevisionFileLinkModel.display_order)
-            .limit(self._MAX_ATTACHMENTS + 1),
-        ).mappings())
-        if len(attachments) > self._MAX_ATTACHMENTS:
-            raise ValueError("Retained Intake revision has too many attachments.")
-        history = list(connection.execute(
-            select(
-                IntakeEvidenceRevisionModel.id,
-                IntakeEvidenceRevisionModel.revision_number,
-                IntakeEvidenceRevisionModel.revision_kind,
-                IntakeEvidenceRevisionModel.created_at,
-                IntakeEvidenceRevisionModel.correction_reason,
-            )
-            .where(IntakeEvidenceRevisionModel.source_id == source_id)
-            .order_by(IntakeEvidenceRevisionModel.revision_number.desc())
-            .limit(max_history + 1),
-        ).mappings())
-        detail = {
-            **revision,
-            "evidence": json.loads(evidence),
-            "attachments": [
-                {
-                    "fileLinkId": row["file_link_id"],
-                    "role": row["attachment_role"],
-                    "displayOrder": row["display_order"],
-                }
-                for row in attachments
-            ],
-            "history": [
-                {
-                    "id": row["id"],
-                    "number": row["revision_number"],
-                    "kind": row["revision_kind"],
-                    "createdAt": row["created_at"],
-                    "correctionReason": row["correction_reason"],
-                }
-                for row in history[:max_history]
-            ],
-            "historyTruncated": len(history) > max_history,
-        }
-        # This is intentionally the final operation: if audit persistence
-        # fails, the caller receives no sensitive body or participant data and
-        # its surrounding transaction rolls back the failed audit attempt.
-        self._recorder.record_change(
-            connection.connection.driver_connection,
-            entity_type="intake_source",
-            entity_id=source_id,
-            action="evidence_read",
-            before=None,
-            after={"sourceId": source_id, "revision": revision_id},
-            reason=audit.reason,
-            correlation_id=audit.correlation_id,
-            actor_kind=audit.actor_kind,
-            actor_reference=audit.actor_reference,
-        )
-        return detail
 
     @staticmethod
     def _summary(row: Mapping[str, object], *, fingerprint: str | None = None) -> dict[str, object]:

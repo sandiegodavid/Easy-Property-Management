@@ -13,16 +13,12 @@ from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.application.errors import PublicationCleanupIncomplete
 from app.modules.intake.api.router import build_router
-from app.modules.intake.application.ports import (
-    MAX_INTAKE_SOURCE_BATCH,
-    IntakeEvidenceReadContext,
-)
+from app.modules.intake.application.ports import MAX_INTAKE_SOURCE_BATCH
 from app.modules.intake.application.service import IntakeAdmissionCommand, IntakeService
 from app.modules.intake.domain.models import EvidenceEnvelope, IntakeConflictError, IntakeReadLimitError
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.modules.intake.infrastructure.source_reader import SQLiteIntakeSourceReader
 from app.platform.product_migrations import initialize_latest_schema, validate_latest_schema
-from app.platform.sqlite_engine import immediate_transaction
 
 
 class IntakeTests(TestCase):
@@ -93,7 +89,7 @@ class IntakeTests(TestCase):
             EvidenceEnvelope("operator_note", "internal", "Corrected first evidence.", "2026-01-01T12:00:00+00:00"),
             "clarified", str(uuid4()),
         )
-        reader = SQLiteIntakeSourceReader(self.recorder)
+        reader = SQLiteIntakeSourceReader()
         statements: list[str] = []
 
         def capture(*args):
@@ -113,50 +109,71 @@ class IntakeTests(TestCase):
                 original = reader.revision_projection(connection, first["sourceId"], first["revision"])
                 self.assertEqual(first["revision"], original["revision"])
                 self.assertEqual("submitted", original["revisionKind"])
-                detail = reader.evidence_detail(
-                    connection, first["sourceId"], corrected["revision"],
-                    audit=IntakeEvidenceReadContext("local_operator", None, "intake_evidence_read", str(uuid4())),
-                    max_history=1,
-                )
-                self.assertEqual("Corrected first evidence.", detail["evidence"]["body"])
-                self.assertTrue(detail["historyTruncated"])
                 self.assertIsNone(reader.revision_projection(connection, second["sourceId"], first["revision"]))
         finally:
             event.remove(engine, "before_cursor_execute", capture)
 
-    def test_consumer_evidence_detail_is_audited_and_fails_closed(self) -> None:
+    def test_public_evidence_read_is_durable_and_fails_closed(self) -> None:
         source = self.service.admit(self.command())
-        reader = SQLiteIntakeSourceReader(self.recorder)
-        correlation_id = str(uuid4())
-        context = IntakeEvidenceReadContext("local_operator", None, "intake_evidence_read", correlation_id)
+        self.assertFalse(hasattr(SQLiteIntakeSourceReader(), "evidence_detail"))
         engine = self.service.unit_of_work.engine
-        with immediate_transaction(engine) as connection:
-            detail = reader.evidence_detail(connection, source["sourceId"], source["revision"], audit=context)
-            self.assertEqual("The sink leaks.", detail["evidence"]["body"])
+        with engine.connect() as connection:
+            before = connection.exec_driver_sql(
+                "SELECT COUNT(*) FROM audit_events WHERE entity_type = 'intake_source' AND entity_id = ? AND action = 'evidence_read'",
+                (source["sourceId"],),
+            ).scalar_one()
+        detail = self.service.get(source["sourceId"])
+        self.assertEqual("The sink leaks.", detail["evidence"]["body"])
         with engine.connect() as connection:
             audit = connection.exec_driver_sql(
-                "SELECT action, correlation_id, after_snapshot FROM audit_events WHERE correlation_id = ?",
-                (correlation_id,),
+                "SELECT action, after_snapshot FROM audit_events WHERE entity_type = 'intake_source' AND entity_id = ? AND action = 'evidence_read' ORDER BY occurred_at DESC LIMIT 1",
+                (source["sourceId"],),
             ).mappings().one()
+            after = connection.exec_driver_sql(
+                "SELECT COUNT(*) FROM audit_events WHERE entity_type = 'intake_source' AND entity_id = ? AND action = 'evidence_read'",
+                (source["sourceId"],),
+            ).scalar_one()
         self.assertEqual("evidence_read", audit["action"])
-        self.assertEqual(correlation_id, audit["correlation_id"])
         self.assertIn(source["revision"], audit["after_snapshot"])
+        self.assertEqual(before + 1, after)
 
         class FailingRecorder:
             def record_change(self, *args, **kwargs):
                 raise RuntimeError("audit unavailable")
 
-        with immediate_transaction(engine) as connection:
-            with self.assertRaisesRegex(RuntimeError, "audit unavailable"):
-                SQLiteIntakeSourceReader(FailingRecorder()).evidence_detail(
-                    connection, source["sourceId"], source["revision"], audit=IntakeEvidenceReadContext(
-                        "local_operator", None, "intake_evidence_read", str(uuid4()),
-                    ),
-                )
+        failing = IntakeService(SQLiteIntakeUnitOfWork(self.database, FailingRecorder()))
+        with self.assertRaisesRegex(RuntimeError, "audit unavailable"):
+            failing.get(source["sourceId"])
+        with engine.connect() as connection:
+            self.assertEqual(
+                after,
+                connection.exec_driver_sql(
+                    "SELECT COUNT(*) FROM audit_events WHERE entity_type = 'intake_source' AND entity_id = ? AND action = 'evidence_read'",
+                    (source["sourceId"],),
+                ).scalar_one(),
+            )
+
+        def fail_commit(_connection):
+            raise RuntimeError("commit unavailable")
+
+        event.listen(engine, "commit", fail_commit)
+        try:
+            with self.assertRaisesRegex(RuntimeError, "commit unavailable"):
+                self.service.get(source["sourceId"])
+        finally:
+            event.remove(engine, "commit", fail_commit)
+        with engine.connect() as connection:
+            self.assertEqual(
+                after,
+                connection.exec_driver_sql(
+                    "SELECT COUNT(*) FROM audit_events WHERE entity_type = 'intake_source' AND entity_id = ? AND action = 'evidence_read'",
+                    (source["sourceId"],),
+                ).scalar_one(),
+            )
 
     def test_consumer_source_reader_enforces_the_unique_batch_limit(self) -> None:
         source = self.service.admit(self.command())
-        reader = SQLiteIntakeSourceReader(self.recorder)
+        reader = SQLiteIntakeSourceReader()
         engine = self.service.unit_of_work.engine
         exact_limit = (source["sourceId"], *(str(uuid4()) for _ in range(MAX_INTAKE_SOURCE_BATCH - 1)))
         duplicate_at_limit = (*exact_limit, source["sourceId"])
