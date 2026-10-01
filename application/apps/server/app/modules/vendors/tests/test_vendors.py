@@ -7,6 +7,9 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
+from uuid import uuid4
+
+from sqlalchemy import event
 
 from fastapi.testclient import TestClient
 
@@ -149,6 +152,71 @@ class ProviderTests(unittest.TestCase):
             archived = client.post(f"/api/providers/{party_id}/category-assignments/{assignment_id}/archive", json={"confirmed": True, "reason": "Not offered"})
             self.assertEqual(archived.status_code, 200)
             self.assertEqual(client.get("/api/providers", params={"categoryState": "uncategorized"}).json()["items"][0]["party"]["id"], party_id)
+
+    def test_provider_page_selects_ids_with_filters_cursor_and_limit_before_hydration(self) -> None:
+        party_ids = []
+        for name in ("Alpha Electric", "Bravo Plumbing", "Charlie HVAC"):
+            party_ids.append(self.providers.create(
+                PartyCreateCommand("organization", name), ProviderProfileCommand(),
+            )["party"]["id"])
+        statements: list[str] = []
+        listener = lambda _connection, _cursor, statement, _parameters, _context, _many: statements.append(statement)
+        event.listen(self.providers.unit_of_work.engine, "before_cursor_execute", listener)
+        try:
+            first = self.providers.page(ProviderSearchCommand(limit=1))
+            second = self.providers.page(ProviderSearchCommand(limit=1, cursor=first["nextCursor"]))
+            third = self.providers.page(ProviderSearchCommand(limit=1, cursor=second["nextCursor"]))
+        finally:
+            event.remove(self.providers.unit_of_work.engine, "before_cursor_execute", listener)
+        self.assertEqual(
+            [first["items"][0]["party"]["id"], second["items"][0]["party"]["id"], third["items"][0]["party"]["id"]],
+            party_ids,
+        )
+        selection = next(statement for statement in statements if "FROM provider_profiles pp JOIN parties p" in statement)
+        self.assertIn("LIMIT ?", selection)
+        self.assertIn("unicode_casefold(p.display_name)", selection)
+
+    def test_unicode_cursor_and_query_budget_remain_stable_for_page_sizes(self) -> None:
+        with sqlite3.connect(self.workspace.paths.database) as connection:
+            stamp = "2026-10-01T00:00:00+00:00"
+            rows = []
+            for index in range(200):
+                party_id = str(uuid4())
+                rows.append((party_id, "organization", f"Provider {index:03d}", stamp, stamp))
+            for name in ("Éclair A", "Éclair B"):
+                party_id = str(uuid4())
+                rows.append((party_id, "organization", name, stamp, stamp))
+            connection.executemany(
+                "INSERT INTO parties (id, party_kind, display_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                rows,
+            )
+            connection.executemany(
+                "INSERT INTO provider_profiles (party_id, selection_status, created_at, updated_at) VALUES (?, 'neutral', ?, ?)",
+                [(row[0], stamp, stamp) for row in rows],
+            )
+
+        def page_query_count(limit: int) -> tuple[dict[str, object], int]:
+            statements: list[str] = []
+            listener = lambda _connection, _cursor, statement, _parameters, _context, _many: statements.append(statement)
+            event.listen(self.providers.unit_of_work.engine, "before_cursor_execute", listener)
+            try:
+                page = self.providers.page(ProviderSearchCommand(limit=limit))
+            finally:
+                event.remove(self.providers.unit_of_work.engine, "before_cursor_execute", listener)
+            return page, len(statements)
+
+        one, one_count = page_query_count(1)
+        hundred, hundred_count = page_query_count(100)
+        two_hundred, two_hundred_count = page_query_count(200)
+        self.assertEqual((len(one["items"]), len(hundred["items"]), len(two_hundred["items"])), (1, 100, 200))
+        self.assertEqual((one_count, hundred_count, two_hundred_count), (one_count, one_count, one_count))
+
+        first = self.providers.page(ProviderSearchCommand(search="ÉCLAIR", limit=1))
+        second = self.providers.page(ProviderSearchCommand(search="ÉCLAIR", limit=1, cursor=first["nextCursor"]))
+        self.assertEqual(
+            [first["items"][0]["party"]["displayName"], second["items"][0]["party"]["displayName"]],
+            ["Éclair A", "Éclair B"],
+        )
 
     def test_provider_http_contract_and_party_route(self) -> None:
         with TestClient(create_app(self.config)) as client:

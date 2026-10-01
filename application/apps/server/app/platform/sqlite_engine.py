@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from pathlib import Path
+import unicodedata
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import URL, Engine
@@ -23,6 +24,9 @@ def create_sqlite_engine(database: Path) -> Engine:
         try:
             cursor.execute("PRAGMA foreign_keys = ON")
             cursor.execute("PRAGMA busy_timeout = 5000")
+            dbapi_connection.create_function(
+                "unicode_casefold", 1, _unicode_casefold, deterministic=True,
+            )
         finally:
             cursor.close()
 
@@ -32,6 +36,13 @@ def create_sqlite_engine(database: Path) -> Engine:
         connection.exec_driver_sql(statement)
 
     return engine
+
+
+def _unicode_casefold(value: object) -> str | None:
+    """SQLite sort/search key with the same Unicode semantics as application cursors."""
+    if value is None:
+        return None
+    return unicodedata.normalize("NFKC", str(value)).casefold()
 
 
 @contextmanager

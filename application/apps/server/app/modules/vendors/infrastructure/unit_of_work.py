@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
@@ -125,15 +125,61 @@ class SQLiteProviderUnitOfWork(ProviderUnitOfWork):
     def list(self, *, archive_state, search, service, service_area, selection_status, property_id, has_reference,
              category_id=None, category_state=None, limit=None, cursor=None):
         with Session(self.engine) as session:
-            query = select(ProviderProfileModel)
+            conditions, parameters = [], {}
             if archive_state == "active":
-                query = query.where(ProviderProfileModel.archived_at.is_(None))
+                conditions.append("pp.archived_at IS NULL")
             elif archive_state == "archived":
-                query = query.where(ProviderProfileModel.archived_at.is_not(None))
+                conditions.append("pp.archived_at IS NOT NULL")
             if selection_status:
-                query = query.where(ProviderProfileModel.selection_status == selection_status)
-            profiles = [_profile(item) for item in session.execute(query).scalars()]
-            party_ids = [item.party_id for item in profiles]
+                conditions.append("pp.selection_status = :selection_status")
+                parameters["selection_status"] = selection_status
+            if service:
+                conditions.append("EXISTS (SELECT 1 FROM provider_services ps WHERE ps.party_id = pp.party_id AND ps.archived_at IS NULL AND ps.normalized_name = :service)")
+                parameters["service"] = service
+            if service_area:
+                conditions.append("EXISTS (SELECT 1 FROM provider_service_areas pa WHERE pa.party_id = pp.party_id AND pa.archived_at IS NULL AND pa.normalized_name = :service_area)")
+                parameters["service_area"] = service_area
+            if property_id:
+                conditions.append("EXISTS (SELECT 1 FROM provider_work_history pw WHERE pw.party_id = pp.party_id AND pw.archived_at IS NULL AND pw.property_id = :property_id)")
+                parameters["property_id"] = property_id
+            if has_reference is not None:
+                predicate = "EXISTS (SELECT 1 FROM provider_references pr WHERE pr.party_id = pp.party_id AND pr.archived_at IS NULL)"
+                conditions.append(predicate if has_reference else f"NOT {predicate}")
+            effective_category = "EXISTS (SELECT 1 FROM provider_category_assignments pca JOIN provider_categories pc ON pc.id = pca.category_id WHERE pca.provider_party_id = pp.party_id AND pca.archived_at IS NULL AND pc.archived_at IS NULL)"
+            if category_id:
+                conditions.append("EXISTS (SELECT 1 FROM provider_category_assignments pca JOIN provider_categories pc ON pc.id = pca.category_id WHERE pca.provider_party_id = pp.party_id AND pca.archived_at IS NULL AND pc.archived_at IS NULL AND pca.category_id = :category_id)")
+                parameters["category_id"] = category_id
+            if category_state == "categorized":
+                conditions.append(effective_category)
+            elif category_state == "uncategorized":
+                conditions.append(f"NOT {effective_category}")
+            if search:
+                parameters["search"] = f"%{_like(search.casefold())}%"
+                conditions.append("""(
+                    unicode_casefold(p.display_name) LIKE :search ESCAPE '\\'
+                    OR EXISTS (SELECT 1 FROM provider_services ps WHERE ps.party_id = pp.party_id AND ps.archived_at IS NULL AND unicode_casefold(ps.display_name) LIKE :search ESCAPE '\\')
+                    OR EXISTS (SELECT 1 FROM provider_service_areas pa WHERE pa.party_id = pp.party_id AND pa.archived_at IS NULL AND unicode_casefold(pa.display_name) LIKE :search ESCAPE '\\')
+                    OR EXISTS (SELECT 1 FROM provider_work_history pw WHERE pw.party_id = pp.party_id AND pw.archived_at IS NULL AND (unicode_casefold(pw.summary) LIKE :search ESCAPE '\\' OR unicode_casefold(coalesce(pw.outcome_notes, '')) LIKE :search ESCAPE '\\'))
+                    OR EXISTS (SELECT 1 FROM provider_references pr WHERE pr.party_id = pp.party_id AND pr.archived_at IS NULL AND (unicode_casefold(coalesce(pr.reference_name, '')) LIKE :search ESCAPE '\\' OR unicode_casefold(coalesce(pr.organization_name, '')) LIKE :search ESCAPE '\\' OR unicode_casefold(coalesce(pr.relationship, '')) LIKE :search ESCAPE '\\'))
+                    OR EXISTS (SELECT 1 FROM provider_category_assignments pca JOIN provider_categories pc ON pc.id = pca.category_id WHERE pca.provider_party_id = pp.party_id AND pca.archived_at IS NULL AND pc.archived_at IS NULL AND unicode_casefold(pc.display_name) LIKE :search ESCAPE '\\')
+                )""")
+            if cursor:
+                conditions.append("(unicode_casefold(p.display_name) > :cursor_name OR (unicode_casefold(p.display_name) = :cursor_name AND p.id > :cursor_id))")
+                parameters["cursor_name"], parameters["cursor_id"] = cursor
+            query = "SELECT pp.party_id FROM provider_profiles pp JOIN parties p ON p.id = pp.party_id"
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
+            query += " ORDER BY unicode_casefold(p.display_name), p.id"
+            if limit:
+                query += " LIMIT :limit"
+                parameters["limit"] = limit
+            party_ids = list(session.execute(text(query), parameters).scalars())
+            if not party_ids:
+                return []
+            profile_rows = session.execute(select(ProviderProfileModel).where(
+                ProviderProfileModel.party_id.in_(party_ids),
+            )).scalars()
+            profiles = {item.party_id: _profile(item) for item in profile_rows}
             parties = self.party_operations.parties(party_ids)
             active_services = _group(session, ProviderServiceModel, party_ids)
             active_areas = _group(session, ProviderServiceAreaModel, party_ids)
@@ -141,38 +187,19 @@ class SQLiteProviderUnitOfWork(ProviderUnitOfWork):
             active_references = _group(session, ProviderReferenceModel, party_ids)
             active_reputation_links = _group(session, ProviderReputationLinkModel, party_ids)
             effective_categories = _assignment_pairs(session, party_ids, include_archived=False)
-            needle = search.casefold() if search else None
             results = []
-            for profile in profiles:
-                party = parties.get(profile.party_id)
+            for party_id in party_ids:
+                profile = profiles.get(party_id)
+                party = parties.get(party_id)
                 if party is None:
                     continue
                 services = [_service(item) for item in active_services.get(profile.party_id, [])]
                 areas = [_area(item) for item in active_areas.get(profile.party_id, [])]
                 work = [_work(item) for item in active_work.get(profile.party_id, [])]
                 references = [_reference(item) for item in active_references.get(profile.party_id, [])]
-                if service and not any(item.normalized_name == service for item in services):
-                    continue
-                if service_area and not any(item.normalized_name == service_area for item in areas):
-                    continue
-                if property_id and not any(item.property_id == property_id for item in work):
-                    continue
-                if has_reference is not None and bool(references) != has_reference:
-                    continue
                 categories = effective_categories.get(profile.party_id, [])
-                if category_id and not any(category.id == category_id for _assignment, category in categories):
-                    continue
-                if category_state == "categorized" and not categories:
-                    continue
-                if category_state == "uncategorized" and categories:
-                    continue
-                if needle and not _matches(needle, party, services, areas, work, references, [category for _assignment, category in categories]):
-                    continue
                 results.append((party, profile, services, areas, len(work), len(references), len(active_reputation_links.get(profile.party_id, []),), categories))
-            ordered = sorted(results, key=lambda item: (item[0].display_name.casefold(), item[0].id))
-            if cursor:
-                ordered = [item for item in ordered if (item[0].display_name.casefold(), item[0].id) > cursor]
-            return ordered[:limit] if limit else ordered
+            return results
 
 
 class _Transaction:
@@ -277,6 +304,10 @@ def _group(session, model, party_ids):
 def _matches(needle, party, services, areas, work, references, categories=()):
     texts = [party.display_name, *(item.display_name for item in services), *(item.display_name for item in areas), *(item.summary for item in work), *(item.outcome_notes or "" for item in work), *(item.reference_name or "" for item in references), *(item.organization_name or "" for item in references), *(item.relationship or "" for item in references), *(item.display_name for item in categories)]
     return any(needle in value.casefold() for value in texts)
+
+
+def _like(value):
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _profile(row): return ProviderProfile(row.party_id, row.selection_status, row.selection_reason, row.notes, row.created_at, row.updated_at, row.archived_at)

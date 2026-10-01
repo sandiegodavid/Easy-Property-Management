@@ -782,11 +782,11 @@ def _uuid(value, label):
     except ValueError as error: raise ProviderError(f"{label} is invalid.") from error
 def _fingerprint(*values):
     return hashlib.sha256(json.dumps(values, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
-def _encode_cursor(party): return f"{party.display_name.casefold()}|{party.id}"
+def _encode_cursor(party): return f"{unicodedata.normalize('NFKC', party.display_name).casefold()}|{party.id}"
 def _decode_cursor(cursor):
     try:
         name, party_id = cursor.rsplit("|", 1)
-        return name, _uuid(party_id, "Provider-list cursor")
+        return unicodedata.normalize("NFKC", name).casefold(), _uuid(party_id, "Provider-list cursor")
     except ValueError as error:
         raise ProviderError("Provider-list cursor is invalid.") from error
 def _date(value):
