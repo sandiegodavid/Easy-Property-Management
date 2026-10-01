@@ -75,36 +75,30 @@ The validator now checks canonical envelopes, revision chains, source lineage, a
 
 Suggestion: validate each operation against its source/revision and expected lifecycle consequence; validate candidate ordering, distinct source ownership, disposition metadata, timestamps, and registered values; and require the correlated audit events identified by the design for admissions, revisions, lifecycle decisions, and sensitive reads.
 
-7. [P1] STILL OPEN (re-reviewed 2026-09-30) — all four read shapes exist, but sensitive-read auditing and batch bounds are incomplete.
-
-The implementation now provides current projection, exact-revision projection, bounded evidence history/attachments, and set-based batched summaries on the caller-owned connection. Two actionable boundary defects remain.
+7. [P1] STILL OPEN (re-reviewed 2026-09-30) — the four read shapes and batch bound exist, but sensitive-read audit durability is not fail-closed.
 
 INTAKE SENSITIVE READ BOUNDARY
 
-7a. [P1] `evidence_detail()` discloses full retained evidence without the required fail-closed audit event.
+7a. [P1] `evidence_detail()` can return full evidence before its audit event is durably committed.
 
 Files:
-- application/apps/server/app/modules/intake/application/ports.py:8-12
-- application/apps/server/app/modules/intake/infrastructure/source_reader.py:110-175
+- application/apps/server/app/modules/intake/application/ports.py:32-36
+- application/apps/server/app/modules/intake/infrastructure/source_reader.py:123-205
+- application/apps/server/app/modules/intake/tests/test_intake.py:88-155
 - docs/INGEST-001_DESIGN.md:41, 225-236, 254-258
 
-The new detail method parses and returns the canonical body through a read-only interface, but the port accepts no trusted actor, reason, or correlation context and writes no `evidence_read` audit event. A direct probe returned `Sensitive evidence` while the count of Intake `evidence_read` events remained `0 -> 0`. Future INGEST-002 or AI-governance consumers can therefore use the intended consumer port to bypass the design's rule that every full-evidence read is audited fail-closed.
+The reader now requires validated audit context and inserts `evidence_read` before returning, which handles an immediate recorder failure. It still accepts a raw caller-owned connection and cannot ensure that the surrounding transaction commits. The existing general reader test calls the method under `engine.connect()` rather than a committing transaction. A direct probe through that supported shape returned `Sensitive evidence`; the audit count was `1` inside the connection and `0` after the context closed and rolled back. The caller therefore receives the body even though no durable audit evidence remains.
 
-Suggestion: separate non-sensitive comparison projections from the audited evidence-detail operation. Give the sensitive operation trusted actor/reference, reason, and correlation context, record the registered `evidence_read` event on the caller-owned writable connection in the same transaction, and fail without returning evidence if audit persistence fails. Add a test proving one successful detail read creates exactly one correlated redacted audit event and an audit-write failure returns no evidence.
+Suggestion: expose sensitive evidence through an Intake-owned application operation that commits the audit transaction before returning the detail to its caller. Keep current/exact/batched comparison projections transaction-aware and non-sensitive. If a future workflow needs evidence within a larger transaction, define a composition contract that prevents external disclosure or model invocation until the owning unit of work commits. Add a regression test using the public sensitive-read operation and prove that connection close, rollback, recorder failure, and commit failure cannot return evidence without one durable correlated audit event.
 
-INTAKE BATCHED SUMMARY BOUNDARY
+RESOLVED FINDING 7 ITEMS — 2026-09-30
 
-7b. [P2] `source_projections()` has no explicit batch-size bound.
+7b. [P2] RESOLVED — `source_projections()` enforces a maximum of 200 unique IDs before constructing SQL and retains one-query batching at the limit.
 
 Files:
-- application/apps/server/app/modules/intake/application/ports.py:8-12
-- application/apps/server/app/modules/intake/infrastructure/source_reader.py:25-61
-- application/apps/server/app/modules/intake/tests/test_intake.py:82-114
-- docs/INGEST-001_DESIGN.md:225-236, 282
-
-The method deduplicates IDs and performs one set-based query, but it accepts an arbitrarily large collection and expands it into SQLite `IN` parameters. The current test covers only two unique IDs. A downstream consumer can exceed SQLite's variable limit or create an unexpectedly expensive transaction-scoped read, so the promised bounded batch shape is not enforced.
-
-Suggestion: define a protocol-level maximum unique source count, validate it before constructing SQL, and return a typed boundary error when exceeded. Test empty input, the exact limit, duplicate IDs at the limit, and one unique ID over the limit while retaining the one-query assertion.
+- application/apps/server/app/modules/intake/application/ports.py:8, 32-36
+- application/apps/server/app/modules/intake/infrastructure/source_reader.py:34-45
+- application/apps/server/app/modules/intake/tests/test_intake.py:157-180
 
 FILE-001 → INTAKE INTEGRITY BOUNDARY
 
