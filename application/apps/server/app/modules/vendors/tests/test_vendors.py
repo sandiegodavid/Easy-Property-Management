@@ -234,6 +234,7 @@ class ProviderTests(unittest.TestCase):
             })
             self.assertEqual(created.status_code, 201)
             category_id = created.json()["id"]
+            self.assertEqual(created.json()["effectiveProviderCount"], 0)
             replay = client.post("/api/provider-categories", json={
                 "displayName": "Roofing", "description": "Roof repairs", "displayOrder": 9,
                 "idempotencyKey": "00000000-0000-4000-8000-000000000911",
@@ -249,10 +250,23 @@ class ProviderTests(unittest.TestCase):
             self.assertEqual(page.status_code, 200)
             self.assertEqual(page.json()["items"][0]["party"]["id"], party_id)
             self.assertEqual(page.json()["items"][0]["categories"][0]["displayName"], "Roofing")
+            patched = client.patch(f"/api/provider-categories/{category_id}", json={"description": "Roof repairs"})
+            self.assertEqual(patched.status_code, 200)
+            self.assertEqual(patched.json()["effectiveProviderCount"], 1)
+            archived_category = client.post(
+                f"/api/provider-categories/{category_id}/archive",
+                json={"confirmed": True, "reason": "Retired"},
+            )
+            self.assertEqual(archived_category.status_code, 200)
+            self.assertEqual(archived_category.json()["effectiveProviderCount"], 0)
+            restored_category = client.post(f"/api/provider-categories/{category_id}/restore", json={"confirmed": True})
+            self.assertEqual(restored_category.status_code, 200)
+            self.assertEqual(restored_category.json()["effectiveProviderCount"], 1)
             assignment_id = provider.json()["categories"][0]["assignmentId"]
             archived = client.post(f"/api/providers/{party_id}/category-assignments/{assignment_id}/archive", json={"confirmed": True, "reason": "Not offered"})
             self.assertEqual(archived.status_code, 200)
             self.assertEqual(client.get("/api/providers", params={"categoryState": "uncategorized"}).json()["items"][0]["party"]["id"], party_id)
+            self.assertEqual(client.get("/api/providers", params={"categoryId": "not-a-uuid"}).status_code, 422)
 
     def test_provider_page_selects_ids_with_filters_cursor_and_limit_before_hydration(self) -> None:
         party_ids = []

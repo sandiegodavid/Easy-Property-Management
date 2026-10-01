@@ -717,7 +717,8 @@ class ProviderService:
         category = next((item for item in self.unit_of_work.categories("all") if item.id == category_id), None)
         if category is None:
             raise ProviderNotFoundError("Provider category was not found.")
-        return category.to_dict()
+        count = self.unit_of_work.effective_assignment_counts([category.id]).get(category.id, 0)
+        return {**category.to_dict(), "effectiveProviderCount": count}
 
 
 class PossibleDuplicateParty(ProviderLifecycleConflict):

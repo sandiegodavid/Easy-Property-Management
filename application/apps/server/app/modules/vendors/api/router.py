@@ -120,8 +120,8 @@ class AreaResponse(ServiceResponse): countryCode: str | None
 class WorkResponse(Contract): id: str; partyId: str; propertyId: str | None; performedOn: date; summary: str; outcomeNotes: str | None; createdAt: str; updatedAt: str; archivedAt: str | None
 class ReferenceResponse(Contract): id: str; partyId: str; referenceName: str | None; organizationName: str | None; relationship: str | None; email: str | None; phone: str | None; notes: str | None; createdAt: str; updatedAt: str; archivedAt: str | None
 class ReputationLinkResponse(Contract): id: str; partyId: str; sourceKind: Literal["google", "yelp", "angi", "other"]; sourceName: str | None; normalizedSourceKey: str; url: str; normalizedUrl: str; notes: str | None; lastCheckedOn: date | None; createdAt: str; updatedAt: str; archivedAt: str | None
-class CategoryResponse(Contract): id: str; displayName: str; normalizedName: str; description: str | None; displayOrder: int; createdAt: str; updatedAt: str; archivedAt: str | None; archiveReason: str | None; effectiveProviderCount: int = 0
-class ProviderCategoryResponse(CategoryResponse): assignmentId: str; assignmentArchivedAt: str | None; assignmentArchiveReason: str | None
+class CategoryResponse(Contract): id: str; displayName: str; normalizedName: str; description: str | None; displayOrder: int; createdAt: str; updatedAt: str; archivedAt: str | None; archiveReason: str | None; effectiveProviderCount: int
+class ProviderCategoryResponse(CategoryResponse): assignmentId: str; assignmentArchivedAt: str | None; assignmentArchiveReason: str | None; effectiveProviderCount: int = 0
 class ProviderResponse(Contract): party: PartyResponse; profile: ProfileResponse; contactMethods: list[ContactResponse]; services: list[ServiceResponse]; serviceAreas: list[AreaResponse]; workHistory: list[WorkResponse]; references: list[ReferenceResponse]; reputationLinks: list[ReputationLinkResponse]; categories: list[ProviderCategoryResponse]
 class ProviderListResponse(Contract): party: PartyResponse; profile: ProfileResponse; services: list[ServiceResponse]; serviceAreas: list[AreaResponse]; workHistoryCount: int; referenceCount: int; reputationLinkCount: int; categories: list[ProviderCategoryResponse]
 class ProviderPageResponse(Contract): items: list[ProviderListResponse]; nextCursor: str | None
@@ -146,7 +146,7 @@ def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -
     def designate(party_id: str, data: ProfileInput):
         ready(True); return invoke(lambda: provider_service.designate(party_id, _profile(data)))
     @router.get("", response_model=ProviderPageResponse)
-    def list_providers(archiveState: Literal["active", "archived", "all"] = "active", search: str | None = Query(None, max_length=240), service: str | None = Query(None, max_length=160), serviceArea: str | None = Query(None, max_length=160), selectionStatus: Literal["neutral", "preferred", "avoid"] | None = None, propertyId: str | None = None, hasReference: bool | None = None, categoryId: str | None = None, categoryState: Literal["categorized", "uncategorized"] | None = None, limit: int = Query(100, ge=1, le=200), cursor: str | None = None):
+    def list_providers(archiveState: Literal["active", "archived", "all"] = "active", search: str | None = Query(None, max_length=240), service: str | None = Query(None, max_length=160), serviceArea: str | None = Query(None, max_length=160), selectionStatus: Literal["neutral", "preferred", "avoid"] | None = None, propertyId: str | None = None, hasReference: bool | None = None, categoryId: UUID | None = None, categoryState: Literal["categorized", "uncategorized"] | None = None, limit: int = Query(100, ge=1, le=200), cursor: str | None = None):
         ready()
         return invoke(lambda: provider_service.page(ProviderSearchCommand(
             archive_state=archiveState,
@@ -156,7 +156,7 @@ def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -
             selection_status=selectionStatus,
             property_id=propertyId,
             has_reference=hasReference,
-            category_id=categoryId, category_state=categoryState, limit=limit, cursor=cursor,
+            category_id=str(categoryId) if categoryId else None, category_state=categoryState, limit=limit, cursor=cursor,
         )))
     @router.get("/{party_id}", response_model=ProviderResponse)
     def detail(party_id: str, includeArchived: bool = False): ready(); return invoke(lambda: provider_service.detail(party_id, include_archived=includeArchived))
