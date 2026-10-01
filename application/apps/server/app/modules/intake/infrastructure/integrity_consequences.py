@@ -7,7 +7,7 @@ from uuid import uuid4
 from sqlalchemy import select
 
 from app.modules.files.application.ports import FileLinkReader
-from app.modules.intake.domain.models import failure_code, fingerprint
+from app.modules.intake.domain.models import canonical_json, failure_code, fingerprint
 from app.modules.intake.infrastructure.sqlalchemy_models import IntakeRevisionFileLinkModel, IntakeSourceModel
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeTransaction
 
@@ -63,6 +63,15 @@ class SQLiteIntakeIntegrityConsequences:
             now = datetime.now(UTC).isoformat()
             code = None if available else failure_code("attachment_content_unavailable")
             operation_type = "integrity_restored" if available else "integrity_failed"
+            request_payload = {
+                "integrity": source["id"],
+                "target": target,
+                # The public Intake integrity operation uses the registered
+                # failure reason for both sides of this storage transition.
+                # Retaining it here keeps FILE-triggered transitions
+                # replayable and schema-valid by the same contract.
+                "reason": "attachment_content_unavailable",
+            }
             transaction.update_source(source["id"], {
                 "technical_status": target,
                 "failure_code": code,
@@ -71,10 +80,8 @@ class SQLiteIntakeIntegrityConsequences:
             transaction.insert_operation({
                 "id": str(uuid4()), "operation_type": operation_type,
                 "idempotency_key": str(uuid4()),
-                "request_fingerprint": fingerprint({
-                    "integrity": source["id"], "state": target,
-                    "fileId": file_id, "storageState": storage_state,
-                }),
+                "request_fingerprint": fingerprint(request_payload),
+                "request_payload_json": canonical_json(request_payload),
                 "source_id": source["id"],
                 "result_revision_id": source["current_revision_id"],
                 "outcome": "succeeded", "error_code": None,
