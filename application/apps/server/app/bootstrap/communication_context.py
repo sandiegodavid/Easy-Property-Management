@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.modules.communications.domain.models import Communication
 from app.modules.finance.infrastructure.sqlalchemy_models import RentExpectationModel, RentReceiptModel
-from app.modules.intake.infrastructure.sqlalchemy_models import IntakeSourceModel
+from app.modules.intake.application.ports import IntakeSourceReader
 from app.modules.leases.infrastructure.sqlalchemy_models import LeaseModel, LeaseRenewalOptionModel
 from app.modules.maintenance.infrastructure.sqlalchemy_models import MaintenanceIssueModel
 from app.modules.owner_management.infrastructure.sqlalchemy_models import OwnerConcernModel
@@ -20,8 +20,13 @@ from app.modules.tasks.infrastructure.sqlalchemy_models import TaskModel
 
 
 class SQLiteCommunicationContextOperations:
-    def __init__(self, task_operations: TaskTransactionOperations) -> None:
+    def __init__(
+        self,
+        task_operations: TaskTransactionOperations,
+        intake_sources: IntakeSourceReader,
+    ) -> None:
         self.task_operations = task_operations
+        self.intake_sources = intake_sources
 
     def participant_snapshot(self, connection: Any, party_id: str, contact_method_id: str | None) -> tuple[str, str | None]:
         party = connection.execute(PartyModel.__table__.select().where(PartyModel.id == party_id)).mappings().first()
@@ -78,12 +83,9 @@ class SQLiteCommunicationContextOperations:
                 raise KeyError("Linked owner concern was not found.")
             return zone
         if entity_type == "intake_source":
-            source = connection.execute(select(IntakeSourceModel.id).where(
-                IntakeSourceModel.id == entity_id,
-                IntakeSourceModel.technical_status == "ready",
-                IntakeSourceModel.superseded_by_source_id.is_(None),
-            )).scalar_one_or_none()
-            if source is None:
+            source = self.intake_sources.source_state(connection, entity_id)
+            if (source is None or source["technical_status"] != "ready"
+                    or source["superseded_by_source_id"] is not None):
                 raise KeyError("Linked intake source was not found or is not ready.")
             return None
         raise ValueError("Communication link type is unsupported.")
@@ -92,7 +94,7 @@ class SQLiteCommunicationContextOperations:
         """Historical links retain their original target instead of following
         mutable source lifecycle state (notably intake supersession)."""
         if entity_type == "intake_source":
-            if connection.execute(select(IntakeSourceModel.id).where(IntakeSourceModel.id == entity_id)).scalar_one_or_none() is None:
+            if self.intake_sources.source_state(connection, entity_id) is None:
                 raise KeyError("Linked intake source was not found.")
             return None
         return self.validate_link(connection, entity_type, entity_id)
@@ -101,10 +103,7 @@ class SQLiteCommunicationContextOperations:
         """Mutable context is a read projection only; the stored COM link is immutable."""
         if entity_type != "intake_source":
             return None
-        row = connection.execute(select(
-            IntakeSourceModel.technical_status, IntakeSourceModel.current_revision_id,
-            IntakeSourceModel.superseded_by_source_id,
-        ).where(IntakeSourceModel.id == entity_id)).mappings().first()
+        row = self.intake_sources.source_state(connection, entity_id)
         if row is None:
             return {"targetExists": False}
         return {"targetExists": True, "technicalStatus": row["technical_status"],

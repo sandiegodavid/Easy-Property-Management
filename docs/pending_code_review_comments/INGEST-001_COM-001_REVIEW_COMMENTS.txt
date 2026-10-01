@@ -125,20 +125,6 @@ Focused Intake validation: 11 passed, with one unrelated Starlette/AnyIO depreca
 
 STANDARDS FINDINGS
 
-INTAKE → COMMUNICATIONS COMPOSITION BOUNDARY
-
-2. [P2] Intake-to-COM source facts are duplicated in an unused application-layer adapter and in bootstrap SQL.
-
-Files:
-- application/apps/server/app/modules/intake/application/link_validator.py:1-14
-- application/apps/server/app/bootstrap/communication_context.py:19, 80-113
-- application/apps/server/app/modules/intake/infrastructure/source_reader.py:1-15
-- docs/ARCHITECTURE.md:97-101, 183-190
-
-IntakeSourceLinkValidator imports an Intake infrastructure model from the application layer but is not wired. Bootstrap separately repeats the new-link, retained-link, and mutable-context queries against the same model. The source module therefore does not expose one consumer-neutral fact reader, and bootstrap contains persistence behavior instead of composition alone.
-
-Suggestion: move the SQLite fact reader into Intake infrastructure behind a neutral application protocol, inject it into Communication context operations, and delete the unused duplicate adapter.
-
 INTAKE PERSISTENCE PROJECTION
 
 3. [P3] Source summaries are assembled twice and can drift.
@@ -166,6 +152,21 @@ Files:
 `FileLinkReader.links_with_files_for_ids()` supplies the bounded immutable FILE metadata projection using Intake's caller-owned connection. `SQLiteIntakeTransaction.detail_projection()` now depends only on that application protocol and Intake-owned persistence models; it no longer imports FILE SQLAlchemy models or constructs FILE table joins. Bootstrap creates one FILE reader and injects it into the Intake unit of work, preserving transaction scope and one bounded set-based metadata query.
 
 Focused validation: Intake, FILE, and workspace-backup tests passed (100 passed, with one unrelated Starlette/AnyIO deprecation warning). No regression or new actionable issue remains for this finding.
+
+INTAKE → COMMUNICATIONS COMPOSITION BOUNDARY
+
+2. [P2] RESOLVED — Intake source facts are owned by the source reader and injected into Communications composition.
+
+Files:
+- application/apps/server/app/modules/intake/application/ports.py
+- application/apps/server/app/modules/intake/infrastructure/source_reader.py
+- application/apps/server/app/bootstrap/communication_context.py
+- application/apps/server/app/bootstrap/api.py
+- application/apps/server/app/platform/product_migrations.py
+
+`IntakeSourceReader.source_state()` provides the small, transaction-aware source state required for COM-001 link creation, retained-link validation, and mutable link context. `SQLiteCommunicationContextOperations` consumes that protocol rather than importing or querying Intake SQLAlchemy models. The unused application-layer `IntakeSourceLinkValidator` has been removed; bootstrap and schema-validation composition inject the reader explicitly.
+
+Focused validation: Communications and Maintenance workflow tests passed (49 passed, with one unrelated Starlette/AnyIO deprecation warning). No regression or new actionable issue remains for this finding.
 
 VALIDATION
 

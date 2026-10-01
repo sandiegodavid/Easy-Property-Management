@@ -24,6 +24,7 @@ from app.modules.files.infrastructure.schema_validation import validate_file_dat
 from app.modules.finance.infrastructure.schema_validation import validate_finance_data, validate_finance_schema
 from app.modules.inspections.infrastructure.schema_validation import validate_inspection_schema
 from app.modules.intake.infrastructure.schema_validation import validate_intake_schema
+from app.modules.intake.infrastructure.source_reader import SQLiteIntakeSourceReader
 from app.modules.leases.infrastructure.schema_validation import validate_lease_schema
 from app.modules.maintenance.infrastructure.schema_validation import validate_maintenance_schema
 from app.modules.owner_accounting.infrastructure.schema_validation import validate_owner_accounting_schema
@@ -107,7 +108,13 @@ def validate_latest_schema(database_path: Path) -> None:
             validate_file_data(connection, build_file_link_policy_registry().as_mapping())
             validate_intake_schema(connection)
             validate_ai_governance_schema(connection, ACTION_REGISTRY, REDACTION_PROFILE_REGISTRY, ADAPTER_REGISTRY, APPROVAL_EVIDENCE_VALIDATORS, SOURCE_VALIDATORS)
-            validate_communication_schema(connection, SQLiteCommunicationContextOperations(SQLiteTaskTransactionOperations()))
+            validate_communication_schema(
+                connection,
+                SQLiteCommunicationContextOperations(
+                    SQLiteTaskTransactionOperations(),
+                    SQLiteIntakeSourceReader(),
+                ),
+            )
             validate_finance_data(connection)
     except ProductSchemaError:
         raise

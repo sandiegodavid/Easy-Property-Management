@@ -17,6 +17,27 @@ from app.modules.intake.infrastructure.sqlalchemy_models import (
 class SQLiteIntakeSourceReader:
     """Read non-sensitive current and historical facts on a caller transaction."""
 
+    def source_state(
+        self,
+        connection: Any,
+        source_id: str,
+    ) -> Mapping[str, object] | None:
+        """Return the small mutable source state needed by other contexts.
+
+        This deliberately stays distinct from the operator-facing projection:
+        consumers can make their own policy decisions without importing Intake
+        persistence models or inheriting an HTTP-shaped response.
+        """
+        row = connection.execute(
+            select(
+                IntakeSourceModel.id,
+                IntakeSourceModel.technical_status,
+                IntakeSourceModel.current_revision_id,
+                IntakeSourceModel.superseded_by_source_id,
+            ).where(IntakeSourceModel.id == source_id),
+        ).mappings().first()
+        return None if row is None else dict(row)
+
     def source_projection(self, connection: Any, source_id: str) -> dict[str, object] | None:
         return dict(self.source_projections(connection, (source_id,)).get(source_id, {})) or None
 

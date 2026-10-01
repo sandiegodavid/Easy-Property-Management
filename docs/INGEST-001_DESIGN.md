@@ -225,9 +225,8 @@ The implementation follows the existing module layout under `application/apps/se
 Required consumer-neutral ports are:
 
 - `IntakeAdmissionPort` — trusted atomic source admission with its complete attachment set;
-- `IntakeSourceReader` — current projection, exact revision, bounded evidence detail, and batched summary reads;
+- `IntakeSourceReader` — current source state, projections, exact revisions, bounded evidence detail, and batched summary reads; it is also the COM-001 source-fact boundary for `intake_source` links;
 - `IntakeAttentionOperations` — transaction-aware attention transitions for INGEST-002;
-- `IntakeSourceLinkValidator` — validates COM-001 `intake_source` links;
 - `IntakeFileLinkValidator` — fails closed for direct generic File API create/archive operations because a valid Intake attachment also needs an immutable revision association. Intake alone writes the file, link, and association together through FILE-001's caller-owned transaction API; and
 - `IntakeRetentionValidator` — contributes exact-schema and cross-table/source-file integrity checks.
 

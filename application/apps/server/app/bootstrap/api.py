@@ -235,11 +235,12 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         # Its dedicated endpoint owns the report audit event and correlation ID.
         file_link_policies,
     )
+    intake_source_reader = SQLiteIntakeSourceReader()
     intake_unit_of_work = SQLiteIntakeUnitOfWork(service.paths.database, recorder, file_link_reader)
     intake = IntakeService(
         intake_unit_of_work,
         files,
-        attention_operations=SQLiteIntakeAttentionOperations(recorder, SQLiteIntakeSourceReader()),
+        attention_operations=SQLiteIntakeAttentionOperations(recorder, intake_source_reader),
     )
     intake_admission = TrustedIntakeAdmission(intake)
     file_verification = FileStorageVerificationService(
@@ -250,7 +251,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     backups = BackupService(service, recorder, lambda database: AuditRecorder(SQLiteAuditRepository(database)), remote_materializer=remote_materializer)
     tasks = TaskService(SQLiteTaskUnitOfWork(service.paths.database, recorder))
     communications = CommunicationService(SQLiteCommunicationUnitOfWork(
-        service.paths.database, recorder, SQLiteCommunicationContextOperations(task_transaction_operations),
+        service.paths.database, recorder,
+        SQLiteCommunicationContextOperations(task_transaction_operations, intake_source_reader),
     ))
     owner_concern_guard = SQLiteOwnerConcernPropertyArchiveGuard()
     portfolio = PortfolioService(SQLitePortfolioUnitOfWork(

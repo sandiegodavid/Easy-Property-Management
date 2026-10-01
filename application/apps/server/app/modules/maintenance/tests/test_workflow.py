@@ -23,6 +23,7 @@ from app.modules.communications.application.service import (
     ParticipantInput,
 )
 from app.modules.communications.infrastructure.link_reader import SQLiteCommunicationLinkReader
+from app.modules.intake.infrastructure.source_reader import SQLiteIntakeSourceReader
 from app.modules.communications.infrastructure.unit_of_work import SQLiteCommunicationUnitOfWork
 from app.modules.files.application.ports import FileLink
 from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
@@ -331,7 +332,9 @@ class MaintenanceWorkflowTests(unittest.TestCase):
         party_id = self.portfolio.get_property(party_property.id)["ownerships"][0]["partyId"]
         communications = CommunicationService(SQLiteCommunicationUnitOfWork(
             self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
-            SQLiteCommunicationContextOperations(SQLiteTaskTransactionOperations()),
+            SQLiteCommunicationContextOperations(
+                SQLiteTaskTransactionOperations(), SQLiteIntakeSourceReader(),
+            ),
         ))
         communication = communications.create(CommunicationCommand(
             "inbound", "phone", "Backup repair call", "A recorded maintenance communication.",
@@ -362,7 +365,9 @@ class MaintenanceWorkflowTests(unittest.TestCase):
         self.assertEqual("work_completed", detail["actualWorkCompleted"]["effectiveKind"])
         restored_communications = CommunicationService(SQLiteCommunicationUnitOfWork(
             database, AuditRecorder(SQLiteAuditRepository(database)),
-            SQLiteCommunicationContextOperations(SQLiteTaskTransactionOperations()),
+            SQLiteCommunicationContextOperations(
+                SQLiteTaskTransactionOperations(), SQLiteIntakeSourceReader(),
+            ),
         ))
         listed, _ = restored_communications.list(entity_type="maintenance_issue", entity_id=issue["id"])
         self.assertEqual([communication["id"]], [item["id"] for item in listed])
