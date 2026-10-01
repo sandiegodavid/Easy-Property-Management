@@ -11,6 +11,8 @@ from app.modules.vendors.infrastructure.sqlalchemy_models import (
     ProviderProfileModel,
 )
 
+MAX_PROVIDER_CONTEXTS = 200
+
 
 class SQLiteProviderContextReader:
     def profile_context(self, connection: Any, party_id: str) -> Mapping[str, object] | None:
@@ -22,6 +24,7 @@ class SQLiteProviderContextReader:
         party_ids = set(party_ids)
         if not party_ids:
             return {}
+        _require_batch_limit(party_ids)
         return {
             row["party_id"]: row
             for row in connection.execute(select(
@@ -36,6 +39,7 @@ class SQLiteProviderContextReader:
         party_ids = set(party_ids)
         if not party_ids:
             return {}
+        _require_batch_limit(party_ids)
         rows = connection.execute(
             select(
                 ProviderCategoryAssignmentModel.id.label("assignment_id"),
@@ -64,3 +68,8 @@ class SQLiteProviderContextReader:
             ProviderCategoryModel.display_order, ProviderCategoryModel.normalized_name,
             ProviderCategoryModel.id,
         )).mappings())
+
+
+def _require_batch_limit(party_ids: Collection[str]) -> None:
+    if len(party_ids) > MAX_PROVIDER_CONTEXTS:
+        raise ValueError(f"Provider context batches cannot exceed {MAX_PROVIDER_CONTEXTS} providers.")

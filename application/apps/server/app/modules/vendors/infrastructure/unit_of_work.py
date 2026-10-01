@@ -145,9 +145,11 @@ class SQLiteProviderUnitOfWork(ProviderUnitOfWork):
             if has_reference is not None:
                 predicate = "EXISTS (SELECT 1 FROM provider_references pr WHERE pr.party_id = pp.party_id AND pr.archived_at IS NULL)"
                 conditions.append(predicate if has_reference else f"NOT {predicate}")
-            effective_category = "EXISTS (SELECT 1 FROM provider_category_assignments pca JOIN provider_categories pc ON pc.id = pca.category_id WHERE pca.provider_party_id = pp.party_id AND pca.archived_at IS NULL AND pc.archived_at IS NULL)"
+            # Categories are effective only while their provider profile is active.
+            # Archive history remains available from the provider detail projection.
+            effective_category = "(pp.archived_at IS NULL AND EXISTS (SELECT 1 FROM provider_category_assignments pca JOIN provider_categories pc ON pc.id = pca.category_id WHERE pca.provider_party_id = pp.party_id AND pca.archived_at IS NULL AND pc.archived_at IS NULL))"
             if category_id:
-                conditions.append("EXISTS (SELECT 1 FROM provider_category_assignments pca JOIN provider_categories pc ON pc.id = pca.category_id WHERE pca.provider_party_id = pp.party_id AND pca.archived_at IS NULL AND pc.archived_at IS NULL AND pca.category_id = :category_id)")
+                conditions.append("pp.archived_at IS NULL AND EXISTS (SELECT 1 FROM provider_category_assignments pca JOIN provider_categories pc ON pc.id = pca.category_id WHERE pca.provider_party_id = pp.party_id AND pca.archived_at IS NULL AND pc.archived_at IS NULL AND pca.category_id = :category_id)")
                 parameters["category_id"] = category_id
             if category_state == "categorized":
                 conditions.append(effective_category)
@@ -161,7 +163,7 @@ class SQLiteProviderUnitOfWork(ProviderUnitOfWork):
                     OR EXISTS (SELECT 1 FROM provider_service_areas pa WHERE pa.party_id = pp.party_id AND pa.archived_at IS NULL AND unicode_casefold(pa.display_name) LIKE :search ESCAPE '\\')
                     OR EXISTS (SELECT 1 FROM provider_work_history pw WHERE pw.party_id = pp.party_id AND pw.archived_at IS NULL AND (unicode_casefold(pw.summary) LIKE :search ESCAPE '\\' OR unicode_casefold(coalesce(pw.outcome_notes, '')) LIKE :search ESCAPE '\\'))
                     OR EXISTS (SELECT 1 FROM provider_references pr WHERE pr.party_id = pp.party_id AND pr.archived_at IS NULL AND (unicode_casefold(coalesce(pr.reference_name, '')) LIKE :search ESCAPE '\\' OR unicode_casefold(coalesce(pr.organization_name, '')) LIKE :search ESCAPE '\\' OR unicode_casefold(coalesce(pr.relationship, '')) LIKE :search ESCAPE '\\'))
-                    OR EXISTS (SELECT 1 FROM provider_category_assignments pca JOIN provider_categories pc ON pc.id = pca.category_id WHERE pca.provider_party_id = pp.party_id AND pca.archived_at IS NULL AND pc.archived_at IS NULL AND unicode_casefold(pc.display_name) LIKE :search ESCAPE '\\')
+                    OR (pp.archived_at IS NULL AND EXISTS (SELECT 1 FROM provider_category_assignments pca JOIN provider_categories pc ON pc.id = pca.category_id WHERE pca.provider_party_id = pp.party_id AND pca.archived_at IS NULL AND pc.archived_at IS NULL AND unicode_casefold(pc.display_name) LIKE :search ESCAPE '\\'))
                 )""")
             if cursor:
                 conditions.append("(unicode_casefold(p.display_name) > :cursor_name OR (unicode_casefold(p.display_name) = :cursor_name AND p.id > :cursor_id))")
@@ -186,7 +188,11 @@ class SQLiteProviderUnitOfWork(ProviderUnitOfWork):
             active_work = _group(session, ProviderWorkHistoryModel, party_ids)
             active_references = _group(session, ProviderReferenceModel, party_ids)
             active_reputation_links = _group(session, ProviderReputationLinkModel, party_ids)
-            effective_categories = _assignment_pairs(session, party_ids, include_archived=False)
+            # Effective categories are a current-provider projection.  Keep the
+            # assignments themselves for historical detail, but do not let an
+            # archived profile retain a current categorization in list results.
+            active_party_ids = [item.party_id for item in profiles.values() if item.archived_at is None]
+            effective_categories = _assignment_pairs(session, active_party_ids, include_archived=False)
             results = []
             for party_id in party_ids:
                 profile = profiles.get(party_id)
