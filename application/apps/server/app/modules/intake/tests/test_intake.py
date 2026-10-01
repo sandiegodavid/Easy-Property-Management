@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 
 from app.modules.audit.api.router import build_router as build_audit_router
 from app.modules.audit.application.recorder import AuditRecorder
@@ -21,6 +22,10 @@ from app.modules.files.infrastructure.content_store import FilesystemContentStor
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
 from app.modules.intake.api.router import build_router
 from app.modules.intake.application.file_links import IntakeSourceFileLinkValidator
+from app.modules.intake.application.ports import (
+    IntakeEvidenceDetailRequest,
+    MAX_INTAKE_SOURCE_BATCH,
+)
 from app.modules.intake.application.service import (
     AttachmentInput,
     IntakeAdmissionCommand,
@@ -34,11 +39,14 @@ from app.modules.intake.domain.models import (
     IntakeAdmissionContext,
     IntakeConflictError,
     IntakeError,
+    IntakeNotFoundError,
+    IntakeReadLimitError,
 )
 from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
 from app.modules.intake.domain.models import IntakePayloadTooLargeError
 from app.modules.intake.infrastructure.schema_validation import validate_intake_data
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
+from app.modules.intake.infrastructure.source_reader import SQLiteIntakeSourceReader
 from app.platform.migration_errors import MigrationSchemaError
 from app.platform.product_migrations import initialize_latest_schema, validate_latest_schema
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
@@ -98,6 +106,124 @@ class IntakeTests(TestCase):
         detail=self.service.correct(source["sourceId"], EvidenceEnvelope("operator_note", "internal", "Corrected evidence.", "2026-01-01T12:00:00+00:00"), "clarified", str(uuid4()))
         self.assertEqual(2, len(detail["revisions"])); self.assertEqual("Corrected evidence.", detail["evidence"]["body"])
         validate_latest_schema(self.database)
+
+    def test_consumer_evidence_detail_is_exact_bounded_and_fail_closed(self) -> None:
+        source = self.service.admit(self.command(body="Original evidence."))
+        corrected = self.service.correct(
+            source["sourceId"],
+            EvidenceEnvelope("operator_note", "internal", "Corrected evidence.", "2026-01-01T12:00:00+00:00"),
+            "clarified",
+            str(uuid4()),
+        )
+        self.assertFalse(hasattr(SQLiteIntakeSourceReader(), "evidence_detail"))
+        correlation_id = str(uuid4())
+        request = IntakeEvidenceDetailRequest(
+            source["sourceId"], source["revision"], "ai_assistant", "connection-1",
+            "ai_governance_review", correlation_id, max_history=1, max_attachments=1,
+        )
+        detail = self.service.evidence_detail(request)
+        self.assertEqual(source["revision"], detail["revision"])
+        self.assertEqual("Original evidence.", detail["evidence"]["body"])
+        self.assertTrue(detail["historyTruncated"])
+        self.assertEqual([], detail["attachments"])
+        self.assertNotEqual(corrected["revision"], detail["revision"])
+        engine = self.service.unit_of_work.engine
+        with engine.connect() as connection:
+            audit = connection.exec_driver_sql(
+                "SELECT actor_kind, actor_reference, reason, correlation_id FROM audit_events WHERE correlation_id = ?",
+                (correlation_id,),
+            ).mappings().one()
+        self.assertEqual("ai_assistant", audit["actor_kind"])
+        self.assertEqual("connection-1", audit["actor_reference"])
+        self.assertEqual("ai_governance_review", audit["reason"])
+        self.assertEqual(correlation_id, audit["correlation_id"])
+        with self.assertRaises(IntakeError):
+            IntakeEvidenceDetailRequest(
+                source["sourceId"], source["revision"], "local_operator", None,
+                "intake_evidence_read", str(uuid4()), max_history=0,
+            )
+        other = self.service.admit(self.command(body="Other evidence."))
+        with self.assertRaises(IntakeNotFoundError):
+            self.service.evidence_detail(IntakeEvidenceDetailRequest(
+                other["sourceId"], source["revision"], "local_operator", None,
+                "intake_evidence_read", str(uuid4()),
+            ))
+
+        class FailingRecorder:
+            def record_change(self, *args, **kwargs):
+                raise RuntimeError("audit unavailable")
+
+        failed_correlation = str(uuid4())
+        failing = IntakeService(
+            SQLiteIntakeUnitOfWork(self.database, FailingRecorder()),
+            attention_operations=self.attention_operations,
+        )
+        with self.assertRaisesRegex(RuntimeError, "audit unavailable"):
+            failing.evidence_detail(IntakeEvidenceDetailRequest(
+                source["sourceId"], source["revision"], "local_operator", None,
+                "intake_evidence_read", failed_correlation,
+            ))
+        with engine.connect() as connection:
+            self.assertEqual(0, connection.exec_driver_sql(
+                "SELECT COUNT(*) FROM audit_events WHERE correlation_id = ?", (failed_correlation,),
+            ).scalar_one())
+
+        def fail_commit(_connection):
+            raise RuntimeError("commit unavailable")
+
+        commit_correlation = str(uuid4())
+        event.listen(engine, "commit", fail_commit)
+        try:
+            with self.assertRaisesRegex(RuntimeError, "commit unavailable"):
+                self.service.evidence_detail(IntakeEvidenceDetailRequest(
+                    source["sourceId"], source["revision"], "local_operator", None,
+                    "intake_evidence_read", commit_correlation,
+                ))
+        finally:
+            event.remove(engine, "commit", fail_commit)
+        with engine.connect() as connection:
+            self.assertEqual(0, connection.exec_driver_sql(
+                "SELECT COUNT(*) FROM audit_events WHERE correlation_id = ?", (commit_correlation,),
+            ).scalar_one())
+
+    def test_consumer_source_reader_batches_current_and_exact_historical_projections(self) -> None:
+        first = self.service.admit(self.command(body="First evidence."))
+        second = self.service.admit(self.command(body="Second evidence."))
+        corrected = self.service.correct(
+            first["sourceId"],
+            EvidenceEnvelope("operator_note", "internal", "First correction.", "2026-01-01T12:00:00+00:00"),
+            "clarified",
+            str(uuid4()),
+        )
+        reader = SQLiteIntakeSourceReader()
+        engine = self.service.unit_of_work.engine
+        statements: list[str] = []
+
+        def capture(*args):
+            if args[2].lstrip().upper().startswith("SELECT"):
+                statements.append(args[2])
+
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            with engine.connect() as connection:
+                self.assertEqual({}, reader.source_projections(connection, ()))
+                before = len(statements)
+                summaries = reader.source_projections(
+                    connection,
+                    (first["sourceId"], second["sourceId"], first["sourceId"]),
+                )
+                self.assertEqual(1, len(statements) - before)
+                self.assertEqual({first["sourceId"], second["sourceId"]}, set(summaries))
+                self.assertEqual(corrected["revision"], summaries[first["sourceId"]]["revision"])
+                original = reader.revision_projection(connection, first["sourceId"], first["revision"])
+                self.assertEqual(first["revision"], original["revision"])
+                self.assertIsNone(reader.revision_projection(connection, second["sourceId"], first["revision"]))
+                exact_limit = (first["sourceId"], *(str(uuid4()) for _ in range(MAX_INTAKE_SOURCE_BATCH - 1)))
+                self.assertIn(first["sourceId"], reader.source_projections(connection, exact_limit))
+                with self.assertRaises(IntakeReadLimitError):
+                    reader.source_projections(connection, (*exact_limit, str(uuid4())))
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
 
     def test_correction_replay_returns_its_recorded_revision_after_a_later_correction(self) -> None:
         source = self.service.admit(self.command())

@@ -6,7 +6,12 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import uuid4
 
-from app.modules.intake.application.ports import IntakeAttentionOperations, IntakeFileOperations, IntakeUnitOfWork
+from app.modules.intake.application.ports import (
+    IntakeAttentionOperations,
+    IntakeEvidenceDetailRequest,
+    IntakeFileOperations,
+    IntakeUnitOfWork,
+)
 from app.modules.intake.domain.models import (
     AttentionTransition,
     EvidenceEnvelope,
@@ -171,6 +176,31 @@ class IntakeService:
             tx.record(entity_type="intake_source", entity_id=source_id, action="evidence_read", before=None,
                       after={"sourceId": source_id, "revision": result["revision"]}, reason="intake_evidence_read",
                       correlation_id=str(uuid4()))
+            return result
+        return self.unit_of_work.write(operation)
+
+    def evidence_detail(self, request: IntakeEvidenceDetailRequest) -> dict[str, object]:
+        """Durably audit a bounded, exact-revision disclosure before returning it."""
+        def operation(tx):
+            result = tx.evidence_detail_projection(
+                request.source_id,
+                request.revision_id,
+                max_history=request.max_history,
+                max_attachments=request.max_attachments,
+            )
+            if result is None:
+                raise IntakeNotFoundError("Intake source revision was not found.")
+            tx.record(
+                entity_type="intake_source",
+                entity_id=request.source_id,
+                action="evidence_read",
+                before=None,
+                after={"sourceId": request.source_id, "revision": request.revision_id},
+                reason=request.reason,
+                correlation_id=request.correlation_id,
+                actor_kind=request.actor_kind,
+                actor_reference=request.actor_reference,
+            )
             return result
         return self.unit_of_work.write(operation)
 

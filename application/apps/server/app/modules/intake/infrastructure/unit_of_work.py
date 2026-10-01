@@ -15,6 +15,7 @@ from app.modules.intake.infrastructure.sqlalchemy_models import (
     IntakeSourceModel,
     IntakeSourceOperationModel,
 )
+from app.modules.intake.infrastructure.source_reader import SQLiteIntakeSourceReader
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 T = TypeVar("T")
@@ -144,3 +145,54 @@ class SQLiteIntakeTransaction:
         )
         metadata = {row["link_id"]: row for row in self.connection.execute(select(FileLinkModel.id.label("link_id"), FileRecordModel.id.label("file_id"), FileRecordModel.original_name, FileRecordModel.media_type, FileRecordModel.size_bytes, FileRecordModel.content_sha256, FileContentLocationModel.storage_state, FileContentLocationModel.verified_at).join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id).join(FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id).where(FileLinkModel.id.in_([row["file_link_id"] for row in links]))).mappings()}
         return {**projection, "revision": current["id"], "fingerprint": current["content_fingerprint"], "attachmentCount": len(links), "evidence": json.loads(current["envelope_json"]), "revisions": [{"id": row["id"], "number": row["revision_number"], "kind": row["revision_kind"], "createdAt": row["created_at"], "correctionReason": row["correction_reason"]} for row in revisions], "attachments": [{"fileLinkId": row["file_link_id"], "role": row["attachment_role"], "displayOrder": row["display_order"], "file": dict(metadata[row["file_link_id"]]) if row["file_link_id"] in metadata else None} for row in links], "operations": [{"type": row["operation_type"], "outcome": row["outcome"], "createdAt": row["created_at"]} for row in operations], "duplicateCandidates": [{"sourceId": row["source_id"], "candidateSourceId": row["candidate_source_id"], "reason": row["reason"], "disposition": row["disposition"]} for row in candidates]}
+
+    def evidence_detail_projection(self, source_id: str, revision_id: str, *, max_history: int,
+                                   max_attachments: int) -> dict[str, object] | None:
+        """Return bounded sensitive evidence only for the audited application port."""
+        revision = SQLiteIntakeSourceReader().revision_projection(
+            self.connection,
+            source_id,
+            revision_id,
+        )
+        if revision is None:
+            return None
+        envelope = self.connection.execute(select(IntakeEvidenceRevisionModel.envelope_json).where(
+            IntakeEvidenceRevisionModel.id == revision_id,
+            IntakeEvidenceRevisionModel.source_id == source_id,
+        )).scalar_one()
+        attachments = list(self.connection.execute(select(
+            IntakeRevisionFileLinkModel.file_link_id,
+            IntakeRevisionFileLinkModel.attachment_role,
+            IntakeRevisionFileLinkModel.display_order,
+        ).where(
+            IntakeRevisionFileLinkModel.revision_id == revision_id,
+        ).order_by(
+            IntakeRevisionFileLinkModel.display_order,
+        ).limit(max_attachments + 1)).mappings())
+        history = list(self.connection.execute(select(
+            IntakeEvidenceRevisionModel.id,
+            IntakeEvidenceRevisionModel.revision_number,
+            IntakeEvidenceRevisionModel.revision_kind,
+            IntakeEvidenceRevisionModel.created_at,
+            IntakeEvidenceRevisionModel.correction_reason,
+        ).where(
+            IntakeEvidenceRevisionModel.source_id == source_id,
+        ).order_by(
+            IntakeEvidenceRevisionModel.revision_number.desc(),
+        ).limit(max_history + 1)).mappings())
+        return {
+            **revision,
+            "evidence": json.loads(envelope),
+            "attachments": [
+                {"fileLinkId": row["file_link_id"], "role": row["attachment_role"],
+                 "displayOrder": row["display_order"]}
+                for row in attachments[:max_attachments]
+            ],
+            "attachmentsTruncated": len(attachments) > max_attachments,
+            "history": [
+                {"id": row["id"], "number": row["revision_number"], "kind": row["revision_kind"],
+                 "createdAt": row["created_at"], "correctionReason": row["correction_reason"]}
+                for row in history[:max_history]
+            ],
+            "historyTruncated": len(history) > max_history,
+        }

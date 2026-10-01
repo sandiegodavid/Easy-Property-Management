@@ -41,6 +41,10 @@ class IntakeNotFoundError(IntakeError):
     code = "intake_not_found"
 
 
+class IntakeReadLimitError(IntakeError):
+    code = "intake_read_limit"
+
+
 class IntakePayloadTooLargeError(IntakeError):
     code = "intake_payload_too_large"
 

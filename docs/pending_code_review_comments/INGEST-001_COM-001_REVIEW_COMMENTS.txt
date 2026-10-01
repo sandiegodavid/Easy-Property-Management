@@ -31,16 +31,18 @@ The validator now checks canonical envelopes, revision chains, source lineage, a
 
 Suggestion: validate each operation against its source/revision and expected lifecycle consequence; validate candidate ordering, distinct source ownership, disposition metadata, timestamps, and registered values; and require the correlated audit events identified by the design for admissions, revisions, lifecycle decisions, and sensitive reads.
 
-7. [P2] The consumer source reader implements only one of the four required read shapes.
+7. [P1] RESOLVED (2026-10-01) — Intake now exposes the required bounded, audited consumer evidence-detail operation.
 
 Files:
-- application/apps/server/app/modules/intake/application/ports.py:8-9
-- application/apps/server/app/modules/intake/infrastructure/source_reader.py:7-15
-- docs/INGEST-001_DESIGN.md:225-236, 294
+- application/apps/server/app/modules/intake/application/ports.py
+- application/apps/server/app/modules/intake/application/service.py
+- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py
+- application/apps/server/app/modules/intake/infrastructure/source_reader.py
+- application/apps/server/app/modules/intake/tests/test_intake.py
 
-The reader exposes only current source_projection(). Exact-revision lookup, bounded evidence detail, and batched summary reads are absent. Future AI governance/review consumers would have to query Intake persistence directly or open unbounded per-source reads.
+`IntakeEvidenceDetailRequest` supplies the exact source/revision, bounded history and attachment limits, and trusted actor/reason/correlation context. `IntakeService.evidence_detail()` reads and writes its required `evidence_read` audit record in one Intake-owned transaction, returning only after commit. The caller-owned reader remains restricted to non-sensitive current, batched, and exact-revision comparison projections.
 
-Suggestion: finish the consumer-neutral protocol and implement its reads on the caller-owned connection with explicit bounds and set-based batching.
+Focused tests cover current and historical revisions, bounded batching, malformed bounds, missing or mismatched IDs, recorder failure, and commit rollback.
 
 RESOLVED SPECIFICATION FINDINGS
 
