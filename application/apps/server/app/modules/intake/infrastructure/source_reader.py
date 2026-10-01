@@ -6,6 +6,12 @@ from typing import Any, Collection, Mapping
 
 from sqlalchemy import func, select
 
+from app.modules.audit.application.recorder import AuditRecorder
+from app.modules.intake.application.ports import (
+    MAX_INTAKE_SOURCE_BATCH,
+    IntakeEvidenceReadContext,
+)
+from app.modules.intake.domain.models import IntakeReadLimitError
 from app.modules.intake.infrastructure.sqlalchemy_models import (
     IntakeEvidenceRevisionModel,
     IntakeRevisionFileLinkModel,
@@ -19,6 +25,9 @@ class SQLiteIntakeSourceReader:
     _MAX_HISTORY = 100
     _MAX_ATTACHMENTS = 20
 
+    def __init__(self, recorder: AuditRecorder) -> None:
+        self._recorder = recorder
+
     def source_projection(self, connection: Any, source_id: str) -> dict[str, object] | None:
         return dict(self.source_projections(connection, (source_id,)).get(source_id, {})) or None
 
@@ -30,6 +39,10 @@ class SQLiteIntakeSourceReader:
         ids = tuple(dict.fromkeys(source_ids))
         if not ids:
             return {}
+        if len(ids) > MAX_INTAKE_SOURCE_BATCH:
+            raise IntakeReadLimitError(
+                f"At most {MAX_INTAKE_SOURCE_BATCH} unique Intake source IDs may be read at once.",
+            )
         counts = (
             select(
                 IntakeRevisionFileLinkModel.revision_id.label("revision_id"),
@@ -113,6 +126,7 @@ class SQLiteIntakeSourceReader:
         source_id: str,
         revision_id: str,
         *,
+        audit: IntakeEvidenceReadContext,
         max_history: int = _MAX_HISTORY,
     ) -> Mapping[str, object] | None:
         if isinstance(max_history, bool) or not isinstance(max_history, int) or not 1 <= max_history <= self._MAX_HISTORY:
@@ -150,7 +164,7 @@ class SQLiteIntakeSourceReader:
             .order_by(IntakeEvidenceRevisionModel.revision_number.desc())
             .limit(max_history + 1),
         ).mappings())
-        return {
+        detail = {
             **revision,
             "evidence": json.loads(evidence),
             "attachments": [
@@ -173,6 +187,22 @@ class SQLiteIntakeSourceReader:
             ],
             "historyTruncated": len(history) > max_history,
         }
+        # This is intentionally the final operation: if audit persistence
+        # fails, the caller receives no sensitive body or participant data and
+        # its surrounding transaction rolls back the failed audit attempt.
+        self._recorder.record_change(
+            connection.connection.driver_connection,
+            entity_type="intake_source",
+            entity_id=source_id,
+            action="evidence_read",
+            before=None,
+            after={"sourceId": source_id, "revision": revision_id},
+            reason=audit.reason,
+            correlation_id=audit.correlation_id,
+            actor_kind=audit.actor_kind,
+            actor_reference=audit.actor_reference,
+        )
+        return detail
 
     @staticmethod
     def _summary(row: Mapping[str, object], *, fingerprint: str | None = None) -> dict[str, object]:

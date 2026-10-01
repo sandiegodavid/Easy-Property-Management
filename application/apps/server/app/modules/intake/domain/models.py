@@ -27,6 +27,10 @@ class IntakeNotFoundError(IntakeError):
     code = "intake_not_found"
 
 
+class IntakeReadLimitError(IntakeError):
+    code = "intake_read_limit"
+
+
 def utc_now() -> str: return datetime.now(UTC).isoformat()
 
 
