@@ -138,10 +138,11 @@ from app.modules.tenants.infrastructure.unit_of_work import (
     SQLiteTenantRoleSummaryReader,
     SQLiteTenantUnitOfWork,
 )
-from app.modules.vendors.api.router import build_router as build_provider_router
+from app.modules.vendors.api.router import build_category_router, build_router as build_provider_router
 from app.modules.vendors.application.service import ProviderService
 from app.modules.vendors.domain.audit_policy import (
     PROVIDER_ACTIVITY_SNAPSHOT_POLICY,
+    PROVIDER_CATEGORY_ACTIVITY_POLICY,
     PROVIDER_REPUTATION_LINK_ACTIVITY_POLICY,
 )
 from app.modules.vendors.infrastructure.context_reader import SQLiteProviderContextReader
@@ -404,6 +405,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("provider_work_history", 1): DEFAULT_SNAPSHOT_POLICY,
         ("provider_reference", 1): DEFAULT_SNAPSHOT_POLICY,
         ("provider_reputation_link", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("provider_category", 1): DEFAULT_SNAPSHOT_POLICY,
+        ("provider_category_assignment", 1): DEFAULT_SNAPSHOT_POLICY,
         ("rent_expectation", 1): DEFAULT_SNAPSHOT_POLICY,
         ("rent_expectation_timeliness_review", 1): DEFAULT_SNAPSHOT_POLICY,
         ("rent_receipt", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -459,6 +462,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         ("provider_work_history", 1): PROVIDER_ACTIVITY_SNAPSHOT_POLICY,
         ("provider_reference", 1): PROVIDER_ACTIVITY_SNAPSHOT_POLICY,
         ("provider_reputation_link", 1): PROVIDER_REPUTATION_LINK_ACTIVITY_POLICY,
+        ("provider_category", 1): PROVIDER_CATEGORY_ACTIVITY_POLICY,
+        ("provider_category_assignment", 1): PROVIDER_CATEGORY_ACTIVITY_POLICY,
         ("rent_expectation", 1): EXPECTATION_ACTIVITY_POLICY,
         ("rent_expectation_timeliness_review", 1): REVIEW_ACTIVITY_POLICY,
         ("rent_receipt", 1): RECEIPT_ACTIVITY_POLICY,
@@ -503,6 +508,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_portfolio_router(portfolio, runtime))
     app.include_router(build_party_router(party_identities, party_contacts, runtime))
     app.include_router(build_provider_router(providers, runtime))
+    app.include_router(build_category_router(providers, runtime))
     app.include_router(build_tenant_router(tenants, runtime))
     app.include_router(build_lease_router(leases, runtime))
     app.include_router(build_inspection_router(inspections, runtime))

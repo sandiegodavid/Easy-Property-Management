@@ -4,6 +4,51 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
+class ProviderCategory:
+    id: str
+    display_name: str
+    normalized_name: str
+    description: str | None
+    display_order: int
+    created_at: str
+    updated_at: str
+    archived_at: str | None
+    archive_reason: str | None
+    create_idempotency_key: str
+    create_request_fingerprint: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id, "displayName": self.display_name,
+            "normalizedName": self.normalized_name, "description": self.description,
+            "displayOrder": self.display_order, "createdAt": self.created_at,
+            "updatedAt": self.updated_at, "archivedAt": self.archived_at,
+            "archiveReason": self.archive_reason,
+        }
+
+
+@dataclass(frozen=True)
+class ProviderCategoryAssignment:
+    id: str
+    provider_party_id: str
+    category_id: str
+    created_at: str
+    updated_at: str
+    archived_at: str | None
+    archive_reason: str | None
+    create_idempotency_key: str
+    create_request_fingerprint: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "id": self.id, "providerPartyId": self.provider_party_id,
+            "categoryId": self.category_id, "createdAt": self.created_at,
+            "updatedAt": self.updated_at, "archivedAt": self.archived_at,
+            "archiveReason": self.archive_reason,
+        }
+
+
+@dataclass(frozen=True)
 class ProviderProfile:
     party_id: str
     selection_status: str

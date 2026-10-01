@@ -1,10 +1,12 @@
 """Provider-directory use cases and invariants."""
 
 import unicodedata
+import hashlib
+import json
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from urllib.parse import SplitResult, urlsplit, urlunsplit
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from app.modules.parties.application.service import (
     ContactMethodCommand,
@@ -14,7 +16,7 @@ from app.modules.parties.application.service import (
 )
 from app.modules.parties.domain.models import Party, PartyContactMethod
 from app.modules.vendors.application.ports import ProviderStorageConflict, ProviderTransaction, ProviderUnitOfWork
-from app.modules.vendors.domain.models import ProviderProfile
+from app.modules.vendors.domain.models import ProviderCategory, ProviderCategoryAssignment, ProviderProfile
 from app.modules.vendors.domain.models import ProviderReference as ProviderReferenceRecord
 from app.modules.vendors.domain.models import ProviderReputationLink
 from app.modules.vendors.domain.models import ProviderService as ProviderServiceRecord
@@ -31,6 +33,10 @@ class ProviderNotFoundError(ProviderError):
 
 
 class ProviderLifecycleConflict(ProviderError):
+    pass
+
+
+class ProviderCategoryIdempotencyConflict(ProviderLifecycleConflict):
     pass
 
 
@@ -76,6 +82,10 @@ class ProviderSearchCommand:
     selection_status: str | None = None
     property_id: str | None = None
     has_reference: bool | None = None
+    category_id: str | None = None
+    category_state: str | None = None
+    limit: int = 100
+    cursor: str | None = None
 
     def __post_init__(self) -> None:
         if self.archive_state not in {"active", "archived", "all"}:
@@ -84,10 +94,58 @@ class ProviderSearchCommand:
             raise ProviderError("Selection status is invalid.")
         if self.has_reference is not None and type(self.has_reference) is not bool:
             raise ProviderError("Reference filter is invalid.")
+        if self.category_state is not None and self.category_state not in {"categorized", "uncategorized"}:
+            raise ProviderError("Category-state filter is invalid.")
+        if type(self.limit) is not int or isinstance(self.limit, bool) or not 1 <= self.limit <= 200:
+            raise ProviderError("Provider-list limit must be between 1 and 200.")
         object.__setattr__(self, "search", _optional(self.search, "Search", 240))
         object.__setattr__(self, "service", _normalized_filter(self.service, "Service filter", 160))
         object.__setattr__(self, "service_area", _normalized_filter(self.service_area, "Service area filter", 160))
         object.__setattr__(self, "property_id", _identifier(self.property_id, "Property ID"))
+        object.__setattr__(self, "category_id", _identifier(self.category_id, "Category ID"))
+        object.__setattr__(self, "cursor", _optional(self.cursor, "Provider-list cursor", 600))
+
+
+@dataclass(frozen=True)
+class ProviderCategoryCommand:
+    display_name: str
+    display_order: int
+    idempotency_key: str
+    description: str | None = None
+
+    def __post_init__(self):
+        object.__setattr__(self, "display_name", _required(self.display_name, "Category name", 160))
+        object.__setattr__(self, "description", _optional(self.description, "Category description", 1000))
+        if type(self.display_order) is not int or isinstance(self.display_order, bool) or self.display_order < 0:
+            raise ProviderError("Category display order must be nonnegative.")
+        object.__setattr__(self, "idempotency_key", _uuid(self.idempotency_key, "Idempotency key"))
+
+
+@dataclass(frozen=True)
+class ProviderCategoryPatchCommand:
+    display_name: str | object = UNSET
+    description: str | None | object = UNSET
+    display_order: int | object = UNSET
+
+    def __post_init__(self):
+        if self.display_name is not UNSET:
+            object.__setattr__(self, "display_name", _required(self.display_name, "Category name", 160))
+        if self.description is not UNSET:
+            object.__setattr__(self, "description", _optional(self.description, "Category description", 1000))
+        if self.display_order is not UNSET and (type(self.display_order) is not int or isinstance(self.display_order, bool) or self.display_order < 0):
+            raise ProviderError("Category display order must be nonnegative.")
+        if self.display_name is UNSET and self.description is UNSET and self.display_order is UNSET:
+            raise ProviderError("Category patch cannot be empty.")
+
+
+@dataclass(frozen=True)
+class ProviderCategoryAssignmentCommand:
+    category_id: str
+    idempotency_key: str
+
+    def __post_init__(self):
+        object.__setattr__(self, "category_id", _uuid(self.category_id, "Category ID"))
+        object.__setattr__(self, "idempotency_key", _uuid(self.idempotency_key, "Idempotency key"))
 
 
 @dataclass(frozen=True)
@@ -188,7 +246,7 @@ class ProviderService:
                *, contacts: tuple[ContactMethodCommand, ...] = (),
                services: tuple[ServiceCommand, ...] = (), areas: tuple[ServiceAreaCommand, ...] = (),
                work_history: tuple[WorkHistoryCommand, ...] = (), references: tuple[ReferenceCommand, ...] = (),
-               confirmed_new_party: bool = False) -> dict[str, object]:
+               category_ids: tuple[str, ...] = (), confirmed_new_party: bool = False) -> dict[str, object]:
         if not isinstance(party_command, PartyCreateCommand) or not isinstance(profile, ProviderProfileCommand):
             raise ProviderError("A valid party and provider profile command are required.")
         if not isinstance(contacts, tuple) or not all(isinstance(item, ContactMethodCommand) for item in contacts):
@@ -199,6 +257,11 @@ class ProviderService:
                 raise ProviderError("Initial provider records are invalid.")
             for item in items:
                 _check_command(item, kind)
+        if not isinstance(category_ids, tuple):
+            raise ProviderError("Initial provider categories are invalid.")
+        category_ids = tuple(_uuid(value, "Category ID") for value in category_ids)
+        if len(category_ids) != len(set(category_ids)):
+            raise ProviderLifecycleConflict("A category can be assigned only once.")
         now, correlation = _now(), str(uuid4())
         def write(tx: ProviderTransaction):
             methods = [_new_contact("", command, now) for command in contacts]
@@ -219,6 +282,20 @@ class ProviderService:
             tx.insert_profile(provider)
             tx.record_change(entity_type="provider_profile", entity_id=party.id, action="created", before=None,
                              after=provider.to_dict(), reason="provider_created", correlation_id=correlation)
+            for category_id in category_ids:
+                category = tx.category(category_id)
+                if category is None:
+                    raise KeyError
+                if category.archived_at is not None:
+                    raise ProviderLifecycleConflict("An archived category cannot be assigned.")
+                assignment = _assignment(
+                    party.id, category_id, now,
+                    str(uuid5(NAMESPACE_URL, f"provider-initial-category:{party.id}:{category_id}")),
+                )
+                tx.insert_assignment(assignment)
+                tx.record_change(entity_type="provider_category_assignment", entity_id=assignment.id, action="created",
+                                 before=None, after=assignment.to_dict(), reason="provider_category_assigned",
+                                 correlation_id=correlation)
             for kind, items in initial:
                 created = []
                 for command in items:
@@ -259,7 +336,150 @@ class ProviderService:
             selection_status=command.selection_status,
             property_id=command.property_id,
             has_reference=command.has_reference,
+            category_id=command.category_id,
+            category_state=command.category_state,
+            limit=None,
+            cursor=None,
         )]
+
+    def page(self, command: ProviderSearchCommand) -> dict[str, object]:
+        if not isinstance(command, ProviderSearchCommand):
+            raise ProviderError("Provider search command is invalid.")
+        cursor = _decode_cursor(command.cursor) if command.cursor else None
+        records = self.unit_of_work.list(
+            archive_state=command.archive_state, search=command.search, service=command.service,
+            service_area=command.service_area, selection_status=command.selection_status,
+            property_id=command.property_id, has_reference=command.has_reference,
+            category_id=command.category_id, category_state=command.category_state,
+            limit=command.limit + 1, cursor=cursor,
+        )
+        items = [_summary(item) for item in records[:command.limit]]
+        next_cursor = _encode_cursor(records[command.limit - 1][0]) if len(records) > command.limit else None
+        return {"items": items, "nextCursor": next_cursor}
+
+    def list_categories(self, *, archive_state: str = "active", search: str | None = None) -> list[dict[str, object]]:
+        if archive_state not in {"active", "archived", "all"}:
+            raise ProviderError("Archive state is invalid.")
+        search = _normalized_filter(search, "Category search", 160)
+        categories = self.unit_of_work.categories(archive_state, search)
+        counts = self.unit_of_work.effective_assignment_counts([item.id for item in categories])
+        return [{**item.to_dict(), "effectiveProviderCount": counts.get(item.id, 0)} for item in categories]
+
+    def create_category(self, command: ProviderCategoryCommand) -> dict[str, object]:
+        if not isinstance(command, ProviderCategoryCommand):
+            raise ProviderError("Category command is invalid.")
+        now, correlation, fingerprint = _now(), str(uuid4()), _fingerprint(command.display_name, command.description, command.display_order)
+        def write(tx):
+            replay = tx.category_by_create_key(command.idempotency_key)
+            if replay:
+                if replay.create_request_fingerprint != fingerprint:
+                    raise ProviderCategoryIdempotencyConflict("Category idempotency key was reused with different content.")
+                return replay.id
+            active = next((item for item in tx.categories("active") if item.normalized_name == _normalized(command.display_name)), None)
+            if active:
+                raise ProviderLifecycleConflict("An active category already uses this name.")
+            item = ProviderCategory(str(uuid4()), command.display_name, _normalized(command.display_name), command.description,
+                                    command.display_order, now, now, None, None, command.idempotency_key, fingerprint)
+            tx.insert_category(item)
+            tx.record_change(entity_type="provider_category", entity_id=item.id, action="created", before=None,
+                             after=item.to_dict(), reason="provider_category_created", correlation_id=correlation)
+            return item.id
+        return self._category_write(write)
+
+    def update_category(self, category_id: str, command: ProviderCategoryPatchCommand) -> dict[str, object]:
+        if not isinstance(command, ProviderCategoryPatchCommand): raise ProviderError("Category patch is invalid.")
+        now, correlation = _now(), str(uuid4())
+        def write(tx):
+            current = tx.category(category_id)
+            if current is None: raise KeyError
+            if current.archived_at is not None: raise ProviderLifecycleConflict("An archived category cannot be edited.")
+            updated = replace(current,
+                display_name=current.display_name if command.display_name is UNSET else command.display_name,
+                normalized_name=current.normalized_name if command.display_name is UNSET else _normalized(command.display_name),
+                description=current.description if command.description is UNSET else command.description,
+                display_order=current.display_order if command.display_order is UNSET else command.display_order,
+                updated_at=now,
+            )
+            if updated == current: return current.id
+            conflict = next((item for item in tx.categories("active") if item.id != current.id and item.normalized_name == updated.normalized_name), None)
+            if conflict: raise ProviderLifecycleConflict("An active category already uses this name.")
+            tx.replace_category(updated)
+            tx.record_change(entity_type="provider_category", entity_id=current.id, action="updated", before=current.to_dict(), after=updated.to_dict(), reason="provider_category_updated", correlation_id=correlation)
+            return current.id
+        return self._category_write(write)
+
+    def archive_category(self, category_id: str, *, confirmed: bool, reason: str) -> dict[str, object]:
+        if confirmed is not True: raise ProviderError("Archiving a category requires explicit confirmation.")
+        reason = _required(reason, "Archive reason", 1000); now, correlation = _now(), str(uuid4())
+        def write(tx):
+            current = tx.category(category_id)
+            if current is None: raise KeyError
+            if current.archived_at is not None: return current.id
+            updated = replace(current, archived_at=now, archive_reason=reason, updated_at=now); tx.replace_category(updated)
+            tx.record_change(entity_type="provider_category", entity_id=current.id, action="archived", before=current.to_dict(), after=updated.to_dict(), reason="provider_category_archived", correlation_id=correlation); return current.id
+        return self._category_write(write)
+
+    def restore_category(self, category_id: str, *, confirmed: bool) -> dict[str, object]:
+        if confirmed is not True: raise ProviderError("Restoring a category requires explicit confirmation.")
+        now, correlation = _now(), str(uuid4())
+        def write(tx):
+            current = tx.category(category_id)
+            if current is None: raise KeyError
+            if current.archived_at is None: return current.id
+            if any(item.id != current.id and item.normalized_name == current.normalized_name for item in tx.categories("active")):
+                raise ProviderLifecycleConflict("An active category already uses this name.")
+            updated = replace(current, archived_at=None, archive_reason=None, updated_at=now); tx.replace_category(updated)
+            tx.record_change(entity_type="provider_category", entity_id=current.id, action="restored", before=current.to_dict(), after=updated.to_dict(), reason="provider_category_restored", correlation_id=correlation); return current.id
+        return self._category_write(write)
+
+    def assign_category(self, party_id: str, command: ProviderCategoryAssignmentCommand) -> dict[str, object]:
+        if not isinstance(command, ProviderCategoryAssignmentCommand): raise ProviderError("Category assignment command is invalid.")
+        now, correlation, fingerprint = _now(), str(uuid4()), _fingerprint(party_id, command.category_id)
+        def write(tx):
+            replay = tx.assignment_by_create_key(command.idempotency_key)
+            if replay:
+                if replay.create_request_fingerprint != fingerprint:
+                    raise ProviderCategoryIdempotencyConflict("Assignment idempotency key was reused with different content.")
+                return replay.provider_party_id
+            _available_provider(tx, party_id)
+            category = tx.category(command.category_id)
+            if category is None: raise KeyError
+            if category.archived_at is not None: raise ProviderLifecycleConflict("An archived category cannot be assigned.")
+            if any(item.archived_at is None and item.category_id == category.id for item in tx.assignments(party_id)):
+                raise ProviderLifecycleConflict("This category is already assigned to the provider.")
+            item = _assignment(party_id, category.id, now, command.idempotency_key, fingerprint)
+            tx.insert_assignment(item)
+            tx.record_change(entity_type="provider_category_assignment", entity_id=item.id, action="created", before=None, after=item.to_dict(), reason="provider_category_assigned", correlation_id=correlation)
+            return party_id
+        return self._write_detail(write)
+
+    def archive_category_assignment(self, party_id: str, assignment_id: str, *, confirmed: bool, reason: str) -> dict[str, object]:
+        if confirmed is not True: raise ProviderError("Archiving a category assignment requires explicit confirmation.")
+        reason = _required(reason, "Archive reason", 1000); now, correlation = _now(), str(uuid4())
+        def write(tx):
+            _available_provider(tx, party_id); current = tx.assignment(assignment_id)
+            if current is None or current.provider_party_id != party_id: raise KeyError
+            if current.archived_at is None:
+                updated = replace(current, archived_at=now, archive_reason=reason, updated_at=now); tx.replace_assignment(updated)
+                tx.record_change(entity_type="provider_category_assignment", entity_id=current.id, action="archived", before=current.to_dict(), after=updated.to_dict(), reason="provider_category_assignment_archived", correlation_id=correlation)
+            return party_id
+        return self._write_detail(write, include_archived=True)
+
+    def restore_category_assignment(self, party_id: str, assignment_id: str, *, confirmed: bool) -> dict[str, object]:
+        if confirmed is not True: raise ProviderError("Restoring a category assignment requires explicit confirmation.")
+        now, correlation = _now(), str(uuid4())
+        def write(tx):
+            _available_provider(tx, party_id); current = tx.assignment(assignment_id)
+            if current is None or current.provider_party_id != party_id: raise KeyError
+            category = tx.category(current.category_id)
+            if category is None: raise KeyError
+            if category.archived_at is not None: raise ProviderLifecycleConflict("Restore the category before restoring its assignment.")
+            if current.archived_at is None: return party_id
+            if any(item.id != current.id and item.archived_at is None and item.category_id == current.category_id for item in tx.assignments(party_id)):
+                raise ProviderLifecycleConflict("This category is already assigned to the provider.")
+            updated = replace(current, archived_at=None, archive_reason=None, updated_at=now); tx.replace_assignment(updated)
+            tx.record_change(entity_type="provider_category_assignment", entity_id=current.id, action="restored", before=current.to_dict(), after=updated.to_dict(), reason="provider_category_assignment_restored", correlation_id=correlation); return party_id
+        return self._write_detail(write, include_archived=True)
 
     def update_profile(self, party_id: str, command: ProviderProfilePatchCommand) -> dict[str, object]:
         if not isinstance(command, ProviderProfilePatchCommand):
@@ -471,6 +691,18 @@ class ProviderService:
         except ProviderStorageConflict as error: raise ProviderLifecycleConflict(str(error)) from error
         return self.detail(party_id, include_archived=include_archived)
 
+    def _category_write(self, write) -> dict[str, object]:
+        try:
+            category_id = self.unit_of_work.write(write)
+        except KeyError as error:
+            raise ProviderNotFoundError("Provider category was not found.") from error
+        except ProviderStorageConflict as error:
+            raise ProviderLifecycleConflict(str(error)) from error
+        category = next((item for item in self.unit_of_work.categories("all") if item.id == category_id), None)
+        if category is None:
+            raise ProviderNotFoundError("Provider category was not found.")
+        return category.to_dict()
+
 
 class PossibleDuplicateParty(ProviderLifecycleConflict):
     def __init__(self, candidate_party_ids):
@@ -489,6 +721,11 @@ def _available_provider(tx, party_id):
     if party.archived_at is not None:
         raise ProviderLifecycleConflict("Restore the party before changing reputation links.")
     return profile
+def _assignment(party_id, category_id, now, idempotency_key, fingerprint=None):
+    return ProviderCategoryAssignment(
+        str(uuid4()), party_id, category_id, now, now, None, None, idempotency_key,
+        fingerprint or _fingerprint(party_id, category_id),
+    )
 def _new_contact(party_id, item, now): return PartyContactMethod(str(uuid4()), party_id, item.method_kind, item.value, item.normalized_value, item.extension, item.label, "active", now, now, None)
 def _profile(party_id, command, now): return ProviderProfile(party_id, command.selection_status, command.selection_reason, command.notes, now, now, None)
 def _children(tx, kind, party_id): return {"service": tx.services, "area": tx.areas, "work": tx.work_history, "reference": tx.references}[kind](party_id)
@@ -522,11 +759,14 @@ def _unique_contacts(items):
     if len(keys) != len(set(keys)):
         raise ProviderLifecycleConflict("Active provider contact methods must be unique.")
 def _detail(record):
-    party, profile, contacts, services, areas, work, references, reputation_links = record
-    return {"party": party.to_dict(), "profile": profile.to_dict(), "contactMethods": [item.to_dict() for item in contacts], "services": [item.to_dict() for item in services], "serviceAreas": [item.to_dict() for item in areas], "workHistory": [item.to_dict() for item in work], "references": [item.to_dict() for item in references], "reputationLinks": [item.to_dict() for item in reputation_links]}
+    party, profile, contacts, services, areas, work, references, reputation_links, categories = record
+    return {"party": party.to_dict(), "profile": profile.to_dict(), "contactMethods": [item.to_dict() for item in contacts], "services": [item.to_dict() for item in services], "serviceAreas": [item.to_dict() for item in areas], "workHistory": [item.to_dict() for item in work], "references": [item.to_dict() for item in references], "reputationLinks": [item.to_dict() for item in reputation_links], "categories": [_category_summary(assignment, category) for assignment, category in categories]}
 def _summary(record):
-    party, profile, services, areas, work_count, reference_count, reputation_link_count = record
-    return {"party": party.to_dict(), "profile": profile.to_dict(), "services": [item.to_dict() for item in services], "serviceAreas": [item.to_dict() for item in areas], "workHistoryCount": work_count, "referenceCount": reference_count, "reputationLinkCount": reputation_link_count}
+    party, profile, services, areas, work_count, reference_count, reputation_link_count, categories = record
+    return {"party": party.to_dict(), "profile": profile.to_dict(), "services": [item.to_dict() for item in services], "serviceAreas": [item.to_dict() for item in areas], "workHistoryCount": work_count, "referenceCount": reference_count, "reputationLinkCount": reputation_link_count, "categories": [_category_summary(assignment, category) for assignment, category in categories]}
+def _category_summary(assignment, category):
+    return {**category.to_dict(), "assignmentId": assignment.id, "assignmentArchivedAt": assignment.archived_at,
+            "assignmentArchiveReason": assignment.archive_reason}
 def _normalized(value): return unicodedata.normalize("NFKC", value).strip().casefold()
 def _normalized_filter(value, label, limit):
     return None if value is None else _normalized(_required(value, label, limit))
@@ -535,6 +775,20 @@ def _required(value, label, limit):
     return text
 def _optional(value, label, limit): return None if value is None else _required(value, label, limit)
 def _identifier(value, label): return None if value is None else _required(value, label, 80)
+def _uuid(value, label):
+    import uuid
+    if not isinstance(value, str): raise ProviderError(f"{label} is invalid.")
+    try: return str(uuid.UUID(value))
+    except ValueError as error: raise ProviderError(f"{label} is invalid.") from error
+def _fingerprint(*values):
+    return hashlib.sha256(json.dumps(values, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+def _encode_cursor(party): return f"{party.display_name.casefold()}|{party.id}"
+def _decode_cursor(cursor):
+    try:
+        name, party_id = cursor.rsplit("|", 1)
+        return name, _uuid(party_id, "Provider-list cursor")
+    except ValueError as error:
+        raise ProviderError("Provider-list cursor is invalid.") from error
 def _date(value):
     if not isinstance(value, str): raise ProviderError("Date is invalid.")
     try: return date.fromisoformat(value).isoformat()

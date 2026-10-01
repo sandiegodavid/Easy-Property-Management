@@ -24,6 +24,8 @@ from app.modules.vendors.application.service import (
     ProviderProfileCommand,
     ProviderSearchCommand,
     ProviderService,
+    ProviderCategoryCommand,
+    ProviderCategoryAssignmentCommand,
     ReferenceCommand,
     ReputationLinkCommand,
     ReputationLinkPatchCommand,
@@ -86,6 +88,68 @@ class ProviderTests(unittest.TestCase):
         events = self.recorder.repository.history("provider_profile", party_id)
         self.assertTrue(events)
 
+    def test_category_catalog_assignment_lifecycle_and_idempotency(self) -> None:
+        seeded = self.providers.list_categories()
+        self.assertEqual([item["displayName"] for item in seeded], [
+            "Legal / Attorney", "Landscaping", "Electrical", "HVAC / A/C",
+            "Appliance repair", "Plumbing", "General maintenance",
+        ])
+        command = ProviderCategoryCommand(
+            "  Specialty Restoration ", 8, "00000000-0000-4000-8000-000000000901", "Water and fire work",
+        )
+        category = self.providers.create_category(command)
+        self.assertEqual(self.providers.create_category(command)["id"], category["id"])
+        party_id = self.providers.create(
+            PartyCreateCommand("organization", "Category Provider"), ProviderProfileCommand(),
+            category_ids=(category["id"],),
+        )["party"]["id"]
+        self.assertEqual(self.providers.detail(party_id)["categories"][0]["id"], category["id"])
+        self.assertEqual(self.providers.list(ProviderSearchCommand(category_id=category["id"]))[0]["party"]["id"], party_id)
+        assignment = self.providers.detail(party_id)["categories"][0]["assignmentId"]
+        archived = self.providers.archive_category_assignment(party_id, assignment, confirmed=True, reason="Incorrect classification")
+        self.assertEqual(archived["categories"][0]["assignmentArchivedAt"] is not None, True)
+        self.assertEqual(self.providers.list(ProviderSearchCommand(category_state="uncategorized"))[0]["party"]["id"], party_id)
+        restored = self.providers.restore_category_assignment(party_id, assignment, confirmed=True)
+        self.assertIsNone(restored["categories"][0]["assignmentArchivedAt"])
+        assigned = self.providers.assign_category(
+            party_id, ProviderCategoryAssignmentCommand(
+                seeded[0]["id"], "00000000-0000-4000-8000-000000000902",
+            ),
+        )
+        self.assertEqual(len(assigned["categories"]), 2)
+        self.workspace.open()
+
+    def test_category_http_contract_and_provider_page(self) -> None:
+        with TestClient(create_app(self.config)) as client:
+            catalog = client.get("/api/provider-categories")
+            self.assertEqual(catalog.status_code, 200)
+            self.assertEqual(len(catalog.json()), 7)
+            created = client.post("/api/provider-categories", json={
+                "displayName": "Roofing", "description": "Roof repairs", "displayOrder": 9,
+                "idempotencyKey": "00000000-0000-4000-8000-000000000911",
+            })
+            self.assertEqual(created.status_code, 201)
+            category_id = created.json()["id"]
+            replay = client.post("/api/provider-categories", json={
+                "displayName": "Roofing", "description": "Roof repairs", "displayOrder": 9,
+                "idempotencyKey": "00000000-0000-4000-8000-000000000911",
+            })
+            self.assertEqual(replay.json()["id"], category_id)
+            provider = client.post("/api/providers", json={
+                "party": {"partyKind": "organization", "displayName": "Roofing Co."},
+                "categoryIds": [category_id],
+            })
+            self.assertEqual(provider.status_code, 201)
+            party_id = provider.json()["party"]["id"]
+            page = client.get("/api/providers", params={"categoryId": category_id, "limit": 1})
+            self.assertEqual(page.status_code, 200)
+            self.assertEqual(page.json()["items"][0]["party"]["id"], party_id)
+            self.assertEqual(page.json()["items"][0]["categories"][0]["displayName"], "Roofing")
+            assignment_id = provider.json()["categories"][0]["assignmentId"]
+            archived = client.post(f"/api/providers/{party_id}/category-assignments/{assignment_id}/archive", json={"confirmed": True, "reason": "Not offered"})
+            self.assertEqual(archived.status_code, 200)
+            self.assertEqual(client.get("/api/providers", params={"categoryState": "uncategorized"}).json()["items"][0]["party"]["id"], party_id)
+
     def test_provider_http_contract_and_party_route(self) -> None:
         with TestClient(create_app(self.config)) as client:
             response = client.post("/api/providers", json={
@@ -97,18 +161,18 @@ class ProviderTests(unittest.TestCase):
             self.assertEqual(response.status_code, 201)
             party_id = response.json()["party"]["id"]
             self.assertEqual(response.json()["services"][0]["displayName"], "Electrical")
-            self.assertEqual([item["party"]["id"] for item in client.get("/api/providers").json()], [party_id])
+            self.assertEqual([item["party"]["id"] for item in client.get("/api/providers").json()["items"]], [party_id])
             self.assertEqual(client.get(f"/api/providers/{party_id}").status_code, 200)
             self.assertEqual(client.get(f"/api/parties/{party_id}").json()["activeRoles"], ["provider"])
             listed = client.get("/api/providers", params={"service": "  \uff25lectrical  "})
             self.assertEqual(listed.status_code, 200)
-            self.assertEqual([item["party"]["id"] for item in listed.json()], [party_id])
+            self.assertEqual([item["party"]["id"] for item in listed.json()["items"]], [party_id])
             service = client.post(f"/api/providers/{party_id}/services", json={"displayName": "Appliance repair"})
             self.assertEqual(service.status_code, 201)
             self.assertEqual(len(service.json()["services"]), 2)
             listed = client.get("/api/providers", params={"service": "  \uff25lectrical  "})
             self.assertEqual(listed.status_code, 200)
-            self.assertEqual([item["party"]["id"] for item in listed.json()], [party_id])
+            self.assertEqual([item["party"]["id"] for item in listed.json()["items"]], [party_id])
             patched = client.patch(f"/api/providers/{party_id}", json={"notes": "Only the notes changed"})
             self.assertEqual(patched.status_code, 200)
             self.assertEqual(patched.json()["profile"]["selectionStatus"], "avoid")
@@ -256,7 +320,7 @@ class ProviderTests(unittest.TestCase):
             })
             self.assertEqual(created.status_code, 201)
             link_id = created.json()["reputationLinks"][0]["id"]
-            self.assertEqual(client.get("/api/providers").json()[0]["reputationLinkCount"], 1)
+            self.assertEqual(client.get("/api/providers").json()["items"][0]["reputationLinkCount"], 1)
             patched = client.patch(f"/api/providers/{party_id}/reputation-links/{link_id}", json={
                 "notes": None, "lastCheckedOn": None,
             })

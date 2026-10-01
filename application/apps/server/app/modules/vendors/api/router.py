@@ -2,6 +2,7 @@
 
 from datetime import date
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
@@ -13,6 +14,10 @@ from app.modules.vendors.application.service import (
     UNSET,
     PossibleDuplicateParty,
     ProviderError,
+    ProviderCategoryCommand,
+    ProviderCategoryAssignmentCommand,
+    ProviderCategoryIdempotencyConflict,
+    ProviderCategoryPatchCommand,
     ProviderLifecycleConflict,
     ProviderNotFoundError,
     ProviderProfileCommand,
@@ -34,7 +39,7 @@ class Contract(BaseModel): model_config = ConfigDict(extra="forbid")
 class PartyInput(Contract): partyKind: Literal["individual", "organization"]; displayName: str = Field(min_length=1, max_length=240)
 class ContactInput(Contract): methodKind: Literal["email", "phone"]; value: str = Field(min_length=1, max_length=320); extension: str | None = Field(None, max_length=6); label: str | None = Field(None, max_length=80)
 class ProfileInput(Contract): selectionStatus: Literal["neutral", "preferred", "avoid"] = "neutral"; selectionReason: str | None = Field(None, max_length=1000); notes: str | None = Field(None, max_length=4000)
-class CreateProviderInput(ProfileInput): party: PartyInput; contacts: list[ContactInput] = Field(default_factory=list); services: list["ServiceInput"] = Field(default_factory=list); serviceAreas: list["AreaInput"] = Field(default_factory=list); workHistory: list["WorkInput"] = Field(default_factory=list); references: list["ReferenceInput"] = Field(default_factory=list); confirmedNewParty: StrictBool = False
+class CreateProviderInput(ProfileInput): party: PartyInput; contacts: list[ContactInput] = Field(default_factory=list); services: list["ServiceInput"] = Field(default_factory=list); serviceAreas: list["AreaInput"] = Field(default_factory=list); workHistory: list["WorkInput"] = Field(default_factory=list); references: list["ReferenceInput"] = Field(default_factory=list); categoryIds: list[UUID] = Field(default_factory=list); confirmedNewParty: StrictBool = False
 class ProfilePatchInput(Contract):
     selectionStatus: Literal["neutral", "preferred", "avoid"] | None = None
     selectionReason: str | None = Field(None, max_length=1000)
@@ -92,6 +97,21 @@ class ReputationLinkPatchInput(Contract):
             raise ValueError("lastCheckedOn cannot be in the future.")
         return self
 class Confirmation(Contract): confirmed: StrictBool
+class ArchiveConfirmation(Confirmation): reason: str = Field(min_length=1, max_length=1000)
+class CategoryInput(Contract):
+    displayName: str = Field(min_length=1, max_length=160)
+    description: str | None = Field(None, max_length=1000)
+    displayOrder: int = Field(ge=0, strict=True)
+    idempotencyKey: UUID
+class CategoryPatchInput(Contract):
+    displayName: str | None = Field(None, min_length=1, max_length=160)
+    description: str | None = Field(None, max_length=1000)
+    displayOrder: int | None = Field(None, ge=0, strict=True)
+    @model_validator(mode="after")
+    def nonempty(self):
+        if not self.model_fields_set: raise ValueError("Category patch cannot be empty.")
+        return self
+class CategoryAssignmentInput(Contract): categoryId: UUID; idempotencyKey: UUID
 class PartyResponse(Contract): id: str; partyKind: Literal["individual", "organization"]; displayName: str; createdAt: str; updatedAt: str; archivedAt: str | None
 class ContactResponse(Contract): id: str; partyId: str; methodKind: Literal["email", "phone"]; displayValue: str; extension: str | None; label: str | None; status: Literal["active", "archived"]; createdAt: str; updatedAt: str; archivedAt: str | None
 class ProfileResponse(Contract): partyId: str; selectionStatus: Literal["neutral", "preferred", "avoid"]; selectionReason: str | None; notes: str | None; createdAt: str; updatedAt: str; archivedAt: str | None
@@ -100,8 +120,11 @@ class AreaResponse(ServiceResponse): countryCode: str | None
 class WorkResponse(Contract): id: str; partyId: str; propertyId: str | None; performedOn: date; summary: str; outcomeNotes: str | None; createdAt: str; updatedAt: str; archivedAt: str | None
 class ReferenceResponse(Contract): id: str; partyId: str; referenceName: str | None; organizationName: str | None; relationship: str | None; email: str | None; phone: str | None; notes: str | None; createdAt: str; updatedAt: str; archivedAt: str | None
 class ReputationLinkResponse(Contract): id: str; partyId: str; sourceKind: Literal["google", "yelp", "angi", "other"]; sourceName: str | None; normalizedSourceKey: str; url: str; normalizedUrl: str; notes: str | None; lastCheckedOn: date | None; createdAt: str; updatedAt: str; archivedAt: str | None
-class ProviderResponse(Contract): party: PartyResponse; profile: ProfileResponse; contactMethods: list[ContactResponse]; services: list[ServiceResponse]; serviceAreas: list[AreaResponse]; workHistory: list[WorkResponse]; references: list[ReferenceResponse]; reputationLinks: list[ReputationLinkResponse]
-class ProviderListResponse(Contract): party: PartyResponse; profile: ProfileResponse; services: list[ServiceResponse]; serviceAreas: list[AreaResponse]; workHistoryCount: int; referenceCount: int; reputationLinkCount: int
+class CategoryResponse(Contract): id: str; displayName: str; normalizedName: str; description: str | None; displayOrder: int; createdAt: str; updatedAt: str; archivedAt: str | None; archiveReason: str | None; effectiveProviderCount: int = 0
+class ProviderCategoryResponse(CategoryResponse): assignmentId: str; assignmentArchivedAt: str | None; assignmentArchiveReason: str | None
+class ProviderResponse(Contract): party: PartyResponse; profile: ProfileResponse; contactMethods: list[ContactResponse]; services: list[ServiceResponse]; serviceAreas: list[AreaResponse]; workHistory: list[WorkResponse]; references: list[ReferenceResponse]; reputationLinks: list[ReputationLinkResponse]; categories: list[ProviderCategoryResponse]
+class ProviderListResponse(Contract): party: PartyResponse; profile: ProfileResponse; services: list[ServiceResponse]; serviceAreas: list[AreaResponse]; workHistoryCount: int; referenceCount: int; reputationLinkCount: int; categories: list[ProviderCategoryResponse]
+class ProviderPageResponse(Contract): items: list[ProviderListResponse]; nextCursor: str | None
 
 
 def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -> APIRouter:
@@ -113,18 +136,19 @@ def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -
         try: return operation()
         except ProviderNotFoundError as error: raise domain_problem(error, status_code=404, code="provider_not_found") from error
         except PossibleDuplicateParty as error: raise domain_problem(error, status_code=409, code="possible_duplicate_party", candidatePartyIds=error.candidate_party_ids) from error
+        except ProviderCategoryIdempotencyConflict as error: raise domain_problem(error, status_code=409, code="provider_category_idempotency_conflict") from error
         except ProviderLifecycleConflict as error: raise domain_problem(error, status_code=409, code="provider_conflict") from error
         except (ProviderError, PartyValidationError) as error: raise domain_problem(error, status_code=400, code="provider_validation") from error
     @router.post("", response_model=ProviderResponse, status_code=status.HTTP_201_CREATED)
     def create(data: CreateProviderInput):
-        ready(True); return invoke(lambda: provider_service.create(PartyCreateCommand(data.party.partyKind, data.party.displayName), _profile(data), contacts=tuple(_contact(item) for item in data.contacts), services=tuple(ServiceCommand(item.displayName) for item in data.services), areas=tuple(ServiceAreaCommand(item.displayName, item.countryCode) for item in data.serviceAreas), work_history=tuple(WorkHistoryCommand(item.performedOn.isoformat(), item.summary, item.propertyId, item.outcomeNotes) for item in data.workHistory), references=tuple(_command(item) for item in data.references), confirmed_new_party=data.confirmedNewParty))
+        ready(True); return invoke(lambda: provider_service.create(PartyCreateCommand(data.party.partyKind, data.party.displayName), _profile(data), contacts=tuple(_contact(item) for item in data.contacts), services=tuple(ServiceCommand(item.displayName) for item in data.services), areas=tuple(ServiceAreaCommand(item.displayName, item.countryCode) for item in data.serviceAreas), work_history=tuple(WorkHistoryCommand(item.performedOn.isoformat(), item.summary, item.propertyId, item.outcomeNotes) for item in data.workHistory), references=tuple(_command(item) for item in data.references), category_ids=tuple(str(item) for item in data.categoryIds), confirmed_new_party=data.confirmedNewParty))
     @router.post("/from-party/{party_id}", response_model=ProviderResponse, status_code=status.HTTP_201_CREATED)
     def designate(party_id: str, data: ProfileInput):
         ready(True); return invoke(lambda: provider_service.designate(party_id, _profile(data)))
-    @router.get("", response_model=list[ProviderListResponse])
-    def list_providers(archiveState: Literal["active", "archived", "all"] = "active", search: str | None = Query(None, max_length=240), service: str | None = Query(None, max_length=160), serviceArea: str | None = Query(None, max_length=160), selectionStatus: Literal["neutral", "preferred", "avoid"] | None = None, propertyId: str | None = None, hasReference: bool | None = None):
+    @router.get("", response_model=ProviderPageResponse)
+    def list_providers(archiveState: Literal["active", "archived", "all"] = "active", search: str | None = Query(None, max_length=240), service: str | None = Query(None, max_length=160), serviceArea: str | None = Query(None, max_length=160), selectionStatus: Literal["neutral", "preferred", "avoid"] | None = None, propertyId: str | None = None, hasReference: bool | None = None, categoryId: str | None = None, categoryState: Literal["categorized", "uncategorized"] | None = None, limit: int = Query(100, ge=1, le=200), cursor: str | None = None):
         ready()
-        return invoke(lambda: provider_service.list(ProviderSearchCommand(
+        return invoke(lambda: provider_service.page(ProviderSearchCommand(
             archive_state=archiveState,
             search=search,
             service=service,
@@ -132,6 +156,7 @@ def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -
             selection_status=selectionStatus,
             property_id=propertyId,
             has_reference=hasReference,
+            category_id=categoryId, category_state=categoryState, limit=limit, cursor=cursor,
         )))
     @router.get("/{party_id}", response_model=ProviderResponse)
     def detail(party_id: str, includeArchived: bool = False): ready(); return invoke(lambda: provider_service.detail(party_id, include_archived=includeArchived))
@@ -143,6 +168,24 @@ def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -
     def archive(party_id: str, data: Confirmation): ready(True); return invoke(lambda: provider_service.archive(party_id, confirmed=data.confirmed))
     @router.post("/{party_id}/restore", response_model=ProviderResponse)
     def restore(party_id: str): ready(True); return invoke(lambda: provider_service.restore(party_id))
+    @router.post("/{party_id}/category-assignments", response_model=ProviderResponse, status_code=status.HTTP_201_CREATED)
+    def assign_category(party_id: str, data: CategoryAssignmentInput):
+        ready(True)
+        return invoke(lambda: provider_service.assign_category(
+            party_id, ProviderCategoryAssignmentCommand(str(data.categoryId), str(data.idempotencyKey)),
+        ))
+    @router.post("/{party_id}/category-assignments/{assignment_id}/archive", response_model=ProviderResponse)
+    def archive_category_assignment(party_id: str, assignment_id: str, data: ArchiveConfirmation):
+        ready(True)
+        return invoke(lambda: provider_service.archive_category_assignment(
+            party_id, assignment_id, confirmed=data.confirmed, reason=data.reason,
+        ))
+    @router.post("/{party_id}/category-assignments/{assignment_id}/restore", response_model=ProviderResponse)
+    def restore_category_assignment(party_id: str, assignment_id: str, data: Confirmation):
+        ready(True)
+        return invoke(lambda: provider_service.restore_category_assignment(
+            party_id, assignment_id, confirmed=data.confirmed,
+        ))
     @router.post("/{party_id}/reputation-links", response_model=ProviderResponse, status_code=status.HTTP_201_CREATED)
     def add_reputation_link(party_id: str, data: ReputationLinkInput):
         ready(True); return invoke(lambda: provider_service.add_reputation_link(party_id, _reputation(data)))
@@ -156,6 +199,59 @@ def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -
     def restore_reputation_link(party_id: str, link_id: str):
         ready(True); return invoke(lambda: provider_service.restore_reputation_link(party_id, link_id))
     _children(router, provider_service, ready, invoke)
+    return router
+
+
+def build_category_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -> APIRouter:
+    """Settings-owned provider category catalog contract."""
+    router = APIRouter(prefix="/api/provider-categories", tags=["provider-categories"])
+
+    def ready(write=False):
+        if not runtime.ready or runtime.error:
+            raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
+        if write and not runtime.can_write:
+            raise workspace_unavailable("Workspace writer lock is unavailable.")
+
+    def invoke(operation):
+        try:
+            return operation()
+        except ProviderNotFoundError as error:
+            raise domain_problem(error, status_code=404, code="provider_category_not_found") from error
+        except ProviderCategoryIdempotencyConflict as error:
+            raise domain_problem(error, status_code=409, code="provider_category_idempotency_conflict") from error
+        except ProviderLifecycleConflict as error:
+            raise domain_problem(error, status_code=409, code="provider_category_conflict") from error
+        except ProviderError as error:
+            raise domain_problem(error, status_code=400, code="provider_category_validation") from error
+
+    @router.get("", response_model=list[CategoryResponse])
+    def categories(archiveState: Literal["active", "archived", "all"] = "active", search: str | None = Query(None, max_length=160)):
+        ready(); return invoke(lambda: provider_service.list_categories(archive_state=archiveState, search=search))
+
+    @router.post("", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
+    def create(data: CategoryInput):
+        ready(True)
+        return invoke(lambda: provider_service.create_category(
+            ProviderCategoryCommand(data.displayName, data.displayOrder, str(data.idempotencyKey), data.description),
+        ))
+
+    @router.patch("/{category_id}", response_model=CategoryResponse)
+    def patch(category_id: str, data: CategoryPatchInput):
+        ready(True)
+        fields = data.model_fields_set
+        return invoke(lambda: provider_service.update_category(category_id, ProviderCategoryPatchCommand(
+            data.displayName if "displayName" in fields else UNSET,
+            data.description if "description" in fields else UNSET,
+            data.displayOrder if "displayOrder" in fields else UNSET,
+        )))
+
+    @router.post("/{category_id}/archive", response_model=CategoryResponse)
+    def archive(category_id: str, data: ArchiveConfirmation):
+        ready(True); return invoke(lambda: provider_service.archive_category(category_id, confirmed=data.confirmed, reason=data.reason))
+
+    @router.post("/{category_id}/restore", response_model=CategoryResponse)
+    def restore(category_id: str, data: Confirmation):
+        ready(True); return invoke(lambda: provider_service.restore_category(category_id, confirmed=data.confirmed))
     return router
 
 
