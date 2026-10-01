@@ -8,6 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import inspect
 
+from app.modules.vendors.domain.category_normalization import normalize_provider_category_name
 from app.modules.vendors.domain.category_seeds import PROVIDER_CATEGORY_SEEDS, fingerprint
 from app.platform.migration_errors import MigrationSchemaError
 
@@ -121,7 +122,7 @@ def validate_vendor_data(connection) -> None:
             raise MigrationSchemaError("Provider category data is invalid.")
         if row["description"] is not None and not _canonical_text(row["description"], 1000):
             raise MigrationSchemaError("Provider category description is invalid.")
-        if row["normalized_name"] != unicodedata.normalize("NFKC", row["display_name"]).strip().casefold() or row["display_order"] < 0:
+        if row["normalized_name"] != normalize_provider_category_name(row["display_name"]) or row["display_order"] < 0:
             raise MigrationSchemaError("Provider category data is invalid.")
         if row["archived_at"] is not None:
             _timestamp(row["archived_at"])

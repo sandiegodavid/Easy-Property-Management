@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-import unicodedata
 from dataclasses import dataclass
 
+from app.modules.vendors.domain.category_normalization import normalize_provider_category_name
 
 @dataclass(frozen=True)
 class ProviderCategorySeed:
@@ -17,7 +17,7 @@ class ProviderCategorySeed:
 
     @property
     def normalized_name(self) -> str:
-        return unicodedata.normalize("NFKC", self.display_name).casefold()
+        return normalize_provider_category_name(self.display_name)
 
     @property
     def create_request_fingerprint(self) -> str:
