@@ -13,9 +13,17 @@ from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.application.errors import PublicationCleanupIncomplete
 from app.modules.intake.api.router import build_router
-from app.modules.intake.application.ports import MAX_INTAKE_SOURCE_BATCH
+from app.modules.intake.application.ports import (
+    MAX_INTAKE_SOURCE_BATCH,
+    IntakeEvidenceDetailRequest,
+)
 from app.modules.intake.application.service import IntakeAdmissionCommand, IntakeService
-from app.modules.intake.domain.models import EvidenceEnvelope, IntakeConflictError, IntakeReadLimitError
+from app.modules.intake.domain.models import (
+    EvidenceEnvelope,
+    IntakeConflictError,
+    IntakeNotFoundError,
+    IntakeReadLimitError,
+)
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.modules.intake.infrastructure.source_reader import SQLiteIntakeSourceReader
 from app.platform.product_migrations import initialize_latest_schema, validate_latest_schema
@@ -170,6 +178,77 @@ class IntakeTests(TestCase):
                     (source["sourceId"],),
                 ).scalar_one(),
             )
+
+    def test_consumer_evidence_detail_is_exact_bounded_and_audited(self) -> None:
+        source = self.service.admit(self.command(body="Original evidence."))
+        corrected = self.service.correct(
+            source["sourceId"],
+            EvidenceEnvelope("operator_note", "internal", "Corrected evidence.", "2026-01-01T12:00:00+00:00"),
+            "clarified", str(uuid4()),
+        )
+        correlation_id = str(uuid4())
+        request = IntakeEvidenceDetailRequest(
+            source["sourceId"], source["revision"], "ai_assistant", "connection-1",
+            "ai_governance_review", correlation_id, max_history=1, max_attachments=1,
+        )
+        detail = self.service.evidence_detail(request)
+        self.assertEqual(source["revision"], detail["revision"])
+        self.assertEqual("Original evidence.", detail["evidence"]["body"])
+        self.assertTrue(detail["historyTruncated"])
+        self.assertEqual([], detail["attachments"])
+        self.assertFalse(detail["attachmentsTruncated"])
+        self.assertNotEqual(corrected["revision"], detail["revision"])
+        engine = self.service.unit_of_work.engine
+        with engine.connect() as connection:
+            audit = connection.exec_driver_sql(
+                "SELECT actor_kind, actor_reference, reason, correlation_id, after_snapshot FROM audit_events WHERE correlation_id = ?",
+                (correlation_id,),
+            ).mappings().one()
+        self.assertEqual("ai_assistant", audit["actor_kind"])
+        self.assertEqual("connection-1", audit["actor_reference"])
+        self.assertEqual("ai_governance_review", audit["reason"])
+        self.assertEqual(correlation_id, audit["correlation_id"])
+        self.assertIn(source["revision"], audit["after_snapshot"])
+
+        class FailingRecorder:
+            def record_change(self, *args, **kwargs):
+                raise RuntimeError("audit unavailable")
+
+        failed_correlation = str(uuid4())
+        with self.assertRaisesRegex(RuntimeError, "audit unavailable"):
+            IntakeService(SQLiteIntakeUnitOfWork(self.database, FailingRecorder())).evidence_detail(
+                IntakeEvidenceDetailRequest(
+                    source["sourceId"], source["revision"], "local_operator", None,
+                    "intake_evidence_read", failed_correlation,
+                ),
+            )
+        with engine.connect() as connection:
+            self.assertEqual(0, connection.exec_driver_sql(
+                "SELECT COUNT(*) FROM audit_events WHERE correlation_id = ?", (failed_correlation,),
+            ).scalar_one())
+        def fail_commit(_connection):
+            raise RuntimeError("commit unavailable")
+
+        commit_correlation = str(uuid4())
+        event.listen(engine, "commit", fail_commit)
+        try:
+            with self.assertRaisesRegex(RuntimeError, "commit unavailable"):
+                self.service.evidence_detail(IntakeEvidenceDetailRequest(
+                    source["sourceId"], source["revision"], "local_operator", None,
+                    "intake_evidence_read", commit_correlation,
+                ))
+        finally:
+            event.remove(engine, "commit", fail_commit)
+        with engine.connect() as connection:
+            self.assertEqual(0, connection.exec_driver_sql(
+                "SELECT COUNT(*) FROM audit_events WHERE correlation_id = ?", (commit_correlation,),
+            ).scalar_one())
+        other = self.service.admit(self.command(body="Other evidence."))
+        with self.assertRaises(IntakeNotFoundError):
+            self.service.evidence_detail(IntakeEvidenceDetailRequest(
+                other["sourceId"], source["revision"], "local_operator", None,
+                "intake_evidence_read", str(uuid4()),
+            ))
 
     def test_consumer_source_reader_enforces_the_unique_batch_limit(self) -> None:
         source = self.service.admit(self.command())
