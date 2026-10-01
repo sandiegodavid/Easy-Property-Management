@@ -75,23 +75,32 @@ The validator now checks canonical envelopes, revision chains, source lineage, a
 
 Suggestion: validate each operation against its source/revision and expected lifecycle consequence; validate candidate ordering, distinct source ownership, disposition metadata, timestamps, and registered values; and require the correlated audit events identified by the design for admissions, revisions, lifecycle decisions, and sensitive reads.
 
-7. [P1] STILL OPEN (re-reviewed 2026-09-30) — the four read shapes and batch bound exist, but sensitive-read audit durability is not fail-closed.
+7. [P1] STILL OPEN (re-reviewed 2026-09-30) — the unsafe sensitive-read method is gone, but the required bounded consumer evidence-detail operation was removed with it.
 
 INTAKE SENSITIVE READ BOUNDARY
 
-7a. [P1] `evidence_detail()` can return full evidence before its audit event is durably committed.
+7c. [P1] REGRESSED — `IntakeSourceReader` no longer provides the specified bounded evidence-detail read.
 
 Files:
-- application/apps/server/app/modules/intake/application/ports.py:32-36
-- application/apps/server/app/modules/intake/infrastructure/source_reader.py:123-205
-- application/apps/server/app/modules/intake/tests/test_intake.py:88-155
-- docs/INGEST-001_DESIGN.md:41, 225-236, 254-258
+- application/apps/server/app/modules/intake/application/ports.py:9-12
+- application/apps/server/app/modules/intake/infrastructure/source_reader.py:17-110
+- application/apps/server/app/modules/intake/application/service.py:130-139
+- application/apps/server/app/modules/intake/tests/test_intake.py:84-118
+- docs/INGEST-001_DESIGN.md:225-236, 254-260
 
-The reader now requires validated audit context and inserts `evidence_read` before returning, which handles an immediate recorder failure. It still accepts a raw caller-owned connection and cannot ensure that the surrounding transaction commits. The existing general reader test calls the method under `engine.connect()` rather than a committing transaction. A direct probe through that supported shape returned `Sensitive evidence`; the audit count was `1` inside the connection and `0` after the context closed and rolled back. The caller therefore receives the body even though no durable audit evidence remains.
+The change fixes the prior durability hole by deleting `evidence_detail()` from the consumer-neutral protocol and adapter, and the new test explicitly asserts that it is absent. This leaves only current summary, batched summary, and exact-revision summary reads even though the design requires a fourth bounded evidence-detail shape. `IntakeService.get()` is correctly fail-closed for the operator's current-detail endpoint, but it cannot replace that contract: it always reads the current revision, returns the operator-oriented aggregate detail, generates its own correlation ID, and records the default local-operator actor rather than accepting trusted consumer audit context. A downstream workflow therefore cannot request the retained body of a specified historical revision through an Intake-owned audited boundary.
 
-Suggestion: expose sensitive evidence through an Intake-owned application operation that commits the audit transaction before returning the detail to its caller. Keep current/exact/batched comparison projections transaction-aware and non-sensitive. If a future workflow needs evidence within a larger transaction, define a composition contract that prevents external disclosure or model invocation until the owning unit of work commits. Add a regression test using the public sensitive-read operation and prove that connection close, rollback, recorder failure, and commit failure cannot return evidence without one durable correlated audit event.
+Suggestion: add a separate consumer evidence-detail application port that accepts source ID, exact revision ID, bounded history/attachment limits, and validated actor/reason/correlation context without accepting a caller-owned connection. Its Intake-owned unit of work should read and audit in one transaction and return only after commit succeeds. Retain the three connection-owned non-sensitive projection methods for transactional comparison. Test current and historical revisions, bounds, missing/mismatched IDs, recorder failure, rollback, and commit failure.
 
 RESOLVED FINDING 7 ITEMS — 2026-09-30
+
+7a. [P1] RESOLVED — the raw-connection `evidence_detail()` path that could disclose evidence before audit commit has been removed. `IntakeService.get()` now remains the public full-evidence path, and its focused tests prove successful durable audit plus fail-closed recorder and commit failures.
+
+Files:
+- application/apps/server/app/modules/intake/application/ports.py:9-12
+- application/apps/server/app/modules/intake/infrastructure/source_reader.py:17-110
+- application/apps/server/app/modules/intake/application/service.py:130-139
+- application/apps/server/app/modules/intake/tests/test_intake.py:116-170
 
 7b. [P2] RESOLVED — `source_projections()` enforces a maximum of 200 unique IDs before constructing SQL and retains one-query batching at the limit.
 
