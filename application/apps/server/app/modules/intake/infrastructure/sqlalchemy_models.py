@@ -78,6 +78,7 @@ class IntakeSourceOperationModel(LocalBase):
     operation_type: Mapped[str] = mapped_column(String, nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    request_payload_json: Mapped[str] = mapped_column(String, nullable=False)
     source_id: Mapped[str] = mapped_column(ForeignKey("intake_sources.id"), nullable=False)
     result_revision_id: Mapped[str | None] = mapped_column(ForeignKey("intake_evidence_revisions.id"))
     result_json: Mapped[str | None] = mapped_column(String)
@@ -87,7 +88,7 @@ class IntakeSourceOperationModel(LocalBase):
     actor_kind: Mapped[str] = mapped_column(String, nullable=False)
     actor_reference: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
-    __table_args__ = (CheckConstraint("operation_type IN ('admit','integrity_failed','integrity_restored','correct','supersede','attention_transition')"), CheckConstraint("outcome IN ('succeeded','failed')"), CheckConstraint("length(request_fingerprint)=64"), Index("intake_operations_source", "source_id", "created_at"))
+    __table_args__ = (CheckConstraint("operation_type IN ('admit','integrity_failed','integrity_restored','correct','supersede','attention_transition')"), CheckConstraint("outcome IN ('succeeded','failed')"), CheckConstraint("length(request_fingerprint)=64"), CheckConstraint("length(request_payload_json) BETWEEN 2 AND 200000"), Index("intake_operations_source", "source_id", "created_at"))
 
 
 class IntakeDuplicateCandidateModel(LocalBase):

@@ -73,7 +73,8 @@ class IntakeService:
         preflight_hashes = tuple(_digest(item.source) for item in command.attachments)
         if len(set(preflight_hashes)) != len(preflight_hashes): raise IntakeError("Duplicate attachment content is not allowed.")
         provisional = command.envelope.canonical(tuple({"role": item.role, "contentSha256": digest} for item, digest in zip(command.attachments, preflight_hashes)))
-        request_fingerprint = fingerprint({"admit": provisional, "origin": command.origin_system, "scope": context.account_scope_hash, "identity": context.account_identity_state, "submitter": _submitter_fingerprint(context), "supersedes": command.supersedes_source_id})
+        provisional_request = _admission_request(command, context, provisional)
+        request_fingerprint = fingerprint(provisional_request)
         source_id = str(uuid4()); revision_id = str(uuid4()); correlation_id = str(uuid4()); now = utc_now()
         batch_holder: dict[str, object] = {}
         def operation(tx):
@@ -102,7 +103,12 @@ class IntakeService:
                 matched = exact if existing is not None and existing["content_fingerprint"] == fingerprint(provisional) else exact_evidence
                 if matched is None:
                     raise IntakeConflictError("Trusted external source identity conflicts with retained evidence.", "intake_exact_identity_conflict")
-                tx.insert_operation({"id": str(uuid4()), "operation_type": "admit", "idempotency_key": command.idempotency_key, "request_fingerprint": request_fingerprint, "source_id": matched["id"], "result_revision_id": matched["current_revision_id"], "outcome": "succeeded", "error_code": None, "correlation_id": correlation_id, "actor_kind": context.submitter_kind, "actor_reference": context.submitter_reference, "created_at": now})
+                tx.insert_operation({"id": str(uuid4()), "operation_type": "admit", "idempotency_key": command.idempotency_key, "request_fingerprint": request_fingerprint, "request_payload_json": canonical_json(provisional_request), "source_id": matched["id"], "result_revision_id": matched["current_revision_id"], "result_json": None, "outcome": "succeeded", "error_code": None, "correlation_id": correlation_id, "actor_kind": context.submitter_kind, "actor_reference": context.submitter_reference, "created_at": now})
+                audit_kind, audit_reference = _audit_actor(context)
+                tx.record(entity_type="intake_source", entity_id=matched["id"], action="admission_replayed", before=None,
+                          after={"sourceId": matched["id"], "revision": matched["current_revision_id"]},
+                          reason="intake_admission_replayed", correlation_id=correlation_id,
+                          actor_kind=audit_kind, actor_reference=audit_reference)
                 return self._view(tx, matched["id"]), None
             batch = self.files.attachment_batch(tx.file_connection()) if command.attachments and self.files else None
             if batch is not None: batch_holder["batch"] = batch
@@ -115,7 +121,8 @@ class IntakeService:
                 attachment_manifest = tuple({"role": role, "contentSha256": stored.content_sha256} for stored, role in links)
                 if len({entry["contentSha256"] for entry in attachment_manifest}) != len(attachment_manifest): raise IntakeError("Duplicate attachment content is not allowed.")
                 envelope = command.envelope.canonical(attachment_manifest)
-                final_request_fingerprint = fingerprint({"admit": envelope, "origin": command.origin_system, "scope": context.account_scope_hash, "identity": context.account_identity_state, "submitter": _submitter_fingerprint(context), "supersedes": command.supersedes_source_id})
+                final_request = _admission_request(command, context, envelope)
+                final_request_fingerprint = fingerprint(final_request)
                 source = {"id": source_id, "source_kind": command.envelope.source_kind, "channel": command.envelope.channel, "origin_system": command.origin_system, "external_source_id": command.envelope.external_source_id, "conversation_ref": command.envelope.conversation_ref, "account_scope_hash": context.account_scope_hash, "account_identity_state": context.account_identity_state, "account_display_hint": context.account_display_hint, "submitter_kind": context.submitter_kind, "submitter_reference": context.submitter_reference, "occurred_at_utc": command.envelope.occurred_at_utc, "received_at_utc": now, "technical_status": "ready", "attention_status": "unprocessed", "current_revision_id": revision_id, "supersedes_source_id": command.supersedes_source_id, "superseded_by_source_id": None, "failure_code": None, "created_at": now, "updated_at": now}
                 revision = {"id": revision_id, "source_id": source_id, "revision_number": 1, "envelope_schema_version": 1, "revision_kind": "submitted", "envelope_json": canonical_json(envelope), "content_fingerprint": fingerprint(envelope), "correction_reason": None, "actor_kind": context.submitter_kind, "actor_reference": context.submitter_reference, "created_at": now, "supersedes_revision_id": None, "superseded_by_revision_id": None}
                 if command.supersedes_source_id is not None:
@@ -124,7 +131,7 @@ class IntakeService:
                 for order, (stored, role) in enumerate(links):
                     link_id = next(link["id"] for link in stored.links if link["entityId"] == source_id)
                     tx.insert_attachment({"revision_id": revision_id, "file_link_id": link_id, "attachment_role": role, "display_order": order})
-                tx.insert_operation({"id": str(uuid4()), "operation_type": "supersede" if command.supersedes_source_id else "admit", "idempotency_key": command.idempotency_key, "request_fingerprint": final_request_fingerprint, "source_id": source_id, "result_revision_id": revision_id, "outcome": "succeeded", "error_code": None, "correlation_id": correlation_id, "actor_kind": context.submitter_kind, "actor_reference": context.submitter_reference, "created_at": now})
+                tx.insert_operation({"id": str(uuid4()), "operation_type": "supersede" if command.supersedes_source_id else "admit", "idempotency_key": command.idempotency_key, "request_fingerprint": final_request_fingerprint, "request_payload_json": canonical_json(final_request), "source_id": source_id, "result_revision_id": revision_id, "result_json": None, "outcome": "succeeded", "error_code": None, "correlation_id": correlation_id, "actor_kind": context.submitter_kind, "actor_reference": context.submitter_reference, "created_at": now})
                 audit_kind, audit_reference = _audit_actor(context)
                 tx.record(entity_type="intake_source", entity_id=source_id, action="admitted", before=None, after=self._safe_source(source), reason="intake_admitted", correlation_id=correlation_id, actor_kind=audit_kind, actor_reference=audit_reference)
                 if command.supersedes_source_id is not None:
@@ -188,7 +195,8 @@ class IntakeService:
             if any(getattr(envelope, field) != old_envelope.get(key) for field, key in (("source_kind", "sourceKind"), ("channel", "channel"), ("provider", "provider"), ("conversation_ref", "conversationRef"), ("external_source_id", "externalSourceId"))):
                 raise IntakeConflictError("Source identity or attachment membership requires source supersession.", "intake_supersession_required")
             payload = envelope.canonical(tuple(old_envelope["attachments"]))
-            request = fingerprint({"correct": source_id, "envelope": payload, "reason": reason})
+            request_payload = {"correct": source_id, "envelope": payload, "reason": reason}
+            request = fingerprint(request_payload)
             prior = tx.operation(idempotency_key)
             if prior:
                 if prior["request_fingerprint"] != request: raise IntakeConflictError("Idempotency key was reused with different input.", "intake_idempotency_conflict")
@@ -202,7 +210,7 @@ class IntakeService:
             tx.replace_revision(old["id"], {"superseded_by_revision_id": revision_id})
             tx.copy_attachments(old["id"], revision_id)
             self._candidate(tx, source_id, revision["content_fingerprint"], now, correlation_id)
-            operation = {"id": str(uuid4()), "operation_type": "correct", "idempotency_key": idempotency_key, "request_fingerprint": request, "source_id": source_id, "result_revision_id": revision_id, "outcome": "succeeded", "error_code": None, "correlation_id": correlation_id, "actor_kind": "local_operator", "actor_reference": None, "created_at": now}
+            operation = {"id": str(uuid4()), "operation_type": "correct", "idempotency_key": idempotency_key, "request_fingerprint": request, "request_payload_json": canonical_json(request_payload), "source_id": source_id, "result_revision_id": revision_id, "outcome": "succeeded", "error_code": None, "correlation_id": correlation_id, "actor_kind": "local_operator", "actor_reference": None, "created_at": now}
             result = tx.detail_projection(source_id, pending_operation=operation)
             if result is None: raise IntakeNotFoundError("Intake source was not found.")
             operation["result_json"] = canonical_json(result)
@@ -231,7 +239,8 @@ class IntakeService:
             source = tx.source(source_id)
             if source is None: raise IntakeNotFoundError("Intake source was not found.")
             target = "ready" if available else "failed"
-            request = fingerprint({"integrity": source_id, "target": target, "reason": code})
+            request_payload = {"integrity": source_id, "target": target, "reason": code}
+            request = fingerprint(request_payload)
             prior = tx.operation(idempotency_key)
             if prior:
                 if prior["request_fingerprint"] != request: raise IntakeConflictError("Idempotency key was reused with different input.", "intake_idempotency_conflict")
@@ -240,7 +249,7 @@ class IntakeService:
             if source["technical_status"] == target: raise IntakeConflictError("Technical status is unchanged.", "intake_lifecycle_conflict")
             now = utc_now(); correlation_id = str(uuid4())
             tx.update_source(source_id, {"technical_status": target, "failure_code": None if available else code, "updated_at": now})
-            tx.insert_operation({"id": str(uuid4()), "operation_type": "integrity_restored" if available else "integrity_failed", "idempotency_key": idempotency_key, "request_fingerprint": request, "source_id": source_id, "result_revision_id": source["current_revision_id"], "outcome": "succeeded", "error_code": None, "correlation_id": correlation_id, "actor_kind": "system", "actor_reference": None, "created_at": now})
+            tx.insert_operation({"id": str(uuid4()), "operation_type": "integrity_restored" if available else "integrity_failed", "idempotency_key": idempotency_key, "request_fingerprint": request, "request_payload_json": canonical_json(request_payload), "source_id": source_id, "result_revision_id": source["current_revision_id"], "result_json": None, "outcome": "succeeded", "error_code": None, "correlation_id": correlation_id, "actor_kind": "system", "actor_reference": None, "created_at": now})
             tx.record(entity_type="intake_source", entity_id=source_id, action="integrity_restored" if available else "integrity_failed", before={"technicalStatus": source["technical_status"]}, after={"technicalStatus": target, "failureCode": None if available else code}, reason="intake_integrity_transition", correlation_id=correlation_id, actor_kind="system")
             return self._view(tx, source_id)
         return self.unit_of_work.write(operation)
@@ -248,7 +257,12 @@ class IntakeService:
     def _candidate(self, tx, source_id: str, content_fingerprint: str, now: str, correlation_id: str) -> None:
         row = tx.duplicate_source(content_fingerprint, source_id)
         if row:
-            left, right = sorted((source_id, row)); tx.insert_candidate({"id":str(uuid4()),"source_id":left,"candidate_source_id":right,"reason":"content_fingerprint","confidence_label":"high","confidence_provenance":"exact_canonical_evidence","disposition":"unreviewed","decided_at":None,"decision_reason":None,"created_at":now})
+            left, right = sorted((source_id, row)); candidate_id = str(uuid4())
+            tx.insert_candidate({"id":candidate_id,"source_id":left,"candidate_source_id":right,"reason":"content_fingerprint","confidence_label":"high","confidence_provenance":"exact_canonical_evidence","disposition":"unreviewed","decided_at":None,"decision_reason":None,"created_at":now})
+            tx.record(entity_type="intake_source_duplicate_candidate", entity_id=candidate_id, action="created", before=None,
+                      after={"sourceId": left, "candidateSourceId": right, "introducedSourceId": source_id,
+                             "reason": "content_fingerprint", "disposition": "unreviewed"},
+                      reason="intake_duplicate_candidate_detected", correlation_id=correlation_id)
 
     def _view(self, tx, source_id: str, detail: bool = False) -> dict[str, object]:
         source = tx.source(source_id)
@@ -320,3 +334,10 @@ def _digest(path: Path) -> str:
     with path.open("rb") as handle:
         for block in iter(lambda: handle.read(1024*1024), b""): digest.update(block)
     return digest.hexdigest()
+
+
+def _admission_request(command: IntakeAdmissionCommand, context: IntakeAdmissionContext,
+                       envelope: dict[str, object]) -> dict[str, object]:
+    return {"admit": envelope, "origin": command.origin_system, "scope": context.account_scope_hash,
+            "identity": context.account_identity_state, "submitter": _submitter_fingerprint(context),
+            "supersedes": command.supersedes_source_id}

@@ -37,6 +37,7 @@ from app.modules.intake.domain.models import (
 )
 from app.modules.intake.infrastructure.attention_operations import SQLiteIntakeAttentionOperations
 from app.modules.intake.domain.models import IntakePayloadTooLargeError
+from app.modules.intake.infrastructure.schema_validation import validate_intake_data
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.platform.migration_errors import MigrationSchemaError
 from app.platform.product_migrations import initialize_latest_schema, validate_latest_schema
@@ -606,6 +607,20 @@ class IntakeTests(TestCase):
         self.assertEqual({"code": "publication_cleanup_incomplete",
                           "message": "File publication cleanup could not be completed.",
                           "repairRequired": True, "attentionRecorded": False}, response.json()["detail"])
+
+    def test_retained_validation_recomputes_an_operation_fingerprint(self) -> None:
+        command = self.command()
+        self.service.admit(command)
+        engine = create_sqlite_engine(self.database)
+        with immediate_transaction(engine) as connection:
+            connection.exec_driver_sql("DROP TRIGGER intake_source_operations_no_update")
+            connection.exec_driver_sql(
+                "UPDATE intake_source_operations SET request_fingerprint = ? WHERE idempotency_key = ?",
+                ("0" * 64, command.idempotency_key),
+            )
+        with engine.connect() as connection:
+            with self.assertRaises(MigrationSchemaError):
+                validate_intake_data(connection)
 
     def test_operator_api_rejects_trusted_provenance_fields(self) -> None:
         class ReadyRuntime:

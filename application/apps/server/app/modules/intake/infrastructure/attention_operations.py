@@ -11,20 +11,13 @@ from app.modules.intake.domain.models import (
     AttentionTransition,
     IntakeConflictError,
     IntakeNotFoundError,
+    attention_transition_allowed,
     canonical_json,
     fingerprint,
     utc_now,
 )
 from app.modules.intake.infrastructure.sqlalchemy_models import IntakeSourceModel, IntakeSourceOperationModel
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeTransaction
-
-_ALLOWED_TRANSITIONS = {
-    "unprocessed": {"in_review", "dismissed"},
-    "in_review": {"resolved", "dismissed", "unprocessed"},
-    "dismissed": {"unprocessed"},
-    "resolved": set(),
-}
-
 
 class SQLiteIntakeAttentionOperations:
     """The one transaction-aware adapter shared by operator and review flows."""
@@ -37,7 +30,7 @@ class SQLiteIntakeAttentionOperations:
         connection: Any,
         transition: AttentionTransition,
     ) -> dict[str, object]:
-        request_fingerprint = fingerprint({
+        request_payload = {
             "attention": transition.source_id,
             "target": transition.target,
             "reason": transition.reason,
@@ -48,7 +41,8 @@ class SQLiteIntakeAttentionOperations:
             # part of request identity, but actor attribution is.
             "actorKind": transition.actor_kind,
             "actorReference": transition.actor_reference,
-        })
+        }
+        request_fingerprint = fingerprint(request_payload)
         prior = connection.execute(
             select(IntakeSourceOperationModel).where(
                 IntakeSourceOperationModel.idempotency_key == transition.idempotency_key,
@@ -77,7 +71,7 @@ class SQLiteIntakeAttentionOperations:
             )
         if transition.target == source["attention_status"]:
             raise IntakeConflictError("Attention status is unchanged.", "intake_lifecycle_conflict")
-        if transition.target not in _ALLOWED_TRANSITIONS[source["attention_status"]]:
+        if not attention_transition_allowed(source["attention_status"], transition.target):
             raise IntakeConflictError("Attention transition is not allowed.", "intake_lifecycle_conflict")
 
         now = utc_now()
@@ -94,6 +88,7 @@ class SQLiteIntakeAttentionOperations:
             operation_type="attention_transition",
             idempotency_key=transition.idempotency_key,
             request_fingerprint=request_fingerprint,
+            request_payload_json=canonical_json(request_payload),
             source_id=transition.source_id,
             result_revision_id=source["current_revision_id"],
             result_json=canonical_json(result),
