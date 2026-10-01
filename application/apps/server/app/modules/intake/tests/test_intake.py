@@ -4,6 +4,8 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase
 from uuid import uuid4
 
+from sqlalchemy import event
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -14,6 +16,7 @@ from app.modules.intake.api.router import build_router
 from app.modules.intake.application.service import IntakeAdmissionCommand, IntakeService
 from app.modules.intake.domain.models import EvidenceEnvelope, IntakeConflictError
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
+from app.modules.intake.infrastructure.source_reader import SQLiteIntakeSourceReader
 from app.platform.product_migrations import initialize_latest_schema, validate_latest_schema
 
 
@@ -75,6 +78,41 @@ class IntakeTests(TestCase):
         self.assertEqual("superseded", old["technicalStatus"])
         self.assertEqual(replacement["sourceId"], old["supersededBySourceId"])
         validate_latest_schema(self.database)
+
+    def test_consumer_source_reader_supports_bounded_current_and_historical_reads(self) -> None:
+        first = self.service.admit(self.command(body="First evidence."))
+        second = self.service.admit(self.command(body="Second evidence."))
+        corrected = self.service.correct(
+            first["sourceId"],
+            EvidenceEnvelope("operator_note", "internal", "Corrected first evidence.", "2026-01-01T12:00:00+00:00"),
+            "clarified", str(uuid4()),
+        )
+        reader = SQLiteIntakeSourceReader()
+        statements: list[str] = []
+
+        def capture(*args):
+            if args[2].lstrip().upper().startswith("SELECT"):
+                statements.append(args[2])
+
+        engine = self.service.unit_of_work.engine
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            with engine.connect() as connection:
+                self.assertEqual({}, reader.source_projections(connection, ()))
+                start = len(statements)
+                summaries = reader.source_projections(connection, (first["sourceId"], second["sourceId"], first["sourceId"]))
+                self.assertEqual(1, len(statements) - start)
+                self.assertEqual({first["sourceId"], second["sourceId"]}, set(summaries))
+                self.assertEqual(corrected["revision"], summaries[first["sourceId"]]["revision"])
+                original = reader.revision_projection(connection, first["sourceId"], first["revision"])
+                self.assertEqual(first["revision"], original["revision"])
+                self.assertEqual("submitted", original["revisionKind"])
+                detail = reader.evidence_detail(connection, first["sourceId"], corrected["revision"], max_history=1)
+                self.assertEqual("Corrected first evidence.", detail["evidence"]["body"])
+                self.assertTrue(detail["historyTruncated"])
+                self.assertIsNone(reader.revision_projection(connection, second["sourceId"], first["revision"]))
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
 
     def test_import_reports_cleanup_repair_when_deferred_attention_recording_fails(self) -> None:
         """The owning HTTP boundary preserves FILE-001's safe 503 contract."""

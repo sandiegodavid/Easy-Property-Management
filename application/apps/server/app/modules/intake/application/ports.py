@@ -1,12 +1,15 @@
 """Narrow transaction-aware ports exposed by INGEST-001."""
 from __future__ import annotations
 from pathlib import Path
-from typing import Any, Callable, Protocol, TypeVar
+from typing import Any, Callable, Collection, Mapping, Protocol, TypeVar
 T = TypeVar("T")
 
 
 class IntakeSourceReader(Protocol):
     def source_projection(self, connection: Any, source_id: str) -> dict[str, object] | None: ...
+    def source_projections(self, connection: Any, source_ids: Collection[str]) -> Mapping[str, Mapping[str, object]]: ...
+    def revision_projection(self, connection: Any, source_id: str, revision_id: str) -> Mapping[str, object] | None: ...
+    def evidence_detail(self, connection: Any, source_id: str, revision_id: str, *, max_history: int = 100) -> Mapping[str, object] | None: ...
 
 
 class IntakeAttachmentBatch(Protocol):
