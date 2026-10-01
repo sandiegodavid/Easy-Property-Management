@@ -17,6 +17,7 @@ from app.modules.intake.infrastructure.sqlalchemy_models import (
     IntakeSourceOperationModel,
 )
 from app.modules.intake.infrastructure.source_reader import SQLiteIntakeSourceReader
+from app.modules.intake.infrastructure.source_summary import source_summary
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 T = TypeVar("T")
@@ -108,7 +109,16 @@ class SQLiteIntakeTransaction:
         source = self.source(source_id)
         if source is None: return None
         revision = self.revision(source["current_revision_id"])
-        return {"sourceId": source["id"], "sourceKind": source["source_kind"], "channel": source["channel"], "revision": source["current_revision_id"], "fingerprint": None if revision is None else revision["content_fingerprint"], "technicalStatus": source["technical_status"], "failureCode": source["failure_code"], "attentionStatus": source["attention_status"], "occurredAtUtc": source["occurred_at_utc"], "receivedAtUtc": source["received_at_utc"], "supersedesSourceId": source["supersedes_source_id"], "supersededBySourceId": source["superseded_by_source_id"], "provenance": {"originSystem": source["origin_system"], "accountIdentityState": source["account_identity_state"], "submitterKind": source["submitter_kind"]}, "attachmentCount": self.connection.execute(select(IntakeRevisionFileLinkModel).where(IntakeRevisionFileLinkModel.revision_id == source["current_revision_id"])).rowcount if False else len(self.connection.execute(select(IntakeRevisionFileLinkModel.file_link_id).where(IntakeRevisionFileLinkModel.revision_id == source["current_revision_id"])).all()), "comparisonAvailable": source["technical_status"] == "ready"}
+        count = len(self.connection.execute(
+            select(IntakeRevisionFileLinkModel.file_link_id).where(
+                IntakeRevisionFileLinkModel.revision_id == source["current_revision_id"],
+            ),
+        ).all())
+        return source_summary(
+            source,
+            fingerprint=None if revision is None else revision["content_fingerprint"],
+            attachment_count=count,
+        )
     def list_projections(self, *, limit: int, cursor: tuple[str, str] | None,
                          source_kind: str | None, technical_status: str | None,
                          attention_status: str | None, channel: str | None = None,
@@ -136,7 +146,14 @@ class SQLiteIntakeTransaction:
         ids = [row["id"] for row in page]
         revisions = {row["id"]: row for row in self.connection.execute(select(IntakeEvidenceRevisionModel).where(IntakeEvidenceRevisionModel.id.in_([row["current_revision_id"] for row in page]))).mappings()}
         counts = dict(self.connection.execute(select(IntakeRevisionFileLinkModel.revision_id, func.count()).where(IntakeRevisionFileLinkModel.revision_id.in_([row["current_revision_id"] for row in page])).group_by(IntakeRevisionFileLinkModel.revision_id)).all())
-        results = [{"sourceId": row["id"], "sourceKind": row["source_kind"], "channel": row["channel"], "revision": row["current_revision_id"], "fingerprint": revisions[row["current_revision_id"]]["content_fingerprint"], "technicalStatus": row["technical_status"], "failureCode": row["failure_code"], "attentionStatus": row["attention_status"], "occurredAtUtc": row["occurred_at_utc"], "receivedAtUtc": row["received_at_utc"], "supersedesSourceId": row["supersedes_source_id"], "supersededBySourceId": row["superseded_by_source_id"], "provenance": {"originSystem": row["origin_system"], "accountIdentityState": row["account_identity_state"], "submitterKind": row["submitter_kind"]}, "attachmentCount": counts.get(row["current_revision_id"], 0), "comparisonAvailable": row["technical_status"] == "ready"} for row in page]
+        results = [
+            source_summary(
+                row,
+                fingerprint=revisions[row["current_revision_id"]]["content_fingerprint"],
+                attachment_count=counts.get(row["current_revision_id"], 0),
+            )
+            for row in page
+        ]
         next_cursor = None if len(rows) <= limit else (page[-1]["received_at_utc"], page[-1]["id"])
         return results, next_cursor
     def detail_projection(self, source_id: str, pending_operation: dict[str, object] | None = None) -> dict[str, object] | None:

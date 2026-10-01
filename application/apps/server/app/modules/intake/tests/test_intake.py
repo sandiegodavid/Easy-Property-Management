@@ -223,6 +223,12 @@ class IntakeTests(TestCase):
                 self.assertEqual(corrected["revision"], state["current_revision_id"])
                 self.assertIsNone(state["superseded_by_source_id"])
                 self.assertIsNone(reader.source_state(connection, str(uuid4())))
+                self.assertEqual(
+                    self.service.unit_of_work.read(
+                        lambda tx: tx.source_projection(first["sourceId"]),
+                    ),
+                    reader.source_projection(connection, first["sourceId"]),
+                )
                 self.assertIsNone(reader.revision_projection(connection, second["sourceId"], first["revision"]))
                 exact_limit = (first["sourceId"], *(str(uuid4()) for _ in range(MAX_INTAKE_SOURCE_BATCH - 1)))
                 self.assertIn(first["sourceId"], reader.source_projections(connection, exact_limit))

@@ -12,6 +12,7 @@ from app.modules.intake.infrastructure.sqlalchemy_models import (
     IntakeRevisionFileLinkModel,
     IntakeSourceModel,
 )
+from app.modules.intake.infrastructure.source_summary import source_summary
 
 
 class SQLiteIntakeSourceReader:
@@ -81,7 +82,14 @@ class SQLiteIntakeSourceReader:
             .outerjoin(counts, counts.c.revision_id == IntakeSourceModel.current_revision_id)
             .where(IntakeSourceModel.id.in_(ids)),
         ).mappings()
-        return {row["id"]: self._summary(row) for row in rows}
+        return {
+            row["id"]: source_summary(
+                row,
+                fingerprint=row["current_fingerprint"],
+                attachment_count=int(row["attachment_count"]),
+            )
+            for row in rows
+        }
 
     def revision_projection(
         self,
@@ -122,34 +130,14 @@ class SQLiteIntakeSourceReader:
         if row is None:
             return None
         return {
-            **self._summary(row, fingerprint=row["content_fingerprint"]),
+            **source_summary(
+                row,
+                fingerprint=row["content_fingerprint"],
+                attachment_count=int(row["attachment_count"]),
+            ),
             "revision": row["revision_id"],
             "revisionNumber": row["revision_number"],
             "revisionKind": row["revision_kind"],
             "correctionReason": row["correction_reason"],
             "revisionCreatedAt": row["revision_created_at"],
-        }
-
-    @staticmethod
-    def _summary(row: Mapping[str, object], *, fingerprint: str | None = None) -> dict[str, object]:
-        return {
-            "sourceId": row["id"],
-            "sourceKind": row["source_kind"],
-            "channel": row["channel"],
-            "revision": row["current_revision_id"],
-            "fingerprint": fingerprint if fingerprint is not None else row["current_fingerprint"],
-            "technicalStatus": row["technical_status"],
-            "failureCode": row["failure_code"],
-            "attentionStatus": row["attention_status"],
-            "occurredAtUtc": row["occurred_at_utc"],
-            "receivedAtUtc": row["received_at_utc"],
-            "supersedesSourceId": row["supersedes_source_id"],
-            "supersededBySourceId": row["superseded_by_source_id"],
-            "provenance": {
-                "originSystem": row["origin_system"],
-                "accountIdentityState": row["account_identity_state"],
-                "submitterKind": row["submitter_kind"],
-            },
-            "attachmentCount": row["attachment_count"],
-            "comparisonAvailable": row["technical_status"] == "ready",
         }

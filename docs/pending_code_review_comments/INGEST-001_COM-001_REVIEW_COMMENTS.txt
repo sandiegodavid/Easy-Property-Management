@@ -125,17 +125,6 @@ Focused Intake validation: 11 passed, with one unrelated Starlette/AnyIO depreca
 
 STANDARDS FINDINGS
 
-INTAKE PERSISTENCE PROJECTION
-
-3. [P3] Source summaries are assembled twice and can drift.
-
-Files:
-- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py:50-54, 77-80
-
-source_projection() and list_projections() independently construct the same response shape. The supersession fields already had to be added in both places in the latest fix.
-
-Suggestion: extract one row-to-summary projection helper that receives the revision and attachment count, then use it for both detail and list paths.
-
 RESOLVED STANDARDS FINDINGS — 2026-10-01
 
 FILE-001 → INTAKE READ BOUNDARY
@@ -167,6 +156,20 @@ Files:
 `IntakeSourceReader.source_state()` provides the small, transaction-aware source state required for COM-001 link creation, retained-link validation, and mutable link context. `SQLiteCommunicationContextOperations` consumes that protocol rather than importing or querying Intake SQLAlchemy models. The unused application-layer `IntakeSourceLinkValidator` has been removed; bootstrap and schema-validation composition inject the reader explicitly.
 
 Focused validation: Communications and Maintenance workflow tests passed (49 passed, with one unrelated Starlette/AnyIO deprecation warning). No regression or new actionable issue remains for this finding.
+
+INTAKE PERSISTENCE PROJECTION
+
+3. [P3] RESOLVED — Source summaries use one shared mapping projection.
+
+Files:
+- application/apps/server/app/modules/intake/infrastructure/source_summary.py
+- application/apps/server/app/modules/intake/infrastructure/source_reader.py
+- application/apps/server/app/modules/intake/infrastructure/unit_of_work.py
+- application/apps/server/app/modules/intake/tests/test_intake.py
+
+`source_summary()` maps retained source facts, a fingerprint, and attachment count to the sole summary shape. The SQLite consumer reader, the single-source persistence projection, and the bounded list projection all reuse it. A regression test verifies that the transaction and reader single-source projections remain identical.
+
+Focused validation: Intake and Communications tests passed (45 passed, with one unrelated Starlette/AnyIO deprecation warning). No regression or new actionable issue remains for this finding.
 
 VALIDATION
 
