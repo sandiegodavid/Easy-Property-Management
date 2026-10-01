@@ -1,8 +1,6 @@
 """Provider-directory use cases and invariants."""
 
 import unicodedata
-import hashlib
-import json
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from urllib.parse import SplitResult, urlsplit, urlunsplit
@@ -17,6 +15,7 @@ from app.modules.parties.application.service import (
 from app.modules.parties.domain.models import Party, PartyContactMethod
 from app.modules.vendors.application.ports import ProviderStorageConflict, ProviderTransaction, ProviderUnitOfWork
 from app.modules.vendors.domain.models import ProviderCategory, ProviderCategoryAssignment, ProviderProfile
+from app.modules.vendors.domain.category_seeds import fingerprint as category_fingerprint
 from app.modules.vendors.domain.models import ProviderReference as ProviderReferenceRecord
 from app.modules.vendors.domain.models import ProviderReputationLink
 from app.modules.vendors.domain.models import ProviderService as ProviderServiceRecord
@@ -780,9 +779,8 @@ def _uuid(value, label):
     if not isinstance(value, str): raise ProviderError(f"{label} is invalid.")
     try: return str(uuid.UUID(value))
     except ValueError as error: raise ProviderError(f"{label} is invalid.") from error
-def _fingerprint(*values):
-    return hashlib.sha256(json.dumps(values, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
 def _encode_cursor(party): return f"{unicodedata.normalize('NFKC', party.display_name).casefold()}|{party.id}"
+def _fingerprint(*values): return category_fingerprint(*values)
 def _decode_cursor(cursor):
     try:
         name, party_id = cursor.rsplit("|", 1)

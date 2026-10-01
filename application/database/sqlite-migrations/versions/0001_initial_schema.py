@@ -25,6 +25,7 @@ def upgrade() -> None:
         ProviderCategoryAssignmentModel, ProviderCategoryModel, ProviderProfileModel, ProviderReferenceModel, ProviderReputationLinkModel,
         ProviderServiceAreaModel, ProviderServiceModel, ProviderWorkHistoryModel,
     )
+    from app.modules.vendors.domain.category_seeds import PROVIDER_CATEGORY_SEEDS
     from app.modules.finance.infrastructure.sqlalchemy_models import (
         ExpenseCategoryModel, ExpenseModel, ExpenseRefundModel,
         RentExpectationModel, RentExpectationTimelinessReviewModel,
@@ -153,22 +154,13 @@ def upgrade() -> None:
          "created_at": stamp, "updated_at": stamp}
         for order, item in enumerate(categories)
     ])
-    provider_categories = (
-        ("00000000-0000-4000-8000-000000000301", "Legal / Attorney"),
-        ("00000000-0000-4000-8000-000000000302", "Landscaping"),
-        ("00000000-0000-4000-8000-000000000303", "Electrical"),
-        ("00000000-0000-4000-8000-000000000304", "HVAC / A/C"),
-        ("00000000-0000-4000-8000-000000000305", "Appliance repair"),
-        ("00000000-0000-4000-8000-000000000306", "Plumbing"),
-        ("00000000-0000-4000-8000-000000000307", "General maintenance"),
-    )
     op.bulk_insert(ProviderCategoryModel.__table__, [
-        {"id": category_id, "display_name": name, "normalized_name": name.casefold(),
-         "description": None, "display_order": order, "created_at": stamp, "updated_at": stamp,
+        {"id": item.id, "display_name": item.display_name, "normalized_name": item.normalized_name,
+         "description": None, "display_order": item.display_order, "created_at": stamp, "updated_at": stamp,
          "archived_at": None, "archive_reason": None,
-         "create_idempotency_key": f"00000000-0000-4000-8000-{300 + order:012d}",
-         "create_request_fingerprint": f"seed-{order}"}
-        for order, (category_id, name) in enumerate(provider_categories)
+         "create_idempotency_key": item.create_idempotency_key,
+         "create_request_fingerprint": item.create_request_fingerprint}
+        for item in PROVIDER_CATEGORY_SEEDS
     ])
 
 

@@ -28,6 +28,7 @@ from app.modules.vendors.application.service import (
     ProviderSearchCommand,
     ProviderService,
     ProviderCategoryCommand,
+    ProviderCategoryPatchCommand,
     ProviderCategoryAssignmentCommand,
     ReferenceCommand,
     ReputationLinkCommand,
@@ -36,7 +37,7 @@ from app.modules.vendors.application.service import (
     ServiceCommand,
     WorkHistoryCommand,
 )
-from app.modules.vendors.infrastructure.schema_validation import validate_vendor_schema
+from app.modules.vendors.infrastructure.schema_validation import validate_vendor_data, validate_vendor_schema
 from app.modules.vendors.infrastructure.unit_of_work import SQLiteProviderUnitOfWork
 from app.modules.workspace.application.backup_service import BackupService
 from app.modules.workspace.application.service import WorkspaceService
@@ -450,5 +451,80 @@ class ProviderTests(unittest.TestCase):
             with engine.connect() as connection:
                 with self.assertRaises(MigrationSchemaError):
                     validate_vendor_schema(connection)
+        finally:
+            engine.dispose()
+
+    def test_category_retained_validation_rejects_nonportable_metadata(self) -> None:
+        category = self.providers.create_category(ProviderCategoryCommand(
+            "Portable category", 8, "00000000-0000-4000-8000-000000000941", "Portable description",
+        ))
+        engine = create_sqlite_engine(self.workspace.paths.database)
+        try:
+            with engine.begin() as connection:
+                connection.exec_driver_sql(
+                    "UPDATE provider_categories SET description = '  noncanonical' WHERE id = ?",
+                    (category["id"],),
+                )
+            with engine.connect() as connection:
+                with self.assertRaises(MigrationSchemaError):
+                    validate_vendor_data(connection)
+        finally:
+            engine.dispose()
+
+    def test_category_retained_validation_rejects_tampered_seed_identity(self) -> None:
+        engine = create_sqlite_engine(self.workspace.paths.database)
+        try:
+            with engine.begin() as connection:
+                connection.exec_driver_sql(
+                    "UPDATE provider_categories SET create_request_fingerprint = ? WHERE display_order = 0",
+                    ("a" * 64,),
+                )
+            with engine.connect() as connection:
+                with self.assertRaises(MigrationSchemaError):
+                    validate_vendor_data(connection)
+        finally:
+            engine.dispose()
+
+    def test_category_retained_validation_anchors_edited_seed_origin(self) -> None:
+        seed = self.providers.list_categories()[0]
+        self.providers.update_category(seed["id"], ProviderCategoryPatchCommand(description="Edited seed"))
+        engine = create_sqlite_engine(self.workspace.paths.database)
+        try:
+            with engine.begin() as connection:
+                original = connection.exec_driver_sql(
+                    "SELECT before_snapshot FROM audit_events "
+                    "WHERE entity_type = 'provider_category' AND entity_id = ?",
+                    (seed["id"],),
+                ).scalar_one()
+                fabricated = json.loads(original)
+                fabricated["displayName"] = "Fabricated origin"
+                connection.exec_driver_sql("DROP TRIGGER audit_events_no_update")
+                connection.exec_driver_sql(
+                    "UPDATE audit_events SET before_snapshot = ? "
+                    "WHERE entity_type = 'provider_category' AND entity_id = ?",
+                    (json.dumps(fabricated, separators=(",", ":")), seed["id"]),
+                )
+            with engine.connect() as connection:
+                with self.assertRaises(MigrationSchemaError):
+                    validate_vendor_data(connection)
+        finally:
+            engine.dispose()
+
+    def test_category_retained_validation_requires_correlated_mutation_audit(self) -> None:
+        category = self.providers.create_category(ProviderCategoryCommand(
+            "Audited category", 8, "00000000-0000-4000-8000-000000000942", None,
+        ))
+        engine = create_sqlite_engine(self.workspace.paths.database)
+        try:
+            with engine.begin() as connection:
+                connection.exec_driver_sql("DROP TRIGGER audit_events_no_update")
+                connection.exec_driver_sql(
+                    "UPDATE audit_events SET after_snapshot = '{}' "
+                    "WHERE entity_type = 'provider_category' AND entity_id = ?",
+                    (category["id"],),
+                )
+            with engine.connect() as connection:
+                with self.assertRaises(MigrationSchemaError):
+                    validate_vendor_data(connection)
         finally:
             engine.dispose()
