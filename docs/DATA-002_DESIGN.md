@@ -7,6 +7,7 @@
 ## Scope and boundaries
 
 - Supported entities: property, owner (shared Party identity), provider (shared Party identity/profile), and explicit property-owner relationships.
+- Provider import may include category values. Each distinct normalized source value requires a reviewed decision to map it to an existing active VEND-CAT-001 category, create a reviewed new category, or skip that value. The import never silently creates or fuzzy-matches a category.
 - Leases, balances, financial history, operational history, bulk updates, overwrite/merge behavior, macros, and formula-as-instruction behavior are out of scope and remain DATA-001 or source-domain work.
 - Files are accepted through FILE-001, parsed in a bounded worker/service boundary, and never executed.
 
@@ -21,6 +22,8 @@
 7. Return a durable row-level outcome report; retry only incomplete/failed rows using the original batch idempotency key.
 
 Import owner identity records before dependent property-owner relationships. Linking reuses a selected existing record solely to satisfy the stated relationship; it never changes that record's fields. Unknown optional values remain unknown; required fields are never invented.
+
+For a provider row with reviewed categories, provider identity/profile creation and every selected category assignment commit atomically. An invalid, archived, ambiguous, or failed category decision blocks that provider row; the importer never leaves a newly created provider partially categorized. An operator may explicitly skip every category value and create an Uncategorized provider because VEND-CAT-001 permits zero categories and exposes that coverage state.
 
 ## Persistence and audit
 

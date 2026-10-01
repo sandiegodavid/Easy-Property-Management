@@ -361,4 +361,4 @@ Follow-on ownership remains:
 - `RPT-001` — repair reporting and source-record drill-down using journal outcomes without treating narratives as finance facts.
 - `ISSUE-AI-004` and `AI-REC-002` — explainable advisory use of clearly sourced manual history, issue-backed outcomes, quoted/actual schedule context, and financial context; never automatic provider contact or assignment.
 - `FIN-002` — confirmed spending and refunds; a later allocation design is required for exact assignment cost.
-- `VEND-CAT-001` — provider categories and explicit issue-category mapping.
+- `VEND-CAT-001` — provider categories only. Maintenance and Provider taxonomies remain distinct; any explicit issue-category mapping requires a later design and must not be inferred from labels.

@@ -358,7 +358,7 @@ Follow-on ownership remains:
 - `MAINT-003` — [append-only work journal](MAINT-003_DESIGN.md), actual work timing, completion evidence, and repair outcomes, optionally referencing stable assignments.
 - `UI-001` — quote comparison, direct/quote-backed assignment, override confirmation, reassignment, and history screens.
 - `VEND-003` — sending quote requests; it may later correlate delivery with Maintenance quotes.
-- `VEND-CAT-001` — configurable provider categories and any explicit mapping to Maintenance issue categories.
+- `VEND-CAT-001` — configurable provider categories only. Any explicit mapping to Maintenance issue categories requires a later design.
 - `ISSUE-AI-004` — explainable saved-provider suggestions; it must never assign or contact a provider automatically.
 - `FIN-002` — actual paid expenses linked to an issue after payment is known.
 - `RPT-001` — repair reporting and drill-down using Maintenance-owned quote and assignment facts without treating quote totals as spending.

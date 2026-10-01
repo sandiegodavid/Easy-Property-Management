@@ -433,9 +433,3 @@ Reporter text and role from a source do not prove a Party, local-operator subjec
 Comparing evidence does not say whether source attachments become issue evidence. Automatically creating a second file link can imply operator endorsement and complicate later archival.
 
 **Decision:** retain attachments under the Intake source and expose them through source-to-issue provenance. Create a Maintenance file link only through a separate explicit evidence action.
-
-### 11. INGEST-001 consumer contracts remain incomplete
-
-The [pending implementation review](pending_code_review_comments/INGEST-001_COM-001_REVIEW_COMMENTS.txt) identifies missing exact-revision/batch readers, unaudited attention transitions, absent file-integrity propagation, and a FILE persistence-boundary violation. INGEST-002 depends directly on those paths.
-
-**Decision:** these findings are mandatory readiness gates. Resolve and verify them before INGEST-002 implementation begins; do not implement review orchestration against raw Intake or FILE tables.

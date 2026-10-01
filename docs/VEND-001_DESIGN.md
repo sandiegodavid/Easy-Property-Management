@@ -21,7 +21,7 @@ VEND-001 provides:
 
 VEND-001 does not provide:
 
-- Configurable provider categories, category hierarchy, or issue-routing taxonomy. `VEND-CAT-001` owns those. VEND-001 service labels are operator-entered normalized offerings, not categories.
+- Configurable provider categories or issue-routing taxonomy. `VEND-CAT-001` owns the flat MVP category catalog; hierarchy and explicit Maintenance-category mapping remain deferred. VEND-001 service labels are operator-entered normalized offerings, not categories.
 - Reputation URLs, ratings, review ingestion, monitoring, or provider discovery. Those belong to `VEND-002`, `VEND-004`, and `VEND-005`.
 - Quote requests, appointment scheduling, provider assignment, repair outcomes, costs, or a maintenance work journal. `MAINT-001`, `MAINT-002`, and `MAINT-003` own those workflows.
 - Provider onboarding, background checks, insurance, licensing, tax forms, payment credentials, bank details, or legal verification.
