@@ -30,6 +30,7 @@ from app.modules.vendors.application.service import (
     ProviderCategoryCommand,
     ProviderCategoryPatchCommand,
     ProviderCategoryAssignmentCommand,
+    ProviderCategoryPatchCommand,
     ReferenceCommand,
     ReputationLinkCommand,
     ReputationLinkPatchCommand,
@@ -122,6 +123,38 @@ class ProviderTests(unittest.TestCase):
         )
         self.assertEqual(len(assigned["categories"]), 2)
         self.workspace.open()
+
+    def test_category_patch_noop_and_archive_retries_preserve_reason(self) -> None:
+        category = self.providers.create_category(ProviderCategoryCommand(
+            "Category lifecycle", 8, "00000000-0000-4000-8000-000000000921",
+        ))
+        category_id = category["id"]
+        events_before = len(self.recorder.repository.history("provider_category", category_id))
+        unchanged = self.providers.update_category(category_id, ProviderCategoryPatchCommand(
+            display_name="Category lifecycle",
+        ))
+        self.assertEqual(unchanged["updatedAt"], category["updatedAt"])
+        self.assertEqual(len(self.recorder.repository.history("provider_category", category_id)), events_before)
+
+        archived = self.providers.archive_category(category_id, confirmed=True, reason="Retired")
+        events_after_archive = len(self.recorder.repository.history("provider_category", category_id))
+        self.assertEqual(
+            self.providers.archive_category(category_id, confirmed=True, reason="Retired"),
+            archived,
+        )
+        self.assertEqual(len(self.recorder.repository.history("provider_category", category_id)), events_after_archive)
+        with self.assertRaises(ProviderLifecycleConflict):
+            self.providers.archive_category(category_id, confirmed=True, reason="Different reason")
+
+        party_id = self.providers.create(
+            PartyCreateCommand("organization", "Category retry provider"), ProviderProfileCommand(),
+            category_ids=(self.providers.list_categories()[0]["id"],),
+        )["party"]["id"]
+        assignment_id = self.providers.detail(party_id)["categories"][0]["assignmentId"]
+        self.providers.archive_category_assignment(party_id, assignment_id, confirmed=True, reason="Not offered")
+        self.providers.archive_category_assignment(party_id, assignment_id, confirmed=True, reason="Not offered")
+        with self.assertRaises(ProviderLifecycleConflict):
+            self.providers.archive_category_assignment(party_id, assignment_id, confirmed=True, reason="Different reason")
 
     def test_category_http_contract_and_provider_page(self) -> None:
         with TestClient(create_app(self.config)) as client:

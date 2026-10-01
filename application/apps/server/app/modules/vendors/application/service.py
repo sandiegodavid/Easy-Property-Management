@@ -392,14 +392,14 @@ class ProviderService:
             current = tx.category(category_id)
             if current is None: raise KeyError
             if current.archived_at is not None: raise ProviderLifecycleConflict("An archived category cannot be edited.")
-            updated = replace(current,
+            requested = replace(current,
                 display_name=current.display_name if command.display_name is UNSET else command.display_name,
                 normalized_name=current.normalized_name if command.display_name is UNSET else _normalized(command.display_name),
                 description=current.description if command.description is UNSET else command.description,
                 display_order=current.display_order if command.display_order is UNSET else command.display_order,
-                updated_at=now,
             )
-            if updated == current: return current.id
+            if requested == current: return current.id
+            updated = replace(requested, updated_at=now)
             conflict = next((item for item in tx.categories("active") if item.id != current.id and item.normalized_name == updated.normalized_name), None)
             if conflict: raise ProviderLifecycleConflict("An active category already uses this name.")
             tx.replace_category(updated)
@@ -413,7 +413,10 @@ class ProviderService:
         def write(tx):
             current = tx.category(category_id)
             if current is None: raise KeyError
-            if current.archived_at is not None: return current.id
+            if current.archived_at is not None:
+                if current.archive_reason != reason:
+                    raise ProviderLifecycleConflict("An archived category cannot be retried with a different archive reason.")
+                return current.id
             updated = replace(current, archived_at=now, archive_reason=reason, updated_at=now); tx.replace_category(updated)
             tx.record_change(entity_type="provider_category", entity_id=current.id, action="archived", before=current.to_dict(), after=updated.to_dict(), reason="provider_category_archived", correlation_id=correlation); return current.id
         return self._category_write(write)
@@ -458,9 +461,12 @@ class ProviderService:
         def write(tx):
             _available_provider(tx, party_id); current = tx.assignment(assignment_id)
             if current is None or current.provider_party_id != party_id: raise KeyError
-            if current.archived_at is None:
-                updated = replace(current, archived_at=now, archive_reason=reason, updated_at=now); tx.replace_assignment(updated)
-                tx.record_change(entity_type="provider_category_assignment", entity_id=current.id, action="archived", before=current.to_dict(), after=updated.to_dict(), reason="provider_category_assignment_archived", correlation_id=correlation)
+            if current.archived_at is not None:
+                if current.archive_reason != reason:
+                    raise ProviderLifecycleConflict("An archived category assignment cannot be retried with a different archive reason.")
+                return party_id
+            updated = replace(current, archived_at=now, archive_reason=reason, updated_at=now); tx.replace_assignment(updated)
+            tx.record_change(entity_type="provider_category_assignment", entity_id=current.id, action="archived", before=current.to_dict(), after=updated.to_dict(), reason="provider_category_assignment_archived", correlation_id=correlation)
             return party_id
         return self._write_detail(write, include_archived=True)
 
