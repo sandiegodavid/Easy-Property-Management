@@ -5,12 +5,12 @@
 - Run focused tests by default.
 - Run the full test suite only when explicitly requested or when a changed integration boundary requires full-suite validation.
 
-## Implementation reviews
+## code reviews
 
-- Report only actionable findings, grouped by module or boundary, with priority and precise file and line references.
-- Create a PR branch for each finding if one does not already exist.
+- Report only actionable findings, grouped by module or boundary, with priority and precise file and line references, in a plain text file in pending_code_review_comments folder
+- Create a PR branch for each findings only at the first review of the backlog
 
-### Re-reviews and Follow-up implementation reviews
+### Re-reviews and Follow-up code reviews
 
 - Assess only the findings reported by the preceding review unless a broader review is explicitly requested.
 - For each finding, mark it as `resolved`, `still open`, or `regressed`.

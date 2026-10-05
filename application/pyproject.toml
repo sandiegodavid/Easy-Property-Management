@@ -35,3 +35,29 @@ where = ["apps/server"]
 
 [tool.pytest.ini_options]
 testpaths = ["apps/server/app"]
+
+[tool.ruff]
+# Target environment details
+target-version = "py314"
+line-length = 100
+
+[tool.ruff.lint]
+# Enable Pyflakes (F), Pycodestyle (E), McCabe Complexity (C90), and Pylint (PL)
+select = ["F", "E", "W", "C90", "PL"]
+
+# Explicitly configure rule thresholds
+[tool.ruff.lint.mccabe]
+# Flags functions with cyclomatic complexity (branching/nested paths) higher than 10
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+# Rule PLR0915: Flags functions containing more than 50 statements/lines of logic
+max-statements = 50
+
+# Rule PLR0913: Flags functions accepting more than 5 arguments
+max-args = 5
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.10",
+]
