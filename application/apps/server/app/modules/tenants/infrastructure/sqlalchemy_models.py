@@ -10,7 +10,9 @@ class TenantProfileModel(LocalBase):
     __tablename__ = "tenant_profiles"
 
     party_id: Mapped[str] = mapped_column(ForeignKey("parties.id"), primary_key=True)
-    preferred_contact_method_id: Mapped[str | None] = mapped_column(ForeignKey("party_contact_methods.id"))
+    preferred_contact_method_id: Mapped[str | None] = mapped_column(
+        ForeignKey("party_contact_methods.id")
+    )
     do_not_contact: Mapped[int] = mapped_column(nullable=False)
     notes: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[str] = mapped_column(String, nullable=False)

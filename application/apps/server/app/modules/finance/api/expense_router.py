@@ -6,12 +6,15 @@ from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 
-from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
+from app.platform.api_errors import domain_problem, workspace_unavailable
 
-from app.modules.finance.application.expense_service import ExpenseService, PossibleDuplicateExpenseError
+from app.modules.finance.application.expense_service import (
+    ExpenseService,
+    PossibleDuplicateExpenseError,
+)
 from app.modules.finance.domain.expense_models import (
     CategoryCreateCommand,
     CategoryPatchCommand,
@@ -20,7 +23,12 @@ from app.modules.finance.domain.expense_models import (
     ExpenseQueryCommand,
     RefundCreateCommand,
 )
-from app.modules.finance.domain.models import FinanceConflictError, FinanceError, FinanceNotFoundError, VoidCommand
+from app.modules.finance.domain.models import (
+    FinanceConflictError,
+    FinanceError,
+    FinanceNotFoundError,
+    VoidCommand,
+)
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 
 
@@ -227,7 +235,12 @@ def build_router(service: ExpenseService, runtime: WorkspaceRuntime) -> APIRoute
         try:
             return operation()
         except PossibleDuplicateExpenseError as error:
-            raise domain_problem(error, status_code=409, code="possible_duplicate_expense", candidates=error.candidates) from error
+            raise domain_problem(
+                error,
+                status_code=409,
+                code="possible_duplicate_expense",
+                candidates=error.candidates,
+            ) from error
         except FinanceNotFoundError as error:
             raise domain_problem(error, status_code=404, code="finance_not_found") from error
         except FinanceConflictError as error:
@@ -243,67 +256,114 @@ def build_router(service: ExpenseService, runtime: WorkspaceRuntime) -> APIRoute
     @router.post("/api/expense-categories", response_model=CategoryResponse, status_code=201)
     def create_category(data: CategoryInput):
         ready(True)
-        return invoke(lambda: service.create_category(CategoryCreateCommand(
-            data.displayName, data.description, data.displayOrder
-        )))
+        return invoke(
+            lambda: service.create_category(
+                CategoryCreateCommand(data.displayName, data.description, data.displayOrder)
+            )
+        )
 
     @router.patch("/api/expense-categories/{category_id}", response_model=CategoryResponse)
     def patch_category(category_id: UUID, data: CategoryPatchInput):
         ready(True)
-        fields = frozenset({
-            {"displayName": "display_name", "description": "description", "displayOrder": "display_order"}[name]
-            for name in data.model_fields_set
-        })
-        return invoke(lambda: service.patch_category(str(category_id), CategoryPatchCommand(
-            fields, data.displayName, data.description, data.displayOrder
-        )))
+        fields = frozenset(
+            {
+                {
+                    "displayName": "display_name",
+                    "description": "description",
+                    "displayOrder": "display_order",
+                }[name]
+                for name in data.model_fields_set
+            }
+        )
+        return invoke(
+            lambda: service.patch_category(
+                str(category_id),
+                CategoryPatchCommand(fields, data.displayName, data.description, data.displayOrder),
+            )
+        )
 
     @router.post("/api/expense-categories/{category_id}/archive", response_model=CategoryResponse)
     def archive_category(category_id: UUID, data: ConfirmReasonInput):
         ready(True)
-        return invoke(lambda: service.archive_category(str(category_id), VoidCommand(data.confirmed, data.reason)))
+        return invoke(
+            lambda: service.archive_category(
+                str(category_id), VoidCommand(data.confirmed, data.reason)
+            )
+        )
 
     @router.post("/api/expense-categories/{category_id}/restore", response_model=CategoryResponse)
     def restore_category(category_id: UUID, data: ConfirmReasonInput):
         ready(True)
-        return invoke(lambda: service.restore_category(str(category_id), VoidCommand(data.confirmed, data.reason)))
+        return invoke(
+            lambda: service.restore_category(
+                str(category_id), VoidCommand(data.confirmed, data.reason)
+            )
+        )
 
-    @router.post("/api/expenses", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
+    @router.post(
+        "/api/expenses", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED
+    )
     def record_expense(data: ExpenseInput):
         ready(True)
-        return invoke(lambda: service.record_expense(ExpenseCreateCommand(
-            str(data.idempotencyKey), str(data.propertyId), str(data.categoryId), data.paidByKind,
-            data.paidOn.isoformat(), data.amount, data.currencyCode, data.description,
-            str(data.spaceId) if data.spaceId else None,
-            str(data.providerPartyId) if data.providerPartyId else None, data.payeeName,
-            str(data.paidByPartyId) if data.paidByPartyId else None, data.reference, data.notes,
-            str(data.replacesExpenseId) if data.replacesExpenseId else None,
-            data.duplicateConfirmed, data.historicalEntryConfirmed, data.historicalEntryReason,
-        )))
+        return invoke(
+            lambda: service.record_expense(
+                ExpenseCreateCommand(
+                    str(data.idempotencyKey),
+                    str(data.propertyId),
+                    str(data.categoryId),
+                    data.paidByKind,
+                    data.paidOn.isoformat(),
+                    data.amount,
+                    data.currencyCode,
+                    data.description,
+                    str(data.spaceId) if data.spaceId else None,
+                    str(data.providerPartyId) if data.providerPartyId else None,
+                    data.payeeName,
+                    str(data.paidByPartyId) if data.paidByPartyId else None,
+                    data.reference,
+                    data.notes,
+                    str(data.replacesExpenseId) if data.replacesExpenseId else None,
+                    data.duplicateConfirmed,
+                    data.historicalEntryConfirmed,
+                    data.historicalEntryReason,
+                )
+            )
+        )
 
     @router.get("/api/expenses", response_model=ExpensePageResponse)
-    def expenses(propertyId: UUID | None = None, spaceId: UUID | None = None,
-                 categoryId: UUID | None = None, providerPartyId: UUID | None = None,
-                 paidByKind: Literal["local_operator", "party"] | None = None,
-                 paidByPartyId: UUID | None = None, paidFrom: date | None = None,
-                 paidTo: date | None = None, hasEvidence: bool | None = None,
-                 includeVoided: bool = False, cursor: str | None = None,
-                 pageSize: int = Query(100, ge=1, le=500)):
+    def expenses(
+        propertyId: UUID | None = None,
+        spaceId: UUID | None = None,
+        categoryId: UUID | None = None,
+        providerPartyId: UUID | None = None,
+        paidByKind: Literal["local_operator", "party"] | None = None,
+        paidByPartyId: UUID | None = None,
+        paidFrom: date | None = None,
+        paidTo: date | None = None,
+        hasEvidence: bool | None = None,
+        includeVoided: bool = False,
+        cursor: str | None = None,
+        pageSize: int = Query(100, ge=1, le=500),
+    ):
         ready()
-        return invoke(lambda: service.list_expenses(ExpenseQueryCommand(
-            property_id=str(propertyId) if propertyId else None,
-            space_id=str(spaceId) if spaceId else None,
-            category_id=str(categoryId) if categoryId else None,
-            provider_party_id=str(providerPartyId) if providerPartyId else None,
-            paid_by_kind=paidByKind,
-            paid_by_party_id=str(paidByPartyId) if paidByPartyId else None,
-            paid_from=paidFrom.isoformat() if paidFrom else None,
-            paid_to=paidTo.isoformat() if paidTo else None,
-            has_evidence=hasEvidence,
-            include_voided=includeVoided,
-            cursor=cursor,
-            page_size=pageSize,
-        )))
+        return invoke(
+            lambda: service.list_expenses(
+                ExpenseQueryCommand(
+                    property_id=str(propertyId) if propertyId else None,
+                    space_id=str(spaceId) if spaceId else None,
+                    category_id=str(categoryId) if categoryId else None,
+                    provider_party_id=str(providerPartyId) if providerPartyId else None,
+                    paid_by_kind=paidByKind,
+                    paid_by_party_id=str(paidByPartyId) if paidByPartyId else None,
+                    paid_from=paidFrom.isoformat() if paidFrom else None,
+                    paid_to=paidTo.isoformat() if paidTo else None,
+                    has_evidence=hasEvidence,
+                    include_voided=includeVoided,
+                    cursor=cursor,
+                    page_size=pageSize,
+                )
+            )
+        )
 
     @router.get("/api/expenses/{expense_id}", response_model=ExpenseResponse)
     def expense(expense_id: UUID):
@@ -313,33 +373,58 @@ def build_router(service: ExpenseService, runtime: WorkspaceRuntime) -> APIRoute
     @router.patch("/api/expenses/{expense_id}", response_model=ExpenseResponse)
     def patch_expense(expense_id: UUID, data: ExpensePatchInput):
         ready(True)
-        fields = frozenset({
-            {"categoryId": "category_id", "notes": "notes"}[name]
-            for name in data.model_fields_set if name in {"categoryId", "notes"}
-        })
-        return invoke(lambda: service.patch_expense(str(expense_id), ExpensePatchCommand(
-            fields, str(data.categoryId) if data.categoryId else None, data.notes,
-            data.categoryChangeReason, data.historicalEntryConfirmed,
-            data.historicalEntryReason,
-        )))
+        fields = frozenset(
+            {
+                {"categoryId": "category_id", "notes": "notes"}[name]
+                for name in data.model_fields_set
+                if name in {"categoryId", "notes"}
+            }
+        )
+        return invoke(
+            lambda: service.patch_expense(
+                str(expense_id),
+                ExpensePatchCommand(
+                    fields,
+                    str(data.categoryId) if data.categoryId else None,
+                    data.notes,
+                    data.categoryChangeReason,
+                    data.historicalEntryConfirmed,
+                    data.historicalEntryReason,
+                ),
+            )
+        )
 
     @router.post("/api/expenses/{expense_id}/void", response_model=ExpenseResponse)
     def void_expense(expense_id: UUID, data: ConfirmReasonInput):
         ready(True)
-        return invoke(lambda: service.void_expense(str(expense_id), VoidCommand(data.confirmed, data.reason)))
+        return invoke(
+            lambda: service.void_expense(str(expense_id), VoidCommand(data.confirmed, data.reason))
+        )
 
-    @router.post("/api/expenses/{expense_id}/refunds", response_model=RefundResponse, status_code=201)
+    @router.post(
+        "/api/expenses/{expense_id}/refunds", response_model=RefundResponse, status_code=201
+    )
     def record_refund(expense_id: UUID, data: RefundInput):
         ready(True)
-        return invoke(lambda: service.record_refund(str(expense_id), RefundCreateCommand(
-            str(data.idempotencyKey), data.receivedOn.isoformat(), data.amount,
-            data.currencyCode, data.notes,
-            str(data.replacesRefundId) if data.replacesRefundId else None,
-        )))
+        return invoke(
+            lambda: service.record_refund(
+                str(expense_id),
+                RefundCreateCommand(
+                    str(data.idempotencyKey),
+                    data.receivedOn.isoformat(),
+                    data.amount,
+                    data.currencyCode,
+                    data.notes,
+                    str(data.replacesRefundId) if data.replacesRefundId else None,
+                ),
+            )
+        )
 
     @router.post("/api/expense-refunds/{refund_id}/void", response_model=RefundResponse)
     def void_refund(refund_id: UUID, data: ConfirmReasonInput):
         ready(True)
-        return invoke(lambda: service.void_refund(str(refund_id), VoidCommand(data.confirmed, data.reason)))
+        return invoke(
+            lambda: service.void_refund(str(refund_id), VoidCommand(data.confirmed, data.reason))
+        )
 
     return router

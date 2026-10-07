@@ -19,6 +19,7 @@ The planned stack is React/Vite/TypeScript for the interface, with Python/FastAP
 - [Product decisions](docs/DECISIONS.md)
 - [Architecture and technology plan](docs/ARCHITECTURE.md)
 - [Confirmed operator experience and acceptance scenarios](docs/UI-001_DESIGN.md)
+- [Implementation quality checks](docs/CODE_QUALITY.md)
 
 ## Local workspace configuration
 
@@ -42,6 +43,18 @@ Set `localWorkspacePath` in the live file to the chosen external data folder. Th
 The React interface and shared web packages are planned follow-on work. `UI-001`, immediately before `DASH-001`, delivers the deferred operator workflows; before then, work is limited to backend capabilities, APIs, CLI/setup tooling, tests, and documentation. Follow the feature backlog sequence and preserve the local workspace, approval, audit, and migration requirements documented in `docs/`.
 
 The confirmed UI design includes configurable Owners and Providers destinations, Light/Dark appearance, full-summary-bar inline expansion, manual legal matters, HOA violation notices, and reviewed Excel/read-only Google Sheets intake for properties, owners, and providers. The backlog names their supporting prerequisites; design approval does not indicate those new capabilities are implemented. Broader HOA administration and historical/update imports remain post-MVP.
+
+## Frontend development checks
+
+The frontend lint/format/type-check tooling is configured under `application/`. React interface implementation remains deferred until UI-001. On a current Node.js LTS release, run:
+
+```bash
+cd application
+npm ci
+npm run check
+```
+
+The combined check runs ESLint, Prettier, and strict TypeScript validation. Before TypeScript sources exist, type checking explicitly reports a skip; that does not validate a frontend feature. See [implementation quality checks](docs/CODE_QUALITY.md) for source scopes and generated-contract handling.
 
 ## Local workspace foundation
 

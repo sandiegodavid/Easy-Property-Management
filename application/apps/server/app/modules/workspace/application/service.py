@@ -11,10 +11,17 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.modules.workspace.domain.models import WORKSPACE_FORMAT_VERSION, WorkspaceManifest
-from app.modules.workspace.infrastructure.sqlite_store import SQLiteWorkspaceStore, WorkspaceDatabaseError
+from app.modules.workspace.infrastructure.sqlite_store import (
+    SQLiteWorkspaceStore,
+    WorkspaceDatabaseError,
+)
 from app.modules.workspace.infrastructure.store_factory import create_workspace_store
 from app.platform.config import LocalConfig, load_local_config, repository_root
-from app.platform.product_migrations import ProductSchemaError, initialize_latest_schema, validate_latest_schema
+from app.platform.product_migrations import (
+    ProductSchemaError,
+    initialize_latest_schema,
+    validate_latest_schema,
+)
 
 
 class WorkspaceError(RuntimeError):
@@ -89,7 +96,9 @@ class WorkspaceService:
             self._publish_staging_workspace(staging_paths)
         except (OSError, WorkspaceDatabaseError, ProductSchemaError) as error:
             self._discard_staging_workspace(staging_paths)
-            raise WorkspaceError(f"Unable to initialize workspace at {self.paths.root}: {error}") from error
+            raise WorkspaceError(
+                f"Unable to initialize workspace at {self.paths.root}: {error}"
+            ) from error
         return self.open()
 
     def open(self, *, integrity_check: bool = False) -> WorkspaceManifest:
@@ -126,7 +135,9 @@ class WorkspaceService:
         return manifest
 
     @staticmethod
-    def _validate_workspace_database(paths: WorkspacePaths, manifest: WorkspaceManifest, *, integrity_check: bool) -> None:
+    def _validate_workspace_database(
+        paths: WorkspacePaths, manifest: WorkspaceManifest, *, integrity_check: bool
+    ) -> None:
         SQLiteWorkspaceStore(paths.database).verify(manifest, integrity_check=integrity_check)
         validate_latest_schema(paths.database)
 
@@ -143,8 +154,14 @@ class WorkspaceService:
     def _validate_workspace_paths(self) -> None:
         """Required workspace paths must be real entries contained by the workspace root."""
         root = self.paths.root.resolve()
-        for path in (self.paths.manifest, self.paths.database.parent, self.paths.database,
-                     self.paths.files, self.paths.exports, self.paths.backups):
+        for path in (
+            self.paths.manifest,
+            self.paths.database.parent,
+            self.paths.database,
+            self.paths.files,
+            self.paths.exports,
+            self.paths.backups,
+        ):
             if not path.exists():
                 continue
             if path.is_symlink():
@@ -157,7 +174,13 @@ class WorkspaceService:
         return self.paths.root.parent / f".{self.paths.root.name}.initializing.{uuid4().hex}"
 
     def _create_workspace_layout(self, paths: WorkspacePaths) -> None:
-        for directory in (paths.root, paths.database.parent, paths.files, paths.exports, paths.backups):
+        for directory in (
+            paths.root,
+            paths.database.parent,
+            paths.files,
+            paths.exports,
+            paths.backups,
+        ):
             self._secure_directory(directory)
 
     def _publish_staging_workspace(self, staging_paths: WorkspacePaths) -> None:
@@ -173,7 +196,12 @@ class WorkspaceService:
     def _secure_existing_workspace_paths(self) -> None:
         self._validate_workspace_paths()
         self._secure_directory(self.paths.root)
-        for directory in (self.paths.database.parent, self.paths.files, self.paths.exports, self.paths.backups):
+        for directory in (
+            self.paths.database.parent,
+            self.paths.files,
+            self.paths.exports,
+            self.paths.backups,
+        ):
             if directory.exists():
                 self._secure_directory(directory)
         for file_path in (

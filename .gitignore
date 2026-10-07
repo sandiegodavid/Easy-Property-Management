@@ -21,3 +21,10 @@ application/backups/
 application/logs/
 
 .DS_Store
+
+# Node dependencies and frontend build/check output.
+node_modules/
+application/apps/web/dist/
+application/packages/*/dist/
+coverage/
+*.tsbuildinfo

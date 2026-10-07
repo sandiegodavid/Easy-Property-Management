@@ -24,9 +24,7 @@ def normalized_label(value: str) -> str:
 def category_normalized_name(value: str) -> str:
     result = normalized_label(value)
     if not 1 <= len(result) <= 100:
-        raise FinanceError(
-            "Normalized category name must be between 1 and 100 characters."
-        )
+        raise FinanceError("Normalized category name must be between 1 and 100 characters.")
     return result
 
 
@@ -63,7 +61,9 @@ def local_date(value: str, label: str) -> str:
 
 def amount_minor(value: str) -> int:
     if not isinstance(value, str) or _AMOUNT.fullmatch(value) is None:
-        raise FinanceError("Amount must be a positive decimal string with exactly two fractional digits.")
+        raise FinanceError(
+            "Amount must be a positive decimal string with exactly two fractional digits."
+        )
     result = int(Decimal(value) * 100)
     if result <= 0 or result > 9_999_999_999:
         raise FinanceError("Amount must be between 0.01 and 99999999.99.")
@@ -147,7 +147,9 @@ class CategoryCreateCommand:
             raise FinanceError("Category display order must be an integer from 0 through 10,000.")
         object.__setattr__(self, "display_name", name)
         category_normalized_name(name)
-        object.__setattr__(self, "description", text(self.description, "Category description", 1000))
+        object.__setattr__(
+            self, "description", text(self.description, "Category description", 1000)
+        )
 
 
 @dataclass(frozen=True)
@@ -161,11 +163,17 @@ class CategoryPatchCommand:
         if not self.fields or not self.fields <= {"display_name", "description", "display_order"}:
             raise FinanceError("At least one valid category field is required.")
         if "display_name" in self.fields:
-            object.__setattr__(self, "display_name", text(self.display_name, "Category name", 100, required=True))
+            object.__setattr__(
+                self, "display_name", text(self.display_name, "Category name", 100, required=True)
+            )
             category_normalized_name(self.display_name)
         if "description" in self.fields:
-            object.__setattr__(self, "description", text(self.description, "Category description", 1000))
-        if "display_order" in self.fields and (type(self.display_order) is not int or not 0 <= self.display_order <= 10_000):
+            object.__setattr__(
+                self, "description", text(self.description, "Category description", 1000)
+            )
+        if "display_order" in self.fields and (
+            type(self.display_order) is not int or not 0 <= self.display_order <= 10_000
+        ):
             raise FinanceError("Category display order must be an integer from 0 through 10,000.")
 
 
@@ -191,11 +199,17 @@ class ExpenseCreateCommand:
     historical_entry_reason: str | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "idempotency_key", identifier(self.idempotency_key, "Idempotency key"))
+        object.__setattr__(
+            self, "idempotency_key", identifier(self.idempotency_key, "Idempotency key")
+        )
         object.__setattr__(self, "property_id", identifier(self.property_id, "Property ID"))
         object.__setattr__(self, "category_id", identifier(self.category_id, "Category ID"))
-        for field, label in (("space_id", "Space ID"), ("provider_party_id", "Provider party ID"),
-                             ("paid_by_party_id", "Payer party ID"), ("replaces_expense_id", "Replacement expense ID")):
+        for field, label in (
+            ("space_id", "Space ID"),
+            ("provider_party_id", "Provider party ID"),
+            ("paid_by_party_id", "Payer party ID"),
+            ("replaces_expense_id", "Replacement expense ID"),
+        ):
             value = getattr(self, field)
             if value is not None:
                 object.__setattr__(self, field, identifier(value, label))
@@ -207,7 +221,10 @@ class ExpenseCreateCommand:
             raise FinanceError("Paid-by party must be present exactly for party-funded expenses.")
         if (self.provider_party_id is None) == (self.payee_name is None):
             raise FinanceError("Provide exactly one provider or payee name.")
-        if type(self.duplicate_confirmed) is not bool or type(self.historical_entry_confirmed) is not bool:
+        if (
+            type(self.duplicate_confirmed) is not bool
+            or type(self.historical_entry_confirmed) is not bool
+        ):
             raise FinanceError("Confirmation values must be boolean.")
         if (self.historical_entry_reason is not None) != self.historical_entry_confirmed:
             raise FinanceError(
@@ -216,10 +233,16 @@ class ExpenseCreateCommand:
         object.__setattr__(self, "paid_on", local_date(self.paid_on, "Paid date"))
         amount_minor(self.amount)
         object.__setattr__(self, "payee_name", text(self.payee_name, "Payee name", 200))
-        object.__setattr__(self, "description", text(self.description, "Description", 500, required=True))
+        object.__setattr__(
+            self, "description", text(self.description, "Description", 500, required=True)
+        )
         object.__setattr__(self, "reference", text(self.reference, "Reference", 200))
         object.__setattr__(self, "notes", text(self.notes, "Notes", 4000))
-        object.__setattr__(self, "historical_entry_reason", text(self.historical_entry_reason, "Historical-entry reason", 1000))
+        object.__setattr__(
+            self,
+            "historical_entry_reason",
+            text(self.historical_entry_reason, "Historical-entry reason", 1000),
+        )
 
     @property
     def amount_minor(self) -> int:
@@ -240,22 +263,28 @@ class ExpensePatchCommand:
             raise FinanceError("At least one editable expense field is required.")
         if "category_id" in self.fields:
             object.__setattr__(self, "category_id", identifier(self.category_id, "Category ID"))
-            object.__setattr__(self, "category_change_reason", text(self.category_change_reason, "Category-change reason", 1000, required=True))
+            object.__setattr__(
+                self,
+                "category_change_reason",
+                text(self.category_change_reason, "Category-change reason", 1000, required=True),
+            )
         elif self.category_change_reason is not None:
             raise FinanceError("A category-change reason requires a category change.")
         if "notes" in self.fields:
             object.__setattr__(self, "notes", text(self.notes, "Notes", 4000))
         if type(self.historical_entry_confirmed) is not bool:
             raise FinanceError("Historical-entry confirmation must be boolean.")
-        object.__setattr__(self, "historical_entry_reason", text(self.historical_entry_reason, "Historical-entry reason", 1000))
+        object.__setattr__(
+            self,
+            "historical_entry_reason",
+            text(self.historical_entry_reason, "Historical-entry reason", 1000),
+        )
         if (self.historical_entry_reason is not None) != self.historical_entry_confirmed:
             raise FinanceError(
                 "Historical-entry confirmation and reason must be supplied together."
             )
         if self.historical_entry_confirmed and "category_id" not in self.fields:
-            raise FinanceError(
-                "Historical-entry confirmation requires a category change."
-            )
+            raise FinanceError("Historical-entry confirmation requires a category change.")
 
 
 @dataclass(frozen=True)
@@ -268,14 +297,22 @@ class RefundCreateCommand:
     replaces_refund_id: str | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "idempotency_key", identifier(self.idempotency_key, "Idempotency key"))
-        object.__setattr__(self, "received_on", local_date(self.received_on, "Refund received date"))
+        object.__setattr__(
+            self, "idempotency_key", identifier(self.idempotency_key, "Idempotency key")
+        )
+        object.__setattr__(
+            self, "received_on", local_date(self.received_on, "Refund received date")
+        )
         if self.currency_code != "USD":
             raise FinanceError("FIN-002 supports USD refunds only.")
         amount_minor(self.amount)
         object.__setattr__(self, "notes", text(self.notes, "Refund notes", 4000))
         if self.replaces_refund_id is not None:
-            object.__setattr__(self, "replaces_refund_id", identifier(self.replaces_refund_id, "Replacement refund ID"))
+            object.__setattr__(
+                self,
+                "replaces_refund_id",
+                identifier(self.replaces_refund_id, "Replacement refund ID"),
+            )
 
     @property
     def amount_minor(self) -> int:

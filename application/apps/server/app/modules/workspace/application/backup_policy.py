@@ -12,7 +12,12 @@ from typing import Iterator
 
 from app.modules.workspace.application.backup_models import BackupError, PackageType
 from app.modules.workspace.application.service import WorkspacePaths, WorkspaceService
-from app.platform.config import LocalConfig, LocalConfigError, repository_root, save_backup_destination
+from app.platform.config import (
+    LocalConfig,
+    LocalConfigError,
+    repository_root,
+    save_backup_destination,
+)
 from app.platform.locking import WorkspaceOperationInProgressError, WorkspaceOperationLock
 
 
@@ -38,10 +43,16 @@ class BackupDestinationPolicy:
             raise BackupError(f"Backup destination is not writable: {error}") from error
         self.workspace_service.config = updated
         if _same_volume(destination, self.paths.root):
-            warnings.warn("Backup destination is on the same volume as the live workspace.", RuntimeWarning, stacklevel=2)
+            warnings.warn(
+                "Backup destination is on the same volume as the live workspace.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         return updated
 
-    def resolve_output(self, workspace_id: str, package_type: PackageType, output_path: Path | None) -> Path:
+    def resolve_output(
+        self, workspace_id: str, package_type: PackageType, output_path: Path | None
+    ) -> Path:
         if output_path is not None:
             destination = output_path.expanduser().resolve()
             self.validate_external(destination.parent)
@@ -57,7 +68,10 @@ class BackupDestinationPolicy:
         from uuid import uuid4
 
         stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
-        return destination / f"easy-property-management-{package_type}-{stamp}-{workspace_id[:8]}-{uuid4().hex[:8]}.epm-backup"
+        return (
+            destination
+            / f"easy-property-management-{package_type}-{stamp}-{workspace_id[:8]}-{uuid4().hex[:8]}.epm-backup"
+        )
 
     def require_configured(self) -> Path:
         destination = self.workspace_service.config.backup_destination_path
@@ -109,7 +123,9 @@ class WorkspaceLockCoordinator:
     @contextmanager
     def _destination_lock(self, destination: Path) -> Iterator[None]:
         key = sha256(str(destination).encode("utf-8")).hexdigest()
-        lock_path = Path(tempfile.gettempdir()) / "easy-property-management-locks" / f"restore-{key}.lock"
+        lock_path = (
+            Path(tempfile.gettempdir()) / "easy-property-management-locks" / f"restore-{key}.lock"
+        )
         with self._lock_at(lock_path):
             yield
 

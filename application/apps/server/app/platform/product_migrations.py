@@ -1,4 +1,5 @@
 """Latest-format-only Alembic schema initialization and validation."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -19,21 +20,36 @@ from app.modules.ai_governance.application.registry import (
 )
 from app.modules.ai_governance.infrastructure.schema_validation import validate_ai_governance_schema
 from app.modules.audit.infrastructure.schema_validation import validate_audit_schema
-from app.modules.communications.infrastructure.schema_validation import validate_communication_schema
-from app.modules.files.infrastructure.schema_validation import validate_file_data, validate_file_schema
-from app.modules.finance.infrastructure.schema_validation import validate_finance_data, validate_finance_schema
+from app.modules.communications.infrastructure.schema_validation import (
+    validate_communication_schema,
+)
+from app.modules.files.infrastructure.schema_validation import (
+    validate_file_data,
+    validate_file_schema,
+)
+from app.modules.finance.infrastructure.schema_validation import (
+    validate_finance_data,
+    validate_finance_schema,
+)
 from app.modules.inspections.infrastructure.schema_validation import validate_inspection_schema
 from app.modules.intake.infrastructure.schema_validation import validate_intake_schema
 from app.modules.intake.infrastructure.source_reader import SQLiteIntakeSourceReader
 from app.modules.leases.infrastructure.schema_validation import validate_lease_schema
 from app.modules.maintenance.infrastructure.schema_validation import validate_maintenance_schema
-from app.modules.owner_accounting.infrastructure.schema_validation import validate_owner_accounting_schema
-from app.modules.owner_management.infrastructure.schema_validation import validate_owner_concern_schema
+from app.modules.owner_accounting.infrastructure.schema_validation import (
+    validate_owner_accounting_schema,
+)
+from app.modules.owner_management.infrastructure.schema_validation import (
+    validate_owner_concern_schema,
+)
 from app.modules.portfolio.infrastructure.schema_validation import validate_portfolio_schema
 from app.modules.tasks.infrastructure.schema_validation import validate_task_schema
 from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
 from app.modules.tenants.infrastructure.schema_validation import validate_tenant_schema
-from app.modules.vendors.infrastructure.schema_validation import validate_vendor_data, validate_vendor_schema
+from app.modules.vendors.infrastructure.schema_validation import (
+    validate_vendor_data,
+    validate_vendor_schema,
+)
 from app.modules.workspace.infrastructure.schema_validation import validate_workspace_schema
 from app.platform.migration_errors import MigrationSchemaError
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
@@ -59,10 +75,13 @@ def initialize_latest_schema(database_path: Path) -> None:
     engine = create_sqlite_engine(database_path)
     try:
         with immediate_transaction(engine) as connection:
-            config = _config(); config.attributes["connection"] = connection
+            config = _config()
+            config.attributes["connection"] = connection
             command.upgrade(config, "head")
     except Exception as error:
-        raise ProductSchemaError(f"Unable to apply the current workspace schema: {error}") from error
+        raise ProductSchemaError(
+            f"Unable to apply the current workspace schema: {error}"
+        ) from error
     finally:
         engine.dispose()
 
@@ -72,42 +91,137 @@ def validate_latest_schema(database_path: Path) -> None:
     engine = create_sqlite_engine(database_path)
     try:
         with engine.connect() as connection:
-            actual_tables = set(connection.execute(text(
-                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
-            )).scalars())
+            actual_tables = set(
+                connection.execute(
+                    text(
+                        "SELECT name FROM sqlite_master "
+                        "WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+                    )
+                ).scalars()
+            )
             expected_tables = {
-                "alembic_version", "workspace_metadata", "audit_events", "file_records", "file_content_locations",
-                "file_links", "file_publication_cleanup_attentions", "tasks", "task_reminders", "parties", "properties", "property_ownerships", "spaces",
-                "space_occupancy_periods", "space_availability", "space_status_operations", "tenant_profiles", "party_contact_methods",
-                "leases", "lease_term_versions", "lease_participants", "lease_renewal_options",
-                "lease_termination_cases", "lease_termination_proposals",
-                "condition_reports", "condition_areas", "condition_observations",
-                "condition_report_acknowledgments", "condition_comparisons",
-                "condition_checklist_templates", "condition_checklist_template_items",
-                "provider_profiles", "provider_categories", "provider_category_assignments", "provider_services", "provider_service_areas",
-                "provider_work_history", "provider_references", "provider_reputation_links",
-                    "rent_expectations", "rent_expectation_timeliness_reviews", "rent_receipts", "rent_receipt_allocations", "prepaid_checks", "prepaid_check_operations",
-                "expense_categories", "expenses", "expense_refunds",
-                "security_deposit_accounts", "security_deposit_receipts", "security_deposit_settlements",
-                "security_deposit_settlement_receipts", "security_deposit_deductions",
-                "security_deposit_deduction_sources", "security_deposit_credits", "security_deposit_refunds",
-                "communications", "communication_participants", "communication_links", "communication_operations",
-                "maintenance_issues", "maintenance_appointments", "maintenance_cost_contexts", "maintenance_issue_expense_links", "maintenance_follow_up_operations", "maintenance_quotes", "maintenance_assignments", "maintenance_work_journal_entries",
-                "owner_rent_reports", "owner_rent_report_operations",
-                "owner_concerns", "owner_concern_follow_up_operations",
-                "ai_settings", "ai_settings_operations", "ai_model_connections", "ai_action_limits", "ai_runs", "ai_drafts", "ai_review_decisions",
-                "intake_sources", "intake_evidence_revisions", "intake_revision_file_links", "intake_source_operations", "intake_source_duplicate_candidates",
+                "alembic_version",
+                "workspace_metadata",
+                "audit_events",
+                "file_records",
+                "file_content_locations",
+                "file_links",
+                "file_publication_cleanup_attentions",
+                "tasks",
+                "task_reminders",
+                "parties",
+                "properties",
+                "property_ownerships",
+                "spaces",
+                "space_occupancy_periods",
+                "space_availability",
+                "space_status_operations",
+                "tenant_profiles",
+                "party_contact_methods",
+                "leases",
+                "lease_term_versions",
+                "lease_participants",
+                "lease_renewal_options",
+                "lease_termination_cases",
+                "lease_termination_proposals",
+                "condition_reports",
+                "condition_areas",
+                "condition_observations",
+                "condition_report_acknowledgments",
+                "condition_comparisons",
+                "condition_checklist_templates",
+                "condition_checklist_template_items",
+                "provider_profiles",
+                "provider_categories",
+                "provider_category_assignments",
+                "provider_services",
+                "provider_service_areas",
+                "provider_work_history",
+                "provider_references",
+                "provider_reputation_links",
+                "rent_expectations",
+                "rent_expectation_timeliness_reviews",
+                "rent_receipts",
+                "rent_receipt_allocations",
+                "prepaid_checks",
+                "prepaid_check_operations",
+                "expense_categories",
+                "expenses",
+                "expense_refunds",
+                "security_deposit_accounts",
+                "security_deposit_receipts",
+                "security_deposit_settlements",
+                "security_deposit_settlement_receipts",
+                "security_deposit_deductions",
+                "security_deposit_deduction_sources",
+                "security_deposit_credits",
+                "security_deposit_refunds",
+                "communications",
+                "communication_participants",
+                "communication_links",
+                "communication_operations",
+                "maintenance_issues",
+                "maintenance_appointments",
+                "maintenance_cost_contexts",
+                "maintenance_issue_expense_links",
+                "maintenance_follow_up_operations",
+                "maintenance_quotes",
+                "maintenance_assignments",
+                "maintenance_work_journal_entries",
+                "owner_rent_reports",
+                "owner_rent_report_operations",
+                "owner_concerns",
+                "owner_concern_follow_up_operations",
+                "ai_settings",
+                "ai_settings_operations",
+                "ai_model_connections",
+                "ai_action_limits",
+                "ai_runs",
+                "ai_drafts",
+                "ai_review_decisions",
+                "intake_sources",
+                "intake_evidence_revisions",
+                "intake_revision_file_links",
+                "intake_source_operations",
+                "intake_source_duplicate_candidates",
             }
             if actual_tables != expected_tables:
-                raise ProductSchemaError("Workspace database contains unsupported application tables.")
-            revisions = connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
+                raise ProductSchemaError(
+                    "Workspace database contains unsupported application tables."
+                )
+            revisions = (
+                connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
+            )
             if revisions != [current_revision()]:
-                raise ProductSchemaError("Workspace database is not at the current schema revision.")
-            for validator in (validate_workspace_schema, validate_audit_schema, validate_file_schema, validate_task_schema, validate_portfolio_schema, validate_tenant_schema, validate_lease_schema, validate_inspection_schema, validate_vendor_schema, validate_finance_schema, validate_maintenance_schema, validate_owner_accounting_schema, validate_owner_concern_schema):
+                raise ProductSchemaError(
+                    "Workspace database is not at the current schema revision."
+                )
+            for validator in (
+                validate_workspace_schema,
+                validate_audit_schema,
+                validate_file_schema,
+                validate_task_schema,
+                validate_portfolio_schema,
+                validate_tenant_schema,
+                validate_lease_schema,
+                validate_inspection_schema,
+                validate_vendor_schema,
+                validate_finance_schema,
+                validate_maintenance_schema,
+                validate_owner_accounting_schema,
+                validate_owner_concern_schema,
+            ):
                 validator(connection)
             validate_file_data(connection, build_file_link_policy_registry().as_mapping())
             validate_intake_schema(connection)
-            validate_ai_governance_schema(connection, ACTION_REGISTRY, REDACTION_PROFILE_REGISTRY, ADAPTER_REGISTRY, APPROVAL_EVIDENCE_VALIDATORS, SOURCE_VALIDATORS)
+            validate_ai_governance_schema(
+                connection,
+                ACTION_REGISTRY,
+                REDACTION_PROFILE_REGISTRY,
+                ADAPTER_REGISTRY,
+                APPROVAL_EVIDENCE_VALIDATORS,
+                SOURCE_VALIDATORS,
+            )
             validate_communication_schema(
                 connection,
                 SQLiteCommunicationContextOperations(

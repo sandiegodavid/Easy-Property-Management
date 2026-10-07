@@ -14,6 +14,12 @@ class TenantProfile:
     archived_at: str | None
 
     def to_dict(self) -> dict[str, object]:
-        return {"partyId": self.party_id, "preferredContactMethodId": self.preferred_contact_method_id,
-                "doNotContact": self.do_not_contact, "notes": self.notes, "createdAt": self.created_at,
-                "updatedAt": self.updated_at, "archivedAt": self.archived_at}
+        return {
+            "partyId": self.party_id,
+            "preferredContactMethodId": self.preferred_contact_method_id,
+            "doNotContact": self.do_not_contact,
+            "notes": self.notes,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+            "archivedAt": self.archived_at,
+        }

@@ -48,7 +48,9 @@ def load_local_config(config_path: Path | None = None) -> LocalConfig:
     try:
         raw_config = json.loads(resolved_config_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
-        raise LocalConfigError(f"Local configuration is not valid JSON: {resolved_config_path}") from error
+        raise LocalConfigError(
+            f"Local configuration is not valid JSON: {resolved_config_path}"
+        ) from error
     if not isinstance(raw_config, dict):
         raise LocalConfigError("Local configuration must be a JSON object.")
 
@@ -61,7 +63,9 @@ def load_local_config(config_path: Path | None = None) -> LocalConfig:
     if backup_value is not None and (not isinstance(backup_value, str) or not backup_value.strip()):
         raise LocalConfigError("backupDestinationPath must be an absolute path when provided.")
     backup_destination_path = (
-        _absolute_path(backup_value, "backupDestinationPath") if isinstance(backup_value, str) else None
+        _absolute_path(backup_value, "backupDestinationPath")
+        if isinstance(backup_value, str)
+        else None
     )
     file_storage_provider = raw_config.get("fileStorageProvider", "local")
     if file_storage_provider not in {"local", "s3"}:
@@ -93,12 +97,16 @@ def save_backup_destination(config: LocalConfig, destination_path: Path) -> Loca
     except (OSError, json.JSONDecodeError) as error:
         raise LocalConfigError(f"Unable to update local configuration: {error}") from error
     if not isinstance(raw_config, dict):
-        raise LocalConfigError("Unable to update local configuration: its root must be a JSON object.")
+        raise LocalConfigError(
+            "Unable to update local configuration: its root must be a JSON object."
+        )
 
     raw_config["backupDestinationPath"] = str(resolved_destination)
     temporary_path = config.config_path.with_name(f".{config.config_path.name}.tmp")
     try:
-        temporary_path.write_text(json.dumps(raw_config, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        temporary_path.write_text(
+            json.dumps(raw_config, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         if os.name == "posix":
             temporary_path.chmod(0o600)
         temporary_path.replace(config.config_path)
@@ -112,5 +120,7 @@ def save_backup_destination(config: LocalConfig, destination_path: Path) -> Loca
 def _absolute_path(value: str, field_name: str) -> Path:
     path = Path(value).expanduser()
     if not path.is_absolute():
-        raise LocalConfigError(f"{field_name} must be an absolute path outside the application checkout.")
+        raise LocalConfigError(
+            f"{field_name} must be an absolute path outside the application checkout."
+        )
     return path.resolve()

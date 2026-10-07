@@ -1,6 +1,6 @@
 """Current SQLite schema for COM-001."""
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, String, UniqueConstraint, text
+from sqlalchemy import CheckConstraint, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.platform.sqlalchemy_models import LocalBase
@@ -17,8 +17,12 @@ class CommunicationModel(LocalBase):
     occurred_timezone: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[str] = mapped_column(String, nullable=False)
     recorded_at: Mapped[str | None] = mapped_column(String)
-    supersedes_communication_id: Mapped[str | None] = mapped_column(ForeignKey("communications.id"), unique=True)
-    superseded_by_communication_id: Mapped[str | None] = mapped_column(ForeignKey("communications.id"), unique=True)
+    supersedes_communication_id: Mapped[str | None] = mapped_column(
+        ForeignKey("communications.id"), unique=True
+    )
+    superseded_by_communication_id: Mapped[str | None] = mapped_column(
+        ForeignKey("communications.id"), unique=True
+    )
     correction_reason: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
@@ -29,7 +33,9 @@ class CommunicationModel(LocalBase):
         CheckConstraint("length(trim(subject)) BETWEEN 1 AND 240"),
         CheckConstraint("length(trim(body)) BETWEEN 1 AND 10000"),
         CheckConstraint("length(trim(occurred_timezone)) > 0"),
-        CheckConstraint("(status = 'draft' AND recorded_at IS NULL AND supersedes_communication_id IS NULL AND superseded_by_communication_id IS NULL AND correction_reason IS NULL) OR (status = 'recorded' AND recorded_at IS NOT NULL AND superseded_by_communication_id IS NULL AND ((supersedes_communication_id IS NULL AND correction_reason IS NULL) OR (supersedes_communication_id IS NOT NULL AND correction_reason IS NOT NULL AND length(trim(correction_reason)) BETWEEN 1 AND 1000))) OR (status = 'superseded' AND recorded_at IS NOT NULL AND supersedes_communication_id IS NULL AND superseded_by_communication_id IS NOT NULL AND correction_reason IS NULL)"),
+        CheckConstraint(
+            "(status = 'draft' AND recorded_at IS NULL AND supersedes_communication_id IS NULL AND superseded_by_communication_id IS NULL AND correction_reason IS NULL) OR (status = 'recorded' AND recorded_at IS NOT NULL AND superseded_by_communication_id IS NULL AND ((supersedes_communication_id IS NULL AND correction_reason IS NULL) OR (supersedes_communication_id IS NOT NULL AND correction_reason IS NOT NULL AND length(trim(correction_reason)) BETWEEN 1 AND 1000))) OR (status = 'superseded' AND recorded_at IS NOT NULL AND supersedes_communication_id IS NULL AND superseded_by_communication_id IS NOT NULL AND correction_reason IS NULL)"
+        ),
         Index("communications_occurred", "occurred_at_utc", "id"),
         Index("communications_status_occurred", "status", "occurred_at_utc", "id"),
     )
@@ -40,7 +46,9 @@ class CommunicationParticipantModel(LocalBase):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     communication_id: Mapped[str] = mapped_column(ForeignKey("communications.id"), nullable=False)
     party_id: Mapped[str] = mapped_column(ForeignKey("parties.id"), nullable=False)
-    party_contact_method_id: Mapped[str | None] = mapped_column(ForeignKey("party_contact_methods.id"))
+    party_contact_method_id: Mapped[str | None] = mapped_column(
+        ForeignKey("party_contact_methods.id")
+    )
     role: Mapped[str] = mapped_column(String, nullable=False)
     party_display_name_snapshot: Mapped[str] = mapped_column(String, nullable=False)
     contact_display_snapshot: Mapped[str | None] = mapped_column(String)
@@ -60,8 +68,12 @@ class CommunicationLinkModel(LocalBase):
     entity_id: Mapped[str] = mapped_column(String, nullable=False)
     property_timezone_snapshot: Mapped[str | None] = mapped_column(String)
     __table_args__ = (
-        CheckConstraint("entity_type IN ('party','property','space','lease','rent_expectation','rent_receipt','renewal_option','task','maintenance_issue','owner_concern','intake_source')"),
-        UniqueConstraint("communication_id", "entity_type", "entity_id", name="communication_links_unique_target"),
+        CheckConstraint(
+            "entity_type IN ('party','property','space','lease','rent_expectation','rent_receipt','renewal_option','task','maintenance_issue','owner_concern','intake_source')"
+        ),
+        UniqueConstraint(
+            "communication_id", "entity_type", "entity_id", name="communication_links_unique_target"
+        ),
         Index("communication_links_target", "entity_type", "entity_id", "communication_id"),
     )
 

@@ -10,7 +10,11 @@ from pathlib import Path
 from typing import Callable
 from uuid import uuid4
 
-from app.modules.files.application.errors import MAX_FILE_BYTES, FileError, PublicationCleanupIncomplete
+from app.modules.files.application.errors import (
+    MAX_FILE_BYTES,
+    FileError,
+    PublicationCleanupIncomplete,
+)
 from app.modules.files.domain.models import StoredFile
 from app.platform.locking import WorkspaceOperationInProgressError, WorkspaceOperationLock
 
@@ -62,7 +66,9 @@ class FilesystemContentStore:
         self.files_root = files_root
 
     def _managed_directory(self) -> Path:
-        if self.files_root.exists() and (self.files_root.is_symlink() or not self.files_root.is_dir()):
+        if self.files_root.exists() and (
+            self.files_root.is_symlink() or not self.files_root.is_dir()
+        ):
             raise FileError("Managed file root is unsafe.", "file_integrity_failed")
         self.files_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         managed = self.files_root / "managed"
@@ -74,14 +80,16 @@ class FilesystemContentStore:
     def store(self, source: Path) -> _Lease:
         managed = self._managed_directory()
         temporary = managed / f".{uuid4().hex}.uploading"
-        digest = hashlib.sha256(); size = 0
+        digest = hashlib.sha256()
+        size = 0
         try:
             with source.open("rb") as input_file, temporary.open("xb") as output:
                 while chunk := input_file.read(1024 * 1024):
                     size += len(chunk)
                     if size > MAX_FILE_BYTES:
                         raise FileError("File exceeds the 50 MiB local upload limit.")
-                    digest.update(chunk); output.write(chunk)
+                    digest.update(chunk)
+                    output.write(chunk)
             content_hash = digest.hexdigest()
             relative = f"managed/{content_hash}"
             target = self.files_root / relative
@@ -101,34 +109,48 @@ class FilesystemContentStore:
         except FileError:
             raise
         except OSError as error:
-            raise FileError("Local file storage is unavailable.", "file_provider_unavailable") from error
+            raise FileError(
+                "Local file storage is unavailable.", "file_provider_unavailable"
+            ) from error
         finally:
             temporary.unlink(missing_ok=True)
 
     def _acquire_digest_lock(self, digest: str) -> WorkspaceOperationLock:
-        lock = WorkspaceOperationLock(self.files_root.parent / ".file-content-locks" / f"{digest}.lock")
+        lock = WorkspaceOperationLock(
+            self.files_root.parent / ".file-content-locks" / f"{digest}.lock"
+        )
         deadline = time.monotonic() + 10
         while True:
             try:
                 return lock.__enter__()
             except WorkspaceOperationInProgressError as error:
                 if time.monotonic() >= deadline:
-                    raise FileError("Another upload of the same content did not finish in time.") from error
+                    raise FileError(
+                        "Another upload of the same content did not finish in time."
+                    ) from error
                 time.sleep(0.05)
 
     def path_for(self, item: StoredFile) -> Path:
         if item.storage_provider != "local" or item.local_relative_path is None:
-            raise FileError("The file does not have a local content location.", "file_content_unavailable")
+            raise FileError(
+                "The file does not have a local content location.", "file_content_unavailable"
+            )
         if item.local_relative_path != f"managed/{item.content_sha256}":
-            raise FileError("Stored file content has an invalid managed locator.", "file_integrity_failed")
+            raise FileError(
+                "Stored file content has an invalid managed locator.", "file_integrity_failed"
+            )
         self._managed_directory()
         path = self.files_root / item.local_relative_path
         try:
             digest, actual = _hash_regular_file(path)
         except FileNotFoundError as error:
-            raise FileError("Stored file content is unavailable.", "file_content_unavailable") from error
+            raise FileError(
+                "Stored file content is unavailable.", "file_content_unavailable"
+            ) from error
         if actual != item.size_bytes or digest != item.content_sha256:
-            raise FileError("Stored file content failed its integrity check.", "file_integrity_failed")
+            raise FileError(
+                "Stored file content failed its integrity check.", "file_integrity_failed"
+            )
         return path
 
     def reconcile(self, retained_locations: set[str]) -> dict[str, tuple[str, ...]]:
@@ -142,10 +164,14 @@ class FilesystemContentStore:
                     unverifiable.add(candidate.name)
                     continue
                 # Only immutable digest object names participate in FILE-001.
-                if len(candidate.name) == 64 and all(char in "0123456789abcdef" for char in candidate.name):
+                if len(candidate.name) == 64 and all(
+                    char in "0123456789abcdef" for char in candidate.name
+                ):
                     found.add(f"managed/{candidate.name}")
         except OSError as error:
-            raise FileError("Unable to reconcile local file storage.", "file_provider_unavailable") from error
+            raise FileError(
+                "Unable to reconcile local file storage.", "file_provider_unavailable"
+            ) from error
         return {
             "referenced": tuple(sorted(found & retained_locations)),
             "orphaned": tuple(sorted(found - retained_locations)),
@@ -204,8 +230,14 @@ class S3ContentStore:
 
     storage_provider = "s3"
 
-    def __init__(self, client, bucket: str, prefix: str = "managed", lock_root: Path | None = None,
-                 workspace_id: str | Callable[[], str] = "workspace") -> None:
+    def __init__(
+        self,
+        client,
+        bucket: str,
+        prefix: str = "managed",
+        lock_root: Path | None = None,
+        workspace_id: str | Callable[[], str] = "workspace",
+    ) -> None:
         self.client = client
         self.bucket = bucket.strip()
         self.prefix = prefix.strip("/")
@@ -230,16 +262,35 @@ class S3ContentStore:
         try:
             with source.open("rb") as body:
                 response = self.client.put_object(
-                    Bucket=self.bucket, Key=key, Body=body,
-                    Metadata={"sha256": digest, "workspace-id": workspace_id.strip(), "publication-id": publication_id}, IfNoneMatch="*",
+                    Bucket=self.bucket,
+                    Key=key,
+                    Body=body,
+                    Metadata={
+                        "sha256": digest,
+                        "workspace-id": workspace_id.strip(),
+                        "publication-id": publication_id,
+                    },
+                    IfNoneMatch="*",
                 )
             version = response.get("VersionId")
             if not version or version == "null":
                 self._delete_unidentified_publication(key)
-                raise FileError("S3 publication did not return a durable version identity.", "file_provider_unavailable")
-            lease = _S3Lease(self, key, size, digest, True, s3_bucket=self.bucket,
-                             s3_version_id=version, provider_etag=response.get("ETag"), lock=lock,
-                             publication_id=publication_id)
+                raise FileError(
+                    "S3 publication did not return a durable version identity.",
+                    "file_provider_unavailable",
+                )
+            lease = _S3Lease(
+                self,
+                key,
+                size,
+                digest,
+                True,
+                s3_bucket=self.bucket,
+                s3_version_id=version,
+                provider_etag=response.get("ETag"),
+                lock=lock,
+                publication_id=publication_id,
+            )
             self._verify_existing(key, version, digest, size)
             return lease
         except Exception as error:
@@ -250,7 +301,10 @@ class S3ContentStore:
                     lock.__exit__(None, None, None)
             except Exception as cleanup_error:
                 raise PublicationCleanupIncomplete(
-                    publication_id, "s3", error, cleanup_error,
+                    publication_id,
+                    "s3",
+                    error,
+                    cleanup_error,
                 ) from error
             if isinstance(error, FileError):
                 raise
@@ -260,7 +314,9 @@ class S3ContentStore:
         try:
             versioning = self.client.get_bucket_versioning(Bucket=self.bucket)
         except Exception as error:
-            raise FileError("Unable to verify S3 bucket versioning.", "file_provider_unavailable") from error
+            raise FileError(
+                "Unable to verify S3 bucket versioning.", "file_provider_unavailable"
+            ) from error
         if versioning.get("Status") != "Enabled":
             raise FileError("S3 file storage requires bucket versioning for safe rollback.")
 
@@ -269,7 +325,8 @@ class S3ContentStore:
         try:
             response = self.client.list_object_versions(Bucket=self.bucket, Prefix=key)
             matches = [
-                item for item in response.get("Versions", [])
+                item
+                for item in response.get("Versions", [])
                 if item.get("Key") == key and item.get("IsLatest") and item.get("VersionId")
             ]
             if len(matches) != 1:
@@ -292,10 +349,14 @@ class S3ContentStore:
                 return lock.__enter__()
             except WorkspaceOperationInProgressError as error:
                 if time.monotonic() >= deadline:
-                    raise FileError("Another upload of the same S3 content did not finish in time.") from error
+                    raise FileError(
+                        "Another upload of the same S3 content did not finish in time."
+                    ) from error
                 time.sleep(0.05)
 
-    def _verify_existing(self, key: str, version: str, expected_hash: str, expected_size: int) -> None:
+    def _verify_existing(
+        self, key: str, version: str, expected_hash: str, expected_size: int
+    ) -> None:
         staged = tempfile.NamedTemporaryFile(prefix="epm-s3-verify-", delete=False)
         path = Path(staged.name)
         staged.close()
@@ -303,26 +364,43 @@ class S3ContentStore:
             self.client.download_file(self.bucket, key, str(path), ExtraArgs={"VersionId": version})
             digest, size = _hash_file(path)
             if digest != expected_hash or size != expected_size:
-                raise FileError("Existing S3 content failed its integrity check.", "file_integrity_failed")
+                raise FileError(
+                    "Existing S3 content failed its integrity check.", "file_integrity_failed"
+                )
         except FileError:
             raise
         except Exception as error:
-            raise FileError("Unable to verify published S3 content.", "file_provider_unavailable") from error
+            raise FileError(
+                "Unable to verify published S3 content.", "file_provider_unavailable"
+            ) from error
         finally:
             path.unlink(missing_ok=True)
 
     def path_for(self, item: StoredFile) -> Path:
-        if item.storage_provider != "s3" or not item.s3_bucket or not item.s3_object_key or not item.s3_version_id:
-            raise FileError("The file does not have an exact S3 content location.", "file_content_unavailable")
+        if (
+            item.storage_provider != "s3"
+            or not item.s3_bucket
+            or not item.s3_object_key
+            or not item.s3_version_id
+        ):
+            raise FileError(
+                "The file does not have an exact S3 content location.", "file_content_unavailable"
+            )
         staged = tempfile.NamedTemporaryFile(prefix="epm-s3-", delete=False)
         path = Path(staged.name)
         staged.close()
         try:
-            self.client.download_file(item.s3_bucket, item.s3_object_key, str(path),
-                                      ExtraArgs={"VersionId": item.s3_version_id})
+            self.client.download_file(
+                item.s3_bucket,
+                item.s3_object_key,
+                str(path),
+                ExtraArgs={"VersionId": item.s3_version_id},
+            )
             digest, actual = _hash_file(path)
             if actual != item.size_bytes or digest != item.content_sha256:
-                raise FileError("Stored S3 content failed its integrity check.", "file_integrity_failed")
+                raise FileError(
+                    "Stored S3 content failed its integrity check.", "file_integrity_failed"
+                )
             return path
         except FileError:
             path.unlink(missing_ok=True)
@@ -330,21 +408,38 @@ class S3ContentStore:
         except Exception as error:
             path.unlink(missing_ok=True)
             if _s3_not_found(error):
-                raise FileError("Stored S3 content is unavailable.", "file_content_unavailable") from error
-            raise FileError("S3 content is temporarily unavailable.", "file_provider_unavailable") from error
+                raise FileError(
+                    "Stored S3 content is unavailable.", "file_content_unavailable"
+                ) from error
+            raise FileError(
+                "S3 content is temporarily unavailable.", "file_provider_unavailable"
+            ) from error
 
-    def materialize(self, bucket: str, object_key: str, version_id: str | None,
-                    target: Path, expected_hash: str, expected_size: int) -> None:
+    def materialize(
+        self,
+        bucket: str,
+        object_key: str,
+        version_id: str | None,
+        target: Path,
+        expected_hash: str,
+        expected_size: int,
+    ) -> None:
         if not version_id:
-            raise FileError("S3 content is missing its durable version identity.", "file_content_unavailable")
+            raise FileError(
+                "S3 content is missing its durable version identity.", "file_content_unavailable"
+            )
         with target.open("xb") as output:
-            self.client.download_fileobj(bucket, object_key, output, ExtraArgs={"VersionId": version_id})
+            self.client.download_fileobj(
+                bucket, object_key, output, ExtraArgs={"VersionId": version_id}
+            )
         digest, size = _hash_file(target)
         if digest != expected_hash or size != expected_size:
             target.unlink(missing_ok=True)
             raise FileError("S3 content failed portable-backup verification.")
 
-    def reconcile(self, retained_locations: set[tuple[str, str, str]], continuation: str | None = None) -> S3ReconciliationPage:
+    def reconcile(
+        self, retained_locations: set[tuple[str, str, str]], continuation: str | None = None
+    ) -> S3ReconciliationPage:
         """Compare one bounded workspace namespace page without deleting anything."""
         workspace_id = self.workspace_id() if callable(self.workspace_id) else self.workspace_id
         prefix = "/".join(part for part in (self.prefix, workspace_id) if part) + "/"
@@ -354,7 +449,9 @@ class S3ContentStore:
         try:
             response = self.client.list_object_versions(**arguments)
         except Exception as error:
-            raise FileError("Unable to reconcile S3 file storage.", "file_provider_unavailable") from error
+            raise FileError(
+                "Unable to reconcile S3 file storage.", "file_provider_unavailable"
+            ) from error
         versions = response.get("Versions", [])
         referenced: list[tuple[str, str, str]] = []
         orphaned: list[tuple[str, str, str]] = []
@@ -370,7 +467,14 @@ class S3ContentStore:
         next_cursor = f"{next_key}|{next_version}" if next_key and next_version else None
         # Missing versions can only be determined after *all* pages have been
         # accumulated.  The verification coordinator owns that aggregation.
-        return S3ReconciliationPage(tuple(referenced), tuple(orphaned), (), tuple(unverifiable), next_cursor, next_cursor is not None)
+        return S3ReconciliationPage(
+            tuple(referenced),
+            tuple(orphaned),
+            (),
+            tuple(unverifiable),
+            next_cursor,
+            next_cursor is not None,
+        )
 
 
 def _s3_not_found(error: Exception) -> bool:
@@ -391,7 +495,8 @@ def _hash_file(path: Path) -> tuple[str, int]:
 
 
 def _hash_bounded(path: Path) -> tuple[str, int]:
-    digest = hashlib.sha256(); size = 0
+    digest = hashlib.sha256()
+    size = 0
     try:
         with path.open("rb") as source:
             while chunk := source.read(1024 * 1024):
@@ -412,15 +517,19 @@ def _hash_regular_file(path: Path) -> tuple[str, int]:
     except FileNotFoundError:
         raise
     except OSError as error:
-        raise FileError("Stored file content is unsafe or unavailable.", "file_integrity_failed") from error
+        raise FileError(
+            "Stored file content is unsafe or unavailable.", "file_integrity_failed"
+        ) from error
     try:
         metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode):
             raise FileError("Stored file content is not a regular file.", "file_integrity_failed")
-        digest = hashlib.sha256(); size = 0
+        digest = hashlib.sha256()
+        size = 0
         with os.fdopen(descriptor, "rb", closefd=False) as source:
             while chunk := source.read(1024 * 1024):
-                size += len(chunk); digest.update(chunk)
+                size += len(chunk)
+                digest.update(chunk)
         return digest.hexdigest(), size
     finally:
         os.close(descriptor)

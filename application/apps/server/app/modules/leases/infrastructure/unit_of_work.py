@@ -10,7 +10,11 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
-from app.modules.files.infrastructure.sqlalchemy_models import FileContentLocationModel, FileLinkModel, FileRecordModel
+from app.modules.files.infrastructure.sqlalchemy_models import (
+    FileContentLocationModel,
+    FileLinkModel,
+    FileRecordModel,
+)
 from app.modules.inspections.application.ports import InspectionContextReader
 from app.modules.leases.application.ports import (
     LeaseConflictError,
@@ -35,16 +39,20 @@ from app.modules.leases.infrastructure.sqlalchemy_models import (
     LeaseTermModel,
 )
 from app.modules.portfolio.application.ports import PortfolioConflictError
-from app.modules.portfolio.domain.models import Property, Space, SpaceOccupancyPeriod
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 Result = TypeVar("Result")
 
 
 class SQLiteLeaseUnitOfWork:
-    def __init__(self, database, recorder: AuditRecorder, tenant_profiles: TenantProfileAvailability,
-                 portfolio_operations: PortfolioLeaseOperations,
-                 inspection_context_reader: InspectionContextReader) -> None:
+    def __init__(
+        self,
+        database,
+        recorder: AuditRecorder,
+        tenant_profiles: TenantProfileAvailability,
+        portfolio_operations: PortfolioLeaseOperations,
+        inspection_context_reader: InspectionContextReader,
+    ) -> None:
         self.engine = create_sqlite_engine(database)
         self.recorder = recorder
         self.tenant_profiles = tenant_profiles
@@ -54,13 +62,20 @@ class SQLiteLeaseUnitOfWork:
     def write(self, operation: Callable[[LeaseTransaction], Result]) -> Result:
         try:
             with immediate_transaction(self.engine) as connection:
-                return operation(_Transaction(
-                    connection, self.recorder, self.tenant_profiles, self.portfolio_operations,
-                    self.inspection_context_reader,
-                ))
+                return operation(
+                    _Transaction(
+                        connection,
+                        self.recorder,
+                        self.tenant_profiles,
+                        self.portfolio_operations,
+                        self.inspection_context_reader,
+                    )
+                )
         except OperationalError as error:
             if "locked" in str(error).casefold():
-                raise LeaseConflictError("The lease changed concurrently; reload it and try again.") from error
+                raise LeaseConflictError(
+                    "The lease changed concurrently; reload it and try again."
+                ) from error
             raise
         except PortfolioConflictError as error:
             raise LeaseConflictError(str(error), current_status=error.current_status) from error
@@ -72,16 +87,27 @@ class SQLiteLeaseUnitOfWork:
                 return None
             return _view_record(session, lease)
 
-    def lease_views(self, *, status=None, property_id=None, space_id=None, tenant_party_id=None,
-                    contract_start_from=None, contract_start_to=None, renewal_due_on_or_before=None):
+    def lease_views(
+        self,
+        *,
+        status=None,
+        property_id=None,
+        space_id=None,
+        tenant_party_id=None,
+        contract_start_from=None,
+        contract_start_to=None,
+        renewal_due_on_or_before=None,
+    ):
         with Session(self.engine) as session:
             query = select(LeaseModel)
             if status is not None:
                 query = query.where(LeaseModel.status == status)
             if property_id is not None:
-                query = query.where(LeaseModel.space_id.in_(
-                    self.portfolio_operations.space_ids_for_property(property_id)
-                ))
+                query = query.where(
+                    LeaseModel.space_id.in_(
+                        self.portfolio_operations.space_ids_for_property(property_id)
+                    )
+                )
             if space_id is not None:
                 query = query.where(LeaseModel.space_id == space_id)
             if tenant_party_id is not None:
@@ -97,14 +123,22 @@ class SQLiteLeaseUnitOfWork:
             if contract_start_to is not None:
                 query = query.where(LeaseModel.contract_starts_on <= contract_start_to)
             if renewal_due_on_or_before is not None:
-                query = query.where(LeaseModel.id.in_(select(LeaseRenewalOptionModel.lease_id).where(
-                    LeaseRenewalOptionModel.status == "open",
-                    or_(
-                        LeaseRenewalOptionModel.notice_due_on <= renewal_due_on_or_before,
-                        LeaseRenewalOptionModel.response_due_on <= renewal_due_on_or_before,
-                    ),
-                )))
-            leases = session.execute(query.order_by(LeaseModel.contract_starts_on, LeaseModel.id)).scalars().all()
+                query = query.where(
+                    LeaseModel.id.in_(
+                        select(LeaseRenewalOptionModel.lease_id).where(
+                            LeaseRenewalOptionModel.status == "open",
+                            or_(
+                                LeaseRenewalOptionModel.notice_due_on <= renewal_due_on_or_before,
+                                LeaseRenewalOptionModel.response_due_on <= renewal_due_on_or_before,
+                            ),
+                        )
+                    )
+                )
+            leases = (
+                session.execute(query.order_by(LeaseModel.contract_starts_on, LeaseModel.id))
+                .scalars()
+                .all()
+            )
             return [_view_record(session, lease) for lease in leases]
 
     def termination_case_view(self, case_id):
@@ -114,7 +148,11 @@ class SQLiteLeaseUnitOfWork:
 
     def termination_case_views(self, lease_id):
         with Session(self.engine) as session:
-            items = session.execute(select(LeaseTerminationCaseModel).where(LeaseTerminationCaseModel.lease_id == lease_id).order_by(LeaseTerminationCaseModel.created_at)).scalars()
+            items = session.execute(
+                select(LeaseTerminationCaseModel)
+                .where(LeaseTerminationCaseModel.lease_id == lease_id)
+                .order_by(LeaseTerminationCaseModel.created_at)
+            ).scalars()
             return [_termination_record(session, item) for item in items]
 
     def file_link_target_exists(self, connection, entity_type: str, entity_id: str) -> bool:
@@ -124,16 +162,21 @@ class SQLiteLeaseUnitOfWork:
         }.get(entity_type)
         if model is None:
             return False
-        return connection.execute(
-            select(model.id).where(model.id == entity_id).limit(1)
-        ).first() is not None
+        return (
+            connection.execute(select(model.id).where(model.id == entity_id).limit(1)).first()
+            is not None
+        )
 
 
 class _Transaction:
-    def __init__(self, connection: Any, recorder: AuditRecorder,
-                 tenant_profiles: TenantProfileAvailability,
-                 portfolio_operations: PortfolioLeaseOperations,
-                 inspection_context_reader) -> None:
+    def __init__(
+        self,
+        connection: Any,
+        recorder: AuditRecorder,
+        tenant_profiles: TenantProfileAvailability,
+        portfolio_operations: PortfolioLeaseOperations,
+        inspection_context_reader,
+    ) -> None:
         self.connection = connection
         self.recorder = recorder
         self.tenant_profiles = tenant_profiles
@@ -153,22 +196,52 @@ class _Transaction:
         return self.tenant_profiles.is_active(self.connection, party_id)
 
     def terms(self, lease_id):
-        return _mapped_many(self.connection, LeaseTermModel, LeaseTerm, LeaseTermModel.lease_id == lease_id, LeaseTermModel.effective_on)
+        return _mapped_many(
+            self.connection,
+            LeaseTermModel,
+            LeaseTerm,
+            LeaseTermModel.lease_id == lease_id,
+            LeaseTermModel.effective_on,
+        )
 
     def participants(self, lease_id):
-        return _mapped_many(self.connection, LeaseParticipantModel, LeaseParticipant, LeaseParticipantModel.lease_id == lease_id, LeaseParticipantModel.created_at)
+        return _mapped_many(
+            self.connection,
+            LeaseParticipantModel,
+            LeaseParticipant,
+            LeaseParticipantModel.lease_id == lease_id,
+            LeaseParticipantModel.created_at,
+        )
 
     def renewal_options(self, lease_id):
-        return _mapped_many(self.connection, LeaseRenewalOptionModel, LeaseRenewalOption, LeaseRenewalOptionModel.lease_id == lease_id, LeaseRenewalOptionModel.created_at)
+        return _mapped_many(
+            self.connection,
+            LeaseRenewalOptionModel,
+            LeaseRenewalOption,
+            LeaseRenewalOptionModel.lease_id == lease_id,
+            LeaseRenewalOptionModel.created_at,
+        )
 
     def termination_cases(self, lease_id):
-        return _mapped_many(self.connection, LeaseTerminationCaseModel, LeaseTerminationCase, LeaseTerminationCaseModel.lease_id == lease_id, LeaseTerminationCaseModel.created_at)
+        return _mapped_many(
+            self.connection,
+            LeaseTerminationCaseModel,
+            LeaseTerminationCase,
+            LeaseTerminationCaseModel.lease_id == lease_id,
+            LeaseTerminationCaseModel.created_at,
+        )
 
     def termination_case(self, case_id):
         return _mapped(self.connection, LeaseTerminationCaseModel, case_id, LeaseTerminationCase)
 
     def termination_proposals(self, case_id):
-        return _mapped_many(self.connection, LeaseTerminationProposalModel, LeaseTerminationProposal, LeaseTerminationProposalModel.termination_case_id == case_id, LeaseTerminationProposalModel.proposal_version)
+        return _mapped_many(
+            self.connection,
+            LeaseTerminationProposalModel,
+            LeaseTerminationProposal,
+            LeaseTerminationProposalModel.termination_case_id == case_id,
+            LeaseTerminationProposalModel.proposal_version,
+        )
 
     def occupancy_periods(self, space_id):
         return self.portfolio_operations.occupancy_periods(self.connection, space_id)
@@ -183,40 +256,68 @@ class _Transaction:
         self.connection.execute(LeaseModel.__table__.insert().values(**item.__dict__))
 
     def replace_lease(self, item):
-        self.connection.execute(LeaseModel.__table__.update().where(LeaseModel.id == item.id).values(**item.__dict__))
+        self.connection.execute(
+            LeaseModel.__table__.update().where(LeaseModel.id == item.id).values(**item.__dict__)
+        )
 
     def insert_term(self, item):
         self.connection.execute(LeaseTermModel.__table__.insert().values(**item.__dict__))
 
     def delete_terms(self, lease_id):
-        self.connection.execute(LeaseTermModel.__table__.delete().where(LeaseTermModel.lease_id == lease_id))
+        self.connection.execute(
+            LeaseTermModel.__table__.delete().where(LeaseTermModel.lease_id == lease_id)
+        )
 
     def insert_participant(self, item):
         self.connection.execute(LeaseParticipantModel.__table__.insert().values(**item.__dict__))
 
     def replace_participant(self, item):
-        self.connection.execute(LeaseParticipantModel.__table__.update().where(LeaseParticipantModel.id == item.id).values(**item.__dict__))
+        self.connection.execute(
+            LeaseParticipantModel.__table__.update()
+            .where(LeaseParticipantModel.id == item.id)
+            .values(**item.__dict__)
+        )
 
     def delete_participant(self, participant_id):
-        self.connection.execute(LeaseParticipantModel.__table__.delete().where(LeaseParticipantModel.id == participant_id))
+        self.connection.execute(
+            LeaseParticipantModel.__table__.delete().where(
+                LeaseParticipantModel.id == participant_id
+            )
+        )
 
     def insert_renewal_option(self, item):
         self.connection.execute(LeaseRenewalOptionModel.__table__.insert().values(**item.__dict__))
 
     def replace_renewal_option(self, item):
-        self.connection.execute(LeaseRenewalOptionModel.__table__.update().where(LeaseRenewalOptionModel.id == item.id).values(**item.__dict__))
+        self.connection.execute(
+            LeaseRenewalOptionModel.__table__.update()
+            .where(LeaseRenewalOptionModel.id == item.id)
+            .values(**item.__dict__)
+        )
 
     def insert_termination_case(self, item):
-        self.connection.execute(LeaseTerminationCaseModel.__table__.insert().values(**item.__dict__))
+        self.connection.execute(
+            LeaseTerminationCaseModel.__table__.insert().values(**item.__dict__)
+        )
 
     def replace_termination_case(self, item):
-        self.connection.execute(LeaseTerminationCaseModel.__table__.update().where(LeaseTerminationCaseModel.id == item.id).values(**item.__dict__))
+        self.connection.execute(
+            LeaseTerminationCaseModel.__table__.update()
+            .where(LeaseTerminationCaseModel.id == item.id)
+            .values(**item.__dict__)
+        )
 
     def insert_termination_proposal(self, item):
-        self.connection.execute(LeaseTerminationProposalModel.__table__.insert().values(**item.__dict__))
+        self.connection.execute(
+            LeaseTerminationProposalModel.__table__.insert().values(**item.__dict__)
+        )
 
     def replace_termination_proposal(self, item):
-        self.connection.execute(LeaseTerminationProposalModel.__table__.update().where(LeaseTerminationProposalModel.id == item.id).values(**item.__dict__))
+        self.connection.execute(
+            LeaseTerminationProposalModel.__table__.update()
+            .where(LeaseTerminationProposalModel.id == item.id)
+            .values(**item.__dict__)
+        )
 
     def apply_source_timeline(self, changes):
         return self.portfolio_operations.apply_source_timeline(self.connection, changes)
@@ -229,7 +330,9 @@ class _Transaction:
 
     def store_source_timeline_consumer_result(self, operation_id, result):
         self.portfolio_operations.store_source_timeline_consumer_result(
-            self.connection, operation_id, result,
+            self.connection,
+            operation_id,
+            result,
         )
 
     def record_change(self, **change):
@@ -245,18 +348,25 @@ class SQLiteLeaseParticipationGuard:
                 LeaseParticipantModel.tenant_party_id == party_id,
                 LeaseModel.status == "executed",
                 (LeaseParticipantModel.ends_on.is_(None) | (LeaseParticipantModel.ends_on > today)),
-            ).limit(1)
+            )
+            .limit(1)
         )
         return connection.execute(query).first() is not None
 
 
 def _mapped(connection, model, record_id, domain):
-    row = connection.execute(model.__table__.select().where(model.id == record_id)).mappings().first()
+    row = (
+        connection.execute(model.__table__.select().where(model.id == record_id)).mappings().first()
+    )
     return domain(**dict(row)) if row else None
 
 
 def _mapped_many(connection, model, domain, condition, ordering):
-    rows = connection.execute(model.__table__.select().where(condition).order_by(ordering)).mappings().all()
+    rows = (
+        connection.execute(model.__table__.select().where(condition).order_by(ordering))
+        .mappings()
+        .all()
+    )
     return [domain(**dict(row)) for row in rows]
 
 
@@ -266,26 +376,59 @@ def _view_record(session: Session, row: LeaseModel):
 
 
 def _lease_snapshot(connection, lease: Lease):
-    terms = _mapped_many(connection, LeaseTermModel, LeaseTerm, LeaseTermModel.lease_id == lease.id, LeaseTermModel.effective_on)
-    participants = _mapped_many(connection, LeaseParticipantModel, LeaseParticipant, LeaseParticipantModel.lease_id == lease.id, LeaseParticipantModel.created_at)
-    renewals = _mapped_many(connection, LeaseRenewalOptionModel, LeaseRenewalOption, LeaseRenewalOptionModel.lease_id == lease.id, LeaseRenewalOptionModel.created_at)
+    terms = _mapped_many(
+        connection,
+        LeaseTermModel,
+        LeaseTerm,
+        LeaseTermModel.lease_id == lease.id,
+        LeaseTermModel.effective_on,
+    )
+    participants = _mapped_many(
+        connection,
+        LeaseParticipantModel,
+        LeaseParticipant,
+        LeaseParticipantModel.lease_id == lease.id,
+        LeaseParticipantModel.created_at,
+    )
+    renewals = _mapped_many(
+        connection,
+        LeaseRenewalOptionModel,
+        LeaseRenewalOption,
+        LeaseRenewalOptionModel.lease_id == lease.id,
+        LeaseRenewalOptionModel.created_at,
+    )
     files = [
         {
-            "id": row["file_id"], "originalName": row["original_name"],
-            "mediaType": row["media_type"], "sizeBytes": row["size_bytes"],
-            "contentSha256": row["content_sha256"], "linkId": row["link_id"], "purpose": row["purpose"],
-            "storageState": row["storage_state"], "available": row["storage_state"] == "available", "verifiedAt": row["verified_at"],
+            "id": row["file_id"],
+            "originalName": row["original_name"],
+            "mediaType": row["media_type"],
+            "sizeBytes": row["size_bytes"],
+            "contentSha256": row["content_sha256"],
+            "linkId": row["link_id"],
+            "purpose": row["purpose"],
+            "storageState": row["storage_state"],
+            "available": row["storage_state"] == "available",
+            "verifiedAt": row["verified_at"],
         }
         for row in connection.execute(
             select(
-                FileLinkModel.id.label("link_id"), FileLinkModel.purpose,
-                FileRecordModel.id.label("file_id"), FileRecordModel.original_name,
-                FileRecordModel.media_type, FileRecordModel.size_bytes, FileRecordModel.content_sha256,
-                FileContentLocationModel.storage_state, FileContentLocationModel.verified_at,
+                FileLinkModel.id.label("link_id"),
+                FileLinkModel.purpose,
+                FileRecordModel.id.label("file_id"),
+                FileRecordModel.original_name,
+                FileRecordModel.media_type,
+                FileRecordModel.size_bytes,
+                FileRecordModel.content_sha256,
+                FileContentLocationModel.storage_state,
+                FileContentLocationModel.verified_at,
             )
             .join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id)
             .join(FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id)
-            .where(FileLinkModel.entity_type == "lease", FileLinkModel.entity_id == lease.id, FileLinkModel.archived_at.is_(None))
+            .where(
+                FileLinkModel.entity_type == "lease",
+                FileLinkModel.entity_id == lease.id,
+                FileLinkModel.archived_at.is_(None),
+            )
             .order_by(FileLinkModel.created_at)
         ).mappings()
     ]
@@ -293,18 +436,41 @@ def _lease_snapshot(connection, lease: Lease):
 
 
 def _termination_record(session: Session, row: LeaseTerminationCaseModel):
-    case = LeaseTerminationCase(**{name: getattr(row, name) for name in LeaseTerminationCase.__dataclass_fields__})
-    proposals = [LeaseTerminationProposal(**{name: getattr(item, name) for name in LeaseTerminationProposal.__dataclass_fields__}) for item in session.execute(select(LeaseTerminationProposalModel).where(LeaseTerminationProposalModel.termination_case_id == row.id).order_by(LeaseTerminationProposalModel.proposal_version)).scalars()]
+    case = LeaseTerminationCase(
+        **{name: getattr(row, name) for name in LeaseTerminationCase.__dataclass_fields__}
+    )
+    proposals = [
+        LeaseTerminationProposal(
+            **{name: getattr(item, name) for name in LeaseTerminationProposal.__dataclass_fields__}
+        )
+        for item in session.execute(
+            select(LeaseTerminationProposalModel)
+            .where(LeaseTerminationProposalModel.termination_case_id == row.id)
+            .order_by(LeaseTerminationProposalModel.proposal_version)
+        ).scalars()
+    ]
     files = [
-        {"id": file.id, "originalName": file.original_name, "mediaType": file.media_type,
-         "sizeBytes": file.size_bytes, "contentSha256": file.content_sha256,
-         "linkId": link.id, "purpose": link.purpose, "storageState": location.storage_state,
-         "available": location.storage_state == "available", "verifiedAt": location.verified_at}
+        {
+            "id": file.id,
+            "originalName": file.original_name,
+            "mediaType": file.media_type,
+            "sizeBytes": file.size_bytes,
+            "contentSha256": file.content_sha256,
+            "linkId": link.id,
+            "purpose": link.purpose,
+            "storageState": location.storage_state,
+            "available": location.storage_state == "available",
+            "verifiedAt": location.verified_at,
+        }
         for link, file, location in session.execute(
             select(FileLinkModel, FileRecordModel, FileContentLocationModel)
             .join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id)
             .join(FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id)
-            .where(FileLinkModel.entity_type == "lease_termination_case", FileLinkModel.entity_id == row.id, FileLinkModel.archived_at.is_(None))
+            .where(
+                FileLinkModel.entity_type == "lease_termination_case",
+                FileLinkModel.entity_id == row.id,
+                FileLinkModel.archived_at.is_(None),
+            )
             .order_by(FileLinkModel.created_at)
         )
     ]

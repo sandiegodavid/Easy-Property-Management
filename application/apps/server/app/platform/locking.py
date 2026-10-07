@@ -39,11 +39,14 @@ class WorkspaceOperationLock:
         except BlockingIOError as error:
             self._close()
             raise WorkspaceOperationInProgressError(
-                "Another workspace operation is already running. Wait for it to finish and try again."
+                "Another workspace operation is already running. "
+                "Wait for it to finish and try again."
             ) from error
         except OSError as error:
             self._close()
-            raise WorkspaceOperationInProgressError(f"Unable to acquire the workspace operation lock: {error}") from error
+            raise WorkspaceOperationInProgressError(
+                f"Unable to acquire the workspace operation lock: {error}"
+            ) from error
         return self
 
     def __exit__(

@@ -13,8 +13,16 @@ from uuid import uuid4
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.workspace.application.archive_service import WorkspaceArchiveService
-from app.modules.workspace.application.backup_models import BackupError, BackupResult, PackageType, RestoreResult
-from app.modules.workspace.application.backup_policy import BackupDestinationPolicy, WorkspaceLockCoordinator
+from app.modules.workspace.application.backup_models import (
+    BackupError,
+    BackupResult,
+    PackageType,
+    RestoreResult,
+)
+from app.modules.workspace.application.backup_policy import (
+    BackupDestinationPolicy,
+    WorkspaceLockCoordinator,
+)
 from app.modules.workspace.application.backup_state import BackupStateStore, RetentionExecutionError
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.infrastructure.encrypted_archive import (
@@ -33,9 +41,14 @@ from app.platform.secrets import BackupSecretStore, KeyringBackupSecretStore, Se
 class BackupService:
     """Coordinates focused archive, state, policy, and restore collaborators."""
 
-    def __init__(self, workspace_service: WorkspaceService, audit_recorder: AuditRecorder,
-                 restored_audit_recorder: Callable[[Path], AuditRecorder], secret_store: BackupSecretStore | None = None,
-                 remote_materializer=None) -> None:
+    def __init__(
+        self,
+        workspace_service: WorkspaceService,
+        audit_recorder: AuditRecorder,
+        restored_audit_recorder: Callable[[Path], AuditRecorder],
+        secret_store: BackupSecretStore | None = None,
+        remote_materializer=None,
+    ) -> None:
         self.workspace_service = workspace_service
         self.secret_store = secret_store or KeyringBackupSecretStore()
         self.archives = WorkspaceArchiveService(workspace_service, remote_materializer)
@@ -54,32 +67,60 @@ class BackupService:
         with self.locks.operation():
             return self.archives.validate_workspace()
 
-    def create_backup(self, passphrase: str, *, package_type: PackageType = "backup", output_path: Path | None = None) -> BackupResult:
+    def create_backup(
+        self,
+        passphrase: str,
+        *,
+        package_type: PackageType = "backup",
+        output_path: Path | None = None,
+    ) -> BackupResult:
         with self.locks.operation():
             archive_path: Path | None = None
             archive_published = False
             correlation_id = str(uuid4())
             try:
                 manifest = self.archives.validate_workspace()
-                archive_path = self.destinations.resolve_output(manifest.workspace_id, package_type, output_path)
-                result = self.archives.create(passphrase, package_type, archive_path, validated_manifest=manifest)
+                archive_path = self.destinations.resolve_output(
+                    manifest.workspace_id, package_type, output_path
+                )
+                result = self.archives.create(
+                    passphrase, package_type, archive_path, validated_manifest=manifest
+                )
                 archive_published = True
-                self._audit("backup_operation", result.archive_path.name, f"{package_type}_created", {
-                    "archiveName": result.archive_path.name, "packageType": package_type, "automatic": False,
-                }, correlation_id)
+                self._audit(
+                    "backup_operation",
+                    result.archive_path.name,
+                    f"{package_type}_created",
+                    {
+                        "archiveName": result.archive_path.name,
+                        "packageType": package_type,
+                        "automatic": False,
+                    },
+                    correlation_id,
+                )
                 self.state.record_success(result, automatic=False)
             except BackupError as error:
                 if archive_published:
                     self._remove_failed_archive(archive_path)
                 self.state.record_failure(
-                    str(error), package_type, automatic=False,
+                    str(error),
+                    package_type,
+                    automatic=False,
                     destination=archive_path.parent if archive_path else None,
                     archive_name=archive_path.name if archive_path else None,
                 )
                 try:
-                    self._audit("backup_operation", archive_path.name if archive_path else str(uuid4()), f"{package_type}_failed", {
-                        "packageType": package_type, "automatic": False, "reason": str(error),
-                    }, correlation_id)
+                    self._audit(
+                        "backup_operation",
+                        archive_path.name if archive_path else str(uuid4()),
+                        f"{package_type}_failed",
+                        {
+                            "packageType": package_type,
+                            "automatic": False,
+                            "reason": str(error),
+                        },
+                        correlation_id,
+                    )
                 except BackupError:
                     # The original operation has already failed and its archive was removed.
                     pass
@@ -98,19 +139,27 @@ class BackupService:
             self.destinations.validate_restore_destination(destination)
             return self._restore_archive(archive_path, passphrase, destination)
 
-    def _restore_archive(self, archive_path: Path, passphrase: str, destination: Path) -> RestoreResult:
+    def _restore_archive(
+        self, archive_path: Path, passphrase: str, destination: Path
+    ) -> RestoreResult:
         destination.parent.mkdir(parents=True, exist_ok=True)
         staging = destination.parent / f".{destination.name}.restoring.{uuid4().hex}"
         try:
-            with tempfile.TemporaryDirectory(prefix="epm-restore-archive-", dir=destination.parent) as temporary:
+            with tempfile.TemporaryDirectory(
+                prefix="epm-restore-archive-", dir=destination.parent
+            ) as temporary:
                 zip_path = Path(temporary) / "payload.zip"
-                header = decrypt_archive_to_zip(archive_path.expanduser().resolve(), passphrase, zip_path)
+                header = decrypt_archive_to_zip(
+                    archive_path.expanduser().resolve(), passphrase, zip_path
+                )
                 contents = inspect_payload_zip(zip_path, header)
                 staging.mkdir(mode=0o700)
                 extract_payload_zip(zip_path, staging, contents)
             manifest = self.archives.validate_extracted_workspace(staging, contents)
             if manifest.workspace_id != contents.header["sourceWorkspaceId"]:
-                raise BackupError("Restored workspace identity does not match the encrypted package.")
+                raise BackupError(
+                    "Restored workspace identity does not match the encrypted package."
+                )
             self._audit_restored_workspace(staging, contents)
             restored_database = staging / "database" / "property-management.sqlite"
             SQLiteWorkspaceStore(restored_database).verify(manifest, integrity_check=True)
@@ -120,7 +169,9 @@ class BackupService:
         except (ArchiveError, BackupError, OSError) as error:
             if staging.exists():
                 shutil.rmtree(staging, ignore_errors=True)
-            raise BackupError(f"Restore failed without changing the active workspace: {error}") from error
+            raise BackupError(
+                f"Restore failed without changing the active workspace: {error}"
+            ) from error
 
     def enable_automatic_backups(self, passphrase: str) -> None:
         with self.locks.operation():
@@ -181,7 +232,9 @@ class BackupService:
                 passphrase = self.secret_store.get_passphrase(manifest.workspace_id)
                 if not passphrase:
                     raise BackupError("Automatic backup credential is unavailable.")
-                archive_path = self.destinations.resolve_output(manifest.workspace_id, "backup", None)
+                archive_path = self.destinations.resolve_output(
+                    manifest.workspace_id, "backup", None
+                )
                 result = self.archives.create(
                     passphrase,
                     "backup",
@@ -189,9 +242,17 @@ class BackupService:
                     validated_manifest=manifest,
                 )
                 archive_published = True
-                self._audit("backup_operation", result.archive_path.name, "backup_created", {
-                    "archiveName": result.archive_path.name, "packageType": "backup", "automatic": True,
-                }, correlation_id)
+                self._audit(
+                    "backup_operation",
+                    result.archive_path.name,
+                    "backup_created",
+                    {
+                        "archiveName": result.archive_path.name,
+                        "packageType": "backup",
+                        "automatic": True,
+                    },
+                    correlation_id,
+                )
                 self.state.record_success(result, automatic=True)
             except SecretStoreError as error:
                 if archive_published:
@@ -208,28 +269,51 @@ class BackupService:
         with self.locks.operation():
             return self.state.status()
 
-    def _raise_recorded_failure(self, reason: str, package_type: PackageType, correlation_id: str,
-                                archive_path: Path | None = None) -> None:
+    def _raise_recorded_failure(
+        self,
+        reason: str,
+        package_type: PackageType,
+        correlation_id: str,
+        archive_path: Path | None = None,
+    ) -> None:
         self.state.record_failure(reason, package_type, automatic=True)
         try:
-            self._audit("backup_operation", archive_path.name if archive_path else str(uuid4()), f"{package_type}_failed", {
-                "packageType": package_type, "automatic": True, "reason": reason,
-            }, correlation_id)
+            self._audit(
+                "backup_operation",
+                archive_path.name if archive_path else str(uuid4()),
+                f"{package_type}_failed",
+                {
+                    "packageType": package_type,
+                    "automatic": True,
+                    "reason": reason,
+                },
+                correlation_id,
+            )
         except BackupError:
             pass
         raise BackupError(f"Automatic backup failed: {reason}")
 
-    def _apply_retention(self, result: BackupResult, workspace_id: str, correlation_id: str) -> None:
+    def _apply_retention(
+        self, result: BackupResult, workspace_id: str, correlation_id: str
+    ) -> None:
         """Retention does not change a successfully validated backup outcome."""
         try:
             recovered = self.state.recover_pending_retention()
             if recovered is not None:
-                self._audit("backup_retention", recovered.audit_event_id, recovered.audit_action,
-                            recovered.audit_after, recovered.correlation_id, event_id=recovered.audit_event_id,
-                            occurred_at=recovered.occurred_at)
+                self._audit(
+                    "backup_retention",
+                    recovered.audit_event_id,
+                    recovered.audit_action,
+                    recovered.audit_after,
+                    recovered.correlation_id,
+                    event_id=recovered.audit_event_id,
+                    occurred_at=recovered.occurred_at,
+                )
                 self.state.complete_retention_audit(recovered.audit_event_id)
-            retention = self.state.apply_retention(
-                workspace_id, result.archive_path.parent, correlation_id=correlation_id,
+            self.state.apply_retention(
+                workspace_id,
+                result.archive_path.parent,
+                correlation_id=correlation_id,
                 archive_name=result.archive_path.name,
             )
         except RetentionExecutionError as error:
@@ -241,7 +325,9 @@ class BackupService:
                 pending = self.state.recover_pending_retention()
             except BackupError as recovery_error:
                 self._record_retention_audit_failure(
-                    f"{error}; retention recovery is pending: {recovery_error}", correlation_id, error.result
+                    f"{error}; retention recovery is pending: {recovery_error}",
+                    correlation_id,
+                    error.result,
                 )
                 return
             self._record_retention_audit_failure(str(error), correlation_id, error.result)
@@ -258,25 +344,39 @@ class BackupService:
             pending = self.state.recover_pending_retention()
             if pending is None:
                 raise BackupError("Retention audit journal is unavailable.")
-            self._audit("backup_retention", pending.audit_event_id, pending.audit_action,
-                        pending.audit_after, correlation_id, event_id=pending.audit_event_id,
-                        occurred_at=pending.occurred_at)
+            self._audit(
+                "backup_retention",
+                pending.audit_event_id,
+                pending.audit_action,
+                pending.audit_after,
+                correlation_id,
+                event_id=pending.audit_event_id,
+                occurred_at=pending.occurred_at,
+            )
             self.state.complete_retention_audit(pending.audit_event_id)
         except BackupError as error:
             try:
-                self.state.record_retention_failure(f"Retention audit could not be recorded: {error}")
+                self.state.record_retention_failure(
+                    f"Retention audit could not be recorded: {error}"
+                )
             except BackupError:
                 pass
 
-    def _record_retention_audit_failure(self, reason: str, correlation_id: str,
-                                        result: object | None = None) -> None:
+    def _record_retention_audit_failure(
+        self, reason: str, correlation_id: str, result: object | None = None
+    ) -> None:
         """Retention telemetry must not reverse an already durable backup result."""
         try:
             details: dict[str, object] = {"reason": reason}
             if result is not None:
                 details["partialOutcome"] = result.to_dict()
-            self._audit("backup_retention", str(uuid4()), "partial" if result is not None else "failed", details,
-                        correlation_id)
+            self._audit(
+                "backup_retention",
+                str(uuid4()),
+                "partial" if result is not None else "failed",
+                details,
+                correlation_id,
+            )
         except BackupError:
             pass
 
@@ -297,17 +397,36 @@ class BackupService:
         try:
             archive_path.unlink(missing_ok=True)
         except OSError as error:
-            raise BackupError(f"Published archive could not be removed after a failed operation: {error}") from error
+            raise BackupError(
+                f"Published archive could not be removed after a failed operation: {error}"
+            ) from error
 
-    def _audit(self, entity_type: str, entity_id: str, action: str, after: dict[str, object], correlation_id: str,
-               *, event_id: str | None = None, occurred_at: datetime | None = None) -> None:
+    def _audit(
+        self,
+        entity_type: str,
+        entity_id: str,
+        action: str,
+        after: dict[str, object],
+        correlation_id: str,
+        *,
+        event_id: str | None = None,
+        occurred_at: datetime | None = None,
+    ) -> None:
         try:
             with sqlite3.connect(self.workspace_service.paths.database) as connection:
-                self.audit_recorder.record_change(connection, entity_type=entity_type, entity_id=entity_id,
-                                                  action=action, before=None, after=after,
-                                                  actor_kind="system", reason="backup_operation",
-                                                  correlation_id=correlation_id, event_id=event_id,
-                                                  occurred_at=occurred_at)
+                self.audit_recorder.record_change(
+                    connection,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    action=action,
+                    before=None,
+                    after=after,
+                    actor_kind="system",
+                    reason="backup_operation",
+                    correlation_id=correlation_id,
+                    event_id=event_id,
+                    occurred_at=occurred_at,
+                )
         except sqlite3.IntegrityError as error:
             if event_id is not None:
                 with sqlite3.connect(self.workspace_service.paths.database) as connection:
@@ -317,8 +436,14 @@ class BackupService:
                         (event_id,),
                     ).fetchone()
                     expected = (
-                        entity_type, entity_id, action, _audit_json(None), _audit_json(after),
-                        "system", "backup_operation", correlation_id,
+                        entity_type,
+                        entity_id,
+                        action,
+                        _audit_json(None),
+                        _audit_json(after),
+                        "system",
+                        "backup_operation",
+                        correlation_id,
                     )
                     if row == expected:
                         return
@@ -331,14 +456,26 @@ class BackupService:
         try:
             recorder = self.restored_audit_recorder(database)
             with sqlite3.connect(database) as connection:
-                recorder.record_change(connection, entity_type="workspace_restore",
-                                       entity_id=contents.header["sourceWorkspaceId"], action="restored",
-                                       before=None, after={"packageType": contents.header["packageType"]},
-                                       actor_kind="system", reason="workspace_restored",
-                                       correlation_id=str(uuid4()))
+                recorder.record_change(
+                    connection,
+                    entity_type="workspace_restore",
+                    entity_id=contents.header["sourceWorkspaceId"],
+                    action="restored",
+                    before=None,
+                    after={"packageType": contents.header["packageType"]},
+                    actor_kind="system",
+                    reason="workspace_restored",
+                    correlation_id=str(uuid4()),
+                )
         except sqlite3.Error as error:
-            raise BackupError(f"Restored workspace audit record could not be written: {error}") from error
+            raise BackupError(
+                f"Restored workspace audit record could not be written: {error}"
+            ) from error
 
 
 def _audit_json(value: object) -> str | None:
-    return None if value is None else json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return (
+        None
+        if value is None
+        else json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    )

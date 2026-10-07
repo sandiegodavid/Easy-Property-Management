@@ -17,7 +17,9 @@ class ProviderProfileModel(LocalBase):
     archived_at: Mapped[str | None] = mapped_column(String)
     __table_args__ = (
         CheckConstraint("selection_status IN ('neutral', 'preferred', 'avoid')"),
-        CheckConstraint("selection_status != 'avoid' OR (selection_reason IS NOT NULL AND length(trim(selection_reason)) > 0)"),
+        CheckConstraint(
+            "selection_status != 'avoid' OR (selection_reason IS NOT NULL AND length(trim(selection_reason)) > 0)"
+        ),
         Index("provider_profiles_selection", "archived_at", "selection_status"),
     )
 
@@ -38,17 +40,31 @@ class ProviderCategoryModel(LocalBase):
     __table_args__ = (
         CheckConstraint("length(trim(display_name)) BETWEEN 1 AND 160"),
         CheckConstraint("display_order >= 0"),
-        CheckConstraint("(archived_at IS NULL AND archive_reason IS NULL) OR (archived_at IS NOT NULL AND archive_reason IS NOT NULL AND length(trim(archive_reason)) BETWEEN 1 AND 1000)"),
-        Index("provider_categories_active_order", "archived_at", "display_order", "normalized_name", "id"),
-        Index("provider_categories_one_active_name", "normalized_name", unique=True,
-              sqlite_where=text("archived_at IS NULL")),
+        CheckConstraint(
+            "(archived_at IS NULL AND archive_reason IS NULL) OR (archived_at IS NOT NULL AND archive_reason IS NOT NULL AND length(trim(archive_reason)) BETWEEN 1 AND 1000)"
+        ),
+        Index(
+            "provider_categories_active_order",
+            "archived_at",
+            "display_order",
+            "normalized_name",
+            "id",
+        ),
+        Index(
+            "provider_categories_one_active_name",
+            "normalized_name",
+            unique=True,
+            sqlite_where=text("archived_at IS NULL"),
+        ),
     )
 
 
 class ProviderCategoryAssignmentModel(LocalBase):
     __tablename__ = "provider_category_assignments"
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    provider_party_id: Mapped[str] = mapped_column(ForeignKey("provider_profiles.party_id"), nullable=False)
+    provider_party_id: Mapped[str] = mapped_column(
+        ForeignKey("provider_profiles.party_id"), nullable=False
+    )
     category_id: Mapped[str] = mapped_column(ForeignKey("provider_categories.id"), nullable=False)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
@@ -57,11 +73,28 @@ class ProviderCategoryAssignmentModel(LocalBase):
     create_idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     create_request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (
-        CheckConstraint("(archived_at IS NULL AND archive_reason IS NULL) OR (archived_at IS NOT NULL AND archive_reason IS NOT NULL AND length(trim(archive_reason)) BETWEEN 1 AND 1000)"),
-        Index("provider_category_assignments_provider_status", "provider_party_id", "archived_at", "category_id"),
-        Index("provider_category_assignments_category_status", "category_id", "archived_at", "provider_party_id"),
-        Index("provider_category_assignments_one_active_pair", "provider_party_id", "category_id", unique=True,
-              sqlite_where=text("archived_at IS NULL")),
+        CheckConstraint(
+            "(archived_at IS NULL AND archive_reason IS NULL) OR (archived_at IS NOT NULL AND archive_reason IS NOT NULL AND length(trim(archive_reason)) BETWEEN 1 AND 1000)"
+        ),
+        Index(
+            "provider_category_assignments_provider_status",
+            "provider_party_id",
+            "archived_at",
+            "category_id",
+        ),
+        Index(
+            "provider_category_assignments_category_status",
+            "category_id",
+            "archived_at",
+            "provider_party_id",
+        ),
+        Index(
+            "provider_category_assignments_one_active_pair",
+            "provider_party_id",
+            "category_id",
+            unique=True,
+            sqlite_where=text("archived_at IS NULL"),
+        ),
     )
 
 
@@ -77,8 +110,13 @@ class ProviderServiceModel(LocalBase):
     __table_args__ = (
         CheckConstraint("length(trim(display_name)) > 0"),
         Index("provider_services_party_status", "party_id", "archived_at"),
-        Index("provider_services_one_active_name", "party_id", "normalized_name", unique=True,
-              sqlite_where=text("archived_at IS NULL")),
+        Index(
+            "provider_services_one_active_name",
+            "party_id",
+            "normalized_name",
+            unique=True,
+            sqlite_where=text("archived_at IS NULL"),
+        ),
     )
 
 
@@ -94,10 +132,18 @@ class ProviderServiceAreaModel(LocalBase):
     archived_at: Mapped[str | None] = mapped_column(String)
     __table_args__ = (
         CheckConstraint("length(trim(display_name)) > 0"),
-        CheckConstraint("country_code = '' OR (length(country_code) = 2 AND country_code = upper(country_code) AND country_code GLOB '[A-Z][A-Z]')"),
+        CheckConstraint(
+            "country_code = '' OR (length(country_code) = 2 AND country_code = upper(country_code) AND country_code GLOB '[A-Z][A-Z]')"
+        ),
         Index("provider_service_areas_party_status", "party_id", "archived_at"),
-        Index("provider_service_areas_one_active_name", "party_id", "normalized_name", "country_code", unique=True,
-              sqlite_where=text("archived_at IS NULL")),
+        Index(
+            "provider_service_areas_one_active_name",
+            "party_id",
+            "normalized_name",
+            "country_code",
+            unique=True,
+            sqlite_where=text("archived_at IS NULL"),
+        ),
     )
 
 
@@ -133,7 +179,9 @@ class ProviderReferenceModel(LocalBase):
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
     archived_at: Mapped[str | None] = mapped_column(String)
     __table_args__ = (
-        CheckConstraint("length(trim(coalesce(reference_name, ''))) > 0 OR length(trim(coalesce(organization_name, ''))) > 0 OR length(trim(coalesce(relationship, ''))) > 0"),
+        CheckConstraint(
+            "length(trim(coalesce(reference_name, ''))) > 0 OR length(trim(coalesce(organization_name, ''))) > 0 OR length(trim(coalesce(relationship, ''))) > 0"
+        ),
         Index("provider_references_party_status", "party_id", "archived_at"),
     )
 
@@ -164,13 +212,15 @@ class ProviderReputationLinkModel(LocalBase):
         Index("provider_reputation_links_party_status", "party_id", "archived_at"),
         Index(
             "provider_reputation_links_one_active_source",
-            "party_id", "normalized_source_key",
+            "party_id",
+            "normalized_source_key",
             unique=True,
             sqlite_where=text("archived_at IS NULL"),
         ),
         Index(
             "provider_reputation_links_one_active_url",
-            "party_id", "normalized_url",
+            "party_id",
+            "normalized_url",
             unique=True,
             sqlite_where=text("archived_at IS NULL"),
         ),

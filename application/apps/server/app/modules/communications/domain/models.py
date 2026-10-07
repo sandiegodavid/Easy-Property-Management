@@ -24,15 +24,20 @@ class Communication:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "id": self.id, "direction": self.direction, "channel": self.channel,
-            "subject": self.subject, "body": self.body,
+            "id": self.id,
+            "direction": self.direction,
+            "channel": self.channel,
+            "subject": self.subject,
+            "body": self.body,
             "occurredAtUtc": self.occurred_at_utc,
-            "occurredTimezone": self.occurred_timezone, "status": self.status,
+            "occurredTimezone": self.occurred_timezone,
+            "status": self.status,
             "recordedAt": self.recorded_at,
             "supersedesCommunicationId": self.supersedes_communication_id,
             "supersededByCommunicationId": self.superseded_by_communication_id,
             "correctionReason": self.correction_reason,
-            "createdAt": self.created_at, "updatedAt": self.updated_at,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
         }
 
 
@@ -48,9 +53,12 @@ class CommunicationParticipant:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "id": self.id, "communicationId": self.communication_id,
-            "partyId": self.party_id, "partyContactMethodId": self.party_contact_method_id,
-            "role": self.role, "partyDisplayName": self.party_display_name_snapshot,
+            "id": self.id,
+            "communicationId": self.communication_id,
+            "partyId": self.party_id,
+            "partyContactMethodId": self.party_contact_method_id,
+            "role": self.role,
+            "partyDisplayName": self.party_display_name_snapshot,
             "contactDisplayValue": self.contact_display_snapshot,
         }
 
@@ -65,8 +73,10 @@ class CommunicationLink:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "id": self.id, "communicationId": self.communication_id,
-            "entityType": self.entity_type, "entityId": self.entity_id,
+            "id": self.id,
+            "communicationId": self.communication_id,
+            "entityType": self.entity_type,
+            "entityId": self.entity_id,
             "propertyTimezoneSnapshot": self.property_timezone_snapshot,
         }
 

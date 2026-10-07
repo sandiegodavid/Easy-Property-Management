@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from app.modules.vendors.domain.category_normalization import normalize_provider_category_name
 
+
 @dataclass(frozen=True)
 class ProviderCategorySeed:
     id: str
@@ -30,11 +31,46 @@ def fingerprint(*values: object) -> str:
 
 
 PROVIDER_CATEGORY_SEEDS = (
-    ProviderCategorySeed("00000000-0000-4000-8000-000000000301", "Legal / Attorney", 0, "00000000-0000-4000-8000-000000000300"),
-    ProviderCategorySeed("00000000-0000-4000-8000-000000000302", "Landscaping", 1, "00000000-0000-4000-8000-000000000301"),
-    ProviderCategorySeed("00000000-0000-4000-8000-000000000303", "Electrical", 2, "00000000-0000-4000-8000-000000000302"),
-    ProviderCategorySeed("00000000-0000-4000-8000-000000000304", "HVAC / A/C", 3, "00000000-0000-4000-8000-000000000303"),
-    ProviderCategorySeed("00000000-0000-4000-8000-000000000305", "Appliance repair", 4, "00000000-0000-4000-8000-000000000304"),
-    ProviderCategorySeed("00000000-0000-4000-8000-000000000306", "Plumbing", 5, "00000000-0000-4000-8000-000000000305"),
-    ProviderCategorySeed("00000000-0000-4000-8000-000000000307", "General maintenance", 6, "00000000-0000-4000-8000-000000000306"),
+    ProviderCategorySeed(
+        "00000000-0000-4000-8000-000000000301",
+        "Legal / Attorney",
+        0,
+        "00000000-0000-4000-8000-000000000300",
+    ),
+    ProviderCategorySeed(
+        "00000000-0000-4000-8000-000000000302",
+        "Landscaping",
+        1,
+        "00000000-0000-4000-8000-000000000301",
+    ),
+    ProviderCategorySeed(
+        "00000000-0000-4000-8000-000000000303",
+        "Electrical",
+        2,
+        "00000000-0000-4000-8000-000000000302",
+    ),
+    ProviderCategorySeed(
+        "00000000-0000-4000-8000-000000000304",
+        "HVAC / A/C",
+        3,
+        "00000000-0000-4000-8000-000000000303",
+    ),
+    ProviderCategorySeed(
+        "00000000-0000-4000-8000-000000000305",
+        "Appliance repair",
+        4,
+        "00000000-0000-4000-8000-000000000304",
+    ),
+    ProviderCategorySeed(
+        "00000000-0000-4000-8000-000000000306",
+        "Plumbing",
+        5,
+        "00000000-0000-4000-8000-000000000305",
+    ),
+    ProviderCategorySeed(
+        "00000000-0000-4000-8000-000000000307",
+        "General maintenance",
+        6,
+        "00000000-0000-4000-8000-000000000306",
+    ),
 )

@@ -22,6 +22,13 @@
 - Address only the named feature and findings.
 - List adjacent issues separately; do not implement them unless explicitly requested.
 
+## Implementation lint validation
+
+- Before completing Python implementation changes, run `ruff check` and `ruff format --check` on every changed Python file using the configuration in `application/pyproject.toml`.
+- Before completing React, TypeScript, JavaScript, or frontend tooling changes, run `npm run lint`, `npm run format:check`, and `npm run typecheck` from `application/`. Type checking covers the complete frontend project, including generated contracts; a no-source skip does not validate an implemented feature.
+- Fix lint, formatting, and type errors in changed code, rerun the applicable checks until they pass, and report the results. If validation cannot run, report the blocker and mark that check as incomplete.
+- Preserve the configured lint rules. Do not add ignores, suppressions, or relaxed thresholds to make checks pass unless the user explicitly requests that policy change.
+
 ## Design validation
 
 - When applicable, document a test matrix covering these validation areas:

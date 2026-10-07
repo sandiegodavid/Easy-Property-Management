@@ -11,26 +11,40 @@ from app.modules.finance.infrastructure.sqlalchemy_models import ExpenseModel, E
 
 class SQLiteExpenseContextReader:
     def expense_context(self, connection: Any, expense_id: str) -> dict[str, object] | None:
-        row = connection.execute(
-            ExpenseModel.__table__.select().where(ExpenseModel.id == expense_id)
-        ).mappings().first()
+        row = (
+            connection.execute(ExpenseModel.__table__.select().where(ExpenseModel.id == expense_id))
+            .mappings()
+            .first()
+        )
         if row is None:
             return None
-        refunds = connection.execute(select(func.coalesce(func.sum(ExpenseRefundModel.amount_minor), 0)).where(
-            ExpenseRefundModel.expense_id == expense_id,
-            ExpenseRefundModel.voided_at.is_(None),
-        )).scalar_one()
+        refunds = connection.execute(
+            select(func.coalesce(func.sum(ExpenseRefundModel.amount_minor), 0)).where(
+                ExpenseRefundModel.expense_id == expense_id,
+                ExpenseRefundModel.voided_at.is_(None),
+            )
+        ).scalar_one()
         return _context(row, int(refunds))
 
-    def expense_contexts(self, connection: Any, expense_ids: list[str]) -> dict[str, dict[str, object]]:
+    def expense_contexts(
+        self, connection: Any, expense_ids: list[str]
+    ) -> dict[str, dict[str, object]]:
         if not expense_ids:
             return {}
         identifiers = set(expense_ids)
         refund_totals = {
             row["expense_id"]: int(row["refund_total"])
             for row in connection.execute(
-                select(ExpenseRefundModel.expense_id, func.coalesce(func.sum(ExpenseRefundModel.amount_minor), 0).label("refund_total"))
-                .where(ExpenseRefundModel.expense_id.in_(identifiers), ExpenseRefundModel.voided_at.is_(None))
+                select(
+                    ExpenseRefundModel.expense_id,
+                    func.coalesce(func.sum(ExpenseRefundModel.amount_minor), 0).label(
+                        "refund_total"
+                    ),
+                )
+                .where(
+                    ExpenseRefundModel.expense_id.in_(identifiers),
+                    ExpenseRefundModel.voided_at.is_(None),
+                )
                 .group_by(ExpenseRefundModel.expense_id)
             ).mappings()
         }

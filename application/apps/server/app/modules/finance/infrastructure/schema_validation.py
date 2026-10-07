@@ -1,11 +1,16 @@
 """Exact current FIN-001 schema validation."""
+
 from datetime import datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint, inspect, text
 
-from app.modules.finance.domain.models import PAYMENT_METHOD_KINDS, FinanceError, validate_masked_reference
+from app.modules.finance.domain.models import (
+    PAYMENT_METHOD_KINDS,
+    FinanceError,
+    validate_masked_reference,
+)
 from app.modules.finance.infrastructure.sqlalchemy_models import (
     ExpenseCategoryModel,
     ExpenseModel,
@@ -28,52 +33,119 @@ from app.modules.finance.infrastructure.sqlalchemy_models import (
 from app.platform.migration_errors import MigrationSchemaError
 
 MODELS = (
-    RentExpectationModel, RentExpectationTimelinessReviewModel,
-    RentReceiptModel, RentReceiptAllocationModel,
-    PrepaidCheckModel, PrepaidCheckOperationModel,
-    ExpenseCategoryModel, ExpenseModel, ExpenseRefundModel,
-    SecurityDepositAccountModel, SecurityDepositReceiptModel,
-    SecurityDepositSettlementModel, SecurityDepositSettlementReceiptModel,
-    SecurityDepositDeductionModel, SecurityDepositDeductionSourceModel,
-    SecurityDepositCreditModel, SecurityDepositRefundModel,
+    RentExpectationModel,
+    RentExpectationTimelinessReviewModel,
+    RentReceiptModel,
+    RentReceiptAllocationModel,
+    PrepaidCheckModel,
+    PrepaidCheckOperationModel,
+    ExpenseCategoryModel,
+    ExpenseModel,
+    ExpenseRefundModel,
+    SecurityDepositAccountModel,
+    SecurityDepositReceiptModel,
+    SecurityDepositSettlementModel,
+    SecurityDepositSettlementReceiptModel,
+    SecurityDepositDeductionModel,
+    SecurityDepositDeductionSourceModel,
+    SecurityDepositCreditModel,
+    SecurityDepositRefundModel,
 )
+
 
 def validate_finance_schema(connection):
     inspector = inspect(connection)
     for model in MODELS:
         table = model.__table__
-        if not inspector.has_table(table.name): raise MigrationSchemaError("Finance schema is missing.")
+        if not inspector.has_table(table.name):
+            raise MigrationSchemaError("Finance schema is missing.")
         actual_columns = {item["name"]: item for item in inspector.get_columns(table.name)}
-        if set(actual_columns) != {column.name for column in table.columns}: raise MigrationSchemaError("Finance columns are incompatible.")
+        if set(actual_columns) != {column.name for column in table.columns}:
+            raise MigrationSchemaError("Finance columns are incompatible.")
         for expected in table.columns:
             actual = actual_columns[expected.name]
-            if bool(actual["primary_key"]) != expected.primary_key or bool(actual["nullable"]) != expected.nullable:
-                raise MigrationSchemaError("Finance column nullability or primary keys are incompatible.")
+            if (
+                bool(actual["primary_key"]) != expected.primary_key
+                or bool(actual["nullable"]) != expected.nullable
+            ):
+                raise MigrationSchemaError(
+                    "Finance column nullability or primary keys are incompatible."
+                )
             expected_type = str(expected.type).upper()
             actual_type = str(actual["type"]).upper()
-            if ("INT" in expected_type and "INT" not in actual_type) or ("INT" not in expected_type and not ("TEXT" in actual_type or "CHAR" in actual_type)):
+            if ("INT" in expected_type and "INT" not in actual_type) or (
+                "INT" not in expected_type and not ("TEXT" in actual_type or "CHAR" in actual_type)
+            ):
                 raise MigrationSchemaError("Finance column types are incompatible.")
-        expected_fks = {(tuple(element.parent.name for element in item.elements), item.elements[0].column.table.name, tuple(element.column.name for element in item.elements)) for item in table.constraints if isinstance(item, ForeignKeyConstraint)}
-        actual_fks = {(tuple(item["constrained_columns"]), item["referred_table"], tuple(item["referred_columns"])) for item in inspector.get_foreign_keys(table.name)}
-        if actual_fks != expected_fks: raise MigrationSchemaError("Finance foreign keys are incompatible.")
-        expected_indexes = {item.name: (tuple(column.name for column in item.columns), bool(item.unique), _where(item.dialect_options["sqlite"].get("where"))) for item in table.indexes}
-        actual_indexes = {item["name"]: (tuple(item["column_names"]), bool(item.get("unique")), _where(item.get("dialect_options", {}).get("sqlite_where"))) for item in inspector.get_indexes(table.name)}
-        if actual_indexes != expected_indexes: raise MigrationSchemaError("Finance indexes are incompatible.")
-        expected_unique = {tuple(column.name for column in item.columns) for item in table.constraints if isinstance(item, UniqueConstraint)}
-        actual_unique = {tuple(item["column_names"]) for item in inspector.get_unique_constraints(table.name)}
-        if actual_unique != expected_unique: raise MigrationSchemaError("Finance unique constraints are incompatible.")
-        expected_checks = {_normalise(item.sqltext.text) for item in table.constraints if isinstance(item, CheckConstraint)}
-        actual_checks = {_normalise(item.get("sqltext") or "") for item in inspector.get_check_constraints(table.name)}
-        if actual_checks != expected_checks: raise MigrationSchemaError("Finance checks are incompatible.")
+        expected_fks = {
+            (
+                tuple(element.parent.name for element in item.elements),
+                item.elements[0].column.table.name,
+                tuple(element.column.name for element in item.elements),
+            )
+            for item in table.constraints
+            if isinstance(item, ForeignKeyConstraint)
+        }
+        actual_fks = {
+            (
+                tuple(item["constrained_columns"]),
+                item["referred_table"],
+                tuple(item["referred_columns"]),
+            )
+            for item in inspector.get_foreign_keys(table.name)
+        }
+        if actual_fks != expected_fks:
+            raise MigrationSchemaError("Finance foreign keys are incompatible.")
+        expected_indexes = {
+            item.name: (
+                tuple(column.name for column in item.columns),
+                bool(item.unique),
+                _where(item.dialect_options["sqlite"].get("where")),
+            )
+            for item in table.indexes
+        }
+        actual_indexes = {
+            item["name"]: (
+                tuple(item["column_names"]),
+                bool(item.get("unique")),
+                _where(item.get("dialect_options", {}).get("sqlite_where")),
+            )
+            for item in inspector.get_indexes(table.name)
+        }
+        if actual_indexes != expected_indexes:
+            raise MigrationSchemaError("Finance indexes are incompatible.")
+        expected_unique = {
+            tuple(column.name for column in item.columns)
+            for item in table.constraints
+            if isinstance(item, UniqueConstraint)
+        }
+        actual_unique = {
+            tuple(item["column_names"]) for item in inspector.get_unique_constraints(table.name)
+        }
+        if actual_unique != expected_unique:
+            raise MigrationSchemaError("Finance unique constraints are incompatible.")
+        expected_checks = {
+            _normalise(item.sqltext.text)
+            for item in table.constraints
+            if isinstance(item, CheckConstraint)
+        }
+        actual_checks = {
+            _normalise(item.get("sqltext") or "")
+            for item in inspector.get_check_constraints(table.name)
+        }
+        if actual_checks != expected_checks:
+            raise MigrationSchemaError("Finance checks are incompatible.")
 
 
 def validate_finance_data(connection):
     """Reject cross-row and cross-module FIN-008 corruption after restore/open."""
     if connection.execute(text("PRAGMA foreign_key_check")).first() is not None:
         raise MigrationSchemaError("Workspace contains broken foreign-key references.")
-    for receipt in connection.execute(text(
-        "SELECT payment_method_kind, payment_method_label, masked_reference, other_payment_method_note FROM rent_receipts"
-    )).mappings():
+    for receipt in connection.execute(
+        text(
+            "SELECT payment_method_kind, payment_method_label, masked_reference, other_payment_method_note FROM rent_receipts"
+        )
+    ).mappings():
         try:
             if receipt["payment_method_kind"] not in PAYMENT_METHOD_KINDS:
                 raise FinanceError("Payment method kind is invalid.")
@@ -86,11 +158,19 @@ def validate_finance_data(connection):
                 raise FinanceError("Other payment method note is invalid.")
         except FinanceError as error:
             raise MigrationSchemaError("FIN-006 receipt-method data is incompatible.") from error
-    for check in connection.execute(text("SELECT idempotency_key, correlation_id, request_fingerprint FROM prepaid_check_operations")).mappings():
+    for check in connection.execute(
+        text(
+            "SELECT idempotency_key, correlation_id, request_fingerprint FROM prepaid_check_operations"
+        )
+    ).mappings():
         try:
             UUID(check["idempotency_key"])
             UUID(check["correlation_id"])
-            if not isinstance(check["request_fingerprint"], str) or len(check["request_fingerprint"]) != 64 or any(value not in "0123456789abcdef" for value in check["request_fingerprint"]):
+            if (
+                not isinstance(check["request_fingerprint"], str)
+                or len(check["request_fingerprint"]) != 64
+                or any(value not in "0123456789abcdef" for value in check["request_fingerprint"])
+            ):
                 raise ValueError("request fingerprint is not canonical SHA-256")
         except (TypeError, ValueError, AttributeError) as error:
             raise MigrationSchemaError("FIN-007 operation identifiers are incompatible.") from error
@@ -317,25 +397,30 @@ def validate_finance_data(connection):
     for query in checks:
         if connection.execute(text(query)).first() is not None:
             raise MigrationSchemaError("FIN-008 data integrity is incompatible.")
-    reminders = connection.execute(text("""
+    reminders = connection.execute(
+        text("""
         SELECT item.check_dated_on, task.due_at_utc, task.due_timezone
         FROM prepaid_checks item JOIN tasks task ON task.id = item.reminder_task_id
         WHERE item.reminder_task_id IS NOT NULL
-    """)).mappings()
+    """)
+    ).mappings()
     for reminder in reminders:
         try:
             due_at = datetime.fromisoformat(reminder["due_at_utc"])
             if due_at.tzinfo is None:
                 raise ValueError("reminder timestamp must be timezone-aware")
             due_date = due_at.astimezone(ZoneInfo(reminder["due_timezone"])).date().isoformat()
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             raise MigrationSchemaError("FIN-007 reminder scheduling is incompatible.") from None
         if due_date != reminder["check_dated_on"]:
             raise MigrationSchemaError("FIN-007 reminder scheduling is incompatible.")
 
+
 def _normalise(value: str) -> str:
     parts = value.split("'")
-    return "'".join(part if index % 2 else "".join(part.lower().split()) for index, part in enumerate(parts))
+    return "'".join(
+        part if index % 2 else "".join(part.lower().split()) for index, part in enumerate(parts)
+    )
 
 
 def _where(value) -> str | None:

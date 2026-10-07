@@ -439,6 +439,7 @@ This section translates the confirmed decisions into an implementation contract.
 
 - Build the web client in `application/apps/web` with React and TypeScript on the current Node.js LTS release. Use Vite for development and production builds.
 - Keep the Node workspace manifest and one lockfile under `application/`. The workspace includes `apps/web`, `packages/contracts`, and `packages/ui`; do not introduce a second package manager or per-package lockfiles.
+- Reuse the established [implementation quality checks](CODE_QUALITY.md): TypeScript-aware ESLint recommended rules, React hooks and JSX accessibility rules, Prettier, and strict compiler validation. Run the root npm scripts against handwritten frontend code and include generated contracts in type checking. Any package-specific TypeScript configuration must retain the shared strict baseline and complete root check coverage.
 - Use React Router for route and nested-workspace composition, TanStack Query for server state, and React Hook Form for form lifecycle. These libraries manage presentation concerns only; FastAPI/Pydantic and the owning domain service remain authoritative for validation and transitions.
 - Generate TypeScript API types and a typed browser client from FastAPI OpenAPI into `application/packages/contracts`. Generated files are replaced by generation and are never hand-edited. Handwritten feature code must not recreate request or response interfaces already present in OpenAPI.
 - Keep reusable, domain-neutral presentational components in `application/packages/ui`. A component that knows about leases, deposits, HOA notices, or another domain belongs in the corresponding `apps/web/src/features` folder.
@@ -452,6 +453,10 @@ The frontend source shape is:
 application/
 ├── package.json                         # Node workspaces and shared scripts
 ├── package-lock.json
+├── eslint.config.mjs                    # shared lint rules and source scopes
+├── .prettierrc.json                     # shared formatting policy
+├── tsconfig.base.json                   # strict compiler baseline
+├── tsconfig.json                        # complete frontend type-check scope
 ├── apps/web/
 │   ├── index.html
 │   ├── vite.config.ts
@@ -700,6 +705,8 @@ Target WCAG 2.2 AA for supported workflows.
 
 Use Vitest and React Testing Library for behavior at component/feature boundaries, Mock Service Worker for generated-client integration states, Playwright for critical browser workflows, and automated accessibility checks as a supplement to keyboard/screen-reader review.
 
+Before completing frontend implementation, `npm run lint`, `npm run format:check`, and `npm run typecheck` must pass from `application/`. ESLint warnings fail the check. Generated contract output is exempt from lint/formatting, but not compiler validation or reproducible-generation verification. The pre-UI no-source type-check skip cannot satisfy this readiness gate.
+
 Required automated coverage is intentionally risk-based:
 
 1. `DisclosureRow` toggles from every part of its summary bar by pointer, Enter, and Space; keeps neighboring rows independent; retains mounted form input; and maintains `aria-expanded`, `aria-controls`, focus exclusion, and panel visibility.
@@ -718,7 +725,7 @@ Map the numbered design-validation scenarios below to Playwright or integration 
 ### Implementation sequence and readiness gates
 
 1. **Backend readiness before UI-001:** complete the backlog-ordered TASK-002, OPS-001, legal/HOA/import/AI prerequisites and typed domain contracts, including recovery and bounded projections. OPS-001 composes owner views from existing sources without waiting for later owner accounting. Record any remaining command revision/idempotency gaps before enabling their workflows; build no React during this phase.
-2. **Scaffold and contract at UI-001:** create the Node workspace, Vite app, generated contract package, relative API transport, FastAPI static/SPA delivery, checks, and a temporary-workspace browser smoke test.
+2. **Scaffold and contract at UI-001:** extend the existing Node tooling workspace with the Vite app, generated contract package, relative API transport, FastAPI static/SPA delivery, and a temporary-workspace browser smoke test; verify lint, formatting, and strict type checking against actual sources.
 3. **Foundation:** implement bootstrap/workspace gate, theme, destination registry, shell, routing, accessibility primitives, async states, error normalization, disclosure components, and directory/workspace layouts.
 4. **Domain and operator workflows:** connect Properties, Owners, Leasing, Money, Maintenance, Providers, Tasks, communications, files, history, preferences, search, draft recovery, coverage, and waiting/follow-up to their completed contracts.
 5. **Review workflows:** connect legal matters, HOA notices/shared repairs, spreadsheet import, and governed AI/assistant review with revision-safe commits and failure recovery.
@@ -732,6 +739,7 @@ A route is ready only when its owning backend capability exists, generated types
 UI-001 is complete when:
 
 - the React/Vite application ships through the local FastAPI runtime and uses the generated OpenAPI contract for all domain access;
+- frontend lint, formatting, and strict type checks pass against actual implementation sources and generated contracts meet reproducible-generation verification;
 - supported permanent destinations, directories, record workspaces, settings, global search, full-bar disclosures, drafts, errors, and contextual navigation meet the decisions above;
 - every visible action either works against an implemented capability or is absent with an accurate capability explanation;
 - the browser contains no duplicated domain policy, authoritative totals, direct workspace-file access, or sensitive persisted state;

@@ -1,4 +1,5 @@
 """Immutable INGEST-001 values and canonical evidence helpers."""
+
 from __future__ import annotations
 
 import hashlib
@@ -8,10 +9,20 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-SOURCE_KINDS = frozenset({"email_message", "sms_message", "chat_message", "operator_note", "voice_transcript"})
+SOURCE_KINDS = frozenset(
+    {"email_message", "sms_message", "chat_message", "operator_note", "voice_transcript"}
+)
 CHANNELS = frozenset({"email", "sms", "chat", "internal", "voice"})
-KIND_CHANNEL = {"email_message": "email", "sms_message": "sms", "chat_message": "chat", "operator_note": "internal", "voice_transcript": "voice"}
-IDENTITY_STATES = frozenset({"transport_verified", "operator_confirmed", "unverified_claim", "not_applicable"})
+KIND_CHANNEL = {
+    "email_message": "email",
+    "sms_message": "sms",
+    "chat_message": "chat",
+    "operator_note": "internal",
+    "voice_transcript": "voice",
+}
+IDENTITY_STATES = frozenset(
+    {"transport_verified", "operator_confirmed", "unverified_claim", "not_applicable"}
+)
 # Failure codes are intentionally small, non-sensitive retained facts.  The
 # owning workflow may store detailed diagnostics only in its correlated audit
 # history; Intake state itself must stay portable and safe to project.
@@ -34,7 +45,8 @@ class IntakeError(ValueError):
 
 class IntakeConflictError(IntakeError):
     def __init__(self, message: str, code: str = "intake_conflict") -> None:
-        super().__init__(message); self.code = code
+        super().__init__(message)
+        self.code = code
 
 
 class IntakeNotFoundError(IntakeError):
@@ -67,25 +79,44 @@ class IntakeAdmissionContext:
         if self.submitter_kind not in {"local_operator", "assistant_connection", "voice_workflow"}:
             raise IntakeError("submitter kind is invalid.")
         if self.submitter_kind == "local_operator":
-            if (self.submitter_reference is not None or self.account_scope_hash is not None
-                    or self.account_identity_state != "not_applicable" or self.account_display_hint is not None):
+            if (
+                self.submitter_reference is not None
+                or self.account_scope_hash is not None
+                or self.account_identity_state != "not_applicable"
+                or self.account_display_hint is not None
+            ):
                 raise IntakeError("Operator admission cannot claim trusted provenance.")
         elif not isinstance(self.submitter_reference, str) or not self.submitter_reference.strip():
             raise IntakeError("Trusted admission requires a submitter reference.")
         else:
-            object.__setattr__(self, "submitter_reference", bounded(self.submitter_reference, "submitterReference", 500, required=True))
+            object.__setattr__(
+                self,
+                "submitter_reference",
+                bounded(self.submitter_reference, "submitterReference", 500, required=True),
+            )
         if self.account_identity_state not in IDENTITY_STATES:
             raise IntakeError("account identity state is invalid.")
-        if self.account_scope_hash is not None and (len(self.account_scope_hash) != 64 or any(c not in "0123456789abcdef" for c in self.account_scope_hash)):
+        if self.account_scope_hash is not None and (
+            len(self.account_scope_hash) != 64
+            or any(c not in "0123456789abcdef" for c in self.account_scope_hash)
+        ):
             raise IntakeError("account scope hash is invalid.")
-        if self.account_identity_state in {"transport_verified", "operator_confirmed"} and not self.account_scope_hash:
+        if (
+            self.account_identity_state in {"transport_verified", "operator_confirmed"}
+            and not self.account_scope_hash
+        ):
             raise IntakeError("trusted account identity requires accountScopeHash.")
-        object.__setattr__(self, "account_display_hint", bounded(self.account_display_hint, "accountDisplayHint", 500))
+        object.__setattr__(
+            self,
+            "account_display_hint",
+            bounded(self.account_display_hint, "accountDisplayHint", 500),
+        )
 
 
 @dataclass(frozen=True)
 class AttentionTransition:
     """The complete concurrency and audit contract for an Intake review decision."""
+
     source_id: str
     target: str
     reason: str
@@ -117,10 +148,13 @@ class AttentionTransition:
             object.__setattr__(self, "actor_kind", "ai_assistant")
             object.__setattr__(self, "actor_reference", actor_reference)
         elif self.actor_reference is not None:
-            object.__setattr__(self, "actor_reference", bounded(self.actor_reference, "actorReference", 500))
+            object.__setattr__(
+                self, "actor_reference", bounded(self.actor_reference, "actorReference", 500)
+            )
 
 
-def utc_now() -> str: return datetime.now(UTC).isoformat()
+def utc_now() -> str:
+    return datetime.now(UTC).isoformat()
 
 
 def canonical_json(value: object) -> str:
@@ -132,16 +166,23 @@ def fingerprint(value: object) -> str:
 
 
 def uuid(value: object, label: str) -> str:
-    if not isinstance(value, str): raise IntakeError(f"{label} must be a UUID.")
-    try: return str(UUID(value))
-    except ValueError as error: raise IntakeError(f"{label} must be a UUID.") from error
+    if not isinstance(value, str):
+        raise IntakeError(f"{label} must be a UUID.")
+    try:
+        return str(UUID(value))
+    except ValueError as error:
+        raise IntakeError(f"{label} must be a UUID.") from error
 
 
 def utc(value: object, label: str) -> str:
-    if not isinstance(value, str): raise IntakeError(f"{label} must be an aware UTC timestamp.")
-    try: parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as error: raise IntakeError(f"{label} must be an aware UTC timestamp.") from error
-    if parsed.tzinfo is None or parsed.utcoffset() is None: raise IntakeError(f"{label} must be an aware UTC timestamp.")
+    if not isinstance(value, str):
+        raise IntakeError(f"{label} must be an aware UTC timestamp.")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as error:
+        raise IntakeError(f"{label} must be an aware UTC timestamp.") from error
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise IntakeError(f"{label} must be an aware UTC timestamp.")
     return parsed.astimezone(UTC).isoformat()
 
 
@@ -152,22 +193,30 @@ def failure_code(value: object) -> str:
 
 
 def bounded(value: object, label: str, maximum: int, *, required: bool = False) -> str | None:
-    if value is None and not required: return None
-    if not isinstance(value, str): raise IntakeError(f"{label} must be text.")
+    if value is None and not required:
+        return None
+    if not isinstance(value, str):
+        raise IntakeError(f"{label} must be text.")
     result = unicodedata.normalize("NFC", value).strip()
-    if (required and not result) or len(result) > maximum or any(unicodedata.category(c) == "Cc" for c in result):
+    if (
+        (required and not result)
+        or len(result) > maximum
+        or any(unicodedata.category(c) == "Cc" for c in result)
+    ):
         raise IntakeError(f"{label} is invalid.")
     return result
 
 
 def body(value: object) -> str:
-    if not isinstance(value, str): raise IntakeError("body must be text.")
+    if not isinstance(value, str):
+        raise IntakeError("body must be text.")
     result = unicodedata.normalize("NFC", value).replace("\r\n", "\n").replace("\r", "\n")
     if len(result.encode("utf-8")) > 131_072:
         raise IntakePayloadTooLargeError("Body exceeds the 131,072-byte limit.")
     if not result or "\x00" in result:
         raise IntakeError("body is invalid.")
-    if any(unicodedata.category(c) == "Cc" and c not in "\t\n" for c in result): raise IntakeError("body is invalid.")
+    if any(unicodedata.category(c) == "Cc" and c not in "\t\n" for c in result):
+        raise IntakeError("body is invalid.")
     return result
 
 
@@ -187,25 +236,48 @@ class EvidenceEnvelope:
     occurred_at_context: str | None = None
 
     def __post_init__(self) -> None:
-        if self.source_kind not in SOURCE_KINDS or self.channel != KIND_CHANNEL.get(self.source_kind): raise IntakeError("source kind and channel are incompatible.")
+        if self.source_kind not in SOURCE_KINDS or self.channel != KIND_CHANNEL.get(
+            self.source_kind
+        ):
+            raise IntakeError("source kind and channel are incompatible.")
         object.__setattr__(self, "body", body(self.body))
         reported = self.occurred_at_context or self.occurred_at_utc
-        if not isinstance(reported, str): raise IntakeError("occurredAtUtc must be an aware UTC timestamp.")
+        if not isinstance(reported, str):
+            raise IntakeError("occurredAtUtc must be an aware UTC timestamp.")
         object.__setattr__(self, "occurred_at_context", reported)
         object.__setattr__(self, "occurred_at_utc", utc(self.occurred_at_utc, "occurredAtUtc"))
         for key in ("subject", "provider", "conversation_ref", "external_source_id"):
             object.__setattr__(self, key, bounded(getattr(self, key), key, 500))
-        if len(self.participants) > 50: raise IntakeError("Too many participants.")
+        if len(self.participants) > 50:
+            raise IntakeError("Too many participants.")
         normalized = []
         for participant in self.participants:
-            if not isinstance(participant, dict) or set(participant) - {"role", "display", "address"} or not participant.get("role"):
+            if (
+                not isinstance(participant, dict)
+                or set(participant) - {"role", "display", "address"}
+                or not participant.get("role")
+            ):
                 raise IntakeError("participant is invalid.")
-            normalized.append({key: bounded(value, f"participant {key}", 500, required=key == "role") for key, value in participant.items()})
+            normalized.append(
+                {
+                    key: bounded(value, f"participant {key}", 500, required=key == "role")
+                    for key, value in participant.items()
+                }
+            )
         object.__setattr__(self, "participants", tuple(normalized))
 
     def canonical(self, attachments: tuple[dict[str, str], ...] = ()) -> dict[str, object]:
-        return {"schemaVersion": 1, "sourceKind": self.source_kind, "channel": self.channel, "subject": self.subject,
-                "body": self.body, "participants": list(self.participants), "occurredAtUtc": self.occurred_at_utc,
-                "occurredAtContext": self.occurred_at_context,
-                "provider": self.provider, "conversationRef": self.conversation_ref, "externalSourceId": self.external_source_id,
-                "attachments": list(attachments)}
+        return {
+            "schemaVersion": 1,
+            "sourceKind": self.source_kind,
+            "channel": self.channel,
+            "subject": self.subject,
+            "body": self.body,
+            "participants": list(self.participants),
+            "occurredAtUtc": self.occurred_at_utc,
+            "occurredAtContext": self.occurred_at_context,
+            "provider": self.provider,
+            "conversationRef": self.conversation_ref,
+            "externalSourceId": self.external_source_id,
+            "attachments": list(attachments),
+        }

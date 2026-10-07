@@ -102,21 +102,29 @@ class TaskCreateCommand:
 class TaskService:
     """Owns task and reminder lifecycle rules; adapters only persist changes."""
 
-    def __init__(self, unit_of_work: TaskUnitOfWork,
-                 now: Callable[[], datetime] | None = None) -> None:
+    def __init__(
+        self, unit_of_work: TaskUnitOfWork, now: Callable[[], datetime] | None = None
+    ) -> None:
         self.unit_of_work = unit_of_work
         self._clock = now or (lambda: datetime.now(UTC))
 
     def create(self, data: TaskCreateCommand | dict) -> Task:
-        command = data if isinstance(data, TaskCreateCommand) else TaskCreateCommand.from_mapping(data)
+        command = (
+            data if isinstance(data, TaskCreateCommand) else TaskCreateCommand.from_mapping(data)
+        )
         task = new_task(command, now=self._now())
         correlation_id = str(uuid4())
 
         def create_in_transaction(transaction: TaskTransaction) -> Task:
             transaction.insert_task(task)
             transaction.record_change(
-                entity_type="task", entity_id=task.id, action="created",
-                before=None, after=task.to_dict(), reason="task_created", correlation_id=correlation_id,
+                entity_type="task",
+                entity_id=task.id,
+                action="created",
+                before=None,
+                after=task.to_dict(),
+                reason="task_created",
+                correlation_id=correlation_id,
             )
             return task
 
@@ -133,10 +141,18 @@ class TaskService:
             raise TaskError("Invalid task status.")
         return self.unit_of_work.list(status)
 
-    def page(self, *, status: str | None = None, due: str | None = None,
-             priority: str | None = None, include_voided: bool = False,
-             related_entity_type: str | None = None, related_entity_id: str | None = None,
-             page_size: int = 100, cursor: str | None = None) -> tuple[list[Task], str | None]:
+    def page(
+        self,
+        *,
+        status: str | None = None,
+        due: str | None = None,
+        priority: str | None = None,
+        include_voided: bool = False,
+        related_entity_type: str | None = None,
+        related_entity_id: str | None = None,
+        page_size: int = 100,
+        cursor: str | None = None,
+    ) -> tuple[list[Task], str | None]:
         statuses = _query_values(status, TASK_STATUSES, "status")
         priorities = _query_values(priority, TASK_PRIORITIES, "priority")
         if type(include_voided) is not bool:
@@ -159,8 +175,12 @@ class TaskService:
         while scanned < MAX_DUE_FILTER_SCAN_CANDIDATES:
             limit = min(chunk_size, MAX_DUE_FILTER_SCAN_CANDIDATES - scanned)
             tasks = self.unit_of_work.page(
-                statuses=statuses, priorities=priorities, related_entity_type=related_type,
-                related_entity_id=related_id, limit=limit, cursor=scan_cursor,
+                statuses=statuses,
+                priorities=priorities,
+                related_entity_type=related_type,
+                related_entity_id=related_id,
+                limit=limit,
+                cursor=scan_cursor,
             )
             scanned += len(tasks)
             matched.extend(task for task in tasks if due_filter(task))
@@ -173,7 +193,9 @@ class TaskService:
         return matched, _encode_task_cursor_values(scan_cursor) if scan_cursor else None
 
     def transition(self, task_id: str, status: str, outcome_note: str | None = None) -> Task:
-        if status not in TASK_STATUSES or (outcome_note is not None and not isinstance(outcome_note, str)):
+        if status not in TASK_STATUSES or (
+            outcome_note is not None and not isinstance(outcome_note, str)
+        ):
             raise TaskError("Invalid task transition.")
         now = self._now()
         correlation_id = str(uuid4())
@@ -185,8 +207,13 @@ class TaskService:
             updated = transition(existing, status, outcome_note, now)
             transaction.replace_task(updated)
             transaction.record_change(
-                entity_type="task", entity_id=updated.id, action="status_changed",
-                before=existing.to_dict(), after=updated.to_dict(), reason="task_updated", correlation_id=correlation_id,
+                entity_type="task",
+                entity_id=updated.id,
+                action="status_changed",
+                before=existing.to_dict(),
+                after=updated.to_dict(),
+                reason="task_updated",
+                correlation_id=correlation_id,
             )
             if is_terminal(updated):
                 self._dismiss_pending_reminders(transaction, updated, now, correlation_id)
@@ -210,8 +237,13 @@ class TaskService:
                 raise ValueError("Reminders can only be added to active tasks.")
             transaction.insert_reminder(reminder)
             transaction.record_change(
-                entity_type="task_reminder", entity_id=reminder.id, action="created",
-                before=None, after=reminder.to_dict(), reason="reminder_created", correlation_id=correlation_id,
+                entity_type="task_reminder",
+                entity_id=reminder.id,
+                action="created",
+                before=None,
+                after=reminder.to_dict(),
+                reason="reminder_created",
+                correlation_id=correlation_id,
             )
             return reminder
 
@@ -233,15 +265,23 @@ class TaskService:
             if reminder.status != "pending":
                 raise ValueError("Reminder is no longer pending.")
             updated = TaskReminder(
-                reminder.id, reminder.task_id, reminder.remind_at_utc, status,
+                reminder.id,
+                reminder.task_id,
+                reminder.remind_at_utc,
+                status,
                 now if status == "acknowledged" else None,
                 now if status == "dismissed" else None,
                 reminder.created_at_utc,
             )
             transaction.replace_reminder(updated)
             transaction.record_change(
-                entity_type="task_reminder", entity_id=updated.id, action="status_changed",
-                before=reminder.to_dict(), after=updated.to_dict(), reason="reminder_updated", correlation_id=correlation_id,
+                entity_type="task_reminder",
+                entity_id=updated.id,
+                action="status_changed",
+                before=reminder.to_dict(),
+                after=updated.to_dict(),
+                reason="reminder_updated",
+                correlation_id=correlation_id,
             )
             return updated
 
@@ -257,16 +297,23 @@ class TaskService:
             raise TaskError("limitPerBucket must be between 1 and 100.")
         summary = self.unit_of_work.summary(now=self._instant(), limit=limit_per_bucket)
         return {
-            "overdue": [task.to_dict() for task in summary.overdue], "overdueTotal": summary.overdue_total,
-            "today": [task.to_dict() for task in summary.today], "todayTotal": summary.today_total,
-            "next7days": [task.to_dict() for task in summary.next7days], "next7daysTotal": summary.next7days_total,
+            "overdue": [task.to_dict() for task in summary.overdue],
+            "overdueTotal": summary.overdue_total,
+            "today": [task.to_dict() for task in summary.today],
+            "todayTotal": summary.today_total,
+            "next7days": [task.to_dict() for task in summary.next7days],
+            "next7daysTotal": summary.next7days_total,
             "dueReminders": [_due_reminder_dict(reminder) for reminder in summary.due_reminders],
             "dueRemindersTotal": summary.due_reminders_total,
         }
 
     def _instant(self) -> datetime:
         instant = self._clock()
-        if not isinstance(instant, datetime) or instant.tzinfo is None or instant.utcoffset() is None:
+        if (
+            not isinstance(instant, datetime)
+            or instant.tzinfo is None
+            or instant.utcoffset() is None
+        ):
             raise TaskError("Task clock must return an aware timestamp.")
         return instant.astimezone(UTC)
 
@@ -274,24 +321,46 @@ class TaskService:
         return self._instant().isoformat()
 
     @staticmethod
-    def _dismiss_pending_reminders(transaction: TaskTransaction, task: Task, now: str, correlation_id: str) -> None:
+    def _dismiss_pending_reminders(
+        transaction: TaskTransaction, task: Task, now: str, correlation_id: str
+    ) -> None:
         for reminder in transaction.pending_reminders(task.id):
             dismissed = dismiss(reminder, now)
             transaction.replace_reminder(dismissed)
             transaction.record_change(
-                entity_type="task_reminder", entity_id=dismissed.id, action="dismissed",
-                before=reminder.to_dict(), after=dismissed.to_dict(), reason="task_updated", correlation_id=correlation_id,
+                entity_type="task_reminder",
+                entity_id=dismissed.id,
+                action="dismissed",
+                before=reminder.to_dict(),
+                after=dismissed.to_dict(),
+                reason="task_updated",
+                correlation_id=correlation_id,
             )
 
 
-def new_task(command: TaskCreateCommand, *, task_id: str | None = None, now: str | None = None) -> Task:
+def new_task(
+    command: TaskCreateCommand, *, task_id: str | None = None, now: str | None = None
+) -> Task:
     """Public TASK-001 factory for transaction-aware owning-domain adapters."""
     due_at, timezone = _timestamp(command.due_at_utc, command.due_timezone, required=False)
     created_at = now or _now()
     return Task(
-        task_id or str(uuid4()), command.title, command.notes, command.status, command.priority,
-        due_at, timezone, command.is_all_day, None, None, None,
-        command.related_entity_type, command.related_entity_id, command.related_label, created_at, created_at,
+        task_id or str(uuid4()),
+        command.title,
+        command.notes,
+        command.status,
+        command.priority,
+        due_at,
+        timezone,
+        command.is_all_day,
+        None,
+        None,
+        None,
+        command.related_entity_type,
+        command.related_entity_id,
+        command.related_label,
+        created_at,
+        created_at,
     )
 
 
@@ -301,11 +370,17 @@ def _now() -> str:
 
 def _due_reminder_dict(reminder: DueReminderSummary) -> dict[str, object]:
     return {
-        "id": reminder.id, "taskId": reminder.task_id, "remindAtUtc": reminder.remind_at_utc,
-        "status": reminder.status, "acknowledgedAtUtc": reminder.acknowledged_at_utc,
-        "dismissedAtUtc": reminder.dismissed_at_utc, "createdAtUtc": reminder.created_at_utc,
-        "taskTitle": reminder.task_title, "taskDueAtUtc": reminder.task_due_at_utc,
-        "taskDueTimezone": reminder.task_due_timezone, "taskIsAllDay": reminder.task_is_all_day,
+        "id": reminder.id,
+        "taskId": reminder.task_id,
+        "remindAtUtc": reminder.remind_at_utc,
+        "status": reminder.status,
+        "acknowledgedAtUtc": reminder.acknowledged_at_utc,
+        "dismissedAtUtc": reminder.dismissed_at_utc,
+        "createdAtUtc": reminder.created_at_utc,
+        "taskTitle": reminder.task_title,
+        "taskDueAtUtc": reminder.task_due_at_utc,
+        "taskDueTimezone": reminder.task_due_timezone,
+        "taskIsAllDay": reminder.task_is_all_day,
         "relatedLabel": reminder.related_label,
     }
 
@@ -316,7 +391,11 @@ def _query_values(value: str | None, allowed: set[str], label: str) -> tuple[str
     if not isinstance(value, str) or not value.strip():
         raise TaskError(f"{label} must be a nonblank comma-separated list.")
     values = tuple(part.strip() for part in value.split(","))
-    if not all(values) or len(set(values)) != len(values) or any(part not in allowed for part in values):
+    if (
+        not all(values)
+        or len(set(values)) != len(values)
+        or any(part not in allowed for part in values)
+    ):
         raise TaskError(f"Invalid task {label} filter.")
     return values
 
@@ -328,13 +407,21 @@ def _due_filter(value: str | None, now: datetime):
         raise TaskError("due must be a supported period or ISO date range.")
     value = value.strip()
     if value in {"overdue", "today", "next7days", "nodate"}:
+
         def named(task: Task) -> bool:
             if value == "nodate":
                 return task.due_at_utc is None
-            return due_bucket(
-                status=task.status, due_at_utc=task.due_at_utc, due_timezone=task.due_timezone,
-                is_all_day=task.is_all_day, now=now,
-            ) == value
+            return (
+                due_bucket(
+                    status=task.status,
+                    due_at_utc=task.due_at_utc,
+                    due_timezone=task.due_timezone,
+                    is_all_day=task.is_all_day,
+                    now=now,
+                )
+                == value
+            )
+
         return named
     parts = tuple(part.strip() for part in value.split(","))
     if len(parts) != 2 or not all(parts):
@@ -345,10 +432,16 @@ def _due_filter(value: str | None, now: datetime):
         raise TaskError("due date range must use ISO calendar dates.") from error
     if end < start:
         raise TaskError("due date range must not end before it starts.")
+
     def ranged(task: Task) -> bool:
         if task.due_at_utc is None:
             return False
-        return start <= _parse(task.due_at_utc).astimezone(ZoneInfo(task.due_timezone or "UTC")).date() <= end
+        return (
+            start
+            <= _parse(task.due_at_utc).astimezone(ZoneInfo(task.due_timezone or "UTC")).date()
+            <= end
+        )
+
     return ranged
 
 

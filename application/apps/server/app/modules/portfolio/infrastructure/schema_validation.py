@@ -15,27 +15,97 @@ def validate_portfolio_schema(connection) -> None:
             {"archived_at"},
         ),
         "properties": (
-            {"id", "display_name", "address_line_1", "address_line_2", "city", "region", "postal_code", "country_code", "time_zone", "notes", "status", "created_at", "updated_at", "archived_at", "property_type", "inventory_layout"},
+            {
+                "id",
+                "display_name",
+                "address_line_1",
+                "address_line_2",
+                "city",
+                "region",
+                "postal_code",
+                "country_code",
+                "time_zone",
+                "notes",
+                "status",
+                "created_at",
+                "updated_at",
+                "archived_at",
+                "property_type",
+                "inventory_layout",
+            },
             {"address_line_2", "region", "postal_code", "notes", "archived_at"},
         ),
         "property_ownerships": (
-            {"id", "property_id", "owner_kind", "party_id", "starts_on", "ends_on", "created_at", "ended_at"},
+            {
+                "id",
+                "property_id",
+                "owner_kind",
+                "party_id",
+                "starts_on",
+                "ends_on",
+                "created_at",
+                "ended_at",
+            },
             {"party_id", "ends_on", "ended_at"},
         ),
         "spaces": (
-            {"id", "property_id", "space_kind", "display_name", "normalized_name", "suite_or_floor", "notes", "status", "status_revision", "created_at", "updated_at", "archived_at", "archived_by_property_operation_id"},
+            {
+                "id",
+                "property_id",
+                "space_kind",
+                "display_name",
+                "normalized_name",
+                "suite_or_floor",
+                "notes",
+                "status",
+                "status_revision",
+                "created_at",
+                "updated_at",
+                "archived_at",
+                "archived_by_property_operation_id",
+            },
             {"suite_or_floor", "notes", "archived_at", "archived_by_property_operation_id"},
         ),
         "space_occupancy_periods": (
-            {"id", "space_id", "occupancy_status", "starts_on", "ends_on", "record_state", "superseded_by_id", "source_kind", "source_id", "note", "created_at", "ended_at", "cancelled_at"},
+            {
+                "id",
+                "space_id",
+                "occupancy_status",
+                "starts_on",
+                "ends_on",
+                "record_state",
+                "superseded_by_id",
+                "source_kind",
+                "source_id",
+                "note",
+                "created_at",
+                "ended_at",
+                "cancelled_at",
+            },
             {"ends_on", "superseded_by_id", "source_id", "note", "ended_at", "cancelled_at"},
         ),
         "space_availability": (
-            {"space_id", "availability_status", "available_on", "source_kind", "source_id", "note", "updated_at"},
+            {
+                "space_id",
+                "availability_status",
+                "available_on",
+                "source_kind",
+                "source_id",
+                "note",
+                "updated_at",
+            },
             {"available_on", "source_id", "note"},
         ),
         "space_status_operations": (
-            {"id", "space_id", "idempotency_key", "request_fingerprint", "result_revision", "result_snapshot", "created_at"},
+            {
+                "id",
+                "space_id",
+                "idempotency_key",
+                "request_fingerprint",
+                "result_revision",
+                "result_snapshot",
+                "created_at",
+            },
             set(),
         ),
     }
@@ -56,13 +126,20 @@ def _validate_columns(inspector, expected_columns) -> None:
         if {column["name"] for column in columns if column["primary_key"]} != expected_primary_key:
             raise MigrationSchemaError(f"{table} primary key is incompatible with PORT-001.")
         for column in columns:
-            if not column["primary_key"] and bool(column["nullable"]) != (column["name"] in nullable):
+            if not column["primary_key"] and bool(column["nullable"]) != (
+                column["name"] in nullable
+            ):
                 raise MigrationSchemaError(f"{table} nullability is incompatible with PORT-001.")
             if column["name"] in {"status_revision", "result_revision"}:
                 if "INT" not in str(column["type"]).upper():
-                    raise MigrationSchemaError(f"{table} column types are incompatible with PORT-003.")
+                    raise MigrationSchemaError(
+                        f"{table} column types are incompatible with PORT-003."
+                    )
                 continue
-            if "TEXT" not in str(column["type"]).upper() and "CHAR" not in str(column["type"]).upper():
+            if (
+                "TEXT" not in str(column["type"]).upper()
+                and "CHAR" not in str(column["type"]).upper()
+            ):
                 raise MigrationSchemaError(f"{table} column types are incompatible with PORT-001.")
 
 
@@ -148,7 +225,11 @@ def _validate_foreign_keys(inspector) -> None:
     }
     found = {
         table: {
-            (tuple(key["constrained_columns"]), key["referred_table"], tuple(key["referred_columns"]))
+            (
+                tuple(key["constrained_columns"]),
+                key["referred_table"],
+                tuple(key["referred_columns"]),
+            )
             for key in inspector.get_foreign_keys(table)
         }
         for table in expected

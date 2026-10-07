@@ -38,17 +38,27 @@ class SQLiteTaskTransactionOperations:
             .limit(1)
         ).scalar_one_or_none()
 
-    def create_task(self, connection: Any, command: Any, *, correlation_id: str,
-                    record_change: Any) -> Task:
+    def create_task(
+        self, connection: Any, command: Any, *, correlation_id: str, record_change: Any
+    ) -> Task:
         """Apply TASK-001's command validation and creation policy in a caller transaction."""
         from app.modules.tasks.application.service import TaskCreateCommand, new_task
 
-        validated = command if isinstance(command, TaskCreateCommand) else TaskCreateCommand.from_mapping(command)
+        validated = (
+            command
+            if isinstance(command, TaskCreateCommand)
+            else TaskCreateCommand.from_mapping(command)
+        )
         task = new_task(validated)
         self.insert_task(connection, task)
         record_change(
-            entity_type="task", entity_id=task.id, action="created", before=None,
-            after=task.to_dict(), reason="task_created", correlation_id=correlation_id,
+            entity_type="task",
+            entity_id=task.id,
+            action="created",
+            before=None,
+            after=task.to_dict(),
+            reason="task_created",
+            correlation_id=correlation_id,
         )
         return task
 

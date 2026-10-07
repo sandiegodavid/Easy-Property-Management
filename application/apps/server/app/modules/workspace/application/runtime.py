@@ -13,7 +13,9 @@ class WorkspaceRuntime:
 
     def __init__(self, service: WorkspaceService) -> None:
         self.service = service
-        self._lock = WorkspaceOperationLock(service.paths.root.parent / f".{service.paths.root.name}.server.lock")
+        self._lock = WorkspaceOperationLock(
+            service.paths.root.parent / f".{service.paths.root.name}.server.lock"
+        )
         self.startup_attempted = False
         self.writer_lock_acquired = False
         self.error: WorkspaceError | None = None
@@ -33,7 +35,9 @@ class WorkspaceRuntime:
         try:
             self._lock.__enter__()
         except WorkspaceOperationInProgressError as error:
-            self.error = WorkspaceError(f"Another local server is already using this workspace: {error}")
+            self.error = WorkspaceError(
+                f"Another local server is already using this workspace: {error}"
+            )
             return
         self.writer_lock_acquired = True
         self.refresh()

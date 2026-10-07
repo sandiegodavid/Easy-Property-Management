@@ -12,8 +12,6 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.bootstrap.api import _automatic_backup_scheduler, create_app
-from app.modules.workspace.application.service import WorkspaceService
-from app.platform.config import LocalConfig
 
 
 class WorkspaceApiTests(unittest.TestCase):
@@ -83,7 +81,9 @@ class WorkspaceApiTests(unittest.TestCase):
     def test_task_create_requires_a_json_boolean_for_is_all_day(self) -> None:
         self.assertEqual(self.client.post("/api/workspace/initialize").status_code, 201)
         for invalid_value in ("false", "yes", 0, 1):
-            response = self.client.post("/api/tasks", json={"title": "Inspection", "isAllDay": invalid_value})
+            response = self.client.post(
+                "/api/tasks", json={"title": "Inspection", "isAllDay": invalid_value}
+            )
             self.assertEqual(response.status_code, 422)
 
     def test_scheduler_cancellation_waits_for_an_inflight_backup_worker(self) -> None:

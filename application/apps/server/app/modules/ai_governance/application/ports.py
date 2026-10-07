@@ -1,4 +1,5 @@
 """Provider, credential, and review extension contracts owned by AI governance."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -20,10 +21,19 @@ class AiProviderError(RuntimeError):
 
 
 class AiProviderPort(Protocol):
-    def estimate_input_tokens(self, provider_request: Mapping[str, Any], model_identifier: str) -> int: ...
-    def probe(self, provider_request: Mapping[str, Any], model_identifier: str,
-              timeout_seconds: int) -> AiProviderResult: ...
-    def generate(self, provider_request: Mapping[str, Any], model_identifier: str, max_completion_tokens: int, timeout_seconds: int) -> AiProviderResult: ...
+    def estimate_input_tokens(
+        self, provider_request: Mapping[str, Any], model_identifier: str
+    ) -> int: ...
+    def probe(
+        self, provider_request: Mapping[str, Any], model_identifier: str, timeout_seconds: int
+    ) -> AiProviderResult: ...
+    def generate(
+        self,
+        provider_request: Mapping[str, Any],
+        model_identifier: str,
+        max_completion_tokens: int,
+        timeout_seconds: int,
+    ) -> AiProviderResult: ...
 
 
 class AiTransportCredentialStore(Protocol):
@@ -35,6 +45,7 @@ class AiTransportCredentialStore(Protocol):
 @dataclass(frozen=True)
 class AiApprovalContext:
     """Immutable facts an owner needs to reject a stale proposal."""
+
     draft_id: str
     draft_version: int
     action_type: str
@@ -49,15 +60,21 @@ class AiApprovalContext:
 
 class AiApprovalHandler(Protocol):
     """Owning domain opens its own transaction and completes review there."""
+
     def approve(self, context: AiApprovalContext) -> Mapping[str, Any]: ...
 
 
 class AiApprovalEvidenceValidator(Protocol):
     """Owning-domain retained-history check used during workspace validation."""
-    def validate_approval_evidence(self, connection: Any, *,
-                                   action_type: str,
-                                   decision: Mapping[str, Any],
-                                   run: Mapping[str, Any]) -> None: ...
+
+    def validate_approval_evidence(
+        self,
+        connection: Any,
+        *,
+        action_type: str,
+        decision: Mapping[str, Any],
+        run: Mapping[str, Any],
+    ) -> None: ...
 
 
 class AiSourceValidator(Protocol):
@@ -67,25 +84,48 @@ class AiSourceValidator(Protocol):
     intentionally different: an old revision is valid evidence when the
     source still exists, or when its owner retained an explicit tombstone.
     """
-    def validate_current_source(self, connection: Any, *, source_entity_type: str,
-                                source_entity_id: str, source_revision: str,
-                                source_fingerprint: str) -> None: ...
-    def validate_retained_source(self, connection: Any, *, source_entity_type: str,
-                                 source_entity_id: str, source_revision: str,
-                                 source_fingerprint: str) -> None: ...
+
+    def validate_current_source(
+        self,
+        connection: Any,
+        *,
+        source_entity_type: str,
+        source_entity_id: str,
+        source_revision: str,
+        source_fingerprint: str,
+    ) -> None: ...
+    def validate_retained_source(
+        self,
+        connection: Any,
+        *,
+        source_entity_type: str,
+        source_entity_id: str,
+        source_revision: str,
+        source_fingerprint: str,
+    ) -> None: ...
 
 
 class AiSourceProjection(Protocol):
     """Owning-domain runtime projection; may return an explicit tombstone."""
-    def source_state(self, *, source_entity_type: str, source_entity_id: str) -> Mapping[str, Any] | None: ...
+
+    def source_state(
+        self, *, source_entity_type: str, source_entity_id: str
+    ) -> Mapping[str, Any] | None: ...
 
 
 class AiReviewOperations(Protocol):
     """Transaction operations supplied to an owning-domain approval handler."""
+
     def draft(self, draft_id: str) -> Mapping[str, Any] | None: ...
-    def complete_approval(self, *, draft_id: str, expected_version: int,
-                          result_entity_type: str | None, result_entity_id: str | None,
-                          operator_note: str | None) -> Mapping[str, Any]: ...
+    def complete_approval(
+        self,
+        *,
+        draft_id: str,
+        expected_version: int,
+        result_entity_type: str | None,
+        result_entity_id: str | None,
+        operator_note: str | None,
+    ) -> Mapping[str, Any]: ...
 
 
 Result = TypeVar("Result")
@@ -93,6 +133,7 @@ Result = TypeVar("Result")
 
 class AiGovernanceTransactionOperations(Protocol):
     """Persistence operations used by AI application services in one write transaction."""
+
     def settings(self) -> Mapping[str, Any]: ...
     def update_settings(self, values: Mapping[str, Any]) -> None: ...
     def settings_operation(self, idempotency_key: str) -> Mapping[str, Any] | None: ...
@@ -105,8 +146,14 @@ class AiGovernanceTransactionOperations(Protocol):
     def action_limits(self) -> list[Mapping[str, Any]]: ...
     def put_action_limit(self, values: Mapping[str, Any]) -> None: ...
     def run_by_key(self, key: str) -> Mapping[str, Any] | None: ...
-    def validate_current_source(self, *, source_entity_type: str, source_entity_id: str,
-                                source_revision: str, source_fingerprint: str) -> None: ...
+    def validate_current_source(
+        self,
+        *,
+        source_entity_type: str,
+        source_entity_id: str,
+        source_revision: str,
+        source_fingerprint: str,
+    ) -> None: ...
     def run(self, run_id: str) -> Mapping[str, Any] | None: ...
     def insert_run(self, values: Mapping[str, Any]) -> None: ...
     def update_run(self, run_id: str, values: Mapping[str, Any]) -> None: ...
@@ -117,13 +164,23 @@ class AiGovernanceTransactionOperations(Protocol):
     def update_draft(self, draft_id: str, values: Mapping[str, Any]) -> None: ...
     def insert_decision(self, values: Mapping[str, Any]) -> None: ...
     def interrupted_runs(self) -> list[Mapping[str, Any]]: ...
-    def record_audit(self, *, entity_type: str, entity_id: str, action: str,
-                     before: Mapping[str, Any] | None, after: Mapping[str, Any] | None,
-                     correlation_id: str, actor: str, reason: str) -> None: ...
+    def record_audit(
+        self,
+        *,
+        entity_type: str,
+        entity_id: str,
+        action: str,
+        before: Mapping[str, Any] | None,
+        after: Mapping[str, Any] | None,
+        correlation_id: str,
+        actor: str,
+        reason: str,
+    ) -> None: ...
 
 
 class AiGovernanceUnitOfWork(Protocol):
     """Application boundary; concrete SQLite transactions stay infrastructure-owned."""
+
     def write(self, operation: Callable[[AiGovernanceTransactionOperations], Result]) -> Result: ...
     def settings_row(self) -> Mapping[str, Any]: ...
     def connection_row(self, connection_id: str) -> Mapping[str, Any] | None: ...
@@ -131,10 +188,18 @@ class AiGovernanceUnitOfWork(Protocol):
     def action_limit_row(self, action_type: str) -> Mapping[str, Any] | None: ...
     def action_limit_rows(self) -> list[Mapping[str, Any]]: ...
     def run_row(self, run_id: str) -> Mapping[str, Any] | None: ...
-    def page_draft_rows(self, *, status: str | None, owning_module: str | None,
-                        entity_kind: str | None, action_type: str | None,
-                        source_type: str | None, source_id: str | None,
-                        limit: int, cursor: tuple[str, str] | None) -> list[Mapping[str, Any]]: ...
+    def page_draft_rows(
+        self,
+        *,
+        status: str | None,
+        owning_module: str | None,
+        entity_kind: str | None,
+        action_type: str | None,
+        source_type: str | None,
+        source_id: str | None,
+        limit: int,
+        cursor: tuple[str, str] | None,
+    ) -> list[Mapping[str, Any]]: ...
     def draft_detail_row(self, draft_id: str) -> Mapping[str, Any] | None: ...
     def draft_decision_rows(self, draft_id: str) -> list[Mapping[str, Any]]: ...
     def approval_context_row(self, draft_id: str) -> Mapping[str, Any] | None: ...

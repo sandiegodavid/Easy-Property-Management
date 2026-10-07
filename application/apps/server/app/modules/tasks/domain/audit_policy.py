@@ -12,7 +12,9 @@ class TaskActivitySnapshotPolicy(DefaultAuditSnapshotPolicy):
 
     @staticmethod
     def _sensitive_follow_up(snapshot: Mapping[str, Any] | None) -> bool:
-        return bool(snapshot and snapshot.get("relatedEntityType") in {"communication", "maintenance_issue"})
+        return bool(
+            snapshot and snapshot.get("relatedEntityType") in {"communication", "maintenance_issue"}
+        )
 
     def redact(self, snapshot: Mapping[str, Any] | None) -> dict[str, Any] | None:
         value = super().redact(snapshot)

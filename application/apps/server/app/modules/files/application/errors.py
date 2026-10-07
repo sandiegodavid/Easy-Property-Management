@@ -1,11 +1,14 @@
 """Stable FILE-001 failures and bounded metadata normalization."""
+
 from __future__ import annotations
 
 import re
 import unicodedata
 
 MAX_FILE_BYTES = 50 * 1024 * 1024
-_MEDIA_TYPE = re.compile(r"^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+(?:;[a-z0-9!#$&^_.+-]+=[a-z0-9!#$&^_.+-]+)*$")
+_MEDIA_TYPE = re.compile(
+    r"^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+(?:;[a-z0-9!#$&^_.+-]+=[a-z0-9!#$&^_.+-]+)*$"
+)
 
 
 class FileError(RuntimeError):
@@ -17,8 +20,16 @@ class FileError(RuntimeError):
 
 
 class PublicationCleanupIncomplete(FileError):
-    def __init__(self, publication_id: str, provider: str, original_failure: BaseException, cleanup_failure: BaseException) -> None:
-        super().__init__("File publication cleanup could not be completed.", "publication_cleanup_incomplete")
+    def __init__(
+        self,
+        publication_id: str,
+        provider: str,
+        original_failure: BaseException,
+        cleanup_failure: BaseException,
+    ) -> None:
+        super().__init__(
+            "File publication cleanup could not be completed.", "publication_cleanup_incomplete"
+        )
         self.publication_id = publication_id
         self.provider = provider
         self.original_failure = original_failure
@@ -34,7 +45,11 @@ def normalize_filename(value: str) -> str:
         raise FileError("File name must be nonblank.")
     # Unicode Cc covers both the familiar ASCII controls and C1 controls
     # (for example U+0085).  They are never meaningful in a display name.
-    if "/" in name or "\\" in name or any(unicodedata.category(character) == "Cc" for character in name):
+    if (
+        "/" in name
+        or "\\" in name
+        or any(unicodedata.category(character) == "Cc" for character in name)
+    ):
         raise FileError("File name contains unsafe characters.")
     if len(name.encode("utf-8")) > 255:
         raise FileError("File name must not exceed 255 UTF-8 bytes.")

@@ -1,4 +1,5 @@
 """FILE-001 commands. Logical metadata and a validated owning link commit together."""
+
 from __future__ import annotations
 
 import hashlib
@@ -45,7 +46,18 @@ class FileAttachmentBatch:
         self._correlation_id: str | None = None
         self._cleanup_incomplete: PublicationCleanupIncomplete | None = None
 
-    def add(self, source: Path, original_name: str, media_type: str | None, *, entity_type: str, entity_id: str, purpose: str, correlation_id: str, owning_workflow: bool = False) -> StoredFile:
+    def add(
+        self,
+        source: Path,
+        original_name: str,
+        media_type: str | None,
+        *,
+        entity_type: str,
+        entity_id: str,
+        purpose: str,
+        correlation_id: str,
+        owning_workflow: bool = False,
+    ) -> StoredFile:
         if self._closed is not None:
             raise FileError("The attachment batch is already complete.")
         self._correlation_id = self._correlation_id or correlation_id
@@ -59,7 +71,10 @@ class FileAttachmentBatch:
                 try:
                     content.rollback()
                 finally:
-                    raise FileError("Published file content changed while it was prepared.", "file_integrity_failed")
+                    raise FileError(
+                        "Published file content changed while it was prepared.",
+                        "file_integrity_failed",
+                    )
             self._by_digest[digest] = content
             self._leases.append(content)
         item = self.service._stored_item(content, original_name, media_type)
@@ -81,11 +96,21 @@ class FileAttachmentBatch:
         if errors:
             publication, error = errors[0]
             incomplete = PublicationCleanupIncomplete(
-                str(getattr(publication, "publication_id", getattr(publication, "content_sha256", "unknown"))),
-                str(getattr(publication, "storage_provider", "unknown")), error, error,
+                str(
+                    getattr(
+                        publication,
+                        "publication_id",
+                        getattr(publication, "content_sha256", "unknown"),
+                    )
+                ),
+                str(getattr(publication, "storage_provider", "unknown")),
+                error,
+                error,
             )
             self._cleanup_incomplete = incomplete
-            self.service._try_record_cleanup_attention(incomplete, self._correlation_id or str(uuid4()))
+            self.service._try_record_cleanup_attention(
+                incomplete, self._correlation_id or str(uuid4())
+            )
             raise incomplete from error
 
     def rollback(self, original_failure: BaseException | None = None) -> None:
@@ -102,8 +127,16 @@ class FileAttachmentBatch:
             publication, cleanup_error = errors[0]
             failure = original_failure or cleanup_error
             incomplete = PublicationCleanupIncomplete(
-                str(getattr(publication, "publication_id", getattr(publication, "content_sha256", "unknown"))),
-                str(getattr(publication, "storage_provider", "unknown")), failure, cleanup_error,
+                str(
+                    getattr(
+                        publication,
+                        "publication_id",
+                        getattr(publication, "content_sha256", "unknown"),
+                    )
+                ),
+                str(getattr(publication, "storage_provider", "unknown")),
+                failure,
+                cleanup_error,
             )
             # Caller-owned transactions can still hold SQLite's single writer
             # lock here.  Leave attention persistence retryable until their
@@ -122,21 +155,38 @@ class FileAttachmentBatch:
 
 
 class FileService:
-    def __init__(self, workspace: WorkspaceService, content_store: FileContentStore,
-                 unit_of_work: FileUnitOfWork,
-                 additional_stores: dict[str, FileContentStore] | None = None,
-                 link_validators: tuple[FileLinkValidator, ...] = ()) -> None:
+    def __init__(
+        self,
+        workspace: WorkspaceService,
+        content_store: FileContentStore,
+        unit_of_work: FileUnitOfWork,
+        additional_stores: dict[str, FileContentStore] | None = None,
+        link_validators: tuple[FileLinkValidator, ...] = (),
+    ) -> None:
         self.workspace = workspace
         self.content_store = content_store
         self.unit_of_work = unit_of_work
-        self.content_stores = {getattr(content_store, "storage_provider", "local"): content_store, **(additional_stores or {})}
+        self.content_stores = {
+            getattr(content_store, "storage_provider", "local"): content_store,
+            **(additional_stores or {}),
+        }
         self.policy_registry = FileLinkPolicyRegistry(link_validators)
         self.link_validators = self.policy_registry.as_mapping()
 
     def attachment_batch(self, connection: Any) -> FileAttachmentBatch:
         return FileAttachmentBatch(self, connection)
 
-    def add(self, source: Path, original_name: str, media_type: str | None, *, entity_type: str, entity_id: str, purpose: str, correlation_id: str | None = None) -> StoredFile:
+    def add(
+        self,
+        source: Path,
+        original_name: str,
+        media_type: str | None,
+        *,
+        entity_type: str,
+        entity_id: str,
+        purpose: str,
+        correlation_id: str | None = None,
+    ) -> StoredFile:
         """Create one logical file and one validated association using the primary store."""
         # Runtime opens and validates the workspace before exposing this
         # command.  Do not reopen it here: an in-process caller may be in the
@@ -149,7 +199,12 @@ class FileService:
         try:
             content = self.content_store.store(source)
             item = self._stored_item(content, original_name, media_type)
-            self.unit_of_work.write(item, link, self._audit_changes(item, link, correlation), lambda connection, candidate: validator.validate_create(connection, candidate))
+            self.unit_of_work.write(
+                item,
+                link,
+                self._audit_changes(item, link, correlation),
+                lambda connection, candidate: validator.validate_create(connection, candidate),
+            )
             persisted = True
             content.commit()
             return item
@@ -159,7 +214,12 @@ class FileService:
                     content.rollback()
                 except BaseException as cleanup_error:
                     publication_id = getattr(content, "publication_id", "unknown")
-                    incomplete = PublicationCleanupIncomplete(publication_id, getattr(content, "storage_provider", "unknown"), error, cleanup_error)
+                    incomplete = PublicationCleanupIncomplete(
+                        publication_id,
+                        getattr(content, "storage_provider", "unknown"),
+                        error,
+                        cleanup_error,
+                    )
                     self._try_record_cleanup_attention(incomplete, correlation)
                     raise incomplete from error
             if isinstance(error, PublicationCleanupIncomplete):
@@ -168,16 +228,40 @@ class FileService:
             if isinstance(error, FileError):
                 raise
             if isinstance(error, OSError):
-                raise FileError("File storage is unavailable.", "file_provider_unavailable") from error
+                raise FileError(
+                    "File storage is unavailable.", "file_provider_unavailable"
+                ) from error
             if isinstance(error, ValueError):
                 raise FileError(str(error)) from error
             raise
 
-    def add_in_transaction(self, connection: Any, source: Path, original_name: str, media_type: str | None, *, entity_type: str, entity_id: str, purpose: str, correlation_id: str, batch: FileAttachmentBatch | None = None, owning_workflow: bool = True) -> tuple[StoredFile, FileAttachmentBatch]:
+    def add_in_transaction(
+        self,
+        connection: Any,
+        source: Path,
+        original_name: str,
+        media_type: str | None,
+        *,
+        entity_type: str,
+        entity_id: str,
+        purpose: str,
+        correlation_id: str,
+        batch: FileAttachmentBatch | None = None,
+        owning_workflow: bool = True,
+    ) -> tuple[StoredFile, FileAttachmentBatch]:
         """Prepare an owning-workflow attachment on its caller's transaction."""
         current = batch or self.attachment_batch(connection)
         try:
-            return current.add(source, original_name, media_type, entity_type=entity_type, entity_id=entity_id, purpose=purpose, correlation_id=correlation_id, owning_workflow=owning_workflow), current
+            return current.add(
+                source,
+                original_name,
+                media_type,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                purpose=purpose,
+                correlation_id=correlation_id,
+                owning_workflow=owning_workflow,
+            ), current
         except Exception as error:
             if batch is None:
                 try:
@@ -188,7 +272,15 @@ class FileService:
                     raise
             raise
 
-    def link_existing_file(self, file_id: str, *, entity_type: str, entity_id: str, purpose: str, correlation_id: str | None = None) -> FileLink:
+    def link_existing_file(
+        self,
+        file_id: str,
+        *,
+        entity_type: str,
+        entity_id: str,
+        purpose: str,
+        correlation_id: str | None = None,
+    ) -> FileLink:
         """Internal-only association command; it never creates another file row."""
         link = self._new_link(entity_type, entity_id, purpose)
         validator = self._validator(link.entity_type, generic_upload=False)
@@ -197,10 +289,25 @@ class FileService:
         if item is None:
             raise FileError("File record was not found.", "file_not_found")
         if item.storage_state != "available":
-            raise FileError("Only available file content can be associated.", "file_content_unavailable")
-        linked = FileLink(link.id, link.entity_type, link.entity_id, link.purpose, link.created_at, file_id)
+            raise FileError(
+                "Only available file content can be associated.", "file_content_unavailable"
+            )
+        linked = FileLink(
+            link.id, link.entity_type, link.entity_id, link.purpose, link.created_at, file_id
+        )
         try:
-            self.unit_of_work.link_existing(linked, FileAuditChange("file_link", linked.id, "created", _link_snapshot(linked), "file_linked", correlation), lambda connection, candidate: validator.validate_create(connection, candidate))
+            self.unit_of_work.link_existing(
+                linked,
+                FileAuditChange(
+                    "file_link",
+                    linked.id,
+                    "created",
+                    _link_snapshot(linked),
+                    "file_linked",
+                    correlation,
+                ),
+                lambda connection, candidate: validator.validate_create(connection, candidate),
+            )
         except (ValueError, IntegrityError) as error:
             raise FileError(str(error), "file_lifecycle_conflict") from error
         return linked
@@ -211,7 +318,9 @@ class FileService:
             raise FileError("File record was not found.", "file_not_found")
         return item
 
-    def archive_link(self, link_id: str, *, confirmed: bool, reason: str, correlation_id: str | None = None) -> dict[str, object]:
+    def archive_link(
+        self, link_id: str, *, confirmed: bool, reason: str, correlation_id: str | None = None
+    ) -> dict[str, object]:
         if type(confirmed) is not bool or not confirmed:
             raise FileError("Explicit archive confirmation is required.")
         if not isinstance(reason, str) or not (reason := reason.strip()) or len(reason) > 1000:
@@ -222,20 +331,46 @@ class FileService:
         if current.archived_at is not None:
             raise FileError("File link is already archived.", "file_lifecycle_conflict")
         validator = self._validator(current.entity_type, generic_upload=False)
-        archived = FileLink(current.id, current.entity_type, current.entity_id, current.purpose, current.created_at, current.file_id, _now(), reason)
-        audit = FileAuditChange("file_link", archived.id, "archived", _link_snapshot(archived), "file_link_archived", correlation_id or str(uuid4()), _link_snapshot(current))
+        archived = FileLink(
+            current.id,
+            current.entity_type,
+            current.entity_id,
+            current.purpose,
+            current.created_at,
+            current.file_id,
+            _now(),
+            reason,
+        )
+        audit = FileAuditChange(
+            "file_link",
+            archived.id,
+            "archived",
+            _link_snapshot(archived),
+            "file_link_archived",
+            correlation_id or str(uuid4()),
+            _link_snapshot(current),
+        )
         try:
-            self.unit_of_work.archive_link(archived, audit, lambda connection, candidate: validator.validate_archive(connection, candidate))
+            self.unit_of_work.archive_link(
+                archived,
+                audit,
+                lambda connection, candidate: validator.validate_archive(connection, candidate),
+            )
         except ValueError as error:
             raise FileError(str(error), "file_lifecycle_conflict") from error
         return _link_snapshot(archived) | {"id": archived.id}
 
     def content_path(self, item: StoredFile) -> Path:
         if item.storage_state != "available":
-            raise FileError("Only available file content can be retrieved.", "file_content_unavailable")
+            raise FileError(
+                "Only available file content can be retrieved.", "file_content_unavailable"
+            )
         store = self.content_stores.get(item.storage_provider)
         if store is None:
-            raise FileError("The configured content store cannot retrieve this file.", "file_provider_unavailable")
+            raise FileError(
+                "The configured content store cannot retrieve this file.",
+                "file_provider_unavailable",
+            )
         return store.path_for(item)
 
     def _new_link(self, entity_type: str, entity_id: str, purpose: str) -> FileLink:
@@ -247,32 +382,72 @@ class FileService:
         if validator is None:
             raise FileError(f"No owning-domain validator is configured for {entity_type} links.")
         if generic_upload and not validator.allows_generic_upload:
-            raise FileError("This evidence type must be attached by its owning workflow.", "file_lifecycle_conflict")
+            raise FileError(
+                "This evidence type must be attached by its owning workflow.",
+                "file_lifecycle_conflict",
+            )
         return validator
 
     def _validate_link(self, connection: Any, link: FileLink, *, generic_upload: bool) -> None:
-        self._validator(link.entity_type, generic_upload=generic_upload).validate_create(connection, link)
+        self._validator(link.entity_type, generic_upload=generic_upload).validate_create(
+            connection, link
+        )
 
     def _stored_item(self, content: Any, original_name: str, media_type: str | None) -> StoredFile:
         now = _now()
-        return StoredFile(str(uuid4()), normalize_filename(original_name), normalize_media_type(media_type), content.size_bytes, content.content_sha256, content.storage_provider, content.storage_state, content.local_relative_path, content.s3_bucket, content.s3_object_key, content.s3_version_id, content.provider_etag, now, now)
+        return StoredFile(
+            str(uuid4()),
+            normalize_filename(original_name),
+            normalize_media_type(media_type),
+            content.size_bytes,
+            content.content_sha256,
+            content.storage_provider,
+            content.storage_state,
+            content.local_relative_path,
+            content.s3_bucket,
+            content.s3_object_key,
+            content.s3_version_id,
+            content.provider_etag,
+            now,
+            now,
+        )
 
-    def _audit_changes(self, item: StoredFile, link: FileLink, correlation_id: str) -> list[FileAuditChange]:
+    def _audit_changes(
+        self, item: StoredFile, link: FileLink, correlation_id: str
+    ) -> list[FileAuditChange]:
         linked = _link_for_file(link, item.id)
-        return [FileAuditChange("file", item.id, "created", item.to_dict(), "file_stored", correlation_id), FileAuditChange("file_link", linked.id, "created", _link_snapshot(linked), "file_linked", correlation_id)]
+        return [
+            FileAuditChange(
+                "file", item.id, "created", item.to_dict(), "file_stored", correlation_id
+            ),
+            FileAuditChange(
+                "file_link",
+                linked.id,
+                "created",
+                _link_snapshot(linked),
+                "file_linked",
+                correlation_id,
+            ),
+        ]
 
-    def _write_on_connection(self, connection: Any, item: StoredFile, link: FileLink, correlation_id: str) -> None:
+    def _write_on_connection(
+        self, connection: Any, item: StoredFile, link: FileLink, correlation_id: str
+    ) -> None:
         writer = getattr(self.unit_of_work, "write_in_transaction", None)
         if writer is None:
             raise FileError("The configured file store does not support caller-owned transactions.")
         writer(connection, item, link, self._audit_changes(item, link, correlation_id))
 
-    def _record_cleanup_attention(self, error: PublicationCleanupIncomplete, correlation_id: str) -> None:
+    def _record_cleanup_attention(
+        self, error: PublicationCleanupIncomplete, correlation_id: str
+    ) -> None:
         recorder = getattr(self.unit_of_work, "record_cleanup_incomplete", None)
         if recorder is not None:
             recorder(error.publication_id, error.provider, correlation_id)
 
-    def _try_record_cleanup_attention(self, error: PublicationCleanupIncomplete, correlation_id: str) -> None:
+    def _try_record_cleanup_attention(
+        self, error: PublicationCleanupIncomplete, correlation_id: str
+    ) -> None:
         """Keep cleanup failure primary, but never discard failed attention persistence."""
         try:
             self._record_cleanup_attention(error, correlation_id)
@@ -309,8 +484,25 @@ def _link_fields(entity_type: str, entity_id: str, purpose: str) -> tuple[str, s
 
 
 def _link_snapshot(link: FileLink) -> dict[str, object]:
-    return {"fileId": link.file_id, "entityType": link.entity_type, "entityId": link.entity_id, "purpose": link.purpose, "createdAt": link.created_at, "archivedAt": link.archived_at, "archiveReason": link.archive_reason}
+    return {
+        "fileId": link.file_id,
+        "entityType": link.entity_type,
+        "entityId": link.entity_id,
+        "purpose": link.purpose,
+        "createdAt": link.created_at,
+        "archivedAt": link.archived_at,
+        "archiveReason": link.archive_reason,
+    }
 
 
 def _link_for_file(link: FileLink, file_id: str) -> FileLink:
-    return FileLink(link.id, link.entity_type, link.entity_id, link.purpose, link.created_at, file_id, link.archived_at, link.archive_reason)
+    return FileLink(
+        link.id,
+        link.entity_type,
+        link.entity_id,
+        link.purpose,
+        link.created_at,
+        file_id,
+        link.archived_at,
+        link.archive_reason,
+    )

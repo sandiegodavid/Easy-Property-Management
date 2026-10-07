@@ -17,34 +17,59 @@ class BundledAddressTimeZoneResolver:
     """Small offline address/postal candidate index for the local MVP."""
 
     _COUNTRY_CANDIDATES = {
-        "GB": ("Europe/London",), "IE": ("Europe/Dublin",),
-        "IS": ("Atlantic/Reykjavik",), "JP": ("Asia/Tokyo",),
-        "KR": ("Asia/Seoul",), "NZ": ("Pacific/Auckland",),
+        "GB": ("Europe/London",),
+        "IE": ("Europe/Dublin",),
+        "IS": ("Atlantic/Reykjavik",),
+        "JP": ("Asia/Tokyo",),
+        "KR": ("Asia/Seoul",),
+        "NZ": ("Pacific/Auckland",),
         "PT": ("Europe/Lisbon",),
     }
     _SINGLE_ZONE_REGIONS = {
-        ("US", "AL"): ("America/Chicago",), ("US", "CA"): ("America/Los_Angeles",),
-        ("US", "CO"): ("America/Denver",), ("US", "CT"): ("America/New_York",),
-        ("US", "DC"): ("America/New_York",), ("US", "DE"): ("America/New_York",),
-        ("US", "GA"): ("America/New_York",), ("US", "HI"): ("Pacific/Honolulu",),
-        ("US", "IA"): ("America/Chicago",), ("US", "IL"): ("America/Chicago",),
-        ("US", "LA"): ("America/Chicago",), ("US", "MA"): ("America/New_York",),
-        ("US", "MD"): ("America/New_York",), ("US", "ME"): ("America/New_York",),
-        ("US", "MN"): ("America/Chicago",), ("US", "MO"): ("America/Chicago",),
-        ("US", "MS"): ("America/Chicago",), ("US", "MT"): ("America/Denver",),
-        ("US", "NC"): ("America/New_York",), ("US", "NH"): ("America/New_York",),
-        ("US", "NJ"): ("America/New_York",), ("US", "NM"): ("America/Denver",),
-        ("US", "NV"): ("America/Los_Angeles",), ("US", "NY"): ("America/New_York",),
-        ("US", "OH"): ("America/New_York",), ("US", "OK"): ("America/Chicago",),
-        ("US", "PA"): ("America/New_York",), ("US", "RI"): ("America/New_York",),
-        ("US", "SC"): ("America/New_York",), ("US", "UT"): ("America/Denver",),
-        ("US", "VA"): ("America/New_York",), ("US", "VT"): ("America/New_York",),
-        ("US", "WA"): ("America/Los_Angeles",), ("US", "WI"): ("America/Chicago",),
-        ("US", "WV"): ("America/New_York",), ("US", "WY"): ("America/Denver",),
-        ("CA", "AB"): ("America/Edmonton",), ("CA", "MB"): ("America/Winnipeg",),
-        ("CA", "NB"): ("America/Moncton",), ("CA", "NL"): ("America/St_Johns",),
-        ("CA", "NS"): ("America/Halifax",), ("CA", "PE"): ("America/Halifax",),
-        ("CA", "QC"): ("America/Toronto",), ("CA", "SK"): ("America/Regina",),
+        ("US", "AL"): ("America/Chicago",),
+        ("US", "CA"): ("America/Los_Angeles",),
+        ("US", "CO"): ("America/Denver",),
+        ("US", "CT"): ("America/New_York",),
+        ("US", "DC"): ("America/New_York",),
+        ("US", "DE"): ("America/New_York",),
+        ("US", "GA"): ("America/New_York",),
+        ("US", "HI"): ("Pacific/Honolulu",),
+        ("US", "IA"): ("America/Chicago",),
+        ("US", "IL"): ("America/Chicago",),
+        ("US", "LA"): ("America/Chicago",),
+        ("US", "MA"): ("America/New_York",),
+        ("US", "MD"): ("America/New_York",),
+        ("US", "ME"): ("America/New_York",),
+        ("US", "MN"): ("America/Chicago",),
+        ("US", "MO"): ("America/Chicago",),
+        ("US", "MS"): ("America/Chicago",),
+        ("US", "MT"): ("America/Denver",),
+        ("US", "NC"): ("America/New_York",),
+        ("US", "NH"): ("America/New_York",),
+        ("US", "NJ"): ("America/New_York",),
+        ("US", "NM"): ("America/Denver",),
+        ("US", "NV"): ("America/Los_Angeles",),
+        ("US", "NY"): ("America/New_York",),
+        ("US", "OH"): ("America/New_York",),
+        ("US", "OK"): ("America/Chicago",),
+        ("US", "PA"): ("America/New_York",),
+        ("US", "RI"): ("America/New_York",),
+        ("US", "SC"): ("America/New_York",),
+        ("US", "UT"): ("America/Denver",),
+        ("US", "VA"): ("America/New_York",),
+        ("US", "VT"): ("America/New_York",),
+        ("US", "WA"): ("America/Los_Angeles",),
+        ("US", "WI"): ("America/Chicago",),
+        ("US", "WV"): ("America/New_York",),
+        ("US", "WY"): ("America/Denver",),
+        ("CA", "AB"): ("America/Edmonton",),
+        ("CA", "MB"): ("America/Winnipeg",),
+        ("CA", "NB"): ("America/Moncton",),
+        ("CA", "NL"): ("America/St_Johns",),
+        ("CA", "NS"): ("America/Halifax",),
+        ("CA", "PE"): ("America/Halifax",),
+        ("CA", "QC"): ("America/Toronto",),
+        ("CA", "SK"): ("America/Regina",),
         ("CA", "YT"): ("America/Whitehorse",),
     }
     _CITY_CANDIDATES = {
@@ -74,11 +99,21 @@ class BundledAddressTimeZoneResolver:
         ("CA", "NU"): ("America/Iqaluit", "America/Rankin_Inlet", "America/Cambridge_Bay"),
     }
 
-    def resolve(self, *, address_line_1: str, city: str, region: str | None,
-                postal_code: str | None, country_code: str) -> str:
+    def resolve(
+        self,
+        *,
+        address_line_1: str,
+        city: str,
+        region: str | None,
+        postal_code: str | None,
+        country_code: str,
+    ) -> str:
         candidates = self.candidates(
-            address_line_1=address_line_1, city=city, region=region,
-            postal_code=postal_code, country_code=country_code,
+            address_line_1=address_line_1,
+            city=city,
+            region=region,
+            postal_code=postal_code,
+            country_code=country_code,
         )
         if len(candidates) != 1:
             raise PortfolioError(
@@ -91,15 +126,26 @@ class BundledAddressTimeZoneResolver:
             raise PortfolioError("The resolved property time zone is unavailable.") from error
         return zone
 
-    def candidates(self, *, address_line_1: str, city: str, region: str | None,
-                   postal_code: str | None, country_code: str) -> tuple[str, ...]:
+    def candidates(
+        self,
+        *,
+        address_line_1: str,
+        city: str,
+        region: str | None,
+        postal_code: str | None,
+        country_code: str,
+    ) -> tuple[str, ...]:
         """Return all local dataset candidates, without choosing among them."""
         country = _key(country_code).upper()
         region_key = None if region is None else _key(region).upper()
         city_key = _key(city)
         street_key = _key(address_line_1)
-        postal_key = "" if postal_code is None else "".join(
-            character for character in _key(postal_code).upper() if character.isalnum()
+        postal_key = (
+            ""
+            if postal_code is None
+            else "".join(
+                character for character in _key(postal_code).upper() if character.isalnum()
+            )
         )
         if region_key is None:
             return self._COUNTRY_CANDIDATES.get(country, ())

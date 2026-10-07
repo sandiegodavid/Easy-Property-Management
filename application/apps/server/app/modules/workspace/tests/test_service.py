@@ -7,7 +7,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.modules.workspace.application.service import WorkspaceError, WorkspaceNotInitializedError, WorkspaceService
+from app.modules.workspace.application.service import (
+    WorkspaceError,
+    WorkspaceNotInitializedError,
+    WorkspaceService,
+)
 from app.modules.workspace.infrastructure.sqlite_store import SQLiteWorkspaceStore
 from app.platform.config import LocalConfig, LocalConfigError, load_local_config, repository_root
 from app.platform.product_migrations import ProductSchemaError
@@ -19,7 +23,11 @@ class WorkspaceServiceTests(unittest.TestCase):
         self.addCleanup(self.temporary_directory.cleanup)
         self.root = Path(self.temporary_directory.name)
         self.workspace_path = self.root / "operator-workspace"
-        self.service = WorkspaceService(LocalConfig(config_path=self.root / "config.local.json", workspace_path=self.workspace_path))
+        self.service = WorkspaceService(
+            LocalConfig(
+                config_path=self.root / "config.local.json", workspace_path=self.workspace_path
+            )
+        )
 
     def test_initialize_creates_a_stable_manifest_and_persistent_sqlite_store(self) -> None:
         manifest = self.service.initialize()
@@ -49,12 +57,19 @@ class WorkspaceServiceTests(unittest.TestCase):
             self.service.initialize()
 
     def test_initialize_rejects_the_application_checkout(self) -> None:
-        unsafe_service = WorkspaceService(LocalConfig(config_path=self.root / "config.local.json", workspace_path=Path.cwd()))
+        unsafe_service = WorkspaceService(
+            LocalConfig(config_path=self.root / "config.local.json", workspace_path=Path.cwd())
+        )
         with self.assertRaises(WorkspaceError):
             unsafe_service.initialize()
 
     def test_initialize_rejects_a_repository_sibling(self) -> None:
-        unsafe_service = WorkspaceService(LocalConfig(config_path=self.root / "config.local.json", workspace_path=repository_root() / "workspace-data-must-not-live-here"))
+        unsafe_service = WorkspaceService(
+            LocalConfig(
+                config_path=self.root / "config.local.json",
+                workspace_path=repository_root() / "workspace-data-must-not-live-here",
+            )
+        )
         with self.assertRaises(WorkspaceError):
             unsafe_service.initialize()
 
@@ -75,7 +90,9 @@ class WorkspaceServiceTests(unittest.TestCase):
         self.assertEqual(self.service.paths.manifest.stat().st_mode & 0o777, 0o600)
 
     def test_failed_publication_leaves_no_partial_workspace(self) -> None:
-        with patch.object(self.service, "_publish_staging_workspace", side_effect=OSError("interrupted")):
+        with patch.object(
+            self.service, "_publish_staging_workspace", side_effect=OSError("interrupted")
+        ):
             with self.assertRaises(WorkspaceError):
                 self.service.initialize()
 
@@ -83,7 +100,10 @@ class WorkspaceServiceTests(unittest.TestCase):
         self.assertEqual(list(self.root.glob(".operator-workspace.initializing.*")), [])
 
     def test_failed_staging_validation_does_not_publish_workspace(self) -> None:
-        with patch("app.modules.workspace.application.service.validate_latest_schema", side_effect=ProductSchemaError("invalid baseline")):
+        with patch(
+            "app.modules.workspace.application.service.validate_latest_schema",
+            side_effect=ProductSchemaError("invalid baseline"),
+        ):
             with self.assertRaisesRegex(WorkspaceError, "invalid baseline"):
                 self.service.initialize()
         self.assertFalse(self.workspace_path.exists())
@@ -92,8 +112,12 @@ class WorkspaceServiceTests(unittest.TestCase):
     def test_corrupt_database_is_reported_as_a_workspace_error(self) -> None:
         self.service.initialize()
         self.service.paths.database.write_bytes(b"not a sqlite database")
-        self.service.paths.database.with_name(f"{self.service.paths.database.name}-wal").unlink(missing_ok=True)
-        self.service.paths.database.with_name(f"{self.service.paths.database.name}-shm").unlink(missing_ok=True)
+        self.service.paths.database.with_name(f"{self.service.paths.database.name}-wal").unlink(
+            missing_ok=True
+        )
+        self.service.paths.database.with_name(f"{self.service.paths.database.name}-shm").unlink(
+            missing_ok=True
+        )
 
         with self.assertRaisesRegex(WorkspaceError, "Workspace database is invalid"):
             self.service.open()

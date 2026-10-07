@@ -1,4 +1,5 @@
 """SQLite persistence owned by the AI governance module."""
+
 from __future__ import annotations
 
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, Text
@@ -49,9 +50,13 @@ class AiModelConnectionModel(LocalBase):
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (
-        CheckConstraint("revision >= 1"), CheckConstraint("execution_location IN ('on_device','cloud')"),
-        CheckConstraint("enabled IN (0,1)"), CheckConstraint("length(trim(label)) BETWEEN 1 AND 120"),
-        CheckConstraint("length(adapter_id) BETWEEN 1 AND 80 AND length(adapter_version) BETWEEN 1 AND 80 AND length(model_identifier) BETWEEN 1 AND 240"),
+        CheckConstraint("revision >= 1"),
+        CheckConstraint("execution_location IN ('on_device','cloud')"),
+        CheckConstraint("enabled IN (0,1)"),
+        CheckConstraint("length(trim(label)) BETWEEN 1 AND 120"),
+        CheckConstraint(
+            "length(adapter_id) BETWEEN 1 AND 80 AND length(adapter_version) BETWEEN 1 AND 80 AND length(model_identifier) BETWEEN 1 AND 240"
+        ),
         Index("ai_model_connections_enabled", "enabled", "execution_location"),
     )
 
@@ -66,7 +71,12 @@ class AiActionLimitModel(LocalBase):
     max_completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
     allowed_models: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
-    __table_args__ = (CheckConstraint("enabled IN (0,1)"), CheckConstraint("max_runs_per_utc_day>0 AND max_prompt_tokens>0 AND max_completion_tokens>0"),)
+    __table_args__ = (
+        CheckConstraint("enabled IN (0,1)"),
+        CheckConstraint(
+            "max_runs_per_utc_day>0 AND max_prompt_tokens>0 AND max_completion_tokens>0"
+        ),
+    )
 
 
 class AiRunModel(LocalBase):
@@ -116,7 +126,9 @@ class AiRunModel(LocalBase):
     __table_args__ = (
         CheckConstraint("execution_kind IN ('provider_generation','external_proposal')"),
         CheckConstraint("status IN ('reserved','running','succeeded','failed','blocked')"),
-        CheckConstraint("length(input_fingerprint)=64 AND length(request_fingerprint)=64 AND length(source_fingerprint)=64"),
+        CheckConstraint(
+            "length(input_fingerprint)=64 AND length(request_fingerprint)=64 AND length(source_fingerprint)=64"
+        ),
         CheckConstraint("(status IN ('failed','blocked')) = (error_code IS NOT NULL)"),
         Index("ai_runs_action_status_started", "action_type", "status", "started_at"),
         Index("ai_runs_source", "source_entity_type", "source_entity_id", "created_at"),
@@ -136,7 +148,14 @@ class AiDraftModel(LocalBase):
     terminal_at: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
-    __table_args__ = (CheckConstraint("status IN ('proposed','edited','approved','dismissed','superseded')"), CheckConstraint("version>=1"), CheckConstraint("(status IN ('approved','dismissed','superseded')) = (terminal_at IS NOT NULL)"), Index("ai_drafts_status_updated", "status", "updated_at"))
+    __table_args__ = (
+        CheckConstraint("status IN ('proposed','edited','approved','dismissed','superseded')"),
+        CheckConstraint("version>=1"),
+        CheckConstraint(
+            "(status IN ('approved','dismissed','superseded')) = (terminal_at IS NOT NULL)"
+        ),
+        Index("ai_drafts_status_updated", "status", "updated_at"),
+    )
 
 
 class AiReviewDecisionModel(LocalBase):
@@ -151,4 +170,8 @@ class AiReviewDecisionModel(LocalBase):
     result_entity_id: Mapped[str | None] = mapped_column(String)
     correlation_id: Mapped[str] = mapped_column(String, nullable=False)
     decided_at: Mapped[str] = mapped_column(String, nullable=False)
-    __table_args__ = (CheckConstraint("decision IN ('edited','approved','dismissed')"), CheckConstraint("draft_version_after>=draft_version_before"), Index("ai_review_decisions_draft", "draft_id", "decided_at"))
+    __table_args__ = (
+        CheckConstraint("decision IN ('edited','approved','dismissed')"),
+        CheckConstraint("draft_version_after>=draft_version_before"),
+        Index("ai_review_decisions_draft", "draft_id", "decided_at"),
+    )

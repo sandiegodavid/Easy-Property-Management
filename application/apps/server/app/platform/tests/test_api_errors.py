@@ -1,3 +1,5 @@
+from http import HTTPStatus
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
@@ -23,18 +25,22 @@ def _client() -> TestClient:
 def test_bounded_request_content_returns_global_413_problem() -> None:
     response = _client().post("/payload", json={"note": "long"})
 
-    assert response.status_code == 413
-    assert response.json() == {"detail": {
-        "code": "request_payload_too_large",
-        "message": "Request content exceeds an allowed limit.",
-    }}
+    assert response.status_code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+    assert response.json() == {
+        "detail": {
+            "code": "request_payload_too_large",
+            "message": "Request content exceeds an allowed limit.",
+        }
+    }
 
 
 def test_malformed_request_content_returns_global_422_problem() -> None:
     response = _client().post("/payload", json={"note": 1})
 
-    assert response.status_code == 422
-    assert response.json() == {"detail": {
-        "code": "request_validation",
-        "message": "Request validation failed.",
-    }}
+    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert response.json() == {
+        "detail": {
+            "code": "request_validation",
+            "message": "Request validation failed.",
+        }
+    }

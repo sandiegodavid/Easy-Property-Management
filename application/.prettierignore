@@ -1,0 +1,16 @@
+# Backend and local configuration have separate ownership and tooling.
+apps/server/
+database/
+config*.json
+.venv/
+.pytest_cache/
+.ruff_cache/
+**/__pycache__/
+
+# Build output and generated contracts are replaced by their owning tools.
+**/node_modules/
+**/dist/
+**/coverage/
+packages/contracts/src/generated/
+packages/contracts/openapi.json
+package-lock.json

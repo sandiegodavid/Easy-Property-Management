@@ -175,6 +175,4 @@ def ownership_context(ownerships: list[PropertyOwnership]) -> str:
 
 def active_on(ownership: PropertyOwnership, when: date) -> bool:
     day = when.isoformat()
-    return ownership.starts_on <= day and (
-        ownership.ends_on is None or ownership.ends_on > day
-    )
+    return ownership.starts_on <= day and (ownership.ends_on is None or ownership.ends_on > day)

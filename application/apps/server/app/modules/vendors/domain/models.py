@@ -19,10 +19,14 @@ class ProviderCategory:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "id": self.id, "displayName": self.display_name,
-            "normalizedName": self.normalized_name, "description": self.description,
-            "displayOrder": self.display_order, "createdAt": self.created_at,
-            "updatedAt": self.updated_at, "archivedAt": self.archived_at,
+            "id": self.id,
+            "displayName": self.display_name,
+            "normalizedName": self.normalized_name,
+            "description": self.description,
+            "displayOrder": self.display_order,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+            "archivedAt": self.archived_at,
             "archiveReason": self.archive_reason,
         }
 
@@ -41,9 +45,12 @@ class ProviderCategoryAssignment:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "id": self.id, "providerPartyId": self.provider_party_id,
-            "categoryId": self.category_id, "createdAt": self.created_at,
-            "updatedAt": self.updated_at, "archivedAt": self.archived_at,
+            "id": self.id,
+            "providerPartyId": self.provider_party_id,
+            "categoryId": self.category_id,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+            "archivedAt": self.archived_at,
             "archiveReason": self.archive_reason,
         }
 
@@ -82,9 +89,13 @@ class ProviderService:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "id": self.id, "partyId": self.party_id, "displayName": self.display_name,
-            "normalizedName": self.normalized_name, "createdAt": self.created_at,
-            "updatedAt": self.updated_at, "archivedAt": self.archived_at,
+            "id": self.id,
+            "partyId": self.party_id,
+            "displayName": self.display_name,
+            "normalizedName": self.normalized_name,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+            "archivedAt": self.archived_at,
         }
 
 
@@ -101,10 +112,14 @@ class ProviderServiceArea:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "id": self.id, "partyId": self.party_id, "displayName": self.display_name,
+            "id": self.id,
+            "partyId": self.party_id,
+            "displayName": self.display_name,
             "normalizedName": self.normalized_name,
-            "countryCode": self.country_code or None, "createdAt": self.created_at,
-            "updatedAt": self.updated_at, "archivedAt": self.archived_at,
+            "countryCode": self.country_code or None,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+            "archivedAt": self.archived_at,
         }
 
 
@@ -122,10 +137,15 @@ class ProviderWorkHistory:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "id": self.id, "partyId": self.party_id, "propertyId": self.property_id,
-            "performedOn": self.performed_on, "summary": self.summary,
-            "outcomeNotes": self.outcome_notes, "createdAt": self.created_at,
-            "updatedAt": self.updated_at, "archivedAt": self.archived_at,
+            "id": self.id,
+            "partyId": self.party_id,
+            "propertyId": self.property_id,
+            "performedOn": self.performed_on,
+            "summary": self.summary,
+            "outcomeNotes": self.outcome_notes,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+            "archivedAt": self.archived_at,
         }
 
 
@@ -145,11 +165,17 @@ class ProviderReference:
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "id": self.id, "partyId": self.party_id,
-            "referenceName": self.reference_name, "organizationName": self.organization_name,
-            "relationship": self.relationship, "email": self.email, "phone": self.phone,
-            "notes": self.notes, "createdAt": self.created_at,
-            "updatedAt": self.updated_at, "archivedAt": self.archived_at,
+            "id": self.id,
+            "partyId": self.party_id,
+            "referenceName": self.reference_name,
+            "organizationName": self.organization_name,
+            "relationship": self.relationship,
+            "email": self.email,
+            "phone": self.phone,
+            "notes": self.notes,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+            "archivedAt": self.archived_at,
         }
 
 

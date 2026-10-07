@@ -1,15 +1,22 @@
 """Portable values and fail-closed policies for governed AI work."""
+
 from __future__ import annotations
 
 import json
 import re
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import Any, Callable, Mapping, Protocol
+from typing import Any, Callable, Mapping
 from uuid import UUID
 
-_SECRET = re.compile(r"(?:access|refresh|client)?_?(?:token|secret|password|passphrase|api_?key|credential|account_?number)", re.I)
-_SECRET_VALUE = re.compile(r"(?:sk-[A-Za-z0-9_-]{16,}|(?:api[_ -]?key|token|password|account[_ -]?number)\s*[:=]\s*\S+|\b\d{8,19}\b)", re.I)
+_SECRET = re.compile(
+    r"(?:access|refresh|client)?_?(?:token|secret|password|passphrase|api_?key|credential|account_?number)",
+    re.I,
+)
+_SECRET_VALUE = re.compile(
+    r"(?:sk-[A-Za-z0-9_-]{16,}|(?:api[_ -]?key|token|password|account[_ -]?number)\s*[:=]\s*\S+|\b\d{8,19}\b)",
+    re.I,
+)
 
 
 class AiGovernanceError(RuntimeError):
@@ -30,6 +37,7 @@ class AiValidationError(AiGovernanceError):
 
 class AiCredentialConsistencyError(AiGovernanceError):
     """Credential-store compensation failed after a failed durable audit."""
+
     code = "ai_credential_repair_required"
 
 
@@ -66,7 +74,7 @@ class RedactionProfile:
             elif rule.mode == "truncate":
                 if not isinstance(value, str) or rule.limit is None:
                     raise AiValidationError("AI redaction truncation requires bounded text.")
-                result[key] = value[:rule.limit]
+                result[key] = value[: rule.limit]
             elif rule.mode == "transform" and rule.transformer is not None:
                 result[key] = rule.transformer(value)
             else:
@@ -78,22 +86,40 @@ class RedactionProfile:
 @dataclass(frozen=True)
 class ConfidenceContract:
     """Registered, bounded provenance for an optional AI confidence value."""
+
     labels: frozenset[str]
     calibration_source: str | None = None
     required_provenance_fields: frozenset[str] = frozenset()
     numeric_field: str = "score"
 
     def __post_init__(self) -> None:
-        if (not self.labels or any(not isinstance(label, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", label) for label in self.labels)
-                or (self.calibration_source is not None and (not isinstance(self.calibration_source, str)
-                    or not self.calibration_source.strip() or len(self.calibration_source) > 120))):
-            raise ValueError("AI confidence contracts require bounded registered labels and provenance.")
+        if (
+            not self.labels
+            or any(
+                not isinstance(label, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", label)
+                for label in self.labels
+            )
+            or (
+                self.calibration_source is not None
+                and (
+                    not isinstance(self.calibration_source, str)
+                    or not self.calibration_source.strip()
+                    or len(self.calibration_source) > 120
+                )
+            )
+        ):
+            raise ValueError(
+                "AI confidence contracts require bounded registered labels and provenance."
+            )
         if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", self.numeric_field):
             raise ValueError("AI confidence numeric fields must be bounded codes.")
         if self.numeric_field in {"label", "calibration_source"}:
             raise ValueError("AI confidence numeric fields cannot use reserved names.")
-        reserved={"label", self.numeric_field, "calibration_source"}
-        if any(not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", field) or field in reserved for field in self.required_provenance_fields):
+        reserved = {"label", self.numeric_field, "calibration_source"}
+        if any(
+            not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", field) or field in reserved
+            for field in self.required_provenance_fields
+        ):
             raise ValueError("AI confidence provenance fields must be bounded codes.")
 
     def validate(self, confidence: Mapping[str, Any] | None) -> None:
@@ -101,17 +127,24 @@ class ConfidenceContract:
             return
         numeric = self.calibration_source is not None
         fields = {"label", *self.required_provenance_fields}
-        if numeric: fields |= {self.numeric_field, "calibration_source"}
+        if numeric:
+            fields |= {self.numeric_field, "calibration_source"}
         if not isinstance(confidence, Mapping) or set(confidence) != fields:
-            raise AiValidationError("AI confidence does not match its registered provenance contract.")
+            raise AiValidationError(
+                "AI confidence does not match its registered provenance contract."
+            )
         if confidence["label"] not in self.labels:
             raise AiValidationError("AI confidence provenance is not registered for this action.")
         if numeric:
             if confidence["calibration_source"] != self.calibration_source:
-                raise AiValidationError("AI confidence provenance is not registered for this action.")
+                raise AiValidationError(
+                    "AI confidence provenance is not registered for this action."
+                )
             score = confidence[self.numeric_field]
             if type(score) not in {int, float} or not 0 <= score <= 1:
-                raise AiValidationError("AI confidence score must be a number from zero through one.")
+                raise AiValidationError(
+                    "AI confidence score must be a number from zero through one."
+                )
         for field in self.required_provenance_fields:
             value = confidence[field]
             if not isinstance(value, str) or not value.strip() or len(value) > 120:
@@ -120,9 +153,20 @@ class ConfidenceContract:
 
 def qualified_model_identity(adapter_id: str, adapter_version: str, model_identifier: str) -> str:
     """Stable provider/version-qualified identifier persisted in action allowlists."""
-    if any(not isinstance(value, str) or not value or len(value) > 80 or any(marker in value for marker in "@:") for value in (adapter_id, adapter_version)):
+    if any(
+        not isinstance(value, str)
+        or not value
+        or len(value) > 80
+        or any(marker in value for marker in "@:")
+        for value in (adapter_id, adapter_version)
+    ):
         raise AiValidationError("AI model identity is invalid.")
-    if not isinstance(model_identifier, str) or not model_identifier or len(model_identifier) > 240 or any(character.isspace() for character in model_identifier):
+    if (
+        not isinstance(model_identifier, str)
+        or not model_identifier
+        or len(model_identifier) > 240
+        or any(character.isspace() for character in model_identifier)
+    ):
         raise AiValidationError("AI model identity is invalid.")
     return f"{adapter_id}@{adapter_version}:{model_identifier}"
 
@@ -160,12 +204,26 @@ class AiActionDefinition:
             raise ValueError("AI action types must be bounded codes.")
         if self.approval_effect not in {"create", "update", "advisory_only"}:
             raise ValueError("Unsupported AI approval effect.")
-        if min(self.max_provider_request_bytes, self.max_prompt_tokens, self.max_completion_tokens, self.max_runs_per_utc_day) < 1:
+        if (
+            min(
+                self.max_provider_request_bytes,
+                self.max_prompt_tokens,
+                self.max_completion_tokens,
+                self.max_runs_per_utc_day,
+            )
+            < 1
+        ):
             raise ValueError("AI action limits must be positive.")
         if not self.required_input_modalities:
             raise ValueError("AI actions must declare at least one input modality.")
-        if any(not isinstance(identity, str) or not re.fullmatch(r"[^@:\s]{1,80}@[^@:\s]{1,80}:\S{1,240}", identity) for identity in self.allowed_model_identities):
-            raise ValueError("AI action model allowlists must use provider/version-qualified identities.")
+        if any(
+            not isinstance(identity, str)
+            or not re.fullmatch(r"[^@:\s]{1,80}@[^@:\s]{1,80}:\S{1,240}", identity)
+            for identity in self.allowed_model_identities
+        ):
+            raise ValueError(
+                "AI action model allowlists must use provider/version-qualified identities."
+            )
 
     def validate_confidence(self, confidence: Mapping[str, Any] | None) -> None:
         if self.confidence_contract is None:
@@ -182,11 +240,16 @@ def validate_provider_metadata(
 ) -> tuple[int | None, int | None, str | None]:
     """Keep provider-provided metadata bounded and safe to retain."""
     for value in (prompt_tokens, completion_tokens):
-        if value is not None and (type(value) is not int or not 0 <= value <= 9_223_372_036_854_775_807):
+        if value is not None and (
+            type(value) is not int or not 0 <= value <= 9_223_372_036_854_775_807
+        ):
             raise AiValidationError("AI provider usage metadata is invalid.")
     if provider_request_id is not None:
-        if (not isinstance(provider_request_id, str) or not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", provider_request_id)
-                or _SECRET_VALUE.search(provider_request_id)):
+        if (
+            not isinstance(provider_request_id, str)
+            or not re.fullmatch(r"[A-Za-z0-9._:-]{1,128}", provider_request_id)
+            or _SECRET_VALUE.search(provider_request_id)
+        ):
             raise AiValidationError("AI provider request metadata is invalid.")
     return prompt_tokens, completion_tokens, provider_request_id
 
@@ -228,7 +291,9 @@ class RedactionProfileRegistry:
 def canonical_json(value: Any, *, maximum_bytes: int | None = None) -> str:
     _reject_secret(value, "$")
     try:
-        result = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+        result = json.dumps(
+            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        )
     except (TypeError, ValueError) as error:
         raise AiValidationError("AI values must be canonical JSON.") from error
     if maximum_bytes is not None and len(result.encode()) > maximum_bytes:

@@ -38,10 +38,18 @@ class PartyContactMethod:
     archived_at: str | None
 
     def to_dict(self) -> dict[str, object]:
-        return {"id": self.id, "partyId": self.party_id, "methodKind": self.method_kind,
-                "displayValue": self.display_value, "extension": self.extension,
-                "label": self.label, "status": self.status, "createdAt": self.created_at,
-                "updatedAt": self.updated_at, "archivedAt": self.archived_at}
+        return {
+            "id": self.id,
+            "partyId": self.party_id,
+            "methodKind": self.method_kind,
+            "displayValue": self.display_value,
+            "extension": self.extension,
+            "label": self.label,
+            "status": self.status,
+            "createdAt": self.created_at,
+            "updatedAt": self.updated_at,
+            "archivedAt": self.archived_at,
+        }
 
     def to_audit_dict(self) -> dict[str, object]:
         return {**self.to_dict(), "normalizedValue": self.normalized_value}

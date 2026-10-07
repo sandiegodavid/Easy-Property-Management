@@ -46,10 +46,11 @@ class SourceTimelineChangeSet:
                 "source_id": item.source_id,
                 "note": item.note,
                 "superseded_by": (
-                    None if item.superseded_by_id is None else
-                    {"insert_index": insert_positions[item.superseded_by_id]}
-                    if item.superseded_by_id in insert_positions else
-                    {"period_id": item.superseded_by_id}
+                    None
+                    if item.superseded_by_id is None
+                    else {"insert_index": insert_positions[item.superseded_by_id]}
+                    if item.superseded_by_id in insert_positions
+                    else {"period_id": item.superseded_by_id}
                 ),
             }
             if replacement:
@@ -77,7 +78,9 @@ class SourceTimelineStore(Protocol):
     def property(self, connection: Any, property_id: str): ...
     def occupancy_periods(self, connection: Any, space_id: str) -> list[SpaceOccupancyPeriod]: ...
     def availability(self, connection: Any, space_id: str): ...
-    def status_operation(self, connection: Any, idempotency_key: str) -> dict[str, object] | None: ...
+    def status_operation(
+        self, connection: Any, idempotency_key: str
+    ) -> dict[str, object] | None: ...
     def replace_occupancy_period(self, connection: Any, period: SpaceOccupancyPeriod) -> None: ...
     def insert_occupancy_period(self, connection: Any, period: SpaceOccupancyPeriod) -> None: ...
     def replace_space(self, connection: Any, space: Space) -> None: ...
@@ -88,14 +91,19 @@ class PortfolioSourceTimelineService:
     """Applies a source transition in one caller-owned transaction."""
 
     def apply(
-        self, store: SourceTimelineStore, connection: Any, changes: SourceTimelineChangeSet,
+        self,
+        store: SourceTimelineStore,
+        connection: Any,
+        changes: SourceTimelineChangeSet,
     ) -> dict[str, object]:
         self._validate_request(changes)
         fingerprint = changes.fingerprint()
         existing = store.status_operation(connection, changes.idempotency_key)
         if existing is not None:
-            if (existing["request_fingerprint"] != fingerprint
-                    or existing["space_id"] != changes.space_id):
+            if (
+                existing["request_fingerprint"] != fingerprint
+                or existing["space_id"] != changes.space_id
+            ):
                 raise PortfolioConflictError(
                     "Portfolio source idempotency key was reused with a different request."
                 )
@@ -112,14 +120,19 @@ class PortfolioSourceTimelineService:
             raise PortfolioConflictError(
                 "Portfolio source status revision is stale.",
                 current_status=space_status_snapshot(
-                    space, property, list(current.values()), store.availability(connection, space.id),
+                    space,
+                    property,
+                    list(current.values()),
+                    store.availability(connection, space.id),
                     datetime.fromisoformat(changes.committed_at),
                 ),
             )
         self._validate_changes(current, changes)
 
         inserted_ids = {item.id for item in changes.inserts}
-        linked = tuple(item for item in changes.replacements if item.superseded_by_id in inserted_ids)
+        linked = tuple(
+            item for item in changes.replacements if item.superseded_by_id in inserted_ids
+        )
         for item in linked:
             store.replace_occupancy_period(connection, replace(item, superseded_by_id=None))
         for item in changes.replacements:
@@ -130,7 +143,9 @@ class PortfolioSourceTimelineService:
         for item in linked:
             store.replace_occupancy_period(connection, item)
 
-        revised = replace(space, status_revision=space.status_revision + 1, updated_at=changes.committed_at)
+        revised = replace(
+            space, status_revision=space.status_revision + 1, updated_at=changes.committed_at
+        )
         store.replace_space(connection, revised)
         operation_id = str(uuid4())
         result = {
@@ -144,25 +159,32 @@ class PortfolioSourceTimelineService:
             "correlationId": changes.correlation_id,
             "requestContext": dict(changes.request_context),
         }
-        store.insert_status_operation(connection, {
-            "id": operation_id,
-            "space_id": changes.space_id,
-            "idempotency_key": changes.idempotency_key,
-            "request_fingerprint": fingerprint,
-            "result_revision": revised.status_revision,
-            "result_snapshot": dumps(result, sort_keys=True),
-            "created_at": changes.committed_at,
-        })
+        store.insert_status_operation(
+            connection,
+            {
+                "id": operation_id,
+                "space_id": changes.space_id,
+                "idempotency_key": changes.idempotency_key,
+                "request_fingerprint": fingerprint,
+                "result_revision": revised.status_revision,
+                "result_snapshot": dumps(result, sort_keys=True),
+                "created_at": changes.committed_at,
+            },
+        )
         return result
 
     @staticmethod
     def _validate_request(changes: SourceTimelineChangeSet) -> None:
         if type(changes.expected_revision) is not int or changes.expected_revision < 0:
             raise PortfolioConflictError("Expected revision must be a non-negative integer.")
-        if (not isinstance(changes.idempotency_key, str)
-                or not changes.idempotency_key.strip()
-                or len(changes.idempotency_key) > 200):
-            raise PortfolioConflictError("Idempotency key must be a nonblank value of at most 200 characters.")
+        if (
+            not isinstance(changes.idempotency_key, str)
+            or not changes.idempotency_key.strip()
+            or len(changes.idempotency_key) > 200
+        ):
+            raise PortfolioConflictError(
+                "Idempotency key must be a nonblank value of at most 200 characters."
+            )
         if not isinstance(changes.source_kind, str) or not changes.source_kind.strip():
             raise PortfolioConflictError("Source kind is required.")
         if not isinstance(changes.source_id, str) or not changes.source_id.strip():
@@ -170,42 +192,62 @@ class PortfolioSourceTimelineService:
 
     @staticmethod
     def _validate_changes(
-        current: dict[str, SpaceOccupancyPeriod], changes: SourceTimelineChangeSet,
+        current: dict[str, SpaceOccupancyPeriod],
+        changes: SourceTimelineChangeSet,
     ) -> None:
         replacement_ids = {item.id for item in changes.replacements}
         inserted_ids = {item.id for item in changes.inserts}
-        if len(replacement_ids) != len(changes.replacements) or len(inserted_ids) != len(changes.inserts):
-            raise PortfolioConflictError("A source timeline change cannot contain duplicate periods.")
+        if len(replacement_ids) != len(changes.replacements) or len(inserted_ids) != len(
+            changes.inserts
+        ):
+            raise PortfolioConflictError(
+                "A source timeline change cannot contain duplicate periods."
+            )
         if replacement_ids & inserted_ids:
-            raise PortfolioConflictError("A source timeline period cannot be both replaced and inserted.")
+            raise PortfolioConflictError(
+                "A source timeline period cannot be both replaced and inserted."
+            )
         for item in changes.replacements:
             previous = current.get(item.id)
             if previous is None or item.space_id != changes.space_id:
                 raise PortfolioConflictError("A source timeline replacement no longer exists.")
-            if ((previous.source_kind, previous.source_id) != (changes.source_kind, changes.source_id)
-                    and item.id not in changes.authorized_replacement_ids):
+            if (previous.source_kind, previous.source_id) != (
+                changes.source_kind,
+                changes.source_id,
+            ) and item.id not in changes.authorized_replacement_ids:
                 raise PortfolioConflictError("Another source owns an affected occupancy period.")
             if (item.source_kind, item.source_id) != (previous.source_kind, previous.source_id):
-                raise PortfolioConflictError("A source timeline change cannot transfer period ownership.")
+                raise PortfolioConflictError(
+                    "A source timeline change cannot transfer period ownership."
+                )
             current[item.id] = item
         for item in changes.inserts:
             if item.id in current or item.space_id != changes.space_id:
                 raise PortfolioConflictError("A source timeline insert is invalid.")
             if (item.source_kind, item.source_id) != (changes.source_kind, changes.source_id):
-                raise PortfolioConflictError("A source action can only create its own occupancy periods.")
+                raise PortfolioConflictError(
+                    "A source action can only create its own occupancy periods."
+                )
             current[item.id] = item
         PortfolioSourceTimelineService._validate_timeline(current.values())
 
     @staticmethod
     def _validate_timeline(periods: Iterable[SpaceOccupancyPeriod]) -> None:
-        valid = sorted((item for item in periods if item.record_state == "valid"), key=lambda item: (item.starts_on, item.id))
+        valid = sorted(
+            (item for item in periods if item.record_state == "valid"),
+            key=lambda item: (item.starts_on, item.id),
+        )
         open_period = False
         previous_end = None
         for item in valid:
             if item.ends_on is not None and item.ends_on <= item.starts_on:
-                raise PortfolioConflictError("The proposed occupancy timeline contains an invalid period.")
+                raise PortfolioConflictError(
+                    "The proposed occupancy timeline contains an invalid period."
+                )
             if open_period or (previous_end is not None and item.starts_on < previous_end):
-                raise PortfolioConflictError("The proposed occupancy timeline contains overlapping periods.")
+                raise PortfolioConflictError(
+                    "The proposed occupancy timeline contains overlapping periods."
+                )
             if item.ends_on is None:
                 open_period = True
                 previous_end = None

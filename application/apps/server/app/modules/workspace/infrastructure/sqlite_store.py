@@ -29,7 +29,11 @@ class SQLiteWorkspaceStore:
                 existing = connection.execute(
                     "SELECT workspace_id, format_version, created_at FROM workspace_metadata WHERE singleton = 1"
                 ).fetchone()
-                expected = (manifest.workspace_id, manifest.format_version, manifest.created_at.isoformat())
+                expected = (
+                    manifest.workspace_id,
+                    manifest.format_version,
+                    manifest.created_at.isoformat(),
+                )
                 if existing is None:
                     connection.execute(
                         "INSERT INTO workspace_metadata (singleton, workspace_id, format_version, created_at) "
@@ -37,7 +41,9 @@ class SQLiteWorkspaceStore:
                         expected,
                     )
                     if self.audit_recorder is None:
-                        raise WorkspaceDatabaseError("Workspace identity auditing is not configured.")
+                        raise WorkspaceDatabaseError(
+                            "Workspace identity auditing is not configured."
+                        )
                     self.audit_recorder.record_change(
                         connection,
                         entity_type="workspace",
@@ -49,10 +55,14 @@ class SQLiteWorkspaceStore:
                         reason="workspace_initialized",
                     )
                 elif existing != expected:
-                    raise WorkspaceDatabaseError("Workspace database identity does not match its manifest.")
+                    raise WorkspaceDatabaseError(
+                        "Workspace database identity does not match its manifest."
+                    )
                 connection.commit()
         except sqlite3.Error as error:
-            raise WorkspaceDatabaseError(f"Unable to persist SQLite workspace identity: {error}") from error
+            raise WorkspaceDatabaseError(
+                f"Unable to persist SQLite workspace identity: {error}"
+            ) from error
 
     def verify(self, manifest: WorkspaceManifest, *, integrity_check: bool = False) -> None:
         self._reject_symlink()
@@ -61,12 +71,18 @@ class SQLiteWorkspaceStore:
         database_uri = f"{self.database_path.resolve().as_uri()}?mode=ro"
         try:
             with closing(sqlite3.connect(database_uri, uri=True)) as connection:
-                integrity = connection.execute("PRAGMA integrity_check").fetchone() if integrity_check else ("ok",)
+                integrity = (
+                    connection.execute("PRAGMA integrity_check").fetchone()
+                    if integrity_check
+                    else ("ok",)
+                )
                 metadata = connection.execute(
                     "SELECT workspace_id, format_version, created_at FROM workspace_metadata WHERE singleton = 1"
                 ).fetchone()
         except sqlite3.Error as error:
-            raise WorkspaceDatabaseError(f"Unable to validate SQLite workspace database: {error}") from error
+            raise WorkspaceDatabaseError(
+                f"Unable to validate SQLite workspace database: {error}"
+            ) from error
         if integrity != ("ok",):
             raise WorkspaceDatabaseError("Workspace SQLite integrity check failed.")
         expected = (manifest.workspace_id, manifest.format_version, manifest.created_at.isoformat())

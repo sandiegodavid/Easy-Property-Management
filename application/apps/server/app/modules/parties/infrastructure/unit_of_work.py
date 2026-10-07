@@ -22,9 +22,13 @@ Result = TypeVar("Result")
 
 
 class SQLitePartyUnitOfWork:
-    def __init__(self, database, recorder: AuditRecorder,
-                 contact_reference_guards: tuple[ContactReferenceGuard, ...] = (),
-                 role_activity_guards: tuple[PartyRoleActivityGuard, ...] = ()) -> None:
+    def __init__(
+        self,
+        database,
+        recorder: AuditRecorder,
+        contact_reference_guards: tuple[ContactReferenceGuard, ...] = (),
+        role_activity_guards: tuple[PartyRoleActivityGuard, ...] = (),
+    ) -> None:
         self.engine = create_sqlite_engine(database)
         self.recorder = recorder
         self.contact_reference_guards = contact_reference_guards
@@ -32,16 +36,26 @@ class SQLitePartyUnitOfWork:
 
     def write(self, operation: Callable[[PartyTransaction], Result]) -> Result:
         with immediate_transaction(self.engine) as connection:
-            return operation(_Transaction(connection, self.recorder, self.contact_reference_guards, self.role_activity_guards))
+            return operation(
+                _Transaction(
+                    connection,
+                    self.recorder,
+                    self.contact_reference_guards,
+                    self.role_activity_guards,
+                )
+            )
 
     def methods(self, party_id: str) -> tuple[Party, list[PartyContactMethod]] | None:
         with Session(self.engine) as session:
             party = session.get(PartyModel, party_id)
             if party is None:
                 return None
-            methods = session.query(PartyContactMethodModel).filter_by(party_id=party_id).order_by(
-                PartyContactMethodModel.created_at
-            ).all()
+            methods = (
+                session.query(PartyContactMethodModel)
+                .filter_by(party_id=party_id)
+                .order_by(PartyContactMethodModel.created_at)
+                .all()
+            )
             return _party(party), [_method(item) for item in methods]
 
 
@@ -52,13 +66,20 @@ class SQLitePartyOperations(PartyTransactionOperations):
         self.engine = create_sqlite_engine(database)
 
     def party(self, connection, party_id):
-        row = connection.execute(
-            PartyModel.__table__.select().where(PartyModel.id == party_id)
-        ).mappings().first()
+        row = (
+            connection.execute(PartyModel.__table__.select().where(PartyModel.id == party_id))
+            .mappings()
+            .first()
+        )
         return Party(**dict(row)) if row else None
 
     def exists(self, connection, party_id):
-        return connection.execute(PartyModel.__table__.select().where(PartyModel.id == party_id)).first() is not None
+        return (
+            connection.execute(
+                PartyModel.__table__.select().where(PartyModel.id == party_id)
+            ).first()
+            is not None
+        )
 
     def party_map(self, connection, party_ids):
         if not party_ids:
@@ -69,11 +90,15 @@ class SQLitePartyOperations(PartyTransactionOperations):
         return {row["id"]: Party(**dict(row)) for row in rows}
 
     def methods(self, connection, party_id):
-        rows = connection.execute(
-            PartyContactMethodModel.__table__.select()
-            .where(PartyContactMethodModel.party_id == party_id)
-            .order_by(PartyContactMethodModel.created_at)
-        ).mappings().all()
+        rows = (
+            connection.execute(
+                PartyContactMethodModel.__table__.select()
+                .where(PartyContactMethodModel.party_id == party_id)
+                .order_by(PartyContactMethodModel.created_at)
+            )
+            .mappings()
+            .all()
+        )
         return [PartyContactMethod(**dict(row)) for row in rows]
 
     def insert_party(self, connection, party):
@@ -113,9 +138,7 @@ class SQLitePartyOperations(PartyTransactionOperations):
         if not party_ids:
             return {}
         with Session(self.engine) as session:
-            rows = session.execute(
-                select(PartyModel).where(PartyModel.id.in_(party_ids))
-            ).scalars()
+            rows = session.execute(select(PartyModel).where(PartyModel.id.in_(party_ids))).scalars()
             return {row.id: _party(row) for row in rows}
 
     def methods_for_parties(self, party_ids):
@@ -143,14 +166,22 @@ class SQLitePartyOperations(PartyTransactionOperations):
                 contact_match = select(PartyContactMethodModel.party_id).where(
                     PartyContactMethodModel.status == "active",
                     or_(
-                        *(PartyContactMethodModel.display_value.ilike(pattern, escape="\\") for pattern in patterns),
-                        *(PartyContactMethodModel.normalized_value.ilike(pattern, escape="\\") for pattern in patterns),
+                        *(
+                            PartyContactMethodModel.display_value.ilike(pattern, escape="\\")
+                            for pattern in patterns
+                        ),
+                        *(
+                            PartyContactMethodModel.normalized_value.ilike(pattern, escape="\\")
+                            for pattern in patterns
+                        ),
                     ),
                 )
-                query = query.where(or_(
-                    PartyModel.display_name.ilike(like_contains_pattern(search), escape="\\"),
-                    PartyModel.id.in_(contact_match),
-                ))
+                query = query.where(
+                    or_(
+                        PartyModel.display_name.ilike(like_contains_pattern(search), escape="\\"),
+                        PartyModel.id.in_(contact_match),
+                    )
+                )
             return [_party(row) for row in session.execute(query).scalars()]
 
 
@@ -172,26 +203,36 @@ class SQLitePartyReadOperations:
 
 
 class _Transaction:
-    def __init__(self, connection: Any, recorder: AuditRecorder,
-                 guards: tuple[ContactReferenceGuard, ...],
-                 role_guards: tuple[PartyRoleActivityGuard, ...]) -> None:
+    def __init__(
+        self,
+        connection: Any,
+        recorder: AuditRecorder,
+        guards: tuple[ContactReferenceGuard, ...],
+        role_guards: tuple[PartyRoleActivityGuard, ...],
+    ) -> None:
         self.connection = connection
         self.recorder = recorder
         self.guards = guards
         self.role_guards = role_guards
 
     def party(self, party_id):
-        row = self.connection.execute(
-            PartyModel.__table__.select().where(PartyModel.id == party_id)
-        ).mappings().first()
+        row = (
+            self.connection.execute(PartyModel.__table__.select().where(PartyModel.id == party_id))
+            .mappings()
+            .first()
+        )
         return Party(**dict(row)) if row else None
 
     def methods(self, party_id):
-        rows = self.connection.execute(
-            PartyContactMethodModel.__table__.select()
-            .where(PartyContactMethodModel.party_id == party_id)
-            .order_by(PartyContactMethodModel.created_at)
-        ).mappings().all()
+        rows = (
+            self.connection.execute(
+                PartyContactMethodModel.__table__.select()
+                .where(PartyContactMethodModel.party_id == party_id)
+                .order_by(PartyContactMethodModel.created_at)
+            )
+            .mappings()
+            .all()
+        )
         return [PartyContactMethod(**dict(row)) for row in rows]
 
     def duplicate_party_ids(self, methods, limit):
@@ -200,12 +241,25 @@ class _Transaction:
         clauses = [
             (PartyContactMethodModel.method_kind == item.method_kind)
             & (PartyContactMethodModel.normalized_value == item.normalized_value)
-            & (PartyContactMethodModel.extension == item.extension if item.extension is not None else PartyContactMethodModel.extension.is_(None))
+            & (
+                PartyContactMethodModel.extension == item.extension
+                if item.extension is not None
+                else PartyContactMethodModel.extension.is_(None)
+            )
             for item in methods
         ]
-        query = select(PartyContactMethodModel.party_id).join(PartyModel).where(
-            PartyContactMethodModel.status == "active", PartyModel.archived_at.is_(None), or_(*clauses)
-        ).distinct().order_by(PartyModel.display_name, PartyContactMethodModel.party_id).limit(limit)
+        query = (
+            select(PartyContactMethodModel.party_id)
+            .join(PartyModel)
+            .where(
+                PartyContactMethodModel.status == "active",
+                PartyModel.archived_at.is_(None),
+                or_(*clauses),
+            )
+            .distinct()
+            .order_by(PartyModel.display_name, PartyContactMethodModel.party_id)
+            .limit(limit)
+        )
         return list(self.connection.execute(query).scalars())
 
     def insert_method(self, item):
@@ -220,7 +274,11 @@ class _Transaction:
         )
 
     def party_role_conflicts(self, party_id):
-        return [message for guard in self.role_guards if (message := guard.conflict(self.connection, party_id))]
+        return [
+            message
+            for guard in self.role_guards
+            if (message := guard.conflict(self.connection, party_id))
+        ]
 
     def replace_method(self, item):
         self.connection.execute(
@@ -229,13 +287,16 @@ class _Transaction:
             .values(**item.__dict__)
         )
 
-    def resolve_contact_references(self, party_id, method_id, resolutions,
-                                   timestamp, correlation_id):
+    def resolve_contact_references(
+        self, party_id, method_id, resolutions, timestamp, correlation_id
+    ):
         consumed = []
         for guard in self.guards:
-            consumed.extend(guard.resolve_before_archive(
-                self.connection, party_id, method_id, resolutions, timestamp, correlation_id
-            ))
+            consumed.extend(
+                guard.resolve_before_archive(
+                    self.connection, party_id, method_id, resolutions, timestamp, correlation_id
+                )
+            )
         return tuple(consumed)
 
     def record_change(self, **change):
@@ -247,6 +308,6 @@ def _party(row) -> Party:
 
 
 def _method(row) -> PartyContactMethod:
-    return PartyContactMethod(**{
-        field: getattr(row, field) for field in PartyContactMethod.__dataclass_fields__
-    })
+    return PartyContactMethod(
+        **{field: getattr(row, field) for field in PartyContactMethod.__dataclass_fields__}
+    )

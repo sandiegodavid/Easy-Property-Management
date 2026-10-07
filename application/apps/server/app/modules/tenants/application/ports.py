@@ -1,8 +1,8 @@
 """Transaction ports for tenant profile and atomic tenant creation changes."""
+
 from collections.abc import Callable
 from typing import Any, Protocol, TypeVar
 
-from app.modules.parties.application.ports import PartyReadOperations, PartyTransactionOperations
 from app.modules.parties.domain.models import Party, PartyContactMethod
 from app.modules.tenants.domain.models import TenantProfile
 
@@ -11,6 +11,7 @@ Result = TypeVar("Result")
 
 class LeaseParticipationGuard(Protocol):
     def has_open_participation(self, connection: Any, party_id: str, today: str) -> bool: ...
+
 
 class TenantTransaction(Protocol):
     def party(self, party_id: str) -> Party | None: ...
@@ -22,9 +23,24 @@ class TenantTransaction(Protocol):
     def insert_profile(self, profile: TenantProfile) -> None: ...
     def replace_profile(self, profile: TenantProfile) -> None: ...
     def insert_method(self, method: PartyContactMethod) -> None: ...
-    def record_change(self, *, entity_type: str, entity_id: str, action: str, before: dict[str, Any] | None, after: dict[str, Any] | None, reason: str, correlation_id: str) -> None: ...
+    def record_change(
+        self,
+        *,
+        entity_type: str,
+        entity_id: str,
+        action: str,
+        before: dict[str, Any] | None,
+        after: dict[str, Any] | None,
+        reason: str,
+        correlation_id: str,
+    ) -> None: ...
+
 
 class TenantUnitOfWork(Protocol):
     def write(self, operation: Callable[[TenantTransaction], Result]) -> Result: ...
-    def get(self, party_id: str) -> tuple[Party, TenantProfile, list[PartyContactMethod]] | None: ...
-    def list(self, *, archive_state: str, search: str | None) -> list[tuple[Party, TenantProfile, list[PartyContactMethod]]]: ...
+    def get(
+        self, party_id: str
+    ) -> tuple[Party, TenantProfile, list[PartyContactMethod]] | None: ...
+    def list(
+        self, *, archive_state: str, search: str | None
+    ) -> list[tuple[Party, TenantProfile, list[PartyContactMethod]]]: ...

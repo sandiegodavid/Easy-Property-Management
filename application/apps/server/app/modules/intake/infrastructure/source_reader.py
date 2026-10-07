@@ -1,4 +1,5 @@
 """Consumer-neutral, connection-owned reads of retained Intake evidence."""
+
 from __future__ import annotations
 
 from typing import Any, Collection, Mapping
@@ -29,14 +30,18 @@ class SQLiteIntakeSourceReader:
         consumers can make their own policy decisions without importing Intake
         persistence models or inheriting an HTTP-shaped response.
         """
-        row = connection.execute(
-            select(
-                IntakeSourceModel.id,
-                IntakeSourceModel.technical_status,
-                IntakeSourceModel.current_revision_id,
-                IntakeSourceModel.superseded_by_source_id,
-            ).where(IntakeSourceModel.id == source_id),
-        ).mappings().first()
+        row = (
+            connection.execute(
+                select(
+                    IntakeSourceModel.id,
+                    IntakeSourceModel.technical_status,
+                    IntakeSourceModel.current_revision_id,
+                    IntakeSourceModel.superseded_by_source_id,
+                ).where(IntakeSourceModel.id == source_id),
+            )
+            .mappings()
+            .first()
+        )
         return None if row is None else dict(row)
 
     def source_projection(self, connection: Any, source_id: str) -> dict[str, object] | None:
@@ -106,27 +111,31 @@ class SQLiteIntakeSourceReader:
             .group_by(IntakeRevisionFileLinkModel.revision_id)
             .subquery()
         )
-        row = connection.execute(
-            select(
-                IntakeSourceModel,
-                IntakeEvidenceRevisionModel.id.label("revision_id"),
-                IntakeEvidenceRevisionModel.revision_number,
-                IntakeEvidenceRevisionModel.revision_kind,
-                IntakeEvidenceRevisionModel.content_fingerprint,
-                IntakeEvidenceRevisionModel.correction_reason,
-                IntakeEvidenceRevisionModel.created_at.label("revision_created_at"),
-                func.coalesce(counts.c.attachment_count, 0).label("attachment_count"),
+        row = (
+            connection.execute(
+                select(
+                    IntakeSourceModel,
+                    IntakeEvidenceRevisionModel.id.label("revision_id"),
+                    IntakeEvidenceRevisionModel.revision_number,
+                    IntakeEvidenceRevisionModel.revision_kind,
+                    IntakeEvidenceRevisionModel.content_fingerprint,
+                    IntakeEvidenceRevisionModel.correction_reason,
+                    IntakeEvidenceRevisionModel.created_at.label("revision_created_at"),
+                    func.coalesce(counts.c.attachment_count, 0).label("attachment_count"),
+                )
+                .join(
+                    IntakeEvidenceRevisionModel,
+                    IntakeEvidenceRevisionModel.source_id == IntakeSourceModel.id,
+                )
+                .outerjoin(counts, counts.c.revision_id == IntakeEvidenceRevisionModel.id)
+                .where(
+                    IntakeSourceModel.id == source_id,
+                    IntakeEvidenceRevisionModel.id == revision_id,
+                ),
             )
-            .join(
-                IntakeEvidenceRevisionModel,
-                IntakeEvidenceRevisionModel.source_id == IntakeSourceModel.id,
-            )
-            .outerjoin(counts, counts.c.revision_id == IntakeEvidenceRevisionModel.id)
-            .where(
-                IntakeSourceModel.id == source_id,
-                IntakeEvidenceRevisionModel.id == revision_id,
-            ),
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
         if row is None:
             return None
         return {

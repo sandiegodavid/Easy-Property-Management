@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from app.platform.api_errors import domain_problem, workspace_unavailable
@@ -50,10 +50,9 @@ class ProfilePatchRequest(Contract):
     notes: str | None = Field(None, max_length=4000)
 
     def command(self) -> TenantProfilePatchCommand:
-        return TenantProfilePatchCommand.from_mapping({
-            field: getattr(self, field)
-            for field in self.model_fields_set
-        })
+        return TenantProfilePatchCommand.from_mapping(
+            {field: getattr(self, field) for field in self.model_fields_set}
+        )
 
 
 class ConfirmationRequest(Contract):
@@ -118,7 +117,12 @@ def build_router(service: TenantService, runtime: WorkspaceRuntime) -> APIRouter
         except TenantNotFoundError as error:
             raise domain_problem(error, status_code=404, code="tenant_not_found") from error
         except PossibleDuplicatePartyError as error:
-            raise domain_problem(error, status_code=409, code="possible_duplicate_party", candidatePartyIds=error.candidate_party_ids) from error
+            raise domain_problem(
+                error,
+                status_code=409,
+                code="possible_duplicate_party",
+                candidatePartyIds=error.candidate_party_ids,
+            ) from error
         except TenantConflictError as error:
             raise domain_problem(error, status_code=409, code="tenant_conflict") from error
         except TenantError as error:
@@ -126,28 +130,45 @@ def build_router(service: TenantService, runtime: WorkspaceRuntime) -> APIRouter
         except PartyValidationError as error:
             raise domain_problem(error, status_code=400, code="tenant_validation") from error
 
-    @router.post("", status_code=status.HTTP_201_CREATED, response_model=TenantResponse,
-                 responses={409: {"model": PossibleDuplicateResponse}})
+    @router.post(
+        "",
+        status_code=status.HTTP_201_CREATED,
+        response_model=TenantResponse,
+        responses={409: {"model": PossibleDuplicateResponse}},
+    )
     def create(data: TenantCreateRequest):
         ready(True)
         from app.modules.parties.application.service import ContactMethodCommand
-        return invoke(lambda: service.create(TenantCreateCommand(
-            party_kind=data.partyKind,
-            display_name=data.displayName,
-            contacts=tuple(ContactMethodCommand(item.methodKind, item.value, item.extension, item.label)
-                           for item in data.contacts),
-            notes=data.notes,
-            do_not_contact=data.doNotContact,
-            confirmed_new_party=data.confirmedNewParty,
-        )))
 
-    @router.post("/from-party/{party_id}", status_code=status.HTTP_201_CREATED, response_model=TenantResponse)
+        return invoke(
+            lambda: service.create(
+                TenantCreateCommand(
+                    party_kind=data.partyKind,
+                    display_name=data.displayName,
+                    contacts=tuple(
+                        ContactMethodCommand(
+                            item.methodKind, item.value, item.extension, item.label
+                        )
+                        for item in data.contacts
+                    ),
+                    notes=data.notes,
+                    do_not_contact=data.doNotContact,
+                    confirmed_new_party=data.confirmedNewParty,
+                )
+            )
+        )
+
+    @router.post(
+        "/from-party/{party_id}", status_code=status.HTTP_201_CREATED, response_model=TenantResponse
+    )
     def designate(party_id: str, data: DesignateRequest):
         ready(True)
         return invoke(lambda: service.designate(party_id, notes=data.notes))
 
     @router.get("", response_model=list[TenantResponse])
-    def list_tenants(archiveState: Literal["active", "archived", "all"] = "active", search: str | None = None):
+    def list_tenants(
+        archiveState: Literal["active", "archived", "all"] = "active", search: str | None = None
+    ):
         ready()
         return invoke(lambda: service.list(archive_state=archiveState, search=search))
 

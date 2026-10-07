@@ -1,4 +1,5 @@
 """SQLAlchemy-owned FILE-001 schema."""
+
 from __future__ import annotations
 
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, text
@@ -12,10 +13,13 @@ class FileRecordModel(LocalBase):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     original_name: Mapped[str] = mapped_column(String, nullable=False)
     media_type: Mapped[str] = mapped_column(String, nullable=False)
-    size_bytes: Mapped[int] = mapped_column(Integer, CheckConstraint("size_bytes >= 0"), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(
+        Integer, CheckConstraint("size_bytes >= 0"), nullable=False
+    )
     content_sha256: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (Index("file_records_content", "content_sha256"),)
+
 
 class FileLinkModel(LocalBase):
     __tablename__ = "file_links"
@@ -28,9 +32,19 @@ class FileLinkModel(LocalBase):
     archived_at: Mapped[str | None] = mapped_column(String)
     archive_reason: Mapped[str | None] = mapped_column(String)
     __table_args__ = (
-        CheckConstraint("(archived_at IS NULL AND archive_reason IS NULL) OR (archived_at IS NOT NULL AND archive_reason IS NOT NULL AND length(trim(archive_reason)) BETWEEN 1 AND 1000)"),
+        CheckConstraint(
+            "(archived_at IS NULL AND archive_reason IS NULL) OR (archived_at IS NOT NULL AND archive_reason IS NOT NULL AND length(trim(archive_reason)) BETWEEN 1 AND 1000)"
+        ),
         Index("file_links_entity", "entity_type", "entity_id"),
-        Index("file_links_one_active_association", "file_id", "entity_type", "entity_id", "purpose", unique=True, sqlite_where=text("archived_at IS NULL")),
+        Index(
+            "file_links_one_active_association",
+            "file_id",
+            "entity_type",
+            "entity_id",
+            "purpose",
+            unique=True,
+            sqlite_where=text("archived_at IS NULL"),
+        ),
     )
 
 
@@ -48,8 +62,16 @@ class FileContentLocationModel(LocalBase):
     __table_args__ = (
         CheckConstraint("storage_provider IN ('local', 's3')"),
         CheckConstraint("storage_state IN ('available', 'missing', 'quarantined')"),
-        CheckConstraint("(storage_provider = 'local' AND local_relative_path IS NOT NULL AND s3_bucket IS NULL AND s3_object_key IS NULL AND s3_version_id IS NULL) OR (storage_provider = 's3' AND local_relative_path IS NULL AND s3_bucket IS NOT NULL AND s3_object_key IS NOT NULL AND s3_version_id IS NOT NULL)"),
-        Index("file_content_locations_provider", "storage_provider", "local_relative_path", "s3_bucket", "s3_object_key"),
+        CheckConstraint(
+            "(storage_provider = 'local' AND local_relative_path IS NOT NULL AND s3_bucket IS NULL AND s3_object_key IS NULL AND s3_version_id IS NULL) OR (storage_provider = 's3' AND local_relative_path IS NULL AND s3_bucket IS NOT NULL AND s3_object_key IS NOT NULL AND s3_version_id IS NOT NULL)"
+        ),
+        Index(
+            "file_content_locations_provider",
+            "storage_provider",
+            "local_relative_path",
+            "s3_bucket",
+            "s3_object_key",
+        ),
     )
 
 

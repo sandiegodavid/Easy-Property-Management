@@ -14,7 +14,11 @@ from pathlib import Path
 
 from app.modules.workspace.application.backup_models import BackupError, BackupResult, PackageType
 from app.modules.workspace.application.backup_policy import secure_directory, secure_file
-from app.modules.workspace.application.service import WorkspaceError, WorkspacePaths, WorkspaceService
+from app.modules.workspace.application.service import (
+    WorkspaceError,
+    WorkspacePaths,
+    WorkspaceService,
+)
 from app.modules.workspace.domain.models import WorkspaceManifest
 from app.modules.workspace.infrastructure.encrypted_archive import (
     APPLICATION_VERSION,
@@ -36,7 +40,11 @@ RemoteMaterializer = Callable[[str, str, str | None, Path, str, int], None]
 
 
 class WorkspaceArchiveService:
-    def __init__(self, workspace_service: WorkspaceService, remote_materializer: RemoteMaterializer | None = None) -> None:
+    def __init__(
+        self,
+        workspace_service: WorkspaceService,
+        remote_materializer: RemoteMaterializer | None = None,
+    ) -> None:
         self.workspace_service = workspace_service
         self.remote_materializer = remote_materializer
 
@@ -61,7 +69,9 @@ class WorkspaceArchiveService:
         manifest = validated_manifest or self.validate_workspace()
         archive_written = False
         try:
-            with tempfile.TemporaryDirectory(prefix="epm-package-", dir=self.paths.root.parent) as temporary_directory:
+            with tempfile.TemporaryDirectory(
+                prefix="epm-package-", dir=self.paths.root.parent
+            ) as temporary_directory:
                 root = Path(temporary_directory)
                 payload = root / "payload"
                 self._stage_live_workspace(payload)
@@ -96,14 +106,20 @@ class WorkspaceArchiveService:
             if archive_written:
                 output_path.unlink(missing_ok=True)
             raise
-        return BackupResult(archive_path=output_path, archive_contents=contents, package_type=package_type)
+        return BackupResult(
+            archive_path=output_path, archive_contents=contents, package_type=package_type
+        )
 
     def validate_archive(self, archive_path: Path, passphrase: str) -> ArchiveContents:
         try:
-            with tempfile.TemporaryDirectory(prefix="epm-archive-validation-") as temporary_directory:
+            with tempfile.TemporaryDirectory(
+                prefix="epm-archive-validation-"
+            ) as temporary_directory:
                 root = Path(temporary_directory)
                 zip_path = root / "payload.zip"
-                header = decrypt_archive_to_zip(archive_path.expanduser().resolve(), passphrase, zip_path)
+                header = decrypt_archive_to_zip(
+                    archive_path.expanduser().resolve(), passphrase, zip_path
+                )
                 contents = inspect_payload_zip(zip_path, header)
                 workspace_root = root / "workspace"
                 workspace_root.mkdir(mode=0o700)
@@ -113,12 +129,20 @@ class WorkspaceArchiveService:
         except (ArchiveError, BackupError, WorkspaceError, OSError, sqlite3.Error) as error:
             raise BackupError(f"Archive validation failed: {error}") from error
 
-    def validate_extracted_workspace(self, workspace_root: Path, contents: ArchiveContents) -> WorkspaceManifest:
-        extracted = [{**item, "path": f"workspace/{item['path']}"} for item in file_inventory(workspace_root)]
+    def validate_extracted_workspace(
+        self, workspace_root: Path, contents: ArchiveContents
+    ) -> WorkspaceManifest:
+        extracted = [
+            {**item, "path": f"workspace/{item['path']}"} for item in file_inventory(workspace_root)
+        ]
         if extracted != contents.manifest["files"]:
             raise BackupError("Restored files do not match the validated archive inventory.")
         self._create_runtime_directories(workspace_root)
-        service = WorkspaceService(LocalConfig(config_path=self.workspace_service.config.config_path, workspace_path=workspace_root))
+        service = WorkspaceService(
+            LocalConfig(
+                config_path=self.workspace_service.config.config_path, workspace_path=workspace_root
+            )
+        )
         try:
             manifest = service.open(integrity_check=True)
         except WorkspaceError as error:
@@ -132,8 +156,12 @@ class WorkspaceArchiveService:
 
     def _validate_managed_file_records(self, workspace_root: Path, *, allow_remote: bool) -> None:
         database = WorkspacePaths(workspace_root).database
-        with closing(sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro", uri=True)) as connection:
-            table = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='file_records'").fetchone()
+        with closing(
+            sqlite3.connect(f"{database.resolve().as_uri()}?mode=ro", uri=True)
+        ) as connection:
+            table = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='file_records'"
+            ).fetchone()
             if not table:
                 raise BackupError("Archive database is missing the required file_records table.")
             records = connection.execute(
@@ -146,23 +174,45 @@ class WorkspaceArchiveService:
                 raise BackupError("A managed file is missing its content location.")
         files_root = WorkspacePaths(workspace_root).files.resolve()
         expected_paths: set[Path] = set()
-        for storage_provider, storage_state, relative_path, s3_bucket, s3_object_key, s3_version_id, expected_hash, expected_size in records:
+        for (
+            storage_provider,
+            storage_state,
+            relative_path,
+            s3_bucket,
+            s3_object_key,
+            s3_version_id,
+            expected_hash,
+            expected_size,
+        ) in records:
             if storage_state != "available":
                 raise BackupError("Only available managed file content can be archived.")
             if storage_provider == "s3":
                 if not allow_remote:
                     raise BackupError("Portable archives cannot contain remote file locations.")
-                if self.remote_materializer is None or not s3_bucket or not s3_object_key or not s3_version_id:
-                    raise BackupError("Remote file content cannot be verified by the configured backup service.")
+                if (
+                    self.remote_materializer is None
+                    or not s3_bucket
+                    or not s3_object_key
+                    or not s3_version_id
+                ):
+                    raise BackupError(
+                        "Remote file content cannot be verified by the configured backup service."
+                    )
                 with tempfile.TemporaryDirectory(prefix="epm-remote-validation-") as directory:
                     target = Path(directory) / expected_hash
                     try:
                         self.remote_materializer(
-                            s3_bucket, s3_object_key, s3_version_id,
-                            target, expected_hash, expected_size,
+                            s3_bucket,
+                            s3_object_key,
+                            s3_version_id,
+                            target,
+                            expected_hash,
+                            expected_size,
                         )
                     except Exception as error:
-                        raise BackupError(f"Remote file content failed verification: {error}") from error
+                        raise BackupError(
+                            f"Remote file content failed verification: {error}"
+                        ) from error
                 continue
             if storage_provider != "local" or relative_path != f"managed/{expected_hash}":
                 raise BackupError("A file record has an unsupported content location.")
@@ -170,12 +220,16 @@ class WorkspaceArchiveService:
             if path.is_symlink() or not path.is_file():
                 raise BackupError("A file record points outside the managed workspace file store.")
             expected_paths.add(path)
-            digest = hashlib.sha256(); size = 0
+            digest = hashlib.sha256()
+            size = 0
             with path.open("rb") as content:
                 while chunk := content.read(1024 * 1024):
-                    size += len(chunk); digest.update(chunk)
+                    size += len(chunk)
+                    digest.update(chunk)
             if size != expected_size or digest.hexdigest() != expected_hash:
-                raise BackupError("A managed file does not match its recorded size or content hash.")
+                raise BackupError(
+                    "A managed file does not match its recorded size or content hash."
+                )
         actual_paths = {path.resolve() for path in files_root.rglob("*") if path.is_file()}
         if actual_paths != expected_paths:
             raise BackupError("Workspace file storage contains temporary or unreferenced content.")
@@ -191,7 +245,10 @@ class WorkspaceArchiveService:
         shutil.copy2(self.paths.manifest, workspace / "workspace.json")
         secure_file(workspace / "workspace.json")
         try:
-            with closing(sqlite3.connect(self.paths.database)) as source, closing(sqlite3.connect(database / self.paths.database.name)) as snapshot:
+            with (
+                closing(sqlite3.connect(self.paths.database)) as source,
+                closing(sqlite3.connect(database / self.paths.database.name)) as snapshot,
+            ):
                 source.backup(snapshot)
         except sqlite3.Error as error:
             raise BackupError(f"Unable to create a consistent SQLite snapshot: {error}") from error
@@ -216,7 +273,9 @@ class WorkspaceArchiveService:
                 "WHERE l.storage_provider = 's3'"
             ).fetchall()
             if records and self.remote_materializer is None:
-                raise BackupError("Remote file content cannot be included by the configured backup service.")
+                raise BackupError(
+                    "Remote file content cannot be included by the configured backup service."
+                )
             for file_id, storage_state, bucket, key, version_id, digest, size in records:
                 if storage_state != "available" or not version_id:
                     raise BackupError("Only available remote file content can be materialized.")
@@ -224,14 +283,21 @@ class WorkspaceArchiveService:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 secure_directory(target.parent)
                 if target.exists():
-                    if target.stat().st_size != size or hashlib.sha256(target.read_bytes()).hexdigest() != digest:
-                        raise BackupError("Materialized remote content conflicts with staged content.")
+                    if (
+                        target.stat().st_size != size
+                        or hashlib.sha256(target.read_bytes()).hexdigest() != digest
+                    ):
+                        raise BackupError(
+                            "Materialized remote content conflicts with staged content."
+                        )
                 else:
                     try:
                         self.remote_materializer(bucket, key, version_id, target, digest, size)
                     except Exception as error:
                         target.unlink(missing_ok=True)
-                        raise BackupError(f"Remote file content could not be materialized: {error}") from error
+                        raise BackupError(
+                            f"Remote file content could not be materialized: {error}"
+                        ) from error
                 secure_file(target)
                 connection.execute(
                     "UPDATE file_content_locations SET storage_provider='local', storage_state='available', "
@@ -261,10 +327,18 @@ class WorkspaceArchiveService:
         secure_directory(root)
 
     @staticmethod
-    def _package_manifest(manifest: WorkspaceManifest, package_type: PackageType, payload: Path) -> dict[str, object]:
+    def _package_manifest(
+        manifest: WorkspaceManifest, package_type: PackageType, payload: Path
+    ) -> dict[str, object]:
         return {
-            "applicationVersion": APPLICATION_VERSION, "credentialsExcluded": True, "createdAt": datetime.now(UTC).isoformat(),
-            "files": file_inventory(payload), "liveJournalFilesExcluded": True, "packageFormatVersion": ARCHIVE_FORMAT_VERSION,
-            "packageType": package_type, "workspaceFormatVersion": manifest.format_version,
-            "databaseSchemaRevision": current_revision(), "sourceWorkspaceId": manifest.workspace_id,
+            "applicationVersion": APPLICATION_VERSION,
+            "credentialsExcluded": True,
+            "createdAt": datetime.now(UTC).isoformat(),
+            "files": file_inventory(payload),
+            "liveJournalFilesExcluded": True,
+            "packageFormatVersion": ARCHIVE_FORMAT_VERSION,
+            "packageType": package_type,
+            "workspaceFormatVersion": manifest.format_version,
+            "databaseSchemaRevision": current_revision(),
+            "sourceWorkspaceId": manifest.workspace_id,
         }

@@ -21,9 +21,15 @@ Result = TypeVar("Result")
 
 class ProviderContextReader(Protocol):
     def profile_context(self, connection: Any, party_id: str) -> Mapping[str, object] | None: ...
-    def profile_contexts(self, connection: Any, party_ids: Collection[str]) -> Mapping[str, Mapping[str, object]]: ...
-    def effective_categories(self, connection: Any, party_id: str) -> list[Mapping[str, object]]: ...
-    def effective_categories_for_providers(self, connection: Any, party_ids: Collection[str]) -> Mapping[str, list[Mapping[str, object]]]: ...
+    def profile_contexts(
+        self, connection: Any, party_ids: Collection[str]
+    ) -> Mapping[str, Mapping[str, object]]: ...
+    def effective_categories(
+        self, connection: Any, party_id: str
+    ) -> list[Mapping[str, object]]: ...
+    def effective_categories_for_providers(
+        self, connection: Any, party_ids: Collection[str]
+    ) -> Mapping[str, list[Mapping[str, object]]]: ...
     def active_category_catalog(self, connection: Any) -> list[Mapping[str, object]]: ...
 
 
@@ -48,9 +54,13 @@ class ProviderTransaction(Protocol):
     def references(self, party_id: str) -> list[ProviderReference]: ...
     def reputation_links(self, party_id: str) -> list[ProviderReputationLink]: ...
     def category(self, category_id: str) -> ProviderCategory | None: ...
-    def categories(self, archive_state: str, search: str | None = None) -> list[ProviderCategory]: ...
+    def categories(
+        self, archive_state: str, search: str | None = None
+    ) -> list[ProviderCategory]: ...
     def category_by_create_key(self, key: str) -> ProviderCategory | None: ...
-    def assignments(self, party_id: str, *, include_archived: bool = True) -> list[ProviderCategoryAssignment]: ...
+    def assignments(
+        self, party_id: str, *, include_archived: bool = True
+    ) -> list[ProviderCategoryAssignment]: ...
     def assignment(self, assignment_id: str) -> ProviderCategoryAssignment | None: ...
     def assignment_by_create_key(self, key: str) -> ProviderCategoryAssignment | None: ...
     def insert_category(self, item: ProviderCategory) -> None: ...
@@ -70,28 +80,67 @@ class ProviderTransaction(Protocol):
     def replace_reference(self, item: ProviderReference) -> None: ...
     def insert_reputation_link(self, item: ProviderReputationLink) -> None: ...
     def replace_reputation_link(self, item: ProviderReputationLink) -> None: ...
-    def record_change(self, *, entity_type: str, entity_id: str, action: str,
-                      before: dict[str, Any] | None, after: dict[str, Any] | None,
-                      reason: str, correlation_id: str) -> None: ...
+    def record_change(
+        self,
+        *,
+        entity_type: str,
+        entity_id: str,
+        action: str,
+        before: dict[str, Any] | None,
+        after: dict[str, Any] | None,
+        reason: str,
+        correlation_id: str,
+    ) -> None: ...
 
 
 class ProviderUnitOfWork(Protocol):
     def write(self, operation: Callable[[ProviderTransaction], Result]) -> Result: ...
-    def detail(self, party_id: str, *, include_archived: bool) -> tuple[
-        Party, ProviderProfile, list[PartyContactMethod], list[ProviderService],
-        list[ProviderServiceArea], list[ProviderWorkHistory], list[ProviderReference],
-        list[ProviderReputationLink], list[tuple[ProviderCategoryAssignment, ProviderCategory]],
-    ] | None: ...
-    def categories(self, archive_state: str, search: str | None = None) -> list[ProviderCategory]: ...
+    def detail(
+        self, party_id: str, *, include_archived: bool
+    ) -> (
+        tuple[
+            Party,
+            ProviderProfile,
+            list[PartyContactMethod],
+            list[ProviderService],
+            list[ProviderServiceArea],
+            list[ProviderWorkHistory],
+            list[ProviderReference],
+            list[ProviderReputationLink],
+            list[tuple[ProviderCategoryAssignment, ProviderCategory]],
+        ]
+        | None
+    ): ...
+    def categories(
+        self, archive_state: str, search: str | None = None
+    ) -> list[ProviderCategory]: ...
     def effective_assignment_counts(self, category_ids: Collection[str]) -> Mapping[str, int]: ...
-    def list(self, *, archive_state: str, search: str | None, service: str | None,
-             service_area: str | None, selection_status: str | None,
-             property_id: str | None, has_reference: bool | None, category_id: str | None = None,
-             category_state: str | None = None, limit: int | None = None,
-             cursor: tuple[str, str] | None = None) -> list[tuple[
-                 Party, ProviderProfile, list[ProviderService], list[ProviderServiceArea],
-                 int, int, int, list[tuple[ProviderCategoryAssignment, ProviderCategory]],
-             ]]: ...
+    def list(
+        self,
+        *,
+        archive_state: str,
+        search: str | None,
+        service: str | None,
+        service_area: str | None,
+        selection_status: str | None,
+        property_id: str | None,
+        has_reference: bool | None,
+        category_id: str | None = None,
+        category_state: str | None = None,
+        limit: int | None = None,
+        cursor: tuple[str, str] | None = None,
+    ) -> list[
+        tuple[
+            Party,
+            ProviderProfile,
+            list[ProviderService],
+            list[ProviderServiceArea],
+            int,
+            int,
+            int,
+            list[tuple[ProviderCategoryAssignment, ProviderCategory]],
+        ]
+    ]: ...
 
 
 class ProviderRoleActivityGuard(Protocol):

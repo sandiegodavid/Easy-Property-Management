@@ -1,4 +1,5 @@
 """FIN-008 transaction boundary."""
+
 from typing import Protocol
 
 

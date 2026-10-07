@@ -1,4 +1,5 @@
 """Shared, non-sensitive source summary projection."""
+
 from __future__ import annotations
 
 from typing import Mapping

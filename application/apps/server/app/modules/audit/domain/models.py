@@ -12,7 +12,10 @@ from uuid import UUID, uuid4
 
 ActorKind = Literal["local_operator", "system", "connector", "ai_assistant"]
 ACTOR_KINDS = frozenset({"local_operator", "system", "connector", "ai_assistant"})
-_SENSITIVE_FIELD = re.compile(r"(?:access|refresh|client)?_?(?:token|secret)|password|passphrase|api_?key|account_?number|credentials?", re.I)
+_SENSITIVE_FIELD = re.compile(
+    r"(?:access|refresh|client)?_?(?:token|secret)|password|passphrase|api_?key|account_?number|credentials?",
+    re.I,
+)
 _MISSING = object()
 
 
@@ -27,12 +30,15 @@ class AuditSnapshotPolicy(Protocol):
 
     def redact_reason(self, reason: str | None) -> str | None: ...
 
-    def redact_actor_reference(self, actor_kind: ActorKind, actor_reference: str | None) -> str | None: ...
+    def redact_actor_reference(
+        self, actor_kind: ActorKind, actor_reference: str | None
+    ) -> str | None: ...
 
 
 @dataclass(frozen=True)
 class DefaultAuditSnapshotPolicy:
     """Conservative shared policy until a domain supplies a narrower allowlist."""
+
     schema_version: int = 1
 
     def validate(self, snapshot: Mapping[str, Any] | None) -> None:
@@ -49,7 +55,9 @@ class DefaultAuditSnapshotPolicy:
     def redact_reason(self, reason: str | None) -> str | None:
         return reason
 
-    def redact_actor_reference(self, actor_kind: ActorKind, actor_reference: str | None) -> str | None:
+    def redact_actor_reference(
+        self, actor_kind: ActorKind, actor_reference: str | None
+    ) -> str | None:
         return actor_reference
 
     def redact_entity_id(
@@ -71,8 +79,11 @@ class AuditPresentationPolicyError(RuntimeError):
 class AuditSnapshotPolicyRegistry:
     """Selects the owning domain's presentation policy for persisted snapshots."""
 
-    def __init__(self, policies: Mapping[tuple[str, int], AuditSnapshotPolicy] | None = None,
-                 activity_policies: Mapping[tuple[str, int], AuditSnapshotPolicy] | None = None) -> None:
+    def __init__(
+        self,
+        policies: Mapping[tuple[str, int], AuditSnapshotPolicy] | None = None,
+        activity_policies: Mapping[tuple[str, int], AuditSnapshotPolicy] | None = None,
+    ) -> None:
         self._policies = dict(policies or {})
         self._activity_policies = dict(activity_policies or {})
 
@@ -108,42 +119,93 @@ class AuditEvent:
     schema_version: int = 1
 
     @classmethod
-    def change(cls, *, entity_type: str, entity_id: str, action: str, before_snapshot: dict[str, Any] | None,
-               after_snapshot: dict[str, Any] | None, actor_kind: ActorKind = "local_operator", reason: str | None = None,
-               actor_reference: str | None = None, correlation_id: str | None = None, event_id: str | None = None,
-               occurred_at: datetime | None = None,
-               snapshot_policy: AuditSnapshotPolicy = DEFAULT_SNAPSHOT_POLICY) -> "AuditEvent":
+    def change(
+        cls,
+        *,
+        entity_type: str,
+        entity_id: str,
+        action: str,
+        before_snapshot: dict[str, Any] | None,
+        after_snapshot: dict[str, Any] | None,
+        actor_kind: ActorKind = "local_operator",
+        reason: str | None = None,
+        actor_reference: str | None = None,
+        correlation_id: str | None = None,
+        event_id: str | None = None,
+        occurred_at: datetime | None = None,
+        snapshot_policy: AuditSnapshotPolicy = DEFAULT_SNAPSHOT_POLICY,
+    ) -> "AuditEvent":
         _validate_classification(entity_type, entity_id, action, actor_kind)
-        snapshot_policy.validate(before_snapshot); snapshot_policy.validate(after_snapshot)
+        snapshot_policy.validate(before_snapshot)
+        snapshot_policy.validate(after_snapshot)
         event_time = datetime.now(UTC) if occurred_at is None else _utc_datetime(occurred_at)
-        return cls(_canonical_event_id(event_id), event_time, entity_type, entity_id, action, before_snapshot, after_snapshot,
-                   changed_paths(before_snapshot, after_snapshot), reason, actor_kind, actor_reference,
-                   correlation_id or str(uuid4()), snapshot_policy.schema_version)
+        return cls(
+            _canonical_event_id(event_id),
+            event_time,
+            entity_type,
+            entity_id,
+            action,
+            before_snapshot,
+            after_snapshot,
+            changed_paths(before_snapshot, after_snapshot),
+            reason,
+            actor_kind,
+            actor_reference,
+            correlation_id or str(uuid4()),
+            snapshot_policy.schema_version,
+        )
 
     def to_dict(self, snapshot_policy: AuditSnapshotPolicy) -> dict[str, Any]:
-        return {"id": self.id, "occurredAt": self.occurred_at.isoformat(), "entityType": self.entity_type,
-                "entityId": getattr(snapshot_policy, "redact_entity_id", lambda value, *_: value)(
-                    self.entity_id, self.before_snapshot, self.after_snapshot,
-                ), "action": self.action, "before": snapshot_policy.redact(self.before_snapshot),
-                "after": snapshot_policy.redact(self.after_snapshot), "changedFields": list(self.changed_fields),
-                "reason": getattr(snapshot_policy, "redact_reason", lambda value: value)(self.reason), "actorKind": self.actor_kind,
-                "actorReference": getattr(snapshot_policy, "redact_actor_reference", lambda _kind, value: value)(
-                    self.actor_kind, self.actor_reference,
-                ),
-                "correlationId": self.correlation_id, "schemaVersion": self.schema_version}
+        return {
+            "id": self.id,
+            "occurredAt": self.occurred_at.isoformat(),
+            "entityType": self.entity_type,
+            "entityId": getattr(snapshot_policy, "redact_entity_id", lambda value, *_: value)(
+                self.entity_id,
+                self.before_snapshot,
+                self.after_snapshot,
+            ),
+            "action": self.action,
+            "before": snapshot_policy.redact(self.before_snapshot),
+            "after": snapshot_policy.redact(self.after_snapshot),
+            "changedFields": list(self.changed_fields),
+            "reason": getattr(snapshot_policy, "redact_reason", lambda value: value)(self.reason),
+            "actorKind": self.actor_kind,
+            "actorReference": getattr(
+                snapshot_policy, "redact_actor_reference", lambda _kind, value: value
+            )(
+                self.actor_kind,
+                self.actor_reference,
+            ),
+            "correlationId": self.correlation_id,
+            "schemaVersion": self.schema_version,
+        }
 
 
 def changed_paths(before: Any, after: Any, prefix: str = "") -> tuple[str, ...]:
-    if before is _MISSING or after is _MISSING: return (prefix or "$",)
-    if before == after: return ()
+    if before is _MISSING or after is _MISSING:
+        return (prefix or "$",)
+    if before == after:
+        return ()
     if isinstance(before, dict) and isinstance(after, dict):
-        return tuple(path for key in sorted(set(before) | set(after)) for path in changed_paths(
-            before.get(key, _MISSING), after.get(key, _MISSING), f"{prefix}.{key}" if prefix else key))
+        return tuple(
+            path
+            for key in sorted(set(before) | set(after))
+            for path in changed_paths(
+                before.get(key, _MISSING),
+                after.get(key, _MISSING),
+                f"{prefix}.{key}" if prefix else key,
+            )
+        )
     return (prefix or "$",)
 
 
-def _validate_classification(entity_type: str, entity_id: str, action: str, actor_kind: str) -> None:
-    if not all(isinstance(value, str) and value.strip() for value in (entity_type, entity_id, action)):
+def _validate_classification(
+    entity_type: str, entity_id: str, action: str, actor_kind: str
+) -> None:
+    if not all(
+        isinstance(value, str) and value.strip() for value in (entity_type, entity_id, action)
+    ):
         raise ValueError("Audit entity type, entity ID, and action must be non-empty strings.")
     if actor_kind not in ACTOR_KINDS:
         raise ValueError(f"Unsupported audit actor kind: {actor_kind}")
@@ -178,18 +240,26 @@ def _validate_value(value: Any, path: str) -> None:
                 raise ValueError(f"Audit snapshots must not contain secret field: {child_path}")
             _validate_value(child, child_path)
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        for index, child in enumerate(value): _validate_value(child, f"{path}[{index}]")
+        for index, child in enumerate(value):
+            _validate_value(child, f"{path}[{index}]")
     elif isinstance(value, float) and not math.isfinite(value):
         raise ValueError(f"Audit snapshots must not contain non-finite numbers at {path}")
 
 
 def _redact_value(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return {str(key): ("[redacted]" if _is_sensitive_key(str(key)) else _redact_value(child)) for key, child in value.items()}
-    if isinstance(value, list): return [_redact_value(child) for child in value]
+        return {
+            str(key): ("[redacted]" if _is_sensitive_key(str(key)) else _redact_value(child))
+            for key, child in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_value(child) for child in value]
     return value
 
 
 def _is_sensitive_key(key: str) -> bool:
     normalized = re.sub(r"[^a-z0-9]", "", key.lower())
-    return bool(_SENSITIVE_FIELD.fullmatch(normalized) or normalized.endswith(("token", "secret", "apikey", "accountnumber")))
+    return bool(
+        _SENSITIVE_FIELD.fullmatch(normalized)
+        or normalized.endswith(("token", "secret", "apikey", "accountnumber"))
+    )

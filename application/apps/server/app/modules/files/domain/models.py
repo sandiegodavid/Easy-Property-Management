@@ -22,8 +22,15 @@ class StoredFile:
     links: tuple[dict[str, str], ...] = ()
 
     def to_dict(self) -> dict[str, object]:
-        return {"id": self.id, "originalName": self.original_name, "mediaType": self.media_type,
-                "sizeBytes": self.size_bytes, "contentSha256": self.content_sha256,
-                "storageProvider": self.storage_provider,
-                "storageState": self.storage_state, "verifiedAt": self.verified_at,
-                "createdAt": self.created_at, "links": list(self.links)}
+        return {
+            "id": self.id,
+            "originalName": self.original_name,
+            "mediaType": self.media_type,
+            "sizeBytes": self.size_bytes,
+            "contentSha256": self.content_sha256,
+            "storageProvider": self.storage_provider,
+            "storageState": self.storage_state,
+            "verifiedAt": self.verified_at,
+            "createdAt": self.created_at,
+            "links": list(self.links),
+        }

@@ -91,7 +91,9 @@ def write_encrypted_archive(
     encryptor = Cipher(algorithms.AES(key), modes.GCM(nonce)).encryptor()
     encryptor.authenticate_additional_data(header_bytes)
 
-    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{output_path.name}.", suffix=".tmp", dir=output_path.parent)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{output_path.name}.", suffix=".tmp", dir=output_path.parent
+    )
     temporary_path = Path(temporary_name)
     try:
         if os.name == "posix":
@@ -168,7 +170,9 @@ def decrypt_archive_to_zip(archive_path: Path, passphrase: str, zip_path: Path) 
             destination.write(decryptor.finalize())
     except InvalidTag as error:
         zip_path.unlink(missing_ok=True)
-        raise ArchiveError("Archive authentication failed: the passphrase is wrong or the archive was modified.") from error
+        raise ArchiveError(
+            "Archive authentication failed: the passphrase is wrong or the archive was modified."
+        ) from error
     except OSError as error:
         zip_path.unlink(missing_ok=True)
         raise ArchiveError(f"Unable to decrypt archive: {error}") from error
@@ -207,7 +211,11 @@ def inspect_payload_zip(zip_path: Path, header: dict[str, Any]) -> ArchiveConten
                 path = item.get("path")
                 digest = item.get("sha256")
                 byte_size = item.get("bytes")
-                if not isinstance(path, str) or not isinstance(digest, str) or not _exact_int(byte_size):
+                if (
+                    not isinstance(path, str)
+                    or not isinstance(digest, str)
+                    or not _exact_int(byte_size)
+                ):
                     raise ArchiveError("Backup manifest contains an invalid file entry.")
                 _validate_relative_path(path)
                 if path in expected:
@@ -215,7 +223,9 @@ def inspect_payload_zip(zip_path: Path, header: dict[str, Any]) -> ArchiveConten
                 expected.add(path)
                 if path not in names:
                     raise ArchiveError(f"Archive is missing declared file: {path}")
-                actual_digest, actual_size = _digest_zip_entry(package, path, MAX_UNCOMPRESSED_BYTES - byte_count)
+                actual_digest, actual_size = _digest_zip_entry(
+                    package, path, MAX_UNCOMPRESSED_BYTES - byte_count
+                )
                 if actual_digest != digest or actual_size != byte_size:
                     raise ArchiveError(f"Archive file integrity check failed: {path}")
                 byte_count += actual_size
@@ -226,7 +236,12 @@ def inspect_payload_zip(zip_path: Path, header: dict[str, Any]) -> ArchiveConten
             if archive_files != expected:
                 raise ArchiveError("Archive contains files that are absent from its manifest.")
             _validate_manifest_consistency(manifest, header)
-            return ArchiveContents(header=header, manifest=manifest, file_count=len(declared_files), byte_count=byte_count)
+            return ArchiveContents(
+                header=header,
+                manifest=manifest,
+                file_count=len(declared_files),
+                byte_count=byte_count,
+            )
     except (OSError, zipfile.BadZipFile, json.JSONDecodeError) as error:
         raise ArchiveError(f"Archive payload is invalid: {error}") from error
 
@@ -242,7 +257,10 @@ def extract_payload_zip(zip_path: Path, destination_root: Path, contents: Archiv
                     raise ArchiveError("Backup manifest contains an unsupported top-level path.")
                 target = destination_root.joinpath(*destination_relative.parts[1:])
                 resolved_target = target.resolve()
-                if destination_root.resolve() not in resolved_target.parents and resolved_target != destination_root.resolve():
+                if (
+                    destination_root.resolve() not in resolved_target.parents
+                    and resolved_target != destination_root.resolve()
+                ):
                     raise ArchiveError("Archive extraction path escapes its destination.")
                 target.parent.mkdir(parents=True, exist_ok=True)
                 remaining = MAX_UNCOMPRESSED_BYTES
@@ -259,7 +277,9 @@ def extract_payload_zip(zip_path: Path, destination_root: Path, contents: Archiv
 
 def create_payload_zip(payload_root: Path, zip_path: Path) -> None:
     """Write the staged payload to a deterministic ZIP container."""
-    with zipfile.ZipFile(zip_path, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as package:
+    with zipfile.ZipFile(
+        zip_path, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=6
+    ) as package:
         for file_path in sorted(path for path in payload_root.rglob("*") if path.is_file()):
             relative_path = file_path.relative_to(payload_root).as_posix()
             package.write(file_path, relative_path)
@@ -308,16 +328,36 @@ def _read_archive_layout(archive_path: Path) -> tuple[dict[str, Any], int, int, 
 def _validate_header(header: object) -> None:
     if not isinstance(header, dict):
         raise ArchiveError("Archive header is not a JSON object.")
-    if set(header) != {"archiveFormatVersion", "createdAt", "encryption", "kdf", "nonce", "packageType", "sourceWorkspaceId"}:
+    if set(header) != {
+        "archiveFormatVersion",
+        "createdAt",
+        "encryption",
+        "kdf",
+        "nonce",
+        "packageType",
+        "sourceWorkspaceId",
+    }:
         raise ArchiveError("Archive header has unsupported fields.")
-    if not _exact_int(header.get("archiveFormatVersion")) or header["archiveFormatVersion"] != ARCHIVE_FORMAT_VERSION:
+    if (
+        not _exact_int(header.get("archiveFormatVersion"))
+        or header["archiveFormatVersion"] != ARCHIVE_FORMAT_VERSION
+    ):
         raise ArchiveError("Archive format version is unsupported.")
-    if header.get("encryption") != "AES-256-GCM" or header.get("packageType") not in {"backup", "export"}:
+    if header.get("encryption") != "AES-256-GCM" or header.get("packageType") not in {
+        "backup",
+        "export",
+    }:
         raise ArchiveError("Archive header uses unsupported encryption or package type.")
     kdf = header.get("kdf")
-    if not isinstance(kdf, dict) or set(kdf) != {"name", "length", "n", "p", "r", "salt"} or kdf.get("name") != "scrypt":
+    if (
+        not isinstance(kdf, dict)
+        or set(kdf) != {"name", "length", "n", "p", "r", "salt"}
+        or kdf.get("name") != "scrypt"
+    ):
         raise ArchiveError("Archive header uses an unsupported key derivation method.")
-    if not isinstance(header.get("sourceWorkspaceId"), str) or not isinstance(header.get("nonce"), str):
+    if not isinstance(header.get("sourceWorkspaceId"), str) or not isinstance(
+        header.get("nonce"), str
+    ):
         raise ArchiveError("Archive header is missing required fields.")
     if not isinstance(header.get("createdAt"), str):
         raise ArchiveError("Archive header is missing its creation time.")
@@ -329,18 +369,34 @@ def _validate_header(header: object) -> None:
         raise ArchiveError("Archive header creation time must include a timezone offset.")
     if not _exact_int(kdf.get("length")) or kdf["length"] != 32:
         raise ArchiveError("Archive header has invalid key derivation parameters.")
-    if (not all(_exact_int(kdf.get(key)) for key in ("n", "r", "p"))
-            or (kdf.get("n"), kdf.get("r"), kdf.get("p")) != (32768, 8, 1)
-            or not isinstance(kdf.get("salt"), str)):
+    if (
+        not all(_exact_int(kdf.get(key)) for key in ("n", "r", "p"))
+        or (kdf.get("n"), kdf.get("r"), kdf.get("p")) != (32768, 8, 1)
+        or not isinstance(kdf.get("salt"), str)
+    ):
         raise ArchiveError("Archive header has invalid key derivation parameters.")
 
 
 def _validate_manifest_consistency(manifest: object, header: dict[str, Any]) -> None:
     if not isinstance(manifest, dict):
         raise ArchiveError("Backup manifest is not a JSON object.")
-    if set(manifest) != {"applicationVersion", "credentialsExcluded", "createdAt", "databaseSchemaRevision", "files", "liveJournalFilesExcluded", "packageFormatVersion", "packageType", "sourceWorkspaceId", "workspaceFormatVersion"}:
+    if set(manifest) != {
+        "applicationVersion",
+        "credentialsExcluded",
+        "createdAt",
+        "databaseSchemaRevision",
+        "files",
+        "liveJournalFilesExcluded",
+        "packageFormatVersion",
+        "packageType",
+        "sourceWorkspaceId",
+        "workspaceFormatVersion",
+    }:
         raise ArchiveError("Backup manifest has unsupported fields.")
-    if not isinstance(manifest.get("applicationVersion"), str) or not manifest["applicationVersion"]:
+    if (
+        not isinstance(manifest.get("applicationVersion"), str)
+        or not manifest["applicationVersion"]
+    ):
         raise ArchiveError("Backup manifest is missing producer application metadata.")
     try:
         created_at = datetime.fromisoformat(manifest["createdAt"])
@@ -348,17 +404,26 @@ def _validate_manifest_consistency(manifest: object, header: dict[str, Any]) -> 
         raise ArchiveError("Backup manifest has an invalid creation time.") from error
     if created_at.tzinfo is None or created_at.utcoffset() is None:
         raise ArchiveError("Backup manifest creation time must include a timezone offset.")
-    if not _exact_int(manifest.get("packageFormatVersion")) or manifest["packageFormatVersion"] != ARCHIVE_FORMAT_VERSION:
+    if (
+        not _exact_int(manifest.get("packageFormatVersion"))
+        or manifest["packageFormatVersion"] != ARCHIVE_FORMAT_VERSION
+    ):
         raise ArchiveError("Backup package format is unsupported.")
     if manifest.get("sourceWorkspaceId") != header["sourceWorkspaceId"]:
         raise ArchiveError("Archive header does not match the encrypted backup manifest.")
     if manifest.get("packageType") != header["packageType"]:
         raise ArchiveError("Archive package type does not match its backup manifest.")
-    if not _exact_int(manifest.get("workspaceFormatVersion")) or manifest["workspaceFormatVersion"] != WORKSPACE_FORMAT_VERSION:
+    if (
+        not _exact_int(manifest.get("workspaceFormatVersion"))
+        or manifest["workspaceFormatVersion"] != WORKSPACE_FORMAT_VERSION
+    ):
         raise ArchiveError("Archive workspace format is unsupported.")
     if manifest.get("databaseSchemaRevision") != current_revision():
         raise ArchiveError("Archive database schema revision is unsupported.")
-    if manifest.get("credentialsExcluded") is not True or manifest.get("liveJournalFilesExcluded") is not True:
+    if (
+        manifest.get("credentialsExcluded") is not True
+        or manifest.get("liveJournalFilesExcluded") is not True
+    ):
         raise ArchiveError("Backup manifest does not provide required exclusion guarantees.")
 
 

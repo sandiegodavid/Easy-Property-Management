@@ -29,13 +29,17 @@ class KeyringBackupSecretStore:
         try:
             return keyring.get_password(self.service_name, workspace_id)
         except KeyringError as error:
-            raise SecretStoreError(f"Unable to read the automatic-backup credential: {error}") from error
+            raise SecretStoreError(
+                f"Unable to read the automatic-backup credential: {error}"
+            ) from error
 
     def set_passphrase(self, workspace_id: str, passphrase: str) -> None:
         try:
             keyring.set_password(self.service_name, workspace_id, passphrase)
         except KeyringError as error:
-            raise SecretStoreError(f"Unable to save the automatic-backup credential: {error}") from error
+            raise SecretStoreError(
+                f"Unable to save the automatic-backup credential: {error}"
+            ) from error
 
     def delete_passphrase(self, workspace_id: str) -> None:
         try:
@@ -43,4 +47,6 @@ class KeyringBackupSecretStore:
         except keyring.errors.PasswordDeleteError:
             return
         except KeyringError as error:
-            raise SecretStoreError(f"Unable to remove the automatic-backup credential: {error}") from error
+            raise SecretStoreError(
+                f"Unable to remove the automatic-backup credential: {error}"
+            ) from error

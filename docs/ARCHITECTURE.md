@@ -116,6 +116,7 @@ Backup status is represented by typed state, operation history, failure records,
 | --- | --- | --- |
 | User-interface language/runtime | TypeScript on the current Node.js LTS release | A mature, type-safe ecosystem for the React interface, UI components, and browser tooling. |
 | User interface | React with Vite | Mature component ecosystem, rapid local development, and a clean boundary from backend rules. |
+| Frontend quality checks | ESLint flat config with TypeScript-aware recommended rules, React hooks and JSX accessibility plugins; Prettier; strict TypeScript compiler checks | Enforces correctness, consistent formatting, and typed API consumption before implementation is complete. See [implementation quality checks](CODE_QUALITY.md). |
 | Server language/runtime | Python on a supported release | Best-fit ecosystem for the product's expanding AI, document, transcription, evaluation, analysis, and potential model-serving work. |
 | API application | FastAPI | Typed validation, OpenAPI support, asynchronous integrations, and a clear, testable Python application structure. |
 | API contract | REST with OpenAPI | Clear contracts for the web UI, local scripts, testing, and later SaaS migration; avoids premature GraphQL complexity. |
@@ -129,6 +130,8 @@ Backup status is represented by typed state, operation history, failure records,
 | Future cloud database | PostgreSQL | Suitable future destination for tenant-isolated SaaS workspaces, concurrent users, and central operations. |
 
 TASK-001 initially exposes reminders through the in-app action summary while the application is running. Durable outbox delivery and background execution are deferred until a connected notification or background-runner feature requires them.
+
+Frontend lint and type-check configuration is available under `application/` as development tooling before UI-001. This does not mark the React interface or shared web packages implemented. UI-001 must make `npm run lint`, `npm run format:check`, and `npm run typecheck` pass against its actual sources, with generated contracts included in compiler validation.
 
 ## Viable alternatives
 

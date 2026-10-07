@@ -1,4 +1,5 @@
 """Current MAINT-001 schema."""
+
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -6,36 +7,292 @@ from app.platform.sqlalchemy_models import LocalBase
 
 
 class MaintenanceIssueModel(LocalBase):
-    __tablename__="maintenance_issues"
-    id: Mapped[str]=mapped_column(String, primary_key=True); property_id: Mapped[str]=mapped_column(ForeignKey("properties.id"), nullable=False); space_id: Mapped[str|None]=mapped_column(ForeignKey("spaces.id")); summary: Mapped[str]=mapped_column(String, nullable=False); description: Mapped[str]=mapped_column(String, nullable=False); category: Mapped[str]=mapped_column(String, nullable=False); category_detail: Mapped[str|None]=mapped_column(String); priority: Mapped[str]=mapped_column(String, nullable=False); status: Mapped[str]=mapped_column(String, nullable=False); reported_at_utc: Mapped[str]=mapped_column(String, nullable=False); reported_timezone: Mapped[str]=mapped_column(String, nullable=False); reporter_role: Mapped[str]=mapped_column(String, nullable=False); reporter_subject_kind: Mapped[str]=mapped_column(String, nullable=False); reporter_party_id: Mapped[str|None]=mapped_column(ForeignKey("parties.id")); reporter_display_name_snapshot: Mapped[str]=mapped_column(String, nullable=False); resolution_summary: Mapped[str|None]=mapped_column(String); resolved_at: Mapped[str|None]=mapped_column(String); cancellation_reason: Mapped[str|None]=mapped_column(String); cancelled_at: Mapped[str|None]=mapped_column(String); idempotency_key: Mapped[str]=mapped_column(String, unique=True, nullable=False); request_fingerprint: Mapped[str]=mapped_column(String, nullable=False); created_at: Mapped[str]=mapped_column(String, nullable=False); updated_at: Mapped[str]=mapped_column(String, nullable=False)
-    __table_args__=(CheckConstraint("category IN ('plumbing','electrical','heating_cooling','appliance','structural','safety_security','pest','exterior_grounds','cleaning','other')"),CheckConstraint("priority IN ('low','normal','high','urgent')"),CheckConstraint("status IN ('open','in_progress','resolved','cancelled')"),CheckConstraint("reporter_role IN ('owner','tenant','manager','staff')"),CheckConstraint("reporter_subject_kind IN ('party','local_operator')"),CheckConstraint("(reporter_subject_kind='party' AND reporter_party_id IS NOT NULL) OR (reporter_subject_kind='local_operator' AND reporter_party_id IS NULL)"),CheckConstraint("(reporter_role IN ('manager','staff') AND reporter_subject_kind='local_operator') OR (reporter_role='tenant' AND reporter_subject_kind='party') OR reporter_role='owner'"),CheckConstraint("length(trim(reporter_display_name_snapshot)) BETWEEN 1 AND 240"),CheckConstraint("(category='other' AND category_detail IS NOT NULL) OR (category!='other' AND category_detail IS NULL)"),CheckConstraint("(status='resolved' AND resolution_summary IS NOT NULL AND resolved_at IS NOT NULL AND cancellation_reason IS NULL AND cancelled_at IS NULL) OR (status='cancelled' AND cancellation_reason IS NOT NULL AND cancelled_at IS NOT NULL AND resolution_summary IS NULL AND resolved_at IS NULL) OR (status IN ('open','in_progress') AND resolution_summary IS NULL AND resolved_at IS NULL AND cancelled_at IS NULL AND cancellation_reason IS NULL)"),Index("maintenance_issues_status_priority_reported","status","priority","reported_at_utc"),Index("maintenance_issues_property_status","property_id","status","reported_at_utc"),Index("maintenance_issues_reporter_role_status_reported","reporter_role","status","reported_at_utc"),Index("maintenance_issues_reporter_party_reported","reporter_party_id","reported_at_utc"))
+    __tablename__ = "maintenance_issues"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    property_id: Mapped[str] = mapped_column(ForeignKey("properties.id"), nullable=False)
+    space_id: Mapped[str | None] = mapped_column(ForeignKey("spaces.id"))
+    summary: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str] = mapped_column(String, nullable=False)
+    category: Mapped[str] = mapped_column(String, nullable=False)
+    category_detail: Mapped[str | None] = mapped_column(String)
+    priority: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    reported_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+    reported_timezone: Mapped[str] = mapped_column(String, nullable=False)
+    reporter_role: Mapped[str] = mapped_column(String, nullable=False)
+    reporter_subject_kind: Mapped[str] = mapped_column(String, nullable=False)
+    reporter_party_id: Mapped[str | None] = mapped_column(ForeignKey("parties.id"))
+    reporter_display_name_snapshot: Mapped[str] = mapped_column(String, nullable=False)
+    resolution_summary: Mapped[str | None] = mapped_column(String)
+    resolved_at: Mapped[str | None] = mapped_column(String)
+    cancellation_reason: Mapped[str | None] = mapped_column(String)
+    cancelled_at: Mapped[str | None] = mapped_column(String)
+    idempotency_key: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('plumbing','electrical','heating_cooling','appliance','structural','safety_security','pest','exterior_grounds','cleaning','other')"
+        ),
+        CheckConstraint("priority IN ('low','normal','high','urgent')"),
+        CheckConstraint("status IN ('open','in_progress','resolved','cancelled')"),
+        CheckConstraint("reporter_role IN ('owner','tenant','manager','staff')"),
+        CheckConstraint("reporter_subject_kind IN ('party','local_operator')"),
+        CheckConstraint(
+            "(reporter_subject_kind='party' AND reporter_party_id IS NOT NULL) OR (reporter_subject_kind='local_operator' AND reporter_party_id IS NULL)"
+        ),
+        CheckConstraint(
+            "(reporter_role IN ('manager','staff') AND reporter_subject_kind='local_operator') OR (reporter_role='tenant' AND reporter_subject_kind='party') OR reporter_role='owner'"
+        ),
+        CheckConstraint("length(trim(reporter_display_name_snapshot)) BETWEEN 1 AND 240"),
+        CheckConstraint(
+            "(category='other' AND category_detail IS NOT NULL) OR (category!='other' AND category_detail IS NULL)"
+        ),
+        CheckConstraint(
+            "(status='resolved' AND resolution_summary IS NOT NULL AND resolved_at IS NOT NULL AND cancellation_reason IS NULL AND cancelled_at IS NULL) OR (status='cancelled' AND cancellation_reason IS NOT NULL AND cancelled_at IS NOT NULL AND resolution_summary IS NULL AND resolved_at IS NULL) OR (status IN ('open','in_progress') AND resolution_summary IS NULL AND resolved_at IS NULL AND cancelled_at IS NULL AND cancellation_reason IS NULL)"
+        ),
+        Index(
+            "maintenance_issues_status_priority_reported", "status", "priority", "reported_at_utc"
+        ),
+        Index("maintenance_issues_property_status", "property_id", "status", "reported_at_utc"),
+        Index(
+            "maintenance_issues_reporter_role_status_reported",
+            "reporter_role",
+            "status",
+            "reported_at_utc",
+        ),
+        Index("maintenance_issues_reporter_party_reported", "reporter_party_id", "reported_at_utc"),
+    )
+
+
 class MaintenanceAppointmentModel(LocalBase):
-    __tablename__="maintenance_appointments"
-    id: Mapped[str]=mapped_column(String, primary_key=True); issue_id: Mapped[str]=mapped_column(ForeignKey("maintenance_issues.id"),nullable=False); starts_at_utc: Mapped[str]=mapped_column(String,nullable=False); ends_at_utc: Mapped[str]=mapped_column(String,nullable=False); scheduled_timezone: Mapped[str]=mapped_column(String,nullable=False); purpose: Mapped[str]=mapped_column(String,nullable=False); instructions: Mapped[str|None]=mapped_column(String); status: Mapped[str]=mapped_column(String,nullable=False); completed_at: Mapped[str|None]=mapped_column(String); outcome_note: Mapped[str|None]=mapped_column(String); cancelled_at: Mapped[str|None]=mapped_column(String); cancellation_reason: Mapped[str|None]=mapped_column(String); idempotency_key: Mapped[str]=mapped_column(String,unique=True,nullable=False); request_fingerprint: Mapped[str]=mapped_column(String,nullable=False); created_at: Mapped[str]=mapped_column(String,nullable=False); updated_at: Mapped[str]=mapped_column(String,nullable=False)
-    __table_args__=(CheckConstraint("ends_at_utc > starts_at_utc"),CheckConstraint("status IN ('scheduled','completed','cancelled')"),CheckConstraint("(status='scheduled' AND completed_at IS NULL AND outcome_note IS NULL AND cancelled_at IS NULL AND cancellation_reason IS NULL) OR (status='completed' AND completed_at IS NOT NULL AND cancelled_at IS NULL AND cancellation_reason IS NULL) OR (status='cancelled' AND completed_at IS NULL AND outcome_note IS NULL AND cancelled_at IS NOT NULL AND cancellation_reason IS NOT NULL)"),Index("maintenance_appointments_issue_start","issue_id","starts_at_utc"))
+    __tablename__ = "maintenance_appointments"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    issue_id: Mapped[str] = mapped_column(ForeignKey("maintenance_issues.id"), nullable=False)
+    starts_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+    ends_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+    scheduled_timezone: Mapped[str] = mapped_column(String, nullable=False)
+    purpose: Mapped[str] = mapped_column(String, nullable=False)
+    instructions: Mapped[str | None] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    completed_at: Mapped[str | None] = mapped_column(String)
+    outcome_note: Mapped[str | None] = mapped_column(String)
+    cancelled_at: Mapped[str | None] = mapped_column(String)
+    cancellation_reason: Mapped[str | None] = mapped_column(String)
+    idempotency_key: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    updated_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint("ends_at_utc > starts_at_utc"),
+        CheckConstraint("status IN ('scheduled','completed','cancelled')"),
+        CheckConstraint(
+            "(status='scheduled' AND completed_at IS NULL AND outcome_note IS NULL AND cancelled_at IS NULL AND cancellation_reason IS NULL) OR (status='completed' AND completed_at IS NOT NULL AND cancelled_at IS NULL AND cancellation_reason IS NULL) OR (status='cancelled' AND completed_at IS NULL AND outcome_note IS NULL AND cancelled_at IS NOT NULL AND cancellation_reason IS NOT NULL)"
+        ),
+        Index("maintenance_appointments_issue_start", "issue_id", "starts_at_utc"),
+    )
+
+
 class MaintenanceCostContextModel(LocalBase):
-    __tablename__="maintenance_cost_contexts"
-    id: Mapped[str]=mapped_column(String,primary_key=True); issue_id: Mapped[str]=mapped_column(ForeignKey("maintenance_issues.id"),nullable=False); context_kind: Mapped[str]=mapped_column(String,nullable=False); label: Mapped[str]=mapped_column(String,nullable=False); amount_minor: Mapped[int]=mapped_column(Integer,nullable=False); currency_code: Mapped[str]=mapped_column(String,nullable=False); observed_on: Mapped[str]=mapped_column(String,nullable=False); source_note: Mapped[str|None]=mapped_column(String); replaces_cost_context_id: Mapped[str|None]=mapped_column(ForeignKey("maintenance_cost_contexts.id"),unique=True); voided_at: Mapped[str|None]=mapped_column(String); void_reason: Mapped[str|None]=mapped_column(String); idempotency_key: Mapped[str]=mapped_column(String,unique=True,nullable=False); request_fingerprint: Mapped[str]=mapped_column(String,nullable=False); created_at: Mapped[str]=mapped_column(String,nullable=False)
-    __table_args__=(CheckConstraint("context_kind IN ('operator_estimate','work_reported')"),CheckConstraint("typeof(amount_minor)='integer' AND amount_minor BETWEEN 1 AND 9999999999"),CheckConstraint("currency_code='USD'"),CheckConstraint("replaces_cost_context_id IS NULL OR replaces_cost_context_id != id"),CheckConstraint("(voided_at IS NULL AND void_reason IS NULL) OR (voided_at IS NOT NULL AND void_reason IS NOT NULL)"),Index("maintenance_cost_contexts_issue","issue_id","context_kind","observed_on"))
+    __tablename__ = "maintenance_cost_contexts"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    issue_id: Mapped[str] = mapped_column(ForeignKey("maintenance_issues.id"), nullable=False)
+    context_kind: Mapped[str] = mapped_column(String, nullable=False)
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency_code: Mapped[str] = mapped_column(String, nullable=False)
+    observed_on: Mapped[str] = mapped_column(String, nullable=False)
+    source_note: Mapped[str | None] = mapped_column(String)
+    replaces_cost_context_id: Mapped[str | None] = mapped_column(
+        ForeignKey("maintenance_cost_contexts.id"), unique=True
+    )
+    voided_at: Mapped[str | None] = mapped_column(String)
+    void_reason: Mapped[str | None] = mapped_column(String)
+    idempotency_key: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint("context_kind IN ('operator_estimate','work_reported')"),
+        CheckConstraint("typeof(amount_minor)='integer' AND amount_minor BETWEEN 1 AND 9999999999"),
+        CheckConstraint("currency_code='USD'"),
+        CheckConstraint("replaces_cost_context_id IS NULL OR replaces_cost_context_id != id"),
+        CheckConstraint(
+            "(voided_at IS NULL AND void_reason IS NULL) OR (voided_at IS NOT NULL AND void_reason IS NOT NULL)"
+        ),
+        Index("maintenance_cost_contexts_issue", "issue_id", "context_kind", "observed_on"),
+    )
+
+
 class MaintenanceIssueExpenseLinkModel(LocalBase):
-    __tablename__="maintenance_issue_expense_links"
-    id: Mapped[str]=mapped_column(String,primary_key=True); issue_id: Mapped[str]=mapped_column(ForeignKey("maintenance_issues.id"),nullable=False); expense_id: Mapped[str]=mapped_column(ForeignKey("expenses.id"),nullable=False); idempotency_key: Mapped[str]=mapped_column(String,unique=True,nullable=False); request_fingerprint: Mapped[str]=mapped_column(String,nullable=False); created_at: Mapped[str]=mapped_column(String,nullable=False); archived_at: Mapped[str|None]=mapped_column(String); archive_reason: Mapped[str|None]=mapped_column(String)
-    __table_args__=(CheckConstraint("(archived_at IS NULL AND archive_reason IS NULL) OR (archived_at IS NOT NULL AND archive_reason IS NOT NULL)"),Index("maintenance_expense_one_active","expense_id",unique=True,sqlite_where=text("archived_at IS NULL")),Index("maintenance_expense_issue","issue_id","archived_at"))
+    __tablename__ = "maintenance_issue_expense_links"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    issue_id: Mapped[str] = mapped_column(ForeignKey("maintenance_issues.id"), nullable=False)
+    expense_id: Mapped[str] = mapped_column(ForeignKey("expenses.id"), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    archived_at: Mapped[str | None] = mapped_column(String)
+    archive_reason: Mapped[str | None] = mapped_column(String)
+    __table_args__ = (
+        CheckConstraint(
+            "(archived_at IS NULL AND archive_reason IS NULL) OR (archived_at IS NOT NULL AND archive_reason IS NOT NULL)"
+        ),
+        Index(
+            "maintenance_expense_one_active",
+            "expense_id",
+            unique=True,
+            sqlite_where=text("archived_at IS NULL"),
+        ),
+        Index("maintenance_expense_issue", "issue_id", "archived_at"),
+    )
+
+
 class MaintenanceFollowUpOperationModel(LocalBase):
-    __tablename__="maintenance_follow_up_operations"
-    idempotency_key: Mapped[str]=mapped_column(String,primary_key=True); request_fingerprint: Mapped[str]=mapped_column(String,nullable=False); issue_id: Mapped[str]=mapped_column(ForeignKey("maintenance_issues.id"),nullable=False); task_id: Mapped[str]=mapped_column(ForeignKey("tasks.id"),nullable=False); correlation_id: Mapped[str]=mapped_column(String,nullable=False); created_at: Mapped[str]=mapped_column(String,nullable=False)
+    __tablename__ = "maintenance_follow_up_operations"
+    idempotency_key: Mapped[str] = mapped_column(String, primary_key=True)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    issue_id: Mapped[str] = mapped_column(ForeignKey("maintenance_issues.id"), nullable=False)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"), nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+
 
 class MaintenanceQuoteModel(LocalBase):
-    __tablename__="maintenance_quotes"
-    id: Mapped[str]=mapped_column(String,primary_key=True); issue_id: Mapped[str]=mapped_column(ForeignKey("maintenance_issues.id"),nullable=False); provider_party_id: Mapped[str]=mapped_column(ForeignKey("parties.id"),nullable=False); provider_display_name_snapshot: Mapped[str]=mapped_column(String,nullable=False); label: Mapped[str]=mapped_column(String,nullable=False); scope_summary: Mapped[str]=mapped_column(String,nullable=False); amount_minor: Mapped[int]=mapped_column(Integer,nullable=False); currency_code: Mapped[str]=mapped_column(String,nullable=False); received_on: Mapped[str]=mapped_column(String,nullable=False); valid_through: Mapped[str|None]=mapped_column(String); earliest_work_start_on: Mapped[str|None]=mapped_column(String); estimated_work_finish_on: Mapped[str|None]=mapped_column(String); terms_notes: Mapped[str|None]=mapped_column(String); replaces_quote_id: Mapped[str|None]=mapped_column(ForeignKey("maintenance_quotes.id"),unique=True); withdrawn_at: Mapped[str|None]=mapped_column(String); withdrawal_reason: Mapped[str|None]=mapped_column(String); idempotency_key: Mapped[str]=mapped_column(String,unique=True,nullable=False); request_fingerprint: Mapped[str]=mapped_column(String,nullable=False); created_at: Mapped[str]=mapped_column(String,nullable=False)
-    __table_args__=(CheckConstraint("typeof(amount_minor)='integer' AND amount_minor BETWEEN 1 AND 9999999999"),CheckConstraint("currency_code='USD'"),CheckConstraint("length(trim(provider_display_name_snapshot)) BETWEEN 1 AND 240"),CheckConstraint("length(trim(label)) BETWEEN 1 AND 200"),CheckConstraint("length(trim(scope_summary)) BETWEEN 1 AND 4000"),CheckConstraint("valid_through IS NULL OR valid_through >= received_on"),CheckConstraint("(earliest_work_start_on IS NULL AND estimated_work_finish_on IS NULL) OR (earliest_work_start_on IS NOT NULL AND estimated_work_finish_on IS NOT NULL AND estimated_work_finish_on >= earliest_work_start_on)"),CheckConstraint("replaces_quote_id IS NULL OR replaces_quote_id != id"),CheckConstraint("(withdrawn_at IS NULL AND withdrawal_reason IS NULL) OR (withdrawn_at IS NOT NULL AND withdrawal_reason IS NOT NULL)"),Index("maintenance_quotes_issue", "issue_id", "withdrawn_at", "received_on"),Index("maintenance_quotes_provider", "provider_party_id", "created_at"))
+    __tablename__ = "maintenance_quotes"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    issue_id: Mapped[str] = mapped_column(ForeignKey("maintenance_issues.id"), nullable=False)
+    provider_party_id: Mapped[str] = mapped_column(ForeignKey("parties.id"), nullable=False)
+    provider_display_name_snapshot: Mapped[str] = mapped_column(String, nullable=False)
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    scope_summary: Mapped[str] = mapped_column(String, nullable=False)
+    amount_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency_code: Mapped[str] = mapped_column(String, nullable=False)
+    received_on: Mapped[str] = mapped_column(String, nullable=False)
+    valid_through: Mapped[str | None] = mapped_column(String)
+    earliest_work_start_on: Mapped[str | None] = mapped_column(String)
+    estimated_work_finish_on: Mapped[str | None] = mapped_column(String)
+    terms_notes: Mapped[str | None] = mapped_column(String)
+    replaces_quote_id: Mapped[str | None] = mapped_column(
+        ForeignKey("maintenance_quotes.id"), unique=True
+    )
+    withdrawn_at: Mapped[str | None] = mapped_column(String)
+    withdrawal_reason: Mapped[str | None] = mapped_column(String)
+    idempotency_key: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint("typeof(amount_minor)='integer' AND amount_minor BETWEEN 1 AND 9999999999"),
+        CheckConstraint("currency_code='USD'"),
+        CheckConstraint("length(trim(provider_display_name_snapshot)) BETWEEN 1 AND 240"),
+        CheckConstraint("length(trim(label)) BETWEEN 1 AND 200"),
+        CheckConstraint("length(trim(scope_summary)) BETWEEN 1 AND 4000"),
+        CheckConstraint("valid_through IS NULL OR valid_through >= received_on"),
+        CheckConstraint(
+            "(earliest_work_start_on IS NULL AND estimated_work_finish_on IS NULL) OR (earliest_work_start_on IS NOT NULL AND estimated_work_finish_on IS NOT NULL AND estimated_work_finish_on >= earliest_work_start_on)"
+        ),
+        CheckConstraint("replaces_quote_id IS NULL OR replaces_quote_id != id"),
+        CheckConstraint(
+            "(withdrawn_at IS NULL AND withdrawal_reason IS NULL) OR (withdrawn_at IS NOT NULL AND withdrawal_reason IS NOT NULL)"
+        ),
+        Index("maintenance_quotes_issue", "issue_id", "withdrawn_at", "received_on"),
+        Index("maintenance_quotes_provider", "provider_party_id", "created_at"),
+    )
+
 
 class MaintenanceAssignmentModel(LocalBase):
-    __tablename__="maintenance_assignments"
-    id: Mapped[str]=mapped_column(String,primary_key=True); issue_id: Mapped[str]=mapped_column(ForeignKey("maintenance_issues.id"),nullable=False); provider_party_id: Mapped[str]=mapped_column(ForeignKey("parties.id"),nullable=False); provider_display_name_snapshot: Mapped[str]=mapped_column(String,nullable=False); quote_id: Mapped[str|None]=mapped_column(ForeignKey("maintenance_quotes.id")); provider_selection_status_snapshot: Mapped[str]=mapped_column(String,nullable=False); selection_reason: Mapped[str|None]=mapped_column(String); avoid_override_reason: Mapped[str|None]=mapped_column(String); instructions: Mapped[str|None]=mapped_column(String); replaces_assignment_id: Mapped[str|None]=mapped_column(ForeignKey("maintenance_assignments.id"),unique=True); assigned_at: Mapped[str]=mapped_column(String,nullable=False); ended_at: Mapped[str|None]=mapped_column(String); end_reason: Mapped[str|None]=mapped_column(String); idempotency_key: Mapped[str]=mapped_column(String,unique=True,nullable=False); request_fingerprint: Mapped[str]=mapped_column(String,nullable=False)
-    __table_args__=(CheckConstraint("length(trim(provider_display_name_snapshot)) BETWEEN 1 AND 240"),CheckConstraint("provider_selection_status_snapshot IN ('neutral','preferred','avoid')"),CheckConstraint("(quote_id IS NULL AND selection_reason IS NOT NULL) OR quote_id IS NOT NULL"),CheckConstraint("(provider_selection_status_snapshot='avoid' AND avoid_override_reason IS NOT NULL) OR (provider_selection_status_snapshot!='avoid' AND avoid_override_reason IS NULL)"),CheckConstraint("replaces_assignment_id IS NULL OR replaces_assignment_id != id"),CheckConstraint("(ended_at IS NULL AND end_reason IS NULL) OR (ended_at IS NOT NULL AND end_reason IS NOT NULL)"),Index("maintenance_assignments_issue", "issue_id", "assigned_at"),Index("maintenance_assignments_provider", "provider_party_id", "assigned_at"),Index("maintenance_assignments_one_current", "issue_id", unique=True,sqlite_where=text("ended_at IS NULL")))
+    __tablename__ = "maintenance_assignments"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    issue_id: Mapped[str] = mapped_column(ForeignKey("maintenance_issues.id"), nullable=False)
+    provider_party_id: Mapped[str] = mapped_column(ForeignKey("parties.id"), nullable=False)
+    provider_display_name_snapshot: Mapped[str] = mapped_column(String, nullable=False)
+    quote_id: Mapped[str | None] = mapped_column(ForeignKey("maintenance_quotes.id"))
+    provider_selection_status_snapshot: Mapped[str] = mapped_column(String, nullable=False)
+    selection_reason: Mapped[str | None] = mapped_column(String)
+    avoid_override_reason: Mapped[str | None] = mapped_column(String)
+    instructions: Mapped[str | None] = mapped_column(String)
+    replaces_assignment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("maintenance_assignments.id"), unique=True
+    )
+    assigned_at: Mapped[str] = mapped_column(String, nullable=False)
+    ended_at: Mapped[str | None] = mapped_column(String)
+    end_reason: Mapped[str | None] = mapped_column(String)
+    idempotency_key: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint("length(trim(provider_display_name_snapshot)) BETWEEN 1 AND 240"),
+        CheckConstraint("provider_selection_status_snapshot IN ('neutral','preferred','avoid')"),
+        CheckConstraint(
+            "(quote_id IS NULL AND selection_reason IS NOT NULL) OR quote_id IS NOT NULL"
+        ),
+        CheckConstraint(
+            "(provider_selection_status_snapshot='avoid' AND avoid_override_reason IS NOT NULL) OR (provider_selection_status_snapshot!='avoid' AND avoid_override_reason IS NULL)"
+        ),
+        CheckConstraint("replaces_assignment_id IS NULL OR replaces_assignment_id != id"),
+        CheckConstraint(
+            "(ended_at IS NULL AND end_reason IS NULL) OR (ended_at IS NOT NULL AND end_reason IS NOT NULL)"
+        ),
+        Index("maintenance_assignments_issue", "issue_id", "assigned_at"),
+        Index("maintenance_assignments_provider", "provider_party_id", "assigned_at"),
+        Index(
+            "maintenance_assignments_one_current",
+            "issue_id",
+            unique=True,
+            sqlite_where=text("ended_at IS NULL"),
+        ),
+    )
+
 
 class MaintenanceWorkJournalEntryModel(LocalBase):
-    __tablename__="maintenance_work_journal_entries"
-    id: Mapped[str]=mapped_column(String,primary_key=True); issue_id: Mapped[str]=mapped_column(ForeignKey("maintenance_issues.id"),nullable=False); assignment_id: Mapped[str|None]=mapped_column(ForeignKey("maintenance_assignments.id")); entry_kind: Mapped[str]=mapped_column(String,nullable=False); corrected_entry_kind: Mapped[str|None]=mapped_column(String); source_kind: Mapped[str]=mapped_column(String,nullable=False); occurred_at_utc: Mapped[str]=mapped_column(String,nullable=False); occurred_timezone: Mapped[str]=mapped_column(String,nullable=False); summary: Mapped[str]=mapped_column(String,nullable=False); detail: Mapped[str|None]=mapped_column(String); outcome_status: Mapped[str|None]=mapped_column(String); outcome_summary: Mapped[str|None]=mapped_column(String); follow_up_required: Mapped[int|None]=mapped_column(Integer); operator_verified: Mapped[int|None]=mapped_column(Integer); corrects_entry_id: Mapped[str|None]=mapped_column(ForeignKey("maintenance_work_journal_entries.id"),unique=True); correction_reason: Mapped[str|None]=mapped_column(String); idempotency_key: Mapped[str]=mapped_column(String,unique=True,nullable=False); request_fingerprint: Mapped[str]=mapped_column(String,nullable=False); recorded_at_utc: Mapped[str]=mapped_column(String,nullable=False)
-    __table_args__=(CheckConstraint("entry_kind IN ('work_started','progress_update','work_blocked','work_completed','general_note','correction')"),CheckConstraint("corrected_entry_kind IS NULL OR corrected_entry_kind IN ('work_started','progress_update','work_blocked','work_completed','general_note')"),CheckConstraint("source_kind IN ('operator_observation','provider_report','other_report')"),CheckConstraint("source_kind != 'provider_report' OR assignment_id IS NOT NULL"),CheckConstraint("outcome_status IS NULL OR outcome_status IN ('completed','partially_completed','unsuccessful')"),CheckConstraint("(entry_kind='correction' AND corrected_entry_kind IS NOT NULL AND corrects_entry_id IS NOT NULL AND correction_reason IS NOT NULL AND length(trim(correction_reason)) BETWEEN 1 AND 1000) OR (entry_kind!='correction' AND corrected_entry_kind IS NULL AND corrects_entry_id IS NULL AND correction_reason IS NULL)"),CheckConstraint("corrects_entry_id IS NULL OR corrects_entry_id != id"),CheckConstraint("((entry_kind='work_completed' OR (entry_kind='correction' AND corrected_entry_kind='work_completed')) AND outcome_status IS NOT NULL AND outcome_summary IS NOT NULL AND length(trim(outcome_summary)) BETWEEN 1 AND 4000 AND follow_up_required IN (0,1) AND operator_verified IN (0,1)) OR ((entry_kind!='work_completed' AND NOT (entry_kind='correction' AND corrected_entry_kind='work_completed')) AND outcome_status IS NULL AND outcome_summary IS NULL AND follow_up_required IS NULL AND operator_verified IS NULL)"),CheckConstraint("length(trim(summary)) BETWEEN 1 AND 240"),CheckConstraint("detail IS NULL OR length(trim(detail)) BETWEEN 1 AND 4000"),Index("maintenance_work_journal_issue_time","issue_id","occurred_at_utc","recorded_at_utc","id"),Index("maintenance_work_journal_assignment_time","assignment_id","occurred_at_utc"))
+    __tablename__ = "maintenance_work_journal_entries"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    issue_id: Mapped[str] = mapped_column(ForeignKey("maintenance_issues.id"), nullable=False)
+    assignment_id: Mapped[str | None] = mapped_column(ForeignKey("maintenance_assignments.id"))
+    entry_kind: Mapped[str] = mapped_column(String, nullable=False)
+    corrected_entry_kind: Mapped[str | None] = mapped_column(String)
+    source_kind: Mapped[str] = mapped_column(String, nullable=False)
+    occurred_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+    occurred_timezone: Mapped[str] = mapped_column(String, nullable=False)
+    summary: Mapped[str] = mapped_column(String, nullable=False)
+    detail: Mapped[str | None] = mapped_column(String)
+    outcome_status: Mapped[str | None] = mapped_column(String)
+    outcome_summary: Mapped[str | None] = mapped_column(String)
+    follow_up_required: Mapped[int | None] = mapped_column(Integer)
+    operator_verified: Mapped[int | None] = mapped_column(Integer)
+    corrects_entry_id: Mapped[str | None] = mapped_column(
+        ForeignKey("maintenance_work_journal_entries.id"), unique=True
+    )
+    correction_reason: Mapped[str | None] = mapped_column(String)
+    idempotency_key: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    recorded_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "entry_kind IN ('work_started','progress_update','work_blocked','work_completed','general_note','correction')"
+        ),
+        CheckConstraint(
+            "corrected_entry_kind IS NULL OR corrected_entry_kind IN ('work_started','progress_update','work_blocked','work_completed','general_note')"
+        ),
+        CheckConstraint("source_kind IN ('operator_observation','provider_report','other_report')"),
+        CheckConstraint("source_kind != 'provider_report' OR assignment_id IS NOT NULL"),
+        CheckConstraint(
+            "outcome_status IS NULL OR outcome_status IN ('completed','partially_completed','unsuccessful')"
+        ),
+        CheckConstraint(
+            "(entry_kind='correction' AND corrected_entry_kind IS NOT NULL AND corrects_entry_id IS NOT NULL AND correction_reason IS NOT NULL AND length(trim(correction_reason)) BETWEEN 1 AND 1000) OR (entry_kind!='correction' AND corrected_entry_kind IS NULL AND corrects_entry_id IS NULL AND correction_reason IS NULL)"
+        ),
+        CheckConstraint("corrects_entry_id IS NULL OR corrects_entry_id != id"),
+        CheckConstraint(
+            "((entry_kind='work_completed' OR (entry_kind='correction' AND corrected_entry_kind='work_completed')) AND outcome_status IS NOT NULL AND outcome_summary IS NOT NULL AND length(trim(outcome_summary)) BETWEEN 1 AND 4000 AND follow_up_required IN (0,1) AND operator_verified IN (0,1)) OR ((entry_kind!='work_completed' AND NOT (entry_kind='correction' AND corrected_entry_kind='work_completed')) AND outcome_status IS NULL AND outcome_summary IS NULL AND follow_up_required IS NULL AND operator_verified IS NULL)"
+        ),
+        CheckConstraint("length(trim(summary)) BETWEEN 1 AND 240"),
+        CheckConstraint("detail IS NULL OR length(trim(detail)) BETWEEN 1 AND 4000"),
+        Index(
+            "maintenance_work_journal_issue_time",
+            "issue_id",
+            "occurred_at_utc",
+            "recorded_at_utc",
+            "id",
+        ),
+        Index("maintenance_work_journal_assignment_time", "assignment_id", "occurred_at_utc"),
+    )

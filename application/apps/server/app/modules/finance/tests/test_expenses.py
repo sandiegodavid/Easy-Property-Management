@@ -17,7 +17,10 @@ from app.modules.files.application.service import FileError, FileService
 from app.modules.files.infrastructure.content_store import FilesystemContentStore
 from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
-from app.modules.finance.application.expense_service import ExpenseService, PossibleDuplicateExpenseError
+from app.modules.finance.application.expense_service import (
+    ExpenseService,
+    PossibleDuplicateExpenseError,
+)
 from app.modules.finance.application.file_links import ExpenseFileLinkValidator
 from app.modules.finance.domain.expense_models import (
     CategoryCreateCommand,
@@ -33,7 +36,11 @@ from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpens
 from app.modules.finance.infrastructure.file_link_facts import SQLiteExpenseFileLinkFacts
 from app.modules.finance.infrastructure.schema_validation import validate_finance_schema
 from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations
-from app.modules.portfolio.application.service import OwnershipInput, PortfolioService, PropertyCreateCommand
+from app.modules.portfolio.application.service import (
+    OwnershipInput,
+    PortfolioService,
+    PropertyCreateCommand,
+)
 from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioUnitOfWork
@@ -52,11 +59,13 @@ class ExpenseWorkflowTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         root = Path(self.temp.name)
         self.config = root / "config.json"
-        self.workspace = WorkspaceService(LocalConfig(
-            self.config, root / "workspace", backup_destination_path=root / "backups"
-        ))
+        self.workspace = WorkspaceService(
+            LocalConfig(self.config, root / "workspace", backup_destination_path=root / "backups")
+        )
         self.workspace.initialize()
-        self.config.write_text(json.dumps({"localWorkspacePath": str(self.workspace.paths.root)}), encoding="utf-8")
+        self.config.write_text(
+            json.dumps({"localWorkspacePath": str(self.workspace.paths.root)}), encoding="utf-8"
+        )
         database = self.workspace.paths.database
         self.audit = SQLiteAuditRepository(database)
         recorder = AuditRecorder(self.audit)
@@ -64,24 +73,39 @@ class ExpenseWorkflowTests(unittest.TestCase):
             SQLitePortfolioUnitOfWork(database, recorder),
             time_zone_resolver=BundledAddressTimeZoneResolver(),
         )
-        property_record = portfolio.create_property(PropertyCreateCommand(
-            "Expense home", "1 Main Street", "Portland", "US",
-            "single_family_home", (OwnershipInput("local_operator"),), region="OR",
-        ))
+        property_record = portfolio.create_property(
+            PropertyCreateCommand(
+                "Expense home",
+                "1 Main Street",
+                "Portland",
+                "US",
+                "single_family_home",
+                (OwnershipInput("local_operator"),),
+                region="OR",
+            )
+        )
         self.property_id = property_record.id
         self.space_id = portfolio.get_property(property_record.id)["spaces"][0]["id"]
         party_operations = SQLitePartyOperations(database)
         file_link_reader = SQLiteFileLinkReader()
-        self.expenses = ExpenseService(SQLiteExpenseUnitOfWork(
-            database, recorder, SQLitePortfolioContextReader(),
-            SQLiteProviderContextReader(), party_operations,
-            file_link_reader,
-        ), now=lambda: datetime.now(UTC))
+        self.expenses = ExpenseService(
+            SQLiteExpenseUnitOfWork(
+                database,
+                recorder,
+                SQLitePortfolioContextReader(),
+                SQLiteProviderContextReader(),
+                party_operations,
+                file_link_reader,
+            ),
+            now=lambda: datetime.now(UTC),
+        )
         self.files = FileService(
             self.workspace,
             FilesystemContentStore(self.workspace.paths.files),
             SQLiteFileUnitOfWork(database, recorder),
-            link_validators=(ExpenseFileLinkValidator(SQLiteExpenseFileLinkFacts(), file_link_reader),),
+            link_validators=(
+                ExpenseFileLinkValidator(SQLiteExpenseFileLinkFacts(), file_link_reader),
+            ),
         )
         self.category_id = self.expenses.list_categories()[0]["id"]
 
@@ -109,21 +133,36 @@ class ExpenseWorkflowTests(unittest.TestCase):
         with self.assertRaises(PossibleDuplicateExpenseError):
             self.expenses.record_expense(self.command())
 
-        refund = self.expenses.record_refund(first["id"], RefundCreateCommand(
-            str(uuid4()), date.today().isoformat(), "25.00", "USD",
-        ))
+        refund = self.expenses.record_refund(
+            first["id"],
+            RefundCreateCommand(
+                str(uuid4()),
+                date.today().isoformat(),
+                "25.00",
+                "USD",
+            ),
+        )
         self.assertEqual(self.expenses.expense(first["id"])["netAmount"], "100.00")
         with self.assertRaises(FinanceConflictError):
-            self.expenses.record_refund(first["id"], RefundCreateCommand(
-                str(uuid4()), date.today().isoformat(), "101.00", "USD",
-            ))
+            self.expenses.record_refund(
+                first["id"],
+                RefundCreateCommand(
+                    str(uuid4()),
+                    date.today().isoformat(),
+                    "101.00",
+                    "USD",
+                ),
+            )
         with self.assertRaises(FinanceConflictError):
             self.expenses.void_expense(first["id"], VoidCommand(True, "Incorrect record"))
         self.expenses.void_refund(refund["id"], VoidCommand(True, "Refund was entered twice"))
         voided = self.expenses.void_expense(first["id"], VoidCommand(True, "Incorrect property"))
-        replacement = self.expenses.record_expense(self.command(
-            replaces_expense_id=voided["id"], duplicate_confirmed=True,
-        ))
+        replacement = self.expenses.record_expense(
+            self.command(
+                replaces_expense_id=voided["id"],
+                duplicate_confirmed=True,
+            )
+        )
         self.assertEqual(replacement["replacesExpenseId"], first["id"])
         self.assertEqual(
             [row["id"] for row in replacement["correctionChain"]],
@@ -134,10 +173,12 @@ class ExpenseWorkflowTests(unittest.TestCase):
         command = self.command()
         recorded = self.expenses.record_expense(command)
         with self.assertRaises(FinanceConflictError):
-            self.expenses.record_expense(self.command(
-                idempotency_key=command.idempotency_key,
-                amount="126.00",
-            ))
+            self.expenses.record_expense(
+                self.command(
+                    idempotency_key=command.idempotency_key,
+                    amount="126.00",
+                )
+            )
         self.assertEqual(len(self.audit.history("expense", recorded["id"])), 1)
 
     def test_historical_idempotency_includes_confirmation_metadata(self):
@@ -153,20 +194,23 @@ class ExpenseWorkflowTests(unittest.TestCase):
         )
         recorded = self.expenses.record_expense(original)
         with self.assertRaises(FinanceConflictError):
-            self.expenses.record_expense(self.command(
-                idempotency_key=key,
-                historical_entry_confirmed=True,
-                historical_entry_reason="Different historical reason",
-            ))
+            self.expenses.record_expense(
+                self.command(
+                    idempotency_key=key,
+                    historical_entry_confirmed=True,
+                    historical_entry_reason="Different historical reason",
+                )
+            )
         with self.assertRaises(FinanceConflictError):
             self.expenses.record_expense(self.command(idempotency_key=key))
         self.assertEqual(len(self.audit.history("expense", recorded["id"])), 1)
         engine = create_sqlite_engine(self.workspace.paths.database)
         try:
             with engine.connect() as connection:
-                fingerprint = connection.execute(text(
-                    "SELECT request_fingerprint FROM expenses WHERE id = :id"
-                ), {"id": recorded["id"]}).scalar_one()
+                fingerprint = connection.execute(
+                    text("SELECT request_fingerprint FROM expenses WHERE id = :id"),
+                    {"id": recorded["id"]},
+                ).scalar_one()
         finally:
             engine.dispose()
         self.assertEqual(fingerprint, expense_request_fingerprint(original))
@@ -180,13 +224,15 @@ class ExpenseWorkflowTests(unittest.TestCase):
         with self.assertRaises(FinanceConflictError):
             self.expenses.create_category(CategoryCreateCommand("  LANDSCAPING  "))
         archived = self.expenses.archive_category(
-            original["id"], VoidCommand(True, "No longer used"),
+            original["id"],
+            VoidCommand(True, "No longer used"),
         )
         self.assertIsNotNone(archived["archivedAt"])
         replacement = self.expenses.create_category(CategoryCreateCommand("landscaping"))
         with self.assertRaises(FinanceConflictError):
             self.expenses.restore_category(
-                original["id"], VoidCommand(True, "Restore category"),
+                original["id"],
+                VoidCommand(True, "Restore category"),
             )
         updated = self.expenses.patch_category(
             replacement["id"],
@@ -210,8 +256,12 @@ class ExpenseWorkflowTests(unittest.TestCase):
         source = Path(self.temp.name) / "private-invoice.pdf"
         source.write_bytes(b"invoice")
         stored = self.files.add(
-            source, source.name, "application/pdf", entity_type="expense",
-            entity_id=expense["id"], purpose="invoice",
+            source,
+            source.name,
+            "application/pdf",
+            entity_type="expense",
+            entity_id=expense["id"],
+            purpose="invoice",
         )
         detail = self.expenses.expense(expense["id"])
         self.assertEqual(detail["activeEvidence"][0]["fileId"], stored.id)
@@ -225,17 +275,24 @@ class ExpenseWorkflowTests(unittest.TestCase):
 
     def test_http_contract_rejects_numeric_amount_and_returns_typed_expense(self):
         payload = {
-            "idempotencyKey": str(uuid4()), "propertyId": self.property_id,
-            "spaceId": self.space_id, "categoryId": self.category_id,
-            "payeeName": "Neighborhood Hardware", "paidByKind": "local_operator",
-            "paidOn": date.today().isoformat(), "amount": "125.00",
-            "currencyCode": "USD", "description": "Replaced a fixture",
+            "idempotencyKey": str(uuid4()),
+            "propertyId": self.property_id,
+            "spaceId": self.space_id,
+            "categoryId": self.category_id,
+            "payeeName": "Neighborhood Hardware",
+            "paidByKind": "local_operator",
+            "paidOn": date.today().isoformat(),
+            "amount": "125.00",
+            "currencyCode": "USD",
+            "description": "Replaced a fixture",
         }
         with TestClient(create_app(self.config)) as client:
             created = client.post("/api/expenses", json=payload)
             self.assertEqual(created.status_code, 201, created.text)
             self.assertEqual(created.json()["amount"], "125.00")
-            invalid = client.post("/api/expenses", json={**payload, "idempotencyKey": str(uuid4()), "amount": 125.0})
+            invalid = client.post(
+                "/api/expenses", json={**payload, "idempotencyKey": str(uuid4()), "amount": 125.0}
+            )
             self.assertEqual(invalid.status_code, 422)
 
     def test_expense_link_limit_is_enforced_but_archival_remains_available(self):
@@ -244,15 +301,33 @@ class ExpenseWorkflowTests(unittest.TestCase):
         source.write_bytes(b"evidence")
         links = []
         for number in range(20):
-            item = self.files.add(source, f"evidence-{number}.txt", "text/plain",
-                                  entity_type="expense", entity_id=expense["id"], purpose="supporting_document")
+            item = self.files.add(
+                source,
+                f"evidence-{number}.txt",
+                "text/plain",
+                entity_type="expense",
+                entity_id=expense["id"],
+                purpose="supporting_document",
+            )
             links.append(self.files.get(item.id).links[0]["id"])
         with self.assertRaisesRegex(FileError, "twenty"):
-            self.files.add(source, "extra.txt", "text/plain", entity_type="expense",
-                           entity_id=expense["id"], purpose="supporting_document")
+            self.files.add(
+                source,
+                "extra.txt",
+                "text/plain",
+                entity_type="expense",
+                entity_id=expense["id"],
+                purpose="supporting_document",
+            )
         self.files.archive_link(links[0], confirmed=True, reason="Wrong supporting document")
-        self.files.add(source, "replacement.txt", "text/plain", entity_type="expense",
-                       entity_id=expense["id"], purpose="supporting_document")
+        self.files.add(
+            source,
+            "replacement.txt",
+            "text/plain",
+            entity_type="expense",
+            entity_id=expense["id"],
+            purpose="supporting_document",
+        )
 
     def test_commands_enforce_exact_decimal_and_usd_contracts(self):
         for invalid in (125, 125.0, "125", "125.0", " 125.00", "+125.00", "1e2", "0.00"):
@@ -269,23 +344,31 @@ class ExpenseWorkflowTests(unittest.TestCase):
         engine = create_sqlite_engine(self.workspace.paths.database)
         try:
             with engine.begin() as connection:
-                connection.execute(text(
-                    "INSERT INTO parties "
-                    "(id, party_kind, display_name, created_at, updated_at, archived_at) "
-                    "VALUES (:id, 'organization', :name, :stamp, :stamp, NULL)"
-                ), {"id": provider_id, "name": "P" * 201, "stamp": stamp})
-                connection.execute(text(
-                    "INSERT INTO provider_profiles "
-                    "(party_id, selection_status, selection_reason, notes, created_at, updated_at, archived_at) "
-                    "VALUES (:id, 'neutral', NULL, NULL, :stamp, :stamp, NULL)"
-                ), {"id": provider_id, "stamp": stamp})
+                connection.execute(
+                    text(
+                        "INSERT INTO parties "
+                        "(id, party_kind, display_name, created_at, updated_at, archived_at) "
+                        "VALUES (:id, 'organization', :name, :stamp, :stamp, NULL)"
+                    ),
+                    {"id": provider_id, "name": "P" * 201, "stamp": stamp},
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO provider_profiles "
+                        "(party_id, selection_status, selection_reason, notes, created_at, updated_at, archived_at) "
+                        "VALUES (:id, 'neutral', NULL, NULL, :stamp, :stamp, NULL)"
+                    ),
+                    {"id": provider_id, "stamp": stamp},
+                )
         finally:
             engine.dispose()
         with self.assertRaisesRegex(FinanceError, "display-name snapshot"):
-            self.expenses.record_expense(self.command(
-                provider_party_id=provider_id,
-                payee_name=None,
-            ))
+            self.expenses.record_expense(
+                self.command(
+                    provider_party_id=provider_id,
+                    payee_name=None,
+                )
+            )
 
     def test_expense_query_command_rejects_untyped_and_inconsistent_filters(self):
         for values in (
@@ -306,23 +389,31 @@ class ExpenseWorkflowTests(unittest.TestCase):
         stamp = datetime.now(UTC).isoformat()
         with self.expenses.unit_of_work.engine.begin() as connection:
             for number, provider_id in enumerate(provider_ids):
-                connection.execute(text(
-                    "INSERT INTO parties (id, party_kind, display_name, created_at, updated_at, archived_at) "
-                    "VALUES (:id, 'organization', :name, :stamp, :stamp, NULL)"
-                ), {"id": provider_id, "name": f"Projection Provider {number}", "stamp": stamp})
-                connection.execute(text(
-                    "INSERT INTO provider_profiles "
-                    "(party_id, selection_status, selection_reason, notes, created_at, updated_at, archived_at) "
-                    "VALUES (:id, 'neutral', NULL, NULL, :stamp, :stamp, NULL)"
-                ), {"id": provider_id, "stamp": stamp})
+                connection.execute(
+                    text(
+                        "INSERT INTO parties (id, party_kind, display_name, created_at, updated_at, archived_at) "
+                        "VALUES (:id, 'organization', :name, :stamp, :stamp, NULL)"
+                    ),
+                    {"id": provider_id, "name": f"Projection Provider {number}", "stamp": stamp},
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO provider_profiles "
+                        "(party_id, selection_status, selection_reason, notes, created_at, updated_at, archived_at) "
+                        "VALUES (:id, 'neutral', NULL, NULL, :stamp, :stamp, NULL)"
+                    ),
+                    {"id": provider_id, "stamp": stamp},
+                )
         for number in range(60):
-            self.expenses.record_expense(self.command(
-                amount=f"{number + 1}.00",
-                description=f"Expense {number}",
-                provider_party_id=provider_ids[number % len(provider_ids)],
-                payee_name=None,
-                paid_on=(date.today() - timedelta(days=number)).isoformat(),
-            ))
+            self.expenses.record_expense(
+                self.command(
+                    amount=f"{number + 1}.00",
+                    description=f"Expense {number}",
+                    provider_party_id=provider_ids[number % len(provider_ids)],
+                    payee_name=None,
+                    paid_on=(date.today() - timedelta(days=number)).isoformat(),
+                )
+            )
 
         counts = []
         expense_selects = []
@@ -350,10 +441,9 @@ class ExpenseWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(counts[1], counts[0])
         self.assertTrue(expense_selects)
-        self.assertTrue(all(
-            "WHERE " in statement or "LIMIT " in statement
-            for statement in expense_selects
-        ))
+        self.assertTrue(
+            all("WHERE " in statement or "LIMIT " in statement for statement in expense_selects)
+        )
 
     def test_provider_context_reader_uses_one_query_for_any_nonempty_batch(self):
         reader = SQLiteProviderContextReader()
@@ -362,20 +452,28 @@ class ExpenseWorkflowTests(unittest.TestCase):
         engine = self.expenses.unit_of_work.engine
         with engine.begin() as connection:
             for number, provider_id in enumerate(provider_ids):
-                connection.execute(text(
-                    "INSERT INTO parties (id, party_kind, display_name, created_at, updated_at, archived_at) "
-                    "VALUES (:id, 'organization', :name, :stamp, :stamp, NULL)"
-                ), {"id": provider_id, "name": f"Reader Provider {number}", "stamp": stamp})
-                connection.execute(text(
-                    "INSERT INTO provider_profiles "
-                    "(party_id, selection_status, selection_reason, notes, created_at, updated_at, archived_at) "
-                    "VALUES (:id, 'neutral', NULL, NULL, :stamp, :stamp, :archived)"
-                ), {"id": provider_id, "stamp": stamp, "archived": None if number == 0 else stamp})
+                connection.execute(
+                    text(
+                        "INSERT INTO parties (id, party_kind, display_name, created_at, updated_at, archived_at) "
+                        "VALUES (:id, 'organization', :name, :stamp, :stamp, NULL)"
+                    ),
+                    {"id": provider_id, "name": f"Reader Provider {number}", "stamp": stamp},
+                )
+                connection.execute(
+                    text(
+                        "INSERT INTO provider_profiles "
+                        "(party_id, selection_status, selection_reason, notes, created_at, updated_at, archived_at) "
+                        "VALUES (:id, 'neutral', NULL, NULL, :stamp, :stamp, :archived)"
+                    ),
+                    {"id": provider_id, "stamp": stamp, "archived": None if number == 0 else stamp},
+                )
 
         statements = []
+
         def capture(*args):
             if args[2].lstrip().upper().startswith("SELECT"):
                 statements.append(args[2])
+
         event.listen(engine, "before_cursor_execute", capture)
         try:
             with engine.connect() as connection:
@@ -383,10 +481,16 @@ class ExpenseWorkflowTests(unittest.TestCase):
                 self.assertEqual(len(statements), 0)
                 self.assertEqual(reader.profile_context(connection, "missing"), None)
                 self.assertEqual(len(statements), 1)
-                self.assertIsNone(reader.profile_context(connection, provider_ids[0])["archived_at"])
-                self.assertIsNotNone(reader.profile_context(connection, provider_ids[1])["archived_at"])
+                self.assertIsNone(
+                    reader.profile_context(connection, provider_ids[0])["archived_at"]
+                )
+                self.assertIsNotNone(
+                    reader.profile_context(connection, provider_ids[1])["archived_at"]
+                )
                 start = len(statements)
-                contexts = reader.profile_contexts(connection, {provider_ids[0], provider_ids[1], "missing"})
+                contexts = reader.profile_contexts(
+                    connection, {provider_ids[0], provider_ids[1], "missing"}
+                )
                 self.assertEqual(set(contexts), set(provider_ids))
                 self.assertEqual(len(statements) - start, 1)
         finally:
@@ -405,16 +509,30 @@ class ExpenseWorkflowTests(unittest.TestCase):
     @fast_backup_encryption()
     def test_expense_evidence_refund_and_audit_round_trip_through_backup(self):
         expense = self.expenses.record_expense(self.command())
-        refund = self.expenses.record_refund(expense["id"], RefundCreateCommand(
-            str(uuid4()), date.today().isoformat(), "20.00", "USD", notes="Partial return",
-        ))
+        refund = self.expenses.record_refund(
+            expense["id"],
+            RefundCreateCommand(
+                str(uuid4()),
+                date.today().isoformat(),
+                "20.00",
+                "USD",
+                notes="Partial return",
+            ),
+        )
         source = Path(self.temp.name) / "invoice.txt"
         source.write_bytes(b"expense evidence")
-        stored = self.files.add(source, "invoice.txt", "text/plain", entity_type="expense",
-                                entity_id=expense["id"], purpose="invoice")
+        stored = self.files.add(
+            source,
+            "invoice.txt",
+            "text/plain",
+            entity_type="expense",
+            entity_id=expense["id"],
+            purpose="invoice",
+        )
         recorder = AuditRecorder(self.audit)
         backups = BackupService(
-            self.workspace, recorder,
+            self.workspace,
+            recorder,
             lambda database: AuditRecorder(SQLiteAuditRepository(database)),
         )
         archive = backups.create_backup("a sufficiently long passphrase")
@@ -422,11 +540,16 @@ class ExpenseWorkflowTests(unittest.TestCase):
         backups.restore(archive.archive_path, "a sufficiently long passphrase", restored_root)
         restored_database = restored_root / "database" / "property-management.sqlite"
         party_operations = SQLitePartyOperations(restored_database)
-        restored = ExpenseService(SQLiteExpenseUnitOfWork(
-            restored_database, AuditRecorder(SQLiteAuditRepository(restored_database)),
-            SQLitePortfolioContextReader(), SQLiteProviderContextReader(),
-            party_operations, SQLiteFileLinkReader(),
-        ))
+        restored = ExpenseService(
+            SQLiteExpenseUnitOfWork(
+                restored_database,
+                AuditRecorder(SQLiteAuditRepository(restored_database)),
+                SQLitePortfolioContextReader(),
+                SQLiteProviderContextReader(),
+                party_operations,
+                SQLiteFileLinkReader(),
+            )
+        )
         detail = restored.expense(expense["id"])
         self.assertEqual(detail["refunds"][0]["id"], refund["id"])
         self.assertEqual(detail["activeEvidence"][0]["fileId"], stored.id)

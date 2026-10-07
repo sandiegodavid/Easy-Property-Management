@@ -84,7 +84,9 @@ class PartyResponse(Contract):
     activeRoles: list[Literal["tenant", "provider", "client_owner"]] = Field(default_factory=list)
 
 
-def build_router(identity: PartyIdentityService, service: PartyContactService, runtime: WorkspaceRuntime) -> APIRouter:
+def build_router(
+    identity: PartyIdentityService, service: PartyContactService, runtime: WorkspaceRuntime
+) -> APIRouter:
     router = APIRouter(prefix="/api/parties", tags=["parties"])
 
     def ready(write: bool = False) -> None:
@@ -105,11 +107,16 @@ def build_router(identity: PartyIdentityService, service: PartyContactService, r
 
     def party_view(record) -> dict[str, object]:
         party, methods = record
-        return {**party.to_dict(), "contactMethods": [item.to_dict() for item in methods], "activeRoles": identity.active_roles(party.id)}
+        return {
+            **party.to_dict(),
+            "contactMethods": [item.to_dict() for item in methods],
+            "activeRoles": identity.active_roles(party.id),
+        }
 
     @router.post("", response_model=PartyResponse, status_code=status.HTTP_201_CREATED)
     def create_party(data: PartyRequest):
         ready(True)
+
         def create() -> dict[str, object]:
             party = identity.create(
                 PartyCreateCommand(data.partyKind, data.displayName),
@@ -117,33 +124,56 @@ def build_router(identity: PartyIdentityService, service: PartyContactService, r
                 confirmed_new_party=data.confirmedNewParty,
             )
             return party_view(identity.get(party.id))
+
         try:
             return create()
         except PossibleDuplicatePartyError as error:
-            raise HTTPException(409, {"code": "possible_duplicate_party", "candidatePartyIds": error.candidate_party_ids}) from error
+            raise HTTPException(
+                409,
+                {
+                    "code": "possible_duplicate_party",
+                    "candidatePartyIds": error.candidate_party_ids,
+                },
+            ) from error
         except PartyConflictError as error:
             raise HTTPException(409, str(error)) from error
         except PartyValidationError as error:
             raise HTTPException(400, str(error)) from error
 
     @router.get("", response_model=list[PartyResponse])
-    def list_parties(archiveState: Literal["active", "archived", "all"] = "active", search: str | None = None):
+    def list_parties(
+        archiveState: Literal["active", "archived", "all"] = "active", search: str | None = None
+    ):
         ready()
-        return invoke(lambda: [party_view(item) for item in identity.list(archive_state=archiveState, search=search)])
+        return invoke(
+            lambda: [
+                party_view(item)
+                for item in identity.list(archive_state=archiveState, search=search)
+            ]
+        )
 
     @router.get("/{party_id}", response_model=PartyResponse)
     def get_party(party_id: str):
-        ready(); return invoke(lambda: party_view(identity.get(party_id)))
+        ready()
+        return invoke(lambda: party_view(identity.get(party_id)))
 
     @router.patch("/{party_id}", response_model=PartyResponse)
     def patch_party(party_id: str, data: PartyPatchRequest):
         ready(True)
-        return invoke(lambda: party_view(identity.get(identity.patch(party_id, PartyPatchCommand(data.displayName)).id)))
+        return invoke(
+            lambda: party_view(
+                identity.get(identity.patch(party_id, PartyPatchCommand(data.displayName)).id)
+            )
+        )
 
     @router.post("/{party_id}/archive", response_model=PartyResponse)
     def archive_party(party_id: str, data: "ArchiveRequest"):
         ready(True)
-        return invoke(lambda: party_view(identity.get(identity.archive(party_id, confirmed=data.confirmed).id)))
+        return invoke(
+            lambda: party_view(
+                identity.get(identity.archive(party_id, confirmed=data.confirmed).id)
+            )
+        )
 
     @router.post("/{party_id}/restore", response_model=PartyResponse)
     def restore_party(party_id: str):
@@ -155,8 +185,11 @@ def build_router(identity: PartyIdentityService, service: PartyContactService, r
         ready()
         return invoke(lambda: service.list(party_id))
 
-    @router.post("/{party_id}/contact-methods", status_code=status.HTTP_201_CREATED,
-                 response_model=ContactResponse)
+    @router.post(
+        "/{party_id}/contact-methods",
+        status_code=status.HTTP_201_CREATED,
+        response_model=ContactResponse,
+    )
     def add_contact(party_id: str, data: ContactRequest):
         ready(True)
         return invoke(lambda: service.add(party_id, _command(data)))
@@ -169,12 +202,19 @@ def build_router(identity: PartyIdentityService, service: PartyContactService, r
     @router.post("/{party_id}/contact-methods/{method_id}/archive", response_model=ContactResponse)
     def archive_contact(party_id: str, method_id: str, data: ArchiveRequest):
         ready(True)
-        return invoke(lambda: service.archive(
-            party_id, method_id, confirmed=data.confirmed,
-            reference_resolutions=tuple(ContactReferenceResolution(
-                item.role, item.roleRecordId, item.replacementContactMethodId, item.clear
-            ) for item in data.referenceResolutions),
-        ))
+        return invoke(
+            lambda: service.archive(
+                party_id,
+                method_id,
+                confirmed=data.confirmed,
+                reference_resolutions=tuple(
+                    ContactReferenceResolution(
+                        item.role, item.roleRecordId, item.replacementContactMethodId, item.clear
+                    )
+                    for item in data.referenceResolutions
+                ),
+            )
+        )
 
     @router.post("/{party_id}/contact-methods/{method_id}/restore", response_model=ContactResponse)
     def restore_contact(party_id: str, method_id: str):

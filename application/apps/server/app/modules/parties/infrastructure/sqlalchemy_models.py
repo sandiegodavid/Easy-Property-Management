@@ -42,8 +42,18 @@ class PartyContactMethodModel(LocalBase):
         CheckConstraint("method_kind IN ('email', 'phone')"),
         CheckConstraint("status IN ('active', 'archived')"),
         CheckConstraint("length(trim(display_value)) > 0"),
-        CheckConstraint("(status = 'active' AND archived_at IS NULL) OR (status = 'archived' AND archived_at IS NOT NULL)"),
+        CheckConstraint(
+            "(status = 'active' AND archived_at IS NULL) OR (status = 'archived' AND archived_at IS NOT NULL)"
+        ),
         CheckConstraint("method_kind = 'phone' OR extension IS NULL"),
         Index("party_contact_methods_party_status", "party_id", "status"),
-        Index("party_contact_methods_one_active_value", "party_id", "method_kind", "normalized_value", text("coalesce(extension, '')"), unique=True, sqlite_where=text("status = 'active'")),
+        Index(
+            "party_contact_methods_one_active_value",
+            "party_id",
+            "method_kind",
+            "normalized_value",
+            text("coalesce(extension, '')"),
+            unique=True,
+            sqlite_where=text("status = 'active'"),
+        ),
     )

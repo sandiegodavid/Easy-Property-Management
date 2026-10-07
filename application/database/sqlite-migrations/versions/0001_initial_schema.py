@@ -3,6 +3,7 @@
 Revision ID: 0001_initial_schema
 Revises: none
 """
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -13,135 +14,747 @@ depends_on = None
 
 
 def upgrade() -> None:
-    from app.modules.tasks.infrastructure import sqlalchemy_models as _task_models
-    from app.modules.leases.infrastructure import sqlalchemy_models as _lease_models
-    from app.modules.portfolio.infrastructure import sqlalchemy_models as _portfolio_models
     from app.modules.inspections.infrastructure.sqlalchemy_models import (
-        ConditionAcknowledgmentModel, ConditionAreaModel, ConditionComparisonModel,
-        ConditionObservationModel, ConditionReportModel, ConditionChecklistTemplateModel,
+        ConditionAcknowledgmentModel,
+        ConditionAreaModel,
+        ConditionComparisonModel,
+        ConditionObservationModel,
+        ConditionReportModel,
+        ConditionChecklistTemplateModel,
         ConditionChecklistTemplateItemModel,
     )
     from app.modules.vendors.infrastructure.sqlalchemy_models import (
-        ProviderCategoryAssignmentModel, ProviderCategoryModel, ProviderProfileModel, ProviderReferenceModel, ProviderReputationLinkModel,
-        ProviderServiceAreaModel, ProviderServiceModel, ProviderWorkHistoryModel,
+        ProviderCategoryAssignmentModel,
+        ProviderCategoryModel,
+        ProviderProfileModel,
+        ProviderReferenceModel,
+        ProviderReputationLinkModel,
+        ProviderServiceAreaModel,
+        ProviderServiceModel,
+        ProviderWorkHistoryModel,
     )
     from app.modules.vendors.domain.category_seeds import PROVIDER_CATEGORY_SEEDS
     from app.modules.finance.infrastructure.sqlalchemy_models import (
-        ExpenseCategoryModel, ExpenseModel, ExpenseRefundModel,
-        RentExpectationModel, RentExpectationTimelinessReviewModel,
-        RentReceiptModel, RentReceiptAllocationModel,
-        PrepaidCheckModel, PrepaidCheckOperationModel,
-        SecurityDepositAccountModel, SecurityDepositReceiptModel,
-        SecurityDepositSettlementModel, SecurityDepositSettlementReceiptModel,
-        SecurityDepositDeductionModel, SecurityDepositDeductionSourceModel,
-        SecurityDepositCreditModel, SecurityDepositRefundModel,
+        ExpenseCategoryModel,
+        ExpenseModel,
+        ExpenseRefundModel,
+        RentExpectationModel,
+        RentExpectationTimelinessReviewModel,
+        RentReceiptModel,
+        RentReceiptAllocationModel,
+        PrepaidCheckModel,
+        PrepaidCheckOperationModel,
+        SecurityDepositAccountModel,
+        SecurityDepositReceiptModel,
+        SecurityDepositSettlementModel,
+        SecurityDepositSettlementReceiptModel,
+        SecurityDepositDeductionModel,
+        SecurityDepositDeductionSourceModel,
+        SecurityDepositCreditModel,
+        SecurityDepositRefundModel,
     )
     from app.modules.communications.infrastructure.sqlalchemy_models import (
-        CommunicationModel, CommunicationParticipantModel, CommunicationLinkModel, CommunicationOperationModel,
+        CommunicationModel,
+        CommunicationParticipantModel,
+        CommunicationLinkModel,
+        CommunicationOperationModel,
     )
     from app.modules.maintenance.infrastructure.sqlalchemy_models import (
-        MaintenanceIssueModel, MaintenanceAppointmentModel, MaintenanceCostContextModel,
-        MaintenanceIssueExpenseLinkModel, MaintenanceFollowUpOperationModel, MaintenanceQuoteModel, MaintenanceAssignmentModel, MaintenanceWorkJournalEntryModel,
+        MaintenanceIssueModel,
+        MaintenanceAppointmentModel,
+        MaintenanceCostContextModel,
+        MaintenanceIssueExpenseLinkModel,
+        MaintenanceFollowUpOperationModel,
+        MaintenanceQuoteModel,
+        MaintenanceAssignmentModel,
+        MaintenanceWorkJournalEntryModel,
     )
-    from app.modules.owner_accounting.infrastructure.sqlalchemy_models import OwnerRentReportModel, OwnerRentReportOperationModel
-    from app.modules.owner_management.infrastructure.sqlalchemy_models import OwnerConcernModel, OwnerConcernFollowUpOperationModel
-    from app.modules.ai_governance.infrastructure.sqlalchemy_models import AiSettingsModel, AiSettingsOperationModel, AiModelConnectionModel, AiActionLimitModel, AiRunModel, AiDraftModel, AiReviewDecisionModel
-    from app.modules.intake.infrastructure.sqlalchemy_models import IntakeSourceModel, IntakeEvidenceRevisionModel, IntakeRevisionFileLinkModel, IntakeSourceOperationModel, IntakeDuplicateCandidateModel
-    op.create_table("workspace_metadata", sa.Column("singleton", sa.Integer(), primary_key=True),
-        sa.Column("workspace_id", sa.String(), nullable=False, unique=True), sa.Column("format_version", sa.Integer(), nullable=False),
-        sa.Column("created_at", sa.String(), nullable=False), sa.CheckConstraint("singleton = 1"))
-    op.create_table("audit_events", sa.Column("id", sa.String(), primary_key=True), sa.Column("occurred_at", sa.String(), nullable=False),
-        sa.Column("entity_type", sa.String(), nullable=False), sa.Column("entity_id", sa.String(), nullable=False), sa.Column("action", sa.String(), nullable=False),
-        sa.Column("before_snapshot", sa.String()), sa.Column("after_snapshot", sa.String()), sa.Column("changed_fields", sa.String(), nullable=False), sa.Column("reason", sa.String()),
-        sa.Column("actor_kind", sa.String(), nullable=False), sa.Column("actor_reference", sa.String()), sa.Column("correlation_id", sa.String(), nullable=False), sa.Column("schema_version", sa.Integer(), nullable=False),
-        sa.CheckConstraint("length(trim(entity_type)) > 0"), sa.CheckConstraint("length(trim(entity_id)) > 0"), sa.CheckConstraint("length(trim(action)) > 0"),
-        sa.CheckConstraint("actor_kind IN ('local_operator', 'system', 'connector', 'ai_assistant')"))
-    op.create_index("audit_events_entity_time", "audit_events", ["entity_type", "entity_id", "occurred_at", "id"])
-    op.create_index("audit_events_correlation", "audit_events", ["correlation_id", "occurred_at", "id"])
-    op.create_index("audit_events_activity", "audit_events", ["occurred_at", "action", "actor_kind"])
-    op.execute("CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON audit_events BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END")
-    op.execute("CREATE TRIGGER audit_events_no_delete BEFORE DELETE ON audit_events BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END")
-    op.create_table("file_records", sa.Column("id", sa.String(), primary_key=True), sa.Column("original_name", sa.String(), nullable=False), sa.Column("media_type", sa.String(), nullable=False),
-        sa.Column("size_bytes", sa.Integer(), nullable=False), sa.Column("content_sha256", sa.String(), nullable=False), sa.Column("created_at", sa.String(), nullable=False), sa.CheckConstraint("size_bytes >= 0"))
+    from app.modules.owner_accounting.infrastructure.sqlalchemy_models import (
+        OwnerRentReportModel,
+        OwnerRentReportOperationModel,
+    )
+    from app.modules.owner_management.infrastructure.sqlalchemy_models import (
+        OwnerConcernModel,
+        OwnerConcernFollowUpOperationModel,
+    )
+    from app.modules.ai_governance.infrastructure.sqlalchemy_models import (
+        AiSettingsModel,
+        AiSettingsOperationModel,
+        AiModelConnectionModel,
+        AiActionLimitModel,
+        AiRunModel,
+        AiDraftModel,
+        AiReviewDecisionModel,
+    )
+    from app.modules.intake.infrastructure.sqlalchemy_models import (
+        IntakeSourceModel,
+        IntakeEvidenceRevisionModel,
+        IntakeRevisionFileLinkModel,
+        IntakeSourceOperationModel,
+        IntakeDuplicateCandidateModel,
+    )
+
+    op.create_table(
+        "workspace_metadata",
+        sa.Column("singleton", sa.Integer(), primary_key=True),
+        sa.Column("workspace_id", sa.String(), nullable=False, unique=True),
+        sa.Column("format_version", sa.Integer(), nullable=False),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.CheckConstraint("singleton = 1"),
+    )
+    op.create_table(
+        "audit_events",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("occurred_at", sa.String(), nullable=False),
+        sa.Column("entity_type", sa.String(), nullable=False),
+        sa.Column("entity_id", sa.String(), nullable=False),
+        sa.Column("action", sa.String(), nullable=False),
+        sa.Column("before_snapshot", sa.String()),
+        sa.Column("after_snapshot", sa.String()),
+        sa.Column("changed_fields", sa.String(), nullable=False),
+        sa.Column("reason", sa.String()),
+        sa.Column("actor_kind", sa.String(), nullable=False),
+        sa.Column("actor_reference", sa.String()),
+        sa.Column("correlation_id", sa.String(), nullable=False),
+        sa.Column("schema_version", sa.Integer(), nullable=False),
+        sa.CheckConstraint("length(trim(entity_type)) > 0"),
+        sa.CheckConstraint("length(trim(entity_id)) > 0"),
+        sa.CheckConstraint("length(trim(action)) > 0"),
+        sa.CheckConstraint(
+            "actor_kind IN ('local_operator', 'system', 'connector', 'ai_assistant')"
+        ),
+    )
+    op.create_index(
+        "audit_events_entity_time",
+        "audit_events",
+        ["entity_type", "entity_id", "occurred_at", "id"],
+    )
+    op.create_index(
+        "audit_events_correlation", "audit_events", ["correlation_id", "occurred_at", "id"]
+    )
+    op.create_index(
+        "audit_events_activity", "audit_events", ["occurred_at", "action", "actor_kind"]
+    )
+    op.execute(
+        "CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON audit_events BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER audit_events_no_delete BEFORE DELETE ON audit_events BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END"
+    )
+    op.create_table(
+        "file_records",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("original_name", sa.String(), nullable=False),
+        sa.Column("media_type", sa.String(), nullable=False),
+        sa.Column("size_bytes", sa.Integer(), nullable=False),
+        sa.Column("content_sha256", sa.String(), nullable=False),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.CheckConstraint("size_bytes >= 0"),
+    )
     op.create_index("file_records_content", "file_records", ["content_sha256"])
-    op.create_table("file_content_locations", sa.Column("file_id", sa.String(), sa.ForeignKey("file_records.id"), primary_key=True), sa.Column("storage_provider", sa.String(), nullable=False), sa.Column("storage_state", sa.String(), nullable=False), sa.Column("local_relative_path", sa.String()), sa.Column("s3_bucket", sa.String()), sa.Column("s3_object_key", sa.String()), sa.Column("s3_version_id", sa.String()), sa.Column("provider_etag", sa.String()), sa.Column("verified_at", sa.String(), nullable=False), sa.CheckConstraint("storage_provider IN ('local', 's3')"), sa.CheckConstraint("storage_state IN ('available', 'missing', 'quarantined')"), sa.CheckConstraint("(storage_provider = 'local' AND local_relative_path IS NOT NULL AND s3_bucket IS NULL AND s3_object_key IS NULL AND s3_version_id IS NULL) OR (storage_provider = 's3' AND local_relative_path IS NULL AND s3_bucket IS NOT NULL AND s3_object_key IS NOT NULL AND s3_version_id IS NOT NULL)"))
-    op.create_index("file_content_locations_provider", "file_content_locations", ["storage_provider", "local_relative_path", "s3_bucket", "s3_object_key"])
-    op.create_table("file_links", sa.Column("id", sa.String(), primary_key=True), sa.Column("file_id", sa.String(), sa.ForeignKey("file_records.id"), nullable=False),
-        sa.Column("entity_type", sa.String(), nullable=False), sa.Column("entity_id", sa.String(), nullable=False), sa.Column("purpose", sa.String(), nullable=False), sa.Column("created_at", sa.String(), nullable=False), sa.Column("archived_at", sa.String()), sa.Column("archive_reason", sa.String()), sa.CheckConstraint("(archived_at IS NULL AND archive_reason IS NULL) OR (archived_at IS NOT NULL AND archive_reason IS NOT NULL AND length(trim(archive_reason)) BETWEEN 1 AND 1000)"))
+    op.create_table(
+        "file_content_locations",
+        sa.Column("file_id", sa.String(), sa.ForeignKey("file_records.id"), primary_key=True),
+        sa.Column("storage_provider", sa.String(), nullable=False),
+        sa.Column("storage_state", sa.String(), nullable=False),
+        sa.Column("local_relative_path", sa.String()),
+        sa.Column("s3_bucket", sa.String()),
+        sa.Column("s3_object_key", sa.String()),
+        sa.Column("s3_version_id", sa.String()),
+        sa.Column("provider_etag", sa.String()),
+        sa.Column("verified_at", sa.String(), nullable=False),
+        sa.CheckConstraint("storage_provider IN ('local', 's3')"),
+        sa.CheckConstraint("storage_state IN ('available', 'missing', 'quarantined')"),
+        sa.CheckConstraint(
+            "(storage_provider = 'local' AND local_relative_path IS NOT NULL AND s3_bucket IS NULL AND s3_object_key IS NULL AND s3_version_id IS NULL) OR (storage_provider = 's3' AND local_relative_path IS NULL AND s3_bucket IS NOT NULL AND s3_object_key IS NOT NULL AND s3_version_id IS NOT NULL)"
+        ),
+    )
+    op.create_index(
+        "file_content_locations_provider",
+        "file_content_locations",
+        ["storage_provider", "local_relative_path", "s3_bucket", "s3_object_key"],
+    )
+    op.create_table(
+        "file_links",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("file_id", sa.String(), sa.ForeignKey("file_records.id"), nullable=False),
+        sa.Column("entity_type", sa.String(), nullable=False),
+        sa.Column("entity_id", sa.String(), nullable=False),
+        sa.Column("purpose", sa.String(), nullable=False),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.Column("archived_at", sa.String()),
+        sa.Column("archive_reason", sa.String()),
+        sa.CheckConstraint(
+            "(archived_at IS NULL AND archive_reason IS NULL) OR (archived_at IS NOT NULL AND archive_reason IS NOT NULL AND length(trim(archive_reason)) BETWEEN 1 AND 1000)"
+        ),
+    )
     op.create_index("file_links_entity", "file_links", ["entity_type", "entity_id"])
-    op.create_index("file_links_one_active_association", "file_links", ["file_id", "entity_type", "entity_id", "purpose"], unique=True, sqlite_where=sa.text("archived_at IS NULL"))
-    op.create_table("file_publication_cleanup_attentions", sa.Column("publication_id", sa.String(), primary_key=True),
-        sa.Column("provider", sa.String(), nullable=False), sa.Column("opened_at", sa.String(), nullable=False), sa.Column("resolved_at", sa.String()))
-    op.create_table("tasks", sa.Column("id", sa.String(), primary_key=True), sa.Column("title", sa.String(), nullable=False), sa.Column("notes", sa.String()), sa.Column("status", sa.String(), nullable=False),
-        sa.Column("priority", sa.String(), nullable=False), sa.Column("due_at_utc", sa.String()), sa.Column("due_timezone", sa.String()), sa.Column("is_all_day", sa.Integer(), nullable=False),
-        sa.Column("completed_at_utc", sa.String()), sa.Column("cancelled_at_utc", sa.String()), sa.Column("outcome_note", sa.String()), sa.Column("related_entity_type", sa.String()), sa.Column("related_entity_id", sa.String()), sa.Column("related_label", sa.String()),
-        sa.Column("created_at_utc", sa.String(), nullable=False), sa.Column("updated_at_utc", sa.String(), nullable=False), sa.CheckConstraint("status IN ('open', 'in_progress', 'completed', 'cancelled')"), sa.CheckConstraint("priority IN ('low', 'normal', 'high', 'urgent')"), sa.CheckConstraint("is_all_day IN (0, 1)"))
-    op.create_index("tasks_status_due", "tasks", ["status", "due_at_utc"]); op.create_index("tasks_related_record", "tasks", ["related_entity_type", "related_entity_id"])
-    op.create_table("task_reminders", sa.Column("id", sa.String(), primary_key=True), sa.Column("task_id", sa.String(), sa.ForeignKey("tasks.id"), nullable=False), sa.Column("remind_at_utc", sa.String(), nullable=False), sa.Column("status", sa.String(), nullable=False), sa.Column("acknowledged_at_utc", sa.String()), sa.Column("dismissed_at_utc", sa.String()), sa.Column("created_at_utc", sa.String(), nullable=False), sa.CheckConstraint("status IN ('pending', 'acknowledged', 'dismissed')"))
+    op.create_index(
+        "file_links_one_active_association",
+        "file_links",
+        ["file_id", "entity_type", "entity_id", "purpose"],
+        unique=True,
+        sqlite_where=sa.text("archived_at IS NULL"),
+    )
+    op.create_table(
+        "file_publication_cleanup_attentions",
+        sa.Column("publication_id", sa.String(), primary_key=True),
+        sa.Column("provider", sa.String(), nullable=False),
+        sa.Column("opened_at", sa.String(), nullable=False),
+        sa.Column("resolved_at", sa.String()),
+    )
+    op.create_table(
+        "tasks",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("title", sa.String(), nullable=False),
+        sa.Column("notes", sa.String()),
+        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("priority", sa.String(), nullable=False),
+        sa.Column("due_at_utc", sa.String()),
+        sa.Column("due_timezone", sa.String()),
+        sa.Column("is_all_day", sa.Integer(), nullable=False),
+        sa.Column("completed_at_utc", sa.String()),
+        sa.Column("cancelled_at_utc", sa.String()),
+        sa.Column("outcome_note", sa.String()),
+        sa.Column("related_entity_type", sa.String()),
+        sa.Column("related_entity_id", sa.String()),
+        sa.Column("related_label", sa.String()),
+        sa.Column("created_at_utc", sa.String(), nullable=False),
+        sa.Column("updated_at_utc", sa.String(), nullable=False),
+        sa.CheckConstraint("status IN ('open', 'in_progress', 'completed', 'cancelled')"),
+        sa.CheckConstraint("priority IN ('low', 'normal', 'high', 'urgent')"),
+        sa.CheckConstraint("is_all_day IN (0, 1)"),
+    )
+    op.create_index("tasks_status_due", "tasks", ["status", "due_at_utc"])
+    op.create_index("tasks_related_record", "tasks", ["related_entity_type", "related_entity_id"])
+    op.create_table(
+        "task_reminders",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("task_id", sa.String(), sa.ForeignKey("tasks.id"), nullable=False),
+        sa.Column("remind_at_utc", sa.String(), nullable=False),
+        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("acknowledged_at_utc", sa.String()),
+        sa.Column("dismissed_at_utc", sa.String()),
+        sa.Column("created_at_utc", sa.String(), nullable=False),
+        sa.CheckConstraint("status IN ('pending', 'acknowledged', 'dismissed')"),
+    )
     op.create_index("task_reminders_status_time", "task_reminders", ["status", "remind_at_utc"])
-    op.create_table("parties", sa.Column("id", sa.String(), primary_key=True), sa.Column("party_kind", sa.String(), nullable=False), sa.Column("display_name", sa.String(), nullable=False), sa.Column("created_at", sa.String(), nullable=False), sa.Column("updated_at", sa.String(), nullable=False), sa.Column("archived_at", sa.String()), sa.CheckConstraint("party_kind IN ('individual', 'organization')"), sa.CheckConstraint("length(trim(display_name)) > 0"))
+    op.create_table(
+        "parties",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("party_kind", sa.String(), nullable=False),
+        sa.Column("display_name", sa.String(), nullable=False),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.Column("updated_at", sa.String(), nullable=False),
+        sa.Column("archived_at", sa.String()),
+        sa.CheckConstraint("party_kind IN ('individual', 'organization')"),
+        sa.CheckConstraint("length(trim(display_name)) > 0"),
+    )
     op.create_index("parties_active_name", "parties", ["archived_at", "display_name"])
-    op.create_table("party_contact_methods", sa.Column("id", sa.String(), primary_key=True), sa.Column("party_id", sa.String(), sa.ForeignKey("parties.id"), nullable=False), sa.Column("method_kind", sa.String(), nullable=False), sa.Column("display_value", sa.String(), nullable=False), sa.Column("normalized_value", sa.String(), nullable=False), sa.Column("extension", sa.String()), sa.Column("label", sa.String()), sa.Column("status", sa.String(), nullable=False), sa.Column("created_at", sa.String(), nullable=False), sa.Column("updated_at", sa.String(), nullable=False), sa.Column("archived_at", sa.String()), sa.CheckConstraint("method_kind IN ('email', 'phone')"), sa.CheckConstraint("status IN ('active', 'archived')"), sa.CheckConstraint("length(trim(display_value)) > 0"), sa.CheckConstraint("(status = 'active' AND archived_at IS NULL) OR (status = 'archived' AND archived_at IS NOT NULL)"), sa.CheckConstraint("method_kind = 'phone' OR extension IS NULL"))
-    op.create_index("party_contact_methods_party_status", "party_contact_methods", ["party_id", "status"])
-    op.execute("CREATE UNIQUE INDEX party_contact_methods_one_active_value ON party_contact_methods(party_id, method_kind, normalized_value, coalesce(extension, '')) WHERE status = 'active'")
-    op.create_table("tenant_profiles", sa.Column("party_id", sa.String(), sa.ForeignKey("parties.id"), primary_key=True),
-        sa.Column("preferred_contact_method_id", sa.String(), sa.ForeignKey("party_contact_methods.id")), sa.Column("do_not_contact", sa.Integer(), nullable=False), sa.Column("notes", sa.String()),
-        sa.Column("created_at", sa.String(), nullable=False), sa.Column("updated_at", sa.String(), nullable=False), sa.Column("archived_at", sa.String()),
-        sa.CheckConstraint("do_not_contact IN (0, 1)"))
+    op.create_table(
+        "party_contact_methods",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("party_id", sa.String(), sa.ForeignKey("parties.id"), nullable=False),
+        sa.Column("method_kind", sa.String(), nullable=False),
+        sa.Column("display_value", sa.String(), nullable=False),
+        sa.Column("normalized_value", sa.String(), nullable=False),
+        sa.Column("extension", sa.String()),
+        sa.Column("label", sa.String()),
+        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.Column("updated_at", sa.String(), nullable=False),
+        sa.Column("archived_at", sa.String()),
+        sa.CheckConstraint("method_kind IN ('email', 'phone')"),
+        sa.CheckConstraint("status IN ('active', 'archived')"),
+        sa.CheckConstraint("length(trim(display_value)) > 0"),
+        sa.CheckConstraint(
+            "(status = 'active' AND archived_at IS NULL) OR (status = 'archived' AND archived_at IS NOT NULL)"
+        ),
+        sa.CheckConstraint("method_kind = 'phone' OR extension IS NULL"),
+    )
+    op.create_index(
+        "party_contact_methods_party_status", "party_contact_methods", ["party_id", "status"]
+    )
+    op.execute(
+        "CREATE UNIQUE INDEX party_contact_methods_one_active_value ON party_contact_methods(party_id, method_kind, normalized_value, coalesce(extension, '')) WHERE status = 'active'"
+    )
+    op.create_table(
+        "tenant_profiles",
+        sa.Column("party_id", sa.String(), sa.ForeignKey("parties.id"), primary_key=True),
+        sa.Column(
+            "preferred_contact_method_id", sa.String(), sa.ForeignKey("party_contact_methods.id")
+        ),
+        sa.Column("do_not_contact", sa.Integer(), nullable=False),
+        sa.Column("notes", sa.String()),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.Column("updated_at", sa.String(), nullable=False),
+        sa.Column("archived_at", sa.String()),
+        sa.CheckConstraint("do_not_contact IN (0, 1)"),
+    )
     op.create_index("tenant_profiles_active_name", "tenant_profiles", ["archived_at"])
-    op.create_table("properties", sa.Column("id", sa.String(), primary_key=True), sa.Column("display_name", sa.String(), nullable=False), sa.Column("address_line_1", sa.String(), nullable=False), sa.Column("address_line_2", sa.String()), sa.Column("city", sa.String(), nullable=False), sa.Column("region", sa.String()), sa.Column("postal_code", sa.String()), sa.Column("country_code", sa.String(), nullable=False), sa.Column("time_zone", sa.String(), nullable=False), sa.Column("notes", sa.String()), sa.Column("status", sa.String(), nullable=False), sa.Column("created_at", sa.String(), nullable=False), sa.Column("updated_at", sa.String(), nullable=False), sa.Column("archived_at", sa.String()), sa.Column("property_type", sa.String(), nullable=False), sa.Column("inventory_layout", sa.String(), nullable=False), sa.CheckConstraint("status IN ('active', 'archived')"), sa.CheckConstraint("property_type IN ('single_family_home', 'condo', 'townhome', 'office')"), sa.CheckConstraint("inventory_layout IN ('single_space', 'whole_office', 'office_suites')"), sa.CheckConstraint("length(trim(display_name)) > 0"), sa.CheckConstraint("length(trim(address_line_1)) > 0"), sa.CheckConstraint("length(trim(city)) > 0"), sa.CheckConstraint("length(trim(country_code)) = 2"), sa.CheckConstraint("length(trim(time_zone)) > 0"))
+    op.create_table(
+        "properties",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("display_name", sa.String(), nullable=False),
+        sa.Column("address_line_1", sa.String(), nullable=False),
+        sa.Column("address_line_2", sa.String()),
+        sa.Column("city", sa.String(), nullable=False),
+        sa.Column("region", sa.String()),
+        sa.Column("postal_code", sa.String()),
+        sa.Column("country_code", sa.String(), nullable=False),
+        sa.Column("time_zone", sa.String(), nullable=False),
+        sa.Column("notes", sa.String()),
+        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.Column("updated_at", sa.String(), nullable=False),
+        sa.Column("archived_at", sa.String()),
+        sa.Column("property_type", sa.String(), nullable=False),
+        sa.Column("inventory_layout", sa.String(), nullable=False),
+        sa.CheckConstraint("status IN ('active', 'archived')"),
+        sa.CheckConstraint(
+            "property_type IN ('single_family_home', 'condo', 'townhome', 'office')"
+        ),
+        sa.CheckConstraint("inventory_layout IN ('single_space', 'whole_office', 'office_suites')"),
+        sa.CheckConstraint("length(trim(display_name)) > 0"),
+        sa.CheckConstraint("length(trim(address_line_1)) > 0"),
+        sa.CheckConstraint("length(trim(city)) > 0"),
+        sa.CheckConstraint("length(trim(country_code)) = 2"),
+        sa.CheckConstraint("length(trim(time_zone)) > 0"),
+    )
     op.create_index("properties_status_name", "properties", ["status", "display_name"])
-    op.create_table("property_ownerships", sa.Column("id", sa.String(), primary_key=True), sa.Column("property_id", sa.String(), sa.ForeignKey("properties.id"), nullable=False), sa.Column("owner_kind", sa.String(), nullable=False), sa.Column("party_id", sa.String(), sa.ForeignKey("parties.id")), sa.Column("starts_on", sa.String(), nullable=False), sa.Column("ends_on", sa.String()), sa.Column("created_at", sa.String(), nullable=False), sa.Column("ended_at", sa.String()), sa.CheckConstraint("owner_kind IN ('local_operator', 'client_owner')"), sa.CheckConstraint("(owner_kind = 'local_operator' AND party_id IS NULL) OR (owner_kind = 'client_owner' AND party_id IS NOT NULL)"), sa.CheckConstraint("ends_on IS NULL OR ends_on >= starts_on"))
-    op.create_index("property_ownerships_property_active", "property_ownerships", ["property_id", "ends_on"])
-    op.create_index("property_ownerships_party_active", "property_ownerships", ["party_id", "ends_on"])
-    op.execute("CREATE UNIQUE INDEX property_ownerships_one_active_operator ON property_ownerships(property_id) WHERE owner_kind = 'local_operator' AND ends_on IS NULL")
-    op.execute("CREATE UNIQUE INDEX property_ownerships_one_active_client ON property_ownerships(property_id, party_id) WHERE owner_kind = 'client_owner' AND ends_on IS NULL")
-    op.create_table("spaces", sa.Column("id", sa.String(), primary_key=True), sa.Column("property_id", sa.String(), sa.ForeignKey("properties.id"), nullable=False), sa.Column("space_kind", sa.String(), nullable=False), sa.Column("display_name", sa.String(), nullable=False), sa.Column("normalized_name", sa.String(), nullable=False), sa.Column("suite_or_floor", sa.String()), sa.Column("notes", sa.String()), sa.Column("status", sa.String(), nullable=False), sa.Column("status_revision", sa.Integer(), nullable=False, server_default="0"), sa.Column("created_at", sa.String(), nullable=False), sa.Column("updated_at", sa.String(), nullable=False), sa.Column("archived_at", sa.String()), sa.Column("archived_by_property_operation_id", sa.String()), sa.CheckConstraint("space_kind IN ('whole_home', 'whole_office', 'office_suite')"), sa.CheckConstraint("status IN ('active', 'archived')"), sa.CheckConstraint("length(trim(display_name)) > 0"))
-    op.create_index("spaces_property_status_name", "spaces", ["property_id", "status", "display_name"])
-    op.execute("CREATE UNIQUE INDEX spaces_one_active_name ON spaces(property_id, normalized_name) WHERE status = 'active'")
-    op.create_table("space_occupancy_periods", sa.Column("id", sa.String(), primary_key=True), sa.Column("space_id", sa.String(), sa.ForeignKey("spaces.id"), nullable=False), sa.Column("occupancy_status", sa.String(), nullable=False), sa.Column("starts_on", sa.String(), nullable=False), sa.Column("ends_on", sa.String()), sa.Column("record_state", sa.String(), nullable=False), sa.Column("superseded_by_id", sa.String(), sa.ForeignKey("space_occupancy_periods.id")), sa.Column("source_kind", sa.String(), nullable=False), sa.Column("source_id", sa.String()), sa.Column("note", sa.String()), sa.Column("created_at", sa.String(), nullable=False), sa.Column("ended_at", sa.String()), sa.Column("cancelled_at", sa.String()), sa.CheckConstraint("occupancy_status IN ('occupied', 'vacant', 'unknown')"), sa.CheckConstraint("record_state IN ('valid', 'cancelled', 'superseded')"), sa.CheckConstraint("ends_on IS NULL OR ends_on > starts_on"), sa.CheckConstraint("(source_kind = 'manual' AND source_id IS NULL) OR (source_kind = 'lease' AND source_id IS NOT NULL)"))
-    op.create_index("space_occupancy_periods_space_dates", "space_occupancy_periods", ["space_id", "starts_on", "ends_on"])
-    op.execute("CREATE UNIQUE INDEX space_occupancy_periods_one_open ON space_occupancy_periods(space_id) WHERE record_state = 'valid' AND ends_on IS NULL")
-    op.create_table("space_availability", sa.Column("space_id", sa.String(), sa.ForeignKey("spaces.id"), primary_key=True), sa.Column("availability_status", sa.String(), nullable=False), sa.Column("available_on", sa.String()), sa.Column("source_kind", sa.String(), nullable=False), sa.Column("source_id", sa.String()), sa.Column("note", sa.String()), sa.Column("updated_at", sa.String(), nullable=False), sa.CheckConstraint("availability_status IN ('available_now', 'available_on', 'not_available', 'unknown')"), sa.CheckConstraint("(availability_status = 'available_on' AND available_on IS NOT NULL) OR (availability_status != 'available_on' AND available_on IS NULL)"), sa.CheckConstraint("(source_kind = 'manual' AND source_id IS NULL) OR (source_kind IN ('listing', 'lease') AND source_id IS NOT NULL)"))
-    op.create_index("space_availability_status_date", "space_availability", ["availability_status", "available_on"])
-    op.create_table("space_status_operations", sa.Column("id", sa.String(), primary_key=True), sa.Column("space_id", sa.String(), sa.ForeignKey("spaces.id"), nullable=False), sa.Column("idempotency_key", sa.String(), nullable=False, unique=True), sa.Column("request_fingerprint", sa.String(), nullable=False), sa.Column("result_revision", sa.Integer(), nullable=False), sa.Column("result_snapshot", sa.String(), nullable=False), sa.Column("created_at", sa.String(), nullable=False))
-    op.create_index("space_status_operations_space_key", "space_status_operations", ["space_id", "idempotency_key"])
-    op.create_table("leases", sa.Column("id", sa.String(), primary_key=True), sa.Column("space_id", sa.String(), sa.ForeignKey("spaces.id"), nullable=False), sa.Column("lease_kind", sa.String(), nullable=False), sa.Column("status", sa.String(), nullable=False), sa.Column("contract_starts_on", sa.String(), nullable=False), sa.Column("contract_ends_on", sa.String()), sa.Column("occupancy_starts_on", sa.String(), nullable=False), sa.Column("executed_on", sa.String()), sa.Column("actual_move_out_on", sa.String()), sa.Column("end_reason", sa.String()), sa.Column("notes", sa.String()), sa.Column("created_at", sa.String(), nullable=False), sa.Column("updated_at", sa.String(), nullable=False), sa.CheckConstraint("lease_kind IN ('residential', 'commercial')"), sa.CheckConstraint("status IN ('draft', 'executed', 'ended', 'terminated', 'void')"), sa.CheckConstraint("end_reason IS NULL OR end_reason IN ('contract_completed', 'early_termination', 'mutual_termination', 'other')"), sa.CheckConstraint("contract_ends_on IS NULL OR contract_ends_on > contract_starts_on"), sa.CheckConstraint("occupancy_starts_on >= contract_starts_on"), sa.CheckConstraint("(status = 'draft' AND executed_on IS NULL AND actual_move_out_on IS NULL AND end_reason IS NULL) OR (status = 'executed' AND executed_on IS NOT NULL AND actual_move_out_on IS NULL AND end_reason IS NULL) OR (status = 'ended' AND executed_on IS NOT NULL AND actual_move_out_on IS NOT NULL AND end_reason IS NOT NULL AND end_reason = 'contract_completed') OR (status = 'terminated' AND executed_on IS NOT NULL AND actual_move_out_on IS NOT NULL AND end_reason IS NOT NULL AND end_reason IN ('early_termination', 'mutual_termination', 'other')) OR (status = 'void' AND executed_on IS NOT NULL AND actual_move_out_on IS NULL AND end_reason IS NULL)"))
-    op.create_index("leases_space_status_dates", "leases", ["space_id", "status", "contract_starts_on", "contract_ends_on"])
-    op.create_table("lease_term_versions", sa.Column("id", sa.String(), primary_key=True), sa.Column("lease_id", sa.String(), sa.ForeignKey("leases.id"), nullable=False), sa.Column("effective_on", sa.String(), nullable=False), sa.Column("ends_on", sa.String()), sa.Column("base_rent_minor", sa.Integer(), nullable=False), sa.Column("currency_code", sa.String(), nullable=False), sa.Column("payment_frequency", sa.String(), nullable=False), sa.Column("payment_due_day", sa.Integer()), sa.Column("agreed_security_deposit_minor", sa.Integer(), nullable=False), sa.Column("created_at", sa.String(), nullable=False), sa.CheckConstraint("ends_on IS NULL OR ends_on > effective_on"), sa.CheckConstraint("typeof(base_rent_minor) = 'integer' AND base_rent_minor > 0"), sa.CheckConstraint("length(currency_code) = 3 AND currency_code GLOB '[A-Z][A-Z][A-Z]'"), sa.CheckConstraint("payment_frequency IN ('monthly', 'weekly')"), sa.CheckConstraint("(payment_frequency = 'monthly' AND payment_due_day BETWEEN 1 AND 31) OR (payment_frequency = 'weekly' AND payment_due_day IS NULL)"), sa.CheckConstraint("agreed_security_deposit_minor >= 0"))
-    op.create_index("lease_terms_lease_dates", "lease_term_versions", ["lease_id", "effective_on", "ends_on"])
-    op.create_table("lease_participants", sa.Column("id", sa.String(), primary_key=True), sa.Column("lease_id", sa.String(), sa.ForeignKey("leases.id"), nullable=False), sa.Column("tenant_party_id", sa.String(), sa.ForeignKey("tenant_profiles.party_id"), nullable=False), sa.Column("participant_role", sa.String(), nullable=False), sa.Column("starts_on", sa.String(), nullable=False), sa.Column("ends_on", sa.String()), sa.Column("notes", sa.String()), sa.Column("created_at", sa.String(), nullable=False), sa.Column("updated_at", sa.String(), nullable=False), sa.CheckConstraint("participant_role IN ('primary_tenant', 'co_tenant', 'guarantor', 'business_signatory')"), sa.CheckConstraint("ends_on IS NULL OR ends_on > starts_on"))
-    op.create_index("lease_participants_lease_dates", "lease_participants", ["lease_id", "starts_on", "ends_on"])
-    op.create_index("lease_participants_tenant_dates", "lease_participants", ["tenant_party_id", "starts_on", "ends_on"])
-    op.create_table("lease_renewal_options", sa.Column("id", sa.String(), primary_key=True), sa.Column("lease_id", sa.String(), sa.ForeignKey("leases.id"), nullable=False), sa.Column("status", sa.String(), nullable=False), sa.Column("proposed_starts_on", sa.String(), nullable=False), sa.Column("proposed_ends_on", sa.String()), sa.Column("notice_due_on", sa.String()), sa.Column("response_due_on", sa.String()), sa.Column("decided_on", sa.String()), sa.Column("notes", sa.String()), sa.Column("created_at", sa.String(), nullable=False), sa.Column("updated_at", sa.String(), nullable=False), sa.CheckConstraint("status IN ('open', 'exercised', 'declined', 'expired', 'withdrawn')"), sa.CheckConstraint("proposed_ends_on IS NULL OR proposed_ends_on > proposed_starts_on"), sa.CheckConstraint("(status = 'open' AND decided_on IS NULL) OR (status != 'open' AND decided_on IS NOT NULL)"))
-    op.create_index("lease_renewals_lease_status_dates", "lease_renewal_options", ["lease_id", "status", "notice_due_on", "response_due_on"])
-    op.create_table("lease_termination_cases", sa.Column("id", sa.String(), primary_key=True), sa.Column("lease_id", sa.String(), sa.ForeignKey("leases.id"), nullable=False), sa.Column("status", sa.String(), nullable=False), sa.Column("reason", sa.String(), nullable=False), sa.Column("notice_received_on", sa.String(), nullable=False), sa.Column("requested_termination_on", sa.String(), nullable=False), sa.Column("expected_move_out_on", sa.String(), nullable=False), sa.Column("agreed_termination_on", sa.String()), sa.Column("accepted_on", sa.String()), sa.Column("completed_on", sa.String()), sa.Column("tenant_explanation", sa.String()), sa.Column("contract_clause_reference", sa.String()), sa.Column("operator_notes", sa.String()), sa.Column("created_at", sa.String(), nullable=False), sa.Column("updated_at", sa.String(), nullable=False), sa.CheckConstraint("status IN ('requested', 'under_review', 'proposed', 'accepted', 'withdrawn', 'declined', 'completed')"), sa.CheckConstraint("reason IN ('job_relocation', 'military', 'habitability', 'mutual', 'other')"), sa.CheckConstraint("(status IN ('accepted', 'completed') AND agreed_termination_on IS NOT NULL AND accepted_on IS NOT NULL) OR (status NOT IN ('accepted', 'completed') AND completed_on IS NULL)"), sa.CheckConstraint("(status = 'completed' AND completed_on IS NOT NULL) OR status != 'completed'"))
-    op.create_index("lease_termination_cases_lease_status", "lease_termination_cases", ["lease_id", "status", "requested_termination_on"])
-    op.create_table("lease_termination_proposals", sa.Column("id", sa.String(), primary_key=True), sa.Column("termination_case_id", sa.String(), sa.ForeignKey("lease_termination_cases.id"), nullable=False), sa.Column("proposal_version", sa.Integer(), nullable=False), sa.Column("proposed_termination_on", sa.String(), nullable=False), sa.Column("expected_move_out_on", sa.String(), nullable=False), sa.Column("rent_responsibility_ends_on", sa.String()), sa.Column("termination_fee_minor", sa.Integer()), sa.Column("currency_code", sa.String()), sa.Column("fee_waived", sa.Integer(), nullable=False), sa.Column("replacement_tenant_condition", sa.String()), sa.Column("access_arrangement", sa.String()), sa.Column("other_terms", sa.String()), sa.Column("response_due_on", sa.String()), sa.Column("status", sa.String(), nullable=False), sa.Column("decided_on", sa.String()), sa.Column("created_at", sa.String(), nullable=False), sa.CheckConstraint("proposal_version > 0"), sa.CheckConstraint("termination_fee_minor IS NULL OR termination_fee_minor >= 0"), sa.CheckConstraint("fee_waived IN (0, 1)"), sa.CheckConstraint("(termination_fee_minor IS NULL AND currency_code IS NULL) OR (termination_fee_minor IS NOT NULL AND length(currency_code) = 3 AND currency_code GLOB '[A-Z][A-Z][A-Z]')"), sa.CheckConstraint("status IN ('open', 'accepted', 'rejected', 'countered', 'withdrawn', 'expired')"), sa.CheckConstraint("(status = 'open' AND decided_on IS NULL) OR (status != 'open' AND decided_on IS NOT NULL)"))
-    op.create_index("lease_termination_proposals_case_version", "lease_termination_proposals", ["termination_case_id", "proposal_version"], unique=True)
-    for table in (ConditionReportModel.__table__, ConditionAreaModel.__table__, ConditionObservationModel.__table__, ConditionAcknowledgmentModel.__table__, ConditionComparisonModel.__table__, ConditionChecklistTemplateModel.__table__, ConditionChecklistTemplateItemModel.__table__, ProviderProfileModel.__table__, ProviderCategoryModel.__table__, ProviderCategoryAssignmentModel.__table__, ProviderServiceModel.__table__, ProviderServiceAreaModel.__table__, ProviderWorkHistoryModel.__table__, ProviderReferenceModel.__table__, ProviderReputationLinkModel.__table__, RentExpectationModel.__table__, RentExpectationTimelinessReviewModel.__table__, RentReceiptModel.__table__, RentReceiptAllocationModel.__table__, PrepaidCheckModel.__table__, PrepaidCheckOperationModel.__table__, ExpenseCategoryModel.__table__, ExpenseModel.__table__, ExpenseRefundModel.__table__, SecurityDepositAccountModel.__table__, SecurityDepositReceiptModel.__table__, SecurityDepositSettlementModel.__table__, SecurityDepositSettlementReceiptModel.__table__, SecurityDepositDeductionModel.__table__, SecurityDepositDeductionSourceModel.__table__, SecurityDepositCreditModel.__table__, SecurityDepositRefundModel.__table__, CommunicationModel.__table__, CommunicationParticipantModel.__table__, CommunicationLinkModel.__table__, CommunicationOperationModel.__table__, MaintenanceIssueModel.__table__, MaintenanceAppointmentModel.__table__, MaintenanceCostContextModel.__table__, MaintenanceIssueExpenseLinkModel.__table__, MaintenanceFollowUpOperationModel.__table__, MaintenanceQuoteModel.__table__, MaintenanceAssignmentModel.__table__, MaintenanceWorkJournalEntryModel.__table__, OwnerRentReportModel.__table__, OwnerRentReportOperationModel.__table__, OwnerConcernModel.__table__, OwnerConcernFollowUpOperationModel.__table__, AiSettingsModel.__table__, AiModelConnectionModel.__table__, AiActionLimitModel.__table__, AiRunModel.__table__, AiDraftModel.__table__, AiReviewDecisionModel.__table__, IntakeSourceModel.__table__, IntakeEvidenceRevisionModel.__table__, IntakeRevisionFileLinkModel.__table__, IntakeSourceOperationModel.__table__, IntakeDuplicateCandidateModel.__table__):
+    op.create_table(
+        "property_ownerships",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("property_id", sa.String(), sa.ForeignKey("properties.id"), nullable=False),
+        sa.Column("owner_kind", sa.String(), nullable=False),
+        sa.Column("party_id", sa.String(), sa.ForeignKey("parties.id")),
+        sa.Column("starts_on", sa.String(), nullable=False),
+        sa.Column("ends_on", sa.String()),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.Column("ended_at", sa.String()),
+        sa.CheckConstraint("owner_kind IN ('local_operator', 'client_owner')"),
+        sa.CheckConstraint(
+            "(owner_kind = 'local_operator' AND party_id IS NULL) OR (owner_kind = 'client_owner' AND party_id IS NOT NULL)"
+        ),
+        sa.CheckConstraint("ends_on IS NULL OR ends_on >= starts_on"),
+    )
+    op.create_index(
+        "property_ownerships_property_active", "property_ownerships", ["property_id", "ends_on"]
+    )
+    op.create_index(
+        "property_ownerships_party_active", "property_ownerships", ["party_id", "ends_on"]
+    )
+    op.execute(
+        "CREATE UNIQUE INDEX property_ownerships_one_active_operator ON property_ownerships(property_id) WHERE owner_kind = 'local_operator' AND ends_on IS NULL"
+    )
+    op.execute(
+        "CREATE UNIQUE INDEX property_ownerships_one_active_client ON property_ownerships(property_id, party_id) WHERE owner_kind = 'client_owner' AND ends_on IS NULL"
+    )
+    op.create_table(
+        "spaces",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("property_id", sa.String(), sa.ForeignKey("properties.id"), nullable=False),
+        sa.Column("space_kind", sa.String(), nullable=False),
+        sa.Column("display_name", sa.String(), nullable=False),
+        sa.Column("normalized_name", sa.String(), nullable=False),
+        sa.Column("suite_or_floor", sa.String()),
+        sa.Column("notes", sa.String()),
+        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("status_revision", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.Column("updated_at", sa.String(), nullable=False),
+        sa.Column("archived_at", sa.String()),
+        sa.Column("archived_by_property_operation_id", sa.String()),
+        sa.CheckConstraint("space_kind IN ('whole_home', 'whole_office', 'office_suite')"),
+        sa.CheckConstraint("status IN ('active', 'archived')"),
+        sa.CheckConstraint("length(trim(display_name)) > 0"),
+    )
+    op.create_index(
+        "spaces_property_status_name", "spaces", ["property_id", "status", "display_name"]
+    )
+    op.execute(
+        "CREATE UNIQUE INDEX spaces_one_active_name ON spaces(property_id, normalized_name) WHERE status = 'active'"
+    )
+    op.create_table(
+        "space_occupancy_periods",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("space_id", sa.String(), sa.ForeignKey("spaces.id"), nullable=False),
+        sa.Column("occupancy_status", sa.String(), nullable=False),
+        sa.Column("starts_on", sa.String(), nullable=False),
+        sa.Column("ends_on", sa.String()),
+        sa.Column("record_state", sa.String(), nullable=False),
+        sa.Column("superseded_by_id", sa.String(), sa.ForeignKey("space_occupancy_periods.id")),
+        sa.Column("source_kind", sa.String(), nullable=False),
+        sa.Column("source_id", sa.String()),
+        sa.Column("note", sa.String()),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.Column("ended_at", sa.String()),
+        sa.Column("cancelled_at", sa.String()),
+        sa.CheckConstraint("occupancy_status IN ('occupied', 'vacant', 'unknown')"),
+        sa.CheckConstraint("record_state IN ('valid', 'cancelled', 'superseded')"),
+        sa.CheckConstraint("ends_on IS NULL OR ends_on > starts_on"),
+        sa.CheckConstraint(
+            "(source_kind = 'manual' AND source_id IS NULL) OR (source_kind = 'lease' AND source_id IS NOT NULL)"
+        ),
+    )
+    op.create_index(
+        "space_occupancy_periods_space_dates",
+        "space_occupancy_periods",
+        ["space_id", "starts_on", "ends_on"],
+    )
+    op.execute(
+        "CREATE UNIQUE INDEX space_occupancy_periods_one_open ON space_occupancy_periods(space_id) WHERE record_state = 'valid' AND ends_on IS NULL"
+    )
+    op.create_table(
+        "space_availability",
+        sa.Column("space_id", sa.String(), sa.ForeignKey("spaces.id"), primary_key=True),
+        sa.Column("availability_status", sa.String(), nullable=False),
+        sa.Column("available_on", sa.String()),
+        sa.Column("source_kind", sa.String(), nullable=False),
+        sa.Column("source_id", sa.String()),
+        sa.Column("note", sa.String()),
+        sa.Column("updated_at", sa.String(), nullable=False),
+        sa.CheckConstraint(
+            "availability_status IN ('available_now', 'available_on', 'not_available', 'unknown')"
+        ),
+        sa.CheckConstraint(
+            "(availability_status = 'available_on' AND available_on IS NOT NULL) OR (availability_status != 'available_on' AND available_on IS NULL)"
+        ),
+        sa.CheckConstraint(
+            "(source_kind = 'manual' AND source_id IS NULL) OR (source_kind IN ('listing', 'lease') AND source_id IS NOT NULL)"
+        ),
+    )
+    op.create_index(
+        "space_availability_status_date",
+        "space_availability",
+        ["availability_status", "available_on"],
+    )
+    op.create_table(
+        "space_status_operations",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("space_id", sa.String(), sa.ForeignKey("spaces.id"), nullable=False),
+        sa.Column("idempotency_key", sa.String(), nullable=False, unique=True),
+        sa.Column("request_fingerprint", sa.String(), nullable=False),
+        sa.Column("result_revision", sa.Integer(), nullable=False),
+        sa.Column("result_snapshot", sa.String(), nullable=False),
+        sa.Column("created_at", sa.String(), nullable=False),
+    )
+    op.create_index(
+        "space_status_operations_space_key",
+        "space_status_operations",
+        ["space_id", "idempotency_key"],
+    )
+    op.create_table(
+        "leases",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("space_id", sa.String(), sa.ForeignKey("spaces.id"), nullable=False),
+        sa.Column("lease_kind", sa.String(), nullable=False),
+        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("contract_starts_on", sa.String(), nullable=False),
+        sa.Column("contract_ends_on", sa.String()),
+        sa.Column("occupancy_starts_on", sa.String(), nullable=False),
+        sa.Column("executed_on", sa.String()),
+        sa.Column("actual_move_out_on", sa.String()),
+        sa.Column("end_reason", sa.String()),
+        sa.Column("notes", sa.String()),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.Column("updated_at", sa.String(), nullable=False),
+        sa.CheckConstraint("lease_kind IN ('residential', 'commercial')"),
+        sa.CheckConstraint("status IN ('draft', 'executed', 'ended', 'terminated', 'void')"),
+        sa.CheckConstraint(
+            "end_reason IS NULL OR end_reason IN ('contract_completed', 'early_termination', 'mutual_termination', 'other')"
+        ),
+        sa.CheckConstraint("contract_ends_on IS NULL OR contract_ends_on > contract_starts_on"),
+        sa.CheckConstraint("occupancy_starts_on >= contract_starts_on"),
+        sa.CheckConstraint(
+            "(status = 'draft' AND executed_on IS NULL AND actual_move_out_on IS NULL AND end_reason IS NULL) OR (status = 'executed' AND executed_on IS NOT NULL AND actual_move_out_on IS NULL AND end_reason IS NULL) OR (status = 'ended' AND executed_on IS NOT NULL AND actual_move_out_on IS NOT NULL AND end_reason IS NOT NULL AND end_reason = 'contract_completed') OR (status = 'terminated' AND executed_on IS NOT NULL AND actual_move_out_on IS NOT NULL AND end_reason IS NOT NULL AND end_reason IN ('early_termination', 'mutual_termination', 'other')) OR (status = 'void' AND executed_on IS NOT NULL AND actual_move_out_on IS NULL AND end_reason IS NULL)"
+        ),
+    )
+    op.create_index(
+        "leases_space_status_dates",
+        "leases",
+        ["space_id", "status", "contract_starts_on", "contract_ends_on"],
+    )
+    op.create_table(
+        "lease_term_versions",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("lease_id", sa.String(), sa.ForeignKey("leases.id"), nullable=False),
+        sa.Column("effective_on", sa.String(), nullable=False),
+        sa.Column("ends_on", sa.String()),
+        sa.Column("base_rent_minor", sa.Integer(), nullable=False),
+        sa.Column("currency_code", sa.String(), nullable=False),
+        sa.Column("payment_frequency", sa.String(), nullable=False),
+        sa.Column("payment_due_day", sa.Integer()),
+        sa.Column("agreed_security_deposit_minor", sa.Integer(), nullable=False),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.CheckConstraint("ends_on IS NULL OR ends_on > effective_on"),
+        sa.CheckConstraint("typeof(base_rent_minor) = 'integer' AND base_rent_minor > 0"),
+        sa.CheckConstraint("length(currency_code) = 3 AND currency_code GLOB '[A-Z][A-Z][A-Z]'"),
+        sa.CheckConstraint("payment_frequency IN ('monthly', 'weekly')"),
+        sa.CheckConstraint(
+            "(payment_frequency = 'monthly' AND payment_due_day BETWEEN 1 AND 31) OR (payment_frequency = 'weekly' AND payment_due_day IS NULL)"
+        ),
+        sa.CheckConstraint("agreed_security_deposit_minor >= 0"),
+    )
+    op.create_index(
+        "lease_terms_lease_dates", "lease_term_versions", ["lease_id", "effective_on", "ends_on"]
+    )
+    op.create_table(
+        "lease_participants",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("lease_id", sa.String(), sa.ForeignKey("leases.id"), nullable=False),
+        sa.Column(
+            "tenant_party_id",
+            sa.String(),
+            sa.ForeignKey("tenant_profiles.party_id"),
+            nullable=False,
+        ),
+        sa.Column("participant_role", sa.String(), nullable=False),
+        sa.Column("starts_on", sa.String(), nullable=False),
+        sa.Column("ends_on", sa.String()),
+        sa.Column("notes", sa.String()),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.Column("updated_at", sa.String(), nullable=False),
+        sa.CheckConstraint(
+            "participant_role IN ('primary_tenant', 'co_tenant', 'guarantor', 'business_signatory')"
+        ),
+        sa.CheckConstraint("ends_on IS NULL OR ends_on > starts_on"),
+    )
+    op.create_index(
+        "lease_participants_lease_dates", "lease_participants", ["lease_id", "starts_on", "ends_on"]
+    )
+    op.create_index(
+        "lease_participants_tenant_dates",
+        "lease_participants",
+        ["tenant_party_id", "starts_on", "ends_on"],
+    )
+    op.create_table(
+        "lease_renewal_options",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("lease_id", sa.String(), sa.ForeignKey("leases.id"), nullable=False),
+        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("proposed_starts_on", sa.String(), nullable=False),
+        sa.Column("proposed_ends_on", sa.String()),
+        sa.Column("notice_due_on", sa.String()),
+        sa.Column("response_due_on", sa.String()),
+        sa.Column("decided_on", sa.String()),
+        sa.Column("notes", sa.String()),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.Column("updated_at", sa.String(), nullable=False),
+        sa.CheckConstraint("status IN ('open', 'exercised', 'declined', 'expired', 'withdrawn')"),
+        sa.CheckConstraint("proposed_ends_on IS NULL OR proposed_ends_on > proposed_starts_on"),
+        sa.CheckConstraint(
+            "(status = 'open' AND decided_on IS NULL) OR (status != 'open' AND decided_on IS NOT NULL)"
+        ),
+    )
+    op.create_index(
+        "lease_renewals_lease_status_dates",
+        "lease_renewal_options",
+        ["lease_id", "status", "notice_due_on", "response_due_on"],
+    )
+    op.create_table(
+        "lease_termination_cases",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("lease_id", sa.String(), sa.ForeignKey("leases.id"), nullable=False),
+        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("reason", sa.String(), nullable=False),
+        sa.Column("notice_received_on", sa.String(), nullable=False),
+        sa.Column("requested_termination_on", sa.String(), nullable=False),
+        sa.Column("expected_move_out_on", sa.String(), nullable=False),
+        sa.Column("agreed_termination_on", sa.String()),
+        sa.Column("accepted_on", sa.String()),
+        sa.Column("completed_on", sa.String()),
+        sa.Column("tenant_explanation", sa.String()),
+        sa.Column("contract_clause_reference", sa.String()),
+        sa.Column("operator_notes", sa.String()),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.Column("updated_at", sa.String(), nullable=False),
+        sa.CheckConstraint(
+            "status IN ('requested', 'under_review', 'proposed', 'accepted', 'withdrawn', 'declined', 'completed')"
+        ),
+        sa.CheckConstraint(
+            "reason IN ('job_relocation', 'military', 'habitability', 'mutual', 'other')"
+        ),
+        sa.CheckConstraint(
+            "(status IN ('accepted', 'completed') AND agreed_termination_on IS NOT NULL AND accepted_on IS NOT NULL) OR (status NOT IN ('accepted', 'completed') AND completed_on IS NULL)"
+        ),
+        sa.CheckConstraint(
+            "(status = 'completed' AND completed_on IS NOT NULL) OR status != 'completed'"
+        ),
+    )
+    op.create_index(
+        "lease_termination_cases_lease_status",
+        "lease_termination_cases",
+        ["lease_id", "status", "requested_termination_on"],
+    )
+    op.create_table(
+        "lease_termination_proposals",
+        sa.Column("id", sa.String(), primary_key=True),
+        sa.Column(
+            "termination_case_id",
+            sa.String(),
+            sa.ForeignKey("lease_termination_cases.id"),
+            nullable=False,
+        ),
+        sa.Column("proposal_version", sa.Integer(), nullable=False),
+        sa.Column("proposed_termination_on", sa.String(), nullable=False),
+        sa.Column("expected_move_out_on", sa.String(), nullable=False),
+        sa.Column("rent_responsibility_ends_on", sa.String()),
+        sa.Column("termination_fee_minor", sa.Integer()),
+        sa.Column("currency_code", sa.String()),
+        sa.Column("fee_waived", sa.Integer(), nullable=False),
+        sa.Column("replacement_tenant_condition", sa.String()),
+        sa.Column("access_arrangement", sa.String()),
+        sa.Column("other_terms", sa.String()),
+        sa.Column("response_due_on", sa.String()),
+        sa.Column("status", sa.String(), nullable=False),
+        sa.Column("decided_on", sa.String()),
+        sa.Column("created_at", sa.String(), nullable=False),
+        sa.CheckConstraint("proposal_version > 0"),
+        sa.CheckConstraint("termination_fee_minor IS NULL OR termination_fee_minor >= 0"),
+        sa.CheckConstraint("fee_waived IN (0, 1)"),
+        sa.CheckConstraint(
+            "(termination_fee_minor IS NULL AND currency_code IS NULL) OR (termination_fee_minor IS NOT NULL AND length(currency_code) = 3 AND currency_code GLOB '[A-Z][A-Z][A-Z]')"
+        ),
+        sa.CheckConstraint(
+            "status IN ('open', 'accepted', 'rejected', 'countered', 'withdrawn', 'expired')"
+        ),
+        sa.CheckConstraint(
+            "(status = 'open' AND decided_on IS NULL) OR (status != 'open' AND decided_on IS NOT NULL)"
+        ),
+    )
+    op.create_index(
+        "lease_termination_proposals_case_version",
+        "lease_termination_proposals",
+        ["termination_case_id", "proposal_version"],
+        unique=True,
+    )
+    for table in (
+        ConditionReportModel.__table__,
+        ConditionAreaModel.__table__,
+        ConditionObservationModel.__table__,
+        ConditionAcknowledgmentModel.__table__,
+        ConditionComparisonModel.__table__,
+        ConditionChecklistTemplateModel.__table__,
+        ConditionChecklistTemplateItemModel.__table__,
+        ProviderProfileModel.__table__,
+        ProviderCategoryModel.__table__,
+        ProviderCategoryAssignmentModel.__table__,
+        ProviderServiceModel.__table__,
+        ProviderServiceAreaModel.__table__,
+        ProviderWorkHistoryModel.__table__,
+        ProviderReferenceModel.__table__,
+        ProviderReputationLinkModel.__table__,
+        RentExpectationModel.__table__,
+        RentExpectationTimelinessReviewModel.__table__,
+        RentReceiptModel.__table__,
+        RentReceiptAllocationModel.__table__,
+        PrepaidCheckModel.__table__,
+        PrepaidCheckOperationModel.__table__,
+        ExpenseCategoryModel.__table__,
+        ExpenseModel.__table__,
+        ExpenseRefundModel.__table__,
+        SecurityDepositAccountModel.__table__,
+        SecurityDepositReceiptModel.__table__,
+        SecurityDepositSettlementModel.__table__,
+        SecurityDepositSettlementReceiptModel.__table__,
+        SecurityDepositDeductionModel.__table__,
+        SecurityDepositDeductionSourceModel.__table__,
+        SecurityDepositCreditModel.__table__,
+        SecurityDepositRefundModel.__table__,
+        CommunicationModel.__table__,
+        CommunicationParticipantModel.__table__,
+        CommunicationLinkModel.__table__,
+        CommunicationOperationModel.__table__,
+        MaintenanceIssueModel.__table__,
+        MaintenanceAppointmentModel.__table__,
+        MaintenanceCostContextModel.__table__,
+        MaintenanceIssueExpenseLinkModel.__table__,
+        MaintenanceFollowUpOperationModel.__table__,
+        MaintenanceQuoteModel.__table__,
+        MaintenanceAssignmentModel.__table__,
+        MaintenanceWorkJournalEntryModel.__table__,
+        OwnerRentReportModel.__table__,
+        OwnerRentReportOperationModel.__table__,
+        OwnerConcernModel.__table__,
+        OwnerConcernFollowUpOperationModel.__table__,
+        AiSettingsModel.__table__,
+        AiModelConnectionModel.__table__,
+        AiActionLimitModel.__table__,
+        AiRunModel.__table__,
+        AiDraftModel.__table__,
+        AiReviewDecisionModel.__table__,
+        IntakeSourceModel.__table__,
+        IntakeEvidenceRevisionModel.__table__,
+        IntakeRevisionFileLinkModel.__table__,
+        IntakeSourceOperationModel.__table__,
+        IntakeDuplicateCandidateModel.__table__,
+    ):
         # Includes FIN-003's measured receipt/deposit read indexes. Metadata and
         # exact schema validation share this current greenfield definition.
         table.create(op.get_bind())
     AiSettingsOperationModel.__table__.create(op.get_bind())
-    op.bulk_insert(AiSettingsModel.__table__, [{"singleton": 1, "kill_switch": False, "built_in_enabled": False, "default_connection_id": None, "updated_at": "2026-01-01T00:00:00+00:00"}])
-    op.execute("CREATE TRIGGER communication_operations_no_update BEFORE UPDATE ON communication_operations BEGIN SELECT RAISE(ABORT, 'communication operations are immutable'); END")
-    op.execute("CREATE TRIGGER ai_settings_operations_no_update BEFORE UPDATE ON ai_settings_operations BEGIN SELECT RAISE(ABORT, 'AI settings operations are immutable'); END")
-    op.execute("CREATE TRIGGER ai_settings_operations_no_delete BEFORE DELETE ON ai_settings_operations BEGIN SELECT RAISE(ABORT, 'AI settings operations are immutable'); END")
-    op.execute("CREATE TRIGGER communication_operations_no_delete BEFORE DELETE ON communication_operations BEGIN SELECT RAISE(ABORT, 'communication operations are immutable'); END")
-    op.execute("CREATE TRIGGER intake_source_operations_no_update BEFORE UPDATE ON intake_source_operations BEGIN SELECT RAISE(ABORT, 'intake operations are immutable'); END")
-    op.execute("CREATE TRIGGER intake_source_operations_no_delete BEFORE DELETE ON intake_source_operations BEGIN SELECT RAISE(ABORT, 'intake operations are immutable'); END")
-    op.execute("CREATE TRIGGER maintenance_follow_up_operations_no_update BEFORE UPDATE ON maintenance_follow_up_operations BEGIN SELECT RAISE(ABORT, 'maintenance follow-up operations are immutable'); END")
-    op.execute("CREATE TRIGGER maintenance_follow_up_operations_no_delete BEFORE DELETE ON maintenance_follow_up_operations BEGIN SELECT RAISE(ABORT, 'maintenance follow-up operations are immutable'); END")
-    op.execute("CREATE TRIGGER maintenance_work_journal_entries_no_update BEFORE UPDATE ON maintenance_work_journal_entries BEGIN SELECT RAISE(ABORT, 'maintenance work journal entries are immutable'); END")
-    op.execute("CREATE TRIGGER maintenance_work_journal_entries_no_delete BEFORE DELETE ON maintenance_work_journal_entries BEGIN SELECT RAISE(ABORT, 'maintenance work journal entries are immutable'); END")
-    op.execute("CREATE TRIGGER owner_rent_report_operations_no_update BEFORE UPDATE ON owner_rent_report_operations BEGIN SELECT RAISE(ABORT, 'owner rent report operations are immutable'); END")
-    op.execute("CREATE TRIGGER owner_rent_report_operations_no_delete BEFORE DELETE ON owner_rent_report_operations BEGIN SELECT RAISE(ABORT, 'owner rent report operations are immutable'); END")
-    op.execute("CREATE TRIGGER owner_concern_follow_up_operations_no_update BEFORE UPDATE ON owner_concern_follow_up_operations BEGIN SELECT RAISE(ABORT, 'owner concern operations are immutable'); END")
-    op.execute("CREATE TRIGGER owner_concern_follow_up_operations_no_delete BEFORE DELETE ON owner_concern_follow_up_operations BEGIN SELECT RAISE(ABORT, 'owner concern operations are immutable'); END")
+    op.bulk_insert(
+        AiSettingsModel.__table__,
+        [
+            {
+                "singleton": 1,
+                "kill_switch": False,
+                "built_in_enabled": False,
+                "default_connection_id": None,
+                "updated_at": "2026-01-01T00:00:00+00:00",
+            }
+        ],
+    )
+    op.execute(
+        "CREATE TRIGGER communication_operations_no_update BEFORE UPDATE ON communication_operations BEGIN SELECT RAISE(ABORT, 'communication operations are immutable'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER ai_settings_operations_no_update BEFORE UPDATE ON ai_settings_operations BEGIN SELECT RAISE(ABORT, 'AI settings operations are immutable'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER ai_settings_operations_no_delete BEFORE DELETE ON ai_settings_operations BEGIN SELECT RAISE(ABORT, 'AI settings operations are immutable'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER communication_operations_no_delete BEFORE DELETE ON communication_operations BEGIN SELECT RAISE(ABORT, 'communication operations are immutable'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER intake_source_operations_no_update BEFORE UPDATE ON intake_source_operations BEGIN SELECT RAISE(ABORT, 'intake operations are immutable'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER intake_source_operations_no_delete BEFORE DELETE ON intake_source_operations BEGIN SELECT RAISE(ABORT, 'intake operations are immutable'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER maintenance_follow_up_operations_no_update BEFORE UPDATE ON maintenance_follow_up_operations BEGIN SELECT RAISE(ABORT, 'maintenance follow-up operations are immutable'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER maintenance_follow_up_operations_no_delete BEFORE DELETE ON maintenance_follow_up_operations BEGIN SELECT RAISE(ABORT, 'maintenance follow-up operations are immutable'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER maintenance_work_journal_entries_no_update BEFORE UPDATE ON maintenance_work_journal_entries BEGIN SELECT RAISE(ABORT, 'maintenance work journal entries are immutable'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER maintenance_work_journal_entries_no_delete BEFORE DELETE ON maintenance_work_journal_entries BEGIN SELECT RAISE(ABORT, 'maintenance work journal entries are immutable'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER owner_rent_report_operations_no_update BEFORE UPDATE ON owner_rent_report_operations BEGIN SELECT RAISE(ABORT, 'owner rent report operations are immutable'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER owner_rent_report_operations_no_delete BEFORE DELETE ON owner_rent_report_operations BEGIN SELECT RAISE(ABORT, 'owner rent report operations are immutable'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER owner_concern_follow_up_operations_no_update BEFORE UPDATE ON owner_concern_follow_up_operations BEGIN SELECT RAISE(ABORT, 'owner concern operations are immutable'); END"
+    )
+    op.execute(
+        "CREATE TRIGGER owner_concern_follow_up_operations_no_delete BEFORE DELETE ON owner_concern_follow_up_operations BEGIN SELECT RAISE(ABORT, 'owner concern operations are immutable'); END"
+    )
     stamp = "2026-01-01T00:00:00+00:00"
     categories = (
-        ("00000000-0000-4000-8000-000000000201", "Repairs and maintenance", "repairs and maintenance"),
+        (
+            "00000000-0000-4000-8000-000000000201",
+            "Repairs and maintenance",
+            "repairs and maintenance",
+        ),
         ("00000000-0000-4000-8000-000000000202", "Utilities", "utilities"),
         ("00000000-0000-4000-8000-000000000203", "Insurance", "insurance"),
         ("00000000-0000-4000-8000-000000000204", "Property taxes", "property taxes"),
@@ -150,45 +763,133 @@ def upgrade() -> None:
         ("00000000-0000-4000-8000-000000000207", "Management fees", "management fees"),
         ("00000000-0000-4000-8000-000000000208", "Other", "other"),
     )
-    op.bulk_insert(ExpenseCategoryModel.__table__, [
-        {"id": item[0], "display_name": item[1], "normalized_name": item[2],
-         "description": None, "display_order": order, "archived_at": None,
-         "created_at": stamp, "updated_at": stamp}
-        for order, item in enumerate(categories)
-    ])
-    op.bulk_insert(ProviderCategoryModel.__table__, [
-        {"id": item.id, "display_name": item.display_name, "normalized_name": item.normalized_name,
-         "description": None, "display_order": item.display_order, "created_at": stamp, "updated_at": stamp,
-         "archived_at": None, "archive_reason": None,
-         "create_idempotency_key": item.create_idempotency_key,
-         "create_request_fingerprint": item.create_request_fingerprint}
-        for item in PROVIDER_CATEGORY_SEEDS
-    ])
+    op.bulk_insert(
+        ExpenseCategoryModel.__table__,
+        [
+            {
+                "id": item[0],
+                "display_name": item[1],
+                "normalized_name": item[2],
+                "description": None,
+                "display_order": order,
+                "archived_at": None,
+                "created_at": stamp,
+                "updated_at": stamp,
+            }
+            for order, item in enumerate(categories)
+        ],
+    )
+    op.bulk_insert(
+        ProviderCategoryModel.__table__,
+        [
+            {
+                "id": item.id,
+                "display_name": item.display_name,
+                "normalized_name": item.normalized_name,
+                "description": None,
+                "display_order": item.display_order,
+                "created_at": stamp,
+                "updated_at": stamp,
+                "archived_at": None,
+                "archive_reason": None,
+                "create_idempotency_key": item.create_idempotency_key,
+                "create_request_fingerprint": item.create_request_fingerprint,
+            }
+            for item in PROVIDER_CATEGORY_SEEDS
+        ],
+    )
 
 
 def downgrade() -> None:
-    op.execute("DROP TRIGGER ai_settings_operations_no_delete"); op.execute("DROP TRIGGER ai_settings_operations_no_update")
-    op.drop_table("ai_review_decisions"); op.drop_table("ai_drafts"); op.drop_table("ai_runs"); op.drop_table("ai_action_limits"); op.drop_table("ai_settings_operations"); op.drop_table("ai_settings"); op.drop_table("ai_model_connections")
+    op.execute("DROP TRIGGER ai_settings_operations_no_delete")
+    op.execute("DROP TRIGGER ai_settings_operations_no_update")
+    op.drop_table("ai_review_decisions")
+    op.drop_table("ai_drafts")
+    op.drop_table("ai_runs")
+    op.drop_table("ai_action_limits")
+    op.drop_table("ai_settings_operations")
+    op.drop_table("ai_settings")
+    op.drop_table("ai_model_connections")
     op.execute("DROP TRIGGER owner_concern_follow_up_operations_no_delete")
     op.execute("DROP TRIGGER owner_concern_follow_up_operations_no_update")
-    op.drop_table("owner_concern_follow_up_operations"); op.drop_table("owner_concerns")
+    op.drop_table("owner_concern_follow_up_operations")
+    op.drop_table("owner_concerns")
     op.execute("DROP TRIGGER owner_rent_report_operations_no_delete")
     op.execute("DROP TRIGGER owner_rent_report_operations_no_update")
-    op.drop_table("owner_rent_report_operations"); op.drop_table("owner_rent_reports")
+    op.drop_table("owner_rent_report_operations")
+    op.drop_table("owner_rent_reports")
     op.execute("DROP TRIGGER maintenance_work_journal_entries_no_delete")
     op.execute("DROP TRIGGER maintenance_work_journal_entries_no_update")
     op.execute("DROP TRIGGER maintenance_follow_up_operations_no_delete")
     op.execute("DROP TRIGGER maintenance_follow_up_operations_no_update")
     op.execute("DROP TRIGGER communication_operations_no_delete")
     op.execute("DROP TRIGGER communication_operations_no_update")
-    op.drop_table("maintenance_work_journal_entries"); op.drop_table("maintenance_assignments"); op.drop_table("maintenance_quotes"); op.drop_table("maintenance_follow_up_operations"); op.drop_table("maintenance_issue_expense_links"); op.drop_table("maintenance_cost_contexts"); op.drop_table("maintenance_appointments"); op.drop_table("maintenance_issues")
-    op.drop_table("communication_operations"); op.drop_table("communication_links"); op.drop_table("communication_participants"); op.drop_table("communications")
-    op.drop_table("security_deposit_refunds"); op.drop_table("security_deposit_credits"); op.drop_table("security_deposit_deduction_sources"); op.drop_table("security_deposit_deductions"); op.drop_table("security_deposit_settlement_receipts"); op.drop_table("security_deposit_settlements"); op.drop_table("security_deposit_receipts"); op.drop_table("security_deposit_accounts")
-    op.drop_table("expense_refunds"); op.drop_table("expenses"); op.drop_table("expense_categories")
-    op.drop_table("prepaid_check_operations"); op.drop_table("prepaid_checks"); op.drop_table("rent_receipt_allocations"); op.drop_table("rent_receipts"); op.drop_table("rent_expectation_timeliness_reviews"); op.drop_table("rent_expectations")
-    op.drop_table("condition_checklist_template_items"); op.drop_table("condition_checklist_templates"); op.drop_table("condition_comparisons"); op.drop_table("condition_report_acknowledgments"); op.drop_table("condition_observations"); op.drop_table("condition_areas"); op.drop_table("condition_reports")
-    op.drop_table("provider_reputation_links"); op.drop_table("provider_references"); op.drop_table("provider_work_history"); op.drop_table("provider_service_areas"); op.drop_table("provider_services"); op.drop_table("provider_category_assignments"); op.drop_table("provider_categories"); op.drop_table("provider_profiles")
-    op.drop_table("lease_termination_proposals"); op.drop_table("lease_termination_cases"); op.drop_table("lease_renewal_options"); op.drop_table("lease_participants"); op.drop_table("lease_term_versions"); op.drop_table("leases")
-    op.drop_table("space_status_operations"); op.drop_table("space_availability"); op.drop_table("space_occupancy_periods"); op.drop_table("spaces"); op.drop_table("property_ownerships"); op.drop_table("properties"); op.drop_table("tenant_profiles"); op.drop_table("party_contact_methods"); op.drop_table("parties")
-    op.drop_table("task_reminders"); op.drop_table("tasks"); op.drop_table("file_publication_cleanup_attentions"); op.drop_table("file_links"); op.drop_table("file_content_locations"); op.drop_table("file_records")
-    op.execute("DROP TRIGGER audit_events_no_delete"); op.execute("DROP TRIGGER audit_events_no_update"); op.drop_table("audit_events"); op.drop_table("workspace_metadata")
+    op.drop_table("maintenance_work_journal_entries")
+    op.drop_table("maintenance_assignments")
+    op.drop_table("maintenance_quotes")
+    op.drop_table("maintenance_follow_up_operations")
+    op.drop_table("maintenance_issue_expense_links")
+    op.drop_table("maintenance_cost_contexts")
+    op.drop_table("maintenance_appointments")
+    op.drop_table("maintenance_issues")
+    op.drop_table("communication_operations")
+    op.drop_table("communication_links")
+    op.drop_table("communication_participants")
+    op.drop_table("communications")
+    op.drop_table("security_deposit_refunds")
+    op.drop_table("security_deposit_credits")
+    op.drop_table("security_deposit_deduction_sources")
+    op.drop_table("security_deposit_deductions")
+    op.drop_table("security_deposit_settlement_receipts")
+    op.drop_table("security_deposit_settlements")
+    op.drop_table("security_deposit_receipts")
+    op.drop_table("security_deposit_accounts")
+    op.drop_table("expense_refunds")
+    op.drop_table("expenses")
+    op.drop_table("expense_categories")
+    op.drop_table("prepaid_check_operations")
+    op.drop_table("prepaid_checks")
+    op.drop_table("rent_receipt_allocations")
+    op.drop_table("rent_receipts")
+    op.drop_table("rent_expectation_timeliness_reviews")
+    op.drop_table("rent_expectations")
+    op.drop_table("condition_checklist_template_items")
+    op.drop_table("condition_checklist_templates")
+    op.drop_table("condition_comparisons")
+    op.drop_table("condition_report_acknowledgments")
+    op.drop_table("condition_observations")
+    op.drop_table("condition_areas")
+    op.drop_table("condition_reports")
+    op.drop_table("provider_reputation_links")
+    op.drop_table("provider_references")
+    op.drop_table("provider_work_history")
+    op.drop_table("provider_service_areas")
+    op.drop_table("provider_services")
+    op.drop_table("provider_category_assignments")
+    op.drop_table("provider_categories")
+    op.drop_table("provider_profiles")
+    op.drop_table("lease_termination_proposals")
+    op.drop_table("lease_termination_cases")
+    op.drop_table("lease_renewal_options")
+    op.drop_table("lease_participants")
+    op.drop_table("lease_term_versions")
+    op.drop_table("leases")
+    op.drop_table("space_status_operations")
+    op.drop_table("space_availability")
+    op.drop_table("space_occupancy_periods")
+    op.drop_table("spaces")
+    op.drop_table("property_ownerships")
+    op.drop_table("properties")
+    op.drop_table("tenant_profiles")
+    op.drop_table("party_contact_methods")
+    op.drop_table("parties")
+    op.drop_table("task_reminders")
+    op.drop_table("tasks")
+    op.drop_table("file_publication_cleanup_attentions")
+    op.drop_table("file_links")
+    op.drop_table("file_content_locations")
+    op.drop_table("file_records")
+    op.execute("DROP TRIGGER audit_events_no_delete")
+    op.execute("DROP TRIGGER audit_events_no_update")
+    op.drop_table("audit_events")
+    op.drop_table("workspace_metadata")

@@ -7,19 +7,29 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.files.application.ports import FileLinkReader, FileLinkWithFile
-from app.modules.finance.application.expense_ports import ExpenseTransaction, PartyExpenseOperations
+from app.modules.finance.application.expense_ports import PartyExpenseOperations
 from app.modules.finance.domain.expense_models import Expense, ExpenseCategory, ExpenseRefund
 from app.modules.finance.domain.models import FinanceConflictError
-from app.modules.finance.infrastructure.sqlalchemy_models import ExpenseCategoryModel, ExpenseModel, ExpenseRefundModel
+from app.modules.finance.infrastructure.sqlalchemy_models import (
+    ExpenseCategoryModel,
+    ExpenseModel,
+    ExpenseRefundModel,
+)
 from app.modules.portfolio.application.ports import PortfolioContextReader
 from app.modules.vendors.application.ports import ProviderContextReader
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 
 class SQLiteExpenseUnitOfWork:
-    def __init__(self, database, recorder: AuditRecorder, portfolio: PortfolioContextReader,
-                 providers: ProviderContextReader, parties: PartyExpenseOperations,
-                 files: FileLinkReader) -> None:
+    def __init__(
+        self,
+        database,
+        recorder: AuditRecorder,
+        portfolio: PortfolioContextReader,
+        providers: ProviderContextReader,
+        parties: PartyExpenseOperations,
+        files: FileLinkReader,
+    ) -> None:
         self.engine = create_sqlite_engine(database)
         self.recorder = recorder
         self.portfolio = portfolio
@@ -30,10 +40,16 @@ class SQLiteExpenseUnitOfWork:
     def write(self, operation):
         try:
             with immediate_transaction(self.engine) as connection:
-                return operation(_Transaction(
-                    connection, self.recorder, self.portfolio,
-                    self.providers, self.parties, self.files,
-                ))
+                return operation(
+                    _Transaction(
+                        connection,
+                        self.recorder,
+                        self.portfolio,
+                        self.providers,
+                        self.parties,
+                        self.files,
+                    )
+                )
         except (IntegrityError, OperationalError) as error:
             raise FinanceConflictError(
                 "The expense changed concurrently or conflicts with an existing record."
@@ -41,10 +57,16 @@ class SQLiteExpenseUnitOfWork:
 
     def read(self, operation):
         with self.engine.connect() as connection:
-            return operation(_Transaction(
-                connection, self.recorder, self.portfolio,
-                self.providers, self.parties, self.files,
-            ))
+            return operation(
+                _Transaction(
+                    connection,
+                    self.recorder,
+                    self.portfolio,
+                    self.providers,
+                    self.parties,
+                    self.files,
+                )
+            )
 
 
 class _Transaction:
@@ -63,40 +85,60 @@ class _Transaction:
         query = ExpenseCategoryModel.__table__.select()
         if not include_archived:
             query = query.where(ExpenseCategoryModel.archived_at.is_(None))
-        rows = self.connection.execute(query.order_by(
-            ExpenseCategoryModel.display_order, ExpenseCategoryModel.display_name,
-        )).mappings()
+        rows = self.connection.execute(
+            query.order_by(
+                ExpenseCategoryModel.display_order,
+                ExpenseCategoryModel.display_name,
+            )
+        ).mappings()
         return [ExpenseCategory(**dict(row)) for row in rows]
 
     def category_by_name(self, normalized_name):
-        row = self.connection.execute(
-            ExpenseCategoryModel.__table__.select().where(
-                ExpenseCategoryModel.normalized_name == normalized_name,
-                ExpenseCategoryModel.archived_at.is_(None),
+        row = (
+            self.connection.execute(
+                ExpenseCategoryModel.__table__.select().where(
+                    ExpenseCategoryModel.normalized_name == normalized_name,
+                    ExpenseCategoryModel.archived_at.is_(None),
+                )
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
         return ExpenseCategory(**dict(row)) if row else None
 
     def insert_category(self, item):
         self.connection.execute(ExpenseCategoryModel.__table__.insert().values(**item.__dict__))
 
     def replace_category(self, item):
-        self.connection.execute(ExpenseCategoryModel.__table__.update().where(
-            ExpenseCategoryModel.id == item.id
-        ).values(**item.__dict__))
+        self.connection.execute(
+            ExpenseCategoryModel.__table__.update()
+            .where(ExpenseCategoryModel.id == item.id)
+            .values(**item.__dict__)
+        )
 
     def expense(self, record_id):
         return _one(self.connection, ExpenseModel, record_id, Expense)
 
     def expense_by_key(self, key):
-        row = self.connection.execute(ExpenseModel.__table__.select().where(
-            ExpenseModel.idempotency_key == key
-        )).mappings().first()
+        row = (
+            self.connection.execute(
+                ExpenseModel.__table__.select().where(ExpenseModel.idempotency_key == key)
+            )
+            .mappings()
+            .first()
+        )
         return Expense(**dict(row)) if row else None
 
     def expenses(self, **filters):
         query = ExpenseModel.__table__.select()
-        for key in ("property_id", "space_id", "category_id", "provider_party_id", "paid_by_kind", "paid_by_party_id"):
+        for key in (
+            "property_id",
+            "space_id",
+            "category_id",
+            "provider_party_id",
+            "paid_by_kind",
+            "paid_by_party_id",
+        ):
             if filters.get(key) is not None:
                 query = query.where(getattr(ExpenseModel, key) == filters[key])
         if filters.get("paid_from") is not None:
@@ -109,26 +151,35 @@ class _Transaction:
         if has_evidence is not None:
             evidence_ids = self.files.entity_ids_with_active_links(self.connection, "expense")
             query = query.where(
-                ExpenseModel.id.in_(evidence_ids) if has_evidence
+                ExpenseModel.id.in_(evidence_ids)
+                if has_evidence
                 else ExpenseModel.id.not_in(evidence_ids)
             )
         cursor = filters.get("cursor")
         if cursor:
-            query = query.where(or_(
-                ExpenseModel.paid_on < cursor[0],
-                and_(ExpenseModel.paid_on == cursor[0], ExpenseModel.id < cursor[1]),
-            ))
-        query = query.order_by(ExpenseModel.paid_on.desc(), ExpenseModel.id.desc()).limit(filters.get("limit", 101))
+            query = query.where(
+                or_(
+                    ExpenseModel.paid_on < cursor[0],
+                    and_(ExpenseModel.paid_on == cursor[0], ExpenseModel.id < cursor[1]),
+                )
+            )
+        query = query.order_by(ExpenseModel.paid_on.desc(), ExpenseModel.id.desc()).limit(
+            filters.get("limit", 101)
+        )
         return [Expense(**dict(row)) for row in self.connection.execute(query).mappings()]
 
     def duplicate_expenses(self, item):
-        query = ExpenseModel.__table__.select().where(
-            ExpenseModel.property_id == item.property_id,
-            ExpenseModel.paid_on == item.paid_on,
-            ExpenseModel.amount_minor == item.amount_minor,
-            ExpenseModel.currency_code == item.currency_code,
-            ExpenseModel.voided_at.is_(None),
-        ).order_by(ExpenseModel.created_at, ExpenseModel.id)
+        query = (
+            ExpenseModel.__table__.select()
+            .where(
+                ExpenseModel.property_id == item.property_id,
+                ExpenseModel.paid_on == item.paid_on,
+                ExpenseModel.amount_minor == item.amount_minor,
+                ExpenseModel.currency_code == item.currency_code,
+                ExpenseModel.voided_at.is_(None),
+            )
+            .order_by(ExpenseModel.created_at, ExpenseModel.id)
+        )
         return [Expense(**dict(row)) for row in self.connection.execute(query).mappings()]
 
     def expense_projection(self, expenses):
@@ -144,9 +195,7 @@ class _Transaction:
         expense_ids = [item.id for item in expenses]
         category_ids = {item.category_id for item in expenses}
         provider_ids = {
-            item.provider_party_id
-            for item in expenses
-            if item.provider_party_id is not None
+            item.provider_party_id for item in expenses if item.provider_party_id is not None
         }
         categories = {
             row["id"]: ExpenseCategory(**dict(row))
@@ -158,9 +207,9 @@ class _Transaction:
         }
         refunds = {expense_id: [] for expense_id in expense_ids}
         for row in self.connection.execute(
-            ExpenseRefundModel.__table__.select().where(
-                ExpenseRefundModel.expense_id.in_(expense_ids)
-            ).order_by(
+            ExpenseRefundModel.__table__.select()
+            .where(ExpenseRefundModel.expense_id.in_(expense_ids))
+            .order_by(
                 ExpenseRefundModel.expense_id,
                 ExpenseRefundModel.received_on,
                 ExpenseRefundModel.id,
@@ -179,7 +228,8 @@ class _Transaction:
             "contexts": {
                 item.id: _expense_context_view(context)
                 for item in expenses
-                if (context := portfolio_contexts.get((item.property_id, item.space_id))) is not None
+                if (context := portfolio_contexts.get((item.property_id, item.space_id)))
+                is not None
             },
             "providers": _provider_views(provider_profiles, provider_parties),
             "refunds": refunds,
@@ -190,9 +240,7 @@ class _Transaction:
                 ).items()
             },
             "correction_chains": {
-                expense_id: _correction_chain(
-                    correction_rows, expense_id, "replaces_expense_id"
-                )
+                expense_id: _correction_chain(correction_rows, expense_id, "replaces_expense_id")
                 for expense_id in expense_ids
             },
         }
@@ -201,9 +249,7 @@ class _Transaction:
         """Load only the ancestor/descendant components for this result page."""
         rows_by_id = {item.id: item for item in expenses}
         parent_frontier = {
-            item.replaces_expense_id
-            for item in expenses
-            if item.replaces_expense_id is not None
+            item.replaces_expense_id for item in expenses if item.replaces_expense_id is not None
         }
         while parent_frontier:
             next_frontier = set()
@@ -224,9 +270,7 @@ class _Transaction:
             next_frontier = set()
             for ids in _chunks(child_frontier):
                 for row in self.connection.execute(
-                    ExpenseModel.__table__.select().where(
-                        ExpenseModel.replaces_expense_id.in_(ids)
-                    )
+                    ExpenseModel.__table__.select().where(ExpenseModel.replaces_expense_id.in_(ids))
                 ).mappings():
                     item = Expense(**dict(row))
                     if item.id in rows_by_id:
@@ -237,45 +281,67 @@ class _Transaction:
         return list(rows_by_id.values())
 
     def replacement_expense_exists(self, record_id):
-        return self.connection.execute(select(ExpenseModel.id).where(
-            ExpenseModel.replaces_expense_id == record_id
-        ).limit(1)).first() is not None
+        return (
+            self.connection.execute(
+                select(ExpenseModel.id)
+                .where(ExpenseModel.replaces_expense_id == record_id)
+                .limit(1)
+            ).first()
+            is not None
+        )
 
     def insert_expense(self, item):
         self.connection.execute(ExpenseModel.__table__.insert().values(**item.__dict__))
 
     def replace_expense(self, item):
-        self.connection.execute(ExpenseModel.__table__.update().where(
-            ExpenseModel.id == item.id
-        ).values(**item.__dict__))
+        self.connection.execute(
+            ExpenseModel.__table__.update()
+            .where(ExpenseModel.id == item.id)
+            .values(**item.__dict__)
+        )
 
     def refund(self, record_id):
         return _one(self.connection, ExpenseRefundModel, record_id, ExpenseRefund)
 
     def refund_by_key(self, key):
-        row = self.connection.execute(ExpenseRefundModel.__table__.select().where(
-            ExpenseRefundModel.idempotency_key == key
-        )).mappings().first()
+        row = (
+            self.connection.execute(
+                ExpenseRefundModel.__table__.select().where(
+                    ExpenseRefundModel.idempotency_key == key
+                )
+            )
+            .mappings()
+            .first()
+        )
         return ExpenseRefund(**dict(row)) if row else None
 
     def refunds(self, expense_id):
-        rows = self.connection.execute(ExpenseRefundModel.__table__.select().where(
-            ExpenseRefundModel.expense_id == expense_id
-        ).order_by(ExpenseRefundModel.received_on, ExpenseRefundModel.id)).mappings()
+        rows = self.connection.execute(
+            ExpenseRefundModel.__table__.select()
+            .where(ExpenseRefundModel.expense_id == expense_id)
+            .order_by(ExpenseRefundModel.received_on, ExpenseRefundModel.id)
+        ).mappings()
         return [ExpenseRefund(**dict(row)) for row in rows]
 
     def replacement_refund_exists(self, record_id):
-        return self.connection.execute(select(ExpenseRefundModel.id).where(
-            ExpenseRefundModel.replaces_refund_id == record_id
-        ).limit(1)).first() is not None
+        return (
+            self.connection.execute(
+                select(ExpenseRefundModel.id)
+                .where(ExpenseRefundModel.replaces_refund_id == record_id)
+                .limit(1)
+            ).first()
+            is not None
+        )
 
     def insert_refund(self, item):
         self.connection.execute(ExpenseRefundModel.__table__.insert().values(**item.__dict__))
 
     def replace_refund(self, item):
-        self.connection.execute(ExpenseRefundModel.__table__.update().where(
-            ExpenseRefundModel.id == item.id
-        ).values(**item.__dict__))
+        self.connection.execute(
+            ExpenseRefundModel.__table__.update()
+            .where(ExpenseRefundModel.id == item.id)
+            .values(**item.__dict__)
+        )
 
     def portfolio_context(self, property_id, space_id, paid_on):
         context = self.portfolio.context_for_property_space(self.connection, property_id, space_id)
@@ -284,7 +350,9 @@ class _Transaction:
     def provider_context(self, party_id):
         profile = self.providers.profile_context(self.connection, party_id)
         party = self.parties.party(self.connection, party_id)
-        return None if profile is None or party is None else _provider_view(party_id, profile, party)
+        return (
+            None if profile is None or party is None else _provider_view(party_id, profile, party)
+        )
 
     def party_exists(self, party_id):
         return self.parties.exists(self.connection, party_id)
@@ -299,7 +367,9 @@ class _Transaction:
 
 
 def _one(connection, model, record_id, domain):
-    row = connection.execute(model.__table__.select().where(model.id == record_id)).mappings().first()
+    row = (
+        connection.execute(model.__table__.select().where(model.id == record_id)).mappings().first()
+    )
     return domain(**dict(row)) if row else None
 
 
@@ -329,7 +399,9 @@ def _expense_context_view(context: dict[str, object]) -> dict[str, object]:
         "timeZone": context["time_zone"],
         "spaceId": context["space_id"],
         "spaceName": context["space_display_name"],
-        "spaceArchived": False if context["space_status"] is None else context["space_status"] == "archived",
+        "spaceArchived": False
+        if context["space_status"] is None
+        else context["space_status"] == "archived",
     }
 
 
@@ -342,13 +414,17 @@ def _provider_views(profiles, parties) -> dict[str, dict[str, object]]:
 
 
 def _provider_view(party_id, profile, party) -> dict[str, object]:
-    return {"partyId": party_id, "displayName": party.display_name, "archived": profile["archived_at"] is not None}
+    return {
+        "partyId": party_id,
+        "displayName": party.display_name,
+        "archived": profile["archived_at"] is not None,
+    }
 
 
 def _chunks(values, size=500):
     values = list(values)
     for start in range(0, len(values), size):
-        yield values[start:start + size]
+        yield values[start : start + size]
 
 
 def _correction_chain(rows, record_id, replacement_field):

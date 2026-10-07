@@ -1,4 +1,5 @@
 """Connection-owned INGEST-001 attention lifecycle persistence."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -17,7 +18,11 @@ from app.modules.intake.domain.models import (
     fingerprint,
     utc_now,
 )
-from app.modules.intake.infrastructure.sqlalchemy_models import IntakeSourceModel, IntakeSourceOperationModel
+from app.modules.intake.infrastructure.sqlalchemy_models import (
+    IntakeSourceModel,
+    IntakeSourceOperationModel,
+)
+
 
 class SQLiteIntakeAttentionOperations:
     """The one transaction-aware adapter shared by operator and review flows."""
@@ -44,11 +49,15 @@ class SQLiteIntakeAttentionOperations:
             "actorReference": transition.actor_reference,
         }
         request_fingerprint = fingerprint(request_payload)
-        prior = connection.execute(
-            select(IntakeSourceOperationModel).where(
-                IntakeSourceOperationModel.idempotency_key == transition.idempotency_key,
-            ),
-        ).mappings().first()
+        prior = (
+            connection.execute(
+                select(IntakeSourceOperationModel).where(
+                    IntakeSourceOperationModel.idempotency_key == transition.idempotency_key,
+                ),
+            )
+            .mappings()
+            .first()
+        )
         if prior is not None:
             if prior["request_fingerprint"] != request_fingerprint:
                 raise IntakeConflictError(
@@ -56,12 +65,16 @@ class SQLiteIntakeAttentionOperations:
                     "intake_idempotency_conflict",
                 )
             if prior["operation_type"] != "attention_transition" or prior["result_json"] is None:
-                raise IntakeConflictError("Idempotency key is not an attention transition.", "intake_idempotency_conflict")
+                raise IntakeConflictError(
+                    "Idempotency key is not an attention transition.", "intake_idempotency_conflict"
+                )
             return self._result(prior["result_json"])
 
         source = self._source(connection, transition.source_id)
         if source["technical_status"] != "ready":
-            raise IntakeConflictError("Only ready sources can change attention.", "intake_lifecycle_conflict")
+            raise IntakeConflictError(
+                "Only ready sources can change attention.", "intake_lifecycle_conflict"
+            )
         if (
             source["current_revision_id"] != transition.expected_revision
             or source["attention_status"] != transition.expected_status
@@ -73,33 +86,39 @@ class SQLiteIntakeAttentionOperations:
         if transition.target == source["attention_status"]:
             raise IntakeConflictError("Attention status is unchanged.", "intake_lifecycle_conflict")
         if not attention_transition_allowed(source["attention_status"], transition.target):
-            raise IntakeConflictError("Attention transition is not allowed.", "intake_lifecycle_conflict")
+            raise IntakeConflictError(
+                "Attention transition is not allowed.", "intake_lifecycle_conflict"
+            )
 
         now = utc_now()
         connection.execute(
-            IntakeSourceModel.__table__.update().where(
+            IntakeSourceModel.__table__.update()
+            .where(
                 IntakeSourceModel.id == transition.source_id,
-            ).values(attention_status=transition.target, updated_at=now),
+            )
+            .values(attention_status=transition.target, updated_at=now),
         )
         result = self.source_reader.source_projection(connection, transition.source_id)
         if result is None:
             raise IntakeNotFoundError("Intake source was not found.")
-        connection.execute(IntakeSourceOperationModel.__table__.insert().values(
-            id=str(uuid4()),
-            operation_type="attention_transition",
-            idempotency_key=transition.idempotency_key,
-            request_fingerprint=request_fingerprint,
-            request_payload_json=canonical_json(request_payload),
-            source_id=transition.source_id,
-            result_revision_id=source["current_revision_id"],
-            result_json=canonical_json(result),
-            outcome="succeeded",
-            error_code=None,
-            correlation_id=transition.correlation_id,
-            actor_kind=transition.actor_kind,
-            actor_reference=transition.actor_reference,
-            created_at=now,
-        ))
+        connection.execute(
+            IntakeSourceOperationModel.__table__.insert().values(
+                id=str(uuid4()),
+                operation_type="attention_transition",
+                idempotency_key=transition.idempotency_key,
+                request_fingerprint=request_fingerprint,
+                request_payload_json=canonical_json(request_payload),
+                source_id=transition.source_id,
+                result_revision_id=source["current_revision_id"],
+                result_json=canonical_json(result),
+                outcome="succeeded",
+                error_code=None,
+                correlation_id=transition.correlation_id,
+                actor_kind=transition.actor_kind,
+                actor_reference=transition.actor_reference,
+                created_at=now,
+            )
+        )
         self.recorder.record_change(
             connection.connection.driver_connection,
             entity_type="intake_source",
@@ -116,9 +135,13 @@ class SQLiteIntakeAttentionOperations:
 
     @staticmethod
     def _source(connection: Any, source_id: str) -> dict[str, object]:
-        source = connection.execute(
-            select(IntakeSourceModel).where(IntakeSourceModel.id == source_id),
-        ).mappings().first()
+        source = (
+            connection.execute(
+                select(IntakeSourceModel).where(IntakeSourceModel.id == source_id),
+            )
+            .mappings()
+            .first()
+        )
         if source is None:
             raise IntakeNotFoundError("Intake source was not found.")
         return dict(source)
@@ -126,10 +149,15 @@ class SQLiteIntakeAttentionOperations:
     @staticmethod
     def _result(value: object) -> dict[str, object]:
         import json
+
         try:
             result = json.loads(str(value))
         except (TypeError, ValueError) as error:
-            raise IntakeConflictError("Stored attention result is invalid.", "intake_integrity_conflict") from error
+            raise IntakeConflictError(
+                "Stored attention result is invalid.", "intake_integrity_conflict"
+            ) from error
         if not isinstance(result, dict):
-            raise IntakeConflictError("Stored attention result is invalid.", "intake_integrity_conflict")
+            raise IntakeConflictError(
+                "Stored attention result is invalid.", "intake_integrity_conflict"
+            )
         return result

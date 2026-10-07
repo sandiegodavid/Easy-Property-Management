@@ -1,4 +1,5 @@
 """Shared SQLAlchemy engine configuration for local SQLite workspaces."""
+
 from __future__ import annotations
 
 from contextlib import contextmanager
@@ -11,6 +12,7 @@ from sqlalchemy.engine import URL, Engine
 
 def sqlite_url(database: Path) -> URL:
     return URL.create("sqlite", database=str(database.resolve()))
+
 
 def create_sqlite_engine(database: Path) -> Engine:
     engine = create_engine(sqlite_url(database))
@@ -25,7 +27,10 @@ def create_sqlite_engine(database: Path) -> Engine:
             cursor.execute("PRAGMA foreign_keys = ON")
             cursor.execute("PRAGMA busy_timeout = 5000")
             dbapi_connection.create_function(
-                "unicode_casefold", 1, _unicode_casefold, deterministic=True,
+                "unicode_casefold",
+                1,
+                _unicode_casefold,
+                deterministic=True,
             )
         finally:
             cursor.close()

@@ -24,6 +24,7 @@ class SQLiteTaskUnitOfWork:
     def __init__(self, database, recorder: AuditRecorder) -> None:
         self.engine = create_sqlite_engine(database)
         self.recorder = recorder
+
         @event.listens_for(self.engine, "connect")
         def task_due_bucket(dbapi_connection, _connection_record) -> None:
             dbapi_connection.create_function("task_due_bucket", 4, _task_due_bucket)
@@ -46,9 +47,16 @@ class SQLiteTaskUnitOfWork:
                 query = query.where(TaskModel.status == status)
             return [_task(row) for row in session.execute(query).scalars()]
 
-    def page(self, *, statuses: tuple[str, ...], priorities: tuple[str, ...] | None,
-             related_entity_type: str | None, related_entity_id: str | None, limit: int,
-             cursor: tuple[int, str | None, str, str] | None) -> list[Task]:
+    def page(
+        self,
+        *,
+        statuses: tuple[str, ...],
+        priorities: tuple[str, ...] | None,
+        related_entity_type: str | None,
+        related_entity_id: str | None,
+        limit: int,
+        cursor: tuple[int, str | None, str, str] | None,
+    ) -> list[Task]:
         with Session(self.engine) as session:
             no_due = TaskModel.due_at_utc.is_(None)
             query = select(TaskModel)
@@ -69,12 +77,16 @@ class SQLiteTaskUnitOfWork:
                 if cursor_no_due:
                     query = query.where(and_(no_due, later_same_due))
                 else:
-                    query = query.where(or_(
-                        no_due,
-                        TaskModel.due_at_utc > cursor_due,
-                        and_(TaskModel.due_at_utc == cursor_due, later_same_due),
-                    ))
-            query = query.order_by(no_due, TaskModel.due_at_utc, TaskModel.created_at_utc.desc(), TaskModel.id.desc()).limit(limit)
+                    query = query.where(
+                        or_(
+                            no_due,
+                            TaskModel.due_at_utc > cursor_due,
+                            and_(TaskModel.due_at_utc == cursor_due, later_same_due),
+                        )
+                    )
+            query = query.order_by(
+                no_due, TaskModel.due_at_utc, TaskModel.created_at_utc.desc(), TaskModel.id.desc()
+            ).limit(limit)
             return [_task(row) for row in session.execute(query).scalars()]
 
     def reminders(self, task_id: str | None = None) -> list[TaskReminder]:
@@ -88,53 +100,94 @@ class SQLiteTaskUnitOfWork:
         """Read all dashboard buckets from one SQLite snapshot."""
         with self.engine.connect() as connection:
             with connection.begin():
-                overdue_total, overdue = _summary_tasks(connection, bucket="overdue", now=now, limit=limit)
-                today_total, today = _summary_tasks(connection, bucket="today", now=now, limit=limit)
-                next7days_total, next7days = _summary_tasks(connection, bucket="next7days", now=now, limit=limit)
-                due_reminders_total, due_reminders = _due_reminders_summary(connection, now=now, limit=limit)
+                overdue_total, overdue = _summary_tasks(
+                    connection, bucket="overdue", now=now, limit=limit
+                )
+                today_total, today = _summary_tasks(
+                    connection, bucket="today", now=now, limit=limit
+                )
+                next7days_total, next7days = _summary_tasks(
+                    connection, bucket="next7days", now=now, limit=limit
+                )
+                due_reminders_total, due_reminders = _due_reminders_summary(
+                    connection, now=now, limit=limit
+                )
         return TaskSummary(
-            overdue_total=overdue_total, overdue=overdue, today_total=today_total, today=today,
-            next7days_total=next7days_total, next7days=next7days,
-            due_reminders_total=due_reminders_total, due_reminders=due_reminders,
+            overdue_total=overdue_total,
+            overdue=overdue,
+            today_total=today_total,
+            today=today,
+            next7days_total=next7days_total,
+            next7days=next7days,
+            due_reminders_total=due_reminders_total,
+            due_reminders=due_reminders,
         )
 
 
-def _summary_tasks(connection: Any, *, bucket: str, now: datetime, limit: int) -> tuple[int, list[Task]]:
+def _summary_tasks(
+    connection: Any, *, bucket: str, now: datetime, limit: int
+) -> tuple[int, list[Task]]:
     condition = and_(
         TaskModel.status.in_(("open", "in_progress")),
         TaskModel.due_at_utc.is_not(None),
         func.task_due_bucket(
-            TaskModel.due_at_utc, TaskModel.due_timezone, TaskModel.is_all_day, now.isoformat(),
-        ) == bucket,
+            TaskModel.due_at_utc,
+            TaskModel.due_timezone,
+            TaskModel.is_all_day,
+            now.isoformat(),
+        )
+        == bucket,
     )
     total = connection.scalar(select(func.count()).select_from(TaskModel).where(condition)) or 0
     rows = connection.execute(
-        TaskModel.__table__.select().where(condition).order_by(
-            TaskModel.due_at_utc, TaskModel.created_at_utc, TaskModel.id,
-        ).limit(limit)
+        TaskModel.__table__.select()
+        .where(condition)
+        .order_by(
+            TaskModel.due_at_utc,
+            TaskModel.created_at_utc,
+            TaskModel.id,
+        )
+        .limit(limit)
     ).mappings()
     return total, [_task_mapping(row) for row in rows]
 
-def _due_reminders_summary(connection: Any, *, now: datetime, limit: int) -> tuple[int, list[DueReminderSummary]]:
+
+def _due_reminders_summary(
+    connection: Any, *, now: datetime, limit: int
+) -> tuple[int, list[DueReminderSummary]]:
     condition = and_(
         TaskReminderModel.status == "pending",
         TaskReminderModel.remind_at_utc <= now.isoformat(),
     )
     columns = (
-        TaskReminderModel.id, TaskReminderModel.task_id, TaskReminderModel.remind_at_utc,
-        TaskReminderModel.status, TaskReminderModel.acknowledged_at_utc,
-        TaskReminderModel.dismissed_at_utc, TaskReminderModel.created_at_utc,
-        TaskModel.title.label("task_title"), TaskModel.due_at_utc.label("task_due_at_utc"),
-        TaskModel.due_timezone.label("task_due_timezone"), TaskModel.is_all_day.label("task_is_all_day"),
+        TaskReminderModel.id,
+        TaskReminderModel.task_id,
+        TaskReminderModel.remind_at_utc,
+        TaskReminderModel.status,
+        TaskReminderModel.acknowledged_at_utc,
+        TaskReminderModel.dismissed_at_utc,
+        TaskReminderModel.created_at_utc,
+        TaskModel.title.label("task_title"),
+        TaskModel.due_at_utc.label("task_due_at_utc"),
+        TaskModel.due_timezone.label("task_due_timezone"),
+        TaskModel.is_all_day.label("task_is_all_day"),
         TaskModel.related_label.label("related_label"),
     )
-    total = connection.scalar(
-        select(func.count()).select_from(TaskReminderModel).join(TaskModel).where(condition)
-    ) or 0
+    total = (
+        connection.scalar(
+            select(func.count()).select_from(TaskReminderModel).join(TaskModel).where(condition)
+        )
+        or 0
+    )
     rows = connection.execute(
-        select(*columns).join(TaskModel).where(condition).order_by(
-            TaskReminderModel.remind_at_utc, TaskReminderModel.id,
-        ).limit(limit)
+        select(*columns)
+        .join(TaskModel)
+        .where(condition)
+        .order_by(
+            TaskReminderModel.remind_at_utc,
+            TaskReminderModel.id,
+        )
+        .limit(limit)
     ).mappings()
     return total, [_due_reminder_summary(row) for row in rows]
 
@@ -145,9 +198,11 @@ class _SQLiteTaskTransaction:
         self.recorder = recorder
 
     def get_task(self, task_id: str) -> Task | None:
-        row = self.connection.execute(
-            TaskModel.__table__.select().where(TaskModel.id == task_id)
-        ).mappings().first()
+        row = (
+            self.connection.execute(TaskModel.__table__.select().where(TaskModel.id == task_id))
+            .mappings()
+            .first()
+        )
         return _task_mapping(row) if row else None
 
     def insert_task(self, task: Task) -> None:
@@ -159,32 +214,50 @@ class _SQLiteTaskTransaction:
         )
 
     def pending_reminders(self, task_id: str) -> list[TaskReminder]:
-        rows = self.connection.execute(
-            TaskReminderModel.__table__.select().where(
-                TaskReminderModel.task_id == task_id, TaskReminderModel.status == "pending"
+        rows = (
+            self.connection.execute(
+                TaskReminderModel.__table__.select().where(
+                    TaskReminderModel.task_id == task_id, TaskReminderModel.status == "pending"
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
         return [TaskReminder(**dict(row)) for row in rows]
 
     def insert_reminder(self, reminder: TaskReminder) -> None:
         self.connection.execute(TaskReminderModel.__table__.insert().values(**reminder.__dict__))
 
     def get_reminder(self, task_id: str, reminder_id: str) -> TaskReminder | None:
-        row = self.connection.execute(
-            TaskReminderModel.__table__.select().where(
-                TaskReminderModel.id == reminder_id, TaskReminderModel.task_id == task_id
+        row = (
+            self.connection.execute(
+                TaskReminderModel.__table__.select().where(
+                    TaskReminderModel.id == reminder_id, TaskReminderModel.task_id == task_id
+                )
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
         return TaskReminder(**dict(row)) if row else None
 
     def replace_reminder(self, reminder: TaskReminder) -> None:
         self.connection.execute(
-            TaskReminderModel.__table__.update().where(TaskReminderModel.id == reminder.id).values(**reminder.__dict__)
+            TaskReminderModel.__table__.update()
+            .where(TaskReminderModel.id == reminder.id)
+            .values(**reminder.__dict__)
         )
 
-    def record_change(self, *, entity_type: str, entity_id: str, action: str,
-                      before: dict[str, Any] | None, after: dict[str, Any] | None,
-                      reason: str, correlation_id: str) -> None:
+    def record_change(
+        self,
+        *,
+        entity_type: str,
+        entity_id: str,
+        action: str,
+        before: dict[str, Any] | None,
+        after: dict[str, Any] | None,
+        reason: str,
+        correlation_id: str,
+    ) -> None:
         self.recorder.record_change(
             self.connection.connection.driver_connection,
             entity_type=entity_type,
@@ -210,30 +283,42 @@ def _task_mapping(row: Any) -> Task:
 
 
 def _reminder(row: TaskReminderModel) -> TaskReminder:
-    return TaskReminder(**{column: getattr(row, column) for column in TaskReminder.__dataclass_fields__})
+    return TaskReminder(
+        **{column: getattr(row, column) for column in TaskReminder.__dataclass_fields__}
+    )
 
 
 def _task_values(task: Task) -> dict[str, Any]:
     return {**task.__dict__, "is_all_day": int(task.is_all_day)}
 
 
-def _task_due_bucket(due_at_utc: str | None, due_timezone: str | None,
-                     is_all_day: int, now: str) -> str | None:
+def _task_due_bucket(
+    due_at_utc: str | None, due_timezone: str | None, is_all_day: int, now: str
+) -> str | None:
     """SQLite UDF: retain set-based filtering while respecting each stored IANA zone."""
     if due_at_utc is None or due_timezone is None:
         return None
     return due_bucket(
-        status="open", due_at_utc=due_at_utc, due_timezone=due_timezone,
-        is_all_day=bool(is_all_day), now=datetime.fromisoformat(now),
+        status="open",
+        due_at_utc=due_at_utc,
+        due_timezone=due_timezone,
+        is_all_day=bool(is_all_day),
+        now=datetime.fromisoformat(now),
     )
 
 
 def _due_reminder_summary(row: Any) -> DueReminderSummary:
     return DueReminderSummary(
-        id=row["id"], task_id=row["task_id"], remind_at_utc=row["remind_at_utc"],
-        status=row["status"], acknowledged_at_utc=row["acknowledged_at_utc"],
-        dismissed_at_utc=row["dismissed_at_utc"], created_at_utc=row["created_at_utc"],
-        task_title=row["task_title"], task_due_at_utc=row["task_due_at_utc"],
-        task_due_timezone=row["task_due_timezone"], task_is_all_day=bool(row["task_is_all_day"]),
+        id=row["id"],
+        task_id=row["task_id"],
+        remind_at_utc=row["remind_at_utc"],
+        status=row["status"],
+        acknowledged_at_utc=row["acknowledged_at_utc"],
+        dismissed_at_utc=row["dismissed_at_utc"],
+        created_at_utc=row["created_at_utc"],
+        task_title=row["task_title"],
+        task_due_at_utc=row["task_due_at_utc"],
+        task_due_timezone=row["task_due_timezone"],
+        task_is_all_day=bool(row["task_is_all_day"]),
         related_label=row["related_label"],
     )

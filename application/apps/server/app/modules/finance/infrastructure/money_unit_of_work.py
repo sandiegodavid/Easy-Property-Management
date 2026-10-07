@@ -109,7 +109,7 @@ class SQLiteMoneyReadTransaction:
 
     def validate_integrity(self):
         """Guard unresolved relationships and currency even in corrupted sources."""
-        p, l = self.properties, self.locations
+        p, locations = self.properties, self.locations
         r, e, f = RentReceiptModel.__table__, ExpenseModel.__table__, ExpenseRefundModel.__table__
         a = SecurityDepositAccountModel.__table__
         dr, df, s = (
@@ -119,8 +119,8 @@ class SQLiteMoneyReadTransaction:
         )
         tests = [
             select(r.c.id)
-            .select_from(r.outerjoin(l, r.c.lease_id == l.c.lease_id))
-            .where(or_(l.c.property_id.is_(None), r.c.currency_code != "USD")),
+            .select_from(r.outerjoin(locations, r.c.lease_id == locations.c.lease_id))
+            .where(or_(locations.c.property_id.is_(None), r.c.currency_code != "USD")),
             select(e.c.id)
             .select_from(e.outerjoin(p, e.c.property_id == p.c.property_id))
             .where(or_(p.c.property_id.is_(None), e.c.currency_code != "USD")),
@@ -128,12 +128,12 @@ class SQLiteMoneyReadTransaction:
             .select_from(f.outerjoin(e, f.c.expense_id == e.c.id))
             .where(or_(e.c.id.is_(None), f.c.currency_code != "USD")),
             select(a.c.id)
-            .select_from(a.outerjoin(l, a.c.lease_id == l.c.lease_id))
+            .select_from(a.outerjoin(locations, a.c.lease_id == locations.c.lease_id))
             .where(
                 or_(
-                    l.c.property_id.is_(None),
-                    a.c.property_id != l.c.property_id,
-                    a.c.space_id != l.c.space_id,
+                    locations.c.property_id.is_(None),
+                    a.c.property_id != locations.c.property_id,
+                    a.c.space_id != locations.c.space_id,
                     a.c.currency_code != "USD",
                 )
             ),
@@ -164,7 +164,7 @@ class SQLiteMoneyReadTransaction:
 
     def _events(self):
         """One row per contribution, never per receipt allocation or line item."""
-        p, l = self.properties, self.locations
+        p, locations = self.properties, self.locations
         r, e, f = RentReceiptModel.__table__, ExpenseModel.__table__, ExpenseRefundModel.__table__
         a, dr, df, s = (
             SecurityDepositAccountModel.__table__,
@@ -211,12 +211,12 @@ class SQLiteMoneyReadTransaction:
                 r,
                 r.c.received_on,
                 r.c.amount_minor,
-                l,
+                locations,
                 lease=r.c.lease_id,
-                space=l.c.space_id,
+                space=locations.c.space_id,
                 party=r.c.received_by_party_id,
             )
-            .select_from(r.join(l, r.c.lease_id == l.c.lease_id))
+            .select_from(r.join(locations, r.c.lease_id == locations.c.lease_id))
             .where(r.c.voided_at.is_(None)),
             projection(
                 "expense",
