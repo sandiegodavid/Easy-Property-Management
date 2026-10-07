@@ -314,7 +314,7 @@ The greatest practical additions from the PDF are **column profiling, explicit l
 
 These refinements are recorded in UR-001/004/006 and do not amend DATA designs, the main UI-001 delivery scope, or the existing production onboarding contract.
 
-## Parallel experimental backlog and remaining decisions
+## Parallel experimental backlog and confirmed design decisions
 
 The [experimental backlog](FEATURE_BACKLOG.md#experimental--universal-reader-parallel-track) uses a separate UR prefix. Existing DATA scopes, dependency lists, and production paths remain unchanged. Existing items do not acquire UR prerequisites.
 
@@ -331,17 +331,176 @@ UR-002 and UR-003 are optional branches. UR-004/005 must support local determini
 
 The no-DATA boundary includes implementation contracts: UR must not call DATA services or use their tables, schema definitions, routes, or required UI flows. It may reuse existing file, governance, connector, Party, Portfolio, Provider, audit, and workspace application protocols. Any eventual consolidation is a future explicit decision, not part of this experiment.
 
-Decisions to settle in the individual UR designs before implementation:
+The operator approved all ten directions on October 6, 2026. The following contracts elaborate those decisions for the individual UR designs. They are proposed implementation contracts, not implemented capabilities. Numerical budgets are initial experimental qualification settings; changing them requires a documented configuration/version and renewed resource testing, not silent expansion.
 
-1. **Layouts and format support.** Qualify `.xlsx` first; define multi-region selectors, spans, overlap/exclusion handling, merged groups, and transform limits. Additional file formats need explicit qualification.
-2. **Independent persistence.** Specify UR-owned snapshot, plan, candidate, recipe, review, and outcome contracts, retention, and restore validators. Existing DATA schemas supply no implicit implementation.
-3. **Shared identities and category suggestions.** Adopt Party candidates with owner/provider projections; all linking and existing/create/skip category decisions require review. Similarity is a suggestion only.
-4. **Snapshot consistency and fidelity.** Specify formula/cache/date-system/hidden/color metadata and bounded multi-request Sheets capture. A values-only grid cannot meet all layout requirements.
-5. **Approval meaning.** AI approval adopts a preview plan; final import authorization binds exact source, decisions, operations, and eligible dependencies. No confidence threshold can replace it.
-6. **Adapter qualification.** Compare heuristics, a qualified LLM, and Jev on the same held-out samples; measure correction effort and semantic accuracy before provider selection. Combined verification remains optional.
-7. **Domain atomicity and recovery.** Define caller-transaction operations, atomic dependency units, idempotency/correlation keys, stale-state checks, rollback, and partial-result reconciliation before writing official records.
-8. **Recipes and layout drift.** Use only constrained declarative transforms; preserve version/signature/lineage and invalidate stale mapping assumptions on every new source. Reuse is not authorization.
-9. **Limits and execution.** Qualify resource budgets, interruption, cancellation, persisted step recovery, and no-network/no-write parser behavior. Do not assume a ready background runner.
-10. **Coverage and expansion.** Expose unsupported fields and explicit exclusions. Leases, balances, history, generated scripts, arbitrary updates, custom-field schemas, and generic undo require new experimental backlog items and domain decisions; existing DATA items are not dependencies for them.
+### 1. Layouts and format support — UR-001
 
-The first experiment is a source-grounded XLSX reader for unfamiliar property/owner/provider layouts. A favorable evaluation can justify later independent review/import pilots; it does not automatically replace the established DATA workflows.
+**Accepted input:** valid, unencrypted `.xlsx` packages. Validate package structure and detected content as well as the extension. Reject legacy `.xls`, `.xlsm`, `.xlsb`, encrypted packages, and unsupported containers with a specific explanation. CSV, PDF/image OCR, and additional formats are future qualifications. A manually exported Google Sheet in XLSX uses this same route; direct Sheets acquisition is UR-003.
+
+**Representation:** assign stable snapshot-local sheet IDs, retain original titles, and address cells by sheet ID plus row/column coordinates. A region has a stable ID, rectangular bounds, proposed entity kinds, header/record orientation, and inclusion state. Multiple regions can exist on a sheet, and a region can yield a property plus related owner candidates. A source record is a persisted group of cells, not necessarily one physical row.
+
+The first transform registry supports direct copy, trim, bounded concatenation, explicit delimiter split, extraction by validated character span, locale-specific date/number conversion, repeating-block traversal, reviewed group-anchor carry-forward, and bounded unpivot. Each transform has a version, typed parameters, input/output bounds, and a pure implementation. No generated expression, regex, Python, SQL, shell, or URL is executable. An unpivoted rent table may be recognized in staging but cannot create financial records.
+
+Selectors include a cell, a record-relative column, a bounded range, a named group anchor, or a character span in one cell. Validate references before interpretation. Reject selectors outside the authorized source, invalid spans, contradictory field mappings, and transforms with incompatible types. A transform chain is at most four steps. Required-field failures become candidate issues rather than inferred defaults.
+
+**Overlaps:** the same owner cell can legitimately support several relationships, and shared header/anchor cells may be reused. Two regions assigning the same record to contradictory identities are blocking conflicts. Every data cell has a primary coverage disposition; additional evidence references do not inflate coverage counts. Merged ranges retain their anchor; fill-forward applies only to an explicitly reviewed group and stops at its boundary. Blank cells elsewhere remain unknown.
+
+**Acceptance evidence:** flat, stacked-header, grouped, transposed, repeating-card, and mixed-region fixtures; exact field copying; correct group boundaries; overlap conflicts; unknown fields; no execution of workbook content; unsupported-format errors; and bounded expansion of sparse/hostile packages.
+
+### 2. Independent persistence — UR-004/005
+
+Introduce a `universal_reader` domain module with UR-owned persistence and `/api/experimental/universal-reader/...` contracts. Its tables and validators do not import DATA schemas. UR-001 can use fixture files and transient CLI results before this durable module exists.
+
+| Logical record | Required retained content |
+| --- | --- |
+| `ur_batches` | UUID, source kind, lifecycle state, current plan/candidate/decision revisions, actor/time, preparation status, last sanitized error |
+| `ur_snapshots` | Batch reference, immutable source digest, capture metadata, FILE-001 source reference where applicable, parser/schema versions, workbook metadata, selected scope |
+| `ur_snapshot_chunks` | Ordered bounded canonical JSON cell/layout chunks, chunk digest, snapshot reference; exact original cell values remain separate from normalization |
+| `ur_plan_revisions` | Immutable revision, region/selector/transform plan, plan digest, parent revision, manual or governed-run provenance |
+| `ur_candidate_revisions` | Candidate ID/kind/revision, typed draft fields, field sources, transform lineage, validation issues, explicit operator edits |
+| `ur_recipe_versions` | Recipe ID/version, structural signature, schema/parser/transform compatibility, declarative plan, publication status |
+| `ur_decision_revisions` | Reviewed create/link/skip/category/relationship/exclusion choices, candidate references, actor/reason/time; edits append a revision |
+| `ur_authorizations` | Exact selected operation-set digest, bound source/revisions, validation read set, actor/time, active/consumed/revoked state |
+| `ur_operations` | Frozen unit commands and dependencies, stable idempotency key, request fingerprint, correlation ID, execution state |
+| `ur_outcomes` | Operation result, domain IDs or blocking/failure codes, immutable response snapshot, time, correlated audit references |
+| `ur_preparation_steps` | Bounded step/chunk identity, input fingerprint, status, attempts, interruption/error result, governed-run references |
+
+These are logical schema requirements; physical design must avoid redundant copies of large source bodies. Persist paged candidate/decision rows rather than one unbounded portfolio JSON document. Enforce uniqueness of batch revision identities, snapshot/chunk order, operation keys, and successful terminal outcomes. Canonical JSON plus SHA-256 provides integrity/change detection, not authentication.
+
+A source FILE-001 link is owned by the UR batch/snapshot through a registered link policy. A Sheets capture retains the selected normalized grid locally; it does not retain Google credentials. Source evidence cannot be unlinked while retained plans/outcomes require it. No automatic expiry or physical deletion is introduced: explicit batch abandonment hides draft work while retaining evidence/audit under current FILE-001 behavior. Portable backups include UR rows and referenced managed files; keys and local model artifacts remain excluded.
+
+Workspace-open/restore validators check chunk/source digests, legal revision chains, acyclic candidate/operation references, registered plan versions, coverage conservation, authorization bindings, outcome/domain references, and audit correlation. Unknown schema/transform versions fail closed. Restored unfinished commits return to a recovery check; restore does not grant fresh authorization to execute.
+
+### 3. Shared identities and category suggestions — UR-001/004/005
+
+Separate `PartyCandidate`, `PropertyCandidate`, `ProviderCandidate`, and `OwnershipCandidate`. Owner/provider projections reference a Party candidate; Portfolio ownership uses either `local_operator` with no Party or `client_owner` with an explicitly selected Party. Retain supported spaces only as required property inventory children; do not create lease/occupancy history from spreadsheet hints.
+
+Each Party requires reviewed individual/organization kind and name. Contacts retain source references and use Party-owned normalization/validation. Same-source keys can propose grouping repeated owner details; conflicting names/contacts block grouping. Neither a fuzzy name match nor an exact email proves identity. Existing-record searches return bounded candidates with reasons; the operator chooses link, create a separate identity with duplicate acknowledgment, or skip.
+
+**Link means reuse, not update.** Linking an existing Party does not overwrite its name/contacts. A new provider role/profile on a linked Party is a separately named, reviewed create consequence only if the provider domain supports it. Linking an already existing provider makes no profile/category updates. Any apparent missing data on an existing record is reported separately; arbitrary update is outside UR-005.
+
+For each distinct source category label, retain original text and a normalized comparison key. Offer existing active category IDs, reviewed new label, or skip. AI may rank options, but no option becomes a decision without operator acceptance. Revalidate catalog state and uniqueness at commit; an archived/renamed/conflicting selection blocks the unit. Creating a category shared across providers requires explicit catalog creation authorization and a stable result reused by dependents. Provider identity/profile and selected assignments must commit together. An explicitly uncategorized provider is permitted and shown as such.
+
+Review property type, complete supported US address, required inventory, operational ownership designation, and effective-date handling through the existing domain command contracts. Do not infer legal ownership shares. Where the domain uses the property-local current date on creation, disclose and bind that effective date during review; if review crosses that date boundary, refresh authorization rather than changing it silently.
+
+### 4. Snapshot consistency and fidelity — UR-001/003
+
+Retain typed raw cell value, formatted/display value, number format, formula text, cached/effective result, source date system, merge anchor, hidden flags, relevant fill/style IDs, and notes when supported. Source text is preserved exactly; normalized values get separate transform lineage. The operator can compare both in the preview.
+
+Dates use the captured workbook epoch and a selected parsing convention. Text such as `04/05/26` remains ambiguous until the region's date convention is confirmed. Never silently treat an Excel serial as money or a phone number. Preserve text identifiers and visible leading zeros; flag values whose original precision cannot be recovered. Formula-derived required fields with no cached result are blocked. Formula caches with unknown freshness carry an explicit review acknowledgment; no automatic recalculation or external-link fetch occurs.
+
+Hidden sheets/rows/columns are inventoried and initially excluded from extraction, with visible counts and an explicit include/exclude choice. Color is a preserved cue. Only an operator-confirmed legend can map a fill to a candidate status, and unsupported lifecycle statuses remain staging information. Sheet names may supply a field only through a visible source reference and accepted mapping.
+
+For direct Sheets, capture selected ranges and required layout metadata through the read-only connection. **Initial pilot:** one bounded data retrieval for the selected grid, with no silent multi-call fallback. If it exceeds the capture bound, ask the operator to narrow scope or use an XLSX export. Multiple selected ranges can belong to the same bounded retrieval; describe it as captured data, not a contractual remote transactional snapshot.
+
+Any later multi-call mode must store capture start/end, all fetched ranges, retry history, and consistency checks. A before/after revision observation or matching repeated read helps detect edits but does not prove atomicity. Such captures need a truthful consistency label and explicit operator acknowledgment, or must be rejected. Final import always reads the stored local snapshot; remote edits never replace it.
+
+### 5. Approval meaning — UR-002/004/005/006
+
+Use three distinct decisions:
+
+1. **Disclosure permission:** the selected governed model may receive the stated bounded data classes. It authorizes neither mapping nor import.
+2. **Apply interpretation:** a reviewed manual plan or AI draft is adopted into UR preview state. For AI, the domain-owned `apply_to_preview` handler validates source/draft versions and commits the plan plus AI review decision in one transaction. No official Party/property/provider write occurs.
+3. **Authorize import:** the operator confirms the exact eligible create/link/skip operation set and named exclusions. This authorization is owned by UR-005, independent of model confidence.
+
+Model actions such as `ur.layout.propose` and `ur.mapping.verify` are proposed registered capability names, not existing registrations. Verification can add issues or suggested corrections; it cannot adopt its own revised plan or approve a commit.
+
+Confirmation includes batch/snapshot ID and digest, plan/candidate/decision revisions, selected atomic unit IDs, operation-set digest, and relevant validation context. The server computes digests and validates eligibility; it never trusts client-supplied counts or hashes alone. Store actor `local_operator`, UTC time, explicit scope, and disclosure/AI provenance separately. The local MVP does not gain an authentication scheme from this confirmation.
+
+Any value, linkage, category, grouping, exclusion, or selected operation change invalidates affected validation and the current authorization. Show counts by consequence, blocked dependency counts, and unsupported content before confirmation. A bulk selection is allowed only after an inspectable preview; it is not an automatic approval event.
+
+Authorization covers identical incomplete-unit retries until revoked or made stale by relevant state. It does not cover a new snapshot, changed payload, new unit, or arbitrary rerun. A commit cancellation revokes authority for unstarted units; resume requires fresh confirmation for those units. Already committed outcomes stay immutable.
+
+### 6. Adapter qualification — UR-002
+
+Compare four configurations through the same candidate/plan validation boundary: deterministic/manual baseline; schema-constrained LLM planner; Jev closed-set selector; optional LLM planner plus Jev verification. All AI paths use AI-GOV-001. No direct provider call from the parser/CLI bypasses disclosure, pause, source revision, output validation, or retained governed-input rules.
+
+For Jev, generate bounded column/region/span choices locally and include none/ambiguous outcomes. Validate returned choice IDs and probability shape. For an LLM, require selectors and registered transforms, not regenerated rows or code. Store provider/model/adapter/prompt/schema versions; local configurations additionally identify the qualified runtime/artifact. Switching or escalating models creates a separately governed run, with no implicit cloud/vendor fallback.
+
+Begin with 30 consented or synthetic workbooks spanning the layout archetypes and intentional abstention cases. Split by source/template family into 18 development and 12 held-out workbooks; never place altered versions of the same customer template in both sets. This is an initial evaluation size, not evidence of universal reliability. Freeze labels and evaluation settings before scoring the held-out set.
+
+Report exact-value precision, supported field/record recall, wrong identity/relationship rates, unreported omissions, operator correction minutes, total review time, refusal/abstention, latency, token/call usage, and disclosed data. Record denominators and workbook-level results; measure calibration only for probability semantics supported by the adapter. Confidence concentration is not automatically correctness probability.
+
+No adapter passes with unexplained invention, silent omitted supported records, unauthorized writes, or broken retry/rollback in the acceptance corpus. A planner must also reduce median operator time without increasing critical relationship errors relative to baseline; the pilot should initially target a 25% reduction as a hypothesis, report variability, and retain manual fallback. The PDF's 98% mapping-suggestion target may be measured but never grants commit authority. If results do not justify Jev or combined verification, omit them.
+
+### 7. Domain atomicity and recovery — UR-005
+
+Expose narrow transaction-aware application protocols for Party identity/role creation, Portfolio property/inventory/ownership creation, and Provider profile/category operations. Proposed UR coordination passes a caller-owned connection, validated command, operation key, correlation ID, and expected context. Owning modules retain business rules and audit policies. Their new coordinated operations must not start nested independent transactions or expose repositories to UR.
+
+Prepare pure parsing/time-zone work outside the write transaction, then recheck required domain context inside one immediate transaction. Never hold that transaction during model/network/file parsing. Link operations validate references but do not mutate existing fields.
+
+Build a dependency graph before authorization. A property and its required children/ownership links are one unit; a provider and its new identity/profile/assignments are one unit. Newly created dependencies cannot be left behind accidentally when the sole dependent fails. A shared owner/category may be a separately authorized prerequisite whose successful creation is explicitly acceptable even if some dependent properties/providers remain blocked. Otherwise combine the mutually required consequences into a single unit. No automatic splitting changes this choice after confirmation.
+
+For each unit, commit domain consequences, durable UR result, and correlated audits together. Failure at any step rolls back the whole unit. Independent successful units remain committed and visible. Dependents of a failed/blocked prerequisite are blocked, not reported as attempted successes.
+
+An operation key is workspace-scoped and immutable, with a canonical semantic request fingerprint. Identical retry returns the stored response; a changed request conflicts. Newly uploaded identical files still undergo identity checks; a content digest alone does not mean all proposed operations were previously approved. Domain-created IDs are stored in outcomes and replace dependency candidate references only through validated result resolution.
+
+At restart, reconcile committing units against atomic outcomes. A committed result can never be rerun because the client lost its response. A unit with no committed result has no committed consequence under the protocol and can be revalidated/retried. Recheck current Party/category/property eligibility and the specific reviewed read set; unrelated portfolio edits should not invalidate the whole batch. Changed relevant state requires refreshed review, not silent rebasing.
+
+Cancellation stops between atomic units; it cannot interrupt a transaction midway or undo completed units. Restored workspaces require explicit recovery review before unfinished writes resume. Archive/reversal of imported domain records is an ordinary separately authorized domain action, not generic import undo.
+
+### 8. Recipes and layout drift — UR-001/004
+
+A recipe is a versioned declarative plan parameterized by a new source, not a script or preapproved record set. Store target kinds/field versions, relative selectors, permitted transforms, region/header patterns, reviewed exclusion rules, and a structural signature. Store neither existing-record IDs nor standing create/link permissions in a reusable recipe.
+
+Compute the structural signature from orientation, normalized header paths, expected blocks, merge topology, required field/type patterns, and transform compatibility. Do not rely on a workbook filename or exact customer values. Parameterize customer-specific sheet names/anchors where possible; if retained, treat them as private workspace data. Recipes are not automatically exported or shared.
+
+On reuse, require parser/schema/transform compatibility, resolve every required selector uniquely, and validate all source records. Changed headings, moved/missing columns, new regions, conflicting groups, or incompatible type patterns create a drift issue. Harmless changes such as row count can be accepted only within the recipe's bounded record pattern; they still generate a new preview and authorization.
+
+Do not quietly select the nearest column or sheet. Present a proposed repair with before/after mapping evidence, then append a new recipe version after operator acceptance. Retain the previous version for historical plan validation. Candidate identity is rebuilt/reconciled from the new snapshot; no prior source-to-database identity binding is silently reapplied.
+
+Recipes for common product exports require verified fixture versions and the same drift checks. Template fallback is a supported manual preparation tactic, not a guarantee that every filled template passes domain validation.
+
+### 9. Limits and execution — UR-001/002/003/004/005
+
+Initial experimental bounds:
+
+| Boundary | Initial ceiling and behavior |
+| --- | --- |
+| XLSX input | 10 MiB compressed; 100 MiB expanded package content; reject excessive ZIP members/expansion before parsing |
+| Grid | 20 sheets, 100 regions, 100,000 populated cells, 10,000 source record groups, 200 columns per region |
+| Cell/plan | 16 KiB UTF-8 per text cell; at most four transforms per field; bounded selector/span lists; no silent truncation |
+| Parser | One isolated preparation process per workspace, 512 MiB memory budget and 30-second step deadline; kill timed-out process and retain a sanitized failed step |
+| Sheets pilot | One selected-grid retrieval, at most 2 MiB captured grid payload, finite request timeout/retries; narrow selection/export on overflow |
+| AI | At most 16K input/4K output tokens per interpretation call, additionally below registered model ceilings; at most 20 calls and 200K reserved input tokens per batch |
+| Reads/lookups | Default page 50, maximum 100 candidates/outcomes; lookup batches at most 100 keys, at most 10 displayed existing matches per candidate |
+| Commit | One atomic unit at a time, at most 100 planned domain records per unit; larger dependency components need explicit replanning or are blocked |
+
+Bounds are application-owned even when providers permit more. Runtime-specific memory enforcement and subprocess termination must be qualified on supported Macs before claiming readiness. The parser receives only an already-open read-only source handle/minimal input and returns bounded data; no model credentials, network capability, workspace write authority, or executable workbook hooks. Resource isolation is required for parsing untrusted packages, not for executing generated scripts.
+
+Use one request per bounded preparation step and persist its input fingerprint/status/result through UR-004. No durable job scheduler is assumed. Long workflows advance through explicit steps with progress and resume; UR-001's standalone harness can remain transient. On startup mark abandoned running preparation steps interrupted. Reusing a successful step requires identical input/parser/plan versions; changed input creates a new step/revision.
+
+AI-GOV-001 controls its own run interruption and result admission. UR records the interrupted/blocked result and can request an explicit new governed attempt; a retry must not falsely claim a previous provider call never happened. Provider timeouts can incur provider usage even without a usable answer, so bound attempts conservatively. Global AI pause stops model activity but leaves manual preview/edit/import available under current domain rules.
+
+Cancellation is observed between chunks/calls/units. Do not promise that it retracts data already sent to a provider. Oversized input returns 413; malformed/unsupported input returns 422; stale revision or changed operation fingerprint returns 409. Include machine-readable UR reason codes with actionable recovery, not raw parser/provider exceptions or local paths.
+
+### 10. Coverage and expansion — UR-001/004/006
+
+Define coverage over the authorized captured source, not over unseen workbook content or remote resources. Every populated data cell/record region has a primary disposition: represented, unresolved, recognized-but-unsupported, or explicitly excluded. Headers/structural anchors are distinguished from data. Hidden/unselected areas appear as disclosed scope exclusions; record their operator choice without claiming they were imported.
+
+A coverage ledger includes source reference, disposition/reason, related candidate/field IDs, decision revision, and actor/time for exclusions. A copied field points to source cells/spans; an operator-entered field points to a reviewed answer/edit record. A model cannot assert source coverage or fabricate an operator answer. Recompute the ledger from the actual interpreter result and reviewed decisions.
+
+The review summary separates inspected sheets/regions, supported candidates, unresolved groups, excluded/unsupported fields, and eligible/blocked/selected units. Expandable exception views retain the original source. A complete *import of selected units* is distinct from complete interpretation of the authorized source and from complete portfolio onboarding. Use these separate labels in results.
+
+Recognized lease/rent/balance/history/maintenance content stays in staging with an explanation. Unknown columns are neither dropped nor automatically converted into official notes/custom fields. The operator can select a supported notes field with explicit scope, correct a mapping, or exclude content with a reason. Their choice never turns an unsupported domain operation into an authorized one.
+
+UR-005 permits create/link/skip for the qualified property/owner/provider consequences only. New leases, historical occupancy, maintenance cases, financial opening balances, arbitrary existing-record updates, custom-field storage, generated scripts, and batch undo each require a new experimental backlog and owning-domain contract. No DATA backlog is an implicit prerequisite or extension mechanism.
+
+Before any later consolidation with production import, compare functionality, evidence, identity/transaction guarantees, portability, and operator effort; obtain an explicit adoption decision. Until then, experimental routes remain opt-in and existing DATA workflows remain independently deliverable.
+
+### Implementation handoff and validation matrix
+
+The individual UR design documents should expand these contracts into exact Pydantic/OpenAPI schemas, domain protocol signatures, database constraints, error-code enums, and test fixtures. Name any gap in an existing owning-domain operation before enabling UR-005. This report approves the design direction; it does not claim that those operations or adapters are implemented.
+
+| Validation area | Specific required checks |
+| --- | --- |
+| Happy paths | Multi-region XLSX, repeated groups/cards, recipe reuse, explicit owner/provider identity reuse, reviewed catalog decision, authorized independent units |
+| Invalid combinations | Unsupported format, conflicting selectors/groups, missing address/ownership, archived category, invalid linked Party, unauthorized new role/update |
+| Idempotency/retry | Lost commit response, changed payload under same key, identical source uploaded again, retry after category/state drift, interrupted AI/preparation step |
+| Transaction rollback | Inject failure after each coordinated domain write and before outcome/audit; prove no partial unit, dependent blocking, and preserved independent successes |
+| Persistence/schema | Corrupt chunk digest, selector outside scope, broken revision/coverage chain, unauthorized outcome, unregistered recipe transform, inconsistent domain/audit evidence |
+| Backup/restore | Preserve source/plan/decision/outcome lineage; no credentials/weights; draft evidence retained; unfinished writes require recovery review |
+| Query/resource budgets | Constant bounded queries per page/lookup batch, no per-row model requests by default, sparse dimensions/ZIP expansion, parser deadline/memory exit, max atomic unit |
+| Operator authorization | Applying AI mapping changes preview only; bulk suggestions remain inspectable; edits revoke stale authorization; cancellation requires reconfirmation for unfinished work |
+
+The initial implementation remains a source-grounded XLSX reader and benchmark. Durable review, direct Sheets, governed AI, official import, and the later UI pilot advance through their separate UR items after their own acceptance evidence is available.
