@@ -53,6 +53,13 @@ from app.modules.finance.application.expense_service import ExpenseService
 from app.modules.finance.application.file_links import ExpenseFileLinkValidator
 from app.modules.finance.application.prepaid_check_service import PrepaidCheckService
 from app.modules.finance.application.service import FinanceService
+from app.modules.finance.api.money_router import build_router as build_money_router
+from app.modules.finance.application.money_service import MoneySummaryService
+from app.modules.finance.application.money_models import MoneyWorkspaceUnavailable
+from app.modules.finance.infrastructure.money_unit_of_work import SQLiteMoneySummaryUnitOfWork
+from app.modules.audit.infrastructure.read_marker import SQLiteAuditReadMarker
+from app.modules.leases.infrastructure.location_relation import SQLiteLeaseLocationRelation
+from app.modules.portfolio.infrastructure.location_relations import SQLitePortfolioLocationRelations
 from app.modules.finance.domain.audit_policy import (
     ALLOCATION_ACTIVITY_POLICY,
     DEPOSIT_ACTIVITY_POLICY,
@@ -286,6 +293,19 @@ def create_app(config_path: Path | None = None) -> FastAPI:
         service.paths.database, recorder, lease_context_reader, portfolio_context_reader, party_operations, task_transaction_operations,
     ))
     prepaid_checks = PrepaidCheckService(finance.unit_of_work)
+    money_locations = SQLitePortfolioLocationRelations()
+
+    def money_read_identity() -> tuple[str, str]:
+        if not runtime.ready:
+            raise MoneyWorkspaceUnavailable(
+                "The workspace is unavailable. Open and validate it before reading money."
+            )
+        return runtime.workspace_id or "", runtime.read_epoch
+
+    money = MoneySummaryService(SQLiteMoneySummaryUnitOfWork(
+        service.paths.database, money_locations, SQLiteLeaseLocationRelation(money_locations),
+        SQLiteAuditReadMarker(),
+    ), read_identity=money_read_identity)
     expenses = ExpenseService(SQLiteExpenseUnitOfWork(
         service.paths.database,
         recorder,
@@ -357,6 +377,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.state.lease_service = leases
     app.state.inspection_service = inspections
     app.state.finance_service = finance
+    app.state.money_summary_reader = money
     app.state.prepaid_check_service = prepaid_checks
     app.state.expense_service = expenses
     app.state.deposit_service = deposits
@@ -513,6 +534,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:
     app.include_router(build_lease_router(leases, runtime))
     app.include_router(build_inspection_router(inspections, runtime))
     app.include_router(build_finance_router(finance, runtime))
+    app.include_router(build_money_router(money, runtime))
     app.include_router(build_prepaid_check_router(prepaid_checks, runtime))
     app.include_router(build_expense_router(expenses, runtime))
     app.include_router(build_deposit_router(deposits, runtime))

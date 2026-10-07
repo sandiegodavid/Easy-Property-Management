@@ -27,6 +27,7 @@ class RentReceiptModel(LocalBase):
         CheckConstraint("(payment_method_kind = 'other' AND other_payment_method_note IS NOT NULL AND length(trim(other_payment_method_note)) BETWEEN 1 AND 200) OR (payment_method_kind != 'other' AND other_payment_method_note IS NULL)"),
         CheckConstraint("(voided_at IS NULL AND void_reason IS NULL) OR (voided_at IS NOT NULL AND void_reason IS NOT NULL AND length(trim(void_reason)) > 0)"),
         Index("rent_receipts_lease_received", "lease_id", "received_on"),
+        Index("rent_receipts_lifecycle_received", "voided_at", "received_on", "lease_id", "id"),
     )
 
 class RentReceiptAllocationModel(LocalBase):
@@ -237,6 +238,7 @@ class SecurityDepositReceiptModel(LocalBase):
         CheckConstraint("replaces_receipt_id IS NULL OR replaces_receipt_id != id"),
         CheckConstraint("(voided_at IS NULL AND void_reason IS NULL) OR (voided_at IS NOT NULL AND void_reason IS NOT NULL AND length(trim(void_reason)) BETWEEN 1 AND 1000)"),
         Index("security_deposit_receipts_account_date", "account_id", "received_on", "id"),
+        Index("security_deposit_receipts_lifecycle_date", "voided_at", "received_on", "account_id", "id"),
         Index("security_deposit_receipts_duplicate", "account_id", "received_on", "amount_minor", "received_from_party_id", sqlite_where=text("voided_at IS NULL")),
     )
 
@@ -270,6 +272,7 @@ class SecurityDepositSettlementModel(LocalBase):
         CheckConstraint("(status = 'draft' AND receipt_total_minor IS NULL AND credit_total_minor IS NULL AND deduction_total_minor IS NULL AND refund_due_minor IS NULL AND approved_at IS NULL AND completed_at IS NULL AND voided_at IS NULL AND void_reason IS NULL) OR (status = 'approved' AND receipt_total_minor IS NOT NULL AND credit_total_minor IS NOT NULL AND deduction_total_minor IS NOT NULL AND refund_due_minor IS NOT NULL AND approved_at IS NOT NULL AND completed_at IS NULL AND voided_at IS NULL AND void_reason IS NULL) OR (status = 'completed' AND receipt_total_minor IS NOT NULL AND credit_total_minor IS NOT NULL AND deduction_total_minor IS NOT NULL AND refund_due_minor IS NOT NULL AND approved_at IS NOT NULL AND completed_at IS NOT NULL AND voided_at IS NULL AND void_reason IS NULL) OR (status = 'voided' AND voided_at IS NOT NULL AND void_reason IS NOT NULL AND length(trim(void_reason)) BETWEEN 1 AND 1000 AND ((approved_at IS NULL AND completed_at IS NULL AND receipt_total_minor IS NULL AND credit_total_minor IS NULL AND deduction_total_minor IS NULL AND refund_due_minor IS NULL) OR (approved_at IS NOT NULL AND receipt_total_minor IS NOT NULL AND credit_total_minor IS NOT NULL AND deduction_total_minor IS NOT NULL AND refund_due_minor IS NOT NULL)))"),
         CheckConstraint("receipt_total_minor IS NULL OR (typeof(receipt_total_minor) = 'integer' AND typeof(credit_total_minor) = 'integer' AND typeof(deduction_total_minor) = 'integer' AND typeof(refund_due_minor) = 'integer' AND receipt_total_minor BETWEEN 0 AND 9999999999 AND credit_total_minor BETWEEN 0 AND 9999999999 AND deduction_total_minor BETWEEN 0 AND 9999999999 AND refund_due_minor = receipt_total_minor + credit_total_minor - deduction_total_minor AND refund_due_minor BETWEEN 0 AND 9999999999)"),
         Index("security_deposit_settlements_one_current", "account_id", unique=True, sqlite_where=text("status != 'voided'")),
+        Index("security_deposit_settlements_status_approval", "status", "approved_at", "account_id"),
     )
 
 
@@ -378,4 +381,5 @@ class SecurityDepositRefundModel(LocalBase):
         CheckConstraint("replaces_refund_id IS NULL OR replaces_refund_id != id"),
         CheckConstraint("(voided_at IS NULL AND void_reason IS NULL) OR (voided_at IS NOT NULL AND void_reason IS NOT NULL AND length(trim(void_reason)) BETWEEN 1 AND 1000)"),
         Index("security_deposit_refunds_account_paid", "account_id", "paid_on", "id"),
+        Index("security_deposit_refunds_lifecycle_paid", "voided_at", "paid_on", "account_id", "id"),
     )

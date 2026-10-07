@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 from app.modules.workspace.application.service import WorkspaceError, WorkspaceService
 from app.platform.locking import WorkspaceOperationInProgressError, WorkspaceOperationLock
 
@@ -15,6 +17,8 @@ class WorkspaceRuntime:
         self.startup_attempted = False
         self.writer_lock_acquired = False
         self.error: WorkspaceError | None = None
+        self.read_epoch = str(uuid4())
+        self.workspace_id: str | None = None
 
     @property
     def ready(self) -> bool:
@@ -39,11 +43,13 @@ class WorkspaceRuntime:
             self.error = WorkspaceError("This server does not hold the workspace writer lock.")
             return
         try:
-            self.service.open(integrity_check=True)
+            manifest = self.service.open(integrity_check=True)
         except WorkspaceError as error:
             self.error = error
         else:
             self.error = None
+            self.workspace_id = manifest.workspace_id
+            self.read_epoch = str(uuid4())
 
     def stop(self) -> None:
         if self.writer_lock_acquired:
