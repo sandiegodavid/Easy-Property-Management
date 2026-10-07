@@ -1,8 +1,21 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Query, status
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    model_validator,
+)
+
+from app.modules.tasks.application.waiting import FollowUpQuery, WaitingCommand, WaitingError
+from app.modules.tasks.application.waiting_service import TaskWaitingService
 
 from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
 
@@ -15,7 +28,9 @@ from app.modules.tasks.application.service import (
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 
 
-def build_router(service: TaskService, runtime: WorkspaceRuntime) -> APIRouter:
+def build_router(
+    service: TaskService, runtime: WorkspaceRuntime, waiting: TaskWaitingService | None = None
+) -> APIRouter:
     router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
     def ready(write: bool = False) -> None:
@@ -27,6 +42,13 @@ def build_router(service: TaskService, runtime: WorkspaceRuntime) -> APIRouter:
     def invoke(fn):
         try:
             return fn()
+        except WaitingError as error:
+            details = (
+                {"currentRevision": error.current_revision}
+                if getattr(error, "current_revision", None) is not None
+                else {}
+            )
+            raise domain_problem(error, status_code=error.status_code, **details) from error
         except TaskNotFoundError as error:
             raise domain_problem(error, status_code=404, code="task_not_found") from error
         except TaskConflictError as error:
@@ -34,12 +56,12 @@ def build_router(service: TaskService, runtime: WorkspaceRuntime) -> APIRouter:
         except TaskError as error:
             raise domain_problem(error, status_code=400, code="task_validation") from error
 
-    @router.post("", status_code=status.HTTP_201_CREATED)
+    @router.post("", status_code=status.HTTP_201_CREATED, response_model=TaskResponse)
     def create(data: TaskCreateRequest):
         ready(True)
-        return invoke(lambda: service.create(data.model_dump()).to_dict())
+        return invoke(lambda: service.view(service.create(data.model_dump())))
 
-    @router.get("")
+    @router.get("", response_model=TaskPageResponse)
     def list_tasks(
         status: str | None = None,
         due: str | None = None,
@@ -57,6 +79,7 @@ def build_router(service: TaskService, runtime: WorkspaceRuntime) -> APIRouter:
                 "task_validation",
                 "relatedEntityType and relatedEntityId must be supplied together.",
             )
+        now = service.instant()
         tasks, next_cursor = invoke(
             lambda: service.page(
                 status=status,
@@ -67,19 +90,107 @@ def build_router(service: TaskService, runtime: WorkspaceRuntime) -> APIRouter:
                 related_entity_id=relatedEntityId,
                 page_size=pageSize,
                 cursor=cursor,
+                as_of=now,
             )
         )
-        return {"items": [task.to_dict() for task in tasks], "nextCursor": next_cursor}
+        return {
+            "items": [service.view(task, now) for task in tasks],
+            "nextCursor": next_cursor,
+            "asOf": now.isoformat(),
+        }
 
     @router.get("/summary", response_model=TaskSummaryResponse, operation_id="getTaskSummary")
     def summary(limitPerBucket: int = Query(20, ge=1, le=100)):
         ready()
         return invoke(lambda: service.summary(limit_per_bucket=limitPerBucket))
 
-    @router.get("/{task_id}")
+    @router.get("/follow-ups", response_model=FollowUpPageResponse, operation_id="getTaskFollowUps")
+    def follow_ups(
+        state: Literal["scheduled", "due", "overdue", "unscheduled"] | None = None,
+        actionable: bool | None = None,
+        priority: Literal["low", "normal", "high", "urgent"] | None = None,
+        relatedEntityType: str | None = None,
+        relatedEntityId: UUID | None = None,
+        limit: int = Query(50, ge=1, le=100),
+        cursor: str | None = None,
+    ):
+        ready()
+        if waiting is None:
+            raise workspace_unavailable("Follow-up service is unavailable.")
+        return invoke(
+            lambda: waiting.follow_ups(
+                FollowUpQuery(
+                    state,
+                    actionable,
+                    priority,
+                    relatedEntityType,
+                    str(relatedEntityId) if relatedEntityId else None,
+                    limit,
+                    cursor,
+                )
+            )
+        )
+
+    @router.get(
+        "/waiting-operations/{key}",
+        response_model=WaitingMutationResponse,
+        operation_id="getTaskWaitingOperation",
+    )
+    def operation(key: UUID):
+        ready()
+        if waiting is None:
+            raise workspace_unavailable("Follow-up service is unavailable.")
+        return invoke(lambda: waiting.operation(str(key)))
+
+    def waiting_change(task_id, data, action):
+        ready(True)
+        if waiting is None:
+            raise workspace_unavailable("Follow-up service is unavailable.")
+        return invoke(
+            lambda: waiting.mutate(
+                WaitingCommand(
+                    task_id=str(task_id),
+                    action=action,
+                    expected_revision=data.expectedRevision,
+                    idempotency_key=str(data.idempotencyKey),
+                    kind=getattr(data, "waitingForKind", None),
+                    label=getattr(data, "waitingForLabel", None),
+                    follow_up_at=data.followUpAt.isoformat()
+                    if getattr(data, "followUpAt", None)
+                    else None,
+                    timezone=getattr(data, "followUpTimezone", None),
+                    confirmed=getattr(data, "confirmed", False),
+                    clear_follow_up=getattr(data, "clearFollowUp", False),
+                )
+            )
+        )
+
+    @router.post(
+        "/{task_id}/waiting", response_model=WaitingMutationResponse, operation_id="setTaskWaiting"
+    )
+    def set_waiting(task_id: UUID, data: WaitingSetRequest):
+        return waiting_change(task_id, data, "set")
+
+    @router.post(
+        "/{task_id}/waiting/clear",
+        response_model=WaitingMutationResponse,
+        operation_id="clearTaskWaiting",
+    )
+    def clear_waiting(task_id: UUID, data: WaitingClearRequest):
+        return waiting_change(task_id, data, "clear")
+
+    @router.post(
+        "/{task_id}/waiting/follow-up",
+        response_model=WaitingMutationResponse,
+        operation_id="rescheduleTaskFollowUp",
+    )
+    def reschedule(task_id: UUID, data: FollowUpRequest):
+        return waiting_change(task_id, data, "reschedule")
+
+    @router.get("/{task_id}", response_model=TaskResponse)
     def get(task_id: str):
         ready()
-        return invoke(lambda: service.get(task_id).to_dict())
+        return invoke(lambda: service.view(service.get(task_id)))
 
     @router.post("/{task_id}/complete")
     def complete(task_id: str, data: OutcomeRequest | None = None):
@@ -152,6 +263,20 @@ class TaskResponse(Contract):
     relatedLabel: str | None
     createdAtUtc: datetime
     updatedAtUtc: datetime
+    revision: int
+    waitingForKind: str | None
+    waitingForLabel: str | None
+    followUpAt: AwareDatetime | None
+    followUpTimezone: str | None
+    waitingSetAtUtc: AwareDatetime | None
+    waitingClearedAtUtc: AwareDatetime | None
+    isWaiting: bool
+    waitingFor: "WaitingForResponse | None"
+    followUpState: Literal["scheduled", "due", "overdue", "unscheduled"] | None
+    followUpDueToday: bool
+    followUpActionable: bool
+    taskDeadlineState: Literal["none", "overdue", "today", "upcoming", "inactive"]
+    asOf: AwareDatetime
 
 
 class DueReminderResponse(Contract):
@@ -167,9 +292,19 @@ class DueReminderResponse(Contract):
     taskDueTimezone: str | None
     taskIsAllDay: bool
     relatedLabel: str | None
+    taskRevision: int
+    taskWaitingForKind: str | None
+    taskWaitingForLabel: str | None
+    taskFollowUpAt: AwareDatetime | None
+    taskFollowUpTimezone: str | None
+    taskFollowUpState: Literal["scheduled", "due", "overdue", "unscheduled"] | None
+    taskFollowUpDueToday: bool
+    taskFollowUpActionable: bool
+    taskDeadlineState: Literal["none", "overdue", "today", "upcoming", "inactive"]
 
 
 class TaskSummaryResponse(Contract):
+    asOf: AwareDatetime
     overdue: list[TaskResponse]
     overdueTotal: int
     today: list[TaskResponse]
@@ -178,6 +313,12 @@ class TaskSummaryResponse(Contract):
     next7daysTotal: int
     dueReminders: list[DueReminderResponse]
     dueRemindersTotal: int
+
+
+class TaskPageResponse(Contract):
+    items: list[TaskResponse]
+    nextCursor: str | None
+    asOf: AwareDatetime
 
 
 class TaskCreateRequest(Contract):
@@ -216,3 +357,87 @@ class OutcomeRequest(Contract):
 
 class ReminderRequest(Contract):
     remindAtUtc: str = Field(min_length=1)
+
+
+class WaitingForResponse(Contract):
+    kind: Literal["person", "organization", "event", "other"]
+    label: str
+
+
+class WaitingMutationResponse(TaskResponse):
+    operationId: UUID
+
+
+class FollowUpPageResponse(Contract):
+    items: list[TaskResponse]
+    matchingTotal: int
+    nextCursor: str | None
+    asOf: AwareDatetime
+    evaluatedAt: AwareDatetime
+    filters: "FollowUpFiltersResponse"
+
+
+class FollowUpFiltersResponse(Contract):
+    state: Literal["scheduled", "due", "overdue", "unscheduled"] | None
+    actionable: bool | None
+    priority: Literal["low", "normal", "high", "urgent"] | None
+    related_entity_type: str | None
+    related_entity_id: str | None
+
+
+class WaitingRequest(Contract):
+    expectedRevision: StrictInt = Field(ge=1)
+    idempotencyKey: UUID
+
+
+def _offset_iso_instant(value: object) -> str:
+    message = "Follow-up requires an offset-bearing ISO timestamp string."
+    if not isinstance(value, str):
+        raise ValueError(message)
+    try:
+        instant = datetime.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError(message) from error
+    if instant.tzinfo is None or instant.utcoffset() is None:
+        raise ValueError(message)
+    return value
+
+
+FollowUpInstant = Annotated[AwareDatetime, BeforeValidator(_offset_iso_instant)]
+
+
+class WaitingSetRequest(WaitingRequest):
+    waitingForKind: Literal["person", "organization", "event", "other"]
+    waitingForLabel: str = Field(min_length=1, max_length=255)
+    followUpAt: FollowUpInstant | None = None
+    followUpTimezone: str | None = None
+
+    @model_validator(mode="after")
+    def paired(self):
+        if (self.followUpAt is None) != (self.followUpTimezone is None):
+            raise ValueError("Follow-up date and timezone must be paired.")
+        return self
+
+
+class WaitingClearRequest(WaitingRequest):
+    confirmed: StrictBool
+
+    @model_validator(mode="after")
+    def confirmation(self):
+        if not self.confirmed:
+            raise ValueError("confirmed=true is required.")
+        return self
+
+
+class FollowUpRequest(WaitingRequest):
+    followUpAt: FollowUpInstant | None = None
+    followUpTimezone: str | None = None
+    clearFollowUp: StrictBool = False
+
+    @model_validator(mode="after")
+    def exclusive(self):
+        if (self.followUpAt is None) != (self.followUpTimezone is None) or self.clearFollowUp == (
+            self.followUpAt is not None
+        ):
+            raise ValueError("Supply paired date/zone or clearFollowUp=true.")
+        return self

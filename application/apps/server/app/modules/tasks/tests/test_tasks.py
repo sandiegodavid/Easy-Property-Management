@@ -447,8 +447,10 @@ class TaskTests(unittest.TestCase):
             response = client.get("/api/tasks/summary")
             invalid = client.get("/api/tasks/summary", params={"limitPerBucket": 101})
         self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIsNotNone(datetime.fromisoformat(payload.pop("asOf")).tzinfo)
         self.assertEqual(
-            response.json(),
+            payload,
             {
                 "overdue": [],
                 "overdueTotal": 0,

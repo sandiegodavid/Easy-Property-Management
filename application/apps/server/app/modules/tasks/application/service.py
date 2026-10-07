@@ -19,6 +19,7 @@ from app.modules.tasks.domain.models import (
     due_bucket,
     is_terminal,
     transition,
+    waiting_facts,
 )
 
 TASK_STATUSES = {"open", "in_progress", "completed", "cancelled"}
@@ -152,6 +153,7 @@ class TaskService:
         related_entity_id: str | None = None,
         page_size: int = 100,
         cursor: str | None = None,
+        as_of: datetime | None = None,
     ) -> tuple[list[Task], str | None]:
         statuses = _query_values(status, TASK_STATUSES, "status")
         priorities = _query_values(priority, TASK_PRIORITIES, "priority")
@@ -167,7 +169,7 @@ class TaskService:
             raise TaskError("relatedEntityType and relatedEntityId must be supplied together.")
         if type(page_size) is not int or not 1 <= page_size <= 500:
             raise TaskError("Page size must be between 1 and 500.")
-        due_filter = _due_filter(due, self._instant())
+        due_filter = _due_filter(due, as_of or self._instant())
         scan_cursor = _task_cursor(cursor) if cursor else None
         matched: list[Task] = []
         chunk_size = max(100, page_size + 1)
@@ -216,6 +218,16 @@ class TaskService:
                 correlation_id=correlation_id,
             )
             if is_terminal(updated):
+                if existing.waiting_for_kind:
+                    transaction.record_change(
+                        entity_type="task",
+                        entity_id=updated.id,
+                        action="task_waiting_cleared",
+                        before=existing.to_dict(),
+                        after=updated.to_dict(),
+                        reason="task_completed" if status == "completed" else "task_cancelled",
+                        correlation_id=correlation_id,
+                    )
                 self._dismiss_pending_reminders(transaction, updated, now, correlation_id)
             return updated
 
@@ -295,17 +307,26 @@ class TaskService:
     def summary(self, *, limit_per_bucket: int = 20) -> dict[str, object]:
         if type(limit_per_bucket) is not int or not 1 <= limit_per_bucket <= 100:
             raise TaskError("limitPerBucket must be between 1 and 100.")
-        summary = self.unit_of_work.summary(now=self._instant(), limit=limit_per_bucket)
+        now = self._instant()
+        summary = self.unit_of_work.summary(now=now, limit=limit_per_bucket)
         return {
-            "overdue": [task.to_dict() for task in summary.overdue],
+            "asOf": now.isoformat(),
+            "overdue": [self.view(task, now) for task in summary.overdue],
             "overdueTotal": summary.overdue_total,
-            "today": [task.to_dict() for task in summary.today],
+            "today": [self.view(task, now) for task in summary.today],
             "todayTotal": summary.today_total,
-            "next7days": [task.to_dict() for task in summary.next7days],
+            "next7days": [self.view(task, now) for task in summary.next7days],
             "next7daysTotal": summary.next7days_total,
             "dueReminders": [_due_reminder_dict(reminder) for reminder in summary.due_reminders],
             "dueRemindersTotal": summary.due_reminders_total,
         }
+
+    def view(self, task: Task, now: datetime | None = None):
+        return {**task.to_dict(), **waiting_facts(task, now or self._instant())}
+
+    def instant(self) -> datetime:
+        """Capture the same clock used for public task projections."""
+        return self._instant()
 
     def _instant(self) -> datetime:
         instant = self._clock()
@@ -382,6 +403,15 @@ def _due_reminder_dict(reminder: DueReminderSummary) -> dict[str, object]:
         "taskDueTimezone": reminder.task_due_timezone,
         "taskIsAllDay": reminder.task_is_all_day,
         "relatedLabel": reminder.related_label,
+        "taskRevision": reminder.task_revision,
+        "taskWaitingForKind": reminder.task_waiting_for_kind,
+        "taskWaitingForLabel": reminder.task_waiting_for_label,
+        "taskFollowUpAt": reminder.task_follow_up_at_utc,
+        "taskFollowUpTimezone": reminder.task_follow_up_timezone,
+        "taskFollowUpState": reminder.task_follow_up_state,
+        "taskFollowUpDueToday": reminder.task_follow_up_due_today,
+        "taskFollowUpActionable": reminder.task_follow_up_actionable,
+        "taskDeadlineState": reminder.task_deadline_state,
     }
 
 

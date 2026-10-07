@@ -140,6 +140,8 @@ from app.modules.portfolio.infrastructure.unit_of_work import (
 )
 from app.modules.tasks.api.router import build_router as build_tasks_router
 from app.modules.tasks.application.service import TaskService
+from app.modules.tasks.application.waiting_service import TaskWaitingService
+from app.modules.tasks.application.waiting import WaitingUnavailable
 from app.modules.tasks.domain.audit_policy import TASK_ACTIVITY_POLICY
 from app.modules.tasks.infrastructure.context_reader import SQLiteTaskContextReader
 from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
@@ -302,6 +304,13 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
         remote_materializer=remote_materializer,
     )
     tasks = TaskService(SQLiteTaskUnitOfWork(service.paths.database, recorder))
+
+    def task_read_identity():
+        if not runtime.ready or not runtime.can_write:
+            raise WaitingUnavailable("Workspace is unavailable.")
+        return runtime.workspace_id or "", runtime.read_epoch
+
+    task_waiting = TaskWaitingService(tasks.unit_of_work, read_identity=task_read_identity)
     communications = CommunicationService(
         SQLiteCommunicationUnitOfWork(
             service.paths.database,
@@ -483,6 +492,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
     app.state.file_link_policy_registry = files.policy_registry
     app.state.file_verification_service = file_verification
     app.state.task_service = tasks
+    app.state.task_waiting_service = task_waiting
     app.state.communication_service = communications
     app.state.intake_service = intake
     app.state.intake_admission = intake_admission
@@ -514,6 +524,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
             ("file_publication_cleanup", 1): DEFAULT_SNAPSHOT_POLICY,
             ("task", 1): DEFAULT_SNAPSHOT_POLICY,
             ("task_reminder", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("task_waiting_operation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("property", 1): DEFAULT_SNAPSHOT_POLICY,
             ("party", 1): DEFAULT_SNAPSHOT_POLICY,
             ("property_ownership", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -645,7 +656,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
     )
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime, file_verification))
-    app.include_router(build_tasks_router(tasks, runtime))
+    app.include_router(build_tasks_router(tasks, runtime, task_waiting))
     app.include_router(build_portfolio_router(portfolio, runtime))
     app.include_router(build_party_router(party_identities, party_contacts, runtime))
     app.include_router(build_provider_router(providers, runtime))

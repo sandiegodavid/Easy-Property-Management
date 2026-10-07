@@ -109,6 +109,7 @@ def validate_latest_schema(database_path: Path) -> None:
                 "file_publication_cleanup_attentions",
                 "tasks",
                 "task_reminders",
+                "task_waiting_operations",
                 "parties",
                 "properties",
                 "property_ownerships",

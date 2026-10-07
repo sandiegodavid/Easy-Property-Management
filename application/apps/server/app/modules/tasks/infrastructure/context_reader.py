@@ -5,12 +5,82 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+
+from app.modules.tasks.application.ports import TaskParentPreview, TaskPreview
+from app.modules.tasks.application.waiting import WaitingError
+from app.modules.tasks.domain.models import Task, waiting_facts
 
 from app.modules.tasks.infrastructure.sqlalchemy_models import TaskModel
 
 
 class SQLiteTaskContextReader:
+    def previews_for_related_entities(
+        self, connection, entity_type, entity_ids, *, now, limit_per_parent=10
+    ):
+        ids = set(entity_ids)
+        if len(ids) > 100 or type(limit_per_parent) is not int or not 1 <= limit_per_parent <= 50:
+            raise WaitingError("Task previews allow 100 parents and 1–50 items per parent.")
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise WaitingError("Task previews require an aware captured instant.")
+        if not ids:
+            return {}
+        columns = [c for c in TaskModel.__table__.columns if c.name != "notes"]
+        ranked = (
+            select(
+                *columns,
+                func.row_number()
+                .over(
+                    partition_by=TaskModel.related_entity_id,
+                    order_by=(TaskModel.created_at_utc.desc(), TaskModel.id),
+                )
+                .label("position"),
+                func.count().over(partition_by=TaskModel.related_entity_id).label("total"),
+            )
+            .where(
+                TaskModel.related_entity_type == entity_type, TaskModel.related_entity_id.in_(ids)
+            )
+            .subquery()
+        )
+        rows = connection.execute(
+            select(ranked)
+            .where(ranked.c.position <= limit_per_parent)
+            .order_by(ranked.c.related_entity_id, ranked.c.position)
+        ).mappings()
+        result = {key: TaskParentPreview(0, []) for key in ids}
+        for row in rows:
+            values = {key: row[key] for key in Task.__dataclass_fields__ if key != "notes"}
+            task = Task(**values, notes=None)
+            facts = waiting_facts(task, now)
+            preview = TaskPreview(
+                **{
+                    key: values[key]
+                    for key in (
+                        "id",
+                        "title",
+                        "status",
+                        "priority",
+                        "revision",
+                        "due_at_utc",
+                        "due_timezone",
+                        "is_all_day",
+                        "waiting_for_kind",
+                        "waiting_for_label",
+                        "follow_up_at_utc",
+                        "follow_up_timezone",
+                    )
+                },
+                follow_up_state=facts["followUpState"],
+                follow_up_due_today=facts["followUpDueToday"],
+                follow_up_actionable=facts["followUpActionable"],
+                task_deadline_state=facts["taskDeadlineState"],
+                as_of=facts["asOf"],
+            )
+            key = row["related_entity_id"]
+            result[key].items.append(preview)
+            result[key] = TaskParentPreview(row["total"], result[key].items)
+        return result
+
     def task(self, connection: Any, task_id: str) -> dict[str, Any] | None:
         row = (
             connection.execute(TaskModel.__table__.select().where(TaskModel.id == task_id))

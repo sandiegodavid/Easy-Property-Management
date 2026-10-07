@@ -1,7 +1,16 @@
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.platform.sqlalchemy_models import LocalBase
+
+WAITING_CHECKS = (
+    "typeof(revision) = 'integer' AND revision >= 1",
+    "waiting_for_kind IS NULL OR waiting_for_kind IN ('person','organization','event','other')",
+    "(waiting_for_kind IS NULL AND waiting_for_label IS NULL AND waiting_set_at_utc IS NULL) OR (waiting_for_kind IS NOT NULL AND waiting_for_label IS NOT NULL AND waiting_set_at_utc IS NOT NULL AND waiting_cleared_at_utc IS NULL)",
+    "waiting_for_label IS NULL OR (length(waiting_for_label) BETWEEN 1 AND 255 AND waiting_for_label = trim(waiting_for_label))",
+    "(follow_up_at_utc IS NULL AND follow_up_timezone IS NULL) OR (follow_up_at_utc IS NOT NULL AND follow_up_timezone IS NOT NULL AND waiting_for_kind IS NOT NULL)",
+    "status IN ('open','in_progress') OR waiting_for_kind IS NULL",
+)
 
 
 class TaskModel(LocalBase):
@@ -22,12 +31,21 @@ class TaskModel(LocalBase):
     related_label: Mapped[str | None] = mapped_column(String)
     created_at_utc: Mapped[str] = mapped_column(String)
     updated_at_utc: Mapped[str] = mapped_column(String)
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    waiting_for_kind: Mapped[str | None] = mapped_column(String)
+    waiting_for_label: Mapped[str | None] = mapped_column(String)
+    follow_up_at_utc: Mapped[str | None] = mapped_column(String)
+    follow_up_timezone: Mapped[str | None] = mapped_column(String)
+    waiting_set_at_utc: Mapped[str | None] = mapped_column(String)
+    waiting_cleared_at_utc: Mapped[str | None] = mapped_column(String)
     __table_args__ = (
         CheckConstraint("status IN ('open', 'in_progress', 'completed', 'cancelled')"),
         CheckConstraint("priority IN ('low', 'normal', 'high', 'urgent')"),
         CheckConstraint("is_all_day IN (0, 1)"),
         Index("tasks_status_due", "status", "due_at_utc"),
         Index("tasks_related_record", "related_entity_type", "related_entity_id"),
+        Index("tasks_waiting_follow_up", "status", "waiting_for_kind", "follow_up_at_utc"),
+        *(CheckConstraint(check) for check in WAITING_CHECKS),
     )
 
 
@@ -44,3 +62,32 @@ class TaskReminderModel(LocalBase):
         CheckConstraint("status IN ('pending', 'acknowledged', 'dismissed')"),
         Index("task_reminders_status_time", "status", "remind_at_utc"),
     )
+
+
+class TaskWaitingOperationModel(LocalBase):
+    __tablename__ = "task_waiting_operations"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
+    action: Mapped[str] = mapped_column(String)
+    request_fingerprint: Mapped[str] = mapped_column(String)
+    expected_revision: Mapped[int] = mapped_column(Integer)
+    resulting_revision: Mapped[int] = mapped_column(Integer)
+    result_json: Mapped[str] = mapped_column(String)
+    correlation_id: Mapped[str] = mapped_column(String)
+    created_at_utc: Mapped[str] = mapped_column(String)
+    __table_args__ = (
+        UniqueConstraint("idempotency_key"),
+        CheckConstraint("action IN ('set','clear','reschedule')"),
+        CheckConstraint("typeof(expected_revision) = 'integer' AND expected_revision >= 1"),
+        CheckConstraint(
+            "typeof(resulting_revision) = 'integer' AND resulting_revision IN (expected_revision, expected_revision + 1)"
+        ),
+        CheckConstraint(
+            "length(request_fingerprint) = 64 AND request_fingerprint NOT GLOB '*[^0-9a-f]*'"
+        ),
+        CheckConstraint("json_valid(result_json)"),
+        CheckConstraint("json_valid(request_json)"),
+        Index("task_waiting_operations_task", "task_id", "created_at_utc"),
+    )
+    request_json: Mapped[str] = mapped_column(String)

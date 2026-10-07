@@ -2,7 +2,7 @@
 
 ## Status
 
-All 13 recommendations were accepted on October 7, 2026. The resolved decisions below govern implementation; TASK-002 remains unimplemented. No application code is included.
+All 13 recommendations were accepted on October 7, 2026. The resolved decisions below govern implementation. Backend implementation and focused acceptance coverage are recorded in [TASK-002_TEST_MATRIX.md](TASK-002_TEST_MATRIX.md); browser integration remains UI-001 work. The implementation-baseline observations below are historical, not the current capability state.
 
 ## Purpose
 

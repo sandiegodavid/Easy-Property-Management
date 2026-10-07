@@ -20,7 +20,7 @@ class TaskActivitySnapshotPolicy(DefaultAuditSnapshotPolicy):
         value = super().redact(snapshot)
         if value is None or not self._sensitive_follow_up(snapshot):
             return value
-        for key in ("id", "relatedEntityId", "relatedLabel", "notes"):
+        for key in ("id", "relatedEntityId", "relatedLabel", "notes", "waitingForLabel"):
             if key in value:
                 value[key] = "[redacted]"
         return value

@@ -3,16 +3,29 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import contextmanager
 from datetime import datetime
+import sqlite3
 from typing import Any, TypeVar
 
-from sqlalchemy import and_, event, func, or_, select
+from sqlalchemy import and_, case, event, func, or_, select, tuple_
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import DBAPIError
 
 from app.modules.audit.application.recorder import AuditRecorder
+from app.modules.audit.infrastructure.read_marker import SQLiteAuditReadMarker
+from app.modules.tasks.application.waiting import (
+    WaitingBusy,
+    WaitingOperation,
+    WaitingStorageFailure,
+)
 from app.modules.tasks.application.ports import DueReminderSummary, TaskSummary, TaskTransaction
-from app.modules.tasks.domain.models import Task, TaskReminder, due_bucket
-from app.modules.tasks.infrastructure.sqlalchemy_models import TaskModel, TaskReminderModel
+from app.modules.tasks.domain.models import Task, TaskReminder, due_bucket, waiting_facts
+from app.modules.tasks.infrastructure.sqlalchemy_models import (
+    TaskModel,
+    TaskReminderModel,
+    TaskWaitingOperationModel,
+)
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 Result = TypeVar("Result")
@@ -28,6 +41,19 @@ class SQLiteTaskUnitOfWork:
         @event.listens_for(self.engine, "connect")
         def task_due_bucket(dbapi_connection, _connection_record) -> None:
             dbapi_connection.create_function("task_due_bucket", 4, _task_due_bucket)
+            dbapi_connection.create_function("task_follow_up_today", 3, _follow_up_today)
+
+    def read_follow_ups(self, operation):
+        with _waiting_storage_errors(), self.engine.connect() as connection, connection.begin():
+            return operation(_FollowUpReadTransaction(connection))
+
+    def waiting_operation(self, key):
+        with _waiting_storage_errors(), self.engine.connect() as connection:
+            return _SQLiteTaskTransaction(connection, self.recorder).waiting_operation(key)
+
+    def write_waiting(self, operation: Callable[[TaskTransaction], Result]) -> Result:
+        with _waiting_storage_errors():
+            return self.write(operation)
 
     def write(self, operation: Callable[[TaskTransaction], Result]) -> Result:
         with immediate_transaction(self.engine) as connection:
@@ -124,6 +150,19 @@ class SQLiteTaskUnitOfWork:
         )
 
 
+@contextmanager
+def _waiting_storage_errors():
+    """Translate only database failures, after transaction cleanup has run."""
+    try:
+        yield
+    except (DBAPIError, sqlite3.Error) as error:
+        driver_error = error.orig if isinstance(error, DBAPIError) else error
+        code = getattr(driver_error, "sqlite_errorcode", None)
+        if isinstance(code, int) and code & 0xFF in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED}:
+            raise WaitingBusy() from error
+        raise WaitingStorageFailure() from error
+
+
 def _summary_tasks(
     connection: Any, *, bucket: str, now: datetime, limit: int
 ) -> tuple[int, list[Task]]:
@@ -172,6 +211,11 @@ def _due_reminders_summary(
         TaskModel.due_timezone.label("task_due_timezone"),
         TaskModel.is_all_day.label("task_is_all_day"),
         TaskModel.related_label.label("related_label"),
+        *(
+            column.label(f"parent_{column.name}")
+            for column in TaskModel.__table__.columns
+            if column.name != "notes"
+        ),
     )
     total = (
         connection.scalar(
@@ -189,7 +233,7 @@ def _due_reminders_summary(
         )
         .limit(limit)
     ).mappings()
-    return total, [_due_reminder_summary(row) for row in rows]
+    return total, [_due_reminder_summary(row, now) for row in rows]
 
 
 class _SQLiteTaskTransaction:
@@ -211,6 +255,23 @@ class _SQLiteTaskTransaction:
     def replace_task(self, task: Task) -> None:
         self.connection.execute(
             TaskModel.__table__.update().where(TaskModel.id == task.id).values(**_task_values(task))
+        )
+
+    def waiting_operation(self, key):
+        row = (
+            self.connection.execute(
+                TaskWaitingOperationModel.__table__.select().where(
+                    TaskWaitingOperationModel.idempotency_key == key
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return WaitingOperation(**row) if row else None
+
+    def insert_waiting_operation(self, operation):
+        self.connection.execute(
+            TaskWaitingOperationModel.__table__.insert().values(**operation.__dict__)
         )
 
     def pending_reminders(self, task_id: str) -> list[TaskReminder]:
@@ -307,7 +368,12 @@ def _task_due_bucket(
     )
 
 
-def _due_reminder_summary(row: Any) -> DueReminderSummary:
+def _due_reminder_summary(row: Any, now: datetime) -> DueReminderSummary:
+    parent = Task(
+        **{key: row[f"parent_{key}"] for key in Task.__dataclass_fields__ if key != "notes"},
+        notes=None,
+    )
+    facts = waiting_facts(parent, now)
     return DueReminderSummary(
         id=row["id"],
         task_id=row["task_id"],
@@ -321,4 +387,83 @@ def _due_reminder_summary(row: Any) -> DueReminderSummary:
         task_due_timezone=row["task_due_timezone"],
         task_is_all_day=bool(row["task_is_all_day"]),
         related_label=row["related_label"],
+        task_revision=parent.revision,
+        task_waiting_for_kind=parent.waiting_for_kind,
+        task_waiting_for_label=parent.waiting_for_label,
+        task_follow_up_at_utc=parent.follow_up_at_utc,
+        task_follow_up_timezone=parent.follow_up_timezone,
+        task_follow_up_state=facts["followUpState"],
+        task_follow_up_due_today=facts["followUpDueToday"],
+        task_follow_up_actionable=facts["followUpActionable"],
+        task_deadline_state=facts["taskDeadlineState"],
     )
+
+
+def _follow_up_today(value, zone, now):
+    from zoneinfo import ZoneInfo
+
+    if value is None:
+        return 0
+    timezone = ZoneInfo(zone)
+    return int(
+        datetime.fromisoformat(value).astimezone(timezone).date()
+        == datetime.fromisoformat(now).astimezone(timezone).date()
+    )
+
+
+class _FollowUpReadTransaction:
+    def __init__(self, connection):
+        self.connection = connection
+
+    def marker(self):
+        return SQLiteAuditReadMarker().marker(self.connection)
+
+    def page(self, query, now, after):
+        table = TaskModel.__table__
+        stamp = now.isoformat()
+        date = TaskModel.follow_up_at_utc
+        rank = case(
+            (date < stamp, 0),
+            (date == stamp, 1),
+            (func.task_follow_up_today(date, TaskModel.follow_up_timezone, stamp) == 1, 2),
+            (date.is_(None), 3),
+            else_=4,
+        )
+        state = case(
+            (date.is_(None), "unscheduled"),
+            (date < stamp, "overdue"),
+            (date == stamp, "due"),
+            else_="scheduled",
+        )
+        predicates = [
+            TaskModel.status.in_(("open", "in_progress")),
+            TaskModel.waiting_for_kind.is_not(None),
+        ]
+        if query.state is not None:
+            predicates.append(state == query.state)
+        if query.actionable is not None:
+            predicates.append(
+                and_(date.is_not(None), date <= stamp)
+                if query.actionable
+                else or_(date.is_(None), date > stamp)
+            )
+        if query.priority:
+            predicates.append(TaskModel.priority == query.priority)
+        if query.related_entity_type:
+            predicates.extend(
+                (
+                    TaskModel.related_entity_type == query.related_entity_type,
+                    TaskModel.related_entity_id == query.related_entity_id,
+                )
+            )
+        total = self.connection.scalar(select(func.count()).select_from(table).where(*predicates))
+        sort_date = func.coalesce(date, "")
+        if after is not None:
+            predicates.append(tuple_(rank, sort_date, TaskModel.id) > after)
+        rows = self.connection.execute(
+            table.select()
+            .where(*predicates)
+            .order_by(rank, sort_date, TaskModel.id)
+            .limit(query.limit + 1)
+        ).mappings()
+        return total, [_task_mapping(row) for row in rows]

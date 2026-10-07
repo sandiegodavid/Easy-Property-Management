@@ -14,6 +14,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    from app.modules.tasks.infrastructure.sqlalchemy_models import (
+        WAITING_CHECKS,
+        TaskWaitingOperationModel,
+    )
     from app.modules.inspections.infrastructure.sqlalchemy_models import (
         ConditionAcknowledgmentModel,
         ConditionAreaModel,
@@ -221,12 +225,28 @@ def upgrade() -> None:
         sa.Column("related_label", sa.String()),
         sa.Column("created_at_utc", sa.String(), nullable=False),
         sa.Column("updated_at_utc", sa.String(), nullable=False),
+        sa.Column("revision", sa.Integer(), nullable=False, server_default="1"),
+        sa.Column("waiting_for_kind", sa.String()),
+        sa.Column("waiting_for_label", sa.String()),
+        sa.Column("follow_up_at_utc", sa.String()),
+        sa.Column("follow_up_timezone", sa.String()),
+        sa.Column("waiting_set_at_utc", sa.String()),
+        sa.Column("waiting_cleared_at_utc", sa.String()),
         sa.CheckConstraint("status IN ('open', 'in_progress', 'completed', 'cancelled')"),
         sa.CheckConstraint("priority IN ('low', 'normal', 'high', 'urgent')"),
         sa.CheckConstraint("is_all_day IN (0, 1)"),
+        *(sa.CheckConstraint(check) for check in WAITING_CHECKS),
     )
     op.create_index("tasks_status_due", "tasks", ["status", "due_at_utc"])
     op.create_index("tasks_related_record", "tasks", ["related_entity_type", "related_entity_id"])
+    op.create_index(
+        "tasks_waiting_follow_up", "tasks", ["status", "waiting_for_kind", "follow_up_at_utc"]
+    )
+    TaskWaitingOperationModel.__table__.create(op.get_bind())
+    for action in ("UPDATE", "DELETE"):
+        op.execute(
+            f"CREATE TRIGGER task_waiting_operations_no_{action.lower()} BEFORE {action} ON task_waiting_operations BEGIN SELECT RAISE(ABORT, 'task waiting operations are append-only'); END"
+        )
     op.create_table(
         "task_reminders",
         sa.Column("id", sa.String(), primary_key=True),
@@ -883,6 +903,7 @@ def downgrade() -> None:
     op.drop_table("tenant_profiles")
     op.drop_table("party_contact_methods")
     op.drop_table("parties")
+    op.drop_table("task_waiting_operations")
     op.drop_table("task_reminders")
     op.drop_table("tasks")
     op.drop_table("file_publication_cleanup_attentions")
