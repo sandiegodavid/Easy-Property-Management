@@ -205,7 +205,9 @@ class FinanceWorkflowTests(unittest.TestCase):
         ))
         expectation = next(item for item in expectations if not item["isProrated"])
         db = self.workspace.paths.database
-        clock = lambda: datetime.combine(date.today() + timedelta(days=2), datetime.min.time(), UTC)
+        clock = lambda: datetime.combine(
+            date.fromisoformat(expectation["periodStartsOn"]), datetime.min.time(), UTC,
+        ) + timedelta(hours=12)
         prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
             db, AuditRecorder(SQLiteAuditRepository(db)),
             SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), SQLitePartyOperations(db),
@@ -287,7 +289,9 @@ class FinanceWorkflowTests(unittest.TestCase):
             term["id"], (date.today() + timedelta(days=60)).isoformat(), date.today().replace(day=1).isoformat(),
         ))
         expectation = next(item for item in expectations if not item["isProrated"])
-        clock = lambda: datetime.combine(date.today() + timedelta(days=2), datetime.min.time(), UTC)
+        clock = lambda: datetime.combine(
+            date.fromisoformat(expectation["periodStartsOn"]), datetime.min.time(), UTC,
+        ) + timedelta(hours=12)
         prepaid = PrepaidCheckService(SQLiteFinanceUnitOfWork(
             self.workspace.paths.database, AuditRecorder(SQLiteAuditRepository(self.workspace.paths.database)),
             SQLiteLeaseContextReader(), SQLitePortfolioContextReader(), SQLitePartyOperations(self.workspace.paths.database), SQLiteTaskTransactionOperations(),
