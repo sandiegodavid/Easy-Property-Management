@@ -42,6 +42,7 @@ from app.modules.owner_accounting.infrastructure.schema_validation import (
 from app.modules.owner_management.infrastructure.schema_validation import (
     validate_owner_concern_schema,
 )
+from app.modules.operator.infrastructure.schema_validation import validate_operator_schema
 from app.modules.portfolio.infrastructure.schema_validation import validate_portfolio_schema
 from app.modules.tasks.infrastructure.schema_validation import validate_task_schema
 from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
@@ -100,6 +101,9 @@ def validate_latest_schema(database_path: Path) -> None:
                 ).scalars()
             )
             expected_tables = {
+                "operator_preferences",
+                "operator_recovery_records",
+                "operator_operations",
                 "alembic_version",
                 "workspace_metadata",
                 "audit_events",
@@ -211,6 +215,7 @@ def validate_latest_schema(database_path: Path) -> None:
                 validate_maintenance_schema,
                 validate_owner_accounting_schema,
                 validate_owner_concern_schema,
+                validate_operator_schema,
             ):
                 validator(connection)
             validate_file_data(connection, build_file_link_policy_registry().as_mapping())

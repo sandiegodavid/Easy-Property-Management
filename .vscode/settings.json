@@ -1,14 +1,9 @@
 {
-    "python.testing.unittestArgs": [
-        "-v",
-        "-s",
-        "./application",
-        "-p",
-        "test_*.py"
-    ],
-    "python.testing.pytestEnabled": true,
-    "python.testing.unittestEnabled": false,
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/easy-property-management/bin/python",
+    "python.testing.cwd": "${workspaceFolder}/application",
     "python.testing.pytestArgs": [
-        "application"
-    ]
+        "apps/server/app"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }

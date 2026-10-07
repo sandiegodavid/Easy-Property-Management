@@ -14,6 +14,11 @@ depends_on = None
 
 
 def upgrade() -> None:
+    from app.modules.operator.infrastructure.sqlalchemy_models import (
+        MODELS as OPERATOR_MODELS,
+        APPEND_ONLY as OPERATOR_APPEND_ONLY,
+        trigger_sql as operator_trigger_sql,
+    )
     from app.modules.tasks.infrastructure.sqlalchemy_models import (
         WAITING_CHECKS,
         TaskWaitingOperationModel,
@@ -799,6 +804,11 @@ def upgrade() -> None:
             for order, item in enumerate(categories)
         ],
     )
+    for model in OPERATOR_MODELS:
+        model.__table__.create(op.get_bind())
+    for table in OPERATOR_APPEND_ONLY:
+        for action in ("UPDATE", "DELETE"):
+            op.execute(operator_trigger_sql(table, action))
     op.bulk_insert(
         ProviderCategoryModel.__table__,
         [
@@ -821,6 +831,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    for table in ("operator_operations",):
+        for action in ("update", "delete"):
+            op.execute(f"DROP TRIGGER {table}_no_{action}")
+    for table in (
+        "operator_operations",
+        "operator_recovery_records",
+        "operator_preferences",
+    ):
+        op.drop_table(table)
     op.execute("DROP TRIGGER ai_settings_operations_no_delete")
     op.execute("DROP TRIGGER ai_settings_operations_no_update")
     op.drop_table("ai_review_decisions")

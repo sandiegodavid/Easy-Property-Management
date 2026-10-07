@@ -11,6 +11,9 @@ from fastapi import FastAPI
 from app.platform.api_errors import register_api_error_handlers
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.bootstrap.file_link_policies import build_file_link_policy_registry
+from app.bootstrap.operator_support import compose_operator
+from app.bootstrap.operator_recovery import RecoverySourcePorts
+from app.modules.operator.api.router import build_router as build_operator_router
 from app.bootstrap.owner_concern_context import SQLiteOwnerConcernContext
 from app.modules.ai_governance.api.router import build_router as build_ai_governance_router
 from app.modules.ai_governance.application.registry import (
@@ -516,8 +519,25 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
     app.state.ai_configuration_service = ai_configuration
     app.state.ai_draft_review_service = ai_drafts
     app.include_router(build_router(service, runtime))
+    operator = compose_operator(
+        service,
+        runtime,
+        recorder,
+        RecoverySourcePorts(
+            portfolio_context_reader,
+            party_operations,
+            SQLiteCommunicationContextOperations(
+                task_transaction_operations, SQLiteIntakeSourceReader()
+            ),
+        ),
+    )
+    app.state.operator_service = operator
+    app.include_router(build_operator_router(operator))
     policies = AuditSnapshotPolicyRegistry(
         {
+            ("operator_preferences", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("operator_recovery", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("operator_operation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
             ("file", 1): DEFAULT_SNAPSHOT_POLICY,
             ("file_link", 1): DEFAULT_SNAPSHOT_POLICY,

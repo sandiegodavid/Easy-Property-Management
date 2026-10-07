@@ -6,13 +6,14 @@ keeps the response envelope and HTTP meaning of those codes consistent.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+
+from app.platform.validation_errors import is_size_limit_violation
 
 
 def api_problem(status_code: int, code: str, message: str, **details: Any) -> HTTPException:
@@ -48,15 +49,8 @@ def register_api_error_handlers(app: FastAPI) -> None:
 
 def validation_problem(error: RequestValidationError | ValidationError) -> HTTPException:
     """Return 413 for bounded content and 422 for malformed typed input."""
-    if any(_is_size_limit_violation(item) for item in error.errors()):
+    if any(is_size_limit_violation(item) for item in error.errors()):
         return api_problem(
             413, "request_payload_too_large", "Request content exceeds an allowed limit."
         )
     return api_problem(422, "request_validation", "Request validation failed.")
-
-
-def _is_size_limit_violation(error: Mapping[str, Any]) -> bool:
-    # Pydantic v2 reports bounded strings as string_too_long and bounded
-    # containers as too_long. Values below a lower bound remain malformed
-    # request data and therefore retain 422.
-    return error.get("type") in {"string_too_long", "too_long"}

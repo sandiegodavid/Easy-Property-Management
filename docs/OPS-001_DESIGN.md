@@ -53,6 +53,14 @@ Persist a versioned, registered short-form recovery record through an atomic aut
 
 The browser distinguishes dirty, saving, saved, failed, and conflicted. It must not claim a local draft is official; substantive domain drafts use their source contract instead.
 
+The initial registered short forms are task creation (`task.create`), maintenance issue
+reporting (`maintenance.issue.create`), and recorded communication entry
+(`communication.record`), each starting at schema version 1. Recovery holds incomplete
+browser input before an official command/domain draft exists; it never commits that command.
+An unresolved consequential attempt is supported only when the owning module supplies a
+durable receipt/replay contract. See [the implementation matrix](OPS-001_TEST_MATRIX.md)
+for delivered and remaining slices; this does not mark OPS-001 complete.
+
 ## Resolved design decisions
 
 ### 1. Operator module ownership
