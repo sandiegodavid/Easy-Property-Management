@@ -215,3 +215,24 @@ The completed foundation items below currently expose safe local CLI/API capabil
 
 
 </div>
+
+## Experimental — Universal Reader, parallel track
+
+This optional experiment is independent of DATA-001, DATA-002, and DATA-003. It neither replaces their scopes nor adds prerequisites to them or to any existing backlog. `E1`–`E6` are delivery labels within this parallel track, not insertions into the existing product sequence. The experiment owns its snapshot, candidate, review, and commit contracts; it may reuse existing file, governance, connection, and domain capabilities through application protocols. Its interfaces must not call or require DATA-owned services, tables, schemas, or UI flows. See [research and attachment comparison](UNIVERSAL_READER_RESEARCH.md).
+
+Early experiments use synthetic/consented fixtures and CLI/API tooling. Web UI work remains deferred until UI-001; the optional pilot UI is a separate later item. LLM/Jev evaluation does not promise either vendor, and local inference requires the separately qualified AI-LOCAL-001 path when selected. Google Sheets and AI assistance are optional branches, not prerequisites for the local manual path. Production enablement requires measured value, verified review/commit safety, and explicit operator authorization; successful extraction alone does not authorize import.
+
+<div style="max-width: 100%; max-height: none; overflow-x: auto; overflow-y: hidden;">
+
+| Sequence | ID | Area | Outcome | Ordered hard dependencies | Status |
+| ---: | --- | --- | --- | --- | --- |
+| E1 | UR-001 | Reader experiment | Establish a held-out messy-workbook corpus, bounded local XLSX cell/layout snapshots, profiling, region discovery, constrained transform recipes, deterministic/manual extraction, and JSON candidate arrays with field provenance, shared Party references, uncertainties, and source coverage. No official-record writes. Measure fidelity, omissions, relationship accuracy, and operator effort. | None |  |
+| E2 | UR-002 | Reader AI evaluation | Compare governed schema-constrained LLM planning, Jev closed-set selection, and optional combined verification against UR-001's baseline on the same held-out corpus. Register bounded experimental actions/adapters, retain exact governed inputs and provenance, enforce disclosure/pause/budgets, and report calibration, correction effort, latency, cost, and data disclosure. No automatic import or vendor commitment. | UR-001, AI-GOV-001 |  |
+| E3 | UR-003 | Reader Sheets source | Acquire selected read-only Google Sheets values and layout metadata directly into the experimental reader's snapshot contract, with bounded retrieval, capture-consistency handling, credential recovery, and no source writes or synchronization. Do not route through DATA-003 or DATA-002. | UR-001, CONN-001 |  |
+| E4 | UR-004 | Reader review staging | Persist experimental sources/snapshots, plan/candidate revisions, safe reusable recipes, coverage/exclusion decisions, and explicit create/link/skip proposals. Provide bounded CLI/API review and correction, stale-revision checks, provenance, audit, and backup/restore validation. Mapping acceptance changes previews only; no official-record writes. AI/Sheets branches are enabled only when their own experiments are qualified. | UR-001, LOCAL-001, LOCAL-002, AUDIT-001, FILE-001 |  |
+| E5 | UR-005 | Reader authorized import | Implement an independent, operator-confirmed import of reviewed property/owner/provider candidates through owning-domain application operations, with shared identity handling, explicit category/relationship decisions, coordinated atomic units, durable outcomes, and duplicate-safe recovery. Bind authorization to the exact reviewed snapshot/operation revisions. Do not depend on DATA services or extend to leases, balances, history, or arbitrary updates. | UR-004, PORT-002, TEN-001, VEND-001, VEND-CAT-001 |  |
+| E6 | UR-006 | Reader onboarding pilot | Add an opt-in experimental source/preview/questions/review/confirmation/outcome UI and resumable onboarding entry point after UI-001. Keep experimental routes and staging independent of existing DATA workflows; show source coverage, unresolved/excluded information, truthful capability readiness, and manual fallback. Measure upload-to-confirmation time and post-import errors before any adoption decision. | UR-005, UI-001 |  |
+
+</div>
+
+Broader entity adapters, generated-script execution, generic custom fields, automatic commit, and batch undo are not approved by these items. Any later expansion requires its own backlog and domain design; no existing DATA item inherits the experiment by default.

@@ -12,13 +12,13 @@ The central design choice is **AI proposes where and how to read; application co
 
 “Universal” should mean adaptable to unfamiliar spreadsheet layouts within documented limits. No reader can reliably recover information that is absent, contradictory, encoded only in unexplained colors, or lost when a spreadsheet converted identifiers to numbers. The product should explain these limits and ask a focused question rather than claim success on every file.
 
-This is a research and redesign proposal, not an adopted change to the backlog or existing designs. No application code, model installation, customer-data upload, or performance benchmark was performed.
+This research supports the separate UR-001–UR-006 experimental track in [FEATURE_BACKLOG.md](FEATURE_BACKLOG.md). The experiment does not change or depend on DATA-001, DATA-002, or DATA-003. Their existing designs and scopes remain the production baseline. The reader owns independent source, candidate, review, and commit contracts; comparison with existing DATA workflows is context, not a dependency. No application code, model installation, customer-data upload, or performance benchmark was performed.
 
 ## Existing contracts and implementation
 
 The current [DATA-002 design](DATA-002_DESIGN.md) supports properties, shared Party identities for owners/providers, provider profiles/categories, and explicit property-owner relationships. It requires worksheet selection, column mapping, create/link/skip decisions, immutable source snapshots, durable outcomes, and duplicate-safe retries. It prohibits silent overwrite, merge, category creation, and fuzzy category assignment.
 
-[DATA-003](DATA-003_DESIGN.md) changes source acquisition only: a read-only Google Sheets snapshot enters the DATA-002 pipeline. [DATA-001 in the backlog](FEATURE_BACKLOG.md) retains later lease, balance, history, and advanced update workflows. A reader may recognize these later entity types without being allowed to import them in MVP.
+[DATA-003](DATA-003_DESIGN.md) changes source acquisition only: a read-only Google Sheets snapshot enters the DATA-002 pipeline. [DATA-001 in the backlog](FEATURE_BACKLOG.md) retains later lease, balance, history, and advanced update workflows. The experimental reader may recognize these entity types, but UR-005 imports only properties, owners, providers, and their reviewed relationships. Any broader experimental import needs a new item and domain design; DATA-001 does not implicitly supply that extension.
 
 The [architecture](ARCHITECTURE.md) requires owning-domain rules, transaction-aware application protocols, short SQLite transactions, optional provider-neutral AI, explicit cloud disclosure, and no provider call during a database transaction. The [product brief](PRODUCT_BRIEF.md) emphasizes small portfolios, local records, and approval before AI consequences. These are suitable foundations for this proposal.
 
@@ -100,7 +100,7 @@ Capture a structural snapshot, not just a rectangle of strings. Include stable s
 
 openpyxl's `data_only` option returns a cached formula result rather than evaluating the formula. A missing cache must produce a visible issue; cache freshness cannot generally be proven locally. Do not recalculate by opening the customer file in Excel automatically. Read-only mode is useful for bounded memory, but reported worksheet dimensions can be wrong; parser qualification must test this. [Workbook loading](https://openpyxl.readthedocs.io/en/stable/api/openpyxl.reader.excel.html), [Optimized reading](https://openpyxl.readthedocs.io/en/stable/optimized.html).
 
-For Sheets, retain layout metadata as well as values where needed. The API supports selected ranges/field masks; cell data distinguishes entered, effective, and formatted values. This is preferable to discarding all structure before interpretation. Read-only authorization remains required. [Spreadsheet retrieval](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/get), [Cell data](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/cells).
+UR-003 independently acquires Sheets snapshots through CONN-001, without calling DATA-003 or DATA-002. Retain layout metadata as well as values where needed. The API supports selected ranges/field masks; cell data distinguishes entered, effective, and formatted values. This is preferable to discarding all structure before interpretation. Read-only authorization remains required. [Spreadsheet retrieval](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/get), [Cell data](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/cells).
 
 A locally frozen capture is immutable; it is not automatically a remote point-in-time snapshot across multiple fetches. Prefer one bounded fetch where feasible. If larger captures need several calls, document consistency detection/retry and show capture timing. Never substitute live Sheet values during confirmation. Batch reads and bounded backoff should respect Google's quotas. [Sheets limits](https://developers.google.com/workspace/sheets/api/limits).
 
@@ -136,7 +136,7 @@ The interpreter applies the validated plan to the snapshot. Preserve raw values,
 
 Do not invent required information. Missing ownership designation, Party kind, property type, address components, inventory layout, or relationship effective date may require a focused question. Derive property time zones through Portfolio's existing local resolver, not a model. Do not create lease-backed occupancy or financial records from an unexplained spreadsheet label.
 
-Preserve identifiers as strings where appropriate, including postal codes, phone numbers, and source IDs. Account for displayed leading zeros. Once Excel has destroyed significant digits, the reader must flag the uncertainty rather than reconstruct them. Money/date conversion belongs in deterministic, locale-aware code; ambiguous dates remain unresolved. DATA-001 will need stronger financial semantics than simply parsing an amount.
+Preserve identifiers as strings where appropriate, including postal codes, phone numbers, and source IDs. Account for displayed leading zeros. Once Excel has destroyed significant digits, the reader must flag the uncertainty rather than reconstruct them. Money/date conversion belongs in deterministic, locale-aware code; ambiguous dates remain unresolved. Any future experimental financial adapter needs stronger financial semantics than simply parsing an amount.
 
 ### 5. Validate semantics and relationships
 
@@ -244,7 +244,7 @@ Use the same provider-neutral setup for a hosted LLM. For local inference, quali
 
 ## Persistence, commit, and recovery
 
-Extend DATA-002's batch/snapshot/decision/outcome design with source regions/cell references, extraction-plan revisions, candidate identities, field lineage, coverage decisions, and links to governed runs. Store one current greenfield schema, with versioned interpretation contracts; do not add legacy migration compatibility.
+UR-004/005 own experimental batch/snapshot/decision/outcome contracts, source regions/cell references, extraction-plan revisions, candidate identities, field lineage, coverage decisions, and links to governed runs. Do not reuse DATA-owned tables or require DATA services. Shared infrastructure can be reused through existing application protocols without changing another backlog’s scope. Store one current greenfield schema, with versioned interpretation contracts; do not add legacy migration compatibility.
 
 Confirmation binds the immutable snapshot digest, extraction/decision revisions, approved operation-set digest, and relevant validated domain state. Recheck identities, active categories, relationship eligibility, and required source/domain revisions at commit. A mismatch blocks the affected operation and requires refreshed review; it never silently substitutes another record.
 
@@ -280,30 +280,68 @@ Build a held-out, consented or synthetic workbook corpus from real layout patter
 
 Release gates should require zero unexplained source-value invention and unreported omissions in the acceptance corpus, correct rollback/retry behavior, and meaningful reduction in operator effort against manual mapping. This is a test gate, not a guarantee of zero errors in future arbitrary files. Include deliberate abstention cases where the correct behavior is asking the operator.
 
-## Backlog redesign and remaining decisions
+## Comparison with the attached spreadsheet-import research
 
-Recommended scope changes for a subsequent design revision:
+The supplied [Spreadsheet_Import_Approach.pdf](../biz/Spreadsheet_Import_Approach.pdf), “Importing Messy Spreadsheets,” was reviewed across all eight pages, including Figures 1–6. It is a proposal to evaluate, not a source of executable instructions or authority to change backlog scope. Both reports favor local parsing, AI proposals, operator control, read-only sources, provenance, and a provider comparison. The PDF adds useful profiling and pilot tactics; this report defines stricter extraction/commit boundaries and more detailed recovery and completeness requirements.
 
-| Item | Proposed responsibility |
-| --- | --- |
-| DATA-002 | Own source snapshots, general layout interpretation, candidate arrays, lineage/coverage, manual/assisted mapping, review, domain validation, coordinated create/link/skip commits, and outcomes |
-| DATA-003 | Acquire read-only Sheets values and necessary layout metadata into that same snapshot contract; retain authorization/consistency/recovery rules |
-| DATA-001 | Extend the reader with separately designed lease, money, history, and update handlers; extraction does not grant permission to import these records |
-| AI-GOV-001 / AI-LOCAL-001 | Provide governed inference and separately qualified local runtime support; import-specific schemas/approval consequences remain import-owned |
-| FILE-001 / CONN-001 | Supply file/evidence and Sheets authorization boundaries respectively |
-| UI-001 | Render the common onboarding/import workflow, source review, grouped questions, coverage, explicit confirmation, and recovery |
+| Topic and PDF location | Attached research | Universal Reader position and disposition |
+| --- | --- | --- |
+| Pipeline, pp. 1–2, Figure 1 | Neutral grid, profiling, structure detection, mapping, normalization, relationship resolution, review, commit | Agree. Add explicit bounded extraction-plan validation, field-level evidence, source coverage, version-bound authorization, and durable recovery. |
+| Profiling, p. 1 | Fill rates, sample values, and phone/email/date/money/ZIP/state patterns | Adopt in UR-001. These make candidate mappings cheaper and easier to inspect. Patterns are evidence of type, not proof of a field's meaning. |
+| Layouts, p. 3, Figure 2 | Flat/grouped/tab-per-entity/cross-tab/free-text archetypes | Adopt as corpus/recipe categories. A region, rather than a whole sheet, is the mapping unit; one sheet can contain several entity types. Carry-forward stops at reviewed group boundaries. Unpivoting can be a registered bounded transform without authorizing financial import. |
+| Generated transform scripts, pp. 3, 5, Figures 2/4 | LLM writes scripts; run locally without network in a sandbox and save recipes | Defer unrestricted scripts. No network alone does not prevent local file access, secrets exposure, resource exhaustion, or writes. Use validated cell selectors and allowlisted transforms first. A script executor would require a separately approved capability and isolation design. |
+| Unmapped data, p. 3 | Preserve everything as custom fields or notes | Preserve source evidence and unresolved fields, but do not automatically put them into official records. Custom fields require a domain schema; indiscriminate notes can duplicate sensitive or unsupported data. Offer reviewed note mapping, leave unsupported fields in staging, or record an explicit exclusion. |
+| High-confidence acceptance, pp. 1, 5, Figures 1/4 | Auto-accept confident items and review exceptions | Accept only as preview preselection. Every proposed mapping stays inspectable and the exact final operation set requires operator authorization. Model confidence never authorizes a link, category creation, merge, or commit. |
+| Reusable recipes, pp. 1–3 | Save mappings/scripts for re-import | Adopt declarative recipes with parser/schema/transform versions and a layout signature. Validate against every new snapshot; layout drift produces new review, not silent old mapping reuse. A recipe is neither an identity map nor standing import permission. |
+| Batch undo, p. 1 | Commit with batch ID and undo | Agree on batch identity; defer generic undo. Imported records can acquire later dependencies. Compensation must use domain-owned archive/correction/reversal rules and new authorization, never delete a batch's rows blindly. Atomic rollback and idempotent retry remain required. |
+| Staged entities, pp. 3–4, Figure 3 | Properties/owners/providers, then units/leases, then maintenance/history; defer balances | Initial entity set agrees. Subsequent stages are ideas, not changes to DATA items or preauthorized UR scope. Every new official entity/action needs separate domain decisions. |
+| Common-source adapters and concierge pilots, pp. 3–4 | Export adapters, setup assistance, consented anonymized samples, template fallback | Adopt concierge fixture collection and a template fallback as evaluation tactics. Add source-specific recipes only after actual samples justify them; export layouts must be verified. Charging setup fees is a business decision, not a technical requirement. |
+| Spreadsheet details, p. 4 | Epochs, formats, merges, hidden content, colors, legacy files, CSV | Agree on test cases. Preserve colors as cues; require an explicit legend before assigning business meaning. Format support is qualified separately from arbitrary layout support. A numeric cell may lose leading zeros/precision; text storage itself does not cause that loss. |
+| Sheets, p. 4 | Read-only snapshots, selected-file/export routes, narrow authorization | Agree. UR-003 has its own capture contract and uses CONN-001 directly. XLSX exported manually can enter UR-001. A multi-fetch local snapshot must not be presented as an automatically atomic remote capture. |
+| Jev fit, pp. 5–6 | Useful classifier/selector, not full ETL; possibly unnecessary at onboarding volumes | Agree. Jev remains optional. Compare it with heuristics and LLM plans before adding a production vendor or verifier. Its typed output does not prove mapping correctness. |
+| Privacy, p. 6, Figure 5 | Minimize/mask; obtain consent; retention/training terms not established | Agree on controls. The existing primary-source research above supplies the missing distinction: documented no-training, purpose-based standard retention, enterprise zero retention by arrangement, and no established local model deployment. |
+| Benchmark, pp. 6–8, Figure 6 | 20–30 messy sheets; correctness at fixed review burden, confidence, cost, privacy; 98% hypothesis | Adopt 20–30 workbooks as an initial pilot corpus, stratified by layouts and separated into tuning/held-out subsets. Report uncertainty and counts; that size does not establish production reliability. The 98% target is a hypothesis for mapping suggestions, not an import authorization policy. Also measure record/field omissions, wrong links, exact-value fidelity, and post-import errors. |
 
-Contradictions and missing decisions to settle before implementation:
+The greatest practical additions from the PDF are **column profiling, explicit layout archetypes, reusable declarative recipes, concierge samples, and template fallback**. The most consequential differences are **generated scripts, automatic acceptance, custom-field fallback, and undo**. They must not be bundled into a reader experiment merely because they appear in a suggested pipeline.
 
-1. **Single-sheet/single-header mapping versus general layouts.** Replace the mandatory one-sheet workflow with selected multi-region interpretation; keep simple column mapping as its manual specialization.
-2. **“No fuzzy category matching” versus AI suggestions.** Clarify that AI can offer nonbinding category candidates, while exact operator decisions authorize assignments/creation. If suggestions themselves are intended to be prohibited, disable them without weakening the reader.
-3. **Arrays versus shared identity.** Adopt Party candidates plus owner/provider projections and explicit relationships, rather than independent identity-creating arrays.
-4. **Snapshot detail and consistency.** Adopt cell/layout metadata, formula/hidden-content policy, and explicit multi-request Sheets consistency behavior. Values-only snapshots are insufficient for this reader.
-5. **Approval meaning.** Adopt preview-only AI plan approval and a separate final import authorization bound to exact revisions; no implicit writes during extraction.
-6. **AI dependencies and adapter choice.** Make assisted reading optional; require AI-GOV-001 for that path and AI-LOCAL-001 only for local inference. Qualify one planner first; Jev remains an experiment until evidence justifies it.
-7. **Cross-domain atomicity.** Design domain-owned coordinated operations and dependency units before implementing commits; existing independent service methods are insufficient proof of atomic batch import.
-8. **Bounds, interruption, retention, and portability.** Establish evaluated parser/model budgets, resumable-step semantics, FILE-001 link ownership, snapshot retention, and restore validators. Do not assume background jobs or automatic deletion.
-9. **Unsupported data and onboarding completion.** Show recognized out-of-scope fields/entities and explicit exclusions; import success must not imply complete portfolio coverage.
-10. **Later leases/balances/history.** DATA-001 needs domain-specific initial-state, effective-date, opening-balance, historical-event, and update semantics before these arrays can be committed. Recognition can precede those decisions; financial writes cannot.
+### Refinements adopted for the experiment
 
-The practical first experiment is a source-grounded reader for unfamiliar property/owner/provider workbooks, with a manual baseline and operator correction measurements. Adopt more providers or broader entity types only when they improve that workflow without weakening evidence, review, or domain rules.
+- Profile each region/column locally: bounded samples, fill rate, type-pattern rates, uniqueness, and candidate keys. Samples help planning; every source record still receives deterministic extraction and validation.
+- Save declarative recipes independently of customer records. Include source layout signature, supported entity/field versions, selectors, transforms, and exclusions. Verify structural compatibility on reuse and require fresh identity/link/category/operation decisions.
+- Preserve relevant cell fills/style identifiers for inspection. A reviewed legend can inform a status mapping; colors alone cannot authorize a lifecycle transition.
+- Pilot with assisted imports and consented, genuinely de-identified fixtures. Keep a manual/template baseline so time savings are measured against a usable alternative. Preserve a held-out set and distinguish synthetic results from customer results.
+- Treat exception-first review as a presentation strategy. Show the full proposed operation set and exclusions at final confirmation; a selected default is never an approval event.
+
+These refinements are recorded in UR-001/004/006 and do not amend DATA designs, the main UI-001 delivery scope, or the existing production onboarding contract.
+
+## Parallel experimental backlog and remaining decisions
+
+The [experimental backlog](FEATURE_BACKLOG.md#experimental--universal-reader-parallel-track) uses a separate UR prefix. Existing DATA scopes, dependency lists, and production paths remain unchanged. Existing items do not acquire UR prerequisites.
+
+| Item | Experimental responsibility | Boundary |
+| --- | --- | --- |
+| UR-001 | Corpus, XLSX snapshots, profiling, regions, constrained transforms, manual/deterministic candidates, coverage, baseline measurements | Standalone fixtures/CLI; no official writes or DATA prerequisite |
+| UR-002 | Governed LLM/Jev planning and optional verification comparison | UR-001 + AI-GOV-001; provider-qualified, no import permission |
+| UR-003 | Read-only Sheets source and capture consistency | UR-001 + CONN-001; own snapshot adapter, no DATA source path |
+| UR-004 | Durable staging, revisions, recipes, CLI/API review, decisions, audit, portability | Own import experiment schema; foundation capabilities only; no official writes |
+| UR-005 | Exact reviewed authorization, domain-owned coordinated import, durable outcomes/retry | UR-004 + existing Party/Portfolio/Provider capabilities; no DATA commit engine |
+| UR-006 | Opt-in experimental onboarding/review UI and operator pilot | UR-005 + UI-001; separate experimental routes, not an amendment to UI-001 |
+
+UR-002 and UR-003 are optional branches. UR-004/005 must support local deterministic/manual extraction without either branch. If AI or Sheets is selected, its corresponding qualified experimental capability is required. Local inference requires the separately qualified AI-LOCAL-001 configuration. No per-vendor item or provider hard dependency is needed before evaluation establishes value.
+
+The no-DATA boundary includes implementation contracts: UR must not call DATA services or use their tables, schema definitions, routes, or required UI flows. It may reuse existing file, governance, connector, Party, Portfolio, Provider, audit, and workspace application protocols. Any eventual consolidation is a future explicit decision, not part of this experiment.
+
+Decisions to settle in the individual UR designs before implementation:
+
+1. **Layouts and format support.** Qualify `.xlsx` first; define multi-region selectors, spans, overlap/exclusion handling, merged groups, and transform limits. Additional file formats need explicit qualification.
+2. **Independent persistence.** Specify UR-owned snapshot, plan, candidate, recipe, review, and outcome contracts, retention, and restore validators. Existing DATA schemas supply no implicit implementation.
+3. **Shared identities and category suggestions.** Adopt Party candidates with owner/provider projections; all linking and existing/create/skip category decisions require review. Similarity is a suggestion only.
+4. **Snapshot consistency and fidelity.** Specify formula/cache/date-system/hidden/color metadata and bounded multi-request Sheets capture. A values-only grid cannot meet all layout requirements.
+5. **Approval meaning.** AI approval adopts a preview plan; final import authorization binds exact source, decisions, operations, and eligible dependencies. No confidence threshold can replace it.
+6. **Adapter qualification.** Compare heuristics, a qualified LLM, and Jev on the same held-out samples; measure correction effort and semantic accuracy before provider selection. Combined verification remains optional.
+7. **Domain atomicity and recovery.** Define caller-transaction operations, atomic dependency units, idempotency/correlation keys, stale-state checks, rollback, and partial-result reconciliation before writing official records.
+8. **Recipes and layout drift.** Use only constrained declarative transforms; preserve version/signature/lineage and invalidate stale mapping assumptions on every new source. Reuse is not authorization.
+9. **Limits and execution.** Qualify resource budgets, interruption, cancellation, persisted step recovery, and no-network/no-write parser behavior. Do not assume a ready background runner.
+10. **Coverage and expansion.** Expose unsupported fields and explicit exclusions. Leases, balances, history, generated scripts, arbitrary updates, custom-field schemas, and generic undo require new experimental backlog items and domain decisions; existing DATA items are not dependencies for them.
+
+The first experiment is a source-grounded XLSX reader for unfamiliar property/owner/provider layouts. A favorable evaluation can justify later independent review/import pilots; it does not automatically replace the established DATA workflows.
