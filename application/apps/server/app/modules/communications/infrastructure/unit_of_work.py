@@ -137,6 +137,18 @@ class _Transaction:
             CommunicationOperationModel.__table__.insert().values(**item.__dict__)
         )
 
+    def operation_by_id(self, operation_id):
+        row = (
+            self.connection.execute(
+                select(CommunicationOperationModel).where(
+                    CommunicationOperationModel.id == operation_id
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return CommunicationOperation(**dict(row)) if row else None
+
     def validate_participant(self, party_id, contact_id):
         return self.context.participant_snapshot(self.connection, party_id, contact_id)
 

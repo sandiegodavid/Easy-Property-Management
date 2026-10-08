@@ -1,6 +1,7 @@
 """Tenant role use cases over shared party identities and contacts."""
 
-from dataclasses import dataclass, replace
+import json
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
@@ -14,17 +15,13 @@ from app.modules.parties.domain.models import PartyContactMethod
 from app.modules.tenants.application.ports import TenantTransaction, TenantUnitOfWork
 from app.modules.tenants.domain.models import TenantProfile
 
-
-class TenantError(RuntimeError):
-    pass
-
-
-class TenantNotFoundError(TenantError):
-    pass
-
-
-class TenantConflictError(TenantError):
-    pass
+from app.modules.tenants.application.commands import TenantCommand, finish, start
+from app.modules.tenants.application.errors import (
+    TenantConflictError,
+    TenantError,
+    TenantNotFoundError,
+)
+from app.modules.parties.application.identity_commands import identifier as validate_identifier
 
 
 class PossibleDuplicatePartyError(TenantConflictError):
@@ -86,6 +83,10 @@ class TenantProfilePatchCommand:
             ):
                 raise TenantError("Preferred contact method ID must be nonblank or null.")
             object.__setattr__(self, "preferred_contact_method_id", identifier)
+            try:
+                validate_identifier(identifier)
+            except ValueError as error:
+                raise TenantError("Preferred contact method must be a canonical UUID.") from error
         if self.notes is not _UNSET:
             object.__setattr__(self, "notes", _optional(self.notes, "Notes", 4000))
 
@@ -103,20 +104,29 @@ class TenantService:
         self.unit_of_work = unit_of_work
         self.party_factory = party_factory
 
-    def create(self, command: TenantCreateCommand) -> dict[str, object]:
-        now, correlation = _now(), str(uuid4())
-        try:
-            party = self.party_factory.create(
-                PartyCreateCommand(command.party_kind, command.display_name), now
-            )
-        except PartyValidationError as error:
-            raise TenantError(str(error)) from error
-        profile = TenantProfile(
-            party.id, None, command.do_not_contact, command.notes, now, now, None
+    def create(
+        self, command: TenantCreateCommand, *, expected_revision: int, idempotency_key: str
+    ) -> dict[str, object]:
+        if not isinstance(command, TenantCreateCommand):
+            raise TenantError("A valid Tenant creation command is required.")
+        identity = TenantCommand(
+            "create", None, expected_revision, idempotency_key, asdict(command)
         )
-        methods = [_method(party.id, item, now) for item in command.contacts]
+        now, correlation = _now(), str(uuid4())
 
         def write(tx: TenantTransaction):
+            if replay := start(tx, identity):
+                return replay
+            try:
+                party = self.party_factory.create(
+                    PartyCreateCommand(command.party_kind, command.display_name), now
+                )
+            except PartyValidationError as error:
+                raise TenantError(str(error)) from error
+            profile = TenantProfile(
+                party.id, None, command.do_not_contact, command.notes, now, now, None
+            )
+            methods = [_method(party.id, item, now) for item in command.contacts]
             _unique(methods)
             duplicates = tx.duplicate_party_ids(methods, 10)
             if duplicates and not command.confirmed_new_party:
@@ -128,7 +138,7 @@ class TenantService:
                 entity_id=party.id,
                 action="created",
                 before=None,
-                after=party.to_dict(),
+                after=party.identity_snapshot(),
                 reason="tenant_created",
                 correlation_id=correlation,
             )
@@ -152,15 +162,27 @@ class TenantService:
                     reason="party_contact_created",
                     correlation_id=correlation,
                 )
-            return _view(party, profile, methods)
+            return finish(tx, identity, profile, _view(party, profile, methods), now, correlation)
 
         return self.unit_of_work.write(write)
 
-    def designate(self, party_id: str, *, notes: str | None = None) -> dict[str, object]:
+    def designate(
+        self,
+        party_id: str,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+        notes: str | None = None,
+    ) -> dict[str, object]:
         now, correlation = _now(), str(uuid4())
         notes = _optional(notes, "Notes", 4000)
+        identity = TenantCommand(
+            "designate", party_id, expected_revision, idempotency_key, {"notes": notes}
+        )
 
         def write(tx: TenantTransaction):
+            if replay := start(tx, identity):
+                return replay
             party = tx.party(party_id)
             if party is None:
                 raise KeyError
@@ -179,7 +201,9 @@ class TenantService:
                 reason="tenant_designated",
                 correlation_id=correlation,
             )
-            return _view(party, profile, [])
+            return finish(
+                tx, identity, profile, _view(party, profile, tx.methods(party_id)), now, correlation
+            )
 
         return self._write(write)
 
@@ -202,13 +226,22 @@ class TenantService:
         ]
 
     def update_profile(
-        self, party_id: str, command: TenantProfilePatchCommand
+        self,
+        party_id: str,
+        command: TenantProfilePatchCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
     ) -> dict[str, object]:
         if not isinstance(command, TenantProfilePatchCommand):
             raise TenantError("A valid tenant profile patch is required.")
         now, correlation = _now(), str(uuid4())
+        payload = {name: value for name, value in command.__dict__.items() if value is not _UNSET}
+        identity = TenantCommand("patch", party_id, expected_revision, idempotency_key, payload)
 
         def write(tx: TenantTransaction):
+            if replay := start(tx, identity):
+                return replay
             profile = tx.profile(party_id)
             if profile is None:
                 raise KeyError
@@ -232,8 +265,17 @@ class TenantService:
                 if command.do_not_contact is _UNSET
                 else command.do_not_contact,
                 notes=profile.notes if command.notes is _UNSET else command.notes,
-                updated_at=now,
             )
+            if updated == profile:
+                return finish(
+                    tx,
+                    identity,
+                    profile,
+                    _view(tx.party(party_id), profile, methods),
+                    now,
+                    correlation,
+                )
+            updated = replace(updated, updated_at=now, revision=profile.revision + 1)
             tx.replace_profile(updated)
             tx.record_change(
                 entity_type="tenant_profile",
@@ -245,22 +287,35 @@ class TenantService:
                 correlation_id=correlation,
             )
             party = tx.party(party_id)
-            return _view(party, updated, methods)
+            return finish(tx, identity, updated, _view(party, updated, methods), now, correlation)
 
         return self._write(write)
 
-    def archive(self, party_id: str, *, confirmed: bool) -> dict[str, object]:
-        return self._set_archived(party_id, confirmed, True)
+    def archive(
+        self, party_id: str, *, confirmed: bool, expected_revision: int, idempotency_key: str
+    ) -> dict[str, object]:
+        return self._set_archived(party_id, confirmed, True, expected_revision, idempotency_key)
 
-    def restore(self, party_id: str) -> dict[str, object]:
-        return self._set_archived(party_id, True, False)
+    def restore(
+        self, party_id: str, *, expected_revision: int, idempotency_key: str
+    ) -> dict[str, object]:
+        return self._set_archived(party_id, True, False, expected_revision, idempotency_key)
 
-    def _set_archived(self, party_id, confirmed, archive):
+    def _set_archived(self, party_id, confirmed, archive, expected_revision, idempotency_key):
         if confirmed is not True:
             raise TenantError("Archiving a tenant requires explicit confirmation.")
         now, correlation = _now(), str(uuid4())
+        identity = TenantCommand(
+            "archive" if archive else "restore",
+            party_id,
+            expected_revision,
+            idempotency_key,
+            {"confirmed": confirmed} if archive else {},
+        )
 
         def write(tx: TenantTransaction):
+            if replay := start(tx, identity):
+                return replay
             profile = tx.profile(party_id)
             if profile is None:
                 raise KeyError
@@ -271,7 +326,12 @@ class TenantService:
                 raise TenantConflictError(
                     "A tenant with current or scheduled lease participation cannot be archived."
                 )
-            updated = replace(profile, archived_at=now if archive else None, updated_at=now)
+            updated = replace(
+                profile,
+                archived_at=now if archive else None,
+                updated_at=now,
+                revision=profile.revision + 1,
+            )
             tx.replace_profile(updated)
             tx.record_change(
                 entity_type="tenant_profile",
@@ -282,9 +342,28 @@ class TenantService:
                 reason="tenant_archived" if archive else "tenant_restored",
                 correlation_id=correlation,
             )
-            return _view(tx.party(party_id), updated, tx.methods(party_id))
+            return finish(
+                tx,
+                identity,
+                updated,
+                _view(tx.party(party_id), updated, tx.methods(party_id)),
+                now,
+                correlation,
+            )
 
         return self._write(write)
+
+    def recover(self, *, operation_id=None, key=None):
+        if (operation_id is None) == (key is None):
+            raise TenantError("Choose one receipt identity.")
+        try:
+            validate_identifier(operation_id if operation_id is not None else key)
+        except (ValueError, TypeError) as error:
+            raise TenantError("Receipt identity must be a canonical UUID.") from error
+        row = self.unit_of_work.operation(operation_id=operation_id, key=key)
+        if row is None:
+            raise TenantNotFoundError("Tenant command receipt was not found.")
+        return json.loads(row["result_json"])
 
     def _write(self, operation):
         try:
@@ -330,6 +409,8 @@ def _require_active(profile):
 def _view(party, profile, methods):
     return {
         **party.to_dict(),
+        "revision": profile.revision,
+        "partyRevision": party.revision,
         "profile": profile.to_dict(),
         "contactMethods": [item.to_dict() for item in methods],
     }

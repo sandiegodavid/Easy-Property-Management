@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
+from json import loads
 from datetime import UTC, date, datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from app.modules.finance.application.commands import (
+    FinanceCommandIdentity,
+    FinanceCommandOutcome,
+    FinanceScope,
+    apply_finance_command,
+    validate_command_concurrency,
+)
 from app.modules.finance.application.expense_ports import ExpenseUnitOfWork
+from app.modules.finance.application.category_commands import (
+    ExpenseCategoryCommand,
+    start_category,
+    finish_category,
+)
+from app.modules.finance.application.commands import canonical_uuid
 from app.modules.finance.domain.expense_models import (
     CategoryCreateCommand,
     CategoryPatchCommand,
@@ -48,12 +62,22 @@ class ExpenseService:
             lambda tx: [item.to_dict() for item in tx.categories(include_archived)]
         )
 
-    def create_category(self, command: CategoryCreateCommand):
+    def create_category(
+        self, command: CategoryCreateCommand, *, expected_revision: int, idempotency_key: str
+    ):
+        receipt = ExpenseCategoryCommand(
+            "create", None, expected_revision, idempotency_key, asdict(command)
+        )
+
         def operation(tx):
+            prior = start_category(tx, receipt)
+            if prior is not None:
+                return prior
             normalized = category_normalized_name(command.display_name)
             if tx.category_by_name(normalized) is not None:
                 raise FinanceConflictError("An expense category with this name already exists.")
             stamp = _stamp(self.now())
+            correlation = str(uuid4())
             item = ExpenseCategory(
                 str(uuid4()),
                 command.display_name,
@@ -72,14 +96,32 @@ class ExpenseService:
                 before=None,
                 after=item.to_dict(),
                 reason=None,
-                correlation_id=str(uuid4()),
+                correlation_id=correlation,
             )
-            return item.to_dict()
+            return finish_category(tx, receipt, item, stamp, correlation)
 
         return self.unit_of_work.write(operation)
 
-    def patch_category(self, category_id: str, command: CategoryPatchCommand):
+    def patch_category(
+        self,
+        category_id: str,
+        command: CategoryPatchCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
+        receipt = ExpenseCategoryCommand(
+            "patch",
+            category_id,
+            expected_revision,
+            idempotency_key,
+            {field: getattr(command, field) for field in command.fields},
+        )
+
         def operation(tx):
+            prior = start_category(tx, receipt)
+            if prior is not None:
+                return prior
             old = tx.category(category_id)
             if old is None:
                 raise FinanceNotFoundError("Expense category was not found.")
@@ -94,15 +136,17 @@ class ExpenseService:
             duplicate = tx.category_by_name(normalized)
             if duplicate is not None and duplicate.id != old.id:
                 raise FinanceConflictError("An expense category with this name already exists.")
+            stamp, correlation = _stamp(self.now()), str(uuid4())
             if (name, description, order) == (old.display_name, old.description, old.display_order):
-                return old.to_dict()
+                return finish_category(tx, receipt, old, stamp, correlation)
             new = replace(
                 old,
                 display_name=name,
                 normalized_name=normalized,
                 description=description,
                 display_order=order,
-                updated_at=_stamp(self.now()),
+                updated_at=stamp,
+                revision=old.revision + 1,
             )
             tx.replace_category(new)
             tx.record_change(
@@ -112,20 +156,59 @@ class ExpenseService:
                 before=old.to_dict(),
                 after=new.to_dict(),
                 reason=None,
-                correlation_id=str(uuid4()),
+                correlation_id=correlation,
             )
-            return new.to_dict()
+            return finish_category(tx, receipt, new, stamp, correlation)
 
         return self.unit_of_work.write(operation)
 
-    def archive_category(self, category_id: str, command: VoidCommand):
-        return self._category_lifecycle(category_id, command, archive=True)
+    def archive_category(
+        self,
+        category_id: str,
+        command: VoidCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
+        return self._category_lifecycle(
+            category_id,
+            command,
+            archive=True,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+        )
 
-    def restore_category(self, category_id: str, command: VoidCommand):
-        return self._category_lifecycle(category_id, command, archive=False)
+    def restore_category(
+        self,
+        category_id: str,
+        command: VoidCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
+        return self._category_lifecycle(
+            category_id,
+            command,
+            archive=False,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+        )
 
-    def _category_lifecycle(self, category_id, command, *, archive):
+    def _category_lifecycle(
+        self, category_id, command, *, archive, expected_revision, idempotency_key
+    ):
+        receipt = ExpenseCategoryCommand(
+            "archive" if archive else "restore",
+            category_id,
+            expected_revision,
+            idempotency_key,
+            asdict(command),
+        )
+
         def operation(tx):
+            prior = start_category(tx, receipt)
+            if prior is not None:
+                return prior
             old = tx.category(category_id)
             if old is None:
                 raise FinanceNotFoundError("Expense category was not found.")
@@ -141,10 +224,12 @@ class ExpenseService:
                     and duplicate.archived_at is None
                 ):
                     raise FinanceConflictError("An active category already uses this name.")
+            stamp, correlation = _stamp(self.now()), str(uuid4())
             new = replace(
                 old,
-                archived_at=_stamp(self.now()) if archive else None,
-                updated_at=_stamp(self.now()),
+                archived_at=stamp if archive else None,
+                updated_at=stamp,
+                revision=old.revision + 1,
             )
             tx.replace_category(new)
             tx.record_change(
@@ -154,27 +239,44 @@ class ExpenseService:
                 before=old.to_dict(),
                 after={**new.to_dict(), "lifecycleReason": command.reason},
                 reason=None,
-                correlation_id=str(uuid4()),
+                correlation_id=correlation,
             )
-            return new.to_dict()
+            return finish_category(tx, receipt, new, stamp, correlation)
 
         return self.unit_of_work.write(operation)
 
-    def record_expense(self, command: ExpenseCreateCommand):
+    def category_operation(self, operation_id: str):
+        canonical_uuid(operation_id)
+        return self.unit_of_work.read(
+            lambda tx: self._category_result(tx.category_operation(operation_id))
+        )
+
+    def category_operation_by_key(self, key: str):
+        canonical_uuid(key)
+        return self.unit_of_work.read(
+            lambda tx: self._category_result(tx.category_operation_by_key(key))
+        )
+
+    @staticmethod
+    def _category_result(row):
+        if row is None:
+            raise FinanceNotFoundError("Expense category operation was not found.")
+        return loads(row["result_json"])
+
+    def record_expense(self, command: ExpenseCreateCommand, *, expected_revision: int):
+        instant = self.now()
+        expense_id = str(uuid4())
+
         def operation(tx):
             old = tx.expense_by_key(command.idempotency_key)
             if old is not None:
-                if not _expense_command_matches(old, command):
-                    raise FinanceConflictError(
-                        "Idempotency key was already used for a different expense."
-                    )
-                return self._view(tx, old)
+                raise FinanceConflictError("Expense key has no matching immutable command receipt.")
             context = tx.portfolio_context(command.property_id, command.space_id, command.paid_on)
             if context is None:
                 raise FinanceNotFoundError("Expense property or space was not found.")
             if (
                 date.fromisoformat(command.paid_on)
-                > self.now().astimezone(ZoneInfo(str(context["timeZone"]))).date()
+                > instant.astimezone(ZoneInfo(str(context["timeZone"]))).date()
             ):
                 raise FinanceError("Paid date cannot be in the future for the property.")
             category = tx.category(command.category_id)
@@ -219,9 +321,9 @@ class ExpenseService:
                     raise FinanceConflictError(
                         "Party payer was not a client owner on the paid date."
                     )
-            stamp = _stamp(self.now())
+            stamp = _stamp(instant)
             item = Expense(
-                str(uuid4()),
+                expense_id,
                 command.idempotency_key,
                 expense_request_fingerprint(command),
                 command.property_id,
@@ -272,14 +374,36 @@ class ExpenseService:
                 before=None,
                 after=snapshot,
                 reason=None,
-                correlation_id=str(uuid4()),
+                correlation_id=correlation,
             )
             return self._view(tx, item)
 
-        return self.unit_of_work.write(operation)
+        correlation = str(uuid4())
+        return self._command_write(
+            operation,
+            action="record_expense",
+            target_id=None,
+            scope_id=expense_id,
+            command=command,
+            expected_revision=expected_revision,
+            idempotency_key=command.idempotency_key,
+            instant=instant,
+            correlation=correlation,
+        )
 
-    def patch_expense(self, expense_id: str, command: ExpensePatchCommand):
+    def patch_expense(
+        self,
+        expense_id: str,
+        command: ExpensePatchCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
+        instant, correlation = self.now(), str(uuid4())
+        effective = False
+
         def operation(tx):
+            nonlocal effective
             old = tx.expense(expense_id)
             if old is None:
                 raise FinanceNotFoundError("Expense was not found.")
@@ -304,7 +428,8 @@ class ExpenseService:
                     )
             if (category_id, notes) == (old.category_id, old.notes):
                 return self._view(tx, old)
-            new = replace(old, category_id=category_id, notes=notes, updated_at=_stamp(self.now()))
+            effective = True
+            new = replace(old, category_id=category_id, notes=notes, updated_at=_stamp(instant))
             tx.replace_expense(new)
             snapshot = _expense_snapshot(new)
             snapshot["categoryChangeReason"] = command.category_change_reason
@@ -316,13 +441,33 @@ class ExpenseService:
                 before=_expense_snapshot(old),
                 after=snapshot,
                 reason=None,
-                correlation_id=str(uuid4()),
+                correlation_id=correlation,
             )
             return self._view(tx, new)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="patch_expense",
+            target_id=expense_id,
+            scope_id=expense_id,
+            command=command,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            correlation=correlation,
+            effective=lambda: effective,
+        )
 
-    def void_expense(self, expense_id: str, command: VoidCommand):
+    def void_expense(
+        self,
+        expense_id: str,
+        command: VoidCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
+        instant, correlation = self.now(), str(uuid4())
+
         def operation(tx):
             old = tx.expense(expense_id)
             if old is None:
@@ -333,9 +478,9 @@ class ExpenseService:
                 raise FinanceConflictError("An expense with an active refund cannot be voided.")
             new = replace(
                 old,
-                voided_at=_stamp(self.now()),
+                voided_at=_stamp(instant),
                 void_reason=command.reason,
-                updated_at=_stamp(self.now()),
+                updated_at=_stamp(instant),
             )
             tx.replace_expense(new)
             tx.record_change(
@@ -345,21 +490,35 @@ class ExpenseService:
                 before=_expense_snapshot(old),
                 after=_expense_snapshot(new),
                 reason=None,
-                correlation_id=str(uuid4()),
+                correlation_id=correlation,
             )
             return self._view(tx, new)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="void_expense",
+            target_id=expense_id,
+            scope_id=expense_id,
+            command=command,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            correlation=correlation,
+        )
 
-    def record_refund(self, expense_id: str, command: RefundCreateCommand):
+    def record_refund(
+        self,
+        expense_id: str,
+        command: RefundCreateCommand,
+        *,
+        expected_revision: int,
+    ):
+        instant, correlation = self.now(), str(uuid4())
+
         def operation(tx):
             old = tx.refund_by_key(command.idempotency_key)
             if old is not None:
-                if not _refund_command_matches(old, expense_id, command):
-                    raise FinanceConflictError(
-                        "Idempotency key was already used for a different refund."
-                    )
-                return _refund_view(old)
+                raise FinanceConflictError("Refund key has no matching immutable command receipt.")
             expense = tx.expense(expense_id)
             if expense is None:
                 raise FinanceNotFoundError("Expense was not found.")
@@ -371,7 +530,7 @@ class ExpenseService:
             received = date.fromisoformat(command.received_on)
             if received < date.fromisoformat(expense.paid_on):
                 raise FinanceError("Refund date cannot precede the expense date.")
-            if received > self.now().astimezone(ZoneInfo(str(context["timeZone"]))).date():
+            if received > instant.astimezone(ZoneInfo(str(context["timeZone"]))).date():
                 raise FinanceError("Refund date cannot be in the future for the property.")
             item = ExpenseRefund(
                 str(uuid4()),
@@ -384,7 +543,7 @@ class ExpenseService:
                 command.replaces_refund_id,
                 None,
                 None,
-                _stamp(self.now()),
+                _stamp(instant),
             )
             if command.replaces_refund_id is not None:
                 replaced = tx.refund(command.replaces_refund_id)
@@ -409,20 +568,39 @@ class ExpenseService:
                 before=None,
                 after=item.to_dict(),
                 reason=None,
-                correlation_id=str(uuid4()),
+                correlation_id=correlation,
             )
             return _refund_view(item)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="record_refund",
+            target_id=expense_id,
+            scope_id=expense_id,
+            command=command,
+            expected_revision=expected_revision,
+            idempotency_key=command.idempotency_key,
+            instant=instant,
+            correlation=correlation,
+        )
 
-    def void_refund(self, refund_id: str, command: VoidCommand):
+    def void_refund(
+        self,
+        refund_id: str,
+        command: VoidCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
+        instant, correlation = self.now(), str(uuid4())
+
         def operation(tx):
             old = tx.refund(refund_id)
             if old is None:
                 raise FinanceNotFoundError("Expense refund was not found.")
             if old.voided_at is not None:
                 raise FinanceConflictError("Expense refund is already voided.")
-            new = replace(old, voided_at=_stamp(self.now()), void_reason=command.reason)
+            new = replace(old, voided_at=_stamp(instant), void_reason=command.reason)
             tx.replace_refund(new)
             tx.record_change(
                 entity_type="expense_refund",
@@ -431,11 +609,66 @@ class ExpenseService:
                 before=old.to_dict(),
                 after=new.to_dict(),
                 reason=None,
-                correlation_id=str(uuid4()),
+                correlation_id=correlation,
             )
             return _refund_view(new)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="void_refund",
+            target_id=refund_id,
+            scope_id=None,
+            command=command,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            correlation=correlation,
+        )
+
+    def _command_write(
+        self,
+        operation,
+        *,
+        action,
+        target_id,
+        scope_id,
+        command,
+        expected_revision,
+        idempotency_key,
+        instant,
+        correlation,
+        effective=lambda: True,
+    ):
+        validate_command_concurrency(expected_revision, idempotency_key)
+        payload = asdict(command)
+        if "fields" in payload:
+            payload["fields"] = sorted(payload["fields"])
+
+        def write(tx):
+            prior = tx.commands.command_operation(idempotency_key)
+            resolved = prior["scope_id"] if prior is not None else scope_id
+            if resolved is None:
+                refund = tx.refund(target_id)
+                if refund is None:
+                    raise FinanceNotFoundError("Expense refund was not found.")
+                resolved = refund.expense_id
+            identity = FinanceCommandIdentity(
+                FinanceScope("expense", resolved),
+                action,
+                target_id or resolved,
+                expected_revision,
+                idempotency_key,
+                payload,
+            )
+            return apply_finance_command(
+                tx.commands,
+                identity,
+                lambda _: FinanceCommandOutcome(operation(tx), effective()),
+                instant=instant,
+                correlation_id=correlation,
+            )
+
+        return self.unit_of_work.write(write)
 
     def expense(self, expense_id: str):
         def operation(tx):
@@ -445,6 +678,14 @@ class ExpenseService:
             return self._view(tx, item)
 
         return self.unit_of_work.read(operation)
+
+    def revision(self, expense_id: str) -> int:
+        def read(tx):
+            if tx.expense(expense_id) is None:
+                raise FinanceNotFoundError("Expense was not found.")
+            return tx.commands.command_revision(FinanceScope("expense", expense_id))
+
+        return self.unit_of_work.read(read)
 
     def list_expenses(self, command: ExpenseQueryCommand | None = None):
         if command is None:
@@ -484,6 +725,7 @@ class ExpenseService:
         values.pop("requestFingerprint")
         return {
             **values,
+            "expenseRevision": projection["revisions"].get(item.id, 0),
             "amount": amount_text(item.amount_minor),
             "category": category.to_dict(),
             "property": {"id": context["propertyId"], "displayName": context["propertyName"]},
@@ -501,30 +743,10 @@ class ExpenseService:
         }
 
 
-def _expense_command_matches(
-    item: Expense,
-    command: ExpenseCreateCommand,
-) -> bool:
-    return item.request_fingerprint == expense_request_fingerprint(command)
-
-
 def _expense_snapshot(item: Expense) -> dict[str, object]:
     values = item.to_dict()
     values.pop("requestFingerprint")
     return values
-
-
-def _refund_command_matches(
-    item: ExpenseRefund, expense_id: str, command: RefundCreateCommand
-) -> bool:
-    return (
-        item.expense_id == expense_id
-        and item.received_on == command.received_on
-        and item.amount_minor == command.amount_minor
-        and item.currency_code == command.currency_code
-        and item.notes == command.notes
-        and item.replaces_refund_id == command.replaces_refund_id
-    )
 
 
 def _same_payee_identity(left: Expense, right: Expense) -> bool:

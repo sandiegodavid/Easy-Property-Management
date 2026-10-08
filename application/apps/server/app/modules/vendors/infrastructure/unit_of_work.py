@@ -30,6 +30,8 @@ from app.modules.vendors.infrastructure.sqlalchemy_models import (
     ProviderCategoryAssignmentModel,
     ProviderCategoryModel,
     ProviderProfileModel,
+    ProviderCommandOperationModel,
+    ProviderCategoryCommandOperationModel,
     ProviderReferenceModel,
     ProviderReputationLinkModel,
     ProviderServiceAreaModel,
@@ -66,6 +68,16 @@ class SQLiteProviderUnitOfWork(ProviderUnitOfWork):
                     "The provider changed concurrently or conflicts with an active record."
                 ) from error
             raise
+
+    def operation(self, *, operation_id=None, key=None):
+        table = ProviderCommandOperationModel.__table__
+        predicate = (
+            table.c.id == operation_id
+            if operation_id is not None
+            else table.c.idempotency_key == key
+        )
+        with self.engine.connect() as connection:
+            return connection.execute(table.select().where(predicate)).mappings().first()
 
     def detail(self, party_id, *, include_archived):
         with Session(self.engine) as session:
@@ -129,33 +141,18 @@ class SQLiteProviderUnitOfWork(ProviderUnitOfWork):
             ]
 
     def effective_assignment_counts(self, category_ids):
-        category_ids = set(category_ids)
-        if not category_ids:
-            return {}
-        with Session(self.engine) as session:
-            rows = session.execute(
-                select(
-                    ProviderCategoryAssignmentModel.category_id,
-                    func.count(ProviderCategoryAssignmentModel.id),
-                )
-                .join(
-                    ProviderProfileModel,
-                    ProviderProfileModel.party_id
-                    == ProviderCategoryAssignmentModel.provider_party_id,
-                )
-                .join(
-                    ProviderCategoryModel,
-                    ProviderCategoryModel.id == ProviderCategoryAssignmentModel.category_id,
-                )
-                .where(
-                    ProviderCategoryAssignmentModel.category_id.in_(category_ids),
-                    ProviderCategoryAssignmentModel.archived_at.is_(None),
-                    ProviderCategoryModel.archived_at.is_(None),
-                    ProviderProfileModel.archived_at.is_(None),
-                )
-                .group_by(ProviderCategoryAssignmentModel.category_id)
-            ).all()
-        return {category_id: int(count) for category_id, count in rows}
+        with self.engine.connect() as connection:
+            return _effective_counts(connection, category_ids)
+
+    def category_operation(self, *, operation_id=None, key=None):
+        table = ProviderCategoryCommandOperationModel.__table__
+        predicate = (
+            table.c.id == operation_id
+            if operation_id is not None
+            else table.c.idempotency_key == key
+        )
+        with self.engine.connect() as connection:
+            return connection.execute(table.select().where(predicate)).mappings().first()
 
     def list(
         self,
@@ -290,6 +287,35 @@ class SQLiteProviderUnitOfWork(ProviderUnitOfWork):
 
 
 class _Transaction:
+    def operation_by_key(self, key):
+        table = ProviderCommandOperationModel.__table__
+        return (
+            self.connection.execute(table.select().where(table.c.idempotency_key == key))
+            .mappings()
+            .first()
+        )
+
+    def category_operation_by_key(self, key):
+        table = ProviderCategoryCommandOperationModel.__table__
+        return (
+            self.connection.execute(table.select().where(table.c.idempotency_key == key))
+            .mappings()
+            .first()
+        )
+
+    def insert_category_operation(self, operation):
+        self.connection.execute(
+            ProviderCategoryCommandOperationModel.__table__.insert().values(**operation)
+        )
+
+    def effective_assignment_counts(self, category_ids):
+        return _effective_counts(self.connection, category_ids)
+
+    def insert_operation(self, operation):
+        self.connection.execute(
+            ProviderCommandOperationModel.__table__.insert().values(**operation)
+        )
+
     def __init__(
         self,
         connection: Any,
@@ -360,18 +386,6 @@ class _Transaction:
             ).mappings()
         ]
 
-    def category_by_create_key(self, key):
-        row = (
-            self.connection.execute(
-                ProviderCategoryModel.__table__.select().where(
-                    ProviderCategoryModel.create_idempotency_key == key
-                )
-            )
-            .mappings()
-            .first()
-        )
-        return _category(row) if row else None
-
     def assignments(self, party_id, *, include_archived=True):
         query = (
             ProviderCategoryAssignmentModel.__table__.select()
@@ -389,18 +403,6 @@ class _Transaction:
             self.connection.execute(
                 ProviderCategoryAssignmentModel.__table__.select().where(
                     ProviderCategoryAssignmentModel.id == assignment_id
-                )
-            )
-            .mappings()
-            .first()
-        )
-        return _assignment(row) if row else None
-
-    def assignment_by_create_key(self, key):
-        row = (
-            self.connection.execute(
-                ProviderCategoryAssignmentModel.__table__.select().where(
-                    ProviderCategoryAssignmentModel.create_idempotency_key == key
                 )
             )
             .mappings()
@@ -585,6 +587,7 @@ def _profile(row):
         row.created_at,
         row.updated_at,
         row.archived_at,
+        row.revision,
     )
 
 
@@ -677,6 +680,7 @@ def _category(row):
         row.archive_reason,
         row.create_idempotency_key,
         row.create_request_fingerprint,
+        row.revision,
     )
 
 
@@ -734,3 +738,31 @@ def _assignment_pairs(session, party_ids, *, include_archived):
             )
         )
     return pairs
+
+
+def _effective_counts(connection, category_ids):
+    category_ids = set(category_ids)
+    if not category_ids:
+        return {}
+    rows = connection.execute(
+        select(
+            ProviderCategoryAssignmentModel.category_id,
+            func.count(ProviderCategoryAssignmentModel.id),
+        )
+        .join(
+            ProviderProfileModel,
+            ProviderProfileModel.party_id == ProviderCategoryAssignmentModel.provider_party_id,
+        )
+        .join(
+            ProviderCategoryModel,
+            ProviderCategoryModel.id == ProviderCategoryAssignmentModel.category_id,
+        )
+        .where(
+            ProviderCategoryAssignmentModel.category_id.in_(category_ids),
+            ProviderCategoryAssignmentModel.archived_at.is_(None),
+            ProviderCategoryModel.archived_at.is_(None),
+            ProviderProfileModel.archived_at.is_(None),
+        )
+        .group_by(ProviderCategoryAssignmentModel.category_id)
+    ).all()
+    return {category_id: int(count) for category_id, count in rows}

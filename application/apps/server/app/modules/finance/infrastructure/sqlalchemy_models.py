@@ -3,6 +3,7 @@
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.modules.finance.infrastructure.command_models import _uuid_check
 from app.platform.sqlalchemy_models import LocalBase
 
 
@@ -221,8 +222,10 @@ class ExpenseCategoryModel(LocalBase):
     archived_at: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     __table_args__ = (
         CheckConstraint("length(trim(display_name)) BETWEEN 1 AND 100"),
+        CheckConstraint("typeof(revision) = 'integer' AND revision >= 1"),
         CheckConstraint("length(trim(normalized_name)) BETWEEN 1 AND 100"),
         CheckConstraint("description IS NULL OR length(trim(description)) BETWEEN 1 AND 1000"),
         CheckConstraint("typeof(display_order) = 'integer' AND display_order BETWEEN 0 AND 10000"),
@@ -234,6 +237,58 @@ class ExpenseCategoryModel(LocalBase):
             sqlite_where=text("archived_at IS NULL"),
         ),
     )
+
+
+class ExpenseCategoryCommandOperationModel(LocalBase):
+    __tablename__ = "expense_category_command_operations"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    category_id: Mapped[str] = mapped_column(ForeignKey("expense_categories.id"), nullable=False)
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    request_json: Mapped[str] = mapped_column(String, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    expected_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    resulting_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    result_json: Mapped[str] = mapped_column(String, nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint("action IN ('create','patch','archive','restore')"),
+        CheckConstraint("typeof(expected_revision) = 'integer' AND expected_revision >= 0"),
+        CheckConstraint(
+            "typeof(resulting_revision) = 'integer' AND resulting_revision >= 1 "
+            "AND resulting_revision IN (expected_revision, expected_revision + 1)"
+        ),
+        CheckConstraint(
+            "(action = 'create' AND expected_revision = 0 AND resulting_revision = 1) OR "
+            "(action = 'patch' AND expected_revision >= 1) OR "
+            "(action IN ('archive','restore') AND expected_revision >= 1 AND resulting_revision = expected_revision + 1)"
+        ),
+        CheckConstraint(
+            "length(request_fingerprint) = 64 AND request_fingerprint NOT GLOB '*[^0-9a-f]*'"
+        ),
+        CheckConstraint("json_valid(request_json) AND json_valid(result_json)"),
+        CheckConstraint("json_type(request_json) = 'object' AND json_type(result_json) = 'object'"),
+        *(
+            CheckConstraint(_uuid_check(column))
+            for column in ("id", "category_id", "idempotency_key", "correlation_id")
+        ),
+        Index("expense_category_command_operations_category", "category_id", "created_at"),
+    )
+
+
+CATEGORY_COMMAND_TRIGGERS = {
+    f"expense_category_command_operations_no_{action}": (
+        f"CREATE TRIGGER expense_category_command_operations_no_{action} BEFORE {action.upper()} "
+        "ON expense_category_command_operations BEGIN SELECT RAISE(ABORT, 'category operations are immutable'); END"
+    )
+    for action in ("update", "delete")
+}
+CATEGORY_COMMAND_TRIGGERS["expense_category_command_operations_no_replace"] = """
+CREATE TRIGGER expense_category_command_operations_no_replace BEFORE INSERT ON expense_category_command_operations
+WHEN EXISTS (SELECT 1 FROM expense_category_command_operations WHERE id = NEW.id OR idempotency_key = NEW.idempotency_key)
+BEGIN SELECT RAISE(ABORT, 'category operations are immutable'); END
+"""
 
 
 class ExpenseModel(LocalBase):

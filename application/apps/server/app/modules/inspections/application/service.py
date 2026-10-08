@@ -6,8 +6,19 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import uuid4
+import hashlib
 
 from app.modules.inspections.application.attention import inspection_attention
+from app.modules.inspections.application.commands import (
+    InspectionError,
+    InspectionNotFoundError,
+    InspectionConflictError,
+    InspectionRevisionConflict,
+    InspectionCommandReceipt,
+    canonical_json,
+    fingerprint,
+    validate_command,
+)
 from app.modules.inspections.application.ports import (
     InspectionEvidenceStore,
     InspectionUnitOfWork,
@@ -34,18 +45,6 @@ COMPARES = {
     "maintenance_needed",
     "not_comparable",
 }
-
-
-class InspectionError(ValueError):
-    pass
-
-
-class InspectionNotFoundError(InspectionError):
-    pass
-
-
-class InspectionConflictError(InspectionError):
-    pass
 
 
 def _date(value, label):
@@ -118,6 +117,100 @@ class InspectionService:
         self.unit_of_work = unit_of_work
         self.files = files
 
+    def recover_command(self, *, operation_id=None, idempotency_key=None):
+        from uuid import UUID
+
+        if (operation_id is None) == (idempotency_key is None):
+            raise InspectionError("Supply exactly one operation ID or idempotency key.")
+        value = operation_id if operation_id is not None else idempotency_key
+        try:
+            if str(UUID(value)) != value:
+                raise ValueError
+        except (ValueError, TypeError, AttributeError) as error:
+            raise InspectionError("Command lookup requires a canonical UUID.") from error
+        receipt = self.unit_of_work.command_lookup(
+            operation_id=operation_id, idempotency_key=idempotency_key
+        )
+        if receipt is None:
+            raise InspectionNotFoundError("Inspection command was not found.")
+        return receipt.result()
+
+    def _command(
+        self,
+        tx,
+        *,
+        action,
+        target_kind,
+        target_id,
+        request,
+        expected_revision,
+        idempotency_key,
+        correlation,
+        write,
+    ):
+        request = {
+            "targetKind": target_kind,
+            "targetId": target_id,
+            "expectedRevision": expected_revision,
+            "payload": request,
+        }
+        previous = tx.command_by_key(idempotency_key)
+        if previous is not None:
+            return previous.replay(action, request)
+        scope_kind, scope_id = target_kind, target_id
+        if target_kind == "report":
+            report = tx.report(target_id)
+            if report is None:
+                raise InspectionNotFoundError("Condition report was not found.")
+            scope_kind, scope_id = "lease", report.lease_id
+        elif target_kind == "observation":
+            observation = tx.observation_context(target_id)
+            if observation is None:
+                raise InspectionNotFoundError("Condition observation was not found.")
+            scope_kind, scope_id = "lease", observation["lease_id"]
+        current = 0 if scope_id is None else tx.command_revision(scope_kind, scope_id)
+        if expected_revision != current:
+            snapshot = {"revision": current, "scopeKind": scope_kind, "scopeId": scope_id}
+            if target_kind == "report":
+                snapshot["report"] = tx.report_view(target_id)
+            elif target_kind == "template" and target_id is not None:
+                snapshot["template"] = tx.template_view(target_id)
+            raise InspectionRevisionConflict(snapshot)
+        value = write(tx)
+        if scope_id is None:
+            scope_id = value["id"]
+        revision, operation_id = current + 1, str(uuid4())
+        result = dict(value) if isinstance(value, dict) else {"comparisons": value}
+        result.update(revision=revision, operationId=operation_id)
+        receipt = InspectionCommandReceipt(
+            id=operation_id,
+            idempotency_key=idempotency_key,
+            action=action,
+            request_json=canonical_json(request),
+            request_fingerprint=fingerprint(action, request),
+            lease_id=scope_id if scope_kind == "lease" else None,
+            template_id=scope_id if scope_kind == "template" else None,
+            revision=revision,
+            result_json=canonical_json(result),
+            correlation_id=correlation,
+            created_at=_now(),
+        )
+        tx.insert_command(receipt)
+        self._audit(
+            tx,
+            "inspection_command_operation",
+            operation_id,
+            "recorded",
+            None,
+            receipt.__dict__,
+            correlation,
+        )
+        return result
+
+    def _write_command(self, write, **command):
+        validate_command(command["expected_revision"], command["idempotency_key"])
+        return self.unit_of_work.write(lambda tx: self._command(tx, write=write, **command))
+
     def get(self, report_id):
         value = self.unit_of_work.report_view(report_id)
         if value is None:
@@ -133,6 +226,7 @@ class InspectionService:
         today = date.today().isoformat()
         return {
             "reports": reports,
+            "revision": self.unit_of_work.command_revision("lease", lease_id),
             "attention": inspection_attention(
                 lease_status=lease["status"],
                 occupancy_starts_on=lease["occupancy_starts_on"],
@@ -148,7 +242,16 @@ class InspectionService:
     def list_templates(self):
         return self.unit_of_work.template_views()
 
-    def create_template(self, *, display_name, applicability="any", notes=None, areas=()):
+    def create_template(
+        self,
+        *,
+        expected_revision,
+        idempotency_key,
+        display_name,
+        applicability="any",
+        notes=None,
+        areas=(),
+    ):
         name = _text(display_name, "Template name", 160, True)
         if applicability not in {"residential", "office", "any"}:
             raise InspectionError("Unsupported checklist applicability.")
@@ -210,14 +313,30 @@ class InspectionService:
                         item.to_dict(),
                         correlation,
                     )
-            return template.id
+            return tx.template_view(template.id)
 
-        return self.unit_of_work.template_view(self.unit_of_work.write(write))
+        return self._write_command(
+            write,
+            action="template.create",
+            target_kind="template",
+            target_id=None,
+            request={
+                "display_name": name,
+                "applicability": applicability,
+                "notes": notes,
+                "areas": areas,
+            },
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            correlation=correlation,
+        )
 
     def patch_template(
         self,
         template_id,
         *,
+        expected_revision,
+        idempotency_key,
         display_name=None,
         applicability=None,
         notes=None,
@@ -294,14 +413,31 @@ class InspectionService:
                             entry.to_dict(),
                             correlation,
                         )
-            return updated.id
+            return tx.template_view(updated.id)
 
-        return self.unit_of_work.template_view(self.unit_of_work.write(write))
+        return self._write_command(
+            write,
+            action="template.patch",
+            target_kind="template",
+            target_id=template_id,
+            request={
+                "display_name": display_name,
+                "applicability": applicability,
+                "notes": notes,
+                "notes_provided": notes_provided,
+                "areas": areas,
+            },
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            correlation=correlation,
+        )
 
     def create(
         self,
         lease_id,
         *,
+        expected_revision,
+        idempotency_key,
         report_kind,
         walkthrough_on,
         conducted_by,
@@ -392,9 +528,29 @@ class InspectionService:
             self._ensure_acknowledgments(tx, report, correlation)
             return tx.report_view(report.id)
 
-        return self.unit_of_work.write(write)
+        return self._write_command(
+            write,
+            action="report.create",
+            target_kind="lease",
+            target_id=lease_id,
+            request={
+                "report_kind": report_kind,
+                "walkthrough_on": walkthrough,
+                "conducted_by": conducted_by,
+                "tenant_presence": tenant_presence,
+                "general_notes": general_notes,
+                "areas": areas,
+                "template_id": template_id,
+                "correction_of": correction_of,
+                "correction_reason": correction_reason,
+                "timing_exception_reason": timing_exception_reason,
+            },
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            correlation=correlation,
+        )
 
-    def replace_areas(self, report_id, areas):
+    def replace_areas(self, report_id, areas, *, expected_revision, idempotency_key):
         if not isinstance(areas, tuple) or any(not isinstance(x, AreaInput) for x in areas):
             raise InspectionError("Areas must be valid.")
         correlation = str(uuid4())
@@ -423,12 +579,23 @@ class InspectionService:
             self._replace_areas(tx, report, areas, correlation)
             return tx.report_view(report.id)
 
-        return self.unit_of_work.write(write)
+        return self._write_command(
+            write,
+            action="report.areas",
+            target_kind="report",
+            target_id=report_id,
+            request={"areas": areas},
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            correlation=correlation,
+        )
 
     def patch_report(
         self,
         report_id,
         *,
+        expected_revision,
+        idempotency_key,
         walkthrough_on=None,
         conducted_by=None,
         tenant_presence=None,
@@ -481,9 +648,24 @@ class InspectionService:
             )
             return tx.report_view(report.id)
 
-        return self.unit_of_work.write(write)
+        return self._write_command(
+            write,
+            action="report.patch",
+            target_kind="report",
+            target_id=report_id,
+            request={
+                "walkthrough_on": walkthrough_on,
+                "conducted_by": conducted_by,
+                "tenant_presence": tenant_presence,
+                "general_notes": general_notes,
+                "general_notes_provided": general_notes_provided,
+            },
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            correlation=correlation,
+        )
 
-    def acknowledge(self, report_id, acknowledgments):
+    def acknowledge(self, report_id, acknowledgments, *, expected_revision, idempotency_key):
         correlation = str(uuid4())
 
         def write(tx):
@@ -534,9 +716,26 @@ class InspectionService:
                 )
             return tx.report_view(report.id)
 
-        return self.unit_of_work.write(write)
+        return self._write_command(
+            write,
+            action="report.acknowledge",
+            target_kind="report",
+            target_id=report_id,
+            request={"acknowledgments": acknowledgments},
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            correlation=correlation,
+        )
 
-    def finalize(self, report_id, *, confirmed, timing_exception_reason=None):
+    def finalize(
+        self,
+        report_id,
+        *,
+        expected_revision,
+        idempotency_key,
+        confirmed,
+        timing_exception_reason=None,
+    ):
         if confirmed is not True:
             raise InspectionError("Finalization requires explicit confirmation.")
         correlation = str(uuid4())
@@ -621,7 +820,16 @@ class InspectionService:
             )
             return tx.report_view(report.id)
 
-        return self.unit_of_work.write(write)
+        return self._write_command(
+            write,
+            action="report.finalize",
+            target_kind="report",
+            target_id=report_id,
+            request={"confirmed": confirmed, "timing_exception_reason": timing_exception_reason},
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            correlation=correlation,
+        )
 
     def comparison(self, lease_id):
         if not self.unit_of_work.lease_exists(lease_id):
@@ -639,9 +847,10 @@ class InspectionService:
             "postReport": current.get("post_move_out"),
             "comparisons": comparisons,
             "requiresFreshReview": bool(current) and not comparisons,
+            "revision": self.unit_of_work.command_revision("lease", lease_id),
         }
 
-    def save_comparisons(self, lease_id, values):
+    def save_comparisons(self, lease_id, values, *, expected_revision, idempotency_key):
         correlation = str(uuid4())
 
         def write(tx):
@@ -726,11 +935,45 @@ class InspectionService:
                 result.append(item.to_dict())
             return result
 
-        return self.unit_of_work.write(write)
+        return self._write_command(
+            write,
+            action="comparison.review",
+            target_kind="lease",
+            target_id=lease_id,
+            request={"values": values},
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            correlation=correlation,
+        )
 
     def attach_evidence(
-        self, observation_id: str, source: Path, original_name: str, media_type: str, purpose: str
+        self,
+        observation_id: str,
+        source: Path,
+        original_name: str,
+        media_type: str,
+        purpose: str,
+        *,
+        expected_revision,
+        idempotency_key,
     ):
+        from app.modules.files.application.errors import (
+            MAX_FILE_BYTES,
+            normalize_filename,
+            normalize_media_type,
+        )
+
+        validate_command(expected_revision, idempotency_key)
+        original_name = normalize_filename(original_name)
+        media_type = normalize_media_type(media_type)
+        digest, size = hashlib.sha256(), 0
+        with source.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_FILE_BYTES:
+                    raise InspectionError("Evidence exceeds the 50 MiB limit.")
+                digest.update(chunk)
+        content_hash = digest.hexdigest()
         if self.files is None:
             raise InspectionError("Inspection evidence storage is not configured.")
         if purpose not in {"condition_photo", "supporting_document"}:
@@ -756,6 +999,8 @@ class InspectionService:
                 correlation_id=correlation,
                 owning_workflow=True,
             )
+            if item.content_sha256 != content_hash or item.size_bytes != size:
+                raise InspectionConflictError("Evidence changed during publication.")
             self._audit(
                 tx,
                 "condition_observation",
@@ -765,10 +1010,25 @@ class InspectionService:
                 {"fileId": item.id, "purpose": purpose},
                 correlation,
             )
-            return item
+            return item.to_dict() | {"available": item.storage_state == "available"}
 
         try:
-            item = self.unit_of_work.write(attach)
+            result = self._write_command(
+                attach,
+                action="evidence.attach",
+                target_kind="observation",
+                target_id=observation_id,
+                request={
+                    "original_name": original_name,
+                    "media_type": media_type,
+                    "purpose": purpose,
+                    "content_sha256": content_hash,
+                    "size_bytes": size,
+                },
+                expected_revision=expected_revision,
+                idempotency_key=idempotency_key,
+                correlation=correlation,
+            )
         except Exception as error:
             if batch is not None:
                 try:
@@ -776,8 +1036,12 @@ class InspectionService:
                 finally:
                     batch.persist_cleanup_attention()
             raise
-        batch.commit()
-        return self.files.get(item.id).to_dict()
+        if batch is not None:
+            try:
+                batch.commit()
+            finally:
+                batch.persist_cleanup_attention()
+        return result
 
     def _draft(self, tx, report_id):
         report = tx.report(report_id)

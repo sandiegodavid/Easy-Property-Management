@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
+from json import loads
+
 from sqlalchemy import inspect
 
+from app.modules.portfolio.application.status_contracts import ManualStatusMutationResponse
+from app.modules.portfolio.infrastructure.receipt_triggers import STATUS_OPERATION_TRIGGERS
 from app.platform.migration_errors import MigrationSchemaError
 
 
@@ -11,7 +16,15 @@ def validate_portfolio_schema(connection) -> None:
     inspector = inspect(connection)
     expected_columns = {
         "parties": (
-            {"id", "party_kind", "display_name", "created_at", "updated_at", "archived_at"},
+            {
+                "id",
+                "party_kind",
+                "display_name",
+                "created_at",
+                "updated_at",
+                "archived_at",
+                "revision",
+            },
             {"archived_at"},
         ),
         "properties": (
@@ -32,6 +45,7 @@ def validate_portfolio_schema(connection) -> None:
                 "archived_at",
                 "property_type",
                 "inventory_layout",
+                "property_revision",
             },
             {"address_line_2", "region", "postal_code", "notes", "archived_at"},
         ),
@@ -113,6 +127,106 @@ def validate_portfolio_schema(connection) -> None:
     _validate_indexes(connection, inspector, expected_columns)
     _validate_foreign_keys(inspector)
     _validate_checks(inspector, expected_columns)
+    _validate_retained_history(connection, inspector)
+    from app.modules.portfolio.infrastructure.inventory_validation import (
+        validate_inventory_commands,
+    )
+
+    validate_inventory_commands(connection)
+
+
+def _validate_retained_history(connection, inspector) -> None:
+    receipt_triggers = {
+        name: _normalise_sql(sql)
+        for name, sql in connection.exec_driver_sql(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' "
+            "AND tbl_name = 'space_status_operations'"
+        )
+    }
+    if receipt_triggers != {
+        name: _normalise_sql(sql) for name, sql in STATUS_OPERATION_TRIGGERS.items()
+    }:
+        raise MigrationSchemaError("PORT-003 receipt immutability triggers are incompatible.")
+    unique_keys = {
+        tuple(item["column_names"])
+        for item in inspector.get_unique_constraints("space_status_operations")
+    }
+    if unique_keys != {("idempotency_key",)}:
+        raise MigrationSchemaError("PORT-003 operation keys must be globally unique.")
+    triggers = dict(
+        connection.exec_driver_sql(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' "
+            "AND tbl_name = 'audit_events'"
+        ).all()
+    )
+    for action in ("update", "delete"):
+        name = f"audit_events_no_{action}"
+        expected = (
+            f"CREATE TRIGGER {name} BEFORE {action} ON audit_events "
+            "BEGIN SELECT RAISE(ABORT, 'audit events are append-only'); END"
+        )
+        if _normalise_sql(triggers.get(name, "")) != _normalise_sql(expected):
+            raise MigrationSchemaError("PORT-003 requires append-only audit history.")
+    invalid = connection.exec_driver_sql(
+        "SELECT s.id FROM spaces s LEFT JOIN space_status_operations o ON o.space_id = s.id "
+        "GROUP BY s.id HAVING typeof(s.status_revision) != 'integer' OR s.status_revision < 0 "
+        "OR count(o.id) != s.status_revision OR count(DISTINCT o.result_revision) != count(o.id) "
+        "OR (count(o.id) > 0 AND (min(o.result_revision) != 1 "
+        "OR max(o.result_revision) != s.status_revision)) LIMIT 1"
+    ).first()
+    if invalid is not None:
+        raise MigrationSchemaError("PORT-003 retained operation revisions are incomplete.")
+    rows = connection.exec_driver_sql("SELECT * FROM space_status_operations").mappings()
+    for operation in rows:
+        try:
+            _validate_receipt(operation)
+        except (ValueError, TypeError, KeyError, AttributeError) as error:
+            raise MigrationSchemaError("PORT-003 retained operation receipt is invalid.") from error
+
+
+def _validate_receipt(operation) -> None:
+    for field in ("id", "space_id", "idempotency_key", "request_fingerprint"):
+        if not isinstance(operation[field], str) or not operation[field].strip():
+            raise ValueError("Receipt identity is missing.")
+    revision = operation["result_revision"]
+    if type(revision) is not int or revision < 1:
+        raise ValueError("Receipt revision is invalid.")
+    committed = datetime.fromisoformat(operation["created_at"])
+    if committed.utcoffset() is None:
+        raise ValueError("Receipt commit time must be aware.")
+    snapshot = loads(operation["result_snapshot"])
+    if (
+        not isinstance(snapshot, dict)
+        or snapshot.get("operationId") != operation["id"]
+        or type(snapshot.get("revision")) is not int
+        or snapshot["revision"] != revision
+        or snapshot.get("updatedAt") != operation["created_at"]
+    ):
+        raise ValueError("Receipt result identity differs from storage.")
+    # Source receipts share storage but keep their existing owning-module shape.
+    if not operation["request_fingerprint"].startswith("{"):
+        if snapshot.get("spaceId") != operation["space_id"]:
+            raise ValueError("Source receipt space differs from storage.")
+        return
+    ManualStatusMutationResponse.model_validate(snapshot)
+    fingerprint = loads(operation["request_fingerprint"])
+    if (
+        type(fingerprint.get("expectedRevision")) is not int
+        or fingerprint["expectedRevision"] != revision - 1
+        or snapshot["id"] != operation["space_id"]
+        or snapshot["status"] != "active"
+        or datetime.fromisoformat(snapshot["asOf"]) != committed
+    ):
+        raise ValueError("Manual receipt does not match its command.")
+    date.fromisoformat(snapshot["effectiveLocalDate"])
+    periods = snapshot["scheduledOccupancyTimeline"]
+    if not isinstance(periods, list) or not isinstance(snapshot["attentionReasons"], list):
+        raise ValueError("Manual receipt timeline is invalid.")
+    if snapshot["scheduledOccupancy"] != (periods[0] if periods else None):
+        raise ValueError("Manual receipt next transition differs from its timeline.")
+    for item in [snapshot["currentOccupancy"], *periods, snapshot["availability"]]:
+        if not isinstance(item, dict) or item.get("spaceId") != operation["space_id"]:
+            raise ValueError("Manual receipt status belongs to another space.")
 
 
 def _validate_columns(inspector, expected_columns) -> None:
@@ -130,7 +244,12 @@ def _validate_columns(inspector, expected_columns) -> None:
                 column["name"] in nullable
             ):
                 raise MigrationSchemaError(f"{table} nullability is incompatible with PORT-001.")
-            if column["name"] in {"status_revision", "result_revision"}:
+            if column["name"] in {
+                "revision",
+                "status_revision",
+                "result_revision",
+                "property_revision",
+            }:
                 if "INT" not in str(column["type"]).upper():
                     raise MigrationSchemaError(
                         f"{table} column types are incompatible with PORT-003."
@@ -243,9 +362,11 @@ def _validate_checks(inspector, expected_columns) -> None:
         "parties": {
             "party_kindin('individual','organization')",
             "length(trim(display_name))>0",
+            "typeof(revision)='integer'andrevision>=1",
         },
         "properties": {
             "statusin('active','archived')",
+            "typeof(property_revision)='integer'andproperty_revision>=1",
             "length(trim(display_name))>0",
             "length(trim(address_line_1))>0",
             "length(trim(city))>0",

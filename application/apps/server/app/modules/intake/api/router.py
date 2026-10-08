@@ -10,7 +10,25 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    PrivateAttr,
+    StrictInt,
+    ValidationError,
+    model_validator,
+)
+
+from app.modules.intake.api.responses import (
+    CommandReceiptResponse,
+    ConflictResponse,
+    CorrectionResponse,
+    SourceDetailResponse,
+    SourceMutationResponse,
+    SourcePageResponse,
+)
 
 from app.platform.api_errors import (
     api_problem,
@@ -33,6 +51,7 @@ from app.modules.intake.domain.models import (
     IntakeError,
     IntakeNotFoundError,
     IntakePayloadTooLargeError,
+    IntakeRevisionConflictError,
 )
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 
@@ -53,7 +72,7 @@ class SourceInput(Contract):
     ]
     channel: Literal["email", "sms", "chat", "internal", "voice"]
     body: str = Field(min_length=1)
-    occurredAtUtc: datetime
+    occurredAtUtc: AwareDatetime
     subject: str | None = Field(default=None, max_length=500)
     participants: list[Participant] = Field(default_factory=list, max_length=50)
     provider: str | None = Field(default=None, max_length=500)
@@ -61,21 +80,45 @@ class SourceInput(Contract):
     externalSourceId: str | None = Field(default=None, max_length=500)
     originSystem: str = Field(min_length=1, max_length=500)
     idempotencyKey: UUID
+    _occurred_at_context: str = PrivateAttr()
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def preserve_occurrence_context(cls, value, handler):
+        result = handler(value)
+        if isinstance(value, dict):
+            reported = value.get("occurredAtUtc")
+            result._occurred_at_context = (
+                reported if isinstance(reported, str) else result.occurredAtUtc.isoformat()
+            )
+        return result
 
 
 class CorrectInput(SourceInput):
     correctionReason: str = Field(min_length=1, max_length=1000)
+    expectedSourceRevision: StrictInt = Field(ge=1)
+    expectedEvidenceRevisionId: UUID
+
+
+class SupersedeInput(SourceInput):
+    expectedSourceRevision: StrictInt = Field(ge=1)
+    expectedEvidenceRevisionId: UUID
 
 
 class AttentionInput(Contract):
     reason: str = Field(min_length=1, max_length=1000)
     idempotencyKey: UUID
     expectedRevision: UUID
+    expectedSourceRevision: StrictInt = Field(ge=1)
     expectedStatus: Literal["unprocessed", "in_review", "resolved", "dismissed"]
 
 
 def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter:
-    router = APIRouter(prefix="/api/intake/sources", tags=["intake"])
+    router = APIRouter(
+        prefix="/api/intake/sources",
+        tags=["intake"],
+        responses={409: {"model": ConflictResponse}},
+    )
 
     def ready():
         if not runtime.ready or runtime.error:
@@ -100,14 +143,25 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
             data.provider,
             data.conversationRef,
             data.externalSourceId,
+            occurred_at_context=data._occurred_at_context,
         )
         return IntakeAdmissionCommand(envelope, data.originSystem, str(data.idempotencyKey))
 
-    @router.post("", dependencies=[Depends(ready)])
+    @router.post(
+        "",
+        dependencies=[Depends(ready)],
+        operation_id="admitIntakeSource",
+        response_model=SourceMutationResponse,
+    )
     def admit(payload: SourceInput):
         return call(lambda: service.admit(command(payload)))
 
-    @router.post("/import", dependencies=[Depends(ready)])
+    @router.post(
+        "/import",
+        dependencies=[Depends(ready)],
+        operation_id="importIntakeSource",
+        response_model=SourceMutationResponse,
+    )
     async def import_source(
         metadata: str = Form(...),
         attachmentRoles: str | None = Form(default=None),
@@ -169,7 +223,12 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
 
             return call(admit_import)
 
-    @router.get("", dependencies=[Depends(ready)])
+    @router.get(
+        "",
+        dependencies=[Depends(ready)],
+        operation_id="listIntakeSources",
+        response_model=SourcePageResponse,
+    )
     def list_sources(
         limit: int = Query(50, ge=1, le=200),
         cursor: str | None = None,
@@ -207,11 +266,39 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
         )
         return {"items": items, "nextCursor": next_cursor}
 
-    @router.get("/{source_id}", dependencies=[Depends(ready)])
+    @router.get(
+        "/operations/by-key/{idempotency_key}",
+        dependencies=[Depends(ready)],
+        operation_id="getIntakeCommandReceiptByKey",
+        response_model=CommandReceiptResponse,
+    )
+    def receipt_by_key(idempotency_key: UUID):
+        return call(lambda: service.receipt_by_key(str(idempotency_key)))
+
+    @router.get(
+        "/operations/{operation_id}",
+        dependencies=[Depends(ready)],
+        operation_id="getIntakeCommandReceipt",
+        response_model=CommandReceiptResponse,
+    )
+    def receipt(operation_id: UUID):
+        return call(lambda: service.receipt(str(operation_id)))
+
+    @router.get(
+        "/{source_id}",
+        dependencies=[Depends(ready)],
+        operation_id="getIntakeSource",
+        response_model=SourceDetailResponse,
+    )
     def get(source_id: UUID):
         return call(lambda: service.get(str(source_id)))
 
-    @router.post("/{source_id}/correct", dependencies=[Depends(ready)])
+    @router.post(
+        "/{source_id}/correct",
+        dependencies=[Depends(ready)],
+        operation_id="correctIntakeSource",
+        response_model=CorrectionResponse,
+    )
     def correct(source_id: UUID, payload: CorrectInput):
         return call(
             lambda: service.correct(
@@ -219,14 +306,33 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
                 command(payload).envelope,
                 payload.correctionReason,
                 str(payload.idempotencyKey),
+                expected_source_revision=payload.expectedSourceRevision,
+                expected_evidence_revision_id=str(payload.expectedEvidenceRevisionId),
             )
         )
 
-    @router.post("/{source_id}/supersede", dependencies=[Depends(ready)])
-    def supersede(source_id: UUID, payload: SourceInput):
-        return call(lambda: service.supersede(str(source_id), command(payload)))
+    @router.post(
+        "/{source_id}/supersede",
+        dependencies=[Depends(ready)],
+        operation_id="supersedeIntakeSource",
+        response_model=SourceMutationResponse,
+    )
+    def supersede(source_id: UUID, payload: SupersedeInput):
+        return call(
+            lambda: service.supersede(
+                str(source_id),
+                command(payload),
+                expected_source_revision=payload.expectedSourceRevision,
+                expected_evidence_revision_id=str(payload.expectedEvidenceRevisionId),
+            )
+        )
 
-    @router.post("/{source_id}/dismiss", dependencies=[Depends(ready)])
+    @router.post(
+        "/{source_id}/dismiss",
+        dependencies=[Depends(ready)],
+        operation_id="dismissIntakeSource",
+        response_model=SourceMutationResponse,
+    )
     def dismiss(source_id: UUID, payload: AttentionInput):
         return call(
             lambda: service.attention(
@@ -235,11 +341,17 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
                 reason=payload.reason,
                 idempotency_key=str(payload.idempotencyKey),
                 expected_revision=str(payload.expectedRevision),
+                expected_source_revision=payload.expectedSourceRevision,
                 expected_status=payload.expectedStatus,
             )
         )
 
-    @router.post("/{source_id}/reopen", dependencies=[Depends(ready)])
+    @router.post(
+        "/{source_id}/reopen",
+        dependencies=[Depends(ready)],
+        operation_id="reopenIntakeSource",
+        response_model=SourceMutationResponse,
+    )
     def reopen(source_id: UUID, payload: AttentionInput):
         return call(
             lambda: service.attention(
@@ -248,6 +360,7 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
                 reason=payload.reason,
                 idempotency_key=str(payload.idempotencyKey),
                 expected_revision=str(payload.expectedRevision),
+                expected_source_revision=payload.expectedSourceRevision,
                 expected_status=payload.expectedStatus,
             )
         )
@@ -266,6 +379,14 @@ def _intake_http_error(error: PublicationCleanupIncomplete | IntakeError) -> HTT
             str(error),
             repairRequired=True,
             attentionRecorded=error.attention_recording_failure is None,
+        )
+    if isinstance(error, IntakeRevisionConflictError):
+        return domain_problem(
+            error,
+            status_code=409,
+            currentRevision=error.current_revision,
+            currentEvidenceRevisionId=error.current_evidence_revision_id,
+            currentAttentionStatus=error.current_attention_status,
         )
     status_code = (
         413

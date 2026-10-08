@@ -127,6 +127,18 @@ The initial portfolio list adds compact property-type text and a space count, fo
 
 ## API contract
 
+### Approved UI-001 inventory command-safety extension
+
+Space create/edit/archive/restore and Property archive/restore cascades now use
+the parent's required `expectedPropertyRevision` and idempotency key. They advance
+the shared Property revision once per effective action, atomically record the
+original result and correlated audits, and replay without repeating cascades.
+Space mutation results include `propertyRevision`, `operationId`, `asOf`, and
+`effectiveLocalDate`; their existing `revision` still means independent PORT-003
+Space status revision. No-change actions retain owning revision and timestamp.
+See [PORT-001_COMMAND_READINESS.md](PORT-001_COMMAND_READINESS.md) for the approved
+receipt schema, recovery/conflict contracts, and focused validation matrix.
+
 All endpoints require a ready workspace. Request models reject unknown fields, and application commands repeat essential validation for direct callers.
 
 | Method | Path | Intent |

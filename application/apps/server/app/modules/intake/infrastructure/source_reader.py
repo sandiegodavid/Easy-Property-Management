@@ -36,6 +36,7 @@ class SQLiteIntakeSourceReader:
                     IntakeSourceModel.id,
                     IntakeSourceModel.technical_status,
                     IntakeSourceModel.current_revision_id,
+                    IntakeSourceModel.source_revision,
                     IntakeSourceModel.superseded_by_source_id,
                 ).where(IntakeSourceModel.id == source_id),
             )
@@ -145,6 +146,7 @@ class SQLiteIntakeSourceReader:
                 attachment_count=int(row["attachment_count"]),
             ),
             "revision": row["revision_id"],
+            "evidenceRevisionId": row["revision_id"],
             "revisionNumber": row["revision_number"],
             "revisionKind": row["revision_kind"],
             "correctionReason": row["correction_reason"],

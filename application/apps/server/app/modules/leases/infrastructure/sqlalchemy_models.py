@@ -1,6 +1,6 @@
 """SQLAlchemy metadata owned by LEASE-001."""
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.platform.sqlalchemy_models import LocalBase
@@ -22,8 +22,10 @@ class LeaseModel(LocalBase):
     notes: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
+    lease_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     __table_args__ = (
+        CheckConstraint("typeof(lease_revision) = 'integer' AND lease_revision >= 1"),
         CheckConstraint("lease_kind IN ('residential', 'commercial')"),
         CheckConstraint("status IN ('draft', 'executed', 'ended', 'terminated', 'void')"),
         CheckConstraint(
@@ -40,6 +42,45 @@ class LeaseModel(LocalBase):
             "status",
             "contract_starts_on",
             "contract_ends_on",
+        ),
+    )
+
+
+class LeaseCommandOperationModel(LocalBase):
+    __tablename__ = "lease_command_operations"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    lease_id: Mapped[str] = mapped_column(ForeignKey("leases.id"), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    expected_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    result_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    effective: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_json: Mapped[str] = mapped_column(String, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    response_json: Mapped[str] = mapped_column(String, nullable=False)
+    response_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint("typeof(expected_revision) = 'integer' AND expected_revision >= 0"),
+        CheckConstraint(
+            "typeof(result_revision) = 'integer' AND result_revision >= 1 AND result_revision = expected_revision + effective"
+        ),
+        CheckConstraint("typeof(effective) = 'integer' AND effective IN (0, 1)"),
+        CheckConstraint("length(trim(idempotency_key)) BETWEEN 1 AND 200"),
+        CheckConstraint(
+            "length(request_fingerprint) = 64 AND request_fingerprint NOT GLOB '*[^0-9a-f]*'"
+        ),
+        CheckConstraint(
+            "length(response_fingerprint) = 64 AND response_fingerprint NOT GLOB '*[^0-9a-f]*'"
+        ),
+        Index(
+            "lease_commands_lease_revision",
+            "lease_id",
+            "result_revision",
+            unique=True,
+            sqlite_where=text("effective = 1"),
         ),
     )
 

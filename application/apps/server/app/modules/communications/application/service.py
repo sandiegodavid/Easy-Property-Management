@@ -55,6 +55,17 @@ class CommunicationConflictError(CommunicationError):
         self.code = code
 
 
+class CommunicationStaleRevisionError(CommunicationConflictError):
+    def __init__(self, current_revision: int) -> None:
+        super().__init__("Communication revision has changed.", "stale_revision")
+        self.current_revision = current_revision
+
+
+class CommunicationChangedKeyError(CommunicationConflictError):
+    def __init__(self) -> None:
+        super().__init__("Idempotency key was reused with different input.", "idempotency_conflict")
+
+
 @dataclass(frozen=True)
 class ParticipantInput:
     party_id: str
@@ -163,9 +174,12 @@ class CommunicationService:
     def __init__(self, unit_of_work: CommunicationUnitOfWork) -> None:
         self.unit_of_work = unit_of_work
 
-    def create(self, command: CommunicationCommand, idempotency_key: str) -> dict[str, object]:
-        _uuid(idempotency_key, "idempotencyKey")
-        fingerprint = _fingerprint("created", None, command)
+    def create(
+        self, command: CommunicationCommand, idempotency_key: str, expected_revision: int
+    ) -> dict[str, object]:
+        idempotency_key = _metadata(idempotency_key, expected_revision)
+        request = _request("created", None, command, expected_revision)
+        fingerprint = _digest(request)
         now = _now()
         correlation_id = str(uuid4())
         communication = Communication(
@@ -188,9 +202,9 @@ class CommunicationService:
         def operation(tx: CommunicationTransaction) -> dict[str, object]:
             prior = self._idempotent(tx, idempotency_key, fingerprint)
             if prior:
-                return self._view(
-                    tx, prior.result_communication_id or prior.target_communication_id or ""
-                )
+                return json.loads(prior.response_json)
+            if expected_revision != 0:
+                raise CommunicationStaleRevisionError(0)
             participants, links, zones = self._validated_children(
                 tx, communication.id, command.participants, command.links
             )
@@ -237,35 +251,38 @@ class CommunicationService:
                     reason="communication_follow_up",
                     correlation_id=correlation_id,
                 )
-            tx.insert_operation(
-                CommunicationOperation(
-                    str(uuid4()),
-                    None,
-                    communication.id,
-                    "created",
-                    idempotency_key,
-                    fingerprint,
-                    correlation_id,
-                    now,
-                    follow_up_task_id,
-                )
+            return self._complete(
+                tx,
+                "created",
+                None,
+                communication.id,
+                idempotency_key,
+                request,
+                expected_revision,
+                correlation_id,
+                follow_up_task_id,
             )
-            return self._view(tx, communication.id)
 
         return self.unit_of_work.write(operation)
 
     def record(
-        self, communication_id: str, follow_up: FollowUpInput | None, idempotency_key: str
+        self,
+        communication_id: str,
+        follow_up: FollowUpInput | None,
+        idempotency_key: str,
+        expected_revision: int,
     ) -> dict[str, object]:
         _uuid(communication_id, "communicationId")
-        _uuid(idempotency_key, "idempotencyKey")
-        fingerprint = _fingerprint("recorded", communication_id, follow_up)
+        idempotency_key = _metadata(idempotency_key, expected_revision)
+        request = _request("recorded", communication_id, follow_up, expected_revision)
+        fingerprint = _digest(request)
 
         def operation(tx: CommunicationTransaction) -> dict[str, object]:
             prior = self._idempotent(tx, idempotency_key, fingerprint)
             if prior:
-                return self._view(tx, prior.result_communication_id or communication_id)
+                return json.loads(prior.response_json)
             current = self._require(tx, communication_id)
+            self._revision(current, expected_revision)
             if current.status != "draft":
                 raise CommunicationConflictError("Only drafts can be recorded.", "draft_required")
             # A draft is only a proposal: participant/contact eligibility is checked again
@@ -274,7 +291,13 @@ class CommunicationService:
                 tx.validate_participant(participant.party_id, participant.party_contact_method_id)
             now = _now()
             correlation_id = str(uuid4())
-            updated = replace(current, status="recorded", recorded_at=now, updated_at=now)
+            updated = replace(
+                current,
+                status="recorded",
+                recorded_at=now,
+                updated_at=now,
+                revision=current.revision + 1,
+            )
             links, zones = self._refresh_link_snapshots(tx, tx.links(current.id), correlation_id)
             self._validate_timezone(updated.occurred_timezone, zones)
             tx.replace_communication(updated)
@@ -313,39 +336,53 @@ class CommunicationService:
                     reason="communication_follow_up",
                     correlation_id=correlation_id,
                 )
-            tx.insert_operation(
-                CommunicationOperation(
-                    str(uuid4()),
-                    current.id,
-                    current.id,
-                    "recorded",
-                    idempotency_key,
-                    fingerprint,
-                    correlation_id,
-                    now,
-                    follow_up_task_id,
-                )
+            return self._complete(
+                tx,
+                "recorded",
+                current.id,
+                current.id,
+                idempotency_key,
+                request,
+                expected_revision,
+                correlation_id,
+                follow_up_task_id,
             )
-            return self._view(tx, current.id)
 
         return self.unit_of_work.write(operation)
 
     def patch(
-        self, communication_id: str, command: PatchCommand, idempotency_key: str
+        self,
+        communication_id: str,
+        command: PatchCommand,
+        idempotency_key: str,
+        expected_revision: int,
     ) -> dict[str, object]:
         _uuid(communication_id, "communicationId")
-        _uuid(idempotency_key, "idempotencyKey")
-        fingerprint = _fingerprint("patched", communication_id, command)
+        idempotency_key = _metadata(idempotency_key, expected_revision)
+        request = _request("patched", communication_id, command, expected_revision)
+        fingerprint = _digest(request)
 
         def operation(tx: CommunicationTransaction) -> dict[str, object]:
             prior = self._idempotent(tx, idempotency_key, fingerprint)
             if prior:
-                return self._view(tx, communication_id)
+                return json.loads(prior.response_json)
             current = self._require(tx, communication_id)
+            self._revision(current, expected_revision)
             if current.status != "draft":
                 raise CommunicationConflictError("Only drafts can be edited.", "draft_required")
-            if command == PatchCommand():
-                return self._view(tx, current.id)
+            if self._unchanged(tx, current, command):
+                return self._complete(
+                    tx,
+                    "patched",
+                    current.id,
+                    current.id,
+                    idempotency_key,
+                    request,
+                    expected_revision,
+                    str(uuid4()),
+                    None,
+                    "no_op",
+                )
             updated = replace(
                 current,
                 subject=command.subject if command.subject is not None else current.subject,
@@ -355,6 +392,7 @@ class CommunicationService:
                 else current.occurred_at_utc,
                 occurred_timezone=command.occurred_timezone or current.occurred_timezone,
                 updated_at=_now(),
+                revision=current.revision + 1,
             )
             old_participants = tx.participants(current.id)
             old_links = tx.links(current.id)
@@ -430,20 +468,17 @@ class CommunicationService:
                         reason="communication_link_replaced",
                         correlation_id=correlation_id,
                     )
-            tx.insert_operation(
-                CommunicationOperation(
-                    str(uuid4()),
-                    current.id,
-                    current.id,
-                    "patched",
-                    idempotency_key,
-                    fingerprint,
-                    correlation_id,
-                    _now(),
-                    None,
-                )
+            return self._complete(
+                tx,
+                "patched",
+                current.id,
+                current.id,
+                idempotency_key,
+                request,
+                expected_revision,
+                correlation_id,
+                None,
             )
-            return self._view(tx, current.id)
 
         return self.unit_of_work.write(operation)
 
@@ -453,19 +488,22 @@ class CommunicationService:
         command: CommunicationCommand,
         correction_reason: str,
         idempotency_key: str,
+        expected_revision: int,
     ) -> dict[str, object]:
         _uuid(source_id, "communicationId")
-        _uuid(idempotency_key, "idempotencyKey")
+        idempotency_key = _metadata(idempotency_key, expected_revision)
         reason = _text(correction_reason, "correctionReason", 1000)
-        fingerprint = _fingerprint("corrected", source_id, (command, reason))
+        request = _request("corrected", source_id, (command, reason), expected_revision)
+        fingerprint = _digest(request)
         now = _now()
         correlation_id = str(uuid4())
 
         def operation(tx: CommunicationTransaction) -> dict[str, object]:
             prior = self._idempotent(tx, idempotency_key, fingerprint)
             if prior:
-                return self._view(tx, prior.result_communication_id or "")
+                return json.loads(prior.response_json)
             source = self._require(tx, source_id)
+            self._revision(source, expected_revision)
             if source.status != "recorded" or source.superseded_by_communication_id:
                 raise CommunicationConflictError(
                     "Only a current recorded communication can be corrected.", "correction_conflict"
@@ -495,6 +533,7 @@ class CommunicationService:
                 status="superseded",
                 superseded_by_communication_id=replacement.id,
                 updated_at=now,
+                revision=source.revision + 1,
             )
             # Insert the child first so the source's forward foreign key is never dangling.
             tx.insert_communication(replacement)
@@ -539,26 +578,104 @@ class CommunicationService:
                     reason="communication_follow_up",
                     correlation_id=correlation_id,
                 )
-            tx.insert_operation(
-                CommunicationOperation(
-                    str(uuid4()),
-                    source.id,
-                    replacement.id,
-                    "corrected",
-                    idempotency_key,
-                    fingerprint,
-                    correlation_id,
-                    now,
-                    follow_up_task_id,
-                )
+            return self._complete(
+                tx,
+                "corrected",
+                source.id,
+                replacement.id,
+                idempotency_key,
+                request,
+                expected_revision,
+                correlation_id,
+                follow_up_task_id,
             )
-            return self._view(tx, replacement.id)
 
         return self.unit_of_work.write(operation)
 
     def get(self, communication_id: str) -> dict[str, object]:
         _uuid(communication_id, "communicationId")
         return self.unit_of_work.read(lambda tx: self._view(tx, communication_id))
+
+    def receipt(self, operation_id: str) -> dict[str, object]:
+        operation_id = _uuid(operation_id, "operationId")
+
+        def read(tx: CommunicationTransaction) -> dict[str, object]:
+            operation = tx.operation_by_id(operation_id)
+            if operation is None:
+                raise CommunicationNotFoundError("Communication operation was not found.")
+            return json.loads(operation.response_json)
+
+        return self.unit_of_work.read(read)
+
+    def _revision(self, current: Communication, expected_revision: int) -> None:
+        if current.revision != expected_revision:
+            raise CommunicationStaleRevisionError(current.revision)
+
+    def _unchanged(
+        self, tx: CommunicationTransaction, current: Communication, command: PatchCommand
+    ) -> bool:
+        for name in ("subject", "body", "occurred_at_utc", "occurred_timezone"):
+            value = getattr(command, name)
+            if value is not None:
+                if name == "occurred_at_utc":
+                    value = _utc(value)
+                if value != getattr(current, name):
+                    return False
+        if command.participants is not None:
+            actual = {
+                (x.party_id, x.party_contact_method_id, x.role) for x in tx.participants(current.id)
+            }
+            supplied = [
+                (x.party_id, x.party_contact_method_id, x.role) for x in command.participants
+            ]
+            if len(supplied) != len(set(supplied)):
+                raise CommunicationError("Duplicate participant.")
+            if actual != set(supplied):
+                return False
+        if command.links is not None:
+            actual = {(x.entity_type, x.entity_id) for x in tx.links(current.id)}
+            supplied = [(x.entity_type, x.entity_id) for x in command.links]
+            if len(supplied) != len(set(supplied)):
+                raise CommunicationError("Duplicate communication link.")
+            if actual != set(supplied):
+                return False
+        return True
+
+    def _complete(
+        self,
+        tx: CommunicationTransaction,
+        action: str,
+        target: str | None,
+        result: str,
+        key: str,
+        request: str,
+        expected_revision: int,
+        correlation_id: str,
+        follow_up_task_id: str | None,
+        outcome: str = "applied",
+    ) -> dict[str, object]:
+        operation_id = str(uuid4())
+        response = {**self._view(tx, result), "operationId": operation_id, "outcome": outcome}
+        response_json = _canonical(response)
+        tx.insert_operation(
+            CommunicationOperation(
+                operation_id,
+                target,
+                result,
+                action,
+                key,
+                _digest(request),
+                correlation_id,
+                _now(),
+                follow_up_task_id,
+                expected_revision,
+                int(response["revision"]),
+                outcome,
+                request,
+                response_json,
+            )
+        )
+        return json.loads(response_json)
 
     def list(
         self,
@@ -634,9 +751,7 @@ class CommunicationService:
         if existing is None:
             return None
         if existing.request_fingerprint != fingerprint:
-            raise CommunicationConflictError(
-                "Idempotency key was reused with different input.", "idempotency_conflict"
-            )
+            raise CommunicationChangedKeyError()
         return existing
 
     def _require(self, tx: CommunicationTransaction, item_id: str) -> Communication:
@@ -834,7 +949,35 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _fingerprint(action: str, target: str | None, value: object) -> str:
+def _metadata(key: str, revision: int) -> str:
+    key = _uuid(key, "idempotencyKey")
+    if type(revision) is not int or revision < 0:
+        raise CommunicationError("expectedRevision must be a nonnegative integer.")
+    return key
+
+
+def _canonical(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+def _digest(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def command_fingerprint(
+    action: str, target: str | None, command: object, expected_revision: int
+) -> str:
+    """Fingerprint the owning command contract for durable outcome reconciliation."""
+    if action not in {"created", "patched", "recorded", "corrected"}:
+        raise CommunicationError("Communication action is invalid.")
+    if type(expected_revision) is not int or expected_revision < 0:
+        raise CommunicationError("expectedRevision must be a nonnegative integer.")
+    if target is not None:
+        _uuid(target, "communicationId")
+    return _digest(_request(action, target, command, expected_revision))
+
+
+def _request(action: str, target: str | None, value: object, expected_revision: int) -> str:
     def encode(item: object) -> object:
         if hasattr(item, "__dict__"):
             return {key: encode(child) for key, child in item.__dict__.items()}
@@ -842,13 +985,14 @@ def _fingerprint(action: str, target: str | None, value: object) -> str:
             return [encode(child) for child in item]
         return item
 
-    return hashlib.sha256(
-        json.dumps(
-            {"action": action, "target": target, "value": encode(value)},
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode()
-    ).hexdigest()
+    return _canonical(
+        {
+            "action": action,
+            "target": target,
+            "value": encode(value),
+            "expectedRevision": expected_revision,
+        }
+    )
 
 
 def _cursor(value: str) -> tuple[str, str]:

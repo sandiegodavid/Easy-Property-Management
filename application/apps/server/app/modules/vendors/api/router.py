@@ -1,11 +1,19 @@
 """Typed provider HTTP contract."""
 
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, status
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    AwareDatetime,
+    model_validator,
+)
 
 from app.platform.api_errors import domain_problem, workspace_unavailable
 
@@ -61,7 +69,24 @@ class ProfileInput(Contract):
     notes: str | None = Field(None, max_length=4000)
 
 
-class CreateProviderInput(ProfileInput):
+class ProviderConcurrency(Contract):
+    expectedRevision: StrictInt = Field(ge=0)
+    idempotencyKey: UUID
+
+
+class ExistingProviderConcurrency(ProviderConcurrency):
+    expectedRevision: StrictInt = Field(ge=1)
+
+
+class DesignateInput(ProfileInput, ProviderConcurrency):
+    pass
+
+
+class ProviderArchiveInput(ExistingProviderConcurrency):
+    confirmed: StrictBool
+
+
+class CreateProviderInput(ProfileInput, ProviderConcurrency):
     party: PartyInput
     contacts: list[ContactInput] = Field(default_factory=list)
     services: list["ServiceInput"] = Field(default_factory=list)
@@ -72,7 +97,7 @@ class CreateProviderInput(ProfileInput):
     confirmedNewParty: StrictBool = False
 
 
-class ProfilePatchInput(Contract):
+class ProfilePatchInput(ExistingProviderConcurrency):
     selectionStatus: Literal["neutral", "preferred", "avoid"] | None = None
     selectionReason: str | None = Field(None, max_length=1000)
     notes: str | None = Field(None, max_length=4000)
@@ -95,7 +120,7 @@ class AreaInput(ServiceInput):
 class WorkInput(Contract):
     performedOn: date
     summary: str = Field(min_length=1, max_length=1000)
-    propertyId: str | None = None
+    propertyId: UUID | None = None
     outcomeNotes: str | None = Field(None, max_length=4000)
 
 
@@ -160,6 +185,30 @@ class ReputationLinkPatchInput(Contract):
         return self
 
 
+class ServiceMutationInput(ServiceInput, ExistingProviderConcurrency):
+    pass
+
+
+class AreaMutationInput(AreaInput, ExistingProviderConcurrency):
+    pass
+
+
+class WorkMutationInput(WorkInput, ExistingProviderConcurrency):
+    pass
+
+
+class ReferenceMutationInput(ReferenceInput, ExistingProviderConcurrency):
+    pass
+
+
+class ReputationMutationInput(ReputationLinkInput, ExistingProviderConcurrency):
+    pass
+
+
+class ReputationPatchMutationInput(ReputationLinkPatchInput, ExistingProviderConcurrency):
+    pass
+
+
 class Confirmation(Contract):
     confirmed: StrictBool
 
@@ -168,28 +217,45 @@ class ArchiveConfirmation(Confirmation):
     reason: str = Field(min_length=1, max_length=1000)
 
 
-class CategoryInput(Contract):
+class CategoryInput(ProviderConcurrency):
     displayName: str = Field(min_length=1, max_length=160)
     description: str | None = Field(None, max_length=1000)
     displayOrder: int = Field(ge=0, strict=True)
     idempotencyKey: UUID
 
 
-class CategoryPatchInput(Contract):
+class CategoryPatchInput(ExistingProviderConcurrency):
     displayName: str | None = Field(None, min_length=1, max_length=160)
     description: str | None = Field(None, max_length=1000)
     displayOrder: int | None = Field(None, ge=0, strict=True)
 
     @model_validator(mode="after")
     def nonempty(self):
-        if not self.model_fields_set:
+        if not self.model_fields_set & {"displayName", "description", "displayOrder"}:
             raise ValueError("Category patch cannot be empty.")
         return self
 
 
-class CategoryAssignmentInput(Contract):
+class CategoryAssignmentInput(ExistingProviderConcurrency):
     categoryId: UUID
-    idempotencyKey: UUID
+    expectedCategoryRevision: StrictInt = Field(ge=1)
+
+
+class AssignmentArchiveInput(ArchiveConfirmation, ExistingProviderConcurrency):
+    pass
+
+
+class AssignmentRestoreInput(ExistingProviderConcurrency):
+    confirmed: StrictBool
+    expectedCategoryRevision: StrictInt = Field(ge=1)
+
+
+class CategoryLifecycleInput(ArchiveConfirmation, ExistingProviderConcurrency):
+    pass
+
+
+class CategoryRestoreInput(Confirmation, ExistingProviderConcurrency):
+    pass
 
 
 class PartyResponse(Contract):
@@ -215,13 +281,14 @@ class ContactResponse(Contract):
 
 
 class ProfileResponse(Contract):
-    partyId: str
+    revision: StrictInt = Field(ge=1)
+    partyId: UUID
     selectionStatus: Literal["neutral", "preferred", "avoid"]
     selectionReason: str | None
     notes: str | None
-    createdAt: str
-    updatedAt: str
-    archivedAt: str | None
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
+    archivedAt: AwareDatetime | None
 
 
 class ServiceResponse(Contract):
@@ -279,17 +346,27 @@ class ReputationLinkResponse(Contract):
     archivedAt: str | None
 
 
-class CategoryResponse(Contract):
-    id: str
+class CategorySnapshotResponse(Contract):
+    revision: StrictInt = Field(ge=1)
+    id: UUID
     displayName: str
     normalizedName: str
     description: str | None
-    displayOrder: int
-    createdAt: str
-    updatedAt: str
-    archivedAt: str | None
+    displayOrder: StrictInt = Field(ge=0)
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
+    archivedAt: AwareDatetime | None
     archiveReason: str | None
-    effectiveProviderCount: int
+
+
+class CategoryResponse(CategorySnapshotResponse):
+    effectiveProviderCount: StrictInt = Field(ge=0)
+
+
+class CategoryMutationResponse(Contract):
+    category: CategoryResponse
+    revision: StrictInt = Field(ge=1)
+    operationId: UUID
 
 
 class ProviderCategoryResponse(CategoryResponse):
@@ -309,6 +386,86 @@ class ProviderResponse(Contract):
     references: list[ReferenceResponse]
     reputationLinks: list[ReputationLinkResponse]
     categories: list[ProviderCategoryResponse]
+
+
+class ProviderMutationResponse(Contract):
+    party: PartyResponse
+    profile: ProfileResponse
+    revision: StrictInt = Field(ge=1)
+    partyRevision: StrictInt = Field(ge=1)
+    operationId: UUID
+
+
+class AssignmentResponse(Contract):
+    id: UUID
+    providerPartyId: UUID
+    categoryId: UUID
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
+    archivedAt: AwareDatetime | None
+    archiveReason: str | None
+
+
+class ProviderChildResult(Contract):
+    profile: ProfileResponse
+    revision: StrictInt = Field(ge=1)
+    operationId: UUID
+
+
+class ServiceMutationResponse(ProviderChildResult):
+    kind: Literal["service"]
+    item: ServiceResponse
+
+
+class AreaMutationResponse(ProviderChildResult):
+    kind: Literal["area"]
+    item: AreaResponse
+
+
+class WorkMutationResponse(ProviderChildResult):
+    kind: Literal["work"]
+    item: WorkResponse
+
+
+class ReferenceMutationResponse(ProviderChildResult):
+    kind: Literal["reference"]
+    item: ReferenceResponse
+
+
+class ReputationMutationResponse(ProviderChildResult):
+    kind: Literal["reputation"]
+    item: ReputationLinkResponse
+
+
+class AssignmentMutationResponse(ProviderChildResult):
+    kind: Literal["assignment"]
+    item: AssignmentResponse
+    category: CategorySnapshotResponse
+
+
+ProviderChildMutationResponse = Annotated[
+    ServiceMutationResponse
+    | AreaMutationResponse
+    | WorkMutationResponse
+    | ReferenceMutationResponse
+    | ReputationMutationResponse
+    | AssignmentMutationResponse,
+    Field(discriminator="kind"),
+]
+
+
+ProviderOperationResponse = ProviderMutationResponse | ProviderChildMutationResponse
+
+
+class ProviderConflictDetail(Contract):
+    code: str
+    message: str
+    current: ProfileResponse | CategorySnapshotResponse | None = None
+    candidatePartyIds: list[UUID] = Field(default_factory=list, max_length=10)
+
+
+class ProviderConflictResponse(Contract):
+    detail: ProviderConflictDetail
 
 
 class ProviderListResponse(Contract):
@@ -353,11 +510,28 @@ def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -
                 error, status_code=409, code="provider_category_idempotency_conflict"
             ) from error
         except ProviderLifecycleConflict as error:
-            raise domain_problem(error, status_code=409, code="provider_conflict") from error
+            raise domain_problem(
+                error,
+                status_code=409,
+                code=error.code,
+                current=(
+                    ProfileResponse if "partyId" in error.current else CategorySnapshotResponse
+                )
+                .model_validate(error.current)
+                .model_dump(mode="json")
+                if error.current
+                else None,
+            ) from error
         except (ProviderError, PartyValidationError) as error:
             raise domain_problem(error, status_code=400, code="provider_validation") from error
 
-    @router.post("", response_model=ProviderResponse, status_code=status.HTTP_201_CREATED)
+    @router.post(
+        "",
+        operation_id="create_provider",
+        response_model=ProviderMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
+        status_code=status.HTTP_201_CREATED,
+    )
     def create(data: CreateProviderInput):
         ready(True)
         return invoke(
@@ -374,7 +548,7 @@ def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -
                     WorkHistoryCommand(
                         item.performedOn.isoformat(),
                         item.summary,
-                        item.propertyId,
+                        str(item.propertyId) if item.propertyId else None,
                         item.outcomeNotes,
                     )
                     for item in data.workHistory
@@ -382,26 +556,37 @@ def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -
                 references=tuple(_command(item) for item in data.references),
                 category_ids=tuple(str(item) for item in data.categoryIds),
                 confirmed_new_party=data.confirmedNewParty,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
     @router.post(
         "/from-party/{party_id}",
-        response_model=ProviderResponse,
+        operation_id="designate_party_as_provider",
+        response_model=ProviderMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
         status_code=status.HTTP_201_CREATED,
     )
-    def designate(party_id: str, data: ProfileInput):
+    def designate(party_id: UUID, data: DesignateInput):
         ready(True)
-        return invoke(lambda: provider_service.designate(party_id, _profile(data)))
+        return invoke(
+            lambda: provider_service.designate(
+                str(party_id),
+                _profile(data),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
 
-    @router.get("", response_model=ProviderPageResponse)
+    @router.get("", operation_id="list_providers", response_model=ProviderPageResponse)
     def list_providers(
         archiveState: Literal["active", "archived", "all"] = "active",
         search: str | None = Query(None, max_length=240),
         service: str | None = Query(None, max_length=160),
         serviceArea: str | None = Query(None, max_length=160),
         selectionStatus: Literal["neutral", "preferred", "avoid"] | None = None,
-        propertyId: str | None = None,
+        propertyId: UUID | None = None,
         hasReference: bool | None = None,
         categoryId: UUID | None = None,
         categoryState: Literal["categorized", "uncategorized"] | None = None,
@@ -417,7 +602,7 @@ def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -
                     service=service,
                     service_area=serviceArea,
                     selection_status=selectionStatus,
-                    property_id=propertyId,
+                    property_id=str(propertyId) if propertyId else None,
                     has_reference=hasReference,
                     category_id=str(categoryId) if categoryId else None,
                     category_state=categoryState,
@@ -427,98 +612,195 @@ def build_router(provider_service: ProviderService, runtime: WorkspaceRuntime) -
             )
         )
 
-    @router.get("/{party_id}", response_model=ProviderResponse)
-    def detail(party_id: str, includeArchived: bool = False):
+    @router.get(
+        "/operations/by-key/{key}",
+        operation_id="get_provider_operation_by_key",
+        response_model=ProviderOperationResponse,
+    )
+    def recover_key(key: UUID):
         ready()
-        return invoke(lambda: provider_service.detail(party_id, include_archived=includeArchived))
+        return invoke(lambda: provider_service.recover(key=str(key)))
 
-    @router.patch("/{party_id}", response_model=ProviderResponse)
-    def update(party_id: str, data: ProfilePatchInput):
-        ready(True)
-        return invoke(lambda: provider_service.update_profile(party_id, _patch_profile(data)))
+    @router.get(
+        "/operations/{operation_id}",
+        operation_id="get_provider_operation",
+        response_model=ProviderOperationResponse,
+    )
+    def recover_id(operation_id: UUID):
+        ready()
+        return invoke(lambda: provider_service.recover(operation_id=str(operation_id)))
 
-    @router.post("/{party_id}/archive", response_model=ProviderResponse)
-    def archive(party_id: str, data: Confirmation):
-        ready(True)
-        return invoke(lambda: provider_service.archive(party_id, confirmed=data.confirmed))
+    @router.get("/{party_id}", operation_id="get_provider", response_model=ProviderResponse)
+    def detail(party_id: UUID, includeArchived: bool = False):
+        ready()
+        return invoke(
+            lambda: provider_service.detail(str(party_id), include_archived=includeArchived)
+        )
 
-    @router.post("/{party_id}/restore", response_model=ProviderResponse)
-    def restore(party_id: str):
+    @router.patch(
+        "/{party_id}",
+        operation_id="update_provider_profile",
+        response_model=ProviderMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
+    )
+    def update(party_id: UUID, data: ProfilePatchInput):
         ready(True)
-        return invoke(lambda: provider_service.restore(party_id))
+        return invoke(
+            lambda: provider_service.update_profile(
+                str(party_id),
+                _patch_profile(data),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
+
+    @router.post(
+        "/{party_id}/archive",
+        operation_id="archive_provider",
+        response_model=ProviderMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
+    )
+    def archive(party_id: UUID, data: ProviderArchiveInput):
+        ready(True)
+        return invoke(
+            lambda: provider_service.archive(
+                str(party_id),
+                confirmed=data.confirmed,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
+
+    @router.post(
+        "/{party_id}/restore",
+        operation_id="restore_provider",
+        response_model=ProviderMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
+    )
+    def restore(party_id: UUID, data: ExistingProviderConcurrency):
+        ready(True)
+        return invoke(
+            lambda: provider_service.restore(
+                str(party_id),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
 
     @router.post(
         "/{party_id}/category-assignments",
-        response_model=ProviderResponse,
+        operation_id="assign_provider_category",
+        response_model=AssignmentMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
         status_code=status.HTTP_201_CREATED,
     )
-    def assign_category(party_id: str, data: CategoryAssignmentInput):
+    def assign_category(party_id: UUID, data: CategoryAssignmentInput):
         ready(True)
         return invoke(
             lambda: provider_service.assign_category(
-                party_id,
+                str(party_id),
                 ProviderCategoryAssignmentCommand(str(data.categoryId), str(data.idempotencyKey)),
+                expected_revision=data.expectedRevision,
+                expected_category_revision=data.expectedCategoryRevision,
             )
         )
 
     @router.post(
-        "/{party_id}/category-assignments/{assignment_id}/archive", response_model=ProviderResponse
+        "/{party_id}/category-assignments/{assignment_id}/archive",
+        operation_id="archive_provider_category_assignment",
+        response_model=AssignmentMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
     )
-    def archive_category_assignment(party_id: str, assignment_id: str, data: ArchiveConfirmation):
+    def archive_category_assignment(
+        party_id: UUID, assignment_id: UUID, data: AssignmentArchiveInput
+    ):
         ready(True)
         return invoke(
             lambda: provider_service.archive_category_assignment(
-                party_id,
-                assignment_id,
+                str(party_id),
+                str(assignment_id),
                 confirmed=data.confirmed,
                 reason=data.reason,
+                **_concurrency(data),
             )
         )
 
     @router.post(
-        "/{party_id}/category-assignments/{assignment_id}/restore", response_model=ProviderResponse
+        "/{party_id}/category-assignments/{assignment_id}/restore",
+        operation_id="restore_provider_category_assignment",
+        response_model=AssignmentMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
     )
-    def restore_category_assignment(party_id: str, assignment_id: str, data: Confirmation):
+    def restore_category_assignment(
+        party_id: UUID, assignment_id: UUID, data: AssignmentRestoreInput
+    ):
         ready(True)
         return invoke(
             lambda: provider_service.restore_category_assignment(
-                party_id,
-                assignment_id,
+                str(party_id),
+                str(assignment_id),
                 confirmed=data.confirmed,
+                expected_category_revision=data.expectedCategoryRevision,
+                **_concurrency(data),
             )
         )
 
     @router.post(
         "/{party_id}/reputation-links",
-        response_model=ProviderResponse,
+        operation_id="add_provider_reputation_link",
+        response_model=ReputationMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
         status_code=status.HTTP_201_CREATED,
     )
-    def add_reputation_link(party_id: str, data: ReputationLinkInput):
+    def add_reputation_link(party_id: UUID, data: ReputationMutationInput):
         ready(True)
-        return invoke(lambda: provider_service.add_reputation_link(party_id, _reputation(data)))
+        return invoke(
+            lambda: provider_service.add_reputation_link(
+                str(party_id), _reputation(data), **_concurrency(data)
+            )
+        )
 
-    @router.patch("/{party_id}/reputation-links/{link_id}", response_model=ProviderResponse)
-    def patch_reputation_link(party_id: str, link_id: str, data: ReputationLinkPatchInput):
+    @router.patch(
+        "/{party_id}/reputation-links/{link_id}",
+        operation_id="update_provider_reputation_link",
+        response_model=ReputationMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
+    )
+    def patch_reputation_link(party_id: UUID, link_id: UUID, data: ReputationPatchMutationInput):
         ready(True)
         return invoke(
             lambda: provider_service.update_reputation_link(
-                party_id, link_id, _reputation_patch(data)
+                str(party_id), str(link_id), _reputation_patch(data), **_concurrency(data)
             )
         )
 
-    @router.post("/{party_id}/reputation-links/{link_id}/archive", response_model=ProviderResponse)
-    def archive_reputation_link(party_id: str, link_id: str, data: Confirmation):
+    @router.post(
+        "/{party_id}/reputation-links/{link_id}/archive",
+        operation_id="archive_provider_reputation_link",
+        response_model=ReputationMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
+    )
+    def archive_reputation_link(party_id: UUID, link_id: UUID, data: ProviderArchiveInput):
         ready(True)
         return invoke(
             lambda: provider_service.archive_reputation_link(
-                party_id, link_id, confirmed=data.confirmed
+                str(party_id), str(link_id), confirmed=data.confirmed, **_concurrency(data)
             )
         )
 
-    @router.post("/{party_id}/reputation-links/{link_id}/restore", response_model=ProviderResponse)
-    def restore_reputation_link(party_id: str, link_id: str):
+    @router.post(
+        "/{party_id}/reputation-links/{link_id}/restore",
+        operation_id="restore_provider_reputation_link",
+        response_model=ReputationMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
+    )
+    def restore_reputation_link(party_id: UUID, link_id: UUID, data: ExistingProviderConcurrency):
         ready(True)
-        return invoke(lambda: provider_service.restore_reputation_link(party_id, link_id))
+        return invoke(
+            lambda: provider_service.restore_reputation_link(
+                str(party_id), str(link_id), **_concurrency(data)
+            )
+        )
 
     _children(router, provider_service, ready, invoke)
     return router
@@ -549,14 +831,14 @@ def build_category_router(
             ) from error
         except ProviderLifecycleConflict as error:
             raise domain_problem(
-                error, status_code=409, code="provider_category_conflict"
+                error, status_code=409, code=error.code, current=error.current
             ) from error
         except ProviderError as error:
             raise domain_problem(
                 error, status_code=400, code="provider_category_validation"
             ) from error
 
-    @router.get("", response_model=list[CategoryResponse])
+    @router.get("", operation_id="list_provider_categories", response_model=list[CategoryResponse])
     def categories(
         archiveState: Literal["active", "archived", "all"] = "active",
         search: str | None = Query(None, max_length=160),
@@ -566,7 +848,13 @@ def build_category_router(
             lambda: provider_service.list_categories(archive_state=archiveState, search=search)
         )
 
-    @router.post("", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
+    @router.post(
+        "",
+        operation_id="create_provider_category",
+        response_model=CategoryMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
+        status_code=status.HTTP_201_CREATED,
+    )
     def create(data: CategoryInput):
         ready(True)
         return invoke(
@@ -574,38 +862,75 @@ def build_category_router(
                 ProviderCategoryCommand(
                     data.displayName, data.displayOrder, str(data.idempotencyKey), data.description
                 ),
+                expected_revision=data.expectedRevision,
             )
         )
 
-    @router.patch("/{category_id}", response_model=CategoryResponse)
-    def patch(category_id: str, data: CategoryPatchInput):
+    @router.get(
+        "/operations/by-key/{key}",
+        operation_id="get_provider_category_operation_by_key",
+        response_model=CategoryMutationResponse,
+    )
+    def recover_key(key: UUID):
+        ready()
+        return invoke(lambda: provider_service.recover_category(key=str(key)))
+
+    @router.get(
+        "/operations/{operation_id}",
+        operation_id="get_provider_category_operation",
+        response_model=CategoryMutationResponse,
+    )
+    def recover_id(operation_id: UUID):
+        ready()
+        return invoke(lambda: provider_service.recover_category(operation_id=str(operation_id)))
+
+    @router.patch(
+        "/{category_id}",
+        operation_id="update_provider_category",
+        response_model=CategoryMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
+    )
+    def patch(category_id: UUID, data: CategoryPatchInput):
         ready(True)
         fields = data.model_fields_set
         return invoke(
             lambda: provider_service.update_category(
-                category_id,
+                str(category_id),
                 ProviderCategoryPatchCommand(
                     data.displayName if "displayName" in fields else UNSET,
                     data.description if "description" in fields else UNSET,
                     data.displayOrder if "displayOrder" in fields else UNSET,
                 ),
+                **_concurrency(data),
             )
         )
 
-    @router.post("/{category_id}/archive", response_model=CategoryResponse)
-    def archive(category_id: str, data: ArchiveConfirmation):
+    @router.post(
+        "/{category_id}/archive",
+        operation_id="archive_provider_category",
+        response_model=CategoryMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
+    )
+    def archive(category_id: UUID, data: CategoryLifecycleInput):
         ready(True)
         return invoke(
             lambda: provider_service.archive_category(
-                category_id, confirmed=data.confirmed, reason=data.reason
+                str(category_id), confirmed=data.confirmed, reason=data.reason, **_concurrency(data)
             )
         )
 
-    @router.post("/{category_id}/restore", response_model=CategoryResponse)
-    def restore(category_id: str, data: Confirmation):
+    @router.post(
+        "/{category_id}/restore",
+        operation_id="restore_provider_category",
+        response_model=CategoryMutationResponse,
+        responses={409: {"model": ProviderConflictResponse}},
+    )
+    def restore(category_id: UUID, data: CategoryRestoreInput):
         ready(True)
         return invoke(
-            lambda: provider_service.restore_category(category_id, confirmed=data.confirmed)
+            lambda: provider_service.restore_category(
+                str(category_id), confirmed=data.confirmed, **_concurrency(data)
+            )
         )
 
     return router
@@ -613,10 +938,10 @@ def build_category_router(
 
 def _children(router, service, ready, invoke):
     specs = (
-        ("services", ServiceInput, "service", ServiceResponse),
-        ("service-areas", AreaInput, "area", AreaResponse),
-        ("work-history", WorkInput, "work_history", WorkResponse),
-        ("references", ReferenceInput, "reference", ReferenceResponse),
+        ("services", ServiceMutationInput, "service", ServiceMutationResponse),
+        ("service-areas", AreaMutationInput, "area", AreaMutationResponse),
+        ("work-history", WorkMutationInput, "work_history", WorkMutationResponse),
+        ("references", ReferenceMutationInput, "reference", ReferenceMutationResponse),
     )
     for path, model, suffix, _response in specs:
         add = getattr(service, f"add_{suffix}")
@@ -630,60 +955,74 @@ def _children(router, service, ready, invoke):
         router.add_api_route(
             f"/{{party_id}}/{path}",
             create,
+            operation_id=f"add_provider_{suffix}",
             methods=["POST"],
-            response_model=ProviderResponse,
+            response_model=_response,
+            responses={409: {"model": ProviderConflictResponse}},
             status_code=201,
         )
         router.add_api_route(
             f"/{{party_id}}/{path}/{{item_id}}",
             patch,
+            operation_id=f"update_provider_{suffix}",
             methods=["PATCH"],
-            response_model=ProviderResponse,
+            response_model=_response,
+            responses={409: {"model": ProviderConflictResponse}},
         )
         router.add_api_route(
             f"/{{party_id}}/{path}/{{item_id}}/archive",
             archive_item,
+            operation_id=f"archive_provider_{suffix}",
             methods=["POST"],
-            response_model=ProviderResponse,
+            response_model=_response,
+            responses={409: {"model": ProviderConflictResponse}},
         )
         router.add_api_route(
             f"/{{party_id}}/{path}/{{item_id}}/restore",
             restore_item,
+            operation_id=f"restore_provider_{suffix}",
             methods=["POST"],
-            response_model=ProviderResponse,
+            response_model=_response,
+            responses={409: {"model": ProviderConflictResponse}},
         )
 
 
 def _create_endpoint(operation, model, ready, invoke):
-    def endpoint(party_id: str, data):
+    def endpoint(party_id: UUID, data):
         ready(True)
-        return invoke(lambda: operation(party_id, _command(data)))
+        return invoke(lambda: operation(str(party_id), _command(data), **_concurrency(data)))
 
     endpoint.__annotations__["data"] = model
     return endpoint
 
 
 def _patch_endpoint(operation, model, ready, invoke):
-    def endpoint(party_id: str, item_id: str, data):
+    def endpoint(party_id: UUID, item_id: UUID, data):
         ready(True)
-        return invoke(lambda: operation(party_id, item_id, _command(data)))
+        return invoke(
+            lambda: operation(str(party_id), str(item_id), _command(data), **_concurrency(data))
+        )
 
     endpoint.__annotations__["data"] = model
     return endpoint
 
 
 def _archive_endpoint(operation, ready, invoke):
-    def endpoint(party_id: str, item_id: str, data: Confirmation):
+    def endpoint(party_id: UUID, item_id: UUID, data: ProviderArchiveInput):
         ready(True)
-        return invoke(lambda: operation(party_id, item_id, confirmed=data.confirmed))
+        return invoke(
+            lambda: operation(
+                str(party_id), str(item_id), confirmed=data.confirmed, **_concurrency(data)
+            )
+        )
 
     return endpoint
 
 
 def _restore_endpoint(operation, ready, invoke):
-    def endpoint(party_id: str, item_id: str):
+    def endpoint(party_id: UUID, item_id: UUID, data: ExistingProviderConcurrency):
         ready(True)
-        return invoke(lambda: operation(party_id, item_id))
+        return invoke(lambda: operation(str(party_id), str(item_id), **_concurrency(data)))
 
     return endpoint
 
@@ -736,7 +1075,10 @@ def _command(data):
         return ServiceAreaCommand(data.displayName, data.countryCode)
     if isinstance(data, WorkInput):
         return WorkHistoryCommand(
-            data.performedOn.isoformat(), data.summary, data.propertyId, data.outcomeNotes
+            data.performedOn.isoformat(),
+            data.summary,
+            str(data.propertyId) if data.propertyId else None,
+            data.outcomeNotes,
         )
     return ReferenceCommand(
         data.referenceName,
@@ -746,3 +1088,7 @@ def _command(data):
         data.phone,
         data.notes,
     )
+
+
+def _concurrency(data):
+    return {"expected_revision": data.expectedRevision, "idempotency_key": str(data.idempotencyKey)}

@@ -5,7 +5,7 @@ from __future__ import annotations
 import unicodedata
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, date, datetime
 from json import dumps, loads
 from uuid import uuid4
@@ -22,6 +22,14 @@ from app.modules.portfolio.application.ports import (
     PortfolioConflictError,
     PortfolioTransaction,
     PortfolioUnitOfWork,
+    PropertyView,
+)
+from app.modules.portfolio.application.inventory_commands import (
+    InventoryCommand,
+    canonical_json,
+    fingerprint,
+    receipt_audit,
+    inventory_state,
 )
 from app.modules.portfolio.application.status_read_model import (
     space_status_snapshot,
@@ -260,7 +268,9 @@ class PortfolioService:
 
         return self.unit_of_work.write(write)
 
-    def create_property(self, command: PropertyCreateCommand) -> Property:
+    def create_property(
+        self, command: PropertyCreateCommand, *, expected_revision: int, idempotency_key: str
+    ) -> dict[str, object]:
         as_of, correlation_id = self._instant(), str(uuid4())
         now = as_of.isoformat()
         time_zone = self._time_zone_for(command)
@@ -326,7 +336,14 @@ class PortfolioService:
                 )
             return property
 
-        return self.unit_of_work.write(write)
+        return self._inventory_write(
+            InventoryCommand(
+                "create_property", None, expected_revision, idempotency_key, asdict(command)
+            ),
+            write,
+            as_of,
+            correlation_id,
+        )
 
     def get_property(self, property_id: str) -> dict[str, object]:
         as_of = self._instant()
@@ -505,7 +522,14 @@ class PortfolioService:
 
         return self.unit_of_work.read(read)
 
-    def add_space(self, property_id: str, command: SpaceCreateCommand) -> Space:
+    def add_space(
+        self,
+        property_id: str,
+        command: SpaceCreateCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ) -> dict[str, object]:
         correlation_id, as_of = str(uuid4()), self._instant()
         now = as_of.isoformat()
 
@@ -554,9 +578,18 @@ class PortfolioService:
             )
             return space
 
-        return self._not_found_from_key_error(write)
+        return self._inventory_write(
+            InventoryCommand(
+                "add_space", property_id, expected_revision, idempotency_key, asdict(command)
+            ),
+            write,
+            as_of,
+            correlation_id,
+        )
 
-    def archive_space(self, space_id: str, *, confirmed: bool) -> Space:
+    def archive_space(
+        self, space_id: str, *, confirmed: bool, expected_revision: int, idempotency_key: str
+    ) -> dict[str, object]:
         if confirmed is not True:
             raise PortfolioError("Archiving a space requires explicit confirmation.")
         correlation_id, as_of = str(uuid4()), self._instant()
@@ -596,13 +629,33 @@ class PortfolioService:
             )
             return archived
 
-        return self._not_found_from_key_error(write, label="Space")
+        return self._inventory_write(
+            InventoryCommand(
+                "archive_space",
+                space_id,
+                expected_revision,
+                idempotency_key,
+                {"confirmed": confirmed},
+            ),
+            write,
+            as_of,
+            correlation_id,
+        )
 
-    def patch_space(self, space_id: str, changes: dict[str, object]) -> Space:
+    def patch_space(
+        self,
+        space_id: str,
+        changes: dict[str, object],
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ) -> dict[str, object]:
         allowed = {"displayName", "suiteOrFloor", "notes"}
         if not changes or set(changes) - allowed:
             raise PortfolioError("A space patch requires supported fields.")
-        correlation_id, now = str(uuid4()), _now()
+        changes = dict(changes)
+        correlation_id, as_of = str(uuid4()), self._instant()
+        now = as_of.isoformat()
 
         def write(transaction: PortfolioTransaction) -> Space:
             current = transaction.get_space(space_id)
@@ -630,8 +683,10 @@ class PortfolioService:
                 normalized_name=normalized_name,
                 suite_or_floor=command.suite_or_floor,
                 notes=command.notes,
-                updated_at=now,
             )
+            if updated == current:
+                return current
+            updated = replace(updated, updated_at=now)
             transaction.replace_space(updated)
             transaction.record_change(
                 entity_type="space",
@@ -644,10 +699,18 @@ class PortfolioService:
             )
             return updated
 
-        return self._not_found_from_key_error(write, label="Space")
+        return self._inventory_write(
+            InventoryCommand("patch_space", space_id, expected_revision, idempotency_key, changes),
+            write,
+            as_of,
+            correlation_id,
+        )
 
-    def restore_space(self, space_id: str) -> Space:
-        correlation_id, now = str(uuid4()), _now()
+    def restore_space(
+        self, space_id: str, *, expected_revision: int, idempotency_key: str
+    ) -> dict[str, object]:
+        correlation_id, as_of = str(uuid4()), self._instant()
+        now = as_of.isoformat()
 
         def write(transaction: PortfolioTransaction) -> Space:
             current = transaction.get_space(space_id)
@@ -685,9 +748,21 @@ class PortfolioService:
             )
             return restored
 
-        return self._not_found_from_key_error(write, label="Space")
+        return self._inventory_write(
+            InventoryCommand("restore_space", space_id, expected_revision, idempotency_key, {}),
+            write,
+            as_of,
+            correlation_id,
+        )
 
-    def patch_property(self, property_id: str, changes: dict[str, object]) -> Property:
+    def patch_property(
+        self,
+        property_id: str,
+        changes: dict[str, object],
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ) -> dict[str, object]:
         allowed = {
             "displayName",
             "addressLine1",
@@ -700,7 +775,9 @@ class PortfolioService:
         }
         if not changes or set(changes) - allowed:
             raise PortfolioError("A property patch requires supported fields.")
-        correlation_id, now = str(uuid4()), _now()
+        changes = dict(changes)
+        correlation_id, as_of = str(uuid4()), self._instant()
+        now = as_of.isoformat()
 
         def write(transaction: PortfolioTransaction) -> Property:
             current = transaction.get_property(property_id)
@@ -741,8 +818,10 @@ class PortfolioService:
                 country_code=command.country_code,
                 time_zone=time_zone,
                 notes=command.notes,
-                updated_at=now,
             )
+            if updated == current:
+                return current
+            updated = replace(updated, updated_at=now)
             transaction.replace_property(updated)
             transaction.record_change(
                 entity_type="property",
@@ -755,7 +834,14 @@ class PortfolioService:
             )
             return updated
 
-        return self._not_found_from_key_error(write)
+        return self._inventory_write(
+            InventoryCommand(
+                "patch_property", property_id, expected_revision, idempotency_key, changes
+            ),
+            write,
+            as_of,
+            correlation_id,
+        )
 
     def _time_zone_for(self, command: PropertyCreateCommand | PropertyUpdateCommand) -> str:
         return self.time_zone_resolver.resolve(
@@ -808,16 +894,22 @@ class PortfolioService:
             raise PortfolioError("Expected revision must be a non-negative integer.")
         if not isinstance(idempotency_key, str) or not idempotency_key.strip():
             raise PortfolioError("An idempotency key is required.")
-        fingerprint = dumps(payload, sort_keys=True, separators=(",", ":"))
+        fingerprint = dumps(
+            {**payload, "expectedRevision": expected_revision},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         existing = transaction.status_operation(idempotency_key)
         if existing is not None:
             if existing["space_id"] != space.id:
                 raise PortfolioConflictError(
-                    "This idempotency key was already used for another space."
+                    "This idempotency key was already used for another space.",
+                    code="portfolio_status_payload_conflict",
                 )
             if existing["request_fingerprint"] != fingerprint:
                 raise PortfolioConflictError(
-                    "This idempotency key was already used with a different request."
+                    "This idempotency key was already used with a different request.",
+                    code="portfolio_status_payload_conflict",
                 )
             return fingerprint, loads(str(existing["result_snapshot"]))
         if space.status_revision != expected_revision:
@@ -835,8 +927,67 @@ class PortfolioService:
             raise PortfolioConflictError(
                 f"Status revision is stale; current revision is {space.status_revision}.",
                 current_status=snapshot,
+                code="portfolio_status_revision_conflict",
+            )
+        if space.status != "active":
+            raise PortfolioConflictError(
+                "Manual status changes require an active space.",
+                code="portfolio_status_lifecycle_conflict",
             )
         return fingerprint, None
+
+    def get_status_operation(
+        self,
+        *,
+        operation_id: str | None = None,
+        space_id: str | None = None,
+        idempotency_key: str | None = None,
+    ) -> dict[str, object]:
+        """Return the retained manual command receipt, never recompute its result."""
+
+        def read(transaction: PortfolioTransaction):
+            operation = (
+                transaction.status_operation_by_id(operation_id)
+                if operation_id is not None
+                else transaction.status_operation(str(idempotency_key))
+            )
+            if operation is None or (space_id is not None and operation["space_id"] != space_id):
+                raise PortfolioNotFoundError("Status operation was not found.")
+            snapshot = loads(str(operation["result_snapshot"]))
+            if "currentOccupancy" not in snapshot:
+                raise PortfolioNotFoundError("Manual status operation was not found.")
+            return {
+                "operationId": operation["id"],
+                "spaceId": operation["space_id"],
+                "idempotencyKey": operation["idempotency_key"],
+                "revision": operation["result_revision"],
+                "committedAt": operation["created_at"],
+                "result": snapshot,
+            }
+
+        return self.unit_of_work.read(read)
+
+    def _manual_status_write(self, space_id: str, as_of: datetime, operation):
+        def write(transaction: PortfolioTransaction):
+            try:
+                return operation(transaction)
+            except PortfolioConflictError as error:
+                space = transaction.get_space(space_id)
+                if space is not None and error.current_status is None:
+                    property = transaction.get_property(space.property_id)
+                    if property is not None:
+                        error.current_status = space_status_snapshot(
+                            space,
+                            property,
+                            transaction.occupancy_periods(space_id),
+                            transaction.availability(space_id),
+                            as_of,
+                        )
+                if error.code == "portfolio_conflict":
+                    error.code = "portfolio_status_lifecycle_conflict"
+                raise
+
+        return self._not_found_from_key_error(write, label="Space")
 
     @staticmethod
     def _status_mutation_finish(
@@ -874,15 +1025,30 @@ class PortfolioService:
     ) -> dict[str, object]:
         return {**result, "asOf": as_of.isoformat(), "effectiveLocalDate": effective_on}
 
-    def archive_property(self, property_id: str, *, confirmed: bool) -> Property:
+    def archive_property(
+        self, property_id: str, *, confirmed: bool, expected_revision: int, idempotency_key: str
+    ) -> dict[str, object]:
         if confirmed is not True:
             raise PortfolioError("Archiving a property requires explicit confirmation.")
-        return self._change_property_status(property_id, "archived")
+        return self._change_property_status(
+            property_id, "archived", expected_revision, idempotency_key, {"confirmed": confirmed}
+        )
 
-    def restore_property(self, property_id: str) -> Property:
-        return self._change_property_status(property_id, "active")
+    def restore_property(
+        self, property_id: str, *, expected_revision: int, idempotency_key: str
+    ) -> dict[str, object]:
+        return self._change_property_status(
+            property_id, "active", expected_revision, idempotency_key, {}
+        )
 
-    def _change_property_status(self, property_id: str, status: str) -> Property:
+    def _change_property_status(
+        self,
+        property_id: str,
+        status: str,
+        expected_revision: int,
+        idempotency_key: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
         correlation_id, as_of = str(uuid4()), self._instant()
         now = as_of.isoformat()
 
@@ -965,7 +1131,18 @@ class PortfolioService:
             )
             return updated
 
-        return self._not_found_from_key_error(write)
+        return self._inventory_write(
+            InventoryCommand(
+                "archive_property" if status == "archived" else "restore_property",
+                property_id,
+                expected_revision,
+                idempotency_key,
+                payload,
+            ),
+            write,
+            as_of,
+            correlation_id,
+        )
 
     def archive_party(self, party_id: str, *, confirmed: bool) -> Party:
         if confirmed is not True:
@@ -1024,7 +1201,13 @@ class PortfolioService:
         return self._not_found_from_key_error(write, label="Party")
 
     def replace_ownerships(
-        self, property_id: str, ownerships: tuple[OwnershipInput, ...], effective_on: str
+        self,
+        property_id: str,
+        ownerships: tuple[OwnershipInput, ...],
+        effective_on: str,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
     ) -> dict[str, object]:
         _validate_ownerships(ownerships)
         effective = _date(effective_on)
@@ -1051,6 +1234,10 @@ class PortfolioService:
                     "Ownership changes cannot replace an existing change on the same date."
                 )
             prior_snapshot = [item.to_dict() for item in existing]
+            if sorted((item.owner_kind, item.party_id or "") for item in existing) == sorted(
+                (item.owner_kind, item.party_id or "") for item in resolved_inputs
+            ):
+                return existing
             for item in existing:
                 if effective < item.starts_on:
                     raise PortfolioError(
@@ -1097,8 +1284,18 @@ class PortfolioService:
             )
             return created
 
-        self._not_found_from_key_error(write)
-        return self.get_property(property_id)
+        return self._inventory_write(
+            InventoryCommand(
+                "replace_ownerships",
+                property_id,
+                expected_revision,
+                idempotency_key,
+                {"ownerships": [asdict(item) for item in ownerships], "effectiveOn": effective},
+            ),
+            write,
+            as_of,
+            correlation_id,
+        )
 
     def list_parties(
         self, *, active_only: bool = False, search: str | None = None
@@ -1282,7 +1479,7 @@ class PortfolioService:
                 transaction, space, now, idempotency_key, fingerprint, result
             )
 
-        return self._not_found_from_key_error(write, label="Space")
+        return self._manual_status_write(space_id, as_of, write)
 
     def cancel_scheduled_occupancy(
         self, space_id: str, period_id: str, *, expected_revision: int, idempotency_key: str
@@ -1367,7 +1564,7 @@ class PortfolioService:
                 transaction, space, now, idempotency_key, fingerprint, result
             )
 
-        return self._not_found_from_key_error(write, label="Space")
+        return self._manual_status_write(space_id, as_of, write)
 
     def replace_scheduled_occupancy(
         self,
@@ -1468,7 +1665,7 @@ class PortfolioService:
                 transaction, space, now, idempotency_key, fingerprint, result
             )
 
-        return self._not_found_from_key_error(write, label="Space")
+        return self._manual_status_write(space_id, as_of, write)
 
     def correct_occupancy(
         self,
@@ -1562,7 +1759,7 @@ class PortfolioService:
                 transaction, space, now, idempotency_key, fingerprint, result
             )
 
-        return self._not_found_from_key_error(write, label="Space")
+        return self._manual_status_write(space_id, as_of, write)
 
     def reschedule_scheduled_occupancy(
         self,
@@ -1692,7 +1889,7 @@ class PortfolioService:
                 transaction, space, now, idempotency_key, fingerprint, result
             )
 
-        return self._not_found_from_key_error(write, label="Space")
+        return self._manual_status_write(space_id, as_of, write)
 
     def change_availability(
         self,
@@ -1761,7 +1958,7 @@ class PortfolioService:
                 transaction, space, now, idempotency_key, fingerprint, result
             )
 
-        return self._not_found_from_key_error(write, label="Space")
+        return self._manual_status_write(space_id, as_of, write)
 
     def classify_space(
         self,
@@ -1807,14 +2004,24 @@ class PortfolioService:
             availability = transaction.availability(space_id)
             if current is None or availability is None:
                 raise PortfolioError("Space status records are missing.")
-            updated_availability = availability
+            # Validate both requested axes before writing either one so conflict
+            # snapshots describe committed state, never a partial classification.
             if command.occupancy is not None:
                 if current.source_kind != "manual":
                     raise PortfolioConflictError(
                         "Source-owned occupancy must be changed by its owning module."
                     )
                 if current.occupancy_status != "unknown":
-                    raise PortfolioError("Occupancy is already classified.")
+                    raise PortfolioConflictError("Occupancy is already classified.")
+            if command.availability is not None:
+                if availability.source_kind != "manual":
+                    raise PortfolioConflictError(
+                        "Source-owned availability must be changed by its owning module."
+                    )
+                if availability.availability_status != "unknown":
+                    raise PortfolioConflictError("Availability is already classified.")
+            updated_availability = availability
+            if command.occupancy is not None:
                 if current.starts_on == today:
                     updated_period = replace(
                         current,
@@ -1869,12 +2076,6 @@ class PortfolioService:
                         correlation_id=correlation_id,
                     )
             if command.availability is not None:
-                if availability.source_kind != "manual":
-                    raise PortfolioConflictError(
-                        "Source-owned availability must be changed by its owning module."
-                    )
-                if availability.availability_status != "unknown":
-                    raise PortfolioError("Availability is already classified.")
                 updated_availability = SpaceAvailability(
                     space_id=space_id,
                     availability_status=command.availability.availability_status,
@@ -1908,13 +2109,179 @@ class PortfolioService:
                 transaction, space, now, idempotency_key, fingerprint, result
             )
 
-        return self._not_found_from_key_error(write, label="Space")
+        return self._manual_status_write(space_id, as_of, write)
 
     def _not_found_from_key_error(self, operation, *, label: str = "Property"):
         try:
             return self.unit_of_work.write(operation)
         except KeyError as error:
             raise PortfolioNotFoundError(f"{label} was not found.") from error
+
+    def _inventory_view(
+        self, transaction: PortfolioTransaction, raw: PropertyView, as_of: datetime
+    ) -> dict[str, object]:
+        property, ownerships, parties, spaces = raw
+        periods, availability = transaction.space_statuses([item.id for item in spaces])
+        return self._with_statuses(
+            self._property_view(property, ownerships, parties, spaces, as_of=as_of),
+            spaces,
+            periods,
+            availability,
+            as_of=as_of,
+        )
+
+    def _inventory_write(
+        self,
+        command: InventoryCommand,
+        operation: Callable[[PortfolioTransaction], Property | Space | list[PropertyOwnership]],
+        as_of: datetime,
+        correlation_id: str,
+    ) -> dict[str, object]:
+        if type(command.expected_revision) is not int or command.expected_revision < 0:
+            raise PortfolioError("Expected Property revision must be a non-negative integer.")
+        if (
+            not isinstance(command.idempotency_key, str)
+            or command.idempotency_key != command.idempotency_key.strip()
+            or not 1 <= len(command.idempotency_key) <= 200
+        ):
+            raise PortfolioError("Idempotency key must contain 1–200 nonblank characters.")
+        if command.action == "create_property" and command.expected_revision != 0:
+            raise PortfolioError("Property creation requires revision zero.")
+        request = command.request_json()
+        request_hash = fingerprint(request)
+        now = as_of.isoformat()
+
+        def write(tx):
+            retained = tx.inventory_operation(idempotency_key=command.idempotency_key)
+            if retained is not None:
+                if (
+                    retained["request_fingerprint"] != request_hash
+                    or retained["request_json"] != request
+                ):
+                    raise PortfolioConflictError(
+                        "The key belongs to a different inventory command.",
+                        code="portfolio_inventory_payload_conflict",
+                    )
+                return loads(retained["response_json"])
+            before = None
+            if command.action != "create_property":
+                target_id = command.target_id
+                if command.action in {"patch_space", "archive_space", "restore_space"}:
+                    space = tx.get_space(target_id)
+                    if space is None:
+                        raise PortfolioNotFoundError("Space was not found.")
+                    target_id = space.property_id
+                records = tx.property_views_for_ids([target_id])
+                if not records:
+                    raise PortfolioNotFoundError("Property was not found.")
+                before = inventory_state(records[0])
+                property = records[0][0]
+                if property.property_revision != command.expected_revision:
+                    raise PortfolioConflictError(
+                        "Property inventory changed; review the current state.",
+                        code="portfolio_inventory_revision_conflict",
+                        current_status=self._inventory_view(tx, records[0], as_of),
+                    )
+            changed = operation(tx)
+            property_id = (
+                changed.property_id
+                if isinstance(changed, Space)
+                else changed.id
+                if isinstance(changed, Property)
+                else command.target_id
+            )
+            raw = tx.property_views_for_ids([property_id])[0]
+            effective = before != inventory_state(raw)
+            revised = replace(
+                raw[0],
+                property_revision=command.expected_revision + int(effective),
+                updated_at=now if effective else raw[0].updated_at,
+            )
+            if revised != raw[0]:
+                tx.replace_property(revised)
+            raw = (revised, *raw[1:])
+            after = inventory_state(raw)
+            operation_id = str(uuid4())
+            if isinstance(changed, Space):
+                result = {
+                    **changed.to_dict(),
+                    "propertyRevision": revised.property_revision,
+                    "asOf": now,
+                    "effectiveLocalDate": as_of.astimezone(ZoneInfo(revised.time_zone))
+                    .date()
+                    .isoformat(),
+                }
+            else:
+                result = self._inventory_view(tx, raw, as_of)
+            result["operationId"] = operation_id
+            receipt = {
+                "id": operation_id,
+                "property_id": property_id,
+                "action": command.action,
+                "idempotency_key": command.idempotency_key,
+                "expected_revision": command.expected_revision,
+                "result_revision": revised.property_revision,
+                "effective": int(effective),
+                "request_json": request,
+                "request_fingerprint": request_hash,
+                "response_json": canonical_json(result),
+                "response_fingerprint": fingerprint(canonical_json(result)),
+                "correlation_id": correlation_id,
+                "created_at": now,
+            }
+            tx.record_change(
+                entity_type="property",
+                entity_id=property_id,
+                action="inventory_command_applied",
+                before=before,
+                after=after,
+                reason="inventory_command_applied",
+                correlation_id=correlation_id,
+            )
+            tx.insert_inventory_operation(receipt)
+            tx.record_change(
+                entity_type="portfolio_inventory_operation",
+                entity_id=operation_id,
+                action="recorded",
+                before=None,
+                after=receipt_audit(receipt),
+                reason="inventory_command_recorded",
+                correlation_id=correlation_id,
+            )
+            return result
+
+        return self._not_found_from_key_error(write)
+
+    def get_inventory_operation(
+        self,
+        *,
+        operation_id: str | None = None,
+        idempotency_key: str | None = None,
+        property_id: str | None = None,
+    ) -> dict[str, object]:
+        if (operation_id is None) == (idempotency_key is None):
+            raise PortfolioError("Supply exactly one operation identity.")
+        operation = self.unit_of_work.read(
+            lambda tx: tx.inventory_operation(
+                operation_id=operation_id, idempotency_key=idempotency_key
+            )
+        )
+        if operation is None or (
+            property_id is not None and operation["property_id"] != property_id
+        ):
+            raise PortfolioNotFoundError("Inventory operation was not found.")
+        return {
+            "operationId": operation["id"],
+            "propertyId": operation["property_id"],
+            "action": operation["action"],
+            "idempotencyKey": operation["idempotency_key"],
+            "expectedPropertyRevision": operation["expected_revision"],
+            "propertyRevision": operation["result_revision"],
+            "effective": bool(operation["effective"]),
+            "correlationId": operation["correlation_id"],
+            "committedAt": operation["created_at"],
+            "result": loads(operation["response_json"]),
+        }
 
     @staticmethod
     def _new_ownerships(

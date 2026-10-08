@@ -31,6 +31,7 @@ from app.modules.leases.domain.models import (
     LeaseTerminationProposal,
 )
 from app.modules.leases.infrastructure.sqlalchemy_models import (
+    LeaseCommandOperationModel,
     LeaseModel,
     LeaseParticipantModel,
     LeaseRenewalOptionModel,
@@ -45,6 +46,21 @@ Result = TypeVar("Result")
 
 
 class SQLiteLeaseUnitOfWork:
+    def command_operation(self, *, operation_id=None, idempotency_key=None):
+        column, value = (
+            (LeaseCommandOperationModel.id, operation_id)
+            if operation_id is not None
+            else (LeaseCommandOperationModel.idempotency_key, idempotency_key)
+        )
+        with self.engine.connect() as connection:
+            return (
+                connection.execute(
+                    LeaseCommandOperationModel.__table__.select().where(column == value)
+                )
+                .mappings()
+                .first()
+            )
+
     def __init__(
         self,
         database,
@@ -169,6 +185,26 @@ class SQLiteLeaseUnitOfWork:
 
 
 class _Transaction:
+    def command_operation(self, idempotency_key):
+        return (
+            self.connection.execute(
+                LeaseCommandOperationModel.__table__.select().where(
+                    LeaseCommandOperationModel.idempotency_key == idempotency_key
+                )
+            )
+            .mappings()
+            .first()
+        )
+
+    def insert_command_operation(self, receipt):
+        self.connection.execute(LeaseCommandOperationModel.__table__.insert().values(**receipt))
+
+    def termination_case_snapshot(self, case_id):
+        item = self.termination_case(case_id)
+        if item is None:
+            raise KeyError(case_id)
+        return _termination_snapshot(self.connection, item)
+
     def __init__(
         self,
         connection: Any,
@@ -248,9 +284,6 @@ class _Transaction:
 
     def finalized_inspection_report_kinds(self, lease_id):
         return self.inspection_context_reader.finalized_report_kinds(self.connection, lease_id)
-
-    def source_timeline_operation(self, idempotency_key):
-        return self.portfolio_operations.source_timeline_operation(self.connection, idempotency_key)
 
     def insert_lease(self, item):
         self.connection.execute(LeaseModel.__table__.insert().values(**item.__dict__))
@@ -439,39 +472,51 @@ def _termination_record(session: Session, row: LeaseTerminationCaseModel):
     case = LeaseTerminationCase(
         **{name: getattr(row, name) for name in LeaseTerminationCase.__dataclass_fields__}
     )
-    proposals = [
-        LeaseTerminationProposal(
-            **{name: getattr(item, name) for name in LeaseTerminationProposal.__dataclass_fields__}
-        )
-        for item in session.execute(
-            select(LeaseTerminationProposalModel)
-            .where(LeaseTerminationProposalModel.termination_case_id == row.id)
-            .order_by(LeaseTerminationProposalModel.proposal_version)
-        ).scalars()
-    ]
+    parent = session.get(LeaseModel, case.lease_id)
+    return (*_termination_snapshot(session.connection(), case), parent.lease_revision)
+
+
+def _termination_snapshot(connection, case: LeaseTerminationCase):
+    proposals = _mapped_many(
+        connection,
+        LeaseTerminationProposalModel,
+        LeaseTerminationProposal,
+        LeaseTerminationProposalModel.termination_case_id == case.id,
+        LeaseTerminationProposalModel.proposal_version,
+    )
     files = [
         {
-            "id": file.id,
-            "originalName": file.original_name,
-            "mediaType": file.media_type,
-            "sizeBytes": file.size_bytes,
-            "contentSha256": file.content_sha256,
-            "linkId": link.id,
-            "purpose": link.purpose,
-            "storageState": location.storage_state,
-            "available": location.storage_state == "available",
-            "verifiedAt": location.verified_at,
+            "id": row["file_id"],
+            "originalName": row["original_name"],
+            "mediaType": row["media_type"],
+            "sizeBytes": row["size_bytes"],
+            "contentSha256": row["content_sha256"],
+            "linkId": row["link_id"],
+            "purpose": row["purpose"],
+            "storageState": row["storage_state"],
+            "available": row["storage_state"] == "available",
+            "verifiedAt": row["verified_at"],
         }
-        for link, file, location in session.execute(
-            select(FileLinkModel, FileRecordModel, FileContentLocationModel)
+        for row in connection.execute(
+            select(
+                FileLinkModel.id.label("link_id"),
+                FileLinkModel.purpose,
+                FileRecordModel.id.label("file_id"),
+                FileRecordModel.original_name,
+                FileRecordModel.media_type,
+                FileRecordModel.size_bytes,
+                FileRecordModel.content_sha256,
+                FileContentLocationModel.storage_state,
+                FileContentLocationModel.verified_at,
+            )
             .join(FileRecordModel, FileRecordModel.id == FileLinkModel.file_id)
             .join(FileContentLocationModel, FileContentLocationModel.file_id == FileRecordModel.id)
             .where(
                 FileLinkModel.entity_type == "lease_termination_case",
-                FileLinkModel.entity_id == row.id,
+                FileLinkModel.entity_id == case.id,
                 FileLinkModel.archived_at.is_(None),
             )
             .order_by(FileLinkModel.created_at)
-        )
+        ).mappings()
     ]
     return case, proposals, files

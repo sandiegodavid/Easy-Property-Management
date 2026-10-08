@@ -14,7 +14,8 @@ from app.modules.maintenance.domain.models import (
 )
 from app.modules.maintenance.domain.work_journal import WorkJournalCreate
 
-from .ports import MaintenanceUnitOfWork
+from .commands import execute_command
+from .ports import MaintenanceTransaction, MaintenanceUnitOfWork
 
 
 def _camel(name: str) -> str:
@@ -64,20 +65,20 @@ class WorkJournalService:
         self.unit_of_work = unit_of_work
         self.now = now or (lambda: datetime.now(UTC))
 
-    def record(self, issue_id: str, command: WorkJournalCreate, idempotency_key: str):
-        uuid(issue_id, "issueId")
-        uuid(idempotency_key, "idempotencyKey")
-        payload = {"issueId": issue_id, "command": command.fingerprint_payload()}
-        request_fingerprint = fingerprint("work_journal", payload)
-
+    def record(
+        self,
+        issue_id: str,
+        command: WorkJournalCreate,
+        idempotency_key: str,
+        *,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
+    ):
         def operation(tx):
-            existing = tx.work_journal_by_key(idempotency_key)
-            if existing is not None:
-                if existing["request_fingerprint"] != request_fingerprint:
-                    raise MaintenanceConflictError(
-                        "Idempotency key payload changed.", "idempotency_conflict"
-                    )
-                return self._entry_view(tx, existing["id"])
+            uuid(issue_id, "issueId")
+            uuid(idempotency_key, "idempotencyKey")
+            payload = {"issueId": issue_id, "command": command.fingerprint_payload()}
+            request_fingerprint = fingerprint("work_journal", payload)
             issue = tx.issue(issue_id)
             if issue is None:
                 raise MaintenanceNotFoundError("Issue was not found.")
@@ -157,7 +158,17 @@ class WorkJournalService:
             )
             return _view(item)
 
-        return self.unit_of_work.write(operation)
+        return execute_command(
+            self.unit_of_work,
+            operation,
+            action="record",
+            target_kind="issue",
+            target_id=issue_id,
+            payload={"issue_id": issue_id, "command": command},
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
     def issue_journal(
         self, issue_id: str, *, cursor=None, page_size: int = 50, descending: bool = True

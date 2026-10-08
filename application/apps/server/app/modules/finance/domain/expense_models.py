@@ -84,6 +84,7 @@ class ExpenseCategory:
     archived_at: str | None
     created_at: str
     updated_at: str
+    revision: int = 1
 
     def to_dict(self) -> dict[str, object]:
         return _camel(asdict(self))

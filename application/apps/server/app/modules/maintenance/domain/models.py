@@ -38,9 +38,16 @@ class MaintenanceNotFoundError(MaintenanceError):
 
 
 class MaintenanceConflictError(MaintenanceError):
-    def __init__(self, message: str, code: str = "maintenance_conflict") -> None:
+    def __init__(
+        self,
+        message: str,
+        code: str = "maintenance_conflict",
+        *,
+        current_revision: int | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.current_revision = current_revision
 
 
 def uuid(value: str, name: str) -> str:

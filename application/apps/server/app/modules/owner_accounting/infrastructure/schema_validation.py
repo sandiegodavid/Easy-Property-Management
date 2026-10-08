@@ -2,12 +2,18 @@ from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint, 
 
 from app.platform.migration_errors import MigrationSchemaError
 
-from .sqlalchemy_models import OwnerRentReportModel, OwnerRentReportOperationModel
+from .sqlalchemy_models import (
+    OwnerRentReportModel,
+    OwnerRentReportOperationModel,
+    OWNER_OPERATION_NO_REPLACE,
+)
+from .command_validation import validate_owner_commands
 
 MODELS = (OwnerRentReportModel, OwnerRentReportOperationModel)
 
 
 def validate_owner_accounting_schema(connection):
+    validate_owner_commands(connection)
     inspector = inspect(connection)
     for model in MODELS:
         table = model.__table__
@@ -16,6 +22,14 @@ def validate_owner_accounting_schema(connection):
         columns = {item["name"]: item for item in inspector.get_columns(table.name)}
         if set(columns) != {column.name for column in table.columns}:
             raise MigrationSchemaError("Owner-accounting columns are incompatible.")
+        if any(
+            str(columns[column.name]["type"]).upper() != str(column.type).upper()
+            or bool(columns[column.name]["nullable"]) != bool(column.nullable)
+            for column in table.columns
+        ) or tuple(inspector.get_pk_constraint(table.name)["constrained_columns"]) != tuple(
+            column.name for column in table.primary_key.columns
+        ):
+            raise MigrationSchemaError("Owner-accounting stored types or primary key differ.")
         expected_fks = {
             (
                 tuple(element.parent.name for element in item.elements),
@@ -45,6 +59,16 @@ def validate_owner_accounting_schema(connection):
         }
         if actual_indexes != expected_indexes:
             raise MigrationSchemaError("Owner-accounting indexes are incompatible.")
+        for item in table.indexes:
+            expected_where = item.dialect_options["sqlite"].get("where")
+            actual = next(
+                index for index in inspector.get_indexes(table.name) if index["name"] == item.name
+            )
+            actual_where = actual.get("dialect_options", {}).get("sqlite_where")
+            if _normalise("" if expected_where is None else expected_where) != _normalise(
+                "" if actual_where is None else actual_where
+            ):
+                raise MigrationSchemaError("Owner-accounting index predicates differ.")
         expected_unique = {
             tuple(column.name for column in item.columns)
             for item in table.constraints
@@ -73,6 +97,7 @@ def validate_owner_accounting_schema(connection):
         )
     }
     expected = {
+        "owner_rent_report_operations_no_replace": _normalise(OWNER_OPERATION_NO_REPLACE),
         "owner_rent_report_operations_no_update": _normalise(
             "CREATE TRIGGER owner_rent_report_operations_no_update BEFORE UPDATE ON owner_rent_report_operations BEGIN SELECT RAISE(ABORT, 'owner rent report operations are immutable'); END"
         ),

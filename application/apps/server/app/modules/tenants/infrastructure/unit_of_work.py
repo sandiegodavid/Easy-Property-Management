@@ -10,7 +10,13 @@ from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.parties.application.ports import PartyReadOperations, PartyTransactionOperations
 from app.modules.tenants.application.ports import LeaseParticipationGuard, TenantTransaction
 from app.modules.tenants.domain.models import TenantProfile
-from app.modules.tenants.infrastructure.sqlalchemy_models import TenantProfileModel
+from app.modules.tenants.infrastructure.sqlalchemy_models import (
+    TenantProfileModel,
+    TenantCommandOperationModel,
+)
+from app.modules.tenants.application.commands import resolve_contact
+from app.modules.tenants.application.errors import TenantConflictError
+from app.modules.parties.application.errors import PartyConflictError
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 Result = TypeVar("Result")
@@ -37,17 +43,22 @@ class SQLiteTenantUnitOfWork:
                 _Transaction(connection, self.recorder, self.lease_guard, self.party_operations)
             )
 
+    def operation(self, *, operation_id=None, key=None):
+        table = TenantCommandOperationModel.__table__
+        predicate = (
+            table.c.id == operation_id
+            if operation_id is not None
+            else table.c.idempotency_key == key
+        )
+        with self.engine.connect() as connection:
+            row = connection.execute(table.select().where(predicate)).mappings().first()
+            return dict(row) if row else None
+
     def get(self, party_id):
-        with Session(self.engine) as session:
-            party = self.party_reads.get_party(party_id)
-            profile = session.get(TenantProfileModel, party_id)
-            if party is None or profile is None:
-                return None
-            return (
-                party,
-                _profile(profile),
-                self.party_reads.methods_for_parties([party_id])[party_id],
-            )
+        with self.engine.connect() as connection:
+            tx = _Transaction(connection, self.recorder, self.lease_guard, self.party_operations)
+            party, profile = tx.party(party_id), tx.profile(party_id)
+            return (party, profile, tx.methods(party_id)) if party and profile else None
 
     def list(self, *, archive_state, search):
         with Session(self.engine) as session:
@@ -73,15 +84,21 @@ class SQLiteTenantUnitOfWork:
             return [item for item in records if item[0].id in matched_ids]
 
 
-class _Transaction:
-    def __init__(self, connection: Any, recorder, lease_guard, party_operations):
-        self.connection = connection
-        self.recorder = recorder
-        self.lease_guard = lease_guard
-        self.party_operations = party_operations
+class _ProfileTransaction:
+    def __init__(self, connection, recorder):
+        self.connection, self.recorder = connection, recorder
 
-    def party(self, party_id):
-        return self.party_operations.party(self.connection, party_id)
+    def tenant_operation_by_key(self, key):
+        table = TenantCommandOperationModel.__table__
+        row = (
+            self.connection.execute(table.select().where(table.c.idempotency_key == key))
+            .mappings()
+            .first()
+        )
+        return dict(row) if row else None
+
+    def insert_tenant_operation(self, operation):
+        self.connection.execute(TenantCommandOperationModel.__table__.insert().values(**operation))
 
     def profile(self, party_id):
         row = (
@@ -92,6 +109,26 @@ class _Transaction:
             .first()
         )
         return _profile_mapping(row) if row else None
+
+    def replace_profile(self, item):
+        self.connection.execute(
+            TenantProfileModel.__table__.update()
+            .where(TenantProfileModel.party_id == item.party_id)
+            .values(**_profile_values(item))
+        )
+
+    def record_change(self, **change):
+        self.recorder.record_change(self.connection.connection.driver_connection, **change)
+
+
+class _Transaction(_ProfileTransaction):
+    def __init__(self, connection: Any, recorder, lease_guard, party_operations):
+        super().__init__(connection, recorder)
+        self.lease_guard = lease_guard
+        self.party_operations = party_operations
+
+    def party(self, party_id):
+        return self.party_operations.party(self.connection, party_id)
 
     def methods(self, party_id):
         return self.party_operations.methods(self.connection, party_id)
@@ -110,18 +147,8 @@ class _Transaction:
             TenantProfileModel.__table__.insert().values(**_profile_values(item))
         )
 
-    def replace_profile(self, item):
-        self.connection.execute(
-            TenantProfileModel.__table__.update()
-            .where(TenantProfileModel.party_id == item.party_id)
-            .values(**_profile_values(item))
-        )
-
     def insert_method(self, item):
         self.party_operations.insert_method(self.connection, item)
-
-    def record_change(self, **change):
-        self.recorder.record_change(self.connection.connection.driver_connection, **change)
 
 
 def _profile(row):
@@ -133,6 +160,7 @@ def _profile(row):
         row.created_at,
         row.updated_at,
         row.archived_at,
+        row.revision,
     )
 
 
@@ -145,6 +173,7 @@ def _profile_mapping(row):
         row["created_at"],
         row["updated_at"],
         row["archived_at"],
+        row["revision"],
     )
 
 
@@ -223,30 +252,15 @@ class SQLiteTenantContactReferenceGuard:
             raise PartyValidationError(
                 "Clear or replace the preferred contact before archiving it."
             )
-        resolution = matching[0]
-        before = _profile_mapping(row)
-        after = TenantProfile(
-            before.party_id,
-            resolution.replacement_contact_method_id,
-            before.do_not_contact,
-            before.notes,
-            before.created_at,
-            timestamp,
-            before.archived_at,
-        )
-        connection.execute(
-            TenantProfileModel.__table__.update()
-            .where(TenantProfileModel.party_id == party_id)
-            .values(**_profile_values(after))
-        )
-        self.recorder.record_change(
-            connection.connection.driver_connection,
-            entity_type="tenant_profile",
-            entity_id=party_id,
-            action="updated",
-            before=before.to_dict(),
-            after=after.to_dict(),
-            reason="preferred_contact_updated",
-            correlation_id=correlation_id,
-        )
+        try:
+            resolve_contact(
+                _ProfileTransaction(connection, self.recorder),
+                matching[0],
+                timestamp,
+                correlation_id,
+            )
+        except TenantConflictError as error:
+            raise PartyConflictError(
+                str(error), code=error.code, current_tenant=error.current
+            ) from error
         return matching

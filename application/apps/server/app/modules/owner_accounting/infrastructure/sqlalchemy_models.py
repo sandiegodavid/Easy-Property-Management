@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.platform.sqlalchemy_models import LocalBase
@@ -33,7 +33,9 @@ class OwnerRentReportModel(LocalBase):
     )
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
+    report_revision: Mapped[int] = mapped_column(Integer, nullable=False)
     __table_args__ = (
+        CheckConstraint("typeof(report_revision) = 'integer' AND report_revision >= 1"),
         CheckConstraint("currency_code = 'USD'"),
         CheckConstraint(
             "typeof(amount_minor) = 'integer' AND amount_minor BETWEEN 1 AND 9999999999"
@@ -94,7 +96,23 @@ class OwnerRentReportOperationModel(LocalBase):
     receipt_created: Mapped[bool | None] = mapped_column(Integer)
     correlation_id: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
+    expected_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    result_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    effective: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_json: Mapped[str] = mapped_column(String, nullable=False)
+    response_json: Mapped[str] = mapped_column(String, nullable=False)
+    response_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (
+        CheckConstraint("typeof(expected_revision) = 'integer' AND expected_revision >= 0"),
+        CheckConstraint("typeof(effective) = 'integer' AND effective IN (0,1)"),
+        CheckConstraint(
+            "typeof(result_revision) = 'integer' AND result_revision = expected_revision + effective"
+        ),
+        CheckConstraint(
+            "length(response_fingerprint) = 64 AND response_fingerprint NOT GLOB '*[^0-9a-f]*'"
+        ),
+        CheckConstraint("json_valid(request_json) AND json_type(request_json) = 'object'"),
+        CheckConstraint("json_valid(response_json) AND json_type(response_json) = 'object'"),
         CheckConstraint("action IN ('create','patch','verify','reject')"),
         CheckConstraint(
             "length(id)=36 AND substr(id,9,1)='-' AND substr(id,14,1)='-' AND substr(id,19,1)='-' AND substr(id,24,1)='-' AND replace(lower(id),'-','') NOT GLOB '*[^0-9a-f]*'"
@@ -112,4 +130,25 @@ class OwnerRentReportOperationModel(LocalBase):
             "(action='verify' AND result_receipt_id IS NOT NULL AND receipt_created IN (0,1) AND length(result_receipt_id)=36 AND substr(result_receipt_id,9,1)='-' AND substr(result_receipt_id,14,1)='-' AND substr(result_receipt_id,19,1)='-' AND substr(result_receipt_id,24,1)='-' AND replace(lower(result_receipt_id),'-','') NOT GLOB '*[^0-9a-f]*') OR (action!='verify' AND result_receipt_id IS NULL AND receipt_created IS NULL)"
         ),
         Index("owner_rent_report_operations_report", "report_id", "created_at"),
+        UniqueConstraint("report_id", "correlation_id"),
+        Index(
+            "owner_report_effective_revision",
+            "report_id",
+            "result_revision",
+            unique=True,
+            sqlite_where=text("effective = 1"),
+        ),
     )
+
+
+OWNER_OPERATION_NO_REPLACE = """
+CREATE TRIGGER owner_rent_report_operations_no_replace BEFORE INSERT ON owner_rent_report_operations
+WHEN EXISTS (
+    SELECT 1 FROM owner_rent_report_operations
+    WHERE id = NEW.id OR idempotency_key = NEW.idempotency_key
+       OR (report_id = NEW.report_id AND correlation_id = NEW.correlation_id)
+       OR (effective = 1 AND NEW.effective = 1 AND report_id = NEW.report_id
+           AND result_revision = NEW.result_revision)
+)
+BEGIN SELECT RAISE(ABORT, 'owner rent report operations are immutable'); END
+"""

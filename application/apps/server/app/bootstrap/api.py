@@ -45,6 +45,7 @@ from app.modules.files.application.verification import FileStorageVerificationSe
 from app.modules.files.domain.audit_policy import (
     FILE_ACTIVITY_SNAPSHOT_POLICY,
     FILE_LINK_ACTIVITY_SNAPSHOT_POLICY,
+    FILE_COMMAND_ACTIVITY_SNAPSHOT_POLICY,
 )
 from app.modules.files.infrastructure.content_store import FilesystemContentStore, S3ContentStore
 from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
@@ -57,6 +58,7 @@ from app.modules.finance.application.deposit_service import DepositService
 from app.modules.finance.application.expense_service import ExpenseService
 from app.modules.finance.application.prepaid_check_service import PrepaidCheckService
 from app.modules.finance.application.service import FinanceService
+from app.modules.finance.domain.command_audit_policy import FINANCE_COMMAND_ACTIVITY_POLICY
 from app.modules.finance.api.money_router import build_router as build_money_router
 from app.modules.finance.application.money_service import MoneySummaryService
 from app.modules.finance.application.money_models import MoneyWorkspaceUnavailable
@@ -84,7 +86,10 @@ from app.modules.finance.infrastructure.receipt_transaction_operations import (
 from app.modules.finance.infrastructure.unit_of_work import SQLiteFinanceUnitOfWork
 from app.modules.inspections.api.router import build_router as build_inspection_router
 from app.modules.inspections.application.service import InspectionService
-from app.modules.inspections.domain.audit_policy import INSPECTION_ACTIVITY_POLICY
+from app.modules.inspections.domain.audit_policy import (
+    INSPECTION_ACTIVITY_POLICY,
+    INSPECTION_COMMAND_ACTIVITY_POLICY,
+)
 from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
 from app.modules.inspections.infrastructure.unit_of_work import SQLiteInspectionUnitOfWork
 from app.modules.intake.api.router import build_router as build_intake_router
@@ -98,6 +103,8 @@ from app.modules.intake.infrastructure.source_reader import SQLiteIntakeSourceRe
 from app.modules.intake.infrastructure.unit_of_work import SQLiteIntakeUnitOfWork
 from app.modules.leases.api.router import build_router as build_lease_router
 from app.modules.leases.application.service import LeaseService
+from app.modules.leases.domain.audit_policy import LEASE_COMMAND_ACTIVITY_POLICY
+from app.modules.portfolio.domain.inventory_audit_policy import INVENTORY_ACTIVITY_POLICY
 from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
 from app.modules.leases.infrastructure.unit_of_work import (
     SQLiteLeaseParticipationGuard,
@@ -143,6 +150,7 @@ from app.modules.portfolio.infrastructure.unit_of_work import (
 )
 from app.modules.tasks.api.router import build_router as build_tasks_router
 from app.modules.tasks.application.service import TaskService
+from app.modules.tasks.application.mutations import TaskMutationService
 from app.modules.tasks.application.waiting_service import TaskWaitingService
 from app.modules.tasks.application.waiting import WaitingUnavailable
 from app.modules.tasks.domain.audit_policy import TASK_ACTIVITY_POLICY
@@ -519,41 +527,61 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
     app.state.ai_configuration_service = ai_configuration
     app.state.ai_draft_review_service = ai_drafts
     app.include_router(build_router(service, runtime))
-    operator = compose_operator(
-        service,
-        runtime,
-        recorder,
-        RecoverySourcePorts(
-            portfolio_context_reader,
-            party_operations,
-            SQLiteCommunicationContextOperations(
-                task_transaction_operations, SQLiteIntakeSourceReader()
+    operator, operator_directories, operator_overviews, operator_search, operator_coverage = (
+        compose_operator(
+            service,
+            runtime,
+            recorder,
+            RecoverySourcePorts(
+                portfolio_context_reader,
+                party_operations,
+                SQLiteCommunicationContextOperations(
+                    task_transaction_operations, SQLiteIntakeSourceReader()
+                ),
             ),
-        ),
+        )
     )
     app.state.operator_service = operator
-    app.include_router(build_operator_router(operator))
+    app.state.operator_directory_service = operator_directories
+    app.state.operator_overview_service = operator_overviews
+    app.state.operator_search_service = operator_search
+    app.state.operator_coverage_service = operator_coverage
+    app.include_router(
+        build_operator_router(
+            operator, operator_directories, operator_overviews, operator_search, operator_coverage
+        )
+    )
     policies = AuditSnapshotPolicyRegistry(
         {
             ("operator_preferences", 1): DEFAULT_SNAPSHOT_POLICY,
             ("operator_recovery", 1): DEFAULT_SNAPSHOT_POLICY,
             ("operator_operation", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("operator_coverage_review", 1): DEFAULT_SNAPSHOT_POLICY,
             ("workspace", 1): DEFAULT_SNAPSHOT_POLICY,
             ("file", 1): DEFAULT_SNAPSHOT_POLICY,
             ("file_link", 1): DEFAULT_SNAPSHOT_POLICY,
             ("file_publication_cleanup", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("file_command_operation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("task", 1): DEFAULT_SNAPSHOT_POLICY,
             ("task_reminder", 1): DEFAULT_SNAPSHOT_POLICY,
             ("task_waiting_operation", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("task_creation_operation", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("task_mutation_operation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("property", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("portfolio_inventory_operation", 1): INVENTORY_ACTIVITY_POLICY,
             ("party", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("party_command_operation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("property_ownership", 1): DEFAULT_SNAPSHOT_POLICY,
             ("space", 1): DEFAULT_SNAPSHOT_POLICY,
             ("space_occupancy", 1): DEFAULT_SNAPSHOT_POLICY,
             ("space_availability", 1): DEFAULT_SNAPSHOT_POLICY,
             ("tenant_profile", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("tenant_command_operation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("party_contact_method", 1): DEFAULT_SNAPSHOT_POLICY,
             ("lease", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("lease_command_operation", 1): LEASE_COMMAND_ACTIVITY_POLICY,
+            ("finance_command_operation", 1): FINANCE_COMMAND_ACTIVITY_POLICY,
+            ("finance_command_scope", 1): FINANCE_COMMAND_ACTIVITY_POLICY,
             ("lease_term", 1): DEFAULT_SNAPSHOT_POLICY,
             ("lease_participant", 1): DEFAULT_SNAPSHOT_POLICY,
             ("lease_renewal_option", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -563,6 +591,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
             ("backup_retention", 1): DEFAULT_SNAPSHOT_POLICY,
             ("workspace_restore", 1): DEFAULT_SNAPSHOT_POLICY,
             ("condition_report", 1): INSPECTION_ACTIVITY_POLICY,
+            ("inspection_command_operation", 1): INSPECTION_COMMAND_ACTIVITY_POLICY,
             ("condition_area", 1): INSPECTION_ACTIVITY_POLICY,
             ("condition_observation", 1): INSPECTION_ACTIVITY_POLICY,
             ("condition_report_acknowledgment", 1): INSPECTION_ACTIVITY_POLICY,
@@ -570,6 +599,8 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
             ("condition_checklist_template_item", 1): INSPECTION_ACTIVITY_POLICY,
             ("condition_comparison", 1): INSPECTION_ACTIVITY_POLICY,
             ("provider_profile", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("provider_command_operation", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("provider_category_command_operation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("provider_service", 1): DEFAULT_SNAPSHOT_POLICY,
             ("provider_service_area", 1): DEFAULT_SNAPSHOT_POLICY,
             ("provider_work_history", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -583,6 +614,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
             ("rent_receipt_allocation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("prepaid_check", 1): DEFAULT_SNAPSHOT_POLICY,
             ("expense_category", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("expense_category_command_operation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("expense", 1): DEFAULT_SNAPSHOT_POLICY,
             ("expense_refund", 1): DEFAULT_SNAPSHOT_POLICY,
             ("security_deposit_account", 1): DEFAULT_SNAPSHOT_POLICY,
@@ -608,10 +640,12 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
             ("owner_rent_report_operation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("owner_concern", 1): DEFAULT_SNAPSHOT_POLICY,
             ("owner_concern_follow_up_operation", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("owner_concern_command_operation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("ai_run", 1): DEFAULT_SNAPSHOT_POLICY,
             ("ai_draft", 1): DEFAULT_SNAPSHOT_POLICY,
             ("ai_review_decision", 1): DEFAULT_SNAPSHOT_POLICY,
             ("ai_settings", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("ai_command_operation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("ai_action_limit", 1): DEFAULT_SNAPSHOT_POLICY,
             ("ai_model_connection", 1): DEFAULT_SNAPSHOT_POLICY,
         },
@@ -619,8 +653,10 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
             ("task", 1): TASK_ACTIVITY_POLICY,
             ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
             ("file_link", 1): FILE_LINK_ACTIVITY_SNAPSHOT_POLICY,
+            ("file_command_operation", 1): FILE_COMMAND_ACTIVITY_SNAPSHOT_POLICY,
             ("party_contact_method", 1): PARTY_CONTACT_SNAPSHOT_POLICY,
             ("condition_report", 1): INSPECTION_ACTIVITY_POLICY,
+            ("inspection_command_operation", 1): INSPECTION_COMMAND_ACTIVITY_POLICY,
             ("condition_area", 1): INSPECTION_ACTIVITY_POLICY,
             ("condition_observation", 1): INSPECTION_ACTIVITY_POLICY,
             ("condition_report_acknowledgment", 1): INSPECTION_ACTIVITY_POLICY,
@@ -666,17 +702,23 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
             ("owner_rent_report_operation", 1): OWNER_REPORT_ACTIVITY_POLICY,
             ("owner_concern", 1): OWNER_CONCERN_ACTIVITY_POLICY,
             ("owner_concern_follow_up_operation", 1): OWNER_CONCERN_ACTIVITY_POLICY,
+            ("owner_concern_command_operation", 1): OWNER_CONCERN_ACTIVITY_POLICY,
             ("ai_run", 1): AI_ACTIVITY_POLICY,
             ("ai_draft", 1): AI_ACTIVITY_POLICY,
             ("ai_review_decision", 1): AI_ACTIVITY_POLICY,
             ("ai_settings", 1): AI_ACTIVITY_POLICY,
+            ("ai_command_operation", 1): AI_ACTIVITY_POLICY,
             ("ai_action_limit", 1): AI_ACTIVITY_POLICY,
             ("ai_model_connection", 1): AI_ACTIVITY_POLICY,
         },
     )
     app.include_router(build_audit_router(runtime, audit_repository, policies))
     app.include_router(build_files_router(files, runtime, file_verification))
-    app.include_router(build_tasks_router(tasks, runtime, task_waiting))
+    app.include_router(
+        build_tasks_router(
+            tasks, runtime, task_waiting, TaskMutationService(tasks.unit_of_work, now=tasks.instant)
+        )
+    )
     app.include_router(build_portfolio_router(portfolio, runtime))
     app.include_router(build_party_router(party_identities, party_contacts, runtime))
     app.include_router(build_provider_router(providers, runtime))

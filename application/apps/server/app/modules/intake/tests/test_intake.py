@@ -82,7 +82,15 @@ class IntakeTests(TestCase):
     def supersede_trusted(
         self, source_id: str, replacement: IntakeAdmissionCommand
     ) -> dict[str, object]:
-        return self.admit_trusted(replace(replacement, supersedes_source_id=source_id))
+        source = self.service.get(source_id)
+        return self.admit_trusted(
+            replace(
+                replacement,
+                supersedes_source_id=source_id,
+                expected_source_revision=source["sourceRevision"],
+                expected_evidence_revision_id=source["revision"],
+            )
+        )
 
     def command(
         self, key: str | None = None, body: str = "The sink leaks."
@@ -132,6 +140,8 @@ class IntakeTests(TestCase):
             ),
             "clarified",
             str(uuid4()),
+            expected_source_revision=source["sourceRevision"],
+            expected_evidence_revision_id=source["revision"],
         )
         self.assertEqual(2, len(detail["revisions"]))
         self.assertEqual("Corrected evidence.", detail["evidence"]["body"])
@@ -146,6 +156,8 @@ class IntakeTests(TestCase):
             ),
             "clarified",
             str(uuid4()),
+            expected_source_revision=source["sourceRevision"],
+            expected_evidence_revision_id=source["revision"],
         )
         self.assertFalse(hasattr(SQLiteIntakeSourceReader(), "evidence_detail"))
         correlation_id = str(uuid4())
@@ -269,6 +281,8 @@ class IntakeTests(TestCase):
             ),
             "clarified",
             str(uuid4()),
+            expected_source_revision=first["sourceRevision"],
+            expected_evidence_revision_id=first["revision"],
         )
         reader = SQLiteIntakeSourceReader()
         engine = self.service.unit_of_work.engine
@@ -325,7 +339,12 @@ class IntakeTests(TestCase):
             "operator_note", "internal", "First correction.", "2026-01-01T12:00:00+00:00"
         )
         first = self.service.correct(
-            source["sourceId"], first_envelope, "first clarification", first_key
+            source["sourceId"],
+            first_envelope,
+            "first clarification",
+            first_key,
+            expected_source_revision=source["sourceRevision"],
+            expected_evidence_revision_id=source["revision"],
         )
         second = self.service.correct(
             source["sourceId"],
@@ -334,10 +353,17 @@ class IntakeTests(TestCase):
             ),
             "second clarification",
             str(uuid4()),
+            expected_source_revision=first["sourceRevision"],
+            expected_evidence_revision_id=first["revision"],
         )
 
         replay = self.service.correct(
-            source["sourceId"], first_envelope, "first clarification", first_key
+            source["sourceId"],
+            first_envelope,
+            "first clarification",
+            first_key,
+            expected_source_revision=source["sourceRevision"],
+            expected_evidence_revision_id=source["revision"],
         )
 
         self.assertEqual(first, replay)
@@ -352,7 +378,14 @@ class IntakeTests(TestCase):
         envelope = EvidenceEnvelope(
             "operator_note", "internal", "Corrected evidence.", "2026-01-01T12:00:00+00:00"
         )
-        first = self.service.correct(source["sourceId"], envelope, "clarified", key)
+        first = self.service.correct(
+            source["sourceId"],
+            envelope,
+            "clarified",
+            key,
+            expected_source_revision=source["sourceRevision"],
+            expected_evidence_revision_id=source["revision"],
+        )
 
         self.service.attention(
             source["sourceId"],
@@ -360,6 +393,7 @@ class IntakeTests(TestCase):
             reason="review needed",
             idempotency_key=str(uuid4()),
             expected_revision=first["revision"],
+            expected_source_revision=first["sourceRevision"],
             expected_status="unprocessed",
         )
         self.service.set_integrity(
@@ -372,7 +406,14 @@ class IntakeTests(TestCase):
 
         self.assertEqual(
             first,
-            self.service.correct(source["sourceId"], envelope, "clarified", key),
+            self.service.correct(
+                source["sourceId"],
+                envelope,
+                "clarified",
+                key,
+                expected_source_revision=source["sourceRevision"],
+                expected_evidence_revision_id=source["revision"],
+            ),
         )
 
     def test_correction_replay_is_unchanged_after_source_supersession(self) -> None:
@@ -381,13 +422,32 @@ class IntakeTests(TestCase):
         envelope = EvidenceEnvelope(
             "operator_note", "internal", "Corrected evidence.", "2026-01-01T12:00:00+00:00"
         )
-        first = self.service.correct(source["sourceId"], envelope, "clarified", key)
+        first = self.service.correct(
+            source["sourceId"],
+            envelope,
+            "clarified",
+            key,
+            expected_source_revision=source["sourceRevision"],
+            expected_evidence_revision_id=source["revision"],
+        )
 
-        self.service.supersede(source["sourceId"], self.command(body="Replacement evidence."))
+        self.service.supersede(
+            source["sourceId"],
+            self.command(body="Replacement evidence."),
+            expected_source_revision=first["sourceRevision"],
+            expected_evidence_revision_id=first["revision"],
+        )
 
         self.assertEqual(
             first,
-            self.service.correct(source["sourceId"], envelope, "clarified", key),
+            self.service.correct(
+                source["sourceId"],
+                envelope,
+                "clarified",
+                key,
+                expected_source_revision=source["sourceRevision"],
+                expected_evidence_revision_id=source["revision"],
+            ),
         )
 
     def test_trusted_external_replay_compares_evidence_and_reserves_each_key(self) -> None:
@@ -426,6 +486,8 @@ class IntakeTests(TestCase):
             replace(
                 self.command(body="Replacement evidence."),
                 supersedes_source_id=assistant["sourceId"],
+                expected_source_revision=assistant["sourceRevision"],
+                expected_evidence_revision_id=assistant["revision"],
             ),
             voice_context,
         )
@@ -543,6 +605,8 @@ class IntakeTests(TestCase):
             replace(
                 trusted(str(uuid4()), replacement_attachment),
                 supersedes_source_id=original["sourceId"],
+                expected_source_revision=original["sourceRevision"],
+                expected_evidence_revision_id=original["revision"],
             )
         )
         historical = admit(trusted(str(uuid4()), original_attachment))
@@ -596,6 +660,8 @@ class IntakeTests(TestCase):
             ),
             "corrected source evidence",
             str(uuid4()),
+            expected_source_revision=original["sourceRevision"],
+            expected_evidence_revision_id=original["revision"],
         )
         replacement = self.supersede_trusted(
             original["sourceId"],
@@ -830,6 +896,8 @@ class IntakeTests(TestCase):
         replacement = self.service.supersede(
             original["sourceId"],
             self.command(body="Replacement source evidence."),
+            expected_source_revision=original["sourceRevision"],
+            expected_evidence_revision_id=original["revision"],
         )
         old = self.service.get(original["sourceId"])
         self.assertEqual("superseded", old["technicalStatus"])
@@ -852,6 +920,7 @@ class IntakeTests(TestCase):
                 reason="review was admitted",
                 idempotency_key=str(uuid4()),
                 expected_revision=source["revision"],
+                expected_source_revision=source["sourceRevision"],
                 expected_status="unprocessed",
                 correlation_id=str(uuid4()),
                 actor_kind=actor_kind,
@@ -888,6 +957,7 @@ class IntakeTests(TestCase):
             reason="review admitted",
             idempotency_key=str(uuid4()),
             expected_revision=source["revision"],
+            expected_source_revision=source["sourceRevision"],
             expected_status="unprocessed",
             correlation_id=str(uuid4()),
         )
@@ -900,6 +970,7 @@ class IntakeTests(TestCase):
             idempotency_key=str(uuid4()),
             expected_revision=source["revision"],
             expected_status="in_review",
+            expected_source_revision=original["sourceRevision"],
             correlation_id=str(uuid4()),
         )
         with immediate_transaction(engine) as connection:
@@ -916,6 +987,7 @@ class IntakeTests(TestCase):
             reason="must not persist",
             idempotency_key=str(uuid4()),
             expected_revision=rolled_back["revision"],
+            expected_source_revision=rolled_back["sourceRevision"],
             expected_status="unprocessed",
             correlation_id=str(uuid4()),
         )
@@ -953,6 +1025,7 @@ class IntakeTests(TestCase):
             correlation_id=str(uuid4()),
             actor_kind="assistant_connection",
             actor_reference="connection-42",
+            expected_source_revision=source["sourceRevision"],
         )
         with immediate_transaction(engine) as connection:
             original = self.attention_operations.transition_attention(connection, assistant)
@@ -971,6 +1044,7 @@ class IntakeTests(TestCase):
             correlation_id=str(uuid4()),
             actor_kind="assistant_connection",
             actor_reference="connection-99",
+            expected_source_revision=source["sourceRevision"],
         )
         with self.assertRaisesRegex(IntakeConflictError, "Idempotency key"):
             with immediate_transaction(engine) as connection:

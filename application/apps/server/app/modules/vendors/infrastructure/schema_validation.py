@@ -20,6 +20,7 @@ def validate_vendor_schema(connection) -> None:
             {
                 "party_id",
                 "selection_status",
+                "revision",
                 "selection_reason",
                 "notes",
                 "created_at",
@@ -31,6 +32,7 @@ def validate_vendor_schema(connection) -> None:
         ),
         "provider_categories": (
             {
+                "revision",
                 "id",
                 "display_name",
                 "normalized_name",
@@ -158,7 +160,9 @@ def validate_vendor_schema(connection) -> None:
         for item in columns:
             if not item["primary_key"] and bool(item["nullable"]) != (item["name"] in nullable):
                 raise MigrationSchemaError("Provider nullability is incompatible.")
-            if table == "provider_categories" and item["name"] == "display_order":
+            if (table == "provider_categories" and item["name"] == "display_order") or (
+                table in {"provider_profiles", "provider_categories"} and item["name"] == "revision"
+            ):
                 if "INT" not in str(item["type"]).upper():
                     raise MigrationSchemaError("Provider types are incompatible.")
             elif (
@@ -283,11 +287,13 @@ def validate_vendor_schema(connection) -> None:
     }
     expected_checks = {
         "provider_profiles": {
+            "typeof(revision)='integer'andrevision>=1",
             "selection_statusin('neutral','preferred','avoid')",
             "selection_status!='avoid'or(selection_reasonisnotnullandlength(trim(selection_reason))>0)",
         },
         "provider_categories": {
             "length(trim(display_name))between1and160",
+            "typeof(revision)='integer'andrevision>=1",
             "display_order>=0",
             "(archived_atisnullandarchive_reasonisnull)or(archived_atisnotnullandarchive_reasonisnotnullandlength(trim(archive_reason))between1and1000)",
         },
@@ -313,6 +319,9 @@ def validate_vendor_schema(connection) -> None:
     }
     if checks != expected_checks:
         raise MigrationSchemaError("Provider checks are incompatible.")
+    from app.modules.vendors.infrastructure.command_validation import validate_commands
+
+    validate_commands(connection)
 
 
 def _normalise(value: str) -> str:
@@ -324,7 +333,7 @@ def validate_vendor_data(connection) -> None:
     categories = (
         connection.exec_driver_sql(
             "SELECT id, display_name, normalized_name, description, display_order, created_at, updated_at, "
-            "archived_at, archive_reason, create_idempotency_key, create_request_fingerprint "
+            "archived_at, archive_reason, create_idempotency_key, create_request_fingerprint, revision "
             "FROM provider_categories"
         )
         .mappings()
@@ -541,12 +550,14 @@ def _is_seed_origin(snapshot: object, seed) -> bool:
             snapshot.get("displayOrder") == seed.display_order,
             snapshot.get("archivedAt") is None,
             snapshot.get("archiveReason") is None,
+            snapshot.get("revision") == 1,
         )
     )
 
 
 def _category_snapshot(row) -> dict[str, object]:
     return {
+        "revision": row["revision"],
         "id": row["id"],
         "displayName": row["display_name"],
         "normalizedName": row["normalized_name"],

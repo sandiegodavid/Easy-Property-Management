@@ -32,6 +32,7 @@ class Task:
     follow_up_timezone: str | None = None
     waiting_set_at_utc: str | None = None
     waiting_cleared_at_utc: str | None = None
+    deleted_at_utc: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -58,6 +59,7 @@ class Task:
             "followUpTimezone": self.follow_up_timezone,
             "waitingSetAtUtc": self.waiting_set_at_utc,
             "waitingClearedAtUtc": self.waiting_cleared_at_utc,
+            "deletedAtUtc": self.deleted_at_utc,
         }
 
 
@@ -84,6 +86,8 @@ class TaskReminder:
 
 
 def transition(task: Task, status: str, outcome_note: str | None, now: str) -> Task:
+    if task.deleted_at_utc is not None:
+        raise ValueError("Deleted Tasks cannot change status.")
     allowed = {
         "open": {"in_progress", "completed", "cancelled"},
         "in_progress": {"open", "completed", "cancelled"},
@@ -129,7 +133,7 @@ def waiting_facts(task: Task, now: datetime) -> dict[str, object]:
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("Task classification requires an aware instant.")
     now = now.astimezone(UTC)
-    active = task.status in ACTIVE_TASK_STATUSES
+    active = task.deleted_at_utc is None and task.status in ACTIVE_TASK_STATUSES
     waiting = active and task.waiting_for_kind is not None
     state = None
     today = actionable = False

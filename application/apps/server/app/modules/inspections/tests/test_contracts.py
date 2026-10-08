@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import unittest
 from pathlib import Path
+from app.modules.inspections.tests.commands import inspection_command
 
 from pydantic import ValidationError
 
@@ -37,6 +38,19 @@ class _Transaction:
         self.observations_by_area = {}
         self.acks_by_report = {}
         self.events = []
+        self.commands = {}
+
+    def command_by_key(self, key):
+        return self.commands.get(key)
+
+    def command_revision(self, kind, scope_id):
+        return max(
+            (item.revision for item in self.commands.values() if item.lease_id == scope_id),
+            default=0,
+        )
+
+    def insert_command(self, item):
+        self.commands[item.idempotency_key] = item
 
     def lease(self, item_id):
         return self.lease_data if item_id == "lease" else None
@@ -111,6 +125,9 @@ class _UnitOfWork:
 
     def write(self, operation):
         return operation(self.tx)
+
+    def command_revision(self, kind, scope_id):
+        return self.tx.command_revision(kind, scope_id)
 
     def report_view(self, report_id):
         return None if report_id not in self.tx.reports_by_id else self.tx.report_view(report_id)
@@ -205,20 +222,24 @@ class InspectionContractTests(unittest.TestCase):
     def test_pre_report_finalization_and_current_report_uniqueness(self):
         service = InspectionService(_UnitOfWork())
         checklist = (AreaInput("Kitchen", (ObservationInput("Floor", "good", is_completed=True),)),)
-        first = service.create(
+        first = inspection_command(
+            service,
+            "create",
             "lease",
             report_kind="pre_move_in",
             walkthrough_on="2099-01-01",
             conducted_by="Operator",
             areas=checklist,
         )
-        second = service.create(
+        second = inspection_command(
+            service,
+            "create",
             "lease",
             report_kind="pre_move_in",
             walkthrough_on="2099-01-01",
             conducted_by="Operator",
             areas=checklist,
         )
-        service.finalize(first["id"], confirmed=True)
+        inspection_command(service, "finalize", first["id"], confirmed=True)
         with self.assertRaises(InspectionConflictError):
-            service.finalize(second["id"], confirmed=True)
+            inspection_command(service, "finalize", second["id"], confirmed=True)

@@ -11,6 +11,7 @@ class Party:
     created_at: str
     updated_at: str
     archived_at: str | None
+    revision: int = 1
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -21,6 +22,9 @@ class Party:
             "updatedAt": self.updated_at,
             "archivedAt": self.archived_at,
         }
+
+    def identity_snapshot(self) -> dict[str, object]:
+        return {**self.to_dict(), "revision": self.revision}
 
 
 @dataclass(frozen=True)

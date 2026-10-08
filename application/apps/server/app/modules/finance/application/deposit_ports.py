@@ -2,8 +2,12 @@
 
 from typing import Protocol
 
+from app.modules.finance.application.commands import FinanceCommandTransaction
+
 
 class DepositTransaction(Protocol):
+    commands: FinanceCommandTransaction
+
     def lease_context(self, lease_id: str, lease_term_id: str): ...
     def party(self, party_id: str): ...
     def account(self, account_id: str): ...

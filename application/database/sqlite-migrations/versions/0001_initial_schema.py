@@ -13,7 +13,25 @@ branch_labels = None
 depends_on = None
 
 
+def _create_triggers(definitions: dict[str, str]) -> None:
+    for statement in definitions.values():
+        op.execute(statement)
+
+
+def _drop_triggers(definitions: dict[str, str]) -> None:
+    for name in definitions:
+        op.execute(f"DROP TRIGGER {name}")
+
+
 def upgrade() -> None:
+    from app.modules.parties.infrastructure.sqlalchemy_models import (
+        PartyCommandOperationModel,
+        PARTY_COMMAND_TRIGGERS,
+    )
+    from app.modules.inspections.infrastructure.command_models import (
+        InspectionCommandOperationModel,
+        INSPECTION_COMMAND_TRIGGERS,
+    )
     from app.modules.operator.infrastructure.sqlalchemy_models import (
         MODELS as OPERATOR_MODELS,
         APPEND_ONLY as OPERATOR_APPEND_ONLY,
@@ -22,6 +40,9 @@ def upgrade() -> None:
     from app.modules.tasks.infrastructure.sqlalchemy_models import (
         WAITING_CHECKS,
         TaskWaitingOperationModel,
+        TaskCreationOperationModel,
+        TaskMutationOperationModel,
+        MUTATION_INSERT_GUARD,
     )
     from app.modules.inspections.infrastructure.sqlalchemy_models import (
         ConditionAcknowledgmentModel,
@@ -36,6 +57,10 @@ def upgrade() -> None:
         ProviderCategoryAssignmentModel,
         ProviderCategoryModel,
         ProviderProfileModel,
+        ProviderCommandOperationModel,
+        ProviderCategoryCommandOperationModel,
+        CATEGORY_COMMAND_TRIGGERS,
+        PROVIDER_COMMAND_TRIGGERS,
         ProviderReferenceModel,
         ProviderReputationLinkModel,
         ProviderServiceAreaModel,
@@ -43,7 +68,16 @@ def upgrade() -> None:
         ProviderWorkHistoryModel,
     )
     from app.modules.vendors.domain.category_seeds import PROVIDER_CATEGORY_SEEDS
+    from app.modules.leases.infrastructure.sqlalchemy_models import LeaseCommandOperationModel
+    from app.modules.leases.infrastructure.command_triggers import LEASE_COMMAND_TRIGGERS
+    from app.modules.finance.infrastructure.command_models import (
+        FINANCE_COMMAND_TRIGGERS,
+        FinanceCommandRevisionModel,
+        FinanceCommandOperationModel,
+    )
     from app.modules.finance.infrastructure.sqlalchemy_models import (
+        CATEGORY_COMMAND_TRIGGERS as EXPENSE_CATEGORY_COMMAND_TRIGGERS,
+        ExpenseCategoryCommandOperationModel,
         ExpenseCategoryModel,
         ExpenseModel,
         ExpenseRefundModel,
@@ -69,6 +103,7 @@ def upgrade() -> None:
         CommunicationOperationModel,
     )
     from app.modules.maintenance.infrastructure.sqlalchemy_models import (
+        MaintenanceCommandReceiptModel,
         MaintenanceIssueModel,
         MaintenanceAppointmentModel,
         MaintenanceCostContextModel,
@@ -85,10 +120,11 @@ def upgrade() -> None:
     from app.modules.owner_management.infrastructure.sqlalchemy_models import (
         OwnerConcernModel,
         OwnerConcernFollowUpOperationModel,
+        OwnerConcernCommandOperationModel,
     )
     from app.modules.ai_governance.infrastructure.sqlalchemy_models import (
         AiSettingsModel,
-        AiSettingsOperationModel,
+        AiCommandOperationModel,
         AiModelConnectionModel,
         AiActionLimitModel,
         AiRunModel,
@@ -212,8 +248,14 @@ def upgrade() -> None:
         sa.Column("opened_at", sa.String(), nullable=False),
         sa.Column("resolved_at", sa.String()),
     )
+    from app.modules.files.infrastructure.sqlalchemy_models import FileCommandOperationModel
+    from app.modules.files.infrastructure.command_triggers import FILE_COMMAND_TRIGGERS
+
+    FileCommandOperationModel.__table__.create(op.get_bind())
+    _create_triggers(FILE_COMMAND_TRIGGERS)
     op.create_table(
         "tasks",
+        sa.Column("deleted_at_utc", sa.String()),
         sa.Column("id", sa.String(), primary_key=True),
         sa.Column("title", sa.String(), nullable=False),
         sa.Column("notes", sa.String()),
@@ -248,6 +290,17 @@ def upgrade() -> None:
         "tasks_waiting_follow_up", "tasks", ["status", "waiting_for_kind", "follow_up_at_utc"]
     )
     TaskWaitingOperationModel.__table__.create(op.get_bind())
+    TaskCreationOperationModel.__table__.create(op.get_bind())
+    TaskMutationOperationModel.__table__.create(op.get_bind())
+    op.execute(MUTATION_INSERT_GUARD)
+    for action in ("UPDATE", "DELETE"):
+        op.execute(
+            f"CREATE TRIGGER task_mutation_operations_no_{action.lower()} BEFORE {action} ON task_mutation_operations BEGIN SELECT RAISE(ABORT, 'task mutation operations are append-only'); END"
+        )
+    for action in ("UPDATE", "DELETE"):
+        op.execute(
+            f"CREATE TRIGGER task_creation_operations_no_{action.lower()} BEFORE {action} ON task_creation_operations BEGIN SELECT RAISE(ABORT, 'task creation operations are append-only'); END"
+        )
     for action in ("UPDATE", "DELETE"):
         op.execute(
             f"CREATE TRIGGER task_waiting_operations_no_{action.lower()} BEFORE {action} ON task_waiting_operations BEGIN SELECT RAISE(ABORT, 'task waiting operations are append-only'); END"
@@ -272,8 +325,10 @@ def upgrade() -> None:
         sa.Column("created_at", sa.String(), nullable=False),
         sa.Column("updated_at", sa.String(), nullable=False),
         sa.Column("archived_at", sa.String()),
+        sa.Column("revision", sa.Integer(), nullable=False, server_default="1"),
         sa.CheckConstraint("party_kind IN ('individual', 'organization')"),
         sa.CheckConstraint("length(trim(display_name)) > 0"),
+        sa.CheckConstraint("typeof(revision) = 'integer' AND revision >= 1"),
     )
     op.create_index("parties_active_name", "parties", ["archived_at", "display_name"])
     op.create_table(
@@ -303,6 +358,8 @@ def upgrade() -> None:
     op.execute(
         "CREATE UNIQUE INDEX party_contact_methods_one_active_value ON party_contact_methods(party_id, method_kind, normalized_value, coalesce(extension, '')) WHERE status = 'active'"
     )
+    PartyCommandOperationModel.__table__.create(op.get_bind())
+    _create_triggers(PARTY_COMMAND_TRIGGERS)
     op.create_table(
         "tenant_profiles",
         sa.Column("party_id", sa.String(), sa.ForeignKey("parties.id"), primary_key=True),
@@ -310,13 +367,22 @@ def upgrade() -> None:
             "preferred_contact_method_id", sa.String(), sa.ForeignKey("party_contact_methods.id")
         ),
         sa.Column("do_not_contact", sa.Integer(), nullable=False),
+        sa.Column("revision", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("notes", sa.String()),
         sa.Column("created_at", sa.String(), nullable=False),
         sa.Column("updated_at", sa.String(), nullable=False),
         sa.Column("archived_at", sa.String()),
         sa.CheckConstraint("do_not_contact IN (0, 1)"),
+        sa.CheckConstraint("typeof(revision) = 'integer' AND revision >= 1"),
     )
     op.create_index("tenant_profiles_active_name", "tenant_profiles", ["archived_at"])
+    from app.modules.tenants.infrastructure.sqlalchemy_models import (
+        TENANT_COMMAND_TRIGGERS,
+        TenantCommandOperationModel,
+    )
+
+    TenantCommandOperationModel.__table__.create(op.get_bind())
+    _create_triggers(TENANT_COMMAND_TRIGGERS)
     op.create_table(
         "properties",
         sa.Column("id", sa.String(), primary_key=True),
@@ -335,6 +401,8 @@ def upgrade() -> None:
         sa.Column("archived_at", sa.String()),
         sa.Column("property_type", sa.String(), nullable=False),
         sa.Column("inventory_layout", sa.String(), nullable=False),
+        sa.Column("property_revision", sa.Integer(), nullable=False),
+        sa.CheckConstraint("typeof(property_revision) = 'integer' AND property_revision >= 1"),
         sa.CheckConstraint("status IN ('active', 'archived')"),
         sa.CheckConstraint(
             "property_type IN ('single_family_home', 'condo', 'townhome', 'office')"
@@ -469,9 +537,20 @@ def upgrade() -> None:
         "space_status_operations",
         ["space_id", "idempotency_key"],
     )
+    from app.modules.portfolio.infrastructure.receipt_triggers import STATUS_OPERATION_TRIGGERS
+
+    _create_triggers(STATUS_OPERATION_TRIGGERS)
+    from app.modules.portfolio.infrastructure.sqlalchemy_models import (
+        PortfolioInventoryOperationModel,
+    )
+    from app.modules.portfolio.infrastructure.inventory_triggers import INVENTORY_TRIGGERS
+
+    PortfolioInventoryOperationModel.__table__.create(op.get_bind())
+    _create_triggers(INVENTORY_TRIGGERS)
     op.create_table(
         "leases",
         sa.Column("id", sa.String(), primary_key=True),
+        sa.Column("lease_revision", sa.Integer(), nullable=False),
         sa.Column("space_id", sa.String(), sa.ForeignKey("spaces.id"), nullable=False),
         sa.Column("lease_kind", sa.String(), nullable=False),
         sa.Column("status", sa.String(), nullable=False),
@@ -485,6 +564,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.String(), nullable=False),
         sa.Column("updated_at", sa.String(), nullable=False),
         sa.CheckConstraint("lease_kind IN ('residential', 'commercial')"),
+        sa.CheckConstraint("typeof(lease_revision) = 'integer' AND lease_revision >= 1"),
         sa.CheckConstraint("status IN ('draft', 'executed', 'ended', 'terminated', 'void')"),
         sa.CheckConstraint(
             "end_reason IS NULL OR end_reason IN ('contract_completed', 'early_termination', 'mutual_termination', 'other')"
@@ -500,6 +580,8 @@ def upgrade() -> None:
         "leases",
         ["space_id", "status", "contract_starts_on", "contract_ends_on"],
     )
+    LeaseCommandOperationModel.__table__.create(op.get_bind())
+    _create_triggers(LEASE_COMMAND_TRIGGERS)
     op.create_table(
         "lease_term_versions",
         sa.Column("id", sa.String(), primary_key=True),
@@ -662,8 +744,11 @@ def upgrade() -> None:
         ConditionComparisonModel.__table__,
         ConditionChecklistTemplateModel.__table__,
         ConditionChecklistTemplateItemModel.__table__,
+        InspectionCommandOperationModel.__table__,
         ProviderProfileModel.__table__,
+        ProviderCommandOperationModel.__table__,
         ProviderCategoryModel.__table__,
+        ProviderCategoryCommandOperationModel.__table__,
         ProviderCategoryAssignmentModel.__table__,
         ProviderServiceModel.__table__,
         ProviderServiceAreaModel.__table__,
@@ -677,6 +762,7 @@ def upgrade() -> None:
         PrepaidCheckModel.__table__,
         PrepaidCheckOperationModel.__table__,
         ExpenseCategoryModel.__table__,
+        ExpenseCategoryCommandOperationModel.__table__,
         ExpenseModel.__table__,
         ExpenseRefundModel.__table__,
         SecurityDepositAccountModel.__table__,
@@ -687,11 +773,14 @@ def upgrade() -> None:
         SecurityDepositDeductionSourceModel.__table__,
         SecurityDepositCreditModel.__table__,
         SecurityDepositRefundModel.__table__,
+        FinanceCommandRevisionModel.__table__,
+        FinanceCommandOperationModel.__table__,
         CommunicationModel.__table__,
         CommunicationParticipantModel.__table__,
         CommunicationLinkModel.__table__,
         CommunicationOperationModel.__table__,
         MaintenanceIssueModel.__table__,
+        MaintenanceCommandReceiptModel.__table__,
         MaintenanceAppointmentModel.__table__,
         MaintenanceCostContextModel.__table__,
         MaintenanceIssueExpenseLinkModel.__table__,
@@ -703,6 +792,7 @@ def upgrade() -> None:
         OwnerRentReportOperationModel.__table__,
         OwnerConcernModel.__table__,
         OwnerConcernFollowUpOperationModel.__table__,
+        OwnerConcernCommandOperationModel.__table__,
         AiSettingsModel.__table__,
         AiModelConnectionModel.__table__,
         AiActionLimitModel.__table__,
@@ -718,7 +808,12 @@ def upgrade() -> None:
         # Includes FIN-003's measured receipt/deposit read indexes. Metadata and
         # exact schema validation share this current greenfield definition.
         table.create(op.get_bind())
-    AiSettingsOperationModel.__table__.create(op.get_bind())
+    AiCommandOperationModel.__table__.create(op.get_bind())
+    _create_triggers(INSPECTION_COMMAND_TRIGGERS)
+    _create_triggers(PROVIDER_COMMAND_TRIGGERS)
+    _create_triggers(CATEGORY_COMMAND_TRIGGERS)
+    _create_triggers(FINANCE_COMMAND_TRIGGERS)
+    _create_triggers(EXPENSE_CATEGORY_COMMAND_TRIGGERS)
     op.bulk_insert(
         AiSettingsModel.__table__,
         [
@@ -728,20 +823,19 @@ def upgrade() -> None:
                 "built_in_enabled": False,
                 "default_connection_id": None,
                 "updated_at": "2026-01-01T00:00:00+00:00",
+                "revision": 1,
             }
         ],
     )
+    from app.modules.communications.infrastructure.schema_validation import OPERATION_TRIGGERS
+
+    _create_triggers(OPERATION_TRIGGERS)
+    for action in ("UPDATE", "DELETE"):
+        op.execute(
+            f"CREATE TRIGGER ai_command_operations_no_{action.lower()} BEFORE {action} ON ai_command_operations BEGIN SELECT RAISE(ABORT, 'AI command operations are immutable'); END"
+        )
     op.execute(
-        "CREATE TRIGGER communication_operations_no_update BEFORE UPDATE ON communication_operations BEGIN SELECT RAISE(ABORT, 'communication operations are immutable'); END"
-    )
-    op.execute(
-        "CREATE TRIGGER ai_settings_operations_no_update BEFORE UPDATE ON ai_settings_operations BEGIN SELECT RAISE(ABORT, 'AI settings operations are immutable'); END"
-    )
-    op.execute(
-        "CREATE TRIGGER ai_settings_operations_no_delete BEFORE DELETE ON ai_settings_operations BEGIN SELECT RAISE(ABORT, 'AI settings operations are immutable'); END"
-    )
-    op.execute(
-        "CREATE TRIGGER communication_operations_no_delete BEFORE DELETE ON communication_operations BEGIN SELECT RAISE(ABORT, 'communication operations are immutable'); END"
+        "CREATE TRIGGER ai_command_operations_no_replace BEFORE INSERT ON ai_command_operations WHEN EXISTS (SELECT 1 FROM ai_command_operations WHERE id=NEW.id OR idempotency_key=NEW.idempotency_key) BEGIN SELECT RAISE(ABORT, 'AI command operations are immutable'); END"
     )
     op.execute(
         "CREATE TRIGGER intake_source_operations_no_update BEFORE UPDATE ON intake_source_operations BEGIN SELECT RAISE(ABORT, 'intake operations are immutable'); END"
@@ -749,6 +843,9 @@ def upgrade() -> None:
     op.execute(
         "CREATE TRIGGER intake_source_operations_no_delete BEFORE DELETE ON intake_source_operations BEGIN SELECT RAISE(ABORT, 'intake operations are immutable'); END"
     )
+    from app.modules.maintenance.infrastructure.schema_validation import COMMAND_RECEIPT_TRIGGERS
+
+    _create_triggers(COMMAND_RECEIPT_TRIGGERS)
     op.execute(
         "CREATE TRIGGER maintenance_follow_up_operations_no_update BEFORE UPDATE ON maintenance_follow_up_operations BEGIN SELECT RAISE(ABORT, 'maintenance follow-up operations are immutable'); END"
     )
@@ -767,27 +864,27 @@ def upgrade() -> None:
     op.execute(
         "CREATE TRIGGER owner_rent_report_operations_no_delete BEFORE DELETE ON owner_rent_report_operations BEGIN SELECT RAISE(ABORT, 'owner rent report operations are immutable'); END"
     )
+    from app.modules.owner_accounting.infrastructure.sqlalchemy_models import (
+        OWNER_OPERATION_NO_REPLACE,
+    )
+
+    op.execute(OWNER_OPERATION_NO_REPLACE)
     op.execute(
         "CREATE TRIGGER owner_concern_follow_up_operations_no_update BEFORE UPDATE ON owner_concern_follow_up_operations BEGIN SELECT RAISE(ABORT, 'owner concern operations are immutable'); END"
     )
     op.execute(
         "CREATE TRIGGER owner_concern_follow_up_operations_no_delete BEFORE DELETE ON owner_concern_follow_up_operations BEGIN SELECT RAISE(ABORT, 'owner concern operations are immutable'); END"
     )
-    stamp = "2026-01-01T00:00:00+00:00"
-    categories = (
-        (
-            "00000000-0000-4000-8000-000000000201",
-            "Repairs and maintenance",
-            "repairs and maintenance",
-        ),
-        ("00000000-0000-4000-8000-000000000202", "Utilities", "utilities"),
-        ("00000000-0000-4000-8000-000000000203", "Insurance", "insurance"),
-        ("00000000-0000-4000-8000-000000000204", "Property taxes", "property taxes"),
-        ("00000000-0000-4000-8000-000000000205", "Supplies", "supplies"),
-        ("00000000-0000-4000-8000-000000000206", "Professional services", "professional services"),
-        ("00000000-0000-4000-8000-000000000207", "Management fees", "management fees"),
-        ("00000000-0000-4000-8000-000000000208", "Other", "other"),
+    from app.modules.owner_management.infrastructure.sqlalchemy_models import COMMAND_TRIGGERS
+
+    _create_triggers(COMMAND_TRIGGERS)
+    from app.modules.finance.domain.category_seeds import (
+        EXPENSE_CATEGORY_SEEDS,
+        EXPENSE_CATEGORY_SEED_TIMESTAMP,
     )
+
+    stamp = EXPENSE_CATEGORY_SEED_TIMESTAMP
+    categories = EXPENSE_CATEGORY_SEEDS
     op.bulk_insert(
         ExpenseCategoryModel.__table__,
         [
@@ -800,6 +897,7 @@ def upgrade() -> None:
                 "archived_at": None,
                 "created_at": stamp,
                 "updated_at": stamp,
+                "revision": 1,
             }
             for order, item in enumerate(categories)
         ],
@@ -831,28 +929,67 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    for table in ("operator_operations",):
+    from app.modules.vendors.infrastructure.sqlalchemy_models import CATEGORY_COMMAND_TRIGGERS
+
+    for name in CATEGORY_COMMAND_TRIGGERS:
+        op.execute(f"DROP TRIGGER {name}")
+    op.drop_table("provider_category_command_operations")
+    from app.modules.vendors.infrastructure.sqlalchemy_models import PROVIDER_COMMAND_TRIGGERS
+
+    for name in PROVIDER_COMMAND_TRIGGERS:
+        op.execute(f"DROP TRIGGER {name}")
+    op.drop_table("provider_command_operations")
+    from app.modules.tenants.infrastructure.sqlalchemy_models import TENANT_COMMAND_TRIGGERS
+
+    for name in TENANT_COMMAND_TRIGGERS:
+        op.execute(f"DROP TRIGGER {name}")
+    op.drop_table("tenant_command_operations")
+    from app.modules.parties.infrastructure.sqlalchemy_models import PARTY_COMMAND_TRIGGERS
+
+    for name in PARTY_COMMAND_TRIGGERS:
+        op.execute(f"DROP TRIGGER {name}")
+    op.drop_table("party_command_operations")
+    for name in (
+        "inspection_commands_no_update",
+        "inspection_commands_no_delete",
+        "inspection_commands_no_replace",
+    ):
+        op.execute(f"DROP TRIGGER IF EXISTS {name}")
+    op.drop_table("inspection_command_operations")
+    for action in ("update", "delete", "replace"):
+        op.execute(f"DROP TRIGGER finance_command_operations_no_{action}")
+    op.drop_table("finance_command_operations")
+    op.drop_table("finance_command_revisions")
+    op.execute("DROP TRIGGER communication_operations_no_replace")
+    for table in ("operator_operations", "operator_coverage_reviews"):
         for action in ("update", "delete"):
             op.execute(f"DROP TRIGGER {table}_no_{action}")
     for table in (
+        "operator_coverage_reviews",
         "operator_operations",
         "operator_recovery_records",
         "operator_preferences",
     ):
         op.drop_table(table)
-    op.execute("DROP TRIGGER ai_settings_operations_no_delete")
-    op.execute("DROP TRIGGER ai_settings_operations_no_update")
+    op.execute("DROP TRIGGER ai_command_operations_no_delete")
+    op.execute("DROP TRIGGER ai_command_operations_no_update")
+    op.execute("DROP TRIGGER ai_command_operations_no_replace")
+    op.drop_table("ai_command_operations")
     op.drop_table("ai_review_decisions")
     op.drop_table("ai_drafts")
     op.drop_table("ai_runs")
     op.drop_table("ai_action_limits")
-    op.drop_table("ai_settings_operations")
     op.drop_table("ai_settings")
     op.drop_table("ai_model_connections")
+    from app.modules.owner_management.infrastructure.sqlalchemy_models import COMMAND_TRIGGERS
+
+    _drop_triggers(COMMAND_TRIGGERS)
+    op.drop_table("owner_concern_command_operations")
     op.execute("DROP TRIGGER owner_concern_follow_up_operations_no_delete")
     op.execute("DROP TRIGGER owner_concern_follow_up_operations_no_update")
     op.drop_table("owner_concern_follow_up_operations")
     op.drop_table("owner_concerns")
+    op.execute("DROP TRIGGER owner_rent_report_operations_no_replace")
     op.execute("DROP TRIGGER owner_rent_report_operations_no_delete")
     op.execute("DROP TRIGGER owner_rent_report_operations_no_update")
     op.drop_table("owner_rent_report_operations")
@@ -861,6 +998,9 @@ def downgrade() -> None:
     op.execute("DROP TRIGGER maintenance_work_journal_entries_no_update")
     op.execute("DROP TRIGGER maintenance_follow_up_operations_no_delete")
     op.execute("DROP TRIGGER maintenance_follow_up_operations_no_update")
+    op.execute("DROP TRIGGER maintenance_command_receipts_no_delete")
+    op.execute("DROP TRIGGER maintenance_command_receipts_no_update")
+    op.execute("DROP TRIGGER maintenance_command_receipts_no_replace")
     op.execute("DROP TRIGGER communication_operations_no_delete")
     op.execute("DROP TRIGGER communication_operations_no_update")
     op.drop_table("maintenance_work_journal_entries")
@@ -870,6 +1010,7 @@ def downgrade() -> None:
     op.drop_table("maintenance_issue_expense_links")
     op.drop_table("maintenance_cost_contexts")
     op.drop_table("maintenance_appointments")
+    op.drop_table("maintenance_command_receipts")
     op.drop_table("maintenance_issues")
     op.drop_table("communication_operations")
     op.drop_table("communication_links")
@@ -885,6 +1026,12 @@ def downgrade() -> None:
     op.drop_table("security_deposit_accounts")
     op.drop_table("expense_refunds")
     op.drop_table("expenses")
+    from app.modules.finance.infrastructure.sqlalchemy_models import (
+        CATEGORY_COMMAND_TRIGGERS as EXPENSE_CATEGORY_COMMAND_TRIGGERS,
+    )
+
+    _drop_triggers(EXPENSE_CATEGORY_COMMAND_TRIGGERS)
+    op.drop_table("expense_category_command_operations")
     op.drop_table("expense_categories")
     op.drop_table("prepaid_check_operations")
     op.drop_table("prepaid_checks")
@@ -912,19 +1059,28 @@ def downgrade() -> None:
     op.drop_table("lease_renewal_options")
     op.drop_table("lease_participants")
     op.drop_table("lease_term_versions")
+    op.drop_table("lease_command_operations")
     op.drop_table("leases")
+    op.execute("DROP TRIGGER space_status_operations_no_replace")
+    op.execute("DROP TRIGGER space_status_operations_no_delete")
+    op.execute("DROP TRIGGER space_status_operations_conditional_update")
     op.drop_table("space_status_operations")
     op.drop_table("space_availability")
     op.drop_table("space_occupancy_periods")
     op.drop_table("spaces")
     op.drop_table("property_ownerships")
+    op.drop_table("portfolio_inventory_operations")
     op.drop_table("properties")
     op.drop_table("tenant_profiles")
     op.drop_table("party_contact_methods")
     op.drop_table("parties")
     op.drop_table("task_waiting_operations")
+    op.drop_table("task_creation_operations")
+    op.execute("DROP TRIGGER task_mutation_operations_no_replace")
+    op.drop_table("task_mutation_operations")
     op.drop_table("task_reminders")
     op.drop_table("tasks")
+    op.drop_table("file_command_operations")
     op.drop_table("file_publication_cleanup_attentions")
     op.drop_table("file_links")
     op.drop_table("file_content_locations")

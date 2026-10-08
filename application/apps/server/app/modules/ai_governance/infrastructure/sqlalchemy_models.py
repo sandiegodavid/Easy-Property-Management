@@ -15,19 +15,12 @@ class AiSettingsModel(LocalBase):
     built_in_enabled: Mapped[bool] = mapped_column(Integer, nullable=False, default=False)
     default_connection_id: Mapped[str | None] = mapped_column(ForeignKey("ai_model_connections.id"))
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     __table_args__ = (
         CheckConstraint("singleton=1"),
+        CheckConstraint("typeof(revision)='integer' AND revision>=1"),
         CheckConstraint("kill_switch IN (0,1) AND built_in_enabled IN (0,1)"),
     )
-
-
-class AiSettingsOperationModel(LocalBase):
-    __tablename__ = "ai_settings_operations"
-    idempotency_key: Mapped[str] = mapped_column(String, primary_key=True)
-    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
-    result_json: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[str] = mapped_column(String, nullable=False)
-    __table_args__ = (CheckConstraint("length(request_fingerprint)=64"),)
 
 
 class AiModelConnectionModel(LocalBase):
@@ -71,11 +64,39 @@ class AiActionLimitModel(LocalBase):
     max_completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
     allowed_models: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     __table_args__ = (
         CheckConstraint("enabled IN (0,1)"),
+        CheckConstraint("typeof(revision)='integer' AND revision>=1"),
         CheckConstraint(
             "max_runs_per_utc_day>0 AND max_prompt_tokens>0 AND max_completion_tokens>0"
         ),
+    )
+
+
+class AiCommandOperationModel(LocalBase):
+    __tablename__ = "ai_command_operations"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    target_id: Mapped[str] = mapped_column(String, nullable=False)
+    request_json: Mapped[str] = mapped_column(Text, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    result_json: Mapped[str] = mapped_column(Text, nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "length(id)=36 AND length(idempotency_key)=36 AND length(correlation_id)=36"
+        ),
+        CheckConstraint(
+            "length(request_fingerprint)=64 AND request_fingerprint NOT GLOB '*[^0-9a-f]*'"
+        ),
+        CheckConstraint(
+            "action IN ('settings','connection_create','connection_update','disclosure','limit','edited','dismissed','approved')"
+        ),
+        CheckConstraint("json_valid(request_json) AND json_valid(result_json)"),
+        Index("ai_commands_target", "target_id", "created_at"),
     )
 
 

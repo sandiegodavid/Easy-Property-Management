@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from app.modules.finance.tests.commands import expense_command
+
+from app.modules.portfolio.tests.commands import inventory_command
+
 import json
 import tempfile
 import unittest
@@ -53,6 +57,18 @@ from app.platform.migration_errors import MigrationSchemaError
 from app.platform.sqlite_engine import create_sqlite_engine
 
 
+def category_command(service, action, *args):
+    """Supply fresh category metadata explicitly, without replacing service methods."""
+    revision = 0
+    if action != "create_category":
+        revision = next(
+            category["revision"]
+            for category in service.list_categories(include_archived=True)
+            if category["id"] == args[0]
+        )
+    return getattr(service, action)(*args, expected_revision=revision, idempotency_key=str(uuid4()))
+
+
 class ExpenseWorkflowTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -73,7 +89,9 @@ class ExpenseWorkflowTests(unittest.TestCase):
             SQLitePortfolioUnitOfWork(database, recorder),
             time_zone_resolver=BundledAddressTimeZoneResolver(),
         )
-        property_record = portfolio.create_property(
+        property_record = inventory_command(
+            portfolio,
+            "create_property",
             PropertyCreateCommand(
                 "Expense home",
                 "1 Main Street",
@@ -82,7 +100,7 @@ class ExpenseWorkflowTests(unittest.TestCase):
                 "single_family_home",
                 (OwnershipInput("local_operator"),),
                 region="OR",
-            )
+            ),
         )
         self.property_id = property_record.id
         self.space_id = portfolio.get_property(property_record.id)["spaces"][0]["id"]
@@ -127,13 +145,17 @@ class ExpenseWorkflowTests(unittest.TestCase):
 
     def test_record_idempotency_duplicate_refund_and_replacement_lifecycle(self):
         command = self.command()
-        first = self.expenses.record_expense(command)
-        self.assertEqual(self.expenses.record_expense(command)["id"], first["id"])
+        first = expense_command(self.expenses, "record_expense", command)
+        self.assertEqual(
+            expense_command(self.expenses, "record_expense", command)["id"], first["id"]
+        )
         self.assertEqual(len(self.audit.history("expense", first["id"])), 1)
         with self.assertRaises(PossibleDuplicateExpenseError):
-            self.expenses.record_expense(self.command())
+            expense_command(self.expenses, "record_expense", self.command())
 
-        refund = self.expenses.record_refund(
+        refund = expense_command(
+            self.expenses,
+            "record_refund",
             first["id"],
             RefundCreateCommand(
                 str(uuid4()),
@@ -144,7 +166,9 @@ class ExpenseWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(self.expenses.expense(first["id"])["netAmount"], "100.00")
         with self.assertRaises(FinanceConflictError):
-            self.expenses.record_refund(
+            expense_command(
+                self.expenses,
+                "record_refund",
                 first["id"],
                 RefundCreateCommand(
                     str(uuid4()),
@@ -154,14 +178,25 @@ class ExpenseWorkflowTests(unittest.TestCase):
                 ),
             )
         with self.assertRaises(FinanceConflictError):
-            self.expenses.void_expense(first["id"], VoidCommand(True, "Incorrect record"))
-        self.expenses.void_refund(refund["id"], VoidCommand(True, "Refund was entered twice"))
-        voided = self.expenses.void_expense(first["id"], VoidCommand(True, "Incorrect property"))
-        replacement = self.expenses.record_expense(
+            expense_command(
+                self.expenses, "void_expense", first["id"], VoidCommand(True, "Incorrect record")
+            )
+        expense_command(
+            self.expenses,
+            "void_refund",
+            refund["id"],
+            VoidCommand(True, "Refund was entered twice"),
+        )
+        voided = expense_command(
+            self.expenses, "void_expense", first["id"], VoidCommand(True, "Incorrect property")
+        )
+        replacement = expense_command(
+            self.expenses,
+            "record_expense",
             self.command(
                 replaces_expense_id=voided["id"],
                 duplicate_confirmed=True,
-            )
+            ),
         )
         self.assertEqual(replacement["replacesExpenseId"], first["id"])
         self.assertEqual(
@@ -171,18 +206,22 @@ class ExpenseWorkflowTests(unittest.TestCase):
 
     def test_idempotency_rejects_changed_payload_without_another_audit_event(self):
         command = self.command()
-        recorded = self.expenses.record_expense(command)
+        recorded = expense_command(self.expenses, "record_expense", command)
         with self.assertRaises(FinanceConflictError):
-            self.expenses.record_expense(
+            expense_command(
+                self.expenses,
+                "record_expense",
                 self.command(
                     idempotency_key=command.idempotency_key,
                     amount="126.00",
-                )
+                ),
             )
         self.assertEqual(len(self.audit.history("expense", recorded["id"])), 1)
 
     def test_historical_idempotency_includes_confirmation_metadata(self):
-        self.expenses.archive_category(
+        category_command(
+            self.expenses,
+            "archive_category",
             self.category_id,
             VoidCommand(True, "Retired category"),
         )
@@ -192,17 +231,19 @@ class ExpenseWorkflowTests(unittest.TestCase):
             historical_entry_confirmed=True,
             historical_entry_reason="Entered from an old receipt",
         )
-        recorded = self.expenses.record_expense(original)
+        recorded = expense_command(self.expenses, "record_expense", original)
         with self.assertRaises(FinanceConflictError):
-            self.expenses.record_expense(
+            expense_command(
+                self.expenses,
+                "record_expense",
                 self.command(
                     idempotency_key=key,
                     historical_entry_confirmed=True,
                     historical_entry_reason="Different historical reason",
-                )
+                ),
             )
         with self.assertRaises(FinanceConflictError):
-            self.expenses.record_expense(self.command(idempotency_key=key))
+            expense_command(self.expenses, "record_expense", self.command(idempotency_key=key))
         self.assertEqual(len(self.audit.history("expense", recorded["id"])), 1)
         engine = create_sqlite_engine(self.workspace.paths.database)
         try:
@@ -220,29 +261,43 @@ class ExpenseWorkflowTests(unittest.TestCase):
         )
 
     def test_category_lifecycle_allows_name_reuse_but_prevents_ambiguous_restore(self):
-        original = self.expenses.create_category(CategoryCreateCommand("Landscaping"))
+        original = category_command(
+            self.expenses, "create_category", CategoryCreateCommand("Landscaping")
+        )
         with self.assertRaises(FinanceConflictError):
-            self.expenses.create_category(CategoryCreateCommand("  LANDSCAPING  "))
-        archived = self.expenses.archive_category(
+            category_command(
+                self.expenses, "create_category", CategoryCreateCommand("  LANDSCAPING  ")
+            )
+        archived = category_command(
+            self.expenses,
+            "archive_category",
             original["id"],
             VoidCommand(True, "No longer used"),
         )
         self.assertIsNotNone(archived["archivedAt"])
-        replacement = self.expenses.create_category(CategoryCreateCommand("landscaping"))
+        replacement = category_command(
+            self.expenses, "create_category", CategoryCreateCommand("landscaping")
+        )
         with self.assertRaises(FinanceConflictError):
-            self.expenses.restore_category(
+            category_command(
+                self.expenses,
+                "restore_category",
                 original["id"],
                 VoidCommand(True, "Restore category"),
             )
-        updated = self.expenses.patch_category(
+        updated = category_command(
+            self.expenses,
+            "patch_category",
             replacement["id"],
             CategoryPatchCommand(frozenset({"description"}), description="Grounds work"),
         )
         self.assertEqual(updated["description"], "Grounds work")
 
     def test_expense_patch_is_limited_to_category_and_notes(self):
-        expense = self.expenses.record_expense(self.command())
-        updated = self.expenses.patch_expense(
+        expense = expense_command(self.expenses, "record_expense", self.command())
+        updated = expense_command(
+            self.expenses,
+            "patch_expense",
             expense["id"],
             ExpensePatchCommand(frozenset({"notes"}), notes="Reviewed by operator"),
         )
@@ -252,7 +307,7 @@ class ExpenseWorkflowTests(unittest.TestCase):
             ExpensePatchCommand(frozenset({"amount"}))
 
     def test_expense_evidence_and_activity_privacy(self):
-        expense = self.expenses.record_expense(self.command())
+        expense = expense_command(self.expenses, "record_expense", self.command())
         source = Path(self.temp.name) / "private-invoice.pdf"
         source.write_bytes(b"invoice")
         stored = self.files.add(
@@ -276,6 +331,7 @@ class ExpenseWorkflowTests(unittest.TestCase):
     def test_http_contract_rejects_numeric_amount_and_returns_typed_expense(self):
         payload = {
             "idempotencyKey": str(uuid4()),
+            "expectedRevision": 0,
             "propertyId": self.property_id,
             "spaceId": self.space_id,
             "categoryId": self.category_id,
@@ -296,7 +352,7 @@ class ExpenseWorkflowTests(unittest.TestCase):
             self.assertEqual(invalid.status_code, 422)
 
     def test_expense_link_limit_is_enforced_but_archival_remains_available(self):
-        expense = self.expenses.record_expense(self.command())
+        expense = expense_command(self.expenses, "record_expense", self.command())
         source = Path(self.temp.name) / "evidence.txt"
         source.write_bytes(b"evidence")
         links = []
@@ -363,11 +419,13 @@ class ExpenseWorkflowTests(unittest.TestCase):
         finally:
             engine.dispose()
         with self.assertRaisesRegex(FinanceError, "display-name snapshot"):
-            self.expenses.record_expense(
+            expense_command(
+                self.expenses,
+                "record_expense",
                 self.command(
                     provider_party_id=provider_id,
                     payee_name=None,
-                )
+                ),
             )
 
     def test_expense_query_command_rejects_untyped_and_inconsistent_filters(self):
@@ -405,14 +463,16 @@ class ExpenseWorkflowTests(unittest.TestCase):
                     {"id": provider_id, "stamp": stamp},
                 )
         for number in range(60):
-            self.expenses.record_expense(
+            expense_command(
+                self.expenses,
+                "record_expense",
                 self.command(
                     amount=f"{number + 1}.00",
                     description=f"Expense {number}",
                     provider_party_id=provider_ids[number % len(provider_ids)],
                     payee_name=None,
                     paid_on=(date.today() - timedelta(days=number)).isoformat(),
-                )
+                ),
             )
 
         counts = []
@@ -508,8 +568,10 @@ class ExpenseWorkflowTests(unittest.TestCase):
 
     @fast_backup_encryption()
     def test_expense_evidence_refund_and_audit_round_trip_through_backup(self):
-        expense = self.expenses.record_expense(self.command())
-        refund = self.expenses.record_refund(
+        expense = expense_command(self.expenses, "record_expense", self.command())
+        refund = expense_command(
+            self.expenses,
+            "record_refund",
             expense["id"],
             RefundCreateCommand(
                 str(uuid4()),

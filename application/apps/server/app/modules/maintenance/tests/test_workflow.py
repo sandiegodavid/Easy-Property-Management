@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from app.modules.finance.tests.commands import expense_command
+
+from app.modules.portfolio.tests.commands import inventory_command
+
 import json
 import tempfile
 import unittest
@@ -33,6 +37,7 @@ from app.modules.finance.domain.models import VoidCommand
 from app.modules.finance.infrastructure.expense_context_reader import SQLiteExpenseContextReader
 from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpenseUnitOfWork
 from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
+from app.modules.leases.tests.commands import lease_command
 from app.modules.leases.application.service import (
     LeaseCreateCommand,
     LeaseService,
@@ -113,7 +118,9 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             SQLitePortfolioUnitOfWork(database, recorder),
             time_zone_resolver=BundledAddressTimeZoneResolver(),
         )
-        property_record = self.portfolio.create_property(
+        property_record = inventory_command(
+            self.portfolio,
+            "create_property",
             PropertyCreateCommand(
                 "Maintenance home",
                 "1 Main Street",
@@ -122,7 +129,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 "single_family_home",
                 (OwnershipInput("local_operator"),),
                 region="OR",
-            )
+            ),
         )
         self.property_id = property_record.id
         self.space_id = self.portfolio.get_property(property_record.id)["spaces"][0]["id"]
@@ -156,6 +163,16 @@ class MaintenanceWorkflowTests(unittest.TestCase):
         )
         self.journal = WorkJournalService(self.service.unit_of_work)
 
+    def issue_revision(self, target_id, *, kind="issue"):
+        """Read the explicit concurrency precondition for a test command call."""
+
+        def read(tx):
+            target = getattr(tx, kind)(target_id)
+            issue_id = target_id if kind == "issue" else target["issue_id"]
+            return tx.issue(issue_id)["revision"]
+
+        return self.service.unit_of_work.read(read)
+
     def provider(self, status="neutral"):
         providers = ProviderService(
             SQLiteProviderUnitOfWork(
@@ -170,6 +187,8 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             ProviderProfileCommand(
                 status, selection_reason="Legacy concern" if status == "avoid" else None
             ),
+            expected_revision=0,
+            idempotency_key=str(uuid4()),
         )["party"]["id"]
 
     def issue(self):
@@ -186,10 +205,13 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 ReporterAttribution("manager", "local_operator"),
             ),
             str(uuid4()),
+            expected_revision=0,
         )
 
     def expense(self):
-        return self.expenses.record_expense(
+        return expense_command(
+            self.expenses,
+            "record_expense",
             ExpenseCreateCommand(
                 idempotency_key=str(uuid4()),
                 property_id=self.property_id,
@@ -201,15 +223,25 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 currency_code="USD",
                 description="Repair supply",
                 payee_name="Local hardware",
-            )
+            ),
         )
 
     def test_lifecycle_parent_scoped_idempotency_and_projection(self) -> None:
         item = self.issue()
         self.assertEqual(item["status"], "open")
-        started = self.service.transition(item["id"], "start")
+        started = self.service.transition(
+            item["id"],
+            "start",
+            expected_revision=self.issue_revision(item["id"], kind="issue"),
+            idempotency_key=str(uuid4()),
+        )
         self.assertEqual(started["status"], "in_progress")
-        returned = self.service.transition(item["id"], "return_to_open")
+        returned = self.service.transition(
+            item["id"],
+            "return_to_open",
+            expected_revision=self.issue_revision(item["id"], kind="issue"),
+            idempotency_key=str(uuid4()),
+        )
         self.assertEqual(returned["status"], "open")
         key = str(uuid4())
         command = AppointmentCreate(
@@ -217,8 +249,15 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
             "Plumber visit",
         )
-        first = self.service.create_appointment(item["id"], command, key)
-        second = self.service.create_appointment(item["id"], command, key)
+        first = self.service.create_appointment(
+            item["id"],
+            command,
+            key,
+            expected_revision=self.issue_revision(item["id"], kind="issue"),
+        )
+        second = self.service.create_appointment(
+            item["id"], command, key, expected_revision=first["revision"] - 1
+        )
         self.assertEqual(first["id"], second["id"])
         page = self.service.list_issues(priority="high", has_active_task=False)
         self.assertEqual(page["items"][0]["id"], item["id"])
@@ -251,6 +290,8 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             ReporterCorrection(
                 ReporterAttribution("staff", "local_operator"), True, "Correct reporter role"
             ),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
+            idempotency_key=str(uuid4()),
         )
         self.assertEqual(corrected["reporter"]["role"], "staff")
         event = next(
@@ -282,7 +323,9 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             "_clock",
             return_value=self._local_midday(local_today - timedelta(days=1)),
         ):
-            owned = self.portfolio.create_property(
+            owned = inventory_command(
+                self.portfolio,
+                "create_property",
                 PropertyCreateCommand(
                     "Owner home",
                     "2 Main Street",
@@ -296,7 +339,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                         ),
                     ),
                     region="OR",
-                )
+                ),
             )
         owner_id = self.portfolio.get_property(owned.id)["ownerships"][0]["partyId"]
         active = self.service.create_issue(
@@ -312,11 +355,16 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 ReporterAttribution("owner", "party", owner_id),
             ),
             str(uuid4()),
+            expected_revision=0,
         )
         self.assertEqual("Casey Owner", active["reporter"]["displayName"])
 
-        self.portfolio.replace_ownerships(
-            owned.id, (OwnershipInput("local_operator"),), local_today.isoformat()
+        inventory_command(
+            self.portfolio,
+            "replace_ownerships",
+            owned.id,
+            (OwnershipInput("local_operator"),),
+            local_today.isoformat(),
         )
         self.portfolio.archive_party(owner_id, confirmed=True)
         reported = self._local_midday(local_today - timedelta(days=1))
@@ -335,6 +383,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 ),
             ),
             str(uuid4()),
+            expected_revision=0,
         )
         event = SQLiteAuditRepository(self.workspace.paths.database).history(
             "maintenance_issue", archived["id"]
@@ -357,7 +406,9 @@ class MaintenanceWorkflowTests(unittest.TestCase):
         local_today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
         reported_at = self._local_midday(local_today - timedelta(days=1))
         with patch.object(self.portfolio, "_clock", return_value=reported_at):
-            owned = self.portfolio.create_property(
+            owned = inventory_command(
+                self.portfolio,
+                "create_property",
                 PropertyCreateCommand(
                     "Correction home",
                     "4 Main Street",
@@ -371,7 +422,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                         ),
                     ),
                     region="OR",
-                )
+                ),
             )
         owner_id = self.portfolio.get_property(owned.id)["ownerships"][0]["partyId"]
         issue = self.service.create_issue(
@@ -387,9 +438,14 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 ReporterAttribution("manager", "local_operator"),
             ),
             str(uuid4()),
+            expected_revision=0,
         )
-        self.portfolio.replace_ownerships(
-            owned.id, (OwnershipInput("local_operator"),), local_today.isoformat()
+        inventory_command(
+            self.portfolio,
+            "replace_ownerships",
+            owned.id,
+            (OwnershipInput("local_operator"),),
+            local_today.isoformat(),
         )
         self.portfolio.archive_party(owner_id, confirmed=True)
         self.service.correct_reporter(
@@ -401,6 +457,8 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 True,
                 "Corrected after reviewing prior ownership records",
             ),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
+            idempotency_key=str(uuid4()),
         )
         event = next(
             item
@@ -439,7 +497,11 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             ),
             SharedPartyFactory(),
         )
-        tenant = tenants.create(TenantCreateCommand("individual", "Taylor Tenant"))
+        tenant = tenants.create(
+            TenantCreateCommand("individual", "Taylor Tenant"),
+            expected_revision=0,
+            idempotency_key=str(uuid4()),
+        )
         leases = LeaseService(
             SQLiteLeaseUnitOfWork(
                 database,
@@ -450,7 +512,9 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             )
         )
         today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
-        lease = leases.create(
+        lease = lease_command(
+            leases,
+            "create",
             LeaseCreateCommand(
                 self.space_id,
                 "residential",
@@ -459,9 +523,11 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 today,
                 TermCommand(200_000, "USD", "monthly", 1, 200_000),
                 (ParticipantCommand(tenant["id"], "primary_tenant"),),
-            )
+            ),
         )
-        leases.execute(
+        lease_command(
+            leases,
+            "execute",
             lease["id"],
             executed_on=today.isoformat(),
             confirmed=True,
@@ -480,7 +546,10 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             ReporterAttribution("tenant", "party", tenant["id"]),
         )
         self.assertEqual(
-            "tenant", self.service.create_issue(command, str(uuid4()))["reporter"]["role"]
+            "tenant",
+            self.service.create_issue(command, str(uuid4()), expected_revision=0)["reporter"][
+                "role"
+            ],
         )
         with self.assertRaises(MaintenanceConflictError):
             self.service.create_issue(
@@ -496,6 +565,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                     ReporterAttribution("tenant", "party", tenant["id"]),
                 ),
                 str(uuid4()),
+                expected_revision=0,
             )
         key = str(uuid4())
         reported_at = self._local_midday(today).isoformat()
@@ -512,6 +582,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 ReporterAttribution("manager", "local_operator"),
             ),
             key,
+            expected_revision=0,
         )
         retry = self.service.create_issue(
             IssueCreate(
@@ -526,6 +597,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 ReporterAttribution("manager", "local_operator"),
             ),
             key,
+            expected_revision=0,
         )
         self.assertEqual(original["id"], retry["id"])
         with self.assertRaises(MaintenanceConflictError):
@@ -542,6 +614,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                     ReporterAttribution("staff", "local_operator"),
                 ),
                 key,
+                expected_revision=0,
             )
 
     def test_maintenance_issue_communications_are_created_corrected_listed_and_detailed(
@@ -553,6 +626,8 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 json={
                     "partyKind": "individual",
                     "displayName": "Communicating Tenant",
+                    "expectedRevision": 0,
+                    "idempotencyKey": str(uuid4()),
                     "confirmedNewParty": True,
                 },
             ).json()
@@ -561,6 +636,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 json={
                     "propertyId": self.property_id,
                     "summary": "Communication link",
+                    "expectedRevision": 0,
                     "description": "An issue with linked communications.",
                     "category": "plumbing",
                     "priority": "normal",
@@ -570,6 +646,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 },
             ).json()
             payload = {
+                "expectedRevision": 0,
                 "direction": "inbound",
                 "channel": "phone",
                 "subject": "Initial repair call",
@@ -585,6 +662,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             self.assertEqual(200, created.status_code, created.text)
             correction = {key: value for key, value in payload.items() if key != "record"}
             correction.update(
+                expectedRevision=created.json()["revision"],
                 subject="Corrected repair call",
                 correctionReason="Clarified the subject",
                 idempotencyKey=str(uuid4()),
@@ -607,7 +685,9 @@ class MaintenanceWorkflowTests(unittest.TestCase):
     @fast_backup_encryption()
     def test_reporter_attribution_survives_backup_restore(self) -> None:
         issue = self.issue()
-        party_property = self.portfolio.create_property(
+        party_property = inventory_command(
+            self.portfolio,
+            "create_property",
             PropertyCreateCommand(
                 "Communication party home",
                 "3 Main Street",
@@ -621,7 +701,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                     ),
                 ),
                 region="OR",
-            )
+            ),
         )
         party_id = self.portfolio.get_property(party_property.id)["ownerships"][0]["partyId"]
         communications = CommunicationService(
@@ -649,6 +729,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 record=True,
             ),
             str(uuid4()),
+            expected_revision=0,
         )
         journal_entry = self.journal.record(
             issue["id"],
@@ -664,6 +745,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 operator_verified=True,
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         archive = Path(self.temp.name) / "maintenance.epm-backup"
         backups = BackupService(
@@ -723,9 +805,17 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 "Inspection",
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(item["id"], kind="issue"),
         )
         with self.assertRaises(MaintenanceConflictError):
-            self.service.transition(item["id"], "resolve", "Confirmed repaired", True)
+            self.service.transition(
+                item["id"],
+                "resolve",
+                "Confirmed repaired",
+                True,
+                expected_revision=self.issue_revision(item["id"], kind="issue"),
+                idempotency_key=str(uuid4()),
+            )
 
     def test_follow_up_uses_task_command_validation(self) -> None:
         item = self.issue()
@@ -738,25 +828,51 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 None,
                 "America/Los_Angeles",
                 str(uuid4()),
+                expected_revision=self.issue_revision(item["id"], kind="issue"),
             )
         task = self.service.create_follow_up(
-            item["id"], "Call electrician", None, "normal", None, None, str(uuid4())
+            item["id"],
+            "Call electrician",
+            None,
+            "normal",
+            None,
+            None,
+            str(uuid4()),
+            expected_revision=self.issue_revision(item["id"], kind="issue"),
         )
         self.assertEqual(task["relatedEntityType"], "maintenance_issue")
 
     def test_later_voided_expense_remains_visible_through_active_link(self) -> None:
         issue = self.issue()
         expense = self.expense()
-        self.service.link_expense(issue["id"], expense["id"], str(uuid4()))
-        self.expenses.void_expense(expense["id"], VoidCommand(True, "Duplicate receipt"))
+        self.service.link_expense(
+            issue["id"],
+            expense["id"],
+            str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
+        )
+        expense_command(
+            self.expenses, "void_expense", expense["id"], VoidCommand(True, "Duplicate receipt")
+        )
         detail = self.service.detail(issue["id"])
         self.assertEqual(detail["expenseLinks"][0]["expense"]["lifecycleStatus"], "voided")
         self.workspace.open()
 
     def test_missing_expense_link_creation_audit_fails_workspace_validation(self) -> None:
         issue = self.issue()
-        link = self.service.link_expense(issue["id"], self.expense()["id"], str(uuid4()))
-        self.service.archive_expense_link(link["id"], "Replaced by a corrected expense link", True)
+        link = self.service.link_expense(
+            issue["id"],
+            self.expense()["id"],
+            str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
+        )
+        self.service.archive_expense_link(
+            link["id"],
+            "Replaced by a corrected expense link",
+            True,
+            expected_revision=self.issue_revision(link["id"], kind="expense_link"),
+            idempotency_key=str(uuid4()),
+        )
         engine = create_sqlite_engine(self.workspace.paths.database)
         try:
             with engine.begin() as connection:
@@ -780,7 +896,14 @@ class MaintenanceWorkflowTests(unittest.TestCase):
     def test_follow_up_operation_immutability_and_trigger_validation(self) -> None:
         issue = self.issue()
         self.service.create_follow_up(
-            issue["id"], "Call plumber", None, "normal", None, None, str(uuid4())
+            issue["id"],
+            "Call plumber",
+            None,
+            "normal",
+            None,
+            None,
+            str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         engine = create_sqlite_engine(self.workspace.paths.database)
         try:
@@ -820,6 +943,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 "Work began",
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         completed = self.journal.record(
             issue["id"],
@@ -835,6 +959,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 operator_verified=True,
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         correction = self.journal.record(
             issue["id"],
@@ -853,6 +978,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 correction_reason="Initial observation overstated repair",
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         page = self.journal.issue_journal(issue["id"])
         states = {item["id"]: item["isEffective"] for item in page["items"]}
@@ -877,8 +1003,16 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                     correction_reason="Duplicate",
                 ),
                 str(uuid4()),
+                expected_revision=self.issue_revision(issue["id"], kind="issue"),
             )
-        self.service.transition(issue["id"], "resolve", "Issue addressed", True)
+        self.service.transition(
+            issue["id"],
+            "resolve",
+            "Issue addressed",
+            True,
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
+            idempotency_key=str(uuid4()),
+        )
         with self.assertRaises(MaintenanceConflictError):
             self.journal.record(
                 issue["id"],
@@ -886,6 +1020,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                     None, "general_note", "other_report", datetime.now(UTC).isoformat(), "Late note"
                 ),
                 str(uuid4()),
+                expected_revision=self.issue_revision(issue["id"], kind="issue"),
             )
         historical = self.journal.record(
             issue["id"],
@@ -898,6 +1033,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 historical_entry_confirmed=True,
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         self.assertEqual(historical["entryKind"], "general_note")
         engine = create_sqlite_engine(self.workspace.paths.database)
@@ -913,8 +1049,19 @@ class MaintenanceWorkflowTests(unittest.TestCase):
 
     def test_invalid_archived_expense_link_reason_fails_workspace_validation(self) -> None:
         issue = self.issue()
-        link = self.service.link_expense(issue["id"], self.expense()["id"], str(uuid4()))
-        self.service.archive_expense_link(link["id"], "No longer relevant", True)
+        link = self.service.link_expense(
+            issue["id"],
+            self.expense()["id"],
+            str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
+        )
+        self.service.archive_expense_link(
+            link["id"],
+            "No longer relevant",
+            True,
+            expected_revision=self.issue_revision(link["id"], kind="expense_link"),
+            idempotency_key=str(uuid4()),
+        )
         engine = create_sqlite_engine(self.workspace.paths.database)
         try:
             for invalid_reason in (" ", "x" * 1_001):
@@ -944,6 +1091,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 json={
                     "propertyId": self.property_id,
                     "summary": "Outlet",
+                    "expectedRevision": 0,
                     "description": "Loose outlet cover.",
                     "category": "electrical",
                     "priority": "normal",
@@ -958,6 +1106,8 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 json={
                     "category": "other",
                     "categoryDetail": "Specialty fixture",
+                    "expectedRevision": created.json()["revision"],
+                    "idempotencyKey": str(uuid4()),
                 },
             )
             self.assertEqual(changed.status_code, 200, changed.text)
@@ -968,6 +1118,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                     "startsAtUtc": datetime.now(UTC).isoformat(),
                     "endsAtUtc": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
                     "purpose": "Electrician visit",
+                    "expectedRevision": changed.json()["revision"],
                     "idempotencyKey": str(uuid4()),
                 },
             )
@@ -982,6 +1133,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                     "sourceKind": "operator_observation",
                     "occurredAtUtc": datetime.now(UTC).isoformat(),
                     "summary": "Outlet repaired",
+                    "expectedRevision": scheduled.json()["revision"],
                     "outcomeStatus": "completed",
                     "outcomeSummary": "Cover secured.",
                     "followUpRequired": False,
@@ -1005,9 +1157,13 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             issue["id"],
             QuoteCreate(provider, "Standard repair", "Replace the failed valve.", "125.00", today),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         assignment = self.service.create_assignment(
-            issue["id"], AssignmentCreate(provider, quote["id"]), str(uuid4())
+            issue["id"],
+            AssignmentCreate(provider, quote["id"]),
+            str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         replacement = self.service.create_assignment(
             issue["id"],
@@ -1019,6 +1175,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 end_reason="Reissued authorization",
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         self.assertEqual(replacement["replacesAssignmentId"], assignment["id"])
         self.assertEqual(self.service.quote_comparison(issue["id"])["quotes"][0]["id"], quote["id"])
@@ -1030,6 +1187,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                     avoided, selection_reason="Emergency", direct_assignment_confirmed=True
                 ),
                 str(uuid4()),
+                expected_revision=self.issue_revision(issue["id"], kind="issue"),
             )
         self.workspace.open()
 
@@ -1049,6 +1207,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 estimated_work_finish_on=(today + timedelta(days=4)).isoformat(),
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         self.assertEqual((today + timedelta(days=2)).isoformat(), quote["earliestWorkStartOn"])
         with self.assertRaises(MaintenanceError):
@@ -1086,6 +1245,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 "Journal note",
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         engine = create_sqlite_engine(self.workspace.paths.database)
         try:
@@ -1156,6 +1316,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 "Journal note",
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         engine = create_sqlite_engine(self.workspace.paths.database)
         try:
@@ -1193,7 +1354,9 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             SQLitePortfolioUnitOfWork(other.paths.database, recorder),
             time_zone_resolver=BundledAddressTimeZoneResolver(),
         )
-        property_record = portfolio.create_property(
+        property_record = inventory_command(
+            portfolio,
+            "create_property",
             PropertyCreateCommand(
                 "Future validation home",
                 "1 Main Street",
@@ -1202,7 +1365,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 "single_family_home",
                 (OwnershipInput("local_operator"),),
                 region="OR",
-            )
+            ),
         )
         service = MaintenanceService(
             SQLiteMaintenanceUnitOfWork(
@@ -1232,6 +1395,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 ReporterAttribution("manager", "local_operator"),
             ),
             str(uuid4()),
+            expected_revision=0,
         )
         second_entry = WorkJournalService(service.unit_of_work).record(
             second_issue["id"],
@@ -1243,6 +1407,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 "Recorded note",
             ),
             str(uuid4()),
+            expected_revision=second_issue["revision"],
         )
         second_engine = create_sqlite_engine(other.paths.database)
         try:
@@ -1279,6 +1444,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 "Journal note",
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         engine = create_sqlite_engine(self.workspace.paths.database)
         try:
@@ -1323,6 +1489,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                     f"Note {index}",
                 ),
                 str(uuid4()),
+                expected_revision=self.issue_revision(issue["id"], kind="issue"),
             )
             for index in range(11)
         ]
@@ -1386,9 +1553,13 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 today,
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         assignment = self.service.create_assignment(
-            issue["id"], AssignmentCreate(provider, quote["id"]), str(uuid4())
+            issue["id"],
+            AssignmentCreate(provider, quote["id"]),
+            str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         self.journal.record(
             issue["id"],
@@ -1400,6 +1571,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 "Provider started work",
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         page = self.journal.provider_history(provider)
         item = page["items"][0]
@@ -1425,6 +1597,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 operator_verified=True,
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         correction = self.journal.record(
             issue["id"],
@@ -1443,6 +1616,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 correction_reason="New evidence changed the conclusion",
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         validator = MaintenanceFileLinkValidator(
             SQLiteMaintenanceFileLinkFacts(), SQLiteFileLinkReader()
@@ -1496,8 +1670,15 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             issue["id"],
             QuoteCreate(provider, "Original", "Original scope.", "100.00", today),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
-        self.service.withdraw_quote(original["id"], "Provider corrected the offer.", True)
+        self.service.withdraw_quote(
+            original["id"],
+            "Provider corrected the offer.",
+            True,
+            expected_revision=self.issue_revision(original["id"], kind="quote"),
+            idempotency_key=str(uuid4()),
+        )
         self.service.create_quote(
             issue["id"],
             QuoteCreate(
@@ -1509,6 +1690,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 replaces_quote_id=original["id"],
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         with self.assertRaisesRegex(MaintenanceConflictError, "already has a replacement") as error:
             self.service.create_quote(
@@ -1522,6 +1704,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                     replaces_quote_id=original["id"],
                 ),
                 str(uuid4()),
+                expected_revision=self.issue_revision(issue["id"], kind="issue"),
             )
         self.assertEqual("quote_replaced", error.exception.code)
         engine = create_sqlite_engine(self.workspace.paths.database)
@@ -1553,6 +1736,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 (today - timedelta(days=1)).isoformat(),
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         valid = self.service.create_quote(
             issue["id"],
@@ -1560,13 +1744,21 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 provider, "Valid", "Valid scope.", "100.00", today.isoformat(), today.isoformat()
             ),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
         withdrawn = self.service.create_quote(
             issue["id"],
             QuoteCreate(provider, "Withdrawn", "Withdrawn scope.", "2.00", today.isoformat()),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
-        self.service.withdraw_quote(withdrawn["id"], "No longer offered.", True)
+        self.service.withdraw_quote(
+            withdrawn["id"],
+            "No longer offered.",
+            True,
+            expected_revision=self.issue_revision(withdrawn["id"], kind="quote"),
+            idempotency_key=str(uuid4()),
+        )
         self.portfolio.archive_party(provider, confirmed=True)
         comparison = self.service.quote_comparison(issue["id"])["quotes"]
         self.assertEqual(
@@ -1584,6 +1776,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             issue["id"],
             QuoteCreate(provider, "Minimal", "Minimal comparison scope.", "75.00", today),
             str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"], kind="issue"),
         )
 
         class Unused:
@@ -1621,9 +1814,13 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             issues[0]["id"],
             QuoteCreate(provider, "Listed", "Listed quote scope.", "50.00", today),
             str(uuid4()),
+            expected_revision=self.issue_revision(issues[0]["id"], kind="issue"),
         )
         self.service.create_assignment(
-            issues[0]["id"], AssignmentCreate(provider, quote["id"]), str(uuid4())
+            issues[0]["id"],
+            AssignmentCreate(provider, quote["id"]),
+            str(uuid4()),
+            expected_revision=self.issue_revision(issues[0]["id"], kind="issue"),
         )
 
         class FileSpy:
@@ -1706,6 +1903,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 json={
                     "propertyId": self.property_id,
                     "summary": "Faucet",
+                    "expectedRevision": 0,
                     "description": "Faucet is dripping continuously.",
                     "category": "plumbing",
                     "priority": "normal",
@@ -1719,6 +1917,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 json={
                     "providerPartyId": provider,
                     "label": "Repair",
+                    "expectedRevision": issue["revision"],
                     "scopeSummary": "Repair faucet cartridge.",
                     "amount": "85.00",
                     "receivedOn": datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat(),
@@ -1731,6 +1930,7 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 json={
                     "providerPartyId": provider,
                     "quoteId": quote.json()["id"],
+                    "expectedRevision": quote.json()["revision"],
                     "idempotencyKey": str(uuid4()),
                 },
             )
@@ -1741,11 +1941,17 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             self.assertEqual(
                 client.post(
                     f"/api/maintenance-quotes/{quote.json()['id']}/withdraw",
-                    json={"confirmed": True, "reason": "Corrected quote."},
+                    json={
+                        "confirmed": True,
+                        "reason": "Corrected quote.",
+                        "expectedRevision": assignment.json()["revision"],
+                        "idempotencyKey": str(uuid4()),
+                    },
                 ).status_code,
                 200,
             )
             replacement = {
+                "expectedRevision": assignment.json()["revision"] + 1,
                 "providerPartyId": provider,
                 "label": "Replacement",
                 "scopeSummary": "Repair with corrected parts.",
@@ -1760,7 +1966,11 @@ class MaintenanceWorkflowTests(unittest.TestCase):
                 ).status_code,
                 201,
             )
-            duplicate = {**replacement, "idempotencyKey": str(uuid4())}
+            duplicate = {
+                **replacement,
+                "expectedRevision": replacement["expectedRevision"] + 1,
+                "idempotencyKey": str(uuid4()),
+            }
             response = client.post(f"/api/maintenance-issues/{issue['id']}/quotes", json=duplicate)
             self.assertEqual(response.status_code, 409, response.text)
             self.assertEqual(response.json()["detail"]["code"], "quote_replaced")

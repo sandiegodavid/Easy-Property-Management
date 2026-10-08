@@ -9,6 +9,7 @@ from app.platform.sqlalchemy_models import LocalBase
 class IntakeSourceModel(LocalBase):
     __tablename__ = "intake_sources"
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    source_revision: Mapped[int] = mapped_column(Integer, nullable=False)
     source_kind: Mapped[str] = mapped_column(String, nullable=False)
     channel: Mapped[str] = mapped_column(String, nullable=False)
     origin_system: Mapped[str] = mapped_column(String, nullable=False)
@@ -36,6 +37,7 @@ class IntakeSourceModel(LocalBase):
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (
+        CheckConstraint("typeof(source_revision) = 'integer' AND source_revision >= 1"),
         CheckConstraint(
             "source_kind IN ('email_message','sms_message','chat_message','operator_note','voice_transcript')"
         ),
@@ -144,6 +146,9 @@ class IntakeSourceOperationModel(LocalBase):
         CheckConstraint("outcome IN ('succeeded','failed')"),
         CheckConstraint("length(request_fingerprint)=64"),
         CheckConstraint("length(request_payload_json) BETWEEN 2 AND 200000"),
+        CheckConstraint(
+            "operation_type IN ('integrity_failed','integrity_restored') OR (result_json IS NOT NULL AND json_valid(result_json))"
+        ),
         Index("intake_operations_source", "source_id", "created_at"),
     )
 

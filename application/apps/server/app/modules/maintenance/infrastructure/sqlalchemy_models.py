@@ -9,6 +9,7 @@ from app.platform.sqlalchemy_models import LocalBase
 class MaintenanceIssueModel(LocalBase):
     __tablename__ = "maintenance_issues"
     id: Mapped[str] = mapped_column(String, primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     property_id: Mapped[str] = mapped_column(ForeignKey("properties.id"), nullable=False)
     space_id: Mapped[str | None] = mapped_column(ForeignKey("spaces.id"))
     summary: Mapped[str] = mapped_column(String, nullable=False)
@@ -32,6 +33,7 @@ class MaintenanceIssueModel(LocalBase):
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (
+        CheckConstraint("typeof(revision)='integer' AND revision >= 1"),
         CheckConstraint(
             "category IN ('plumbing','electrical','heating_cooling','appliance','structural','safety_security','pest','exterior_grounds','cleaning','other')"
         ),
@@ -63,6 +65,47 @@ class MaintenanceIssueModel(LocalBase):
             "reported_at_utc",
         ),
         Index("maintenance_issues_reporter_party_reported", "reporter_party_id", "reported_at_utc"),
+    )
+
+
+class MaintenanceCommandReceiptModel(LocalBase):
+    __tablename__ = "maintenance_command_receipts"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    issue_id: Mapped[str] = mapped_column(ForeignKey("maintenance_issues.id"), nullable=False)
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    target_kind: Mapped[str] = mapped_column(String, nullable=False)
+    target_id: Mapped[str | None] = mapped_column(String)
+    expected_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    effective: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_payload: Mapped[str] = mapped_column(String, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    response_payload: Mapped[str] = mapped_column(String, nullable=False)
+    response_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint("typeof(expected_revision)='integer' AND expected_revision >= 0"),
+        CheckConstraint("typeof(revision)='integer' AND revision >= 1"),
+        CheckConstraint("typeof(effective)='integer' AND effective IN (0,1)"),
+        CheckConstraint("revision = expected_revision + effective"),
+        CheckConstraint(
+            "target_kind IN ('issue','appointment','cost_context','expense_link','quote','assignment')"
+        ),
+        CheckConstraint(
+            "(action='create_issue' AND target_id IS NULL AND expected_revision=0 AND effective=1) OR (action!='create_issue' AND target_id IS NOT NULL AND expected_revision>=1)"
+        ),
+        CheckConstraint("json_valid(request_payload) AND json_type(request_payload)='object'"),
+        CheckConstraint("json_valid(response_payload) AND json_type(response_payload)='object'"),
+        CheckConstraint("length(request_fingerprint)=64 AND length(response_fingerprint)=64"),
+        Index("maintenance_receipts_issue_revision", "issue_id", "revision"),
+        Index(
+            "maintenance_receipts_effective_revision",
+            "issue_id",
+            "revision",
+            unique=True,
+            sqlite_where=text("effective=1"),
+        ),
     )
 
 

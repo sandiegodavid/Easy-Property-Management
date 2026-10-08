@@ -1,9 +1,9 @@
-from datetime import date, datetime
+from datetime import date
 from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictBool
 
 from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
 
@@ -26,24 +26,18 @@ class FollowUpRequest(Contract):
     title: str = Field(min_length=1, max_length=255)
     notes: str | None = Field(default=None, max_length=10_000)
     priority: Literal["low", "normal", "high", "urgent"] = "normal"
-    dueAtUtc: datetime | None = None
+    dueAtUtc: AwareDatetime | None = None
     dueTimezone: str | None = Field(default=None, max_length=128)
-
-    @field_validator("dueAtUtc")
-    @classmethod
-    def aware_due_time(cls, value):
-        if value is not None and value.tzinfo is None:
-            raise ValueError("dueAtUtc must include a timezone.")
-        return value
 
 
 class ConcernCreateRequest(Contract):
+    expectedRevision: int = Field(strict=True, ge=0, le=0)
     ownerPartyId: UUID
     propertyId: UUID
     concernType: Literal["general_rental", "lease", "tenant", "vacancy"]
     summary: str = Field(min_length=1, max_length=240)
     description: str = Field(min_length=1, max_length=10_000)
-    raisedAtUtc: datetime
+    raisedAtUtc: AwareDatetime
     idempotencyKey: UUID
     spaceId: UUID | None = None
     leaseId: UUID | None = None
@@ -57,30 +51,32 @@ class ConcernCreateRequest(Contract):
     replacesConcernId: UUID | None = None
     followUp: FollowUpRequest | None = None
 
-    @field_validator("raisedAtUtc")
-    @classmethod
-    def aware_raised_time(cls, value):
-        if value.tzinfo is None:
-            raise ValueError("raisedAtUtc must include a timezone.")
-        return value
-
 
 class ConcernPatchRequest(Contract):
+    expectedRevision: int = Field(strict=True, ge=1)
+    idempotencyKey: UUID
     summary: str | None = Field(default=None, min_length=1, max_length=240)
     description: str | None = Field(default=None, min_length=1, max_length=10_000)
     priority: Literal["low", "normal", "high", "urgent"] | None = None
 
 
 class TransitionRequest(Contract):
+    expectedRevision: int = Field(strict=True, ge=1)
+    idempotencyKey: UUID
     confirmed: StrictBool
     summary: str | None = Field(default=None, min_length=1, max_length=4000)
+
+
+class ConcernFollowUpRequest(FollowUpRequest):
+    expectedRevision: int = Field(strict=True, ge=1)
+    idempotencyKey: UUID
 
 
 class FollowUpSummary(Contract):
     id: UUID
     status: Literal["open", "in_progress", "completed", "cancelled"]
     title: str
-    dueAtUtc: datetime | None = None
+    dueAtUtc: AwareDatetime | None = None
 
 
 class LineageSummary(Contract):
@@ -98,7 +94,7 @@ class OriginatingCommunicationState(Contract):
 class RecentCommunicationSummary(Contract):
     id: UUID
     subject: str
-    occurredAtUtc: datetime
+    occurredAtUtc: AwareDatetime
     status: Literal["draft", "recorded", "superseded"]
 
 
@@ -124,6 +120,8 @@ class CurrentSourceState(Contract):
 
 class ConcernResponse(Contract):
     id: UUID
+    revision: int = Field(strict=True, ge=1)
+    operationId: UUID | None = None
     ownerPartyId: UUID
     ownerDisplayNameSnapshot: str
     propertyId: UUID
@@ -140,13 +138,13 @@ class ConcernResponse(Contract):
     description: str
     priority: Literal["low", "normal", "high", "urgent"]
     status: Literal["open", "in_progress", "resolved", "dismissed"]
-    raisedAtUtc: datetime
+    raisedAtUtc: AwareDatetime
     propertyTimezoneSnapshot: str
-    recordedAtUtc: datetime
-    updatedAtUtc: datetime
-    resolvedAtUtc: datetime | None = None
+    recordedAtUtc: AwareDatetime
+    updatedAtUtc: AwareDatetime
+    resolvedAtUtc: AwareDatetime | None = None
     resolutionSummary: str | None = None
-    dismissedAtUtc: datetime | None = None
+    dismissedAtUtc: AwareDatetime | None = None
     dismissalReason: str | None = None
     replacesConcernId: UUID | None = None
     observedOccupancyStatus: str | None = None
@@ -161,6 +159,52 @@ class ConcernResponse(Contract):
     currentSourceState: CurrentSourceState
 
 
+class ConcernFollowUpTaskResponse(Contract):
+    """Original Task.to_dict snapshot retained by the concern command receipt."""
+
+    id: UUID
+    title: str
+    notes: str | None
+    status: Literal["open", "in_progress", "completed", "cancelled"]
+    priority: Literal["low", "normal", "high", "urgent"]
+    dueAtUtc: AwareDatetime | None
+    dueTimezone: str | None
+    isAllDay: StrictBool
+    completedAtUtc: AwareDatetime | None
+    cancelledAtUtc: AwareDatetime | None
+    outcomeNote: str | None
+    relatedEntityType: str | None
+    relatedEntityId: UUID | None
+    relatedLabel: str | None
+    createdAtUtc: AwareDatetime
+    updatedAtUtc: AwareDatetime
+    revision: int = Field(strict=True, ge=1)
+    waitingForKind: str | None
+    waitingForLabel: str | None
+    followUpAt: AwareDatetime | None
+    followUpTimezone: str | None
+    waitingSetAtUtc: AwareDatetime | None
+    waitingClearedAtUtc: AwareDatetime | None
+    deletedAtUtc: AwareDatetime | None
+
+
+class ConcernMutationResponse(ConcernResponse):
+    operationId: UUID
+    followUpTask: ConcernFollowUpTaskResponse | None = None
+
+
+class ConcernConflictDetail(Contract):
+    code: str
+    message: str
+    currentRevision: int | None = Field(default=None, strict=True, ge=1)
+    current: ConcernResponse | None = None
+    candidateConcernIds: list[UUID] | None = Field(default=None, max_length=20)
+
+
+class ConcernConflictResponse(Contract):
+    detail: ConcernConflictDetail
+
+
 class ConcernSummaryResponse(Contract):
     id: UUID
     ownerPartyId: UUID
@@ -173,7 +217,7 @@ class ConcernSummaryResponse(Contract):
     summary: str
     priority: Literal["low", "normal", "high", "urgent"]
     status: Literal["open", "in_progress", "resolved", "dismissed"]
-    raisedAtUtc: datetime
+    raisedAtUtc: AwareDatetime
     propertyTimezoneSnapshot: str
     activeFollowUpCount: int
     linkedCommunicationCount: int
@@ -185,7 +229,11 @@ class ConcernPage(Contract):
 
 
 def build_router(service: OwnerConcernService, runtime: WorkspaceRuntime) -> APIRouter:
-    router = APIRouter(prefix="/api/owner-concerns", tags=["owner concerns"])
+    router = APIRouter(
+        prefix="/api/owner-concerns",
+        tags=["owner concerns"],
+        responses={409: {"model": ConcernConflictResponse}},
+    )
 
     def ready():
         if not runtime.ready or runtime.error:
@@ -241,11 +289,23 @@ def build_router(service: OwnerConcernService, runtime: WorkspaceRuntime) -> API
             follow(data.followUp),
         )
 
-    @router.post("", response_model=ConcernResponse, dependencies=[Depends(writable)])
+    @router.post(
+        "",
+        operation_id="create_owner_concern",
+        response_model=ConcernMutationResponse,
+        dependencies=[Depends(writable)],
+    )
     def create(data: ConcernCreateRequest):
-        return invoke(lambda: service.create(command(data)))
+        return invoke(
+            lambda: service.create(command(data), expected_revision=data.expectedRevision)
+        )
 
-    @router.get("", response_model=ConcernPage, dependencies=[Depends(ready)])
+    @router.get(
+        "",
+        operation_id="list_owner_concerns",
+        response_model=ConcernPage,
+        dependencies=[Depends(ready)],
+    )
     def list_concerns(
         ownerPartyId: UUID | None = None,
         propertyId: UUID | None = None,
@@ -291,56 +351,134 @@ def build_router(service: OwnerConcernService, runtime: WorkspaceRuntime) -> API
         )
         return {"items": items, "nextCursor": next_cursor}
 
-    @router.get("/{concern_id}", response_model=ConcernResponse, dependencies=[Depends(ready)])
+    @router.get(
+        "/operations/by-key/{key}",
+        operation_id="get_owner_concern_operation_by_key",
+        response_model=ConcernMutationResponse,
+        dependencies=[Depends(ready)],
+    )
+    def operation_by_key(key: UUID):
+        return invoke(lambda: service.command_operation_by_key(str(key)))
+
+    @router.get(
+        "/operations/{operation_id}",
+        operation_id="get_owner_concern_operation",
+        response_model=ConcernMutationResponse,
+        dependencies=[Depends(ready)],
+    )
+    def operation_by_id(operation_id: UUID):
+        return invoke(lambda: service.command_operation(str(operation_id)))
+
+    @router.get(
+        "/{concern_id}",
+        operation_id="get_owner_concern",
+        response_model=ConcernResponse,
+        dependencies=[Depends(ready)],
+    )
     def detail(concern_id: UUID):
         return invoke(lambda: service.get(str(concern_id)))
 
-    @router.patch("/{concern_id}", response_model=ConcernResponse, dependencies=[Depends(writable)])
-    def patch(concern_id: UUID, data: ConcernPatchRequest):
-        return invoke(lambda: service.patch(str(concern_id), data.model_dump(exclude_unset=True)))
-
-    @router.post(
-        "/{concern_id}/start", response_model=ConcernResponse, dependencies=[Depends(writable)]
+    @router.patch(
+        "/{concern_id}",
+        operation_id="update_owner_concern",
+        response_model=ConcernMutationResponse,
+        dependencies=[Depends(writable)],
     )
-    def start(concern_id: UUID, data: TransitionRequest):
+    def patch(concern_id: UUID, data: ConcernPatchRequest):
         return invoke(
-            lambda: service.transition(str(concern_id), "in_progress", confirmed=data.confirmed)
+            lambda: service.patch(
+                str(concern_id),
+                data.model_dump(exclude_unset=True, exclude={"expectedRevision", "idempotencyKey"}),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
         )
 
     @router.post(
-        "/{concern_id}/resolve", response_model=ConcernResponse, dependencies=[Depends(writable)]
+        "/{concern_id}/start",
+        operation_id="start_owner_concern",
+        response_model=ConcernMutationResponse,
+        dependencies=[Depends(writable)],
+    )
+    def start(concern_id: UUID, data: TransitionRequest):
+        return invoke(
+            lambda: service.transition(
+                str(concern_id),
+                "in_progress",
+                confirmed=data.confirmed,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
+
+    @router.post(
+        "/{concern_id}/resolve",
+        operation_id="resolve_owner_concern",
+        response_model=ConcernMutationResponse,
+        dependencies=[Depends(writable)],
     )
     def resolve(concern_id: UUID, data: TransitionRequest):
         return invoke(
             lambda: service.transition(
-                str(concern_id), "resolved", confirmed=data.confirmed, narrative=data.summary
+                str(concern_id),
+                "resolved",
+                confirmed=data.confirmed,
+                narrative=data.summary,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
     @router.post(
-        "/{concern_id}/dismiss", response_model=ConcernResponse, dependencies=[Depends(writable)]
+        "/{concern_id}/dismiss",
+        operation_id="dismiss_owner_concern",
+        response_model=ConcernMutationResponse,
+        dependencies=[Depends(writable)],
     )
     def dismiss(concern_id: UUID, data: TransitionRequest):
         return invoke(
             lambda: service.transition(
-                str(concern_id), "dismissed", confirmed=data.confirmed, narrative=data.summary
+                str(concern_id),
+                "dismissed",
+                confirmed=data.confirmed,
+                narrative=data.summary,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
     @router.post(
-        "/{concern_id}/reopen", response_model=ConcernResponse, dependencies=[Depends(writable)]
+        "/{concern_id}/reopen",
+        operation_id="reopen_owner_concern",
+        response_model=ConcernMutationResponse,
+        dependencies=[Depends(writable)],
     )
     def reopen(concern_id: UUID, data: TransitionRequest):
         return invoke(
             lambda: service.transition(
-                str(concern_id), "open", confirmed=data.confirmed, narrative=data.summary
+                str(concern_id),
+                "open",
+                confirmed=data.confirmed,
+                narrative=data.summary,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
     @router.post(
-        "/{concern_id}/follow-ups", response_model=ConcernResponse, dependencies=[Depends(writable)]
+        "/{concern_id}/follow-ups",
+        operation_id="add_owner_concern_follow_up",
+        response_model=ConcernMutationResponse,
+        dependencies=[Depends(writable)],
     )
-    def follow_up(concern_id: UUID, data: FollowUpRequest, idempotencyKey: UUID):
-        return invoke(lambda: service.follow_up(str(concern_id), follow(data), str(idempotencyKey)))
+    def follow_up(concern_id: UUID, data: ConcernFollowUpRequest):
+        return invoke(
+            lambda: service.follow_up(
+                str(concern_id),
+                follow(data),
+                str(data.idempotencyKey),
+                expected_revision=data.expectedRevision,
+            )
+        )
 
     return router

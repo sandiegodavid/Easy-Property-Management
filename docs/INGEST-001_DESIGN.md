@@ -97,6 +97,7 @@ All IDs are UUIDs. Timestamps are timezone-aware UTC text. Canonical JSON uses t
 | Field | Rule |
 | --- | --- |
 | `id` | Stable UUID primary key. |
+| `source_revision` | Required positive integer, starting at 1. Advances once for each correction, attention transition, technical integrity transition, or supersession of this source. Admission replays and evidence reads do not advance it. Separate from the evidence revision UUID and evidence revision number. |
 | `source_kind` | `email_message`, `sms_message`, `chat_message`, `operator_note`, or `voice_transcript`. New kinds require a schema change. |
 | `channel` | `email`, `sms`, `chat`, `internal`, or `voice`; compatible with the source kind. |
 | `origin_system` | Bounded normalized name such as `gmail`, `outlook`, `muse_agent`, `manual`, or `voice_workflow`; it identifies provenance, not authority. |
@@ -143,9 +144,41 @@ Append-only operations provide idempotency and recovery independently of Audit. 
 - operation ID and type (`admit`, `integrity_failed`, `integrity_restored`, `correct`, `supersede`, `attention_transition`);
 - caller-supplied idempotency UUID, immutable canonical request payload, and its recomputable fingerprint;
 - source ID, optional resulting revision ID, outcome, and registered error code;
+- immutable canonical `result_json` for operator admission/import, correction, supersession, and attention commands, including operation ID, resulting source revision, evidence revision ID, and original `updatedAt`; technical integrity operations remain system-owned and are not operator recovery commands;
 - correlation ID, trusted actor context, and timestamps.
 
 A unique idempotency key with the same request fingerprint returns the same result. Reusing it with changed content returns `409 intake_idempotency_conflict`.
+
+#### UI-001 command recovery
+
+Admission and import retain their verified attachment manifest and original result in
+the admitting transaction. Lost responses are reconciled through the recorded key;
+recovery never republishes bytes or reruns a consumer consequence. Each successful
+trusted exact-identity replay under a new key records its own immutable result.
+
+Correction and supersession require both `expectedSourceRevision` (a strict positive
+integer) and `expectedEvidenceRevisionId` (a UUID). Attention commands require
+`expectedSourceRevision`, their existing `expectedRevision` evidence UUID, and
+`expectedStatus`. These separate values participate in the semantic fingerprint.
+Same-key replay precedes mutable lifecycle/concurrency checks; a new command based
+on stale source or evidence state returns a typed 409. Attention therefore detects
+changes even if its status subsequently returns to the original value. Consumer
+attention transitions use the same concurrency contract on the owning transaction.
+Stale responses carry the current source revision, evidence revision UUID and
+attention state, without disclosing the evidence payload.
+
+`GET /api/intake/sources/operations/by-key/{idempotencyKey}` and
+`GET /api/intake/sources/operations/{operationId}` return the exact recorded local
+operator command result. Missing receipts, connected-actor receipts, and system
+integrity operations return 404 at this operator recovery boundary. Correction
+receipts contain evidence; their disclosure requires a committed sensitive-read
+audit event and fails closed if that audit cannot be written. This contract does
+not authorize generic resubmission, INGEST-002 effects, or a public integrity command.
+
+Retained validation reconstructs source revisions, evidence identities and lifecycle
+state from correlated operations, validates the recorded result against that state,
+and checks the immutable operation schema/triggers. The greenfield baseline creates
+the current SQLAlchemy definitions directly; no compatibility migration is retained.
 
 ### `intake_source_duplicate_candidates`
 

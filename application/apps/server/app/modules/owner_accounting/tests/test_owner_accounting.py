@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from app.modules.owner_accounting.tests.commands import owner_command
+
+from app.modules.finance.tests.commands import rent_command
+
+
+from app.modules.portfolio.tests.commands import inventory_command
+
 import json
 import tempfile
 import unittest
@@ -34,6 +41,7 @@ from app.modules.finance.infrastructure.receipt_transaction_operations import (
 )
 from app.modules.finance.infrastructure.unit_of_work import SQLiteFinanceUnitOfWork
 from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
+from app.modules.leases.tests.commands import lease_command
 from app.modules.leases.application.service import (
     LeaseCreateCommand,
     LeaseService,
@@ -94,10 +102,12 @@ class _Service:
     def __init__(self):
         self.values = None
 
-    def patch(self, report_id, values, key):
+    def patch(self, report_id, values, key, *, expected_revision=0):
         self.values = (report_id, values, key)
         return {
             "id": report_id,
+            "reportRevision": 1,
+            "operationId": str(uuid4()),
             "leaseId": str(uuid4()),
             "propertyId": str(uuid4()),
             "spaceId": str(uuid4()),
@@ -125,7 +135,7 @@ class _Service:
             "evidenceCount": 0,
         }
 
-    def create(self, command):
+    def create(self, command, *, expected_revision):
         self.created = command
         return self.patch(str(uuid4()), {}, command.idempotency_key)
 
@@ -147,6 +157,7 @@ class OwnerRentReportApiTests(unittest.TestCase):
                 "paymentMethodKind": "cash",
                 "reportedAtUtc": "2026-01-02T20:00:00+00:00",
                 "idempotencyKey": key,
+                "expectedRevision": 0,
             },
         )
         self.assertEqual(response.status_code, 200)
@@ -195,6 +206,7 @@ class OwnerRentReportApiTests(unittest.TestCase):
                 "paymentMethodKind": "cash",
                 "reportedAtUtc": "2026-01-02T12:00:00",
                 "idempotencyKey": str(uuid4()),
+                "expectedRevision": 0,
             },
         )
         self.assertEqual(response.status_code, 422)
@@ -215,6 +227,7 @@ class OwnerRentReportApiTests(unittest.TestCase):
                 "paymentMethodKind": "cash",
                 "reportedAtUtc": "2026-01-02T12:00:00+00:00",
                 "idempotencyKey": str(uuid4()),
+                "expectedRevision": 0,
             },
         )
         self.assertEqual(response.status_code, 201)
@@ -371,13 +384,25 @@ class OwnerRentReportVerificationTests(unittest.TestCase):
     def test_creation_mode_rejects_a_reused_finance_idempotency_receipt(self):
         self.tx.recorded = RecordedReceipt(self.receipt, created=False)
         with self.assertRaises(OwnerReportConflictError):
-            self.service.verify(self.report.id, self._command(), str(uuid4()))
+            self.service.verify(
+                self.report.id,
+                self._command(),
+                str(uuid4()),
+                expected_revision=0,
+                expected_ledger_revision=0,
+            )
         self.assertIsNone(self.tx.replaced)
 
     def test_verification_records_immutable_evidence_snapshot_with_shared_correlation(self):
         self.tx.recorded = RecordedReceipt(self.receipt, created=True)
-        self.service.verify(self.report.id, self._command(), str(uuid4()))
-        operation_event, report_event = self.tx.changes[-2:]
+        self.service.verify(
+            self.report.id,
+            self._command(),
+            str(uuid4()),
+            expected_revision=0,
+            expected_ledger_revision=0,
+        )
+        report_event, operation_event = self.tx.changes[-2:]
         self.assertEqual(operation_event["correlation_id"], report_event["correlation_id"])
         self.assertEqual(operation_event["action"], "recorded")
         self.assertEqual(report_event["action"], "verified")
@@ -439,7 +464,9 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
         )
         owner = portfolio.create_party(PartyCreateCommand("individual", "Client owner"))
         self.owner_id = owner.id
-        property_record = portfolio.create_property(
+        property_record = inventory_command(
+            portfolio,
+            "create_property",
             PropertyCreateCommand(
                 "Owner home",
                 "1 Main Street",
@@ -448,7 +475,7 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
                 "single_family_home",
                 (OwnershipInput("client_owner", party_id=owner.id),),
                 region="OR",
-            )
+            ),
         )
         space_id = portfolio.get_property(property_record.id)["spaces"][0]["id"]
         tenant = TenantService(
@@ -460,7 +487,11 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
                 SQLitePartyReadOperations(parties),
             ),
             SharedPartyFactory(),
-        ).create(TenantCreateCommand("individual", "Tenant"))
+        ).create(
+            TenantCreateCommand("individual", "Tenant"),
+            expected_revision=0,
+            idempotency_key=str(uuid4()),
+        )
         # Capture one injected instant and derive all business dates from the
         # property's timezone.  This remains correct during UTC/local-date
         # boundaries and prevents a test from crossing midnight mid-run.
@@ -480,7 +511,9 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
                 SQLiteInspectionContextReader(),
             )
         )
-        lease = leases.create(
+        lease = lease_command(
+            leases,
+            "create",
             LeaseCreateCommand(
                 space_id,
                 "residential",
@@ -489,9 +522,11 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
                 today,
                 TermCommand(100_000, "USD", "monthly", 1, 0),
                 (ParticipantCommand(tenant["id"], "primary_tenant"),),
-            )
+            ),
         )
-        self.lease = leases.execute(
+        self.lease = lease_command(
+            leases,
+            "execute",
             lease["id"],
             executed_on=today,
             confirmed=True,
@@ -538,7 +573,9 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
 
     def _expectation(self):
         term = self.lease["terms"][0]
-        rows = self.finance.synchronize(
+        rows = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -554,7 +591,9 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
         return rows[0]
 
     def _report_with_evidence(self, amount, key=None):
-        item = self.service.create(
+        item = owner_command(
+            self.service,
+            "create",
             OwnerRentReportCommand(
                 self.lease["id"],
                 self.owner_id,
@@ -563,7 +602,7 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
                 "cash",
                 key or str(uuid4()),
                 self.now.isoformat(),
-            )
+            ),
         )
         source = Path(self.temp.name) / f"{item['id']}.txt"
         source.write_text("statement", encoding="utf-8")
@@ -579,7 +618,9 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
 
     def test_create_and_zero_evidence_list_are_transactional_and_batched(self):
         for amount in (100, 101, 102):
-            self.service.create(
+            owner_command(
+                self.service,
+                "create",
                 OwnerRentReportCommand(
                     self.lease["id"],
                     self.owner_id,
@@ -588,7 +629,7 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
                     "cash",
                     str(uuid4()),
                     self.now.isoformat(),
-                )
+                ),
             )
         statements = []
 
@@ -609,7 +650,9 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
 
     def test_verification_adopts_existing_receipt_and_retries_idempotently(self):
         expectation = self._expectation()
-        receipt = self.finance.record_receipt(
+        receipt = rent_command(
+            self.finance,
+            "record_receipt",
             RecordReceiptCommand(
                 self.lease["id"],
                 str(uuid4()),
@@ -619,13 +662,21 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
                 (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
                 "cash",
                 received_by_party_id=self.owner_id,
-            )
+            ),
         )
         report = self._report_with_evidence(expectation["expectedAmountMinor"])
         key = str(uuid4())
         command = VerifyOwnerRentReportCommand(True, "Matched receipt.", receipt["id"])
-        verified = self.service.verify(report["id"], command, key)
-        retried = self.service.verify(report["id"], command, key)
+        ledger_revision = self.finance.rent_ledger_revision(self.lease["id"])["rentLedgerRevision"]
+        verified = owner_command(self.service, "verify", report["id"], command, key)
+        retried = owner_command(self.service, "verify", report["id"], command, key)
+        self.assertEqual(verified["rentLedgerRevision"], ledger_revision)
+        self.assertEqual(
+            self.finance.rent_ledger_revision(self.lease["id"])["rentLedgerRevision"],
+            ledger_revision,
+        )
+        self.assertEqual(verified["reportRevision"], report["reportRevision"] + 1)
+        self.assertEqual(retried, verified)
         self.assertEqual(retried["id"], verified["id"])
         with self.service.unit_of_work.engine.connect() as connection:
             operation = (
@@ -653,7 +704,9 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
         expectation = self._expectation()
         report = self._report_with_evidence(expectation["expectedAmountMinor"])
         key = str(uuid4())
-        verified = self.service.verify(
+        verified = owner_command(
+            self.service,
+            "verify",
             report["id"],
             VerifyOwnerRentReportCommand(
                 True,
@@ -691,7 +744,9 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
     def test_schema_validation_rejects_tampered_creation_history(self):
         expectation = self._expectation()
         report = self._report_with_evidence(expectation["expectedAmountMinor"])
-        self.service.verify(
+        owner_command(
+            self.service,
+            "verify",
             report["id"],
             VerifyOwnerRentReportCommand(
                 True,
@@ -727,7 +782,9 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
             self.service, "_operation", side_effect=RuntimeError("operation audit unavailable")
         ):
             with self.assertRaisesRegex(RuntimeError, "operation audit unavailable"):
-                self.service.verify(
+                owner_command(
+                    self.service,
+                    "verify",
                     report["id"],
                     VerifyOwnerRentReportCommand(
                         True,
@@ -757,7 +814,10 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
     def test_verified_creation_history_survives_backup_and_restore(self):
         expectation = self._expectation()
         report = self._report_with_evidence(expectation["expectedAmountMinor"])
-        verified = self.service.verify(
+        verification_key = str(uuid4())
+        verified = owner_command(
+            self.service,
+            "verify",
             report["id"],
             VerifyOwnerRentReportCommand(
                 True,
@@ -766,7 +826,7 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
                 str(uuid4()),
                 (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
             ),
-            str(uuid4()),
+            verification_key,
         )
         backups = BackupService(
             self.workspace,
@@ -802,6 +862,145 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
         self.assertEqual(
             restored.detail(report["id"])["verifiedReceiptId"], verified["verifiedReceiptId"]
         )
+        self.assertEqual(restored.command_operation(verification_key)["result"], verified)
+        with (
+            self.service.unit_of_work.engine.connect() as source,
+            restored.unit_of_work.engine.connect() as destination,
+        ):
+            for table in (
+                "owner_rent_report_operations",
+                "finance_command_operations",
+                "finance_command_revisions",
+            ):
+                self.assertEqual(
+                    source.exec_driver_sql(
+                        f"SELECT * FROM {table} ORDER BY id"
+                        if table != "finance_command_revisions"
+                        else f"SELECT * FROM {table} ORDER BY scope_kind, scope_id"
+                    ).all(),
+                    destination.exec_driver_sql(
+                        f"SELECT * FROM {table} ORDER BY id"
+                        if table != "finance_command_revisions"
+                        else f"SELECT * FROM {table} ORDER BY scope_kind, scope_id"
+                    ).all(),
+                )
+
+    def test_original_create_patch_and_reject_replay_and_single_read_recovery(self):
+        report = self._report_with_evidence(100)
+        patch_key, reject_key = str(uuid4()), str(uuid4())
+        values = {"source_note": "Statement correction"}
+        patched = self.service.patch(report["id"], values, patch_key, expected_revision=1)
+        self.assertEqual(patched["reportRevision"], 2)
+        from app.modules.owner_accounting.domain.models import RejectOwnerRentReportCommand
+
+        command = RejectOwnerRentReportCommand(True, "Unsupported claim")
+        rejected = self.service.reject(report["id"], command, reject_key, expected_revision=2)
+        self.assertEqual(rejected["reportRevision"], 3)
+        self.assertEqual(
+            self.service.patch(report["id"], values, patch_key, expected_revision=1), patched
+        )
+        self.assertEqual(
+            self.service.reject(report["id"], command, reject_key, expected_revision=2), rejected
+        )
+        statements = []
+        engine = self.service.unit_of_work.engine
+
+        def capture(*args):
+            if args[2].lstrip().upper().startswith("SELECT"):
+                statements.append(args[2])
+
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            self.assertEqual(self.service.command_operation(patch_key)["result"], patched)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+        self.assertEqual(len(statements), 1)
+        with self.assertRaises(OwnerReportConflictError):
+            self.service.patch(
+                report["id"], {"source_note": "Different"}, patch_key, expected_revision=1
+            )
+        validate_latest_schema(self.database)
+
+    def test_stale_ledger_verification_and_receipt_write_failure_roll_back_both_scopes(self):
+        expectation = self._expectation()
+        report = self._report_with_evidence(expectation["expectedAmountMinor"])
+        command = VerifyOwnerRentReportCommand(
+            True,
+            "Verified statement",
+            None,
+            str(uuid4()),
+            (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
+        )
+        from app.modules.finance.domain.models import FinanceConflictError
+
+        with self.assertRaises(FinanceConflictError):
+            self.service.verify(
+                report["id"], command, str(uuid4()), expected_revision=1, expected_ledger_revision=0
+            )
+        ledger = self.finance.rent_ledger_revision(self.lease["id"])["rentLedgerRevision"]
+        with (
+            patch.object(
+                self.service, "_operation", side_effect=RuntimeError("owner audit unavailable")
+            ),
+            self.assertRaises(RuntimeError),
+        ):
+            self.service.verify(
+                report["id"],
+                command,
+                str(uuid4()),
+                expected_revision=1,
+                expected_ledger_revision=ledger,
+            )
+        self.assertEqual(self.service.detail(report["id"])["reportRevision"], 1)
+        self.assertEqual(
+            self.finance.rent_ledger_revision(self.lease["id"])["rentLedgerRevision"], ledger
+        )
+        with self.service.unit_of_work.engine.connect() as connection:
+            self.assertEqual(connection.scalar(text("SELECT count(*) FROM rent_receipts")), 0)
+            self.assertEqual(
+                connection.scalar(
+                    text(
+                        "SELECT count(*) FROM finance_command_operations WHERE action='record_receipt'"
+                    )
+                ),
+                0,
+            )
+        key = str(uuid4())
+        verified = self.service.verify(
+            report["id"], command, key, expected_revision=1, expected_ledger_revision=ledger
+        )
+        self.assertEqual(verified["reportRevision"], 2)
+        self.assertEqual(verified["rentLedgerRevision"], ledger + 1)
+        self.assertEqual(
+            self.service.verify(
+                report["id"], command, key, expected_revision=1, expected_ledger_revision=ledger
+            ),
+            verified,
+        )
+        validate_latest_schema(self.database)
+
+    def test_report_noop_and_rewritten_original_result_validation(self):
+        report = self._report_with_evidence(100)
+        key = str(uuid4())
+        noop = self.service.patch(report["id"], {}, key, expected_revision=1)
+        self.assertEqual(noop["reportRevision"], 1)
+        self.assertEqual(noop["updatedAt"], report["updatedAt"])
+        validate_latest_schema(self.database)
+        from app.platform.migration_errors import MigrationSchemaError
+
+        with self.service.unit_of_work.engine.begin() as connection:
+            connection.execute(text("DROP TRIGGER owner_rent_report_operations_no_update"))
+            connection.execute(
+                text(
+                    "UPDATE owner_rent_report_operations SET response_json=json_set(response_json,'$.sourceNote','rewritten') WHERE idempotency_key=:key"
+                ),
+                {"key": key},
+            )
+        with (
+            self.service.unit_of_work.engine.connect() as connection,
+            self.assertRaises(MigrationSchemaError),
+        ):
+            validate_owner_accounting_schema(connection)
 
 
 class _OneTxUow:
@@ -826,6 +1025,9 @@ class _VerificationTx:
 
     def report(self, _):
         return self.item
+
+    def require_ledger_revision(self, *_):
+        pass
 
     def has_evidence(self, _):
         return True

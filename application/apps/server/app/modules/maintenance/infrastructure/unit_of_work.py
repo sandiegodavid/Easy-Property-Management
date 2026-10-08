@@ -6,6 +6,7 @@ adapter deliberately knows only maintenance tables.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -20,6 +21,7 @@ from .sqlalchemy_models import (
     MaintenanceAppointmentModel,
     MaintenanceAssignmentModel,
     MaintenanceCostContextModel,
+    MaintenanceCommandReceiptModel,
     MaintenanceFollowUpOperationModel,
     MaintenanceIssueExpenseLinkModel,
     MaintenanceIssueModel,
@@ -55,6 +57,8 @@ class SQLiteMaintenanceTransaction:
         providers=None,
     ):
         self.connection, self.recorder = connection, recorder
+        self._operation_id = None
+        self._command_changed = False
         self.portfolio, self.finance, self.tasks, self.task_operations, self.files = (
             portfolio,
             finance,
@@ -73,6 +77,62 @@ class SQLiteMaintenanceTransaction:
         model = MODELS[kind]
         row = self.connection.execute(select(model).where(model.id == item_id)).mappings().first()
         return dict(row) if row else None
+
+    def command_receipt_by_key(self, key):
+        row = (
+            self.connection.execute(
+                select(MaintenanceCommandReceiptModel).where(
+                    MaintenanceCommandReceiptModel.idempotency_key == key
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return dict(row) if row else None
+
+    def command_receipt(self, operation_id):
+        row = (
+            self.connection.execute(
+                select(MaintenanceCommandReceiptModel).where(
+                    MaintenanceCommandReceiptModel.id == operation_id
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return dict(row) if row else None
+
+    def insert_command_receipt(self, values):
+        self.connection.execute(MaintenanceCommandReceiptModel.__table__.insert().values(**values))
+
+    @contextmanager
+    def command_scope(self, operation_id):
+        previous = self._operation_id, self._command_changed
+        self._operation_id, self._command_changed = operation_id, False
+        try:
+            yield
+        finally:
+            self._operation_id, self._command_changed = previous
+
+    def command_has_changes(self):
+        return self._command_changed
+
+    def advance_issue_revision(self, issue_id, expected_revision):
+        result = self.connection.execute(
+            MaintenanceIssueModel.__table__.update()
+            .where(
+                MaintenanceIssueModel.id == issue_id,
+                MaintenanceIssueModel.revision == expected_revision,
+            )
+            .values(revision=expected_revision + 1)
+        )
+        if result.rowcount != 1:
+            current = self.issue(issue_id)
+            raise MaintenanceConflictError(
+                "Issue revision changed.",
+                "stale_revision",
+                current_revision=current["revision"] if current else None,
+            )
 
     def _by_idempotency_key(self, kind, key):
         model = MODELS[kind]
@@ -214,6 +274,8 @@ class SQLiteMaintenanceTransaction:
             raise
 
     def insert_follow_up_operation(self, values):
+        if self._operation_id:
+            values = {**values, "correlation_id": self._operation_id}
         self._insert("follow_up_operation", values)
 
     def appointments_for_issue(self, issue_id):
@@ -1125,6 +1187,9 @@ class SQLiteMaintenanceTransaction:
         }
 
     def record_change(self, **kwargs):
+        if self._operation_id:
+            kwargs["correlation_id"] = self._operation_id
+            self._command_changed = True
         self.recorder.record_change(self.connection.connection.driver_connection, **kwargs)
 
 

@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.modules.finance.domain.models import FinanceConflictError
+from app.modules.finance.infrastructure.command_operations import SQLiteFinanceCommandTransaction
 from app.modules.finance.infrastructure.sqlalchemy_models import (
     ExpenseModel,
     RentExpectationModel,
@@ -79,6 +80,7 @@ class SQLiteDepositUnitOfWork:
 class _Transaction:
     def __init__(self, connection, recorder, leases, portfolio, parties, inspections, files):
         self.connection = connection
+        self.commands = SQLiteFinanceCommandTransaction(connection, recorder)
         self.recorder = recorder
         self.leases = leases
         self.portfolio = portfolio

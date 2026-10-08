@@ -52,6 +52,11 @@ class OperatorStorageFailure(OperatorError):
     status_code = 500
 
 
+class OperatorSectionUnavailable(OperatorError):
+    code = "operator_section_unavailable"
+    status_code = 503
+
+
 class OperatorTooLarge(OperatorError):
     code = "operator_payload_too_large"
     status_code = 413

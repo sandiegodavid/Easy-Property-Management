@@ -391,6 +391,8 @@ class FileStoreTests(unittest.TestCase):
                 "manual",
                 str(uuid4()),
             ),
+            expected_source_revision=original["sourceRevision"],
+            expected_evidence_revision_id=original["revision"],
         )
         detail = intake.get(original["sourceId"])
         item = intake_files.get(detail["attachments"][0]["file"]["file_id"])

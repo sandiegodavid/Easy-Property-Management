@@ -28,6 +28,7 @@ class Lease:
     notes: str | None
     created_at: str
     updated_at: str
+    lease_revision: int = 0
 
     def to_dict(self) -> dict[str, object]:
         return _camel(asdict(self))

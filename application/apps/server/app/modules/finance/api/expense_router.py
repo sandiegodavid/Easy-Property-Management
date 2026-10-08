@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, status
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    field_validator,
+    model_validator,
+)
+
+from app.modules.finance.api.conflicts import FinanceConflictDetail
 
 from app.platform.api_errors import domain_problem, workspace_unavailable
 
@@ -36,19 +47,34 @@ class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class CategoryInput(Contract):
+class CategoryCommandInput(Contract):
+    expectedRevision: StrictInt = Field(ge=1)
+    idempotencyKey: UUID
+
+    @field_validator("idempotencyKey", mode="before")
+    @classmethod
+    def canonical_key(cls, value):
+        if not isinstance(value, str) or str(UUID(value)) != value:
+            raise ValueError("idempotencyKey must be a canonical UUID.")
+        return value
+
+
+class CategoryInput(CategoryCommandInput):
+    expectedRevision: StrictInt = Field(ge=0, le=0)
     displayName: str = Field(min_length=1, max_length=100)
     description: str | None = Field(None, max_length=1000)
     displayOrder: StrictInt = Field(0, ge=0, le=10_000)
 
 
-class CategoryPatchInput(Contract):
+class CategoryPatchInput(CategoryCommandInput):
     displayName: str | None = Field(None, min_length=1, max_length=100)
     description: str | None = Field(None, max_length=1000)
     displayOrder: StrictInt | None = Field(None, ge=0, le=10_000)
 
     @model_validator(mode="after")
     def reject_null_nonnullable_fields(self):
+        if not self.model_fields_set & {"displayName", "description", "displayOrder"}:
+            raise ValueError("Select at least one category field.")
         if "displayName" in self.model_fields_set and self.displayName is None:
             raise ValueError("displayName cannot be null.")
         if "displayOrder" in self.model_fields_set and self.displayOrder is None:
@@ -61,7 +87,20 @@ class ConfirmReasonInput(Contract):
     reason: str = Field(min_length=1, max_length=1000)
 
 
-class ExpenseInput(Contract):
+class CategoryLifecycleInput(ConfirmReasonInput, CategoryCommandInput):
+    pass
+
+
+class ExpenseCommandInput(Contract):
+    expectedRevision: StrictInt = Field(ge=0)
+    idempotencyKey: UUID
+
+
+class ExpenseVoidInput(ConfirmReasonInput, ExpenseCommandInput):
+    pass
+
+
+class ExpenseInput(ExpenseCommandInput):
     idempotencyKey: UUID
     propertyId: UUID
     spaceId: UUID | None = None
@@ -94,7 +133,7 @@ class ExpenseInput(Contract):
         return self
 
 
-class ExpensePatchInput(Contract):
+class ExpensePatchInput(ExpenseCommandInput):
     categoryId: UUID | None = None
     notes: str | None = Field(None, max_length=4000)
     categoryChangeReason: str | None = Field(None, max_length=1000)
@@ -116,7 +155,7 @@ class ExpensePatchInput(Contract):
         return self
 
 
-class RefundInput(Contract):
+class RefundInput(ExpenseCommandInput):
     idempotencyKey: UUID
     receivedOn: date
     amount: str = Field(pattern=r"^(?:0|[1-9][0-9]{0,7})\.[0-9]{2}$", strict=True)
@@ -126,14 +165,20 @@ class RefundInput(Contract):
 
 
 class CategoryResponse(Contract):
+    revision: StrictInt = Field(ge=1)
+    operationId: UUID | None = None
     id: UUID
     displayName: str
     normalizedName: str
     description: str | None
     displayOrder: int
-    archivedAt: datetime | None
-    createdAt: datetime
-    updatedAt: datetime
+    archivedAt: AwareDatetime | None
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
+
+
+class CategoryMutationResponse(CategoryResponse):
+    operationId: UUID
 
 
 class RecordSummary(Contract):
@@ -155,8 +200,8 @@ class EvidenceResponse(Contract):
     sizeBytes: int
     contentSha256: str
     purpose: Literal["receipt", "invoice", "proof_of_payment", "supporting_document"]
-    createdAt: datetime
-    archivedAt: datetime | None
+    createdAt: AwareDatetime
+    archivedAt: AwareDatetime | None
     archiveReason: str | None
 
 
@@ -169,9 +214,9 @@ class RefundResponse(Contract):
     currencyCode: Literal["USD"]
     notes: str | None
     replacesRefundId: UUID | None
-    voidedAt: datetime | None
+    voidedAt: AwareDatetime | None
     voidReason: str | None
-    createdAt: datetime
+    createdAt: AwareDatetime
     lifecycleStatus: Literal["active", "voided"]
 
 
@@ -184,6 +229,7 @@ class ExpenseCorrectionSummary(Contract):
 
 
 class ExpenseResponse(Contract):
+    expenseRevision: StrictInt
     id: UUID
     idempotencyKey: UUID
     propertyId: UUID
@@ -200,10 +246,10 @@ class ExpenseResponse(Contract):
     reference: str | None
     notes: str | None
     replacesExpenseId: UUID | None
-    voidedAt: datetime | None
+    voidedAt: AwareDatetime | None
     voidReason: str | None
-    createdAt: datetime
-    updatedAt: datetime
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
     category: CategoryResponse
     property: RecordSummary
     space: RecordSummary | None
@@ -222,8 +268,34 @@ class ExpensePageResponse(Contract):
     nextCursor: str | None
 
 
+class ExpenseMutationResponse(ExpenseResponse):
+    operationId: UUID
+
+
+class RefundMutationResponse(RefundResponse):
+    expenseRevision: StrictInt
+    operationId: UUID
+
+
+class ExpenseDuplicateCandidate(Contract):
+    id: UUID
+    paidOn: date
+    amount: str
+    payeeName: str
+    description: str
+
+
+class ExpenseConflictDetail(FinanceConflictDetail):
+    candidates: list[ExpenseDuplicateCandidate] | None = None
+    currentCategory: CategoryResponse | None = None
+
+
+class ExpenseConflictResponse(Contract):
+    detail: ExpenseConflictDetail
+
+
 def build_router(service: ExpenseService, runtime: WorkspaceRuntime) -> APIRouter:
-    router = APIRouter(tags=["expenses"])
+    router = APIRouter(tags=["expenses"], responses={409: {"model": ExpenseConflictResponse}})
 
     def ready(write=False):
         if not runtime.ready or runtime.error:
@@ -244,25 +316,42 @@ def build_router(service: ExpenseService, runtime: WorkspaceRuntime) -> APIRoute
         except FinanceNotFoundError as error:
             raise domain_problem(error, status_code=404, code="finance_not_found") from error
         except FinanceConflictError as error:
-            raise domain_problem(error, status_code=409, code="finance_conflict") from error
+            raise domain_problem(
+                error, status_code=409, code=error.code, **error.details
+            ) from error
         except FinanceError as error:
             raise domain_problem(error, status_code=400, code="finance_validation") from error
 
-    @router.get("/api/expense-categories", response_model=list[CategoryResponse])
+    @router.get(
+        "/api/expense-categories",
+        response_model=list[CategoryResponse],
+        operation_id="listExpenseCategories",
+    )
     def categories(includeArchived: bool = False):
         ready()
         return invoke(lambda: service.list_categories(include_archived=includeArchived))
 
-    @router.post("/api/expense-categories", response_model=CategoryResponse, status_code=201)
+    @router.post(
+        "/api/expense-categories",
+        response_model=CategoryMutationResponse,
+        status_code=201,
+        operation_id="createExpenseCategory",
+    )
     def create_category(data: CategoryInput):
         ready(True)
         return invoke(
             lambda: service.create_category(
-                CategoryCreateCommand(data.displayName, data.description, data.displayOrder)
+                CategoryCreateCommand(data.displayName, data.description, data.displayOrder),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
-    @router.patch("/api/expense-categories/{category_id}", response_model=CategoryResponse)
+    @router.patch(
+        "/api/expense-categories/{category_id}",
+        response_model=CategoryMutationResponse,
+        operation_id="patchExpenseCategory",
+    )
     def patch_category(category_id: UUID, data: CategoryPatchInput):
         ready(True)
         fields = frozenset(
@@ -273,35 +362,73 @@ def build_router(service: ExpenseService, runtime: WorkspaceRuntime) -> APIRoute
                     "displayOrder": "display_order",
                 }[name]
                 for name in data.model_fields_set
+                if name in {"displayName", "description", "displayOrder"}
             }
         )
         return invoke(
             lambda: service.patch_category(
                 str(category_id),
                 CategoryPatchCommand(fields, data.displayName, data.description, data.displayOrder),
-            )
-        )
-
-    @router.post("/api/expense-categories/{category_id}/archive", response_model=CategoryResponse)
-    def archive_category(category_id: UUID, data: ConfirmReasonInput):
-        ready(True)
-        return invoke(
-            lambda: service.archive_category(
-                str(category_id), VoidCommand(data.confirmed, data.reason)
-            )
-        )
-
-    @router.post("/api/expense-categories/{category_id}/restore", response_model=CategoryResponse)
-    def restore_category(category_id: UUID, data: ConfirmReasonInput):
-        ready(True)
-        return invoke(
-            lambda: service.restore_category(
-                str(category_id), VoidCommand(data.confirmed, data.reason)
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
     @router.post(
-        "/api/expenses", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED
+        "/api/expense-categories/{category_id}/archive",
+        response_model=CategoryMutationResponse,
+        operation_id="archiveExpenseCategory",
+    )
+    def archive_category(category_id: UUID, data: CategoryLifecycleInput):
+        ready(True)
+        return invoke(
+            lambda: service.archive_category(
+                str(category_id),
+                VoidCommand(data.confirmed, data.reason),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
+
+    @router.post(
+        "/api/expense-categories/{category_id}/restore",
+        response_model=CategoryMutationResponse,
+        operation_id="restoreExpenseCategory",
+    )
+    def restore_category(category_id: UUID, data: CategoryLifecycleInput):
+        ready(True)
+        return invoke(
+            lambda: service.restore_category(
+                str(category_id),
+                VoidCommand(data.confirmed, data.reason),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
+
+    @router.get(
+        "/api/expense-categories/operations/by-key/{key}",
+        response_model=CategoryMutationResponse,
+        operation_id="getExpenseCategoryOperationByKey",
+    )
+    def category_operation_by_key(key: UUID):
+        ready()
+        return invoke(lambda: service.category_operation_by_key(str(key)))
+
+    @router.get(
+        "/api/expense-categories/operations/{operation_id}",
+        response_model=CategoryMutationResponse,
+        operation_id="getExpenseCategoryOperation",
+    )
+    def category_operation(operation_id: UUID):
+        ready()
+        return invoke(lambda: service.category_operation(str(operation_id)))
+
+    @router.post(
+        "/api/expenses",
+        response_model=ExpenseMutationResponse,
+        status_code=status.HTTP_201_CREATED,
+        operation_id="recordExpense",
     )
     def record_expense(data: ExpenseInput):
         ready(True)
@@ -326,11 +453,12 @@ def build_router(service: ExpenseService, runtime: WorkspaceRuntime) -> APIRoute
                     data.duplicateConfirmed,
                     data.historicalEntryConfirmed,
                     data.historicalEntryReason,
-                )
+                ),
+                expected_revision=data.expectedRevision,
             )
         )
 
-    @router.get("/api/expenses", response_model=ExpensePageResponse)
+    @router.get("/api/expenses", response_model=ExpensePageResponse, operation_id="listExpenses")
     def expenses(
         propertyId: UUID | None = None,
         spaceId: UUID | None = None,
@@ -365,12 +493,18 @@ def build_router(service: ExpenseService, runtime: WorkspaceRuntime) -> APIRoute
             )
         )
 
-    @router.get("/api/expenses/{expense_id}", response_model=ExpenseResponse)
+    @router.get(
+        "/api/expenses/{expense_id}", response_model=ExpenseResponse, operation_id="getExpense"
+    )
     def expense(expense_id: UUID):
         ready()
         return invoke(lambda: service.expense(str(expense_id)))
 
-    @router.patch("/api/expenses/{expense_id}", response_model=ExpenseResponse)
+    @router.patch(
+        "/api/expenses/{expense_id}",
+        response_model=ExpenseMutationResponse,
+        operation_id="patchExpense",
+    )
     def patch_expense(expense_id: UUID, data: ExpensePatchInput):
         ready(True)
         fields = frozenset(
@@ -391,18 +525,32 @@ def build_router(service: ExpenseService, runtime: WorkspaceRuntime) -> APIRoute
                     data.historicalEntryConfirmed,
                     data.historicalEntryReason,
                 ),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
-    @router.post("/api/expenses/{expense_id}/void", response_model=ExpenseResponse)
-    def void_expense(expense_id: UUID, data: ConfirmReasonInput):
+    @router.post(
+        "/api/expenses/{expense_id}/void",
+        response_model=ExpenseMutationResponse,
+        operation_id="voidExpense",
+    )
+    def void_expense(expense_id: UUID, data: ExpenseVoidInput):
         ready(True)
         return invoke(
-            lambda: service.void_expense(str(expense_id), VoidCommand(data.confirmed, data.reason))
+            lambda: service.void_expense(
+                str(expense_id),
+                VoidCommand(data.confirmed, data.reason),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
         )
 
     @router.post(
-        "/api/expenses/{expense_id}/refunds", response_model=RefundResponse, status_code=201
+        "/api/expenses/{expense_id}/refunds",
+        response_model=RefundMutationResponse,
+        status_code=201,
+        operation_id="recordExpenseRefund",
     )
     def record_refund(expense_id: UUID, data: RefundInput):
         ready(True)
@@ -417,14 +565,24 @@ def build_router(service: ExpenseService, runtime: WorkspaceRuntime) -> APIRoute
                     data.notes,
                     str(data.replacesRefundId) if data.replacesRefundId else None,
                 ),
+                expected_revision=data.expectedRevision,
             )
         )
 
-    @router.post("/api/expense-refunds/{refund_id}/void", response_model=RefundResponse)
-    def void_refund(refund_id: UUID, data: ConfirmReasonInput):
+    @router.post(
+        "/api/expense-refunds/{refund_id}/void",
+        response_model=RefundMutationResponse,
+        operation_id="voidExpenseRefund",
+    )
+    def void_refund(refund_id: UUID, data: ExpenseVoidInput):
         ready(True)
         return invoke(
-            lambda: service.void_refund(str(refund_id), VoidCommand(data.confirmed, data.reason))
+            lambda: service.void_refund(
+                str(refund_id),
+                VoidCommand(data.confirmed, data.reason),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
         )
 
     return router

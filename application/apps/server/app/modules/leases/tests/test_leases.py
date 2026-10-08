@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.modules.portfolio.tests.commands import inventory_command
+
 import json
 import tempfile
 import unittest
@@ -22,6 +24,7 @@ from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfW
 from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
 from app.modules.leases.application.file_links import LeaseFileLinkValidator
 from app.modules.leases.application.ports import LeaseConflictError
+from app.modules.leases.tests.commands import lease_command
 from app.modules.leases.application.service import (
     LeaseCreateCommand,
     LeasePatchCommand,
@@ -84,7 +87,9 @@ class LeaseTerminationTests(unittest.TestCase):
             SQLitePortfolioUnitOfWork(self.workspace.paths.database, recorder),
             time_zone_resolver=BundledAddressTimeZoneResolver(),
         )
-        property_record = self.portfolio.create_property(
+        property_record = inventory_command(
+            self.portfolio,
+            "create_property",
             PropertyCreateCommand(
                 "Relocation home",
                 "1 Main Street",
@@ -93,7 +98,7 @@ class LeaseTerminationTests(unittest.TestCase):
                 "single_family_home",
                 (OwnershipInput("local_operator"),),
                 region="OR",
-            )
+            ),
         )
         self.property_id = property_record.id
         self.space_id = self.portfolio.get_property(property_record.id)["spaces"][0]["id"]
@@ -107,7 +112,11 @@ class LeaseTerminationTests(unittest.TestCase):
             ),
             SharedPartyFactory(),
         )
-        tenant = self.tenants.create(TenantCreateCommand("individual", "Relocating Tenant"))
+        tenant = self.tenants.create(
+            TenantCreateCommand("individual", "Relocating Tenant"),
+            expected_revision=0,
+            idempotency_key=str(uuid4()),
+        )
         self.tenant_id = tenant["id"]
         self.audit = audit
         self.service = LeaseService(
@@ -120,7 +129,9 @@ class LeaseTerminationTests(unittest.TestCase):
             )
         )
         today = date.today()
-        self.lease = self.service.create(
+        self.lease = lease_command(
+            self.service,
+            "create",
             LeaseCreateCommand(
                 self.space_id,
                 "residential",
@@ -129,11 +140,13 @@ class LeaseTerminationTests(unittest.TestCase):
                 today,
                 TermCommand(200_000, "USD", "monthly", 1, 200_000),
                 (ParticipantCommand(self.tenant_id, "primary_tenant"),),
-            )
+            ),
         )
         self._execute_revision = self.portfolio.get_space_status(self.space_id)["revision"]
         self._execute_key = str(uuid4())
-        self.lease = self.service.execute(
+        self.lease = lease_command(
+            self.service,
+            "execute",
             self.lease["id"],
             executed_on=today,
             confirmed=True,
@@ -143,7 +156,9 @@ class LeaseTerminationTests(unittest.TestCase):
 
     def _new_draft(self, *, starts_on: date | None = None) -> dict[str, object]:
         start = starts_on or date.today()
-        return self.service.create(
+        return lease_command(
+            self.service,
+            "create",
             LeaseCreateCommand(
                 self.space_id,
                 "residential",
@@ -152,7 +167,7 @@ class LeaseTerminationTests(unittest.TestCase):
                 start,
                 TermCommand(210_000, "USD", "monthly", 1, 210_000),
                 (ParticipantCommand(self.tenant_id, "primary_tenant"),),
-            )
+            ),
         )
 
     def _timeline_kwargs(self) -> dict[str, object]:
@@ -242,7 +257,9 @@ class LeaseTerminationTests(unittest.TestCase):
                 "postMoveOut": "not_due",
             },
         )
-        replay = self.service.execute(
+        replay = lease_command(
+            self.service,
+            "execute",
             self.lease["id"],
             executed_on=date.today(),
             confirmed=True,
@@ -359,19 +376,31 @@ class LeaseTerminationTests(unittest.TestCase):
         today = date.today()
         self._move_executed_lease_to_yesterday(contract_ends_on=today)
         before = self.portfolio.get_space_status(self.space_id)["revision"]
-        self.service.end(
-            self.lease["id"], actual_move_out_on=today, confirmed=True, **self._timeline_kwargs()
+        lease_command(
+            self.service,
+            "end",
+            self.lease["id"],
+            actual_move_out_on=today,
+            confirmed=True,
+            **self._timeline_kwargs(),
         )
         self.assertEqual(self.portfolio.get_space_status(self.space_id)["revision"], before + 1)
 
         successor = self._new_draft(starts_on=today + timedelta(days=1))
-        executed = self.service.execute(
-            successor["id"], executed_on=today, confirmed=True, **self._timeline_kwargs()
+        executed = lease_command(
+            self.service,
+            "execute",
+            successor["id"],
+            executed_on=today,
+            confirmed=True,
+            **self._timeline_kwargs(),
         )
         self.assertEqual(executed["status"], "executed")
         self.assertEqual(self.portfolio.get_space_status(self.space_id)["revision"], before + 2)
 
-        voided = self.service.void(successor["id"], confirmed=True, **self._timeline_kwargs())
+        voided = lease_command(
+            self.service, "void", successor["id"], confirmed=True, **self._timeline_kwargs()
+        )
         self.assertEqual(voided["status"], "void")
         self.assertEqual(self.portfolio.get_space_status(self.space_id)["revision"], before + 3)
 
@@ -380,14 +409,18 @@ class LeaseTerminationTests(unittest.TestCase):
         self._move_executed_lease_to_yesterday(contract_ends_on=today)
         revision = self.portfolio.get_space_status(self.space_id)["revision"]
         key = str(uuid4())
-        first = self.service.end(
+        first = lease_command(
+            self.service,
+            "end",
             self.lease["id"],
             actual_move_out_on=today,
             confirmed=True,
             expected_revision=revision,
             idempotency_key=key,
         )
-        replay = self.service.end(
+        replay = lease_command(
+            self.service,
+            "end",
             self.lease["id"],
             actual_move_out_on=today,
             confirmed=True,
@@ -397,7 +430,9 @@ class LeaseTerminationTests(unittest.TestCase):
         self.assertEqual(first["inspectionAttention"]["postMoveOut"], "due")
         self.assertEqual(replay, first)
         with self.assertRaises(LeaseConflictError):
-            self.service.end(
+            lease_command(
+                self.service,
+                "end",
                 self.lease["id"],
                 actual_move_out_on=today + timedelta(days=1),
                 confirmed=True,
@@ -408,7 +443,9 @@ class LeaseTerminationTests(unittest.TestCase):
     def test_terminate_records_post_mutation_inspection_attention_and_replays_it(self) -> None:
         today = date.today()
         self._move_executed_lease_to_yesterday(contract_ends_on=today + timedelta(days=90))
-        case = self.service.create_termination_case(
+        case = lease_command(
+            self.service,
+            "create_termination_case",
             self.lease["id"],
             TerminationCaseCommand(
                 "job_relocation",
@@ -417,10 +454,15 @@ class LeaseTerminationTests(unittest.TestCase):
                 today,
             ),
         )
-        proposal = self.service.add_termination_proposal(
-            case["id"], TerminationProposalCommand(today, today)
+        proposal = lease_command(
+            self.service,
+            "add_termination_proposal",
+            case["id"],
+            TerminationProposalCommand(today, today),
         )
-        self.service.accept_termination_proposal(
+        lease_command(
+            self.service,
+            "accept_termination_proposal",
             case["id"],
             proposal["proposals"][0]["id"],
             accepted_on=today,
@@ -428,7 +470,9 @@ class LeaseTerminationTests(unittest.TestCase):
         )
         revision = self.portfolio.get_space_status(self.space_id)["revision"]
         key = str(uuid4())
-        first = self.service.terminate(
+        first = lease_command(
+            self.service,
+            "terminate",
             self.lease["id"],
             actual_move_out_on=today,
             end_reason="early_termination",
@@ -436,7 +480,9 @@ class LeaseTerminationTests(unittest.TestCase):
             expected_revision=revision,
             idempotency_key=key,
         )
-        replay = self.service.terminate(
+        replay = lease_command(
+            self.service,
+            "terminate",
             self.lease["id"],
             actual_move_out_on=today,
             end_reason="early_termination",
@@ -644,7 +690,9 @@ class LeaseTerminationTests(unittest.TestCase):
 
     def test_accepting_job_relocation_case_does_not_create_vacancy(self) -> None:
         today = date.today()
-        case = self.service.create_termination_case(
+        case = lease_command(
+            self.service,
+            "create_termination_case",
             self.lease["id"],
             TerminationCaseCommand(
                 "job_relocation",
@@ -655,7 +703,9 @@ class LeaseTerminationTests(unittest.TestCase):
                 "Early termination section",
             ),
         )
-        proposal = self.service.add_termination_proposal(
+        proposal = lease_command(
+            self.service,
+            "add_termination_proposal",
             case["id"],
             TerminationProposalCommand(
                 today + timedelta(days=45),
@@ -666,7 +716,9 @@ class LeaseTerminationTests(unittest.TestCase):
                 access_arrangement="24-hour notice",
             ),
         )
-        accepted = self.service.accept_termination_proposal(
+        accepted = lease_command(
+            self.service,
+            "accept_termination_proposal",
             case["id"],
             proposal["proposals"][0]["id"],
             accepted_on=today,
@@ -682,19 +734,34 @@ class LeaseTerminationTests(unittest.TestCase):
         )
         self.assertEqual(
             {event.entity_type for event in events},
-            {"lease_termination_case", "lease_termination_proposal"},
+            {
+                "lease_termination_case",
+                "lease_termination_proposal",
+                "lease",
+                "lease_command_operation",
+            },
         )
 
     def test_completed_lease_vacancy_can_be_superseded_by_the_next_lease(self) -> None:
         today = date.today()
         self._move_executed_lease_to_yesterday(contract_ends_on=today)
-        ended = self.service.end(
-            self.lease["id"], actual_move_out_on=today, confirmed=True, **self._timeline_kwargs()
+        ended = lease_command(
+            self.service,
+            "end",
+            self.lease["id"],
+            actual_move_out_on=today,
+            confirmed=True,
+            **self._timeline_kwargs(),
         )
         self.assertEqual(ended["status"], "ended")
         successor = self._new_draft(starts_on=today)
-        executed = self.service.execute(
-            successor["id"], executed_on=today, confirmed=True, **self._timeline_kwargs()
+        executed = lease_command(
+            self.service,
+            "execute",
+            successor["id"],
+            executed_on=today,
+            confirmed=True,
+            **self._timeline_kwargs(),
         )
         self.assertEqual(executed["status"], "executed")
         self.assertEqual(executed["occupancyState"], "current")
@@ -702,7 +769,9 @@ class LeaseTerminationTests(unittest.TestCase):
     def test_completed_termination_vacancy_can_be_superseded_by_the_next_lease(self) -> None:
         today = date.today()
         self._move_executed_lease_to_yesterday(contract_ends_on=today + timedelta(days=90))
-        case = self.service.create_termination_case(
+        case = lease_command(
+            self.service,
+            "create_termination_case",
             self.lease["id"],
             TerminationCaseCommand(
                 "job_relocation",
@@ -711,16 +780,23 @@ class LeaseTerminationTests(unittest.TestCase):
                 today,
             ),
         )
-        proposed = self.service.add_termination_proposal(
-            case["id"], TerminationProposalCommand(today, today)
+        proposed = lease_command(
+            self.service,
+            "add_termination_proposal",
+            case["id"],
+            TerminationProposalCommand(today, today),
         )
-        self.service.accept_termination_proposal(
+        lease_command(
+            self.service,
+            "accept_termination_proposal",
             case["id"],
             proposed["proposals"][0]["id"],
             accepted_on=today,
             confirmed=True,
         )
-        completed = self.service.complete_termination_case(
+        completed = lease_command(
+            self.service,
+            "complete_termination_case",
             case["id"],
             actual_move_out_on=today,
             confirmed=True,
@@ -729,8 +805,13 @@ class LeaseTerminationTests(unittest.TestCase):
         self.assertEqual(completed["status"], "terminated")
         successor = self._new_draft(starts_on=today)
         self.assertEqual(
-            self.service.execute(
-                successor["id"], executed_on=today, confirmed=True, **self._timeline_kwargs()
+            lease_command(
+                self.service,
+                "execute",
+                successor["id"],
+                executed_on=today,
+                confirmed=True,
+                **self._timeline_kwargs(),
             )["status"],
             "executed",
         )
@@ -744,15 +825,22 @@ class LeaseTerminationTests(unittest.TestCase):
                 {"now": "2026-01-01T00:00:00+00:00", "party": self.tenant_id},
             )
         with self.assertRaises(LeaseConflictError):
-            self.service.execute(
-                draft["id"], executed_on=date.today(), confirmed=True, **self._timeline_kwargs()
+            lease_command(
+                self.service,
+                "execute",
+                draft["id"],
+                executed_on=date.today(),
+                confirmed=True,
+                **self._timeline_kwargs(),
             )
 
     def test_draft_date_patch_keeps_the_initial_term_aligned(self) -> None:
         tomorrow = date.today() + timedelta(days=1)
         draft = self._new_draft(starts_on=tomorrow)
         new_end = tomorrow + timedelta(days=400)
-        updated = self.service.patch(
+        updated = lease_command(
+            self.service,
+            "patch",
             draft["id"],
             LeasePatchCommand(
                 contract_ends_on=new_end,
@@ -765,7 +853,9 @@ class LeaseTerminationTests(unittest.TestCase):
     def test_contract_and_renewal_due_filters_are_available(self) -> None:
         today = date.today()
         due = today + timedelta(days=10)
-        self.service.add_renewal_option(
+        lease_command(
+            self.service,
+            "add_renewal_option",
             self.lease["id"],
             RenewalCommand(
                 today + timedelta(days=365),
@@ -843,7 +933,9 @@ class LeaseTerminationTests(unittest.TestCase):
                 TerminationProposalCommand(
                     today, today, termination_fee_minor=1, currency_code=currency
                 )
-        case = self.service.create_termination_case(
+        case = lease_command(
+            self.service,
+            "create_termination_case",
             self.lease["id"],
             TerminationCaseCommand(
                 "job_relocation",
@@ -852,7 +944,9 @@ class LeaseTerminationTests(unittest.TestCase):
                 today + timedelta(days=30),
             ),
         )
-        proposal = self.service.add_termination_proposal(
+        proposal = lease_command(
+            self.service,
+            "add_termination_proposal",
             case["id"],
             TerminationProposalCommand(
                 today + timedelta(days=30),
@@ -921,13 +1015,15 @@ class LeaseTerminationTests(unittest.TestCase):
                 ),
                 self.assertRaises(MigrationSchemaError),
             ):
-                validate_lease_schema(connection)
+                validate_lease_schema(connection, self.service.unit_of_work.portfolio_operations)
 
     def test_ordinary_end_rejects_early_move_out(self) -> None:
         tomorrow = date.today() + timedelta(days=1)
         self._move_executed_lease_to_yesterday(contract_ends_on=tomorrow)
         with self.assertRaises(LeaseConflictError):
-            self.service.end(
+            lease_command(
+                self.service,
+                "end",
                 self.lease["id"],
                 actual_move_out_on=date.today(),
                 confirmed=True,
@@ -936,7 +1032,9 @@ class LeaseTerminationTests(unittest.TestCase):
 
     def test_termination_case_review_and_decline_close_open_proposals(self) -> None:
         today = date.today()
-        case = self.service.create_termination_case(
+        case = lease_command(
+            self.service,
+            "create_termination_case",
             self.lease["id"],
             TerminationCaseCommand(
                 "job_relocation",
@@ -945,17 +1043,25 @@ class LeaseTerminationTests(unittest.TestCase):
                 today + timedelta(days=30),
             ),
         )
-        reviewed = self.service.transition_termination_case(case["id"], status="under_review")
+        reviewed = lease_command(
+            self.service, "transition_termination_case", case["id"], status="under_review"
+        )
         self.assertEqual(reviewed["status"], "under_review")
-        self.service.add_termination_proposal(
+        lease_command(
+            self.service,
+            "add_termination_proposal",
             case["id"],
             TerminationProposalCommand(
                 today + timedelta(days=30),
                 today + timedelta(days=30),
             ),
         )
-        declined = self.service.transition_termination_case(
-            case["id"], status="declined", operator_notes="Request declined after review."
+        declined = lease_command(
+            self.service,
+            "transition_termination_case",
+            case["id"],
+            status="declined",
+            operator_notes="Request declined after review.",
         )
         self.assertEqual(declined["status"], "declined")
         self.assertEqual(declined["proposals"][0]["status"], "rejected")
@@ -963,7 +1069,9 @@ class LeaseTerminationTests(unittest.TestCase):
     def test_termination_reason_must_match_the_accepted_case(self) -> None:
         today = date.today()
         self._move_executed_lease_to_yesterday(contract_ends_on=today + timedelta(days=90))
-        case = self.service.create_termination_case(
+        case = lease_command(
+            self.service,
+            "create_termination_case",
             self.lease["id"],
             TerminationCaseCommand(
                 "job_relocation",
@@ -972,17 +1080,24 @@ class LeaseTerminationTests(unittest.TestCase):
                 today,
             ),
         )
-        proposal = self.service.add_termination_proposal(
-            case["id"], TerminationProposalCommand(today, today)
+        proposal = lease_command(
+            self.service,
+            "add_termination_proposal",
+            case["id"],
+            TerminationProposalCommand(today, today),
         )
-        self.service.accept_termination_proposal(
+        lease_command(
+            self.service,
+            "accept_termination_proposal",
             case["id"],
             proposal["proposals"][0]["id"],
             accepted_on=today,
             confirmed=True,
         )
         with self.assertRaises(LeaseConflictError):
-            self.service.terminate(
+            lease_command(
+                self.service,
+                "terminate",
                 self.lease["id"],
                 actual_move_out_on=today,
                 end_reason="mutual_termination",
@@ -1028,14 +1143,18 @@ class LeaseTerminationTests(unittest.TestCase):
     @fast_backup_encryption()
     def test_lease_history_and_documents_round_trip_through_backup_restore(self) -> None:
         today = date.today()
-        self.service.add_renewal_option(
+        lease_command(
+            self.service,
+            "add_renewal_option",
             self.lease["id"],
             RenewalCommand(
                 today + timedelta(days=365),
                 notice_due_on=today + timedelta(days=30),
             ),
         )
-        case = self.service.create_termination_case(
+        case = lease_command(
+            self.service,
+            "create_termination_case",
             self.lease["id"],
             TerminationCaseCommand(
                 "job_relocation",
@@ -1044,14 +1163,18 @@ class LeaseTerminationTests(unittest.TestCase):
                 today + timedelta(days=40),
             ),
         )
-        proposal = self.service.add_termination_proposal(
+        proposal = lease_command(
+            self.service,
+            "add_termination_proposal",
             case["id"],
             TerminationProposalCommand(
                 today + timedelta(days=45),
                 today + timedelta(days=40),
             ),
         )
-        self.service.accept_termination_proposal(
+        lease_command(
+            self.service,
+            "accept_termination_proposal",
             case["id"],
             proposal["proposals"][0]["id"],
             accepted_on=today,
@@ -1100,6 +1223,37 @@ class LeaseTerminationTests(unittest.TestCase):
         )
         lease = restored.get(self.lease["id"])
         restored_case = restored.get_termination_case(case["id"])
+        with self.service.unit_of_work.engine.connect() as connection:
+            original_receipts = [
+                dict(row)
+                for row in connection.exec_driver_sql(
+                    "SELECT * FROM lease_command_operations ORDER BY id"
+                ).mappings()
+            ]
+        with restored.unit_of_work.engine.connect() as connection:
+            restored_receipts = [
+                dict(row)
+                for row in connection.exec_driver_sql(
+                    "SELECT * FROM lease_command_operations ORDER BY id"
+                ).mappings()
+            ]
+        self.assertEqual(restored_receipts, original_receipts)
+        for receipt in original_receipts:
+            self.assertEqual(
+                restored.get_command_operation(operation_id=receipt["id"])["response"],
+                json.loads(receipt["response_json"]),
+            )
+        self.assertEqual(
+            restored.execute(
+                self.lease["id"],
+                executed_on=today,
+                confirmed=True,
+                expected_revision=self._execute_revision,
+                expected_lease_revision=1,
+                idempotency_key=self._execute_key,
+            ),
+            self.lease,
+        )
         self.assertEqual(len(lease["terms"]), 1)
         self.assertEqual(len(lease["participants"]), 1)
         self.assertEqual(len(lease["renewalOptions"]), 1)
@@ -1140,7 +1294,9 @@ class LeaseTerminationTests(unittest.TestCase):
         self.assertEqual(stored.original_name, "lease.pdf")
 
         today = date.today()
-        case = self.service.create_termination_case(
+        case = lease_command(
+            self.service,
+            "create_termination_case",
             self.lease["id"],
             TerminationCaseCommand(
                 "job_relocation",
@@ -1165,13 +1321,14 @@ class LeaseTerminationTests(unittest.TestCase):
 
         with TestClient(create_app(self.workspace.config.config_path)) as client:
             malformed = client.post("/api/leases", json={"leaseKind": "residential"})
-            missing = client.get("/api/leases/missing")
+            missing = client.get("/api/leases/00000000-0000-4000-8000-000000000000")
             conflict = client.post(
                 f"/api/leases/{self.lease['id']}/execute",
                 json={
                     "executedOn": date.today().isoformat(),
                     "confirmed": True,
                     "expectedRevision": 1,
+                    "expectedLeaseRevision": self.service.get(self.lease["id"])["leaseRevision"],
                     "idempotencyKey": str(uuid4()),
                 },
             )
@@ -1181,6 +1338,7 @@ class LeaseTerminationTests(unittest.TestCase):
                     "actualMoveOutOn": (date.today() + timedelta(days=1)).isoformat(),
                     "confirmed": True,
                     "expectedRevision": 1,
+                    "expectedLeaseRevision": self.service.get(self.lease["id"])["leaseRevision"],
                     "idempotencyKey": str(uuid4()),
                 },
             )

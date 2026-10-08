@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, ForeignKey, Index, String
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.platform.sqlalchemy_models import LocalBase
@@ -43,7 +43,9 @@ class OwnerConcernModel(LocalBase):
     observed_available_on: Mapped[str | None] = mapped_column(String)
     idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     __table_args__ = (
+        CheckConstraint("typeof(revision)='integer' AND revision>=1"),
         CheckConstraint("concern_type IN ('general_rental','lease','tenant','vacancy')"),
         CheckConstraint("priority IN ('low','normal','high','urgent')"),
         CheckConstraint("status IN ('open','in_progress','resolved','dismissed')"),
@@ -107,3 +109,57 @@ class OwnerConcernFollowUpOperationModel(LocalBase):
         CheckConstraint("length(trim(created_at_utc)) BETWEEN 20 AND 40"),
         Index("owner_concern_follow_up_operations_concern", "concern_id", "created_at_utc"),
     )
+
+
+class OwnerConcernCommandOperationModel(LocalBase):
+    __tablename__ = "owner_concern_command_operations"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    concern_id: Mapped[str] = mapped_column(ForeignKey("owner_concerns.id"), nullable=False)
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    request_json: Mapped[str] = mapped_column(String, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    expected_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    resulting_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    result_json: Mapped[str] = mapped_column(String, nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('create','patch','in_progress','open','resolved','dismissed','follow_up')"
+        ),
+        CheckConstraint(
+            "typeof(expected_revision)='integer' AND ((action='create' AND expected_revision=0) OR (action!='create' AND expected_revision>=1))"
+        ),
+        CheckConstraint(
+            "typeof(resulting_revision)='integer' AND resulting_revision>=1 AND (resulting_revision=expected_revision+1 OR (action='patch' AND resulting_revision=expected_revision))"
+        ),
+        CheckConstraint(
+            "length(request_fingerprint)=64 AND request_fingerprint NOT GLOB '*[^0-9a-f]*'"
+        ),
+        CheckConstraint(
+            "json_valid(request_json) AND json_type(request_json)='object' AND json_valid(result_json) AND json_type(result_json)='object'"
+        ),
+        *[
+            CheckConstraint(_UUID.format(*([field] * 6)))
+            for field in ("id", "concern_id", "idempotency_key", "correlation_id")
+        ],
+        CheckConstraint(
+            "length(created_at_utc) BETWEEN 25 AND 32 AND substr(created_at_utc,11,1)='T' AND substr(created_at_utc,-6)='+00:00'"
+        ),
+        Index("owner_concern_commands_concern", "concern_id", "created_at_utc"),
+    )
+
+
+COMMAND_TRIGGERS = {
+    f"owner_concern_command_operations_no_{action}": f"CREATE TRIGGER owner_concern_command_operations_no_{action} BEFORE {action.upper()} ON owner_concern_command_operations BEGIN SELECT RAISE(ABORT, 'owner concern commands are immutable'); END"
+    for action in ("update", "delete")
+}
+COMMAND_TRIGGERS["owner_concern_command_operations_no_replace"] = """
+CREATE TRIGGER owner_concern_command_operations_no_replace
+BEFORE INSERT ON owner_concern_command_operations
+WHEN EXISTS (SELECT 1 FROM owner_concern_command_operations
+    WHERE id=NEW.id OR idempotency_key=NEW.idempotency_key
+       OR correlation_id=NEW.correlation_id)
+BEGIN SELECT RAISE(ABORT, 'owner concern commands are immutable'); END
+"""

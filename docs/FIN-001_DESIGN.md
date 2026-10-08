@@ -1,5 +1,36 @@
 # FIN-001 — Rent Expectations and Recorded Receipts
 
+## UI-001 Slice 15 command-contract amendment — October 8, 2026
+
+The operator approved a shared Lease rent-ledger revision for expectations,
+receipts/allocations and prepaid checks, independent of Lease lifecycle and Space
+status revisions. All selected commands preserve immutable original-response
+receipts and provide read-only recovery. See
+[Financial command readiness](FINANCE_COMMAND_READINESS.md) for implementation
+status, the current schema inventory and the validation matrix.
+
+Standalone synchronization, receipt creation/voiding, expectation voiding and
+timeliness review now require `expectedRevision` and a UUID `idempotencyKey`.
+Receipt creation reuses its existing receipt key. Effective commands advance the
+ledger once; unchanged synchronization records a no-op without an increment.
+Exact retries replay the original response before lifecycle evaluation; changed
+reuse and stale revisions return typed `409` conflicts. Financial mutations,
+receipt storage and correlated audits remain one atomic transaction.
+
+Mutation responses add required `rentLedgerRevision` and `operationId`.
+Synchronization returns `{items, rentLedgerRevision, operationId}` rather than
+a bare list. The ledger-revision read and original operation-key recovery are
+read-only; ordinary historical financial reads retain their existing shapes.
+
+Prepaid create/deposit/return/void/replace share this ledger revision. Each action
+advances it once, including nested receipt/allocation and reminder effects.
+The neutral caller-transaction receipt operation requires the expected ledger
+revision; Owner verification-created receipts use it atomically with the report.
+Receipt adoption makes no Finance write and does not increment the ledger.
+Source-owned Slice 15 contracts are complete; new OPS registrations and browser
+controls remain gated. This amendment supersedes earlier current-state retry
+wording for the selected commands.
+
 ## Purpose
 
 `FIN-001` gives the local operator a truthful rent-collection record: what rent was expected for an executed lease, what was actually received, and which expected period each recorded receipt settles. It makes full, partial, late, and missed rent visible without initiating payments, attempting accounting reconciliation, or deciding legal delinquency consequences.

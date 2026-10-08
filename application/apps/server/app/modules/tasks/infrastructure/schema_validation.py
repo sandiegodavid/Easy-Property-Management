@@ -12,6 +12,9 @@ from app.modules.tasks.infrastructure.sqlalchemy_models import (
     TaskModel,
     TaskReminderModel,
     TaskWaitingOperationModel,
+    TaskCreationOperationModel,
+    TaskMutationOperationModel,
+    MUTATION_INSERT_GUARD,
 )
 from app.modules.tasks.application.waiting import WaitingCommand
 from app.modules.tasks.domain.models import Task, waiting_facts
@@ -24,7 +27,13 @@ def _normalized(value):
 
 def validate_task_schema(connection):
     inspector = inspect(connection)
-    for model in (TaskModel, TaskReminderModel, TaskWaitingOperationModel):
+    for model in (
+        TaskModel,
+        TaskReminderModel,
+        TaskWaitingOperationModel,
+        TaskCreationOperationModel,
+        TaskMutationOperationModel,
+    ):
         table = model.__table__
         if not inspector.has_table(table.name):
             raise MigrationSchemaError("Task schema is incomplete.")
@@ -43,11 +52,22 @@ def validate_task_schema(connection):
         }:
             raise MigrationSchemaError("Task checks are incompatible.")
         indexes = {
-            (i["name"], tuple(i["column_names"]), bool(i["unique"]))
+            (
+                i["name"],
+                tuple(i["column_names"]),
+                bool(i["unique"]),
+                _normalized(i.get("dialect_options", {}).get("sqlite_where")),
+            )
             for i in inspector.get_indexes(table.name)
         }
         if indexes != {
-            (i.name, tuple(c.name for c in i.columns), bool(i.unique)) for i in table.indexes
+            (
+                i.name,
+                tuple(c.name for c in i.columns),
+                bool(i.unique),
+                _normalized(i.dialect_options["sqlite"].get("where")),
+            )
+            for i in table.indexes
         }:
             raise MigrationSchemaError("Task indexes are incompatible.")
         uniques = {tuple(c["column_names"]) for c in inspector.get_unique_constraints(table.name)}
@@ -81,7 +101,122 @@ def validate_task_schema(connection):
             raise MigrationSchemaError("Task operation immutability is incompatible.")
     if len(triggers) != 2:
         raise MigrationSchemaError("Unexpected Task operation triggers.")
+    creation_triggers = dict(
+        connection.execute(
+            text(
+                "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='task_creation_operations'"
+            )
+        ).all()
+    )
+    for action in ("UPDATE", "DELETE"):
+        name = f"task_creation_operations_no_{action.lower()}"
+        expected = f"CREATE TRIGGER {name} BEFORE {action} ON task_creation_operations BEGIN SELECT RAISE(ABORT, 'task creation operations are append-only'); END"
+        if _normalized(creation_triggers.get(name)) != _normalized(expected):
+            raise MigrationSchemaError("Task creation immutability is incompatible.")
+    if len(creation_triggers) != 2:
+        raise MigrationSchemaError("Unexpected Task creation triggers.")
+    mutation_triggers = dict(
+        connection.execute(
+            text(
+                "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='task_mutation_operations'"
+            )
+        ).all()
+    )
+    for action in ("UPDATE", "DELETE"):
+        name = f"task_mutation_operations_no_{action.lower()}"
+        expected = f"CREATE TRIGGER {name} BEFORE {action} ON task_mutation_operations BEGIN SELECT RAISE(ABORT, 'task mutation operations are append-only'); END"
+        if _normalized(mutation_triggers.get(name)) != _normalized(expected):
+            raise MigrationSchemaError("Task mutation immutability is incompatible.")
+    if _normalized(mutation_triggers.get("task_mutation_operations_no_replace")) != _normalized(
+        MUTATION_INSERT_GUARD
+    ):
+        raise MigrationSchemaError("Task mutation replacement guard is incompatible.")
+    if len(mutation_triggers) != 3:
+        raise MigrationSchemaError("Unexpected Task mutation triggers.")
     validate_task_data(connection)
+    validate_creation_data(connection)
+    from app.modules.tasks.infrastructure.mutation_validation import validate_mutations
+
+    validate_mutations(connection, _uuid, _utc)
+
+
+def validate_creation_data(connection):
+    from app.modules.tasks.application.creation import (
+        TaskCreationOperation,
+        canonical,
+        creation_fingerprint,
+        creation_request,
+    )
+    from app.modules.tasks.application.service import TaskCreateCommand, TaskError, new_task
+
+    try:
+        operations = list(
+            connection.execute(TaskCreationOperationModel.__table__.select()).mappings()
+        )
+        for row in operations:
+            for field in ("id", "task_id", "idempotency_key", "correlation_id"):
+                _uuid(row[field])
+            instant = _utc(row["created_at_utc"])
+            request = json.loads(row["request_json"])
+            command = TaskCreateCommand(**request["command"])
+            if (
+                canonical(creation_request(command, request["expectedRevision"]))
+                != row["request_json"]
+                or creation_fingerprint(command) != row["request_fingerprint"]
+            ):
+                raise ValueError("Creation request differs from fingerprint.")
+            task = new_task(command, task_id=row["task_id"], now=row["created_at_utc"])
+            result = {**task.to_dict(), **waiting_facts(task, instant), "operationId": row["id"]}
+            if canonical(result) != row["result_json"]:
+                raise ValueError("Creation result differs from initial Task.")
+            if (
+                connection.scalar(text("SELECT id FROM tasks WHERE id=:id"), {"id": task.id})
+                is None
+            ):
+                raise ValueError("Creation receipt lost its Task.")
+            events = list(
+                connection.execute(
+                    text(
+                        "SELECT * FROM audit_events WHERE (entity_type='task_creation_operation' AND entity_id=:operation) "
+                        "OR (entity_type='task' AND entity_id=:task AND action='created')"
+                    ),
+                    {"operation": row["id"], "task": task.id},
+                ).mappings()
+            )
+            if len(events) != 2:
+                raise ValueError("Missing creation audit evidence.")
+            for audit in events:
+                expected = (
+                    task.to_dict()
+                    if audit["entity_type"] == "task"
+                    else TaskCreationOperation(**row).audit_snapshot()
+                )
+                if (
+                    audit["correlation_id"] != row["correlation_id"]
+                    or audit["action"]
+                    != ("created" if audit["entity_type"] == "task" else "recorded")
+                    or audit["before_snapshot"] is not None
+                    or json.loads(audit["after_snapshot"]) != expected
+                ):
+                    raise ValueError("Creation audit differs from receipt.")
+        ids = {row["id"] for row in operations}
+        audits = connection.execute(
+            text("SELECT entity_id FROM audit_events WHERE entity_type='task_creation_operation'")
+        ).scalars()
+        if any(identifier not in ids for identifier in audits):
+            raise ValueError("Creation audit lost its receipt.")
+        by_task = {row["task_id"]: row for row in operations}
+        for audit in connection.execute(
+            text(
+                "SELECT entity_id, correlation_id FROM audit_events WHERE entity_type='task' "
+                "AND action='created' AND reason='task_creation_command'"
+            )
+        ).mappings():
+            operation = by_task.get(audit["entity_id"])
+            if operation is None or operation["correlation_id"] != audit["correlation_id"]:
+                raise ValueError("Recoverable creation lost its receipt.")
+    except (ValueError, TypeError, KeyError, TaskError) as error:
+        raise MigrationSchemaError("Retained Task creation data is invalid.") from error
 
 
 def _uuid(value):
@@ -133,11 +268,23 @@ def validate_task_data(connection):
                 "waiting_set_at_utc",
                 "waiting_cleared_at_utc",
                 "follow_up_at_utc",
+                "deleted_at_utc",
             ):
                 if row[key] is not None:
                     _utc(row[key])
             if _utc(row["updated_at_utc"]) < _utc(row["created_at_utc"]):
                 raise ValueError("Invalid task timestamps.")
+            if row["deleted_at_utc"] is not None and (
+                row["deleted_at_utc"] != row["updated_at_utc"]
+                or connection.scalar(
+                    text(
+                        "SELECT id FROM task_reminders WHERE task_id=:id AND status!='dismissed' LIMIT 1"
+                    ),
+                    {"id": row["id"]},
+                )
+                is not None
+            ):
+                raise ValueError("Deleted Task has invalid lifecycle/reminders.")
             for field in ("due_timezone", "follow_up_timezone"):
                 if row[field] is not None:
                     ZoneInfo(row[field])
@@ -270,6 +417,7 @@ def validate_task_data(connection):
                         ("created_at_utc", "createdAtUtc"),
                         ("updated_at_utc", "updatedAtUtc"),
                         ("revision", "revision"),
+                        ("deleted_at_utc", "deletedAtUtc"),
                         *WAITING_FIELDS.items(),
                     )
                 }
@@ -353,7 +501,7 @@ def _validate_receipt_references(connection, operations):
             text(
                 "SELECT * FROM audit_events WHERE entity_type='task_waiting_operation' "
                 "OR (entity_type='task' AND action IN "
-                "('task_waiting_set','task_waiting_cleared','task_follow_up_rescheduled','status_changed'))"
+                "('task_waiting_set','task_waiting_cleared','task_follow_up_rescheduled','status_changed','deleted'))"
             )
         )
         .mappings()
@@ -361,7 +509,7 @@ def _validate_receipt_references(connection, operations):
     )
     lifecycle_by_change = {}
     for event in events:
-        if event["entity_type"] == "task" and event["action"] == "status_changed":
+        if event["entity_type"] == "task" and event["action"] in {"status_changed", "deleted"}:
             key = (event["entity_id"], event["correlation_id"])
             lifecycle_by_change.setdefault(key, []).append(event)
     for event in events:
@@ -377,12 +525,17 @@ def _validate_receipt_references(connection, operations):
             if event["action"] == "task_waiting_cleared" and event["reason"] in {
                 "task_completed",
                 "task_cancelled",
+                "task_deleted",
             }:
                 lifecycle = lifecycle_by_change.get(
                     (event["entity_id"], event["correlation_id"]), []
                 )
                 expected_status = (
-                    "completed" if event["reason"] == "task_completed" else "cancelled"
+                    "open"
+                    if event["reason"] == "task_deleted"
+                    else "completed"
+                    if event["reason"] == "task_completed"
+                    else "cancelled"
                 )
                 if (
                     len(lifecycle) != 1
@@ -409,7 +562,14 @@ def _validate_task_history(row, events):
     previous = None
     previous_correlation = None
     for event in events:
-        if event["action"] not in {"created", "status_changed", *WAITING_ACTIONS.values()}:
+        if event["action"] not in {
+            "created",
+            "status_changed",
+            "reminder_changed",
+            "updated",
+            "deleted",
+            *WAITING_ACTIONS.values(),
+        }:
             continue
         before = json.loads(event["before_snapshot"]) if event["before_snapshot"] else None
         after = json.loads(event["after_snapshot"])
@@ -419,6 +579,7 @@ def _validate_task_history(row, events):
         elif event["action"] == "task_waiting_cleared" and event["reason"] in {
             "task_completed",
             "task_cancelled",
+            "task_deleted",
         }:
             if previous != after or previous_correlation != event["correlation_id"]:
                 raise ValueError("Automatic clearing is not correlated with lifecycle.")

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import UTC, datetime
 from typing import TypeVar
 from uuid import uuid4
 
@@ -16,6 +15,7 @@ from app.modules.finance.application.ports import (
     PartyFinanceOperations,
 )
 from app.modules.finance.domain.models import PrepaidCheck, RentExpectation, RentReceipt
+from app.modules.finance.infrastructure.command_operations import SQLiteFinanceCommandTransaction
 from app.modules.finance.infrastructure.sqlalchemy_models import (
     PrepaidCheckModel,
     PrepaidCheckOperationModel,
@@ -92,6 +92,7 @@ class _Tx:
         task_operations,
     ):
         self.connection = connection
+        self.commands = SQLiteFinanceCommandTransaction(connection, recorder)
         self.recorder = recorder
         self.lease_operations = lease_operations
         self.portfolio_operations = portfolio_operations
@@ -660,10 +661,12 @@ class _Tx:
     def insert_prepaid_check_operation(self, item):
         self.connection.execute(PrepaidCheckOperationModel.__table__.insert().values(**item))
 
-    def create_prepaid_check_reminder(self, *, check_id, due_at_utc, due_timezone, correlation_id):
+    def create_prepaid_check_reminder(
+        self, *, check_id, due_at_utc, due_timezone, correlation_id, committed_at
+    ):
         if self.task_operations is None:
             raise RuntimeError("TASK-001 operations are not configured.")
-        now = datetime.now(UTC).isoformat()
+        now = committed_at
         task = Task(
             str(uuid4()),
             "Deposit prepaid check",
@@ -705,12 +708,12 @@ class _Tx:
         )
         return task.id
 
-    def dismiss_prepaid_check_reminder(self, task_id, *, correlation_id):
+    def dismiss_prepaid_check_reminder(self, task_id, *, correlation_id, committed_at):
         if self.task_operations is None:
             raise RuntimeError("TASK-001 operations are not configured.")
         if task_id is None:
             return
-        now = datetime.now(UTC).isoformat()
+        now = committed_at
         for reminder in self.task_operations.pending_reminders(self.connection, task_id):
             dismissed = dismiss(reminder, now)
             self.task_operations.replace_reminder(self.connection, dismissed)

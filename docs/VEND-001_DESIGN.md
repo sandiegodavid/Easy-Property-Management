@@ -40,6 +40,88 @@ Inline provider creation reuses TEN-001's operator-reviewed identity workflow. E
 
 Archiving a shared party is intentionally stricter than archiving a role profile. It requires explicit confirmation and is rejected while any active role that requires an available identity remains, including active provider profiles, tenant profiles, or current/future client-owner relationships. Archiving a provider profile never archives the shared party. New roles register a role-activity guard through the parties application port rather than making the parties module import downstream infrastructure.
 
+### UI-001 Slice 24 command recovery
+
+Provider creation, designation, profile editing, archive and restore require a
+canonical UUID `idempotencyKey` and exact integer `expectedRevision` from HTTP
+and direct application callers. Creation/designation require zero; existing
+profiles require their positive current Provider revision, independently of the
+shared Party revision. Effective profile mutations advance once; unchanged
+patches retain timestamps/revision but record their own receipt. Replay is checked
+before revision, duplicate-identity and lifecycle checks. A changed payload under
+an existing global Provider key returns `provider_idempotency_conflict`; stale
+revisions return `provider_revision_conflict` with the current profile snapshot.
+
+All five commands return the original committed representation:
+`party`, `profile`, `revision`, `partyRevision`, and `operationId`. This deliberately
+excludes live contact, child and category enrichments; read-only Provider detail
+owns those projections. Initial contacts, children and category assignments remain
+atomic creation effects, included in the request fingerprint and correlated audits.
+Identity/profile facts and the immutable response are assembled on the owning
+transaction before commit, never reconstructed by a later detail read.
+
+The append-only `provider_command_operations` ledger stores stable operation ID,
+Provider party ID, action (`create`, `designate`, `patch`, `archive`, `restore`),
+globally unique UUID key, canonical semantic request JSON and lowercase SHA-256
+fingerprint, expected/resulting revisions, canonical original result JSON,
+correlation ID and UTC creation time. Update, delete and replacement triggers
+protect receipts. Receipt creation, Party/profile/initial-child effects and audits
+commit or roll back together. A `provider_command_operation/recorded` event shares
+the mutation correlation and contains only IDs, action and revisions, not request
+contents, notes or contact details.
+
+Read-only `GET /api/providers/operations/{operationId}` and
+`GET /api/providers/operations/by-key/{idempotencyKey}` return that original result
+in one indexed lookup, including after later edits or lifecycle changes. Exact
+current-schema validation covers ledger constraints and trigger bodies; retained
+validation recomputes canonical fingerprints, binds original results to legal
+profile revision transitions and correlated audit evidence, and checks current
+profiles against the recorded tips. LOCAL-002 preserves receipts and correlations.
+Independent child commands use the Slice 25 contract below; category/assignment
+recovery remains Slice 26. No new OPS forms or consequential browser controls are enabled.
+
+### UI-001 Slice 25 child command recovery
+
+Service, service-area, work-history, reference and reputation create, update,
+archive and restore commands require the current positive Provider
+`expectedRevision` and a canonical UUID `idempotencyKey`, including direct callers.
+They share Slice 24's revision and global key namespace. Replay precedes current
+revision, target and lifecycle checks; changed reuse and stale revisions return
+the same typed conflicts as profile commands. The Provider and shared Party must
+be active for a new child mutation. Existing uniqueness and reference rules remain.
+
+Each effective command advances the Provider revision once and updates its
+timestamp using the same UTC instant as the child change. An unchanged update
+preserves both child and Provider timestamps/revision, but records an immutable
+receipt. Archive and restore require the appropriate current child lifecycle;
+retries use the original key rather than reapplying a lifecycle transition.
+
+All 20 commands return `kind`, the affected `item`, `profile`, `revision` and
+`operationId`, assembled inside the owning transaction. `kind` identifies
+`service`, `area`, `work`, `reference` or `reputation`, with a corresponding typed
+child representation. They do not return live aggregate detail. Recovery by ID
+or global key returns either the original profile result or original child result,
+unchanged after subsequent edits, archive/restore or Party identity changes.
+
+The same append-only `provider_command_operations` ledger adds actions
+`<kind>_create`, `<kind>_update`, `<kind>_archive` and `<kind>_restore`. Canonical
+requests retain the child ID (null for creation) and normalized business fields;
+reputation patches preserve omission versus explicit null. Child effects, parent
+revision, original result and correlated child/profile/receipt audit events commit
+or roll back together. No-op updates record only the receipt audit. Receipt audit
+snapshots remain metadata-only; contextual child audits retain their existing
+privacy policies. The current greenfield baseline derives the expanded constraints
+from the authoritative model; no compatibility migration is introduced.
+
+Retained validation reconstructs initial and independent child history, validates
+requests/results against normalized commands and legal lifecycle changes, binds
+each effective change to correlated child/profile/receipt audits, and compares
+current rows with their recorded tips. Encrypted LOCAL-002 backup/restore preserves
+original results, IDs, revisions, archive history and correlations. Focused proofs
+live in `vendors/tests/test_child_command_readiness.py`, the shared Provider backup
+test and deterministic no-workspace endpoint-contract tests. Category/assignment
+recovery, additional OPS registration and browser controls remain out of scope.
+
 ### Provider state is an operator decision, not a rating
 
 `selection_status` is exactly one of:
@@ -87,6 +169,7 @@ Reusable email and phone records live in TEN-001's party-owned `party_contact_me
 | `selection_status` | Required `neutral`, `preferred`, or `avoid`; defaults to `neutral`. |
 | `selection_reason` | Optional bounded text except required for `avoid`. |
 | `notes` | Optional 4,000-character internal provider context. |
+| `revision` | Exact positive integer, initially one. Slice 24 profile and Slice 25 child commands increment once per effective change. Independent of Party revision; unchanged edits preserve it. |
 | `created_at`, `updated_at`, `archived_at` | UTC lifecycle timestamps. |
 
 ### `provider_services`
@@ -198,6 +281,8 @@ All routes require a ready workspace. Mutations require the writer lock. Request
 | `POST` | `/api/providers` | Atomically create an inline party and provider profile after duplicate review; supports explicit `confirmedNewParty`. |
 | `POST` | `/api/providers/from-party/{partyId}` | Designate an existing active party as a provider. |
 | `GET` | `/api/providers` | Search/list provider profiles. |
+| `GET` | `/api/providers/operations/{operationId}` | Recover the immutable original profile or child result by operation ID. |
+| `GET` | `/api/providers/operations/by-key/{idempotencyKey}` | Recover the immutable original profile or child result by global Provider key. |
 | `GET` | `/api/providers/{partyId}` | Return identity, profile, services, areas, work history, and references. |
 | `PATCH` | `/api/providers/{partyId}` | Update selection state and provider notes. |
 | `POST` | `/api/providers/{partyId}/services` | Add a service offering. |
@@ -223,7 +308,7 @@ Errors are explicit: malformed request models return `422`; oversized request co
 
 ## Audit, privacy, and portability
 
-Every mutation persists all domain rows and `AUDIT-001` events in one immediate transaction. A multi-row create, designation, or coordinated update uses one correlation ID. Event entity types are `party`, `party_contact_method`, `provider_profile`, `provider_service`, `provider_service_area`, `provider_work_history`, and `provider_reference`.
+Every mutation persists all domain rows and `AUDIT-001` events in one immediate transaction. A multi-row create, designation, or coordinated update uses one correlation ID. Event entity types are `party`, `party_contact_method`, `provider_profile`, `provider_service`, `provider_service_area`, `provider_work_history`, `provider_reference`, and `provider_command_operation`.
 
 Audit snapshots retain stable IDs, lifecycle state, normalized values needed to explain uniqueness, and ordinary business fields. General activity presentation redacts party contact-method values and extensions, reference email/phone, reference notes, provider notes, work-history outcome notes, and selection reasons. Contextual provider history can reveal the protected record to the local operator. All policies are registered before events can be written, preserving the current fail-closed audit behavior.
 

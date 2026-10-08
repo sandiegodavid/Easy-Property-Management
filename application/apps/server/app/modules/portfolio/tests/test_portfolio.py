@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.modules.portfolio.tests.commands import inventory_command
+
 import json
 import sqlite3
 import tempfile
@@ -92,7 +94,9 @@ class PortfolioTests(unittest.TestCase):
         return self.service.create_party(PartyCreateCommand("individual", "Morgan Owner"))
 
     def _property(self, ownerships):
-        return self.service.create_property(
+        return inventory_command(
+            self.service,
+            "create_property",
             PropertyCreateCommand(
                 "Maple duplex",
                 "10 Maple Street",
@@ -102,7 +106,7 @@ class PortfolioTests(unittest.TestCase):
                 tuple(ownerships),
                 region="OR",
                 postal_code="97201",
-            )
+            ),
         )
 
     def test_ownership_contexts_are_derived_from_relationships(self) -> None:
@@ -127,7 +131,9 @@ class PortfolioTests(unittest.TestCase):
 
     def test_context_reader_uses_bounded_set_based_queries(self) -> None:
         owner = self._party()
-        first = self.service.create_property(
+        first = inventory_command(
+            self.service,
+            "create_property",
             PropertyCreateCommand(
                 "Reader office",
                 "20 Maple Street",
@@ -139,7 +145,7 @@ class PortfolioTests(unittest.TestCase):
                 postal_code="97201",
                 inventory_layout="office_suites",
                 spaces=(SpaceCreateCommand("Suite 100"), SpaceCreateCommand("Suite 200")),
-            )
+            ),
         )
         second = self._property([OwnershipInput("local_operator")])
         first_spaces = [space["id"] for space in self.service.get_property(first.id)["spaces"]]
@@ -222,7 +228,9 @@ class PortfolioTests(unittest.TestCase):
     def test_property_time_zone_is_derived_and_recomputed_after_an_address_change(self) -> None:
         property = self._property([OwnershipInput("local_operator")])
         self.assertEqual(property.time_zone, "America/Los_Angeles")
-        changed = self.service.patch_property(
+        changed = inventory_command(
+            self.service,
+            "patch_property",
             property.id,
             {
                 "addressLine1": "11 Broadway",
@@ -232,12 +240,18 @@ class PortfolioTests(unittest.TestCase):
             },
         )
         self.assertEqual(changed.time_zone, "America/New_York")
-        event = self.audit.history("property", property.id)[-1]
+        event = next(
+            event
+            for event in reversed(self.audit.history("property", property.id))
+            if event.action == "updated"
+        )
         self.assertEqual(event.after_snapshot["timeZone"], "America/New_York")
 
     def test_property_rejects_an_ambiguous_or_incomplete_address_time_zone(self) -> None:
         with self.assertRaises(PortfolioError):
-            self.service.create_property(
+            inventory_command(
+                self.service,
+                "create_property",
                 PropertyCreateCommand(
                     "Unknown zone",
                     "10 Main",
@@ -245,10 +259,12 @@ class PortfolioTests(unittest.TestCase):
                     "US",
                     "single_family_home",
                     (OwnershipInput("local_operator"),),
-                )
+                ),
             )
         with self.assertRaises(PortfolioError):
-            self.service.create_property(
+            inventory_command(
+                self.service,
+                "create_property",
                 PropertyCreateCommand(
                     "Ambiguous zone",
                     "10 Main",
@@ -257,7 +273,7 @@ class PortfolioTests(unittest.TestCase):
                     "single_family_home",
                     (OwnershipInput("local_operator"),),
                     region="OR",
-                )
+                ),
             )
 
     def test_time_zone_resolver_uses_local_postal_and_city_candidates(self) -> None:
@@ -326,8 +342,12 @@ class PortfolioTests(unittest.TestCase):
     def test_ownership_replacement_preserves_the_prior_relationship_and_correlation(self) -> None:
         property = self._property([OwnershipInput("local_operator")])
         owner = self._party()
-        updated = self.service.replace_ownerships(
-            property.id, (OwnershipInput("client_owner", owner.id),), "2099-01-01"
+        updated = inventory_command(
+            self.service,
+            "replace_ownerships",
+            property.id,
+            (OwnershipInput("client_owner", owner.id),),
+            "2099-01-01",
         )
         self.assertEqual(updated["ownershipContext"], "self_owned")
         self.assertEqual(len(updated["ownerships"]), 1)
@@ -336,7 +356,11 @@ class PortfolioTests(unittest.TestCase):
         replacement_events = [event for event in events if event.reason == "ownership_replaced"]
         self.assertEqual(len(replacement_events), 2)
         self.assertEqual(replacement_events[0].correlation_id, replacement_events[1].correlation_id)
-        property_event = self.audit.history("property", property.id)[-1]
+        property_event = next(
+            event
+            for event in reversed(self.audit.history("property", property.id))
+            if event.action == "ownership_changed"
+        )
         self.assertEqual(property_event.action, "ownership_changed")
         self.assertEqual(property_event.after_snapshot["ownershipContext"], "managed_for_owner")
 
@@ -366,12 +390,19 @@ class PortfolioTests(unittest.TestCase):
         with TestClient(create_app(Path(config))) as client:
             party = client.post(
                 "/api/parties",
-                json={"partyKind": "organization", "displayName": "Northwest Holdings"},
+                json={
+                    "partyKind": "organization",
+                    "displayName": "Northwest Holdings",
+                    "expectedRevision": 0,
+                    "idempotencyKey": str(uuid4()),
+                },
             )
             self.assertEqual(party.status_code, 201)
             property = client.post(
                 "/api/properties",
                 json={
+                    "expectedPropertyRevision": 0,
+                    "idempotencyKey": str(uuid4()),
                     "displayName": "Pine office",
                     "addressLine1": "1 Pine Avenue",
                     "city": "Portland",
@@ -393,6 +424,8 @@ class PortfolioTests(unittest.TestCase):
             invalid = client.post(
                 "/api/properties",
                 json={
+                    "expectedPropertyRevision": 0,
+                    "idempotencyKey": str(uuid4()),
                     "displayName": "Bad",
                     "addressLine1": "1 Test",
                     "city": "Portland",
@@ -406,6 +439,8 @@ class PortfolioTests(unittest.TestCase):
             inline = client.post(
                 "/api/properties",
                 json={
+                    "expectedPropertyRevision": 0,
+                    "idempotencyKey": str(uuid4()),
                     "displayName": "Cedar home",
                     "addressLine1": "2 Cedar",
                     "city": "Portland",
@@ -432,6 +467,8 @@ class PortfolioTests(unittest.TestCase):
                 client.post(
                     "/api/properties",
                     json={
+                        "expectedPropertyRevision": 0,
+                        "idempotencyKey": str(uuid4()),
                         "displayName": "Ignored",
                         "addressLine1": "3 Cedar",
                         "city": "Portland",
@@ -449,8 +486,12 @@ class PortfolioTests(unittest.TestCase):
         property = self._property([OwnershipInput("client_owner", owner.id)])
         with self.assertRaises(PortfolioError):
             self.service.archive_party(owner.id, confirmed=True)
-        self.service.replace_ownerships(
-            property.id, (OwnershipInput("local_operator"),), date.today().isoformat()
+        inventory_command(
+            self.service,
+            "replace_ownerships",
+            property.id,
+            (OwnershipInput("local_operator"),),
+            date.today().isoformat(),
         )
         self.assertIsNotNone(self.service.archive_party(owner.id, confirmed=True).archived_at)
 
@@ -459,22 +500,34 @@ class PortfolioTests(unittest.TestCase):
     ) -> None:
         property = self._property([OwnershipInput("local_operator")])
         future_owner = self._party()
-        self.service.replace_ownerships(
-            property.id, (OwnershipInput("client_owner", future_owner.id),), "2030-01-01"
+        inventory_command(
+            self.service,
+            "replace_ownerships",
+            property.id,
+            (OwnershipInput("client_owner", future_owner.id),),
+            "2030-01-01",
         )
         with self.assertRaises(PortfolioError):
             self.service.archive_party(future_owner.id, confirmed=True)
         current_owner = self._party()
         property = self._property([OwnershipInput("client_owner", current_owner.id)])
         replacement = self._party()
-        self.service.replace_ownerships(
-            property.id, (OwnershipInput("client_owner", replacement.id),), "2030-01-01"
+        inventory_command(
+            self.service,
+            "replace_ownerships",
+            property.id,
+            (OwnershipInput("client_owner", replacement.id),),
+            "2030-01-01",
         )
         with self.assertRaises(PortfolioError):
             self.service.archive_party(current_owner.id, confirmed=True)
         with self.assertRaises(PortfolioError):
-            self.service.replace_ownerships(
-                property.id, (OwnershipInput("local_operator"),), "2029-01-01"
+            inventory_command(
+                self.service,
+                "replace_ownerships",
+                property.id,
+                (OwnershipInput("local_operator"),),
+                "2029-01-01",
             )
 
     def test_direct_inline_owner_must_be_a_party_command(self) -> None:
@@ -497,13 +550,17 @@ class PortfolioTests(unittest.TestCase):
         property = self._property([OwnershipInput("local_operator")])
         first_owner = self._party()
         second_owner = self._party()
-        self.service.replace_ownerships(
+        inventory_command(
+            self.service,
+            "replace_ownerships",
             property.id,
             (OwnershipInput("client_owner", first_owner.id),),
             "2030-01-01",
         )
         with self.assertRaises(PortfolioError):
-            self.service.replace_ownerships(
+            inventory_command(
+                self.service,
+                "replace_ownerships",
                 property.id,
                 (OwnershipInput("client_owner", second_owner.id),),
                 "2030-01-01",
@@ -578,7 +635,9 @@ class PortfolioTests(unittest.TestCase):
         )
 
     def test_office_suites_are_created_and_can_add_a_suite(self) -> None:
-        office = self.service.create_property(
+        office = inventory_command(
+            self.service,
+            "create_property",
             PropertyCreateCommand(
                 "Pine offices",
                 "1 Pine Avenue",
@@ -589,9 +648,11 @@ class PortfolioTests(unittest.TestCase):
                 region="OR",
                 inventory_layout="office_suites",
                 spaces=(SpaceCreateCommand("Suite 100"), SpaceCreateCommand("Suite 200")),
-            )
+            ),
         )
-        added = self.service.add_space(office.id, SpaceCreateCommand("Suite 300"))
+        added = inventory_command(
+            self.service, "add_space", office.id, SpaceCreateCommand("Suite 300")
+        )
         detail = self.service.get_property(office.id)
         self.assertEqual(added.space_kind, "office_suite")
         self.assertEqual(
@@ -601,7 +662,9 @@ class PortfolioTests(unittest.TestCase):
         events = self.audit.history("space")
         self.assertEqual(len(events), 3)
         with self.assertRaises(PortfolioError):
-            self.service.create_property(
+            inventory_command(
+                self.service,
+                "create_property",
                 PropertyCreateCommand(
                     "Invalid office",
                     "2 Pine Avenue",
@@ -611,22 +674,24 @@ class PortfolioTests(unittest.TestCase):
                     (OwnershipInput("local_operator"),),
                     region="OR",
                     inventory_layout="office_suites",
-                )
+                ),
             )
 
     def test_archiving_a_property_archives_its_spaces_atomically(self) -> None:
         property = self._property([OwnershipInput("local_operator")])
-        archived = self.service.archive_property(property.id, confirmed=True)
+        archived = inventory_command(self.service, "archive_property", property.id, confirmed=True)
         self.assertEqual(archived.status, "archived")
         self.assertEqual(self.service.get_property(property.id)["spaces"][0]["status"], "archived")
-        restored = self.service.restore_property(property.id)
+        restored = inventory_command(self.service, "restore_property", property.id)
         self.assertEqual(restored.status, "active")
         self.assertEqual(self.service.get_property(property.id)["spaces"][0]["status"], "active")
 
     def test_space_names_are_case_insensitively_unique_and_retired_spaces_stay_archived(
         self,
     ) -> None:
-        office = self.service.create_property(
+        office = inventory_command(
+            self.service,
+            "create_property",
             PropertyCreateCommand(
                 "Pine offices",
                 "1 Pine Avenue",
@@ -637,21 +702,25 @@ class PortfolioTests(unittest.TestCase):
                 region="OR",
                 inventory_layout="office_suites",
                 spaces=(SpaceCreateCommand("Suite 100"), SpaceCreateCommand("Suite 200")),
-            )
+            ),
         )
         spaces = self.service.get_property(office.id)["spaces"]
         with self.assertRaises(PortfolioError):
-            self.service.add_space(office.id, SpaceCreateCommand("suite 100"))
+            inventory_command(self.service, "add_space", office.id, SpaceCreateCommand("suite 100"))
 
-        retired = self.service.archive_space(spaces[0]["id"], confirmed=True)
-        replacement = self.service.add_space(office.id, SpaceCreateCommand("suite 100"))
+        retired = inventory_command(self.service, "archive_space", spaces[0]["id"], confirmed=True)
+        replacement = inventory_command(
+            self.service, "add_space", office.id, SpaceCreateCommand("suite 100")
+        )
         with self.assertRaises(PortfolioError):
-            self.service.restore_space(retired.id)
+            inventory_command(self.service, "restore_space", retired.id)
         with self.assertRaises(PortfolioError):
-            self.service.patch_space(spaces[1]["id"], {"displayName": "SUITE 100"})
+            inventory_command(
+                self.service, "patch_space", spaces[1]["id"], {"displayName": "SUITE 100"}
+            )
 
-        self.service.archive_property(office.id, confirmed=True)
-        self.service.restore_property(office.id)
+        inventory_command(self.service, "archive_property", office.id, confirmed=True)
+        inventory_command(self.service, "restore_property", office.id)
         all_spaces = {item.id: item for item in self.service.unit_of_work.spaces(office.id)}
         self.assertEqual(all_spaces[retired.id].status, "archived")
         self.assertEqual(all_spaces[replacement.id].status, "active")
@@ -666,6 +735,8 @@ class PortfolioTests(unittest.TestCase):
             created = client.post(
                 "/api/properties",
                 json={
+                    "expectedPropertyRevision": 0,
+                    "idempotencyKey": str(uuid4()),
                     "displayName": "Oak offices",
                     "addressLine1": "10 Oak Road",
                     "city": "Portland",
@@ -681,23 +752,42 @@ class PortfolioTests(unittest.TestCase):
             space_id = created.json()["spaces"][0]["id"]
             patched = client.patch(
                 f"/api/spaces/{space_id}",
-                json={"displayName": "Suite 101", "notes": "North wing"},
+                json={
+                    "displayName": "Suite 101",
+                    "notes": "North wing",
+                    "expectedPropertyRevision": 1,
+                    "idempotencyKey": str(uuid4()),
+                },
             )
             self.assertEqual(patched.status_code, 200)
             self.assertEqual(patched.json()["displayName"], "Suite 101")
             self.assertEqual(
                 client.post(
-                    f"/api/spaces/{space_id}/archive", json={"confirmed": True}
+                    f"/api/spaces/{space_id}/archive",
+                    json={
+                        "confirmed": True,
+                        "expectedPropertyRevision": 2,
+                        "idempotencyKey": str(uuid4()),
+                    },
                 ).status_code,
                 200,
             )
-            self.assertEqual(client.post(f"/api/spaces/{space_id}/restore").status_code, 200)
+            self.assertEqual(
+                client.post(
+                    f"/api/spaces/{space_id}/restore",
+                    json={"expectedPropertyRevision": 3, "idempotencyKey": str(uuid4())},
+                ).status_code,
+                200,
+            )
 
     def test_partial_property_patch_normalizes_values_and_preserves_archival_time(self) -> None:
         property = self._property([OwnershipInput("local_operator")])
-        archived = self.service.archive_property(property.id, confirmed=True)
-        updated = self.service.patch_property(
-            property.id, {"displayName": "  Updated Maple  ", "countryCode": "us"}
+        archived = inventory_command(self.service, "archive_property", property.id, confirmed=True)
+        updated = inventory_command(
+            self.service,
+            "patch_property",
+            property.id,
+            {"displayName": "  Updated Maple  ", "countryCode": "us"},
         )
         self.assertEqual(updated.display_name, "Updated Maple")
         self.assertEqual(updated.country_code, "US")
@@ -729,7 +819,9 @@ class PortfolioTests(unittest.TestCase):
         self.assertEqual(restored["currentOccupancy"]["occupancyStatus"], "unknown")
 
     def test_occupied_or_scheduled_space_cannot_be_archived(self) -> None:
-        office = self.service.create_property(
+        office = inventory_command(
+            self.service,
+            "create_property",
             PropertyCreateCommand(
                 "Oak office",
                 "1 Oak",
@@ -740,7 +832,7 @@ class PortfolioTests(unittest.TestCase):
                 region="OR",
                 inventory_layout="office_suites",
                 spaces=(SpaceCreateCommand("A"), SpaceCreateCommand("B")),
-            )
+            ),
         )
         space_id = self.service.get_property(office.id)["spaces"][0]["id"]
         self._classify_space(
@@ -751,10 +843,10 @@ class PortfolioTests(unittest.TestCase):
             ),
         )
         with self.assertRaises(PortfolioError):
-            self.service.archive_space(space_id, confirmed=True)
+            inventory_command(self.service, "archive_space", space_id, confirmed=True)
         self._change_occupancy(space_id, OccupancyCommand("vacant", "2099-01-01"))
         with self.assertRaises(PortfolioError):
-            self.service.archive_space(space_id, confirmed=True)
+            inventory_command(self.service, "archive_space", space_id, confirmed=True)
 
     def test_availability_date_rules_and_property_summary(self) -> None:
         property = self._property([OwnershipInput("local_operator")])
@@ -842,6 +934,8 @@ class PortfolioTests(unittest.TestCase):
             created = client.post(
                 "/api/properties",
                 json={
+                    "expectedPropertyRevision": 0,
+                    "idempotencyKey": str(uuid4()),
                     "displayName": "Status home",
                     "addressLine1": "9 Status Lane",
                     "city": "Portland",
@@ -883,7 +977,9 @@ class PortfolioTests(unittest.TestCase):
 
     def test_future_initial_occupancy_is_rejected_without_creating_a_property(self) -> None:
         with self.assertRaises(PortfolioError):
-            self.service.create_property(
+            inventory_command(
+                self.service,
+                "create_property",
                 PropertyCreateCommand(
                     "Future home",
                     "1 Future Way",
@@ -898,7 +994,7 @@ class PortfolioTests(unittest.TestCase):
                             initial_occupancy=OccupancyCommand("occupied", "2099-01-01"),
                         ),
                     ),
-                )
+                ),
             )
         self.assertEqual(self.service.list_properties(), [])
 
@@ -959,7 +1055,9 @@ class PortfolioTests(unittest.TestCase):
         self.assertEqual(status["availability"]["availabilityStatus"], "unknown")
 
     def test_filters_ignore_archived_spaces(self) -> None:
-        office = self.service.create_property(
+        office = inventory_command(
+            self.service,
+            "create_property",
             PropertyCreateCommand(
                 "Filter office",
                 "8 Filter",
@@ -970,11 +1068,11 @@ class PortfolioTests(unittest.TestCase):
                 region="OR",
                 inventory_layout="office_suites",
                 spaces=(SpaceCreateCommand("A"), SpaceCreateCommand("B")),
-            )
+            ),
         )
         space_id = self.service.get_property(office.id)["spaces"][0]["id"]
         self._change_availability(space_id, AvailabilityCommand("available_now"))
-        self.service.archive_space(space_id, confirmed=True)
+        inventory_command(self.service, "archive_space", space_id, confirmed=True)
         self.assertEqual(self.service.list_properties(availability_filter="available_now"), [])
 
     def test_needs_attention_query_accepts_true_and_false(self) -> None:
@@ -986,6 +1084,8 @@ class PortfolioTests(unittest.TestCase):
             created = client.post(
                 "/api/properties",
                 json={
+                    "expectedPropertyRevision": 0,
+                    "idempotencyKey": str(uuid4()),
                     "displayName": "Attention home",
                     "addressLine1": "7 Review",
                     "city": "Portland",
@@ -1169,6 +1269,8 @@ class PortfolioTests(unittest.TestCase):
             created = client.post(
                 "/api/properties",
                 json={
+                    "expectedPropertyRevision": 0,
+                    "idempotencyKey": str(uuid4()),
                     "displayName": "Typed status home",
                     "addressLine1": "8 Contract Way",
                     "city": "Portland",
@@ -1264,6 +1366,8 @@ class PortfolioTests(unittest.TestCase):
             created = client.post(
                 "/api/properties",
                 json={
+                    "expectedPropertyRevision": 0,
+                    "idempotencyKey": str(uuid4()),
                     "displayName": "Conflict home",
                     "addressLine1": "9 Source Way",
                     "city": "Portland",

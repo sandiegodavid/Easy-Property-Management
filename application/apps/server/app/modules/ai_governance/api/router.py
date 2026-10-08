@@ -21,25 +21,71 @@ from app.modules.ai_governance.domain.models import (
     AiValidationError,
 )
 from app.modules.workspace.application.runtime import WorkspaceRuntime
+from app.modules.ai_governance.api.responses import (
+    ActionLimitResponse,
+    ConnectionTestResponse,
+    DraftApprovalResponse,
+    DraftDetailResponse,
+    DraftPageResponse,
+    DraftStatus,
+    DraftSummaryResponse,
+    ExecutionLocation,
+    ModelConnectionResponse,
+    RedactionProfileResponse,
+    SettingsResponse,
+    SettingsMutationResponse,
+    SettingsCommandResponse,
+    ConnectionCommandResponse,
+    LimitCommandResponse,
+    DraftCommandResponse,
+    AiCommandReceiptResponse,
+)
 
 
 class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class DraftConflictState(Contract):
+    id: UUID
+    status: DraftStatus
+    version: StrictInt = Field(ge=1)
+
+
+class AiConflictDetail(Contract):
+    code: str
+    message: str
+    current: (
+        SettingsMutationResponse
+        | ModelConnectionResponse
+        | ActionLimitResponse
+        | DraftSummaryResponse
+        | DraftConflictState
+        | None
+    ) = None
+    revision: StrictInt | None = None
+
+
+class AiConflictResponse(Contract):
+    detail: AiConflictDetail
+
+
 class SettingsInput(Contract):
+    expectedRevision: StrictInt = Field(ge=1)
     killSwitch: StrictBool | None = None
     builtInEnabled: StrictBool | None = None
     defaultConnectionId: UUID | None = None
-    idempotencyKey: UUID | None = None
+    idempotencyKey: UUID
 
 
 class ConnectionInput(Contract):
+    expectedRevision: StrictInt = Field(ge=0, le=0)
+    idempotencyKey: UUID
     label: str = Field(min_length=1, max_length=120)
     adapterId: str = Field(min_length=1, max_length=80)
     adapterVersion: str = Field(min_length=1, max_length=80)
     modelIdentifier: str = Field(min_length=1, max_length=240)
-    executionLocation: str
+    executionLocation: ExecutionLocation
     enabled: StrictBool = True
     modelArtifactDigest: str | None = Field(None, max_length=256)
     quantization: str | None = Field(None, max_length=128)
@@ -48,6 +94,7 @@ class ConnectionInput(Contract):
 
 
 class ConnectionPatch(Contract):
+    idempotencyKey: UUID
     expectedRevision: StrictInt = Field(ge=1)
     label: str | None = Field(None, min_length=1, max_length=120)
     enabled: StrictBool | None = None
@@ -58,6 +105,7 @@ class ConnectionPatch(Contract):
 
 
 class DisclosureInput(Contract):
+    idempotencyKey: UUID
     expectedRevision: StrictInt = Field(ge=1)
     disclosureVersion: str = Field(min_length=1, max_length=80)
     dataClasses: list[str] = Field(max_length=40)
@@ -68,6 +116,8 @@ class CredentialInput(Contract):
 
 
 class LimitInput(Contract):
+    expectedRevision: StrictInt = Field(ge=0)
+    idempotencyKey: UUID
     enabled: StrictBool
     connectionId: UUID | None = None
     maxRunsPerUtcDay: StrictInt = Field(gt=0)
@@ -77,12 +127,14 @@ class LimitInput(Contract):
 
 
 class DraftEditInput(Contract):
+    idempotencyKey: UUID
     version: StrictInt = Field(ge=1)
     draftPayload: dict[str, object]
     operatorNote: str | None = Field(None, max_length=1000)
 
 
 class DraftDecisionInput(Contract):
+    idempotencyKey: UUID
     version: StrictInt = Field(ge=1)
     operatorNote: str | None = Field(None, max_length=1000)
 
@@ -93,7 +145,11 @@ def build_router(
     drafts_service: AiDraftReviewService,
     runtime: WorkspaceRuntime,
 ) -> APIRouter:
-    router = APIRouter(prefix="/api/ai", tags=["ai-governance"])
+    router = APIRouter(
+        prefix="/api/ai",
+        tags=["ai-governance"],
+        responses={409: {"model": AiConflictResponse}},
+    )
 
     def ready(write=False):
         if not runtime.ready or runtime.error:
@@ -107,22 +163,26 @@ def build_router(
         except AiNotFoundError as error:
             raise domain_problem(error, status_code=404) from error
         except AiConflictError as error:
-            raise domain_problem(
-                error,
-                status_code=409,
-                code=str(error) if str(error).startswith("ai_") else error.code,
+            raise api_problem(
+                409,
+                str(error) if str(error).startswith("ai_") else error.code,
+                str(error),
+                current=getattr(error, "current", None),
+                revision=getattr(error, "revision", None),
             ) from error
         except AiValidationError as error:
             raise domain_problem(error, status_code=422) from error
         except AiGovernanceError as error:
             raise domain_problem(error, status_code=400) from error
 
-    @router.get("/settings", operation_id="getAiSettings")
+    @router.get("/settings", response_model=SettingsResponse, operation_id="getAiSettings")
     def settings():
         ready()
         return invoke(configuration.settings)
 
-    @router.put("/settings", operation_id="updateAiSettings")
+    @router.put(
+        "/settings", response_model=SettingsCommandResponse, operation_id="updateAiSettings"
+    )
     def update_settings(data: SettingsInput):
         ready(True)
         values = {"kill_switch": data.killSwitch, "built_in_enabled": data.builtInEnabled}
@@ -133,17 +193,25 @@ def build_router(
         return invoke(
             lambda: configuration.update_settings(
                 **values,
-                idempotency_key=None if data.idempotencyKey is None else str(data.idempotencyKey),
+                idempotency_key=str(data.idempotencyKey),
+                expected_revision=data.expectedRevision,
             )
         )
 
-    @router.get("/connections", operation_id="listAiConnections")
+    @router.get(
+        "/connections",
+        response_model=list[ModelConnectionResponse],
+        operation_id="listAiConnections",
+    )
     def connections():
         ready()
         return invoke(configuration.connections)
 
     @router.post(
-        "/connections", status_code=status.HTTP_201_CREATED, operation_id="createAiConnection"
+        "/connections",
+        status_code=status.HTTP_201_CREATED,
+        response_model=ConnectionCommandResponse,
+        operation_id="createAiConnection",
     )
     def create_connection(data: ConnectionInput):
         ready(True)
@@ -160,14 +228,22 @@ def build_router(
                     "quantization": data.quantization,
                     "runtime_id": data.runtimeId,
                     "runtime_version": data.runtimeVersion,
-                }
+                },
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
-    @router.patch("/connections/{connection_id}", operation_id="updateAiConnection")
+    @router.patch(
+        "/connections/{connection_id}",
+        response_model=ConnectionCommandResponse,
+        operation_id="updateAiConnection",
+    )
     def patch_connection(connection_id: UUID, data: ConnectionPatch):
         ready(True)
-        payload = data.model_dump(exclude={"expectedRevision"}, exclude_unset=True)
+        payload = data.model_dump(
+            exclude={"expectedRevision", "idempotencyKey"}, exclude_unset=True
+        )
         names = {
             "modelArtifactDigest": "model_artifact_digest",
             "runtimeId": "runtime_id",
@@ -177,17 +253,23 @@ def build_router(
             lambda: configuration.update_connection(
                 str(connection_id),
                 expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
                 data={names.get(key, key): value for key, value in payload.items()},
             )
         )
 
-    @router.put("/connections/{connection_id}/disclosure", operation_id="recordAiDisclosure")
+    @router.put(
+        "/connections/{connection_id}/disclosure",
+        response_model=ConnectionCommandResponse,
+        operation_id="recordAiDisclosure",
+    )
     def disclosure(connection_id: UUID, data: DisclosureInput):
         ready(True)
         return invoke(
             lambda: configuration.set_disclosure(
                 str(connection_id),
                 expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
                 disclosure_version=data.disclosureVersion,
                 data_classes=data.dataClasses,
             )
@@ -209,17 +291,27 @@ def build_router(
         ready(True)
         invoke(lambda: configuration.delete_credential(str(connection_id)))
 
-    @router.post("/connections/{connection_id}/test", operation_id="testAiConnection")
+    @router.post(
+        "/connections/{connection_id}/test",
+        response_model=ConnectionTestResponse,
+        operation_id="testAiConnection",
+    )
     def test_connection(connection_id: UUID):
         ready()
         return invoke(lambda: configuration.test_connection(str(connection_id)))
 
-    @router.get("/limits", operation_id="listAiActionLimits")
+    @router.get(
+        "/limits", response_model=list[ActionLimitResponse], operation_id="listAiActionLimits"
+    )
     def limits():
         ready()
         return invoke(configuration.limits)
 
-    @router.put("/limits/{action_type}", operation_id="updateAiActionLimit")
+    @router.put(
+        "/limits/{action_type}",
+        response_model=LimitCommandResponse,
+        operation_id="updateAiActionLimit",
+    )
     def limit(action_type: str, data: LimitInput):
         ready(True)
         return invoke(
@@ -233,10 +325,16 @@ def build_router(
                     "max_completion_tokens": data.maxCompletionTokens,
                     "allowed_models": data.allowedModels,
                 },
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
-    @router.get("/redaction-profiles", operation_id="listAiRedactionProfiles")
+    @router.get(
+        "/redaction-profiles",
+        response_model=list[RedactionProfileResponse],
+        operation_id="listAiRedactionProfiles",
+    )
     def profiles():
         ready()
         return [
@@ -253,9 +351,9 @@ def build_router(
             for item in generation.profiles.all()
         ]
 
-    @router.get("/drafts", operation_id="listAiDrafts")
+    @router.get("/drafts", response_model=DraftPageResponse, operation_id="listAiDrafts")
     def drafts(
-        status: str | None = None,
+        status: DraftStatus | None = None,
         owningModule: str | None = None,
         entityKind: str | None = None,
         actionType: str | None = None,
@@ -284,39 +382,74 @@ def build_router(
             )
         )
 
-    @router.get("/drafts/{draft_id}", operation_id="getAiDraft")
+    @router.get("/drafts/{draft_id}", response_model=DraftDetailResponse, operation_id="getAiDraft")
     def draft(draft_id: UUID):
         ready()
         return invoke(lambda: drafts_service.draft_detail(str(draft_id)))
 
-    @router.patch("/drafts/{draft_id}", operation_id="editAiDraft")
+    @router.patch(
+        "/drafts/{draft_id}", response_model=DraftCommandResponse, operation_id="editAiDraft"
+    )
     def edit(draft_id: UUID, data: DraftEditInput):
         ready(True)
         return invoke(
             lambda: drafts_service.edit_draft(
                 str(draft_id),
                 version=data.version,
+                idempotency_key=str(data.idempotencyKey),
                 payload=data.draftPayload,
                 operator_note=data.operatorNote,
             )
         )
 
-    @router.post("/drafts/{draft_id}/approve", operation_id="approveAiDraft")
+    @router.post(
+        "/drafts/{draft_id}/approve",
+        response_model=DraftApprovalResponse,
+        operation_id="approveAiDraft",
+    )
     def approve(draft_id: UUID, data: DraftDecisionInput):
         ready(True)
         return invoke(
             lambda: drafts_service.approve_draft(
-                str(draft_id), version=data.version, operator_note=data.operatorNote
+                str(draft_id),
+                version=data.version,
+                idempotency_key=str(data.idempotencyKey),
+                operator_note=data.operatorNote,
             )
         )
 
-    @router.post("/drafts/{draft_id}/dismiss", operation_id="dismissAiDraft")
+    @router.post(
+        "/drafts/{draft_id}/dismiss",
+        response_model=DraftCommandResponse,
+        operation_id="dismissAiDraft",
+    )
     def dismiss(draft_id: UUID, data: DraftDecisionInput):
         ready(True)
         return invoke(
             lambda: drafts_service.dismiss_draft(
-                str(draft_id), version=data.version, operator_note=data.operatorNote
+                str(draft_id),
+                version=data.version,
+                idempotency_key=str(data.idempotencyKey),
+                operator_note=data.operatorNote,
             )
         )
+
+    @router.get(
+        "/command-operations/by-key/{key}",
+        response_model=AiCommandReceiptResponse,
+        operation_id="getAiCommandByKey",
+    )
+    def command_by_key(key: UUID):
+        ready()
+        return invoke(lambda: configuration.command_result(idempotency_key=str(key)))
+
+    @router.get(
+        "/command-operations/{operation_id}",
+        response_model=AiCommandReceiptResponse,
+        operation_id="getAiCommandOperation",
+    )
+    def command_by_id(operation_id: UUID):
+        ready()
+        return invoke(lambda: configuration.command_result(operation_id=str(operation_id)))
 
     return router

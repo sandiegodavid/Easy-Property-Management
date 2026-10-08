@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from dataclasses import asdict
 from pathlib import Path
 
 from sqlalchemy import select
@@ -10,12 +11,14 @@ from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.files.application.ports import FileAuditChange, FileLink
+from app.modules.files.application.commands import FileCommandReceipt
 from app.modules.files.domain.models import StoredFile
 from app.modules.files.infrastructure.sqlalchemy_models import (
     FileContentLocationModel,
     FileLinkModel,
     FilePublicationCleanupAttentionModel,
     FileRecordModel,
+    FileCommandOperationModel,
 )
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
@@ -24,6 +27,28 @@ class SQLiteFileUnitOfWork:
     def __init__(self, database: Path, recorder: AuditRecorder) -> None:
         self.engine = create_sqlite_engine(database)
         self.recorder = recorder
+
+    def command(self, operation):
+        with immediate_transaction(self.engine) as connection:
+            return operation(SQLiteFileCommandTransaction(self, connection))
+
+    def command_receipt(self, *, operation_id=None, key=None):
+        column = (
+            FileCommandOperationModel.id
+            if operation_id is not None
+            else FileCommandOperationModel.idempotency_key
+        )
+        with self.engine.connect() as connection:
+            row = (
+                connection.execute(
+                    select(FileCommandOperationModel.__table__).where(
+                        column == (operation_id or key)
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            return FileCommandReceipt(**row) if row else None
 
     def write(
         self,
@@ -127,12 +152,14 @@ class SQLiteFileUnitOfWork:
                 links=tuple(
                     {
                         "id": link.id,
+                        "fileId": link.file_id,
                         "entityType": link.entity_type,
                         "entityId": link.entity_id,
                         "purpose": link.purpose,
                         "createdAt": link.created_at,
                         "archivedAt": link.archived_at,
                         "archiveReason": link.archive_reason,
+                        "revision": 1 if link.archived_at is None else 2,
                     }
                     for link in links
                 ),
@@ -367,3 +394,71 @@ class SQLiteFileUnitOfWork:
                     )
                 ).mappings()
             ]
+
+
+class SQLiteFileCommandTransaction:
+    """Persistence and policy facts on the command's single immediate transaction."""
+
+    def __init__(self, owner, connection):
+        self.owner = owner
+        self.connection = connection
+
+    def operation_by_key(self, key):
+        row = (
+            self.connection.execute(
+                select(FileCommandOperationModel.__table__).where(
+                    FileCommandOperationModel.idempotency_key == key
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return FileCommandReceipt(**row) if row else None
+
+    def write_file(self, item, link, changes, validate_link):
+        validate_link(self.connection, link)
+        self.owner.write_in_transaction(self.connection, item, link, changes)
+
+    def get_link(self, link_id):
+        row = (
+            self.connection.execute(
+                select(FileLinkModel.__table__).where(FileLinkModel.id == link_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return FileLink(**row) if row else None
+
+    def archive_link(self, link, change, validate_link):
+        validate_link(self.connection, link)
+        self.connection.execute(
+            FileLinkModel.__table__.update()
+            .where(FileLinkModel.id == link.id)
+            .values(archived_at=link.archived_at, archive_reason=link.archive_reason)
+        )
+        self.owner.recorder.record_change(
+            self.connection.connection.driver_connection,
+            entity_type=change.entity_type,
+            entity_id=change.entity_id,
+            action=change.action,
+            before=change.before,
+            after=change.after,
+            reason=change.reason,
+            correlation_id=change.correlation_id,
+            actor_kind=change.actor_kind,
+        )
+
+    def record_operation(self, receipt):
+        self.connection.execute(
+            FileCommandOperationModel.__table__.insert().values(**asdict(receipt))
+        )
+        self.owner.recorder.record_change(
+            self.connection.connection.driver_connection,
+            entity_type="file_command_operation",
+            entity_id=receipt.id,
+            action="recorded",
+            before=None,
+            after=asdict(receipt),
+            reason="file_command_recorded",
+            correlation_id=receipt.correlation_id,
+        )

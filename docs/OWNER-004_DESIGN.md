@@ -153,6 +153,7 @@ All IDs are UUIDs. Timestamps are timezone-aware UTC text. Dates are ISO local d
 | `replaces_concern_id` | Optional unique predecessor; cannot self-reference or branch. |
 | Vacancy snapshots | Required exactly for vacancy concerns: occupancy status, availability status, and optional available-on date. |
 | `idempotency_key`, `request_fingerprint` | Required immutable create-retry identity; workspace-unique key and canonical SHA-256 fingerprint. |
+| `revision` | Shared concern revision, initially 1; effective patches, lifecycle transitions and additional follow-ups advance it once. |
 
 Database checks enforce closed vocabularies, field pairing, type-required context, terminal timestamp/narrative pairs, nonblank bounds where SQLite can enforce them, and non-self replacement. Application policy enforces cross-record ownership, property/space/lease/tenant consistency, historical eligibility, future-time limits, duplicate handling, and lifecycle transitions.
 
@@ -168,6 +169,34 @@ Coordinated follow-up creation stores an append-only operation record containing
 - correlation ID and creation timestamp.
 
 This record exists only to make an uncertain cross-module response safely replayable. It is not a generic workflow engine or a second task link. TASK-001's `related_entity_type`, `related_entity_id`, and durable label remain the relationship authority.
+
+### `owner_concern_command_operations` — UI-001 Slice 27
+
+Every accepted create, patch, lifecycle or additional-follow-up command records an
+append-only receipt in the same immediate transaction as its concern, Task and
+audit effects. Fields are `id`, `concern_id`, `action`, globally unique
+`idempotency_key`, canonical `request_json`, SHA-256 `request_fingerprint`,
+`expected_revision`, `resulting_revision`, canonical `result_json`,
+`correlation_id` and `created_at_utc`. Update/delete triggers enforce immutability.
+The action is `create`, `patch`, `in_progress`, `open`, `resolved`, `dismissed` or
+`follow_up`. Creation requires revision zero; all other commands require a
+positive exact integer revision. Keys are canonical UUIDs.
+
+Same-key replay checks the complete canonical request before lifecycle or
+revision validation and returns the recorded original response. Changed reuse
+returns `idempotency_conflict`; stale revisions return
+`owner_concern_revision_conflict` with the current bounded concern detail.
+Responses include `revision` and `operationId`. Coordinated Task creation also
+retains its complete original `followUpTask` result; later Task changes never
+rewrite it. Read-only recovery by operation ID or global key performs an indexed
+receipt lookup without reconstructing current detail.
+
+An accepted semantic patch no-op records a receipt and its `recorded` audit but
+does not change the concern timestamp/revision or emit a business mutation audit.
+An additional follow-up advances the concern revision once. The follow-up Task,
+follow-up linkage operation, command result and all correlated events commit or
+roll back together. Communications links continue using COM-001's own shared
+revision and immutable command contracts; they do not mutate the concern revision.
 
 ## Workflows and invariants
 
@@ -192,7 +221,7 @@ Likely duplicates are active concerns with the same owner, property, type, and o
 
 ### Patch an active concern
 
-While a concern is open or in progress, the operator may patch summary, description, and priority. An omitted field remains unchanged. An empty or semantically identical patch is a no-op without a timestamp or audit event.
+While a concern is open or in progress, the operator may patch summary, description, and priority. An omitted field remains unchanged. An empty or semantically identical patch preserves the timestamp and business audit history while retaining its command receipt.
 
 Owner, property, space, lease, tenant, type, and raised time are immutable. A wrong target is dismissed and replaced explicitly so communications and tasks are not silently moved to a different subject.
 
@@ -247,8 +276,18 @@ All routes require a ready workspace. Mutations require the writer lock. Request
 | `POST` | `/api/owner-concerns/{concernId}/dismiss` | Dismiss with confirmation and reason. |
 | `POST` | `/api/owner-concerns/{concernId}/reopen` | Reopen a terminal concern with confirmation and reason. |
 | `POST` | `/api/owner-concerns/{concernId}/follow-ups` | Atomically create a related TASK-001 action. |
+| `GET` | `/api/owner-concerns/operations/{operationId}` | Recover the immutable original command result. |
+| `GET` | `/api/owner-concerns/operations/by-key/{key}` | Recover the original result by global command key. |
 
 There is no destructive delete endpoint.
+
+Every mutation request carries `expectedRevision` and `idempotencyKey` in its
+JSON body. Create requires revision zero; edits, lifecycle commands and additional
+follow-ups require a positive exact integer. Mutation and recovery responses
+require `revision` and `operationId`; coordinated creation also returns the
+typed original `followUpTask`. Stale conflicts include `currentRevision` and
+the complete bounded current concern representation. Recovery routes are
+read-only and require workspace readiness but not writer-lock ownership.
 
 List filters include owner, property, space, lease, tenant, concern type, priority, status, raised local-date range, active-task state, and linked-communication presence. Default ordering is urgent/high priority first, then raised time descending and ID descending. Cursor pagination defaults to 100 and allows at most 500.
 
@@ -264,7 +303,7 @@ Reads must be set-based. One concern page query may be followed by bounded batch
 
 ## Audit, privacy, and portability
 
-Audit entity types are `owner_concern` and `owner_concern_follow_up_operation`; coordinated creation also emits the TASK-001 `task` event. Creation, patches, transitions, replacement lineage, and follow-up creation are fail-closed on required events in the same transaction and correlation.
+Audit entity types are `owner_concern`, `owner_concern_follow_up_operation` and `owner_concern_command_operation`; coordinated creation also emits the TASK-001 `task` event. Creation, patches, transitions, replacement lineage, follow-up creation and command receipts are fail-closed on required events in the same transaction and correlation.
 
 General activity may show concern type, priority, status, property context, and non-sensitive lifecycle labels. It must redact description, owner and tenant identifiers and display snapshots, lease and communication identifiers, resolution/dismissal/reopening narratives, historical-selection and duplicate-confirmation reasons, idempotency keys, and task notes. Contextual owner-management history may display the permitted details to the local operator. Communication bodies remain governed by COM-001 and are never copied into owner-concern audit snapshots.
 

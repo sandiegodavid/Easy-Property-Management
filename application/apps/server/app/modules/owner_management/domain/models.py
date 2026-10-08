@@ -205,6 +205,7 @@ class Concern:
     observed_available_on: str | None
     idempotency_key: str
     request_fingerprint: str
+    revision: int = 1
 
     def to_dict(self) -> dict[str, object]:
         values = asdict(self)

@@ -2,21 +2,32 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Mapping, TypeVar
 from uuid import uuid4
 
 from sqlalchemy import and_, func, select
+from app.modules.ai_governance.application.commands import (
+    record_command,
+    replay_command,
+    require_revision,
+)
+from app.modules.ai_governance.domain.models import (
+    AiConflictError,
+    AiNotFoundError,
+    AiValidationError,
+)
 
 from app.modules.ai_governance.infrastructure.sqlalchemy_models import (
     AiActionLimitModel,
+    AiCommandOperationModel,
     AiDraftModel,
     AiModelConnectionModel,
     AiReviewDecisionModel,
     AiRunModel,
     AiSettingsModel,
-    AiSettingsOperationModel,
 )
 from app.modules.audit.application.recorder import AuditRecorder
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
@@ -49,6 +60,18 @@ class SQLiteAiGovernanceUnitOfWork:
                 c.execute(AiSettingsModel.__table__.select().where(AiSettingsModel.singleton == 1))
                 .mappings()
                 .one()
+            )
+        )
+
+    def command_row(self, *, operation_id=None, key=None):
+        predicate = (
+            AiCommandOperationModel.id == operation_id
+            if operation_id is not None
+            else AiCommandOperationModel.idempotency_key == key
+        )
+        return self.read(
+            lambda c: _mapping(
+                c.execute(AiCommandOperationModel.__table__.select().where(predicate))
             )
         )
 
@@ -118,6 +141,23 @@ class SQLiteAiGovernanceUnitOfWork:
                     AiRunModel.source_revision,
                     AiRunModel.source_fingerprint,
                     AiRunModel.governed_input_json,
+                    AiRunModel.execution_kind,
+                    AiRunModel.transport_provider,
+                    AiRunModel.adapter_version,
+                    AiRunModel.model_identifier,
+                    AiRunModel.execution_location,
+                    AiRunModel.model_artifact_digest,
+                    AiRunModel.quantization,
+                    AiRunModel.runtime_id,
+                    AiRunModel.runtime_version,
+                    AiRunModel.prompt_template_id,
+                    AiRunModel.prompt_template_version,
+                    AiRunModel.output_schema_version,
+                    AiRunModel.redaction_profile,
+                    AiRunModel.redaction_profile_version,
+                    AiRunModel.prompt_tokens,
+                    AiRunModel.completion_tokens,
+                    AiRunModel.correlation_id,
                     AiRunModel.status.label("run_status"),
                     AiRunModel.id.label("run_id_value"),
                 )
@@ -135,7 +175,11 @@ class SQLiteAiGovernanceUnitOfWork:
                 for row in c.execute(
                     AiReviewDecisionModel.__table__.select()
                     .where(AiReviewDecisionModel.draft_id == draft_id)
-                    .order_by(AiReviewDecisionModel.decided_at, AiReviewDecisionModel.id)
+                    .order_by(
+                        AiReviewDecisionModel.draft_version_before,
+                        AiReviewDecisionModel.decided_at,
+                        AiReviewDecisionModel.id,
+                    )
                 ).mappings()
             ]
         )
@@ -146,6 +190,7 @@ class SQLiteAiGovernanceUnitOfWork:
                 select(
                     *AiDraftModel.__table__.c,
                     AiRunModel.action_type,
+                    AiRunModel.owning_module,
                     AiRunModel.source_entity_type,
                     AiRunModel.source_entity_id,
                     AiRunModel.source_revision,
@@ -190,8 +235,21 @@ class AiGovernanceTransaction:
                 "built_in_enabled": False,
                 "default_connection_id": None,
                 "updated_at": stamp,
+                "revision": 1,
             }
         return dict(row)
+
+    def command_by_key(self, key):
+        return _mapping(
+            self.connection.execute(
+                AiCommandOperationModel.__table__.select().where(
+                    AiCommandOperationModel.idempotency_key == key
+                )
+            )
+        )
+
+    def insert_command(self, values):
+        self.connection.execute(AiCommandOperationModel.__table__.insert().values(**values))
 
     def update_settings(self, values: dict[str, Any]) -> None:
         self.connection.execute(
@@ -199,21 +257,6 @@ class AiGovernanceTransaction:
             .where(AiSettingsModel.singleton == 1)
             .values(**values)
         )
-
-    def settings_operation(self, idempotency_key: str) -> dict[str, Any] | None:
-        row = (
-            self.connection.execute(
-                AiSettingsOperationModel.__table__.select().where(
-                    AiSettingsOperationModel.idempotency_key == idempotency_key
-                )
-            )
-            .mappings()
-            .first()
-        )
-        return dict(row) if row else None
-
-    def insert_settings_operation(self, values: dict[str, Any]) -> None:
-        self.connection.execute(AiSettingsOperationModel.__table__.insert().values(**values))
 
     def model_connection(self, connection_id: str) -> dict[str, Any] | None:
         row = (
@@ -370,7 +413,11 @@ class AiGovernanceTransaction:
             for row in self.connection.execute(
                 AiReviewDecisionModel.__table__.select()
                 .where(AiReviewDecisionModel.draft_id == draft_id)
-                .order_by(AiReviewDecisionModel.decided_at, AiReviewDecisionModel.id)
+                .order_by(
+                    AiReviewDecisionModel.draft_version_before,
+                    AiReviewDecisionModel.decided_at,
+                    AiReviewDecisionModel.id,
+                )
             ).mappings()
         ]
 
@@ -388,6 +435,7 @@ class AiGovernanceTransaction:
         correlation_id: str,
         actor: str,
         reason: str,
+        event_id: str | None = None,
     ) -> None:
         self.recorder.record_change(
             self.connection.connection.driver_connection,
@@ -399,6 +447,7 @@ class AiGovernanceTransaction:
             actor_kind=actor,
             reason=reason,
             correlation_id=correlation_id,
+            event_id=event_id,
         )
 
     def review_operations(self) -> "SQLiteAiReviewOperations":
@@ -412,15 +461,23 @@ class AiGovernanceTransaction:
         result_entity_type: str | None,
         result_entity_id: str | None,
         operator_note: str | None,
+        command,
     ) -> dict[str, Any]:
         """Low-level atomic terminal write; policy remains in the service."""
+        if (
+            command.action != "approved"
+            or command.target_id != draft_id
+            or command.expected_revision != expected_version
+            or json.loads(command.request_json)["payload"] != {"operatorNote": operator_note}
+        ):
+            raise AiValidationError("Approval command does not match its completion.")
         draft = self.draft(draft_id)
         if (
             draft is None
             or draft["status"] not in {"proposed", "edited"}
             or draft["version"] != expected_version
         ):
-            raise ValueError("AI draft version changed before approval completion.")
+            raise AiConflictError("ai_draft_version_conflict")
         stamp = datetime.now(UTC).isoformat()
         self.update_draft(
             draft_id, {"status": "approved", "terminal_at": stamp, "updated_at": stamp}
@@ -448,6 +505,7 @@ class AiGovernanceTransaction:
             after={**draft, "status": "approved", "terminal_at": stamp, "updated_at": stamp},
             reason="ai_approved",
             correlation_id=run["correlation_id"],
+            event_id=command.operation_id,
         )
         self.recorder.record_change(
             self.connection.connection.driver_connection,
@@ -459,7 +517,19 @@ class AiGovernanceTransaction:
             reason="ai_approved",
             correlation_id=run["correlation_id"],
         )
-        return {**draft, "status": "approved", "terminal_at": stamp, "updated_at": stamp}
+        return record_command(
+            self,
+            command,
+            {
+                "status": "approved",
+                "resultEntityId": result_entity_id,
+                "resultEntityType": result_entity_type,
+                "draftId": draft_id,
+                "version": expected_version,
+                "updatedAt": stamp,
+            },
+            stamp,
+        )
 
     def interrupted_runs(self) -> list[dict[str, Any]]:
         return [
@@ -524,6 +594,22 @@ class SQLiteAiReviewOperations:
 
     def draft(self, draft_id: str) -> dict[str, Any] | None:
         return self._transaction.draft(draft_id)
+
+    def approval_replay(self, context):
+        prior = replay_command(self._transaction, context.command)
+        if prior is not None:
+            return prior
+        draft = self.draft(context.draft_id)
+        if draft is None:
+            raise AiNotFoundError("AI draft was not found.")
+        require_revision(
+            context.command,
+            draft["version"],
+            {"id": draft["id"], "version": draft["version"], "status": draft["status"]},
+        )
+        if draft["status"] not in {"proposed", "edited"}:
+            raise AiConflictError("ai_draft_terminal")
+        return None
 
     def complete_approval(self, **kwargs: Any) -> dict[str, Any]:
         return self._transaction.complete_approval(**kwargs)

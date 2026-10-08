@@ -1,6 +1,7 @@
 """Exact current LEASE-001 schema validation."""
 
 from sqlalchemy import inspect
+from app.modules.portfolio.application.source_timeline import SourceTimelineOperationReader
 
 from app.platform.migration_errors import MigrationSchemaError
 
@@ -20,6 +21,7 @@ EXPECTED = {
             "notes",
             "created_at",
             "updated_at",
+            "lease_revision",
         },
         "nullable": {
             "contract_ends_on",
@@ -28,7 +30,7 @@ EXPECTED = {
             "end_reason",
             "notes",
         },
-        "integer": set(),
+        "integer": {"lease_revision"},
         "indexes": {
             "leases_space_status_dates": (
                 ("space_id", "status", "contract_starts_on", "contract_ends_on"),
@@ -37,6 +39,7 @@ EXPECTED = {
         },
         "foreign_keys": {(("space_id",), "spaces", ("id",))},
         "checks": {
+            "typeof(lease_revision)='integer'andlease_revision>=1",
             "lease_kindin('residential','commercial')",
             "statusin('draft','executed','ended','terminated','void')",
             "end_reasonisnullorend_reasonin('contract_completed','early_termination','mutual_termination','other')",
@@ -217,7 +220,7 @@ EXPECTED = {
 }
 
 
-def validate_lease_schema(connection) -> None:
+def validate_lease_schema(connection, source_operations: SourceTimelineOperationReader) -> None:
     inspector = inspect(connection)
     for table, expected in EXPECTED.items():
         if not inspector.has_table(table):
@@ -260,6 +263,9 @@ def validate_lease_schema(connection) -> None:
         }
         if checks != expected["checks"]:
             raise MigrationSchemaError(f"{table} constraints are incompatible with LEASE-001.")
+    from app.modules.leases.infrastructure.command_validation import validate_lease_commands
+
+    validate_lease_commands(connection, source_operations)
 
 
 def _normalise(value: str) -> str:

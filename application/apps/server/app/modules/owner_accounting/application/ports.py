@@ -7,6 +7,8 @@ Result = TypeVar("Result")
 
 
 class OwnerRentReportTransaction(Protocol):
+    def require_ledger_revision(self, lease_id: str, expected_revision: int) -> None: ...
+    def ledger_revision(self, lease_id: str) -> int: ...
     def report(self, report_id: str) -> OwnerRentReport | None: ...
     def report_by_operation_key(self, key: str) -> dict[str, object] | None: ...
     def insert_report(self, item: OwnerRentReport) -> None: ...
@@ -35,6 +37,7 @@ class OwnerRentReportTransaction(Protocol):
         self,
         command: Any,
         *,
+        expected_revision: int,
         now: Callable[[], Any],
         correlation_id: str,
         audit_reason: str,

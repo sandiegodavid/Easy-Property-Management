@@ -5,11 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
+from app.modules.inspections.application.commands import InspectionCommandReceipt
+from app.modules.inspections.infrastructure.command_models import InspectionCommandOperationModel
 from app.modules.files.infrastructure.sqlalchemy_models import (
     FileContentLocationModel,
     FileLinkModel,
@@ -59,14 +61,35 @@ class SQLiteInspectionUnitOfWork:
                 "The inspection changed concurrently or violates a protected relationship."
             ) from error
 
+    def command_lookup(self, *, operation_id=None, idempotency_key=None):
+        model = InspectionCommandOperationModel
+        with self.engine.connect() as connection:
+            row = (
+                connection.execute(
+                    select(model).where(
+                        model.id == operation_id
+                        if operation_id is not None
+                        else model.idempotency_key == idempotency_key
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            return None if row is None else InspectionCommandReceipt(**row)
+
+    def command_revision(self, kind, scope_id):
+        with self.engine.connect() as connection:
+            return _revision(connection, kind, scope_id)
+
     def report_view(self, report_id: str):
         with Session(self.engine) as session:
             return _report_view(session, report_id)
 
     def report_views(self, lease_id: str):
         with Session(self.engine) as session:
+            revision = _revision(session, "lease", lease_id)
             return [
-                _report_view(session, item.id)
+                _report_view(session, item.id, revision=revision)
                 for item in session.execute(
                     select(ConditionReportModel)
                     .where(ConditionReportModel.lease_id == lease_id)
@@ -93,13 +116,22 @@ class SQLiteInspectionUnitOfWork:
 
     def template_views(self):
         with Session(self.engine) as session:
+            revision = (
+                select(func.coalesce(func.max(InspectionCommandOperationModel.revision), 0))
+                .where(
+                    InspectionCommandOperationModel.template_id
+                    == ConditionChecklistTemplateModel.id
+                )
+                .correlate(ConditionChecklistTemplateModel)
+                .scalar_subquery()
+            )
             return [
-                _template_view(session, item.id)
-                for item in session.execute(
-                    select(ConditionChecklistTemplateModel)
+                _template_view(session, item.id, revision=current_revision)
+                for item, current_revision in session.execute(
+                    select(ConditionChecklistTemplateModel, revision)
                     .where(ConditionChecklistTemplateModel.archived_at.is_(None))
                     .order_by(ConditionChecklistTemplateModel.display_name)
-                ).scalars()
+                )
             ]
 
     def template_view(self, template_id: str):
@@ -114,6 +146,28 @@ class _Transaction:
 
     def file_transaction(self):
         return self.connection
+
+    def command_by_key(self, key):
+        row = (
+            self.connection.execute(
+                select(InspectionCommandOperationModel).where(
+                    InspectionCommandOperationModel.idempotency_key == key
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return None if row is None else InspectionCommandReceipt(**row)
+
+    def command_revision(self, kind, scope_id):
+        return _revision(self.connection, kind, scope_id)
+
+    def insert_command(self, receipt):
+        self.insert(InspectionCommandOperationModel, receipt)
+
+    def template_view(self, item_id):
+        with Session(bind=self.connection) as session:
+            return _template_view(session, item_id)
 
     def lease(self, item_id):
         return _one(self.connection, LeaseModel, item_id)
@@ -335,6 +389,14 @@ def _one(connection, model, item_id):
     return connection.execute(select(model).where(model.id == item_id)).mappings().first()
 
 
+def _revision(connection, kind, scope_id):
+    model = InspectionCommandOperationModel
+    column = model.lease_id if kind == "lease" else model.template_id
+    return connection.execute(
+        select(func.coalesce(func.max(model.revision), 0)).where(column == scope_id)
+    ).scalar_one()
+
+
 def _domain(connection, model, domain, item_id):
     row = _one(connection, model, item_id)
     return None if row is None else domain(**dict(row))
@@ -347,7 +409,7 @@ def _many(connection, model, domain, predicate, ordering):
     ]
 
 
-def _report_view(session: Session, report_id: str):
+def _report_view(session: Session, report_id: str, *, revision=None):
     row = session.get(ConditionReportModel, report_id)
     if row is None:
         return None
@@ -429,10 +491,11 @@ def _report_view(session: Session, report_id: str):
     report["acknowledgmentComplete"] = bool(acknowledgments) and all(
         item["status"] != "pending" for item in acknowledgments
     )
+    report["revision"] = _revision(session, "lease", row.lease_id) if revision is None else revision
     return report
 
 
-def _template_view(session: Session, template_id: str):
+def _template_view(session: Session, template_id: str, *, revision=None):
     row = session.get(ConditionChecklistTemplateModel, template_id)
     if row is None:
         return None
@@ -452,4 +515,7 @@ def _template_view(session: Session, template_id: str):
             .order_by(ConditionChecklistTemplateItemModel.sort_order)
         ).scalars()
     ]
+    result["revision"] = (
+        _revision(session, "template", template_id) if revision is None else revision
+    )
     return result

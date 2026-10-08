@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.files.application.ports import FileLinkReader, FileLinkWithFile
 from app.modules.finance.application.expense_ports import PartyExpenseOperations
+from app.modules.finance.application.commands import FinanceScope
 from app.modules.finance.domain.expense_models import Expense, ExpenseCategory, ExpenseRefund
 from app.modules.finance.domain.models import FinanceConflictError
+from app.modules.finance.infrastructure.command_operations import SQLiteFinanceCommandTransaction
 from app.modules.finance.infrastructure.sqlalchemy_models import (
     ExpenseCategoryModel,
+    ExpenseCategoryCommandOperationModel,
     ExpenseModel,
     ExpenseRefundModel,
 )
@@ -50,7 +55,12 @@ class SQLiteExpenseUnitOfWork:
                         self.files,
                     )
                 )
-        except (IntegrityError, OperationalError) as error:
+        except (
+            IntegrityError,
+            OperationalError,
+            sqlite3.IntegrityError,
+            sqlite3.OperationalError,
+        ) as error:
             raise FinanceConflictError(
                 "The expense changed concurrently or conflicts with an existing record."
             ) from error
@@ -72,6 +82,7 @@ class SQLiteExpenseUnitOfWork:
 class _Transaction:
     def __init__(self, connection, recorder, portfolio, providers, parties, files) -> None:
         self.connection = connection
+        self.commands = SQLiteFinanceCommandTransaction(connection, recorder)
         self.recorder = recorder
         self.portfolio = portfolio
         self.providers = providers
@@ -80,6 +91,27 @@ class _Transaction:
 
     def category(self, record_id):
         return _one(self.connection, ExpenseCategoryModel, record_id, ExpenseCategory)
+
+    def category_operation(self, operation_id):
+        return self._category_operation(ExpenseCategoryCommandOperationModel.id == operation_id)
+
+    def category_operation_by_key(self, key):
+        return self._category_operation(ExpenseCategoryCommandOperationModel.idempotency_key == key)
+
+    def _category_operation(self, predicate):
+        row = (
+            self.connection.execute(
+                select(ExpenseCategoryCommandOperationModel.__table__).where(predicate)
+            )
+            .mappings()
+            .first()
+        )
+        return dict(row) if row else None
+
+    def insert_category_operation(self, values):
+        self.connection.execute(
+            ExpenseCategoryCommandOperationModel.__table__.insert().values(**values)
+        )
 
     def categories(self, include_archived):
         query = ExpenseCategoryModel.__table__.select()
@@ -191,6 +223,7 @@ class _Transaction:
                 "refunds": {},
                 "evidence": {},
                 "correction_chains": {},
+                "revisions": {},
             }
         expense_ids = [item.id for item in expenses]
         category_ids = {item.category_id for item in expenses}
@@ -225,6 +258,12 @@ class _Transaction:
         provider_parties = self.parties.party_map(self.connection, list(provider_profiles))
         return {
             "categories": categories,
+            "revisions": {
+                scope.id: revision
+                for scope, revision in self.commands.command_revisions(
+                    [FinanceScope("expense", item.id) for item in expenses]
+                ).items()
+            },
             "contexts": {
                 item.id: _expense_context_view(context)
                 for item in expenses

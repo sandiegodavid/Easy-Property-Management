@@ -303,6 +303,7 @@ class SQLiteOwnerConcernContext:
                     TaskModel.related_entity_type == "owner_concern",
                     TaskModel.related_entity_id == concern_model.id,
                     TaskModel.status.in_(("open", "in_progress")),
+                    TaskModel.deleted_at_utc.is_(None),
                 )
                 .exists()
             )
@@ -350,6 +351,7 @@ class SQLiteOwnerConcernContext:
             .where(
                 TaskModel.related_entity_type == "owner_concern",
                 TaskModel.related_entity_id.in_(concern_ids),
+                TaskModel.deleted_at_utc.is_(None),
             )
             .subquery()
         )
@@ -377,6 +379,7 @@ class SQLiteOwnerConcernContext:
                 TaskModel.related_entity_type == "owner_concern",
                 TaskModel.related_entity_id.in_(concern_ids),
                 TaskModel.status.in_(("open", "in_progress")),
+                TaskModel.deleted_at_utc.is_(None),
             )
             .group_by(TaskModel.related_entity_id)
         ).all()

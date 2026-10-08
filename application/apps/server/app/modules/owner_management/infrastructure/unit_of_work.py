@@ -8,6 +8,7 @@ from app.modules.owner_management.domain.models import Concern
 from app.modules.owner_management.infrastructure.sqlalchemy_models import (
     OwnerConcernFollowUpOperationModel,
     OwnerConcernModel,
+    OwnerConcernCommandOperationModel,
 )
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
@@ -43,27 +44,26 @@ class _Tx:
         )
         return Concern(**dict(row)) if row else None
 
-    def operation(self, key):
+    def command_operation(self, operation_id):
+        return self._command_operation(OwnerConcernCommandOperationModel.id == operation_id)
+
+    def command_operation_by_key(self, key):
+        return self._command_operation(OwnerConcernCommandOperationModel.idempotency_key == key)
+
+    def _command_operation(self, predicate):
         row = (
             self.connection.execute(
-                select(OwnerConcernModel.__table__).where(OwnerConcernModel.idempotency_key == key)
+                select(OwnerConcernCommandOperationModel.__table__).where(predicate)
             )
             .mappings()
             .first()
         )
         return dict(row) if row else None
 
-    def follow_up_operation(self, key):
-        row = (
-            self.connection.execute(
-                select(OwnerConcernFollowUpOperationModel.__table__).where(
-                    OwnerConcernFollowUpOperationModel.idempotency_key == key
-                )
-            )
-            .mappings()
-            .first()
+    def insert_command_operation(self, values):
+        self.connection.execute(
+            OwnerConcernCommandOperationModel.__table__.insert().values(**values)
         )
-        return dict(row) if row else None
 
     def insert_concern(self, item):
         self.connection.execute(OwnerConcernModel.__table__.insert().values(**item.__dict__))

@@ -12,6 +12,7 @@ class TenantProfile:
     created_at: str
     updated_at: str
     archived_at: str | None
+    revision: int = 1
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -22,4 +23,5 @@ class TenantProfile:
             "createdAt": self.created_at,
             "updatedAt": self.updated_at,
             "archivedAt": self.archived_at,
+            "revision": self.revision,
         }

@@ -3,7 +3,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, status
-from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
 
@@ -29,6 +29,11 @@ class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class CommandInput(Contract):
+    expectedRevision: StrictInt = Field(ge=0)
+    idempotencyKey: UUID
+
+
 class ReporterInput(Contract):
     role: Literal["owner", "tenant", "manager", "staff"]
     subjectKind: Literal["party", "local_operator"]
@@ -37,7 +42,7 @@ class ReporterInput(Contract):
     historicalSelectionReason: str | None = Field(None, min_length=1, max_length=1000)
 
 
-class IssueInput(Contract):
+class IssueInput(CommandInput):
     propertyId: UUID
     spaceId: UUID | None = None
     summary: str = Field(min_length=1, max_length=240)
@@ -56,12 +61,12 @@ class IssueInput(Contract):
     ]
     categoryDetail: str | None = Field(None, max_length=200)
     priority: Literal["low", "normal", "high", "urgent"] = "normal"
-    reportedAtUtc: datetime
+    reportedAtUtc: AwareDatetime
     reporter: ReporterInput
     idempotencyKey: UUID
 
 
-class IssuePatch(Contract):
+class IssuePatch(CommandInput):
     summary: str | None = Field(None, min_length=1, max_length=240)
     description: str | None = Field(None, min_length=1, max_length=10000)
     category: (
@@ -83,26 +88,26 @@ class IssuePatch(Contract):
     priority: Literal["low", "normal", "high", "urgent"] | None = None
 
 
-class Reason(Contract):
+class Reason(CommandInput):
     confirmed: StrictBool
     reason: str = Field(min_length=1, max_length=1000)
 
 
-class ReporterCorrectionInput(Contract):
+class ReporterCorrectionInput(CommandInput):
     reporter: ReporterInput
     confirmed: StrictBool
     reason: str = Field(min_length=1, max_length=1000)
 
 
-class AppointmentInput(Contract):
-    startsAtUtc: datetime
-    endsAtUtc: datetime
+class AppointmentInput(CommandInput):
+    startsAtUtc: AwareDatetime
+    endsAtUtc: AwareDatetime
     purpose: str = Field(min_length=1, max_length=500)
     instructions: str | None = Field(None, max_length=4000)
     idempotencyKey: UUID
 
 
-class CostInput(Contract):
+class CostInput(CommandInput):
     contextKind: Literal["operator_estimate", "work_reported"]
     label: str = Field(min_length=1, max_length=200)
     amount: str
@@ -112,34 +117,34 @@ class CostInput(Contract):
     idempotencyKey: UUID
 
 
-class ExpenseLinkInput(Contract):
+class ExpenseLinkInput(CommandInput):
     expenseId: UUID
     idempotencyKey: UUID
 
 
-class AppointmentPatch(Contract):
-    startsAtUtc: datetime
-    endsAtUtc: datetime
+class AppointmentPatch(CommandInput):
+    startsAtUtc: AwareDatetime
+    endsAtUtc: AwareDatetime
     purpose: str = Field(min_length=1, max_length=500)
     instructions: str | None = Field(None, max_length=4000)
     rescheduleReason: str | None = Field(None, max_length=1000)
 
 
-class AppointmentFinish(Contract):
+class AppointmentFinish(CommandInput):
     confirmed: StrictBool
     outcomeNote: str | None = Field(None, max_length=4000)
 
 
-class FollowUpInput(Contract):
+class FollowUpInput(CommandInput):
     title: str = Field(min_length=1, max_length=240)
     notes: str | None = Field(None, max_length=10000)
     priority: Literal["low", "normal", "high", "urgent"] = "normal"
-    dueAtUtc: datetime | None = None
+    dueAtUtc: AwareDatetime | None = None
     dueTimezone: str | None = None
     idempotencyKey: UUID
 
 
-class QuoteInput(Contract):
+class QuoteInput(CommandInput):
     providerPartyId: UUID
     label: str = Field(min_length=1, max_length=200)
     scopeSummary: str = Field(min_length=1, max_length=4000)
@@ -153,7 +158,7 @@ class QuoteInput(Contract):
     idempotencyKey: UUID
 
 
-class AssignmentInput(Contract):
+class AssignmentInput(CommandInput):
     providerPartyId: UUID
     quoteId: UUID | None = None
     selectionReason: str | None = Field(None, max_length=1000)
@@ -167,7 +172,7 @@ class AssignmentInput(Contract):
     idempotencyKey: UUID
 
 
-class WorkJournalInput(Contract):
+class WorkJournalInput(CommandInput):
     assignmentId: UUID | None = None
     entryKind: Literal[
         "work_started",
@@ -182,7 +187,7 @@ class WorkJournalInput(Contract):
         | None
     ) = None
     sourceKind: Literal["operator_observation", "provider_report", "other_report"]
-    occurredAtUtc: datetime
+    occurredAtUtc: AwareDatetime
     summary: str = Field(min_length=1, max_length=240)
     detail: str | None = Field(None, max_length=4000)
     outcomeStatus: Literal["completed", "partially_completed", "unsuccessful"] | None = None
@@ -198,18 +203,18 @@ class WorkJournalInput(Contract):
 class AppointmentResponse(Contract):
     id: UUID
     issueId: UUID
-    startsAtUtc: datetime
-    endsAtUtc: datetime
+    startsAtUtc: AwareDatetime
+    endsAtUtc: AwareDatetime
     scheduledTimezone: str
     purpose: str
     instructions: str | None
     status: Literal["scheduled", "completed", "cancelled"]
-    completedAt: datetime | None
+    completedAt: AwareDatetime | None
     outcomeNote: str | None
-    cancelledAt: datetime | None
+    cancelledAt: AwareDatetime | None
     cancellationReason: str | None
-    createdAt: datetime
-    updatedAt: datetime
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
 
 
 class CostResponse(Contract):
@@ -222,17 +227,17 @@ class CostResponse(Contract):
     observedOn: str
     sourceNote: str | None
     replacesCostContextId: UUID | None
-    voidedAt: datetime | None
+    voidedAt: AwareDatetime | None
     voidReason: str | None
-    createdAt: datetime
+    createdAt: AwareDatetime
 
 
 class ExpenseLinkResponse(Contract):
     id: UUID
     issueId: UUID
     expenseId: UUID
-    createdAt: datetime
-    archivedAt: datetime | None
+    createdAt: AwareDatetime
+    archivedAt: AwareDatetime | None
     archiveReason: str | None
 
 
@@ -242,8 +247,8 @@ class FileSummaryResponse(Contract):
     entityId: UUID
     purpose: str
     fileId: UUID
-    createdAt: datetime
-    archivedAt: datetime | None
+    createdAt: AwareDatetime
+    archivedAt: AwareDatetime | None
     archiveReason: str | None
     originalName: str
     mediaType: str
@@ -256,7 +261,7 @@ class TaskSummaryResponse(Contract):
     title: str
     status: Literal["open", "in_progress", "completed", "cancelled"]
     priority: Literal["low", "normal", "high", "urgent"]
-    dueAtUtc: datetime | None
+    dueAtUtc: AwareDatetime | None
     dueTimezone: str | None
     isAllDay: bool
     relatedEntityType: str
@@ -289,8 +294,8 @@ class ExpenseSummaryResponse(Contract):
 
 class AppointmentSummaryResponse(Contract):
     id: UUID
-    startsAtUtc: datetime
-    endsAtUtc: datetime
+    startsAtUtc: AwareDatetime
+    endsAtUtc: AwareDatetime
     status: Literal["scheduled", "completed", "cancelled"]
 
 
@@ -308,7 +313,7 @@ class CommunicationSummaryResponse(Contract):
     channel: str
     direction: str
     status: str
-    occurredAtUtc: datetime
+    occurredAtUtc: AwareDatetime
     occurredTimezone: str
 
 
@@ -335,9 +340,9 @@ class QuoteFields(Contract):
     estimatedWorkFinishOn: str | None
     termsNotes: str | None
     replacesQuoteId: UUID | None
-    withdrawnAt: datetime | None
+    withdrawnAt: AwareDatetime | None
     withdrawalReason: str | None
-    createdAt: datetime
+    createdAt: AwareDatetime
     currentPartyState: Literal["active", "archived"] | None = None
     currentProviderProfileState: Literal["active", "archived"] | None = None
 
@@ -357,8 +362,8 @@ class AssignmentResponse(Contract):
     avoidOverrideReason: str | None
     instructions: str | None
     replacesAssignmentId: UUID | None
-    assignedAt: datetime
-    endedAt: datetime | None
+    assignedAt: AwareDatetime
+    endedAt: AwareDatetime | None
     endReason: str | None
     currentPartyState: Literal["active", "archived"] | None = None
     currentProviderProfileState: Literal["active", "archived"] | None = None
@@ -400,7 +405,7 @@ class WorkJournalPreviewResponse(Contract):
         "work_started", "progress_update", "work_blocked", "work_completed", "general_note"
     ]
     sourceKind: Literal["operator_observation", "provider_report", "other_report"]
-    occurredAtUtc: datetime
+    occurredAtUtc: AwareDatetime
     occurredTimezone: str
     summary: str
     detail: str | None
@@ -410,12 +415,13 @@ class WorkJournalPreviewResponse(Contract):
     operatorVerified: bool | None
     correctsEntryId: UUID | None
     correctionReason: str | None
-    recordedAtUtc: datetime
+    recordedAtUtc: AwareDatetime
     isEffective: bool
     files: list[FileSummaryResponse] = []
 
 
 class IssueSummaryResponse(Contract):
+    revision: StrictInt = Field(ge=0)
     id: UUID
     propertyId: UUID
     spaceId: UUID | None
@@ -423,7 +429,7 @@ class IssueSummaryResponse(Contract):
     category: str
     priority: str
     status: str
-    reportedAtUtc: datetime
+    reportedAtUtc: AwareDatetime
     reportedTimezone: str
     reporter: ReporterResponse
     property: PropertySummaryResponse
@@ -437,6 +443,7 @@ class IssueSummaryResponse(Contract):
 
 
 class IssueResponse(Contract):
+    revision: StrictInt = Field(ge=0)
     id: UUID
     propertyId: UUID
     spaceId: UUID | None
@@ -446,15 +453,15 @@ class IssueResponse(Contract):
     categoryDetail: str | None
     priority: str
     status: str
-    reportedAtUtc: datetime
+    reportedAtUtc: AwareDatetime
     reportedTimezone: str
     reporter: ReporterResponse
     resolutionSummary: str | None
-    resolvedAt: datetime | None
+    resolvedAt: AwareDatetime | None
     cancellationReason: str | None
-    cancelledAt: datetime | None
-    createdAt: datetime
-    updatedAt: datetime
+    cancelledAt: AwareDatetime | None
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
     property: PropertySummaryResponse
     space: SpaceSummaryResponse | None
     files: list[FileSummaryResponse]
@@ -497,7 +504,7 @@ class WorkJournalEntryResponse(Contract):
         "work_started", "progress_update", "work_blocked", "work_completed", "general_note"
     ]
     sourceKind: Literal["operator_observation", "provider_report", "other_report"]
-    occurredAtUtc: datetime
+    occurredAtUtc: AwareDatetime
     occurredTimezone: str
     summary: str
     detail: str | None
@@ -507,7 +514,7 @@ class WorkJournalEntryResponse(Contract):
     operatorVerified: bool | None
     correctsEntryId: UUID | None
     correctionReason: str | None
-    recordedAtUtc: datetime
+    recordedAtUtc: AwareDatetime
     isEffective: bool
     files: list[FileSummaryResponse] = []
     issueSummary: str | None = None
@@ -515,7 +522,7 @@ class WorkJournalEntryResponse(Contract):
     spaceId: UUID | None = None
     providerPartyId: UUID | None = None
     providerDisplayNameSnapshot: str | None = None
-    assignedAt: datetime | None = None
+    assignedAt: AwareDatetime | None = None
     quoteId: UUID | None = None
     quotedEarliestWorkStartOn: str | None = None
     quotedEstimatedWorkFinishOn: str | None = None
@@ -527,10 +534,81 @@ class WorkJournalPageResponse(Contract):
     nextCursor: str | None
 
 
+class CommandMetadata(Contract):
+    revision: StrictInt = Field(ge=0)
+    operationId: UUID
+
+
+class IssueCommandResponse(IssueResponse, CommandMetadata):
+    pass
+
+
+class AppointmentCommandResponse(AppointmentResponse, CommandMetadata):
+    pass
+
+
+class CostCommandResponse(CostResponse, CommandMetadata):
+    pass
+
+
+class ExpenseLinkCommandResponse(ExpenseLinkResponse, CommandMetadata):
+    pass
+
+
+class QuoteCommandResponse(QuoteResponse, CommandMetadata):
+    pass
+
+
+class AssignmentCommandResponse(AssignmentResponse, CommandMetadata):
+    pass
+
+
+class TaskSummaryCommandResponse(TaskSummaryResponse, CommandMetadata):
+    pass
+
+
+class WorkJournalEntryCommandResponse(WorkJournalEntryResponse, CommandMetadata):
+    pass
+
+
+class CommandConflictDetail(Contract):
+    code: str
+    message: str
+    currentRevision: StrictInt | None
+
+
+class CommandConflictResponse(Contract):
+    detail: CommandConflictDetail
+
+
+class CommandReceiptResponse(Contract):
+    operationId: UUID
+    idempotencyKey: UUID
+    issueId: UUID
+    action: str
+    expectedRevision: StrictInt = Field(ge=0)
+    revision: StrictInt = Field(ge=0)
+    effective: bool
+    createdAt: AwareDatetime
+    request: dict[str, object]
+    response: (
+        IssueCommandResponse
+        | AppointmentCommandResponse
+        | CostCommandResponse
+        | ExpenseLinkCommandResponse
+        | QuoteCommandResponse
+        | AssignmentCommandResponse
+        | TaskSummaryCommandResponse
+        | WorkJournalEntryCommandResponse
+    )
+
+
 def build_router(
     service: MaintenanceService, journal: WorkJournalService, runtime: WorkspaceRuntime
 ):
-    router = APIRouter(prefix="/api", tags=["maintenance"])
+    router = APIRouter(
+        prefix="/api", tags=["maintenance"], responses={409: {"model": CommandConflictResponse}}
+    )
 
     def ready(write=False):
         if not runtime.ready or runtime.error:
@@ -544,12 +622,15 @@ def build_router(
         except MaintenanceNotFoundError as e:
             raise domain_problem(e, status_code=404) from e
         except MaintenanceConflictError as e:
-            raise domain_problem(e, status_code=409) from e
+            raise domain_problem(e, status_code=409, currentRevision=e.current_revision) from e
         except MaintenanceError as e:
             raise domain_problem(e, status_code=400) from e
 
     @router.post(
-        "/maintenance-issues", response_model=IssueResponse, status_code=status.HTTP_201_CREATED
+        "/maintenance-issues",
+        operation_id="createMaintenanceIssue",
+        response_model=IssueCommandResponse,
+        status_code=status.HTTP_201_CREATED,
     )
     def create(data: IssueInput):
         ready(True)
@@ -574,10 +655,24 @@ def build_router(
                     ),
                 ),
                 str(data.idempotencyKey),
+                expected_revision=data.expectedRevision,
             )
         )
 
-    @router.get("/maintenance-issues", response_model=IssuePageResponse)
+    @router.get(
+        "/maintenance-command-receipts/{operation_id}",
+        response_model=CommandReceiptResponse,
+        operation_id="getMaintenanceCommandReceipt",
+    )
+    def receipt(operation_id: UUID):
+        ready()
+        return invoke(lambda: service.command_receipt(str(operation_id)))
+
+    @router.get(
+        "/maintenance-issues",
+        response_model=IssuePageResponse,
+        operation_id="listMaintenanceIssues",
+    )
     def list_issues(
         propertyId: UUID | None = None,
         spaceId: UUID | None = None,
@@ -602,10 +697,10 @@ def build_router(
         providerPartyId: UUID | None = None,
         hasActiveQuote: bool | None = None,
         hasCurrentAssignment: bool | None = None,
-        reportedFrom: datetime | None = None,
-        reportedTo: datetime | None = None,
-        appointmentFrom: datetime | None = None,
-        appointmentTo: datetime | None = None,
+        reportedFrom: AwareDatetime | None = None,
+        reportedTo: AwareDatetime | None = None,
+        appointmentFrom: AwareDatetime | None = None,
+        appointmentTo: AwareDatetime | None = None,
         hasEvidence: bool | None = None,
         hasLinkedExpense: bool | None = None,
         hasActiveTask: bool | None = None,
@@ -651,7 +746,8 @@ def build_router(
 
     @router.post(
         "/maintenance-issues/{issue_id}/work-journal",
-        response_model=WorkJournalEntryResponse,
+        operation_id="recordMaintenanceWorkJournalEntry",
+        response_model=WorkJournalEntryCommandResponse,
         status_code=201,
     )
     def record_work(issue_id: UUID, data: WorkJournalInput):
@@ -676,11 +772,14 @@ def build_router(
                     data.historicalEntryConfirmed,
                 ),
                 str(data.idempotencyKey),
+                expected_revision=data.expectedRevision,
             )
         )
 
     @router.get(
-        "/maintenance-issues/{issue_id}/work-journal", response_model=WorkJournalPageResponse
+        "/maintenance-issues/{issue_id}/work-journal",
+        response_model=WorkJournalPageResponse,
+        operation_id="getMaintenanceIssueWorkJournal",
     )
     def issue_work_journal(
         issue_id: UUID,
@@ -698,7 +797,11 @@ def build_router(
             )
         )
 
-    @router.get("/maintenance-work-journal", response_model=WorkJournalPageResponse)
+    @router.get(
+        "/maintenance-work-journal",
+        response_model=WorkJournalPageResponse,
+        operation_id="getMaintenanceWorkJournal",
+    )
     def provider_work_journal(
         providerPartyId: UUID,
         cursor: str | None = None,
@@ -715,23 +818,42 @@ def build_router(
             )
         )
 
-    @router.get("/maintenance-issues/{issue_id}", response_model=IssueResponse)
+    @router.get(
+        "/maintenance-issues/{issue_id}",
+        response_model=IssueResponse,
+        operation_id="getMaintenanceIssue",
+    )
     def detail(issue_id: UUID):
         ready()
         return invoke(lambda: service.detail(str(issue_id)))
 
-    @router.patch("/maintenance-issues/{issue_id}", response_model=IssueResponse)
+    @router.patch(
+        "/maintenance-issues/{issue_id}",
+        response_model=IssueCommandResponse,
+        operation_id="editMaintenanceIssue",
+    )
     def patch(issue_id: UUID, data: IssuePatch):
         ready(True)
         names = {"categoryDetail": "category_detail"}
         return invoke(
             lambda: service.patch_issue(
                 str(issue_id),
-                {names.get(k, k): v for k, v in data.model_dump(exclude_unset=True).items()},
+                {
+                    names.get(k, k): v
+                    for k, v in data.model_dump(
+                        exclude_unset=True, exclude={"expectedRevision", "idempotencyKey"}
+                    ).items()
+                },
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
-    @router.post("/maintenance-issues/{issue_id}/reporter/correct", response_model=IssueResponse)
+    @router.post(
+        "/maintenance-issues/{issue_id}/reporter/correct",
+        response_model=IssueCommandResponse,
+        operation_id="correctMaintenanceIssueReporter",
+    )
     def correct_reporter(issue_id: UUID, data: ReporterCorrectionInput):
         ready(True)
         reporter = data.reporter
@@ -749,37 +871,76 @@ def build_router(
                     data.confirmed,
                     data.reason,
                 ),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
-    @router.post("/maintenance-issues/{issue_id}/start", response_model=IssueResponse)
-    def start(issue_id: UUID):
+    @router.post(
+        "/maintenance-issues/{issue_id}/start",
+        response_model=IssueCommandResponse,
+        operation_id="startMaintenanceIssue",
+    )
+    def start(issue_id: UUID, data: CommandInput):
         ready(True)
-        return invoke(lambda: service.transition(str(issue_id), "start"))
+        return invoke(
+            lambda: service.transition(
+                str(issue_id),
+                "start",
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
 
-    @router.post("/maintenance-issues/{issue_id}/return-to-open", response_model=IssueResponse)
-    def return_to_open(issue_id: UUID):
+    @router.post(
+        "/maintenance-issues/{issue_id}/return-to-open",
+        response_model=IssueCommandResponse,
+        operation_id="returnMaintenanceIssueToOpen",
+    )
+    def return_to_open(issue_id: UUID, data: CommandInput):
         ready(True)
-        return invoke(lambda: service.transition(str(issue_id), "return_to_open"))
+        return invoke(
+            lambda: service.transition(
+                str(issue_id),
+                "return_to_open",
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
 
-    for path, action in (("resolve", "resolve"), ("cancel", "cancel"), ("reopen", "reopen")):
-
-        def endpoint(issue_id: UUID, data: Reason, _action=action):
+    def lifecycle_endpoint(action):
+        def endpoint(issue_id: UUID, data: Reason):
             ready(True)
             return invoke(
-                lambda: service.transition(str(issue_id), _action, data.reason, data.confirmed)
+                lambda: service.transition(
+                    str(issue_id),
+                    action,
+                    data.reason,
+                    data.confirmed,
+                    expected_revision=data.expectedRevision,
+                    idempotency_key=str(data.idempotencyKey),
+                )
             )
 
+        return endpoint
+
+    for path in ("resolve", "cancel", "reopen"):
         router.add_api_route(
             "/maintenance-issues/{issue_id}/" + path,
-            endpoint,
+            lifecycle_endpoint(path),
+            operation_id={
+                "resolve": "resolveMaintenanceIssue",
+                "cancel": "cancelMaintenanceIssue",
+                "reopen": "reopenMaintenanceIssue",
+            }[path],
             methods=["POST"],
-            response_model=IssueResponse,
+            response_model=IssueCommandResponse,
         )
 
     @router.post(
         "/maintenance-issues/{issue_id}/appointments",
-        response_model=AppointmentResponse,
+        operation_id="createMaintenanceAppointment",
+        response_model=AppointmentCommandResponse,
         status_code=201,
     )
     def appointment(issue_id: UUID, data: AppointmentInput):
@@ -794,11 +955,15 @@ def build_router(
                     data.instructions,
                 ),
                 str(data.idempotencyKey),
+                expected_revision=data.expectedRevision,
             )
         )
 
     @router.post(
-        "/maintenance-issues/{issue_id}/cost-contexts", response_model=CostResponse, status_code=201
+        "/maintenance-issues/{issue_id}/cost-contexts",
+        operation_id="createMaintenanceCostContext",
+        response_model=CostCommandResponse,
+        status_code=201,
     )
     def cost(issue_id: UUID, data: CostInput):
         ready(True)
@@ -814,24 +979,32 @@ def build_router(
                     str(data.replacesCostContextId) if data.replacesCostContextId else None,
                 ),
                 str(data.idempotencyKey),
+                expected_revision=data.expectedRevision,
             )
         )
 
     @router.post(
         "/maintenance-issues/{issue_id}/expense-links",
-        response_model=ExpenseLinkResponse,
+        operation_id="linkMaintenanceExpense",
+        response_model=ExpenseLinkCommandResponse,
         status_code=201,
     )
     def expense_link(issue_id: UUID, data: ExpenseLinkInput):
         ready(True)
         return invoke(
             lambda: service.link_expense(
-                str(issue_id), str(data.expenseId), str(data.idempotencyKey)
+                str(issue_id),
+                str(data.expenseId),
+                str(data.idempotencyKey),
+                expected_revision=data.expectedRevision,
             )
         )
 
     @router.post(
-        "/maintenance-issues/{issue_id}/quotes", response_model=QuoteResponse, status_code=201
+        "/maintenance-issues/{issue_id}/quotes",
+        operation_id="createMaintenanceQuote",
+        response_model=QuoteCommandResponse,
+        status_code=201,
     )
     def quote(issue_id: UUID, data: QuoteInput):
         ready(True)
@@ -851,24 +1024,40 @@ def build_router(
                     str(data.replacesQuoteId) if data.replacesQuoteId else None,
                 ),
                 str(data.idempotencyKey),
+                expected_revision=data.expectedRevision,
             )
         )
 
     @router.get(
-        "/maintenance-issues/{issue_id}/quote-comparison", response_model=QuoteComparisonResponse
+        "/maintenance-issues/{issue_id}/quote-comparison",
+        response_model=QuoteComparisonResponse,
+        operation_id="getMaintenanceQuoteComparison",
     )
     def quote_comparison(issue_id: UUID):
         ready()
         return invoke(lambda: service.quote_comparison(str(issue_id)))
 
-    @router.post("/maintenance-quotes/{quote_id}/withdraw", response_model=QuoteResponse)
+    @router.post(
+        "/maintenance-quotes/{quote_id}/withdraw",
+        response_model=QuoteCommandResponse,
+        operation_id="withdrawMaintenanceQuote",
+    )
     def withdraw_quote(quote_id: UUID, data: Reason):
         ready(True)
-        return invoke(lambda: service.withdraw_quote(str(quote_id), data.reason, data.confirmed))
+        return invoke(
+            lambda: service.withdraw_quote(
+                str(quote_id),
+                data.reason,
+                data.confirmed,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
 
     @router.post(
         "/maintenance-issues/{issue_id}/assignments",
-        response_model=AssignmentResponse,
+        operation_id="createMaintenanceAssignment",
+        response_model=AssignmentCommandResponse,
         status_code=201,
     )
     def assignment(issue_id: UUID, data: AssignmentInput):
@@ -889,17 +1078,32 @@ def build_router(
                     data.endReason,
                 ),
                 str(data.idempotencyKey),
+                expected_revision=data.expectedRevision,
             )
         )
 
-    @router.post("/maintenance-assignments/{assignment_id}/end", response_model=AssignmentResponse)
+    @router.post(
+        "/maintenance-assignments/{assignment_id}/end",
+        response_model=AssignmentCommandResponse,
+        operation_id="endMaintenanceAssignment",
+    )
     def end_assignment(assignment_id: UUID, data: Reason):
         ready(True)
         return invoke(
-            lambda: service.end_assignment(str(assignment_id), data.reason, data.confirmed)
+            lambda: service.end_assignment(
+                str(assignment_id),
+                data.reason,
+                data.confirmed,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
         )
 
-    @router.patch("/maintenance-appointments/{appointment_id}", response_model=AppointmentResponse)
+    @router.patch(
+        "/maintenance-appointments/{appointment_id}",
+        response_model=AppointmentCommandResponse,
+        operation_id="editMaintenanceAppointment",
+    )
     def patch_appointment(appointment_id: UUID, data: AppointmentPatch):
         ready(True)
         return invoke(
@@ -912,11 +1116,15 @@ def build_router(
                     data.instructions,
                 ),
                 data.rescheduleReason,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
     @router.post(
-        "/maintenance-appointments/{appointment_id}/complete", response_model=AppointmentResponse
+        "/maintenance-appointments/{appointment_id}/complete",
+        operation_id="completeMaintenanceAppointment",
+        response_model=AppointmentCommandResponse,
     )
     def complete_appointment(appointment_id: UUID, data: AppointmentFinish):
         ready(True)
@@ -926,35 +1134,67 @@ def build_router(
                 cancelled=False,
                 reason=data.outcomeNote,
                 confirmed=data.confirmed,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
     @router.post(
-        "/maintenance-appointments/{appointment_id}/cancel", response_model=AppointmentResponse
+        "/maintenance-appointments/{appointment_id}/cancel",
+        operation_id="cancelMaintenanceAppointment",
+        response_model=AppointmentCommandResponse,
     )
     def cancel_appointment(appointment_id: UUID, data: Reason):
         ready(True)
         return invoke(
             lambda: service.finish_appointment(
-                str(appointment_id), cancelled=True, reason=data.reason, confirmed=data.confirmed
+                str(appointment_id),
+                cancelled=True,
+                reason=data.reason,
+                confirmed=data.confirmed,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
-    @router.post("/maintenance-cost-contexts/{context_id}/void", response_model=CostResponse)
+    @router.post(
+        "/maintenance-cost-contexts/{context_id}/void",
+        response_model=CostCommandResponse,
+        operation_id="voidMaintenanceCostContext",
+    )
     def void_cost(context_id: UUID, data: Reason):
         ready(True)
-        return invoke(lambda: service.void_cost(str(context_id), data.reason, data.confirmed))
+        return invoke(
+            lambda: service.void_cost(
+                str(context_id),
+                data.reason,
+                data.confirmed,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
 
-    @router.post("/maintenance-expense-links/{link_id}/archive", response_model=ExpenseLinkResponse)
+    @router.post(
+        "/maintenance-expense-links/{link_id}/archive",
+        response_model=ExpenseLinkCommandResponse,
+        operation_id="archiveMaintenanceExpenseLink",
+    )
     def archive_link(link_id: UUID, data: Reason):
         ready(True)
         return invoke(
-            lambda: service.archive_expense_link(str(link_id), data.reason, data.confirmed)
+            lambda: service.archive_expense_link(
+                str(link_id),
+                data.reason,
+                data.confirmed,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
         )
 
     @router.post(
         "/maintenance-issues/{issue_id}/follow-ups",
-        response_model=TaskSummaryResponse,
+        operation_id="createMaintenanceFollowUp",
+        response_model=TaskSummaryCommandResponse,
         status_code=201,
     )
     def follow_up(issue_id: UUID, data: FollowUpInput):
@@ -968,6 +1208,7 @@ def build_router(
                 data.dueAtUtc.isoformat() if data.dueAtUtc else None,
                 data.dueTimezone,
                 str(data.idempotencyKey),
+                expected_revision=data.expectedRevision,
             )
         )
 

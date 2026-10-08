@@ -1,5 +1,11 @@
 """FIN-003 reconciliation and bounded SQLite read acceptance tests."""
 
+from app.modules.finance.tests.commands import deposit_command, expense_command, rent_command
+from app.modules.owner_accounting.tests.commands import owner_command
+from app.platform.sqlite_engine import create_sqlite_engine
+
+from app.modules.portfolio.tests.commands import inventory_command
+
 import json
 import unittest
 import tempfile
@@ -53,6 +59,7 @@ from app.modules.finance.infrastructure.money_unit_of_work import (
     SQLiteMoneySummaryUnitOfWork,
     SQLiteMoneyReadTransaction,
 )
+from app.modules.leases.tests.commands import lease_command
 from app.modules.leases.application.service import (
     LeaseService,
     LeaseCreateCommand,
@@ -138,7 +145,9 @@ class MoneySummaryTests(unittest.TestCase):
             time_zone_resolver=BundledAddressTimeZoneResolver(),
             now=lambda: datetime(2026, 1, 1, 12, tzinfo=UTC),
         )
-        property_record = self.portfolio.create_property(
+        property_record = inventory_command(
+            self.portfolio,
+            "create_property",
             PropertyCreateCommand(
                 "Rent home",
                 "1 Main Street",
@@ -147,7 +156,7 @@ class MoneySummaryTests(unittest.TestCase):
                 "single_family_home",
                 (OwnershipInput("local_operator"),),
                 region="OR",
-            )
+            ),
         )
         self.property_id = property_record.id
         space = self.portfolio.get_property(self.property_id)["spaces"][0]["id"]
@@ -160,7 +169,11 @@ class MoneySummaryTests(unittest.TestCase):
                 SQLitePartyReadOperations(parties),
             ),
             SharedPartyFactory(),
-        ).create(TenantCreateCommand("individual", "Tenant"))
+        ).create(
+            TenantCreateCommand("individual", "Tenant"),
+            expected_revision=0,
+            idempotency_key=str(uuid4()),
+        )
         self.leases = LeaseService(
             SQLiteLeaseUnitOfWork(
                 self.db,
@@ -170,7 +183,9 @@ class MoneySummaryTests(unittest.TestCase):
                 SQLiteInspectionContextReader(),
             )
         )
-        lease = self.leases.create(
+        lease = lease_command(
+            self.leases,
+            "create",
             LeaseCreateCommand(
                 space,
                 "residential",
@@ -179,7 +194,7 @@ class MoneySummaryTests(unittest.TestCase):
                 date(2026, 1, 1),
                 TermCommand(100000, "USD", "monthly", 1, 0),
                 (ParticipantCommand(self.tenant["id"], "primary_tenant"),),
-            )
+            ),
         )
         # Execute at the fixture's historical start, then inspect corrected money
         # in October. Leasing has no injected calendar yet; freeze its clock here.
@@ -190,7 +205,9 @@ class MoneySummaryTests(unittest.TestCase):
                 return_value="2026-01-01T12:00:00+00:00",
             ),
         ):
-            self.lease = self.leases.execute(
+            self.lease = lease_command(
+                self.leases,
+                "execute",
                 lease["id"],
                 executed_on="2026-01-01",
                 confirmed=True,
@@ -249,7 +266,9 @@ class MoneySummaryTests(unittest.TestCase):
 
     def lease_for_property(self, property_id):
         space = self.portfolio.get_property(property_id)["spaces"][0]["id"]
-        lease = self.leases.create(
+        lease = lease_command(
+            self.leases,
+            "create",
             LeaseCreateCommand(
                 space,
                 "residential",
@@ -258,7 +277,7 @@ class MoneySummaryTests(unittest.TestCase):
                 date(2026, 1, 1),
                 TermCommand(100000, "USD", "monthly", 1, 0),
                 (ParticipantCommand(self.tenant["id"], "primary_tenant"),),
-            )
+            ),
         )
         with (
             patch("app.modules.leases.application.service.date", FixtureLeaseDate),
@@ -267,7 +286,9 @@ class MoneySummaryTests(unittest.TestCase):
                 return_value="2026-01-01T12:00:00+00:00",
             ),
         ):
-            return self.leases.execute(
+            return lease_command(
+                self.leases,
+                "execute",
                 lease["id"],
                 executed_on="2026-01-01",
                 confirmed=True,
@@ -277,7 +298,9 @@ class MoneySummaryTests(unittest.TestCase):
 
     def record_sources(self, deposits=True):
         term = self.lease["terms"][0]
-        expectations = self.finance.synchronize(
+        expectations = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -285,7 +308,9 @@ class MoneySummaryTests(unittest.TestCase):
                 term["effectiveOn"],
             ),
         )
-        self.receipt = self.finance.record_receipt(
+        self.receipt = rent_command(
+            self.finance,
+            "record_receipt",
             RecordReceiptCommand(
                 self.lease["id"],
                 str(uuid4()),
@@ -294,10 +319,12 @@ class MoneySummaryTests(unittest.TestCase):
                 "USD",
                 tuple(ReceiptAllocationCommand(row["id"], 60000) for row in expectations[:2]),
                 "cash",
-            )
+            ),
         )
         category = self.expenses.list_categories()[0]
-        self.expense = self.expenses.record_expense(
+        self.expense = expense_command(
+            self.expenses,
+            "record_expense",
             ExpenseCreateCommand(
                 str(uuid4()),
                 self.property_id,
@@ -308,9 +335,11 @@ class MoneySummaryTests(unittest.TestCase):
                 "USD",
                 "Recorded maintenance",
                 payee_name="Contractor",
-            )
+            ),
         )
-        self.refund = self.expenses.record_refund(
+        self.refund = expense_command(
+            self.expenses,
+            "record_refund",
             self.expense["id"],
             RefundCreateCommand(
                 str(uuid4()),
@@ -321,10 +350,15 @@ class MoneySummaryTests(unittest.TestCase):
         )
         if not deposits:
             return
-        self.account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        self.account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        self.deposit_receipt = self.deposits.record_receipt(
+        self.deposit_receipt = deposit_command(
+            self.deposits,
+            "record_receipt",
             self.account["id"],
             DepositReceiptCommand(
                 str(uuid4()),
@@ -336,7 +370,9 @@ class MoneySummaryTests(unittest.TestCase):
                 overage_reason="Documented actual receipt",
             ),
         )
-        draft = self.deposits.create_settlement(
+        draft = deposit_command(
+            self.deposits,
+            "create_settlement",
             self.account["id"],
             SettlementCreateCommand(
                 "2026-02-20",
@@ -344,7 +380,9 @@ class MoneySummaryTests(unittest.TestCase):
                 eligibility_override_reason="Early settlement agreed",
             ),
         )
-        deduction = self.deposits.add_deduction(
+        deduction = deposit_command(
+            self.deposits,
+            "add_deduction",
             draft["id"],
             DeductionCommand(
                 "damage",
@@ -353,12 +391,16 @@ class MoneySummaryTests(unittest.TestCase):
                 "Documented repair cost",
             ),
         )
-        self.deposits.add_deduction_source(deduction["id"], "expense", self.expense["id"])
+        deposit_command(
+            self.deposits, "add_deduction_source", deduction["id"], "expense", self.expense["id"]
+        )
         self.deposits.now = lambda: datetime(2026, 2, 2, 0, 30, tzinfo=UTC)
-        self.settlement = self.deposits.approve_settlement(draft["id"], True)
+        self.settlement = deposit_command(self.deposits, "approve_settlement", draft["id"], True)
         self.deposits.now = lambda: datetime(2026, 10, 6, 12, tzinfo=UTC)
         participant = self.lease["participants"][0]["tenantPartyId"]
-        self.deposit_refund = self.deposits.record_refund(
+        self.deposit_refund = deposit_command(
+            self.deposits,
+            "record_refund",
             self.settlement["id"],
             DepositRefundCommand(
                 str(uuid4()),
@@ -415,11 +457,18 @@ class MoneySummaryTests(unittest.TestCase):
 
     def test_corrections_restate_original_dates_and_surviving_refunds(self):
         self.record_sources()
-        self.finance.void_receipt(self.receipt["id"], VoidCommand(True, "Incorrect receipt"))
+        rent_command(
+            self.finance, "void_receipt", self.receipt["id"], VoidCommand(True, "Incorrect receipt")
+        )
         result = self.reader.summary(self.query)
         self.assertEqual(result.operating.rent_received, "0.00")
         self.assertEqual(result.operating.operating_remainder, "-400.00")
-        self.deposits.void_settlement(self.settlement["id"], VoidCommand(True, "Correction needed"))
+        deposit_command(
+            self.deposits,
+            "void_settlement",
+            self.settlement["id"],
+            VoidCommand(True, "Correction needed"),
+        )
         result = self.reader.summary(
             replace(self.query, from_on="2026-02-01", through_on="2026-02-28")
         )
@@ -430,8 +479,15 @@ class MoneySummaryTests(unittest.TestCase):
             self.reader.sources(self.query, Metric.CURRENT_REFUNDS).items[0].authorization_id,
             self.settlement["id"],
         )
-        self.expenses.void_refund(self.refund["id"], VoidCommand(True, "Incorrect refund"))
-        self.expenses.void_expense(self.expense["id"], VoidCommand(True, "Incorrect expense"))
+        expense_command(
+            self.expenses, "void_refund", self.refund["id"], VoidCommand(True, "Incorrect refund")
+        )
+        expense_command(
+            self.expenses,
+            "void_expense",
+            self.expense["id"],
+            VoidCommand(True, "Incorrect expense"),
+        )
         self.assertEqual(
             self.reader.summary(
                 replace(self.query, from_on="2026-02-01", through_on="2026-02-28")
@@ -441,11 +497,17 @@ class MoneySummaryTests(unittest.TestCase):
 
     def test_negative_reconciliation_and_replacement_decisions_are_not_netted_away(self):
         self.record_sources()
-        self.deposits.void_settlement(
-            self.settlement["id"], VoidCommand(True, "Incorrect decision")
+        deposit_command(
+            self.deposits,
+            "void_settlement",
+            self.settlement["id"],
+            VoidCommand(True, "Incorrect decision"),
         )
-        self.deposits.void_receipt(
-            self.deposit_receipt["id"], VoidCommand(True, "Erroneous receipt")
+        deposit_command(
+            self.deposits,
+            "void_receipt",
+            self.deposit_receipt["id"],
+            VoidCommand(True, "Erroneous receipt"),
         )
         result = self.reader.summary(self.query)
         self.assertEqual(result.deposit_obligations.positive_obligations, "0.00")
@@ -454,7 +516,9 @@ class MoneySummaryTests(unittest.TestCase):
         self.assertTrue(self.reader.deposit_accounts(self.query).items[0].requires_review)
         # Reconcile receipt facts, then replace only the settlement decision;
         # the refund retains its original authorization and contributes once.
-        self.deposits.record_receipt(
+        deposit_command(
+            self.deposits,
+            "record_receipt",
             self.account["id"],
             DepositReceiptCommand(
                 str(uuid4()),
@@ -467,7 +531,9 @@ class MoneySummaryTests(unittest.TestCase):
                 replaces_receipt_id=self.deposit_receipt["id"],
             ),
         )
-        replacement = self.deposits.create_settlement(
+        replacement = deposit_command(
+            self.deposits,
+            "create_settlement",
             self.account["id"],
             SettlementCreateCommand(
                 "2026-10-20",
@@ -476,14 +542,17 @@ class MoneySummaryTests(unittest.TestCase):
                 replaces_settlement_id=self.settlement["id"],
             ),
         )
-        self.deposits.add_credit(
-            replacement["id"], CreditCommand("other", "20.00", "Approved credit")
+        deposit_command(
+            self.deposits,
+            "add_credit",
+            replacement["id"],
+            CreditCommand("other", "20.00", "Approved credit"),
         )
         # Draft credit is never part of the obligation or period approvals.
         self.assertEqual(
             self.reader.summary(self.query).deposit_obligations.net_recorded_obligation, "700.00"
         )
-        self.deposits.approve_settlement(replacement["id"], True)
+        deposit_command(self.deposits, "approve_settlement", replacement["id"], True)
         result = self.reader.summary(
             replace(self.query, from_on="2026-10-01", through_on="2026-10-31")
         )
@@ -495,7 +564,9 @@ class MoneySummaryTests(unittest.TestCase):
     def test_approval_and_completion_use_distinct_property_local_dates_and_late_receipts(self):
         self.record_sources()
         participant = self.lease["participants"][0]["tenantPartyId"]
-        self.deposits.record_refund(
+        deposit_command(
+            self.deposits,
+            "record_refund",
             self.settlement["id"],
             DepositRefundCommand(
                 str(uuid4()),
@@ -506,7 +577,7 @@ class MoneySummaryTests(unittest.TestCase):
             ),
         )
         self.deposits.now = lambda: datetime(2026, 3, 1, 0, 30, tzinfo=UTC)
-        self.deposits.complete_settlement(self.settlement["id"], False)
+        deposit_command(self.deposits, "complete_settlement", self.settlement["id"], False)
         feb = replace(self.query, from_on="2026-02-01", through_on="2026-02-28")
         result = self.reader.summary(feb)
         self.assertEqual(result.deposit_activity.completed_settlement_count, 1)
@@ -518,7 +589,9 @@ class MoneySummaryTests(unittest.TestCase):
         self.assertEqual(result.deposit_obligations.net_recorded_obligation, "0.00")
         self.assertEqual(result.deposit_obligations.unresolved_account_count, 0)
         self.deposits.now = lambda: datetime(2026, 10, 6, 12, tzinfo=UTC)
-        self.deposits.record_receipt(
+        deposit_command(
+            self.deposits,
+            "record_receipt",
             self.account["id"],
             DepositReceiptCommand(
                 str(uuid4()),
@@ -538,13 +611,21 @@ class MoneySummaryTests(unittest.TestCase):
 
     def test_positive_and_negative_accounts_remain_separate_in_bounded_pages(self):
         self.record_sources()
-        self.deposits.void_settlement(
-            self.settlement["id"], VoidCommand(True, "Incorrect decision")
+        deposit_command(
+            self.deposits,
+            "void_settlement",
+            self.settlement["id"],
+            VoidCommand(True, "Incorrect decision"),
         )
-        self.deposits.void_receipt(
-            self.deposit_receipt["id"], VoidCommand(True, "Erroneous receipt")
+        deposit_command(
+            self.deposits,
+            "void_receipt",
+            self.deposit_receipt["id"],
+            VoidCommand(True, "Erroneous receipt"),
         )
-        property_record = self.portfolio.create_property(
+        property_record = inventory_command(
+            self.portfolio,
+            "create_property",
             PropertyCreateCommand(
                 "Second deposit property",
                 "1 Main Street",
@@ -553,13 +634,18 @@ class MoneySummaryTests(unittest.TestCase):
                 "single_family_home",
                 (OwnershipInput("local_operator"),),
                 region="OR",
-            )
+            ),
         )
         lease = self.lease_for_property(property_record.id)
-        account = self.deposits.create_account(
-            lease["id"], DepositAccountCreateCommand(lease["terms"][0]["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            lease["id"],
+            DepositAccountCreateCommand(lease["terms"][0]["id"]),
         )
-        self.deposits.record_receipt(
+        deposit_command(
+            self.deposits,
+            "record_receipt",
             account["id"],
             DepositReceiptCommand(
                 str(uuid4()),
@@ -592,11 +678,16 @@ class MoneySummaryTests(unittest.TestCase):
             (datetime(2026, 3, 8, 7, 30, tzinfo=UTC), "2026-03-07"),
             (datetime(2026, 3, 8, 10, 30, tzinfo=UTC), "2026-03-08"),
         ):
-            self.deposits.void_settlement(
-                predecessor, VoidCommand(True, "Replace reviewed decision")
+            deposit_command(
+                self.deposits,
+                "void_settlement",
+                predecessor,
+                VoidCommand(True, "Replace reviewed decision"),
             )
             self.deposits.now = lambda: instant
-            draft = self.deposits.create_settlement(
+            draft = deposit_command(
+                self.deposits,
+                "create_settlement",
                 self.account["id"],
                 SettlementCreateCommand(
                     "2026-03-20",
@@ -605,7 +696,7 @@ class MoneySummaryTests(unittest.TestCase):
                     replaces_settlement_id=predecessor,
                 ),
             )
-            approved = self.deposits.approve_settlement(draft["id"], True)
+            approved = deposit_command(self.deposits, "approve_settlement", draft["id"], True)
             query = replace(self.query, from_on=local_day, through_on=local_day)
             self.assertEqual(
                 self.reader.summary(query).deposit_activity.approved_settlement_count, 1
@@ -622,7 +713,9 @@ class MoneySummaryTests(unittest.TestCase):
         )
         category = self.expenses.list_categories()[0]
         for index in range(150):
-            self.expenses.record_expense(
+            expense_command(
+                self.expenses,
+                "record_expense",
                 ExpenseCreateCommand(
                     str(uuid4()),
                     self.property_id,
@@ -633,7 +726,7 @@ class MoneySummaryTests(unittest.TestCase):
                     "USD",
                     "Recorded small expense",
                     payee_name=f"Contractor {index}",
-                )
+                ),
             )
         second, second_sql = self.count_queries(
             lambda: self.reader.sources(self.query, Metric.EXPENSES)
@@ -672,7 +765,9 @@ class MoneySummaryTests(unittest.TestCase):
             SQLitePortfolioUnitOfWork(self.db, recorder),
             time_zone_resolver=BundledAddressTimeZoneResolver(),
         )
-        empty = portfolio.create_property(
+        empty = inventory_command(
+            portfolio,
+            "create_property",
             PropertyCreateCommand(
                 "Empty retained property",
                 "1 Main Street",
@@ -681,9 +776,9 @@ class MoneySummaryTests(unittest.TestCase):
                 "single_family_home",
                 (OwnershipInput("local_operator"),),
                 region="OR",
-            )
+            ),
         )
-        portfolio.archive_property(empty.id, confirmed=True)
+        inventory_command(portfolio, "archive_property", empty.id, confirmed=True)
         page = self.reader.properties(self.query)
         self.assertEqual(page.matching_total, 2)
         self.assertEqual(
@@ -742,7 +837,9 @@ class MoneySummaryTests(unittest.TestCase):
         recorder = AuditRecorder(SQLiteAuditRepository(self.db))
         parties = SQLitePartyOperations(self.db)
         owner = self.portfolio.create_party(PartyCreateCommand("individual", "Client owner"))
-        property_record = self.portfolio.create_property(
+        property_record = inventory_command(
+            self.portfolio,
+            "create_property",
             PropertyCreateCommand(
                 "Managed property",
                 "1 Main Street",
@@ -751,10 +848,12 @@ class MoneySummaryTests(unittest.TestCase):
                 "single_family_home",
                 (OwnershipInput("client_owner", party_id=owner.id),),
                 region="OR",
-            )
+            ),
         )
         lease = self.lease_for_property(property_record.id)
-        expectation = self.finance.synchronize(
+        expectation = rent_command(
+            self.finance,
+            "synchronize",
             lease["id"],
             SynchronizeExpectationsCommand(
                 lease["terms"][0]["id"],
@@ -762,7 +861,9 @@ class MoneySummaryTests(unittest.TestCase):
                 "2026-01-01",
             ),
         )[0]
-        receipt = self.finance.record_receipt(
+        receipt = rent_command(
+            self.finance,
+            "record_receipt",
             RecordReceiptCommand(
                 lease["id"],
                 str(uuid4()),
@@ -772,7 +873,7 @@ class MoneySummaryTests(unittest.TestCase):
                 (ReceiptAllocationCommand(expectation["id"], 100000),),
                 "cash",
                 received_by_party_id=owner.id,
-            )
+            ),
         )
         reports = OwnerRentReportService(
             SQLiteOwnerRentReportUnitOfWork(
@@ -791,7 +892,9 @@ class MoneySummaryTests(unittest.TestCase):
             ),
             now=lambda: datetime(2026, 10, 6, 12, tzinfo=UTC),
         )
-        report = reports.create(
+        report = owner_command(
+            reports,
+            "create",
             OwnerRentReportCommand(
                 lease["id"],
                 owner.id,
@@ -800,7 +903,7 @@ class MoneySummaryTests(unittest.TestCase):
                 "cash",
                 str(uuid4()),
                 "2026-10-06T12:00:00+00:00",
-            )
+            ),
         )
         source = Path(self.temp.name) / "owner-evidence.txt"
         source.write_text("Owner statement", encoding="utf-8")
@@ -823,7 +926,9 @@ class MoneySummaryTests(unittest.TestCase):
             purpose="owner_statement",
         )
         before = self.reader.summary(self.query)
-        reports.verify(
+        owner_command(
+            reports,
+            "verify",
             report["id"],
             VerifyOwnerRentReportCommand(True, "Matches recorded receipt", receipt["id"]),
             str(uuid4()),
@@ -872,7 +977,9 @@ class MoneySummaryTests(unittest.TestCase):
 
     def test_completed_zero_obligation_does_not_implicitly_complete_an_approved_settlement(self):
         self.record_sources()
-        self.deposits.record_refund(
+        deposit_command(
+            self.deposits,
+            "record_refund",
             self.settlement["id"],
             DepositRefundCommand(
                 str(uuid4()),
@@ -897,7 +1004,9 @@ class MoneySummaryTests(unittest.TestCase):
         for target in (1, 50):
             if target == 50:
                 for index in range(49):
-                    portfolio.create_property(
+                    inventory_command(
+                        portfolio,
+                        "create_property",
                         PropertyCreateCommand(
                             f"Éclair {index:02d}",
                             "1 Main Street",
@@ -906,7 +1015,7 @@ class MoneySummaryTests(unittest.TestCase):
                             "single_family_home",
                             (OwnershipInput("local_operator"),),
                             region="OR",
-                        )
+                        ),
                     )
             result, sql = self.count_queries(
                 lambda: self.reader.properties(replace(self.query, page_size=1))
@@ -948,7 +1057,9 @@ class MoneySummaryTests(unittest.TestCase):
         other = self.make_reader(self.db, (self.identity[0], str(uuid4())))
         with self.assertRaises(MoneyViewChanged):
             other.sources(replace(query, cursor=first.next_cursor), Metric.REMAINDER)
-        self.finance.void_receipt(self.receipt["id"], VoidCommand(True, "Correction"))
+        rent_command(
+            self.finance, "void_receipt", self.receipt["id"], VoidCommand(True, "Correction")
+        )
         with self.assertRaises(MoneyViewChanged):
             self.reader.sources(replace(query, cursor=first.next_cursor), Metric.REMAINDER)
 
@@ -961,8 +1072,11 @@ class MoneySummaryTests(unittest.TestCase):
         def mutate(_, __, sql, *args):
             if not fired and "max(rowid)" in sql:
                 fired.append(True)
-                self.finance.void_receipt(
-                    self.receipt["id"], VoidCommand(True, "Concurrent correction")
+                rent_command(
+                    self.finance,
+                    "void_receipt",
+                    self.receipt["id"],
+                    VoidCommand(True, "Concurrent correction"),
                 )
 
         engine = self.reader.unit_of_work.engine
@@ -1140,6 +1254,25 @@ class MoneySummaryTests(unittest.TestCase):
             (self.identity[0], str(uuid4())),
         )
         after = restored.summary(self.query)
+        restored_engine = create_sqlite_engine(
+            restored_path / "database" / "property-management.sqlite"
+        )
+        try:
+            with (
+                self.finance.unit_of_work.engine.connect() as original,
+                restored_engine.connect() as restored_connection,
+            ):
+                for table, order in (
+                    ("finance_command_operations", "sequence"),
+                    ("finance_command_revisions", "scope_kind, scope_id"),
+                ):
+                    query = f"SELECT * FROM {table} ORDER BY {order}"
+                    self.assertEqual(
+                        original.exec_driver_sql(query).all(),
+                        restored_connection.exec_driver_sql(query).all(),
+                    )
+        finally:
+            restored_engine.dispose()
         self.assertEqual(before.operating, after.operating)
         self.assertEqual(before.deposit_activity, after.deposit_activity)
         self.assertEqual(before.deposit_obligations, after.deposit_obligations)

@@ -78,6 +78,9 @@ class _SyntheticApprovalHandler:
 
     def approve(self, context):
         def operation(tx):
+            prior = tx.review_operations().approval_replay(context)
+            if prior is not None:
+                return prior
             source = (
                 tx.connection.exec_driver_sql(
                     "SELECT revision, fingerprint, tombstoned FROM synthetic_ai_sources WHERE id=:id",
@@ -114,8 +117,9 @@ class _SyntheticApprovalHandler:
                 result_entity_type="synthetic_ai_result",
                 result_entity_id=result_id,
                 operator_note=context.operator_note,
+                command=context.command,
             )
-            return {"status": draft["status"], "resultEntityId": result_id}
+            return draft
 
         return self.unit_of_work.write(operation)
 
@@ -357,10 +361,15 @@ class AiGovernanceTests(TestCase):
                 "quantization": "q",
                 "runtime_id": "runtime",
                 "runtime_version": "1",
-            }
+            },
+            idempotency_key=str(uuid4()),
+            expected_revision=0,
         )
         self.configuration.update_settings(
-            built_in_enabled=True, default_connection_id=connection["id"]
+            built_in_enabled=True,
+            default_connection_id=connection["id"],
+            idempotency_key=str(uuid4()),
+            expected_revision=self.configuration.settings()["revision"],
         )
         with create_sqlite_engine(self.database).begin() as connection:
             connection.exec_driver_sql(
@@ -528,10 +537,14 @@ class AiGovernanceTests(TestCase):
                 "adapter_version": "1",
                 "model_identifier": "alternate-model",
                 "execution_location": "cloud",
-            }
+            },
+            idempotency_key=str(uuid4()),
+            expected_revision=0,
         )
         self.configuration.update_settings(
-            default_connection_id=cloud["id"], idempotency_key=str(uuid4())
+            default_connection_id=cloud["id"],
+            idempotency_key=str(uuid4()),
+            expected_revision=self.configuration.settings()["revision"],
         )
         blocked = self.generation.run(
             action_type="synthetic_action",
@@ -544,7 +557,11 @@ class AiGovernanceTests(TestCase):
         )
         self.assertEqual("ai_disclosure_required", blocked["errorCode"])
         self.configuration.set_disclosure(
-            cloud["id"], expected_revision=1, disclosure_version="v1", data_classes=["public"]
+            cloud["id"],
+            expected_revision=1,
+            disclosure_version="v1",
+            data_classes=["public"],
+            idempotency_key=str(uuid4()),
         )
         second = self.generation.run(
             action_type="synthetic_action",
@@ -608,9 +625,15 @@ class AiGovernanceTests(TestCase):
                 "quantization": "q",
                 "runtime_id": "runtime",
                 "runtime_version": "1",
-            }
+            },
+            idempotency_key=str(uuid4()),
+            expected_revision=0,
         )
-        self.configuration.update_settings(default_connection_id=connection["id"])
+        self.configuration.update_settings(
+            default_connection_id=connection["id"],
+            idempotency_key=str(uuid4()),
+            expected_revision=self.configuration.settings()["revision"],
+        )
         result = self.generation.run(
             action_type=original.action_type,
             source_entity_type="synthetic",
@@ -742,7 +765,12 @@ class AiGovernanceTests(TestCase):
             idempotency_key=str(uuid4()),
         )
         with self.assertRaises(AiValidationError):
-            self.drafts.approve_draft(result["draft"]["id"], version=1, operator_note="x" * 1001)
+            self.drafts.approve_draft(
+                result["draft"]["id"],
+                version=1,
+                operator_note="x" * 1001,
+                idempotency_key=str(uuid4()),
+            )
 
     def test_same_key_replays_after_the_source_changes(self):
         arguments = dict(
@@ -832,11 +860,13 @@ class AiGovernanceTests(TestCase):
         )
         draft = result["draft"]
         dismissed = self.drafts.dismiss_draft(
-            draft["id"], version=1, operator_note="not applicable"
+            draft["id"], version=1, operator_note="not applicable", idempotency_key=str(uuid4())
         )
         self.assertEqual("dismissed", dismissed["status"])
         with self.assertRaises(AiConflictError):
-            self.drafts.edit_draft(draft["id"], version=1, payload={"summary": "later"})
+            self.drafts.edit_draft(
+                draft["id"], version=1, payload={"summary": "later"}, idempotency_key=str(uuid4())
+            )
         with create_sqlite_engine(self.database).connect() as connection:
             validate_ai_governance_schema(
                 connection,
@@ -1069,6 +1099,12 @@ class AiGovernanceTests(TestCase):
                 "max_prompt_tokens": 14_000,
                 "max_completion_tokens": 4_000,
             },
+            idempotency_key=str(uuid4()),
+            expected_revision=next(
+                x["revision"]
+                for x in self.configuration.limits()
+                if x["actionType"] == "synthetic_action"
+            ),
         )
         result = self.generation.run(
             action_type="synthetic_action",
@@ -1085,6 +1121,12 @@ class AiGovernanceTests(TestCase):
         self.configuration.put_limit(
             "synthetic_action",
             {"enabled": True, "max_prompt_tokens": 4_000, "max_completion_tokens": 4_097},
+            idempotency_key=str(uuid4()),
+            expected_revision=next(
+                x["revision"]
+                for x in self.configuration.limits()
+                if x["actionType"] == "synthetic_action"
+            ),
         )
         result = self.generation.run(
             action_type="synthetic_action",
@@ -1160,32 +1202,38 @@ class AiGovernanceTests(TestCase):
 
     def test_settings_replay_and_changed_reuse_are_durable(self):
         key = str(uuid4())
+        revision = self.configuration.settings()["revision"]
         connection_id = self.configuration.connections()[0]["id"]
         first = self.configuration.update_settings(
-            kill_switch=False, default_connection_id=connection_id, idempotency_key=key
+            kill_switch=False,
+            default_connection_id=connection_id,
+            idempotency_key=key,
+            expected_revision=revision,
         )
-        self.configuration.update_settings(kill_switch=True, idempotency_key=str(uuid4()))
+        self.configuration.update_settings(
+            kill_switch=True,
+            idempotency_key=str(uuid4()),
+            expected_revision=self.configuration.settings()["revision"],
+        )
         replay = self.configuration.update_settings(
-            kill_switch=False, default_connection_id=connection_id, idempotency_key=key
+            kill_switch=False,
+            default_connection_id=connection_id,
+            idempotency_key=key,
+            expected_revision=revision,
         )
         self.assertEqual(first, replay)
         self.assertTrue(self.configuration.settings()["killSwitch"])
         with self.assertRaises(AiConflictError):
-            self.configuration.update_settings(kill_switch=True, idempotency_key=key)
-
-    def test_malformed_settings_operation_is_rejected_during_retained_validation(self):
-        with create_sqlite_engine(self.database).begin() as connection:
-            connection.execute(
-                text(
-                    "INSERT INTO ai_settings_operations (idempotency_key,request_fingerprint,result_json,created_at) VALUES (:key,:fingerprint,:result,:created)"
-                ),
-                {
-                    "key": str(uuid4()),
-                    "fingerprint": "a" * 64,
-                    "result": "not-json",
-                    "created": "not-a-time",
-                },
+            self.configuration.update_settings(
+                kill_switch=True,
+                idempotency_key=key,
+                expected_revision=self.configuration.settings()["revision"],
             )
+
+    def test_malformed_command_operation_is_rejected_during_retained_validation(self):
+        with create_sqlite_engine(self.database).begin() as connection:
+            connection.exec_driver_sql("DROP TRIGGER ai_command_operations_no_update")
+            connection.exec_driver_sql("UPDATE ai_command_operations SET created_at='not-a-time'")
         with create_sqlite_engine(self.database).connect() as connection:
             with self.assertRaises(MigrationSchemaError):
                 validate_ai_governance_schema(
@@ -1196,28 +1244,9 @@ class AiGovernanceTests(TestCase):
                     source_validators={"synthetic": _SyntheticSource()},
                 )
 
-    def test_settings_operation_replay_timestamp_must_equal_its_write_timestamp(self):
+    def test_command_operation_trigger_is_required(self):
         with create_sqlite_engine(self.database).begin() as connection:
-            connection.execute(
-                text(
-                    "INSERT INTO ai_settings_operations (idempotency_key,request_fingerprint,result_json,created_at) VALUES (:key,:fingerprint,:result,:created)"
-                ),
-                {
-                    "key": str(uuid4()),
-                    "fingerprint": "a" * 64,
-                    "result": json.dumps(
-                        {
-                            "killSwitch": False,
-                            "builtInEnabled": False,
-                            "defaultConnectionId": None,
-                            "updatedAt": "2026-01-01T00:00:00+00:00",
-                        },
-                        sort_keys=True,
-                        separators=(",", ":"),
-                    ),
-                    "created": "2026-01-01T00:00:01+00:00",
-                },
-            )
+            connection.exec_driver_sql("DROP TRIGGER ai_command_operations_no_delete")
         with create_sqlite_engine(self.database).connect() as connection:
             with self.assertRaises(MigrationSchemaError):
                 validate_ai_governance_schema(
@@ -1312,7 +1341,10 @@ class AiGovernanceTests(TestCase):
             idempotency_key=str(uuid4()),
         )
         approved = self.drafts.approve_draft(
-            result["draft"]["id"], version=1, operator_note="confirmed"
+            result["draft"]["id"],
+            version=1,
+            operator_note="confirmed",
+            idempotency_key=str(uuid4()),
         )
         self.assertEqual("approved", approved["status"])
         with create_sqlite_engine(self.database).connect() as connection:
@@ -1340,7 +1372,12 @@ class AiGovernanceTests(TestCase):
                 text("UPDATE synthetic_ai_sources SET revision='2' WHERE id='source'")
             )
         with self.assertRaises(AiConflictError):
-            self.drafts.approve_draft(result["draft"]["id"], version=1, operator_note="confirmed")
+            self.drafts.approve_draft(
+                result["draft"]["id"],
+                version=1,
+                operator_note="confirmed",
+                idempotency_key=str(uuid4()),
+            )
         detail = self.drafts.draft_detail(result["draft"]["id"])
         self.assertEqual("proposed", detail["status"])
         self.assertEqual([], detail["reviewHistory"])
@@ -1420,12 +1457,17 @@ class AiGovernanceTests(TestCase):
                 "quantization": "q",
                 "runtime_id": "runtime",
                 "runtime_version": "1",
-            }
+            },
+            idempotency_key=str(uuid4()),
+            expected_revision=0,
         )
         connection_id = connection["id"]
         backup_configuration.set_credential(connection_id, "not-in-the-workspace")
         backup_configuration.update_settings(
-            built_in_enabled=True, default_connection_id=connection_id, idempotency_key=str(uuid4())
+            built_in_enabled=True,
+            default_connection_id=connection_id,
+            idempotency_key=str(uuid4()),
+            expected_revision=backup_configuration.settings()["revision"],
         )
         backup_configuration.put_limit(
             "backup_action",
@@ -1437,6 +1479,12 @@ class AiGovernanceTests(TestCase):
                 "max_completion_tokens": 10,
                 "allowed_models": [qualified_model_identity("backup", "1", "backup-model")],
             },
+            idempotency_key=str(uuid4()),
+            expected_revision=next(
+                x["revision"]
+                for x in backup_configuration.limits()
+                if x["actionType"] == "backup_action"
+            ),
         )
         run = backup_generation.run(
             action_type="backup_action",
@@ -1447,8 +1495,22 @@ class AiGovernanceTests(TestCase):
             candidate={"message": "archive"},
             idempotency_key=str(uuid4()),
         )
-        backup_drafts.dismiss_draft(run["draft"]["id"], version=1, operator_note="archived")
+        backup_drafts.dismiss_draft(
+            run["draft"]["id"], version=1, operator_note="archived", idempotency_key=str(uuid4())
+        )
         with create_sqlite_engine(workspace.paths.database).connect() as connection:
+            expected_commands = (
+                connection.exec_driver_sql("SELECT * FROM ai_command_operations ORDER BY id")
+                .mappings()
+                .all()
+            )
+            expected_command_audits = (
+                connection.exec_driver_sql(
+                    "SELECT * FROM audit_events WHERE entity_type='ai_command_operation' ORDER BY id"
+                )
+                .mappings()
+                .all()
+            )
             expected = {
                 "settings": dict(
                     connection.execute(
@@ -1520,13 +1582,25 @@ class AiGovernanceTests(TestCase):
             restored.workspace_path / "database" / "property-management.sqlite"
         ).connect() as connection:
             self.assertEqual(
+                expected_commands,
+                connection.exec_driver_sql("SELECT * FROM ai_command_operations ORDER BY id")
+                .mappings()
+                .all(),
+            )
+            self.assertEqual(
+                expected_command_audits,
+                connection.exec_driver_sql(
+                    "SELECT * FROM audit_events WHERE entity_type='ai_command_operation' ORDER BY id"
+                )
+                .mappings()
+                .all(),
+            )
+            self.assertEqual(
                 1, connection.execute(text("SELECT COUNT(*) FROM ai_settings")).scalar_one()
             )
             self.assertEqual(
-                1,
-                connection.execute(
-                    text("SELECT COUNT(*) FROM ai_settings_operations")
-                ).scalar_one(),
+                4,
+                connection.execute(text("SELECT COUNT(*) FROM ai_command_operations")).scalar_one(),
             )
             self.assertEqual(
                 1,

@@ -10,12 +10,18 @@ from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint, 
 from app.platform.migration_errors import MigrationSchemaError
 
 from ..domain.models import Concern
-from .sqlalchemy_models import OwnerConcernFollowUpOperationModel, OwnerConcernModel
+from .command_validation import COMMAND_TRIGGERS, validate_commands
+from .sqlalchemy_models import (
+    OwnerConcernCommandOperationModel,
+    OwnerConcernFollowUpOperationModel,
+    OwnerConcernModel,
+)
 
-MODELS = (OwnerConcernModel, OwnerConcernFollowUpOperationModel)
+MODELS = (OwnerConcernModel, OwnerConcernFollowUpOperationModel, OwnerConcernCommandOperationModel)
 TRIGGERS = {
     "owner_concern_follow_up_operations_no_update": "CREATE TRIGGER owner_concern_follow_up_operations_no_update BEFORE UPDATE ON owner_concern_follow_up_operations BEGIN SELECT RAISE(ABORT, 'owner concern operations are immutable'); END",
     "owner_concern_follow_up_operations_no_delete": "CREATE TRIGGER owner_concern_follow_up_operations_no_delete BEFORE DELETE ON owner_concern_follow_up_operations BEGIN SELECT RAISE(ABORT, 'owner concern operations are immutable'); END",
+    **COMMAND_TRIGGERS,
 }
 
 
@@ -27,14 +33,19 @@ def validate_owner_concern_schema(connection):
     inspector = inspect(connection)
     for model in MODELS:
         table = model.__table__
+        if not inspector.has_table(table.name):
+            raise MigrationSchemaError("Owner-management schema is incomplete.")
         actual = {item["name"]: item for item in inspector.get_columns(table.name)}
         expected = {item.name: item for item in table.columns}
         if not inspector.has_table(table.name) or set(actual) != set(expected):
             raise MigrationSchemaError("Owner-management columns are incompatible.")
         for name, column in expected.items():
-            if str(actual[name]["type"]).upper() != str(column.type).upper() or bool(
-                actual[name]["nullable"]
-            ) != bool(column.nullable):
+            default = str(column.server_default.arg) if column.server_default else None
+            if (
+                str(actual[name]["type"]).upper() != str(column.type).upper()
+                or bool(actual[name]["nullable"]) != bool(column.nullable)
+                or _default(actual[name]["default"]) != _default(default)
+            ):
                 raise MigrationSchemaError("Owner-management column definitions are incompatible.")
         if {item["name"] for item in inspector.get_columns(table.name) if item["primary_key"]} != {
             item.name for item in table.primary_key.columns
@@ -45,6 +56,11 @@ def validate_owner_concern_schema(connection):
                 tuple(fk.parent.name for fk in item.elements),
                 item.elements[0].column.table.name,
                 tuple(fk.column.name for fk in item.elements),
+                tuple(
+                    (option, getattr(item, option))
+                    for option in ("onupdate", "ondelete", "deferrable", "initially", "match")
+                    if getattr(item, option) is not None
+                ),
             )
             for item in table.constraints
             if isinstance(item, ForeignKeyConstraint)
@@ -54,17 +70,30 @@ def validate_owner_concern_schema(connection):
                 tuple(item["constrained_columns"]),
                 item["referred_table"],
                 tuple(item["referred_columns"]),
+                tuple(
+                    (option, item.get("options", {})[option])
+                    for option in ("onupdate", "ondelete", "deferrable", "initially", "match")
+                    if option in item.get("options", {})
+                ),
             )
             for item in inspector.get_foreign_keys(table.name)
         }
         if actual_fk != expected_fk:
             raise MigrationSchemaError("Owner-management foreign keys are incompatible.")
         expected_index = {
-            item.name: (tuple(column.name for column in item.columns), bool(item.unique))
+            item.name: (
+                tuple(column.name for column in item.columns),
+                bool(item.unique),
+                _sql(item.dialect_options["sqlite"].get("where")),
+            )
             for item in table.indexes
         }
         actual_index = {
-            item["name"]: (tuple(item["column_names"]), bool(item.get("unique")))
+            item["name"]: (
+                tuple(item["column_names"]),
+                bool(item.get("unique")),
+                _sql(item.get("dialect_options", {}).get("sqlite_where")),
+            )
             for item in inspector.get_indexes(table.name)
         }
         if actual_index != expected_index:
@@ -86,12 +115,17 @@ def validate_owner_concern_schema(connection):
     actual = {
         name: _sql(sql)
         for name, sql in connection.exec_driver_sql(
-            "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name='owner_concern_follow_up_operations'"
+            "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name IN ('owner_concern_follow_up_operations','owner_concern_command_operations')"
         )
     }
     if actual != {name: _sql(sql) for name, sql in TRIGGERS.items()}:
         raise MigrationSchemaError("Owner-management operation triggers are incompatible.")
     _validate_data(connection)
+    validate_commands(connection)
+
+
+def _default(value):
+    return None if value is None else str(value).strip("()'\" ")
 
 
 def _validate_data(connection):
@@ -297,7 +331,7 @@ def _audit_history(connection, row):
     events = list(
         connection.execute(
             text(
-                "SELECT action,before_snapshot,after_snapshot FROM audit_events WHERE entity_type='owner_concern' AND entity_id=:id ORDER BY occurred_at,id"
+                "SELECT action,before_snapshot,after_snapshot FROM audit_events WHERE entity_type='owner_concern' AND entity_id=:id ORDER BY rowid"
             ),
             {"id": row["id"]},
         ).mappings()
@@ -310,7 +344,11 @@ def _audit_history(connection, row):
     ):
         raise MigrationSchemaError("Owner concern creation audit history is incomplete.")
     created_after = _snapshot(created[0]["after_snapshot"])
-    mutations = [event for event in events if event["action"] in {"updated", "status_changed"}]
+    mutations = [
+        event
+        for event in events
+        if event["action"] in {"updated", "status_changed", "follow_up_created"}
+    ]
     # A matching final snapshot alone cannot prove that every retained mutation
     # happened.  Walk the ordered audit history instead: each mutation must
     # begin at the exact preceding concern state and establish the next one.
@@ -318,7 +356,15 @@ def _audit_history(connection, row):
     for event in mutations:
         before = _snapshot(event["before_snapshot"])
         after = _snapshot(event["after_snapshot"])
-        if not _same_state(before, previous) or not _complete_state(after):
+        if event["action"] == "follow_up_created" and event["before_snapshot"] is None:
+            if not _same_state(after, created_after):
+                raise MigrationSchemaError("Owner concern initial follow-up audit is invalid.")
+            continue
+        if (
+            not _complete_state(before)
+            or not _same_state(before, previous)
+            or not _complete_state(after)
+        ):
             raise MigrationSchemaError("Owner concern audit mutation chain is incomplete.")
         previous = after
     updates = [
@@ -332,7 +378,15 @@ def _audit_history(connection, row):
     current = Concern(**dict(row)).to_dict()
     if not _same_state(previous, current):
         raise MigrationSchemaError("Owner concern retained state has no complete audit chain.")
-    mutation_snapshots = updates + transitions
+    mutation_snapshots = (
+        updates
+        + transitions
+        + [
+            _snapshot(event["after_snapshot"])
+            for event in events
+            if event["action"] == "follow_up_created"
+        ]
+    )
     if row["status"] in ("open", "in_progress"):
         # Creation substantiates an untouched open concern. Once a lifecycle
         # transition exists, it cannot prove the current active state: a raw
@@ -358,7 +412,7 @@ def _audit_history(connection, row):
             "dismissed_at_utc",
             "dismissal_reason",
         )
-        if not any(_same_values(snapshot, row, fields) for snapshot in transitions):
+        if not any(_same_values(snapshot, row, fields) for snapshot in mutation_snapshots):
             raise MigrationSchemaError("Owner concern lifecycle audit history is incomplete.")
     if row["status"] in ("open", "in_progress") and any(
         snapshot.get("status") in ("resolved", "dismissed") for snapshot in transitions
@@ -391,7 +445,7 @@ def _audit_history(connection, row):
             _same_values(
                 _snapshot(snapshot),
                 source,
-                ("status", "updated_at_utc", "dismissed_at_utc", "dismissal_reason"),
+                ("status", "dismissed_at_utc", "dismissal_reason"),
             )
             for snapshot in source_events
         ):

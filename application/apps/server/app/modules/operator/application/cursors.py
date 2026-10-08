@@ -3,7 +3,8 @@
 import base64
 import json
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
+from typing import TypedDict, NotRequired, Unpack
 
 from app.modules.operator.domain.models import (
     OperatorConflict,
@@ -13,6 +14,19 @@ from app.modules.operator.domain.models import (
     identifier,
     utc,
 )
+
+MAX_CURSOR_BYTES = 4096
+CURSOR_KEY_PARTS = 2
+MAX_SORT_KEY = 1000
+
+
+class CursorArguments(TypedDict):
+    endpoint: str
+    filters: dict
+    identity: tuple[str, str]
+    source_revision: str
+    now: datetime
+    sort_kind: NotRequired[str]
 
 
 @dataclass(frozen=True)
@@ -44,9 +58,11 @@ class ReadCursor:
         )
 
 
-def decode_cursor(value, *, endpoint, filters, identity, source_revision, now):
+def decode_cursor(value, **scope: Unpack[CursorArguments]):
+    endpoint, filters, identity = scope["endpoint"], scope["filters"], scope["identity"]
+    source_revision, now = scope["source_revision"], scope["now"]
     try:
-        if not isinstance(value, str) or not 1 <= len(value) <= 4096:
+        if not isinstance(value, str) or not 1 <= len(value) <= MAX_CURSOR_BYTES:
             raise ValueError()
         data = json.loads(
             base64.b64decode(value + "=" * (-len(value) % 4), altchars=b"-_", validate=True)
@@ -58,10 +74,10 @@ def decode_cursor(value, *, endpoint, filters, identity, source_revision, now):
             or data["version"] != 1
         ):
             raise ValueError()
-        if not isinstance(data["last"], list) or len(data["last"]) != 2:
+        if not isinstance(data["last"], list) or len(data["last"]) != CURSOR_KEY_PARTS:
             raise ValueError()
         last = tuple(data["last"])
-        utc(last[0])
+        _validate_sort(last[0], scope.get("sort_kind", "instant"))
         identifier(last[1])
         captured = utc(data["asOf"])
         if data["endpoint"] != endpoint or canonical(data["filters"]) != canonical(filters):
@@ -77,6 +93,13 @@ def decode_cursor(value, *, endpoint, filters, identity, source_revision, now):
         if isinstance(error, OperatorError):
             raise
         raise OperatorError("Malformed collection cursor.") from error
+
+
+def _validate_sort(value, kind):
+    if kind == "instant":
+        utc(value)
+    elif kind != "label" or not isinstance(value, str) or len(value) > MAX_SORT_KEY:
+        raise ValueError()
 
 
 def read_revision(identity, marker):

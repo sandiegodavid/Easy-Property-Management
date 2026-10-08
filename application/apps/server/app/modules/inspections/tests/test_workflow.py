@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from app.modules.portfolio.tests.commands import inventory_command
+from app.modules.inspections.tests.commands import inspection_command
+
 import json
 import sqlite3
 import tempfile
@@ -9,9 +12,10 @@ import unittest
 from datetime import date, timedelta
 from pathlib import Path
 from uuid import uuid4
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from sqlalchemy import event, text
+from sqlalchemy import event
 
 from app.bootstrap.api import create_app
 from app.modules.audit.application.recorder import AuditRecorder
@@ -28,11 +32,14 @@ from app.modules.inspections.application.service import (
 )
 from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
 from app.modules.inspections.infrastructure.unit_of_work import SQLiteInspectionUnitOfWork
+from app.modules.leases.tests.commands import lease_command
 from app.modules.leases.application.service import (
     LeaseCreateCommand,
     LeaseService,
     ParticipantCommand,
     TermCommand,
+    TerminationCaseCommand,
+    TerminationProposalCommand,
 )
 from app.modules.leases.infrastructure.unit_of_work import (
     SQLiteLeaseParticipationGuard,
@@ -81,7 +88,9 @@ class InspectionWorkflowTests(unittest.TestCase):
             SQLitePortfolioUnitOfWork(self.workspace.paths.database, self.recorder),
             time_zone_resolver=BundledAddressTimeZoneResolver(),
         )
-        property_record = portfolio.create_property(
+        property_record = inventory_command(
+            portfolio,
+            "create_property",
             PropertyCreateCommand(
                 "Home",
                 "1 Main",
@@ -90,7 +99,7 @@ class InspectionWorkflowTests(unittest.TestCase):
                 "single_family_home",
                 (OwnershipInput("local_operator"),),
                 region="OR",
-            )
+            ),
         )
         self.space_id = portfolio.get_property(property_record.id)["spaces"][0]["id"]
         self.portfolio = portfolio
@@ -105,8 +114,16 @@ class InspectionWorkflowTests(unittest.TestCase):
             ),
             SharedPartyFactory(),
         )
-        tenant = tenants.create(TenantCreateCommand("individual", "Tenant"))
-        co_tenant = tenants.create(TenantCreateCommand("individual", "Co tenant"))
+        tenant = tenants.create(
+            TenantCreateCommand("individual", "Tenant"),
+            expected_revision=0,
+            idempotency_key=str(uuid4()),
+        )
+        co_tenant = tenants.create(
+            TenantCreateCommand("individual", "Co tenant"),
+            expected_revision=0,
+            idempotency_key=str(uuid4()),
+        )
         today = date.today()
         self.leases = LeaseService(
             SQLiteLeaseUnitOfWork(
@@ -117,7 +134,9 @@ class InspectionWorkflowTests(unittest.TestCase):
                 SQLiteInspectionContextReader(),
             )
         )
-        draft = self.leases.create(
+        draft = lease_command(
+            self.leases,
+            "create",
             LeaseCreateCommand(
                 self.space_id,
                 "residential",
@@ -129,9 +148,11 @@ class InspectionWorkflowTests(unittest.TestCase):
                     ParticipantCommand(tenant["id"], "primary_tenant"),
                     ParticipantCommand(co_tenant["id"], "co_tenant"),
                 ),
-            )
+            ),
         )
-        self.lease = self.leases.execute(
+        self.lease = lease_command(
+            self.leases,
+            "execute",
             draft["id"],
             executed_on=today,
             confirmed=True,
@@ -156,16 +177,69 @@ class InspectionWorkflowTests(unittest.TestCase):
             AreaInput("Kitchen", (ObservationInput("Floor", "good", is_completed=True),)),
         )
 
+    def _terminate_and_create_post_report(self):
+        move_out = date.today() + timedelta(days=1)
+        case = lease_command(
+            self.leases,
+            "create_termination_case",
+            self.lease["id"],
+            TerminationCaseCommand("mutual", date.today(), move_out, move_out),
+        )
+        proposal = lease_command(
+            self.leases,
+            "add_termination_proposal",
+            case["id"],
+            TerminationProposalCommand(move_out, move_out),
+        )
+        lease_command(
+            self.leases,
+            "accept_termination_proposal",
+            case["id"],
+            proposal["proposals"][0]["id"],
+            accepted_on=date.today(),
+            confirmed=True,
+        )
+
+        class MoveOutDate(date):
+            @classmethod
+            def today(cls):
+                return move_out
+
+        with patch("app.modules.leases.application.service.date", MoveOutDate):
+            lease_command(
+                self.leases,
+                "complete_termination_case",
+                case["id"],
+                actual_move_out_on=move_out.isoformat(),
+                confirmed=True,
+                expected_revision=self.leases.unit_of_work.write(
+                    lambda tx: tx.space(self.space_id).status_revision
+                ),
+            )
+        return inspection_command(
+            self.inspections,
+            "create",
+            self.lease["id"],
+            report_kind="post_move_out",
+            walkthrough_on=move_out.isoformat(),
+            conducted_by="Operator",
+            areas=self.checklist,
+        )
+
     def _finalize_pre(self):
-        report = self.inspections.create(
+        report = inspection_command(
+            self.inspections,
+            "create",
             self.lease["id"],
             report_kind="pre_move_in",
             walkthrough_on=date.today(),
             conducted_by="Operator",
             areas=self.checklist,
         )
-        self.inspections.acknowledge(report["id"], self._acknowledge_all(report))
-        return self.inspections.finalize(report["id"], confirmed=True)
+        inspection_command(
+            self.inspections, "acknowledge", report["id"], self._acknowledge_all(report)
+        )
+        return inspection_command(self.inspections, "finalize", report["id"], confirmed=True)
 
     @staticmethod
     def _acknowledge_all(report):
@@ -176,25 +250,14 @@ class InspectionWorkflowTests(unittest.TestCase):
 
     def test_pre_post_correction_and_pair_scoped_comparison_history(self):
         pre = self._finalize_pre()
-        with self.leases.unit_of_work.engine.begin() as connection:
-            connection.execute(
-                text(
-                    "UPDATE leases SET status='ended', actual_move_out_on=:day, end_reason='contract_completed' WHERE id=:id"
-                ),
-                {"day": date.today().isoformat(), "id": self.lease["id"]},
-            )
-        post = self.inspections.create(
-            self.lease["id"],
-            report_kind="post_move_out",
-            walkthrough_on=date.today(),
-            conducted_by="Operator",
-            areas=self.checklist,
-        )
-        self.inspections.acknowledge(post["id"], self._acknowledge_all(post))
-        post = self.inspections.finalize(post["id"], confirmed=True)
+        post = self._terminate_and_create_post_report()
+        inspection_command(self.inspections, "acknowledge", post["id"], self._acknowledge_all(post))
+        post = inspection_command(self.inspections, "finalize", post["id"], confirmed=True)
         pre_observation = pre["areas"][0]["observations"][0]["id"]
         post_observation = post["areas"][0]["observations"][0]["id"]
-        self.inspections.save_comparisons(
+        inspection_command(
+            self.inspections,
+            "save_comparisons",
             self.lease["id"],
             [
                 {
@@ -205,7 +268,9 @@ class InspectionWorkflowTests(unittest.TestCase):
                 }
             ],
         )
-        correction = self.inspections.create(
+        correction = inspection_command(
+            self.inspections,
+            "create",
             self.lease["id"],
             report_kind="pre_move_in",
             walkthrough_on=date.today(),
@@ -214,10 +279,16 @@ class InspectionWorkflowTests(unittest.TestCase):
             correction_of=pre["id"],
             correction_reason="Corrected photo",
         )
-        self.inspections.acknowledge(correction["id"], self._acknowledge_all(correction))
-        correction = self.inspections.finalize(correction["id"], confirmed=True)
+        inspection_command(
+            self.inspections, "acknowledge", correction["id"], self._acknowledge_all(correction)
+        )
+        correction = inspection_command(
+            self.inspections, "finalize", correction["id"], confirmed=True
+        )
         corrected_observation = correction["areas"][0]["observations"][0]["id"]
-        current = self.inspections.save_comparisons(
+        current = inspection_command(
+            self.inspections,
+            "save_comparisons",
             self.lease["id"],
             [
                 {
@@ -228,14 +299,16 @@ class InspectionWorkflowTests(unittest.TestCase):
                 }
             ],
         )
-        self.assertEqual(current[0]["preReportId"], correction["id"])
+        self.assertEqual(current["comparisons"][0]["preReportId"], correction["id"])
         rows = self.inspections.unit_of_work.write(lambda tx: tx.comparisons(self.lease["id"]))
         self.assertEqual(len(rows), 2)
         self.assertGreaterEqual(len(self.audit.history("condition_comparison")), 2)
 
     def test_context_reader_returns_inspection_facts_in_one_query_per_context(self):
         reader = SQLiteInspectionContextReader()
-        draft = self.inspections.create(
+        draft = inspection_command(
+            self.inspections,
+            "create",
             self.lease["id"],
             report_kind="pre_move_in",
             walkthrough_on=date.today(),
@@ -247,25 +320,18 @@ class InspectionWorkflowTests(unittest.TestCase):
             self.assertEqual(
                 reader.observation_context(connection, observation_id)["status"], "draft"
             )
-        pre = self.inspections.acknowledge(draft["id"], self._acknowledge_all(draft))
-        pre = self.inspections.finalize(pre["id"], confirmed=True)
-        with self.leases.unit_of_work.engine.begin() as connection:
-            connection.execute(
-                text(
-                    "UPDATE leases SET status='ended', actual_move_out_on=:day, end_reason='contract_completed' WHERE id=:id"
-                ),
-                {"day": date.today().isoformat(), "id": self.lease["id"]},
-            )
-        post = self.inspections.create(
-            self.lease["id"],
-            report_kind="post_move_out",
-            walkthrough_on=date.today(),
-            conducted_by="Operator",
-            areas=self.checklist,
+        pre = inspection_command(
+            self.inspections, "acknowledge", draft["id"], self._acknowledge_all(draft)
         )
-        post = self.inspections.acknowledge(post["id"], self._acknowledge_all(post))
-        post = self.inspections.finalize(post["id"], confirmed=True)
-        comparison = self.inspections.save_comparisons(
+        pre = inspection_command(self.inspections, "finalize", pre["id"], confirmed=True)
+        post = self._terminate_and_create_post_report()
+        post = inspection_command(
+            self.inspections, "acknowledge", post["id"], self._acknowledge_all(post)
+        )
+        post = inspection_command(self.inspections, "finalize", post["id"], confirmed=True)
+        comparison = inspection_command(
+            self.inspections,
+            "save_comparisons",
             self.lease["id"],
             [
                 {
@@ -275,7 +341,7 @@ class InspectionWorkflowTests(unittest.TestCase):
                     "operator_notes": None,
                 }
             ],
-        )[0]
+        )["comparisons"][0]
 
         statements = []
         engine = self.inspections.unit_of_work.engine
@@ -323,8 +389,9 @@ class InspectionWorkflowTests(unittest.TestCase):
                 "/api/files",
                 data={
                     "entity_type": "condition_observation",
-                    "entity_id": "observation",
+                    "entity_id": "00000000-0000-4000-8000-000000000000",
                     "purpose": "condition_photo",
+                    "idempotency_key": str(uuid4()),
                 },
                 files={"file": ("evidence.txt", b"evidence", "text/plain")},
             )
@@ -332,7 +399,9 @@ class InspectionWorkflowTests(unittest.TestCase):
         self.assertIn("attached by its owning workflow", response.json()["detail"]["message"])
 
     def test_post_move_out_draft_precedes_confirmed_move_out_but_cannot_finalize(self):
-        report = self.inspections.create(
+        report = inspection_command(
+            self.inspections,
+            "create",
             self.lease["id"],
             report_kind="post_move_out",
             walkthrough_on=date.today(),
@@ -340,18 +409,24 @@ class InspectionWorkflowTests(unittest.TestCase):
             areas=self.checklist,
         )
         self.assertEqual(report["status"], "draft")
-        self.inspections.acknowledge(report["id"], self._acknowledge_all(report))
+        inspection_command(
+            self.inspections, "acknowledge", report["id"], self._acknowledge_all(report)
+        )
         with self.assertRaises(InspectionConflictError):
-            self.inspections.finalize(report["id"], confirmed=True)
+            inspection_command(self.inspections, "finalize", report["id"], confirmed=True)
 
     @fast_backup_encryption()
     def test_inspection_dataset_evidence_and_correlated_audit_round_trip_through_backup(self):
-        template = self.inspections.create_template(
+        template = inspection_command(
+            self.inspections,
+            "create_template",
             display_name="Move-in checklist",
             applicability="residential",
             areas=self.checklist,
         )
-        pre = self.inspections.create(
+        pre = inspection_command(
+            self.inspections,
+            "create",
             self.lease["id"],
             report_kind="pre_move_in",
             walkthrough_on=date.today(),
@@ -359,11 +434,13 @@ class InspectionWorkflowTests(unittest.TestCase):
             template_id=template["id"],
         )
         self.assertEqual(pre["areas"][0]["observations"][0]["itemName"], "Floor")
-        pre = self.inspections.replace_areas(pre["id"], self.checklist)
+        pre = inspection_command(self.inspections, "replace_areas", pre["id"], self.checklist)
         observation_id = pre["areas"][0]["observations"][0]["id"]
         evidence_source = Path(self.temp.name) / "move-in-photo.txt"
         evidence_source.write_bytes(b"move-in evidence")
-        evidence = self.inspections.attach_evidence(
+        evidence = inspection_command(
+            self.inspections,
+            "attach_evidence",
             observation_id,
             evidence_source,
             "move-in-photo.txt",
@@ -371,25 +448,18 @@ class InspectionWorkflowTests(unittest.TestCase):
             "condition_photo",
         )
         self.assertEqual(evidence["links"][0]["entityType"], "condition_observation")
-        pre = self.inspections.acknowledge(pre["id"], self._acknowledge_all(pre))
-        pre = self.inspections.finalize(pre["id"], confirmed=True)
-        with self.leases.unit_of_work.engine.begin() as connection:
-            connection.execute(
-                text(
-                    "UPDATE leases SET status='ended', actual_move_out_on=:day, end_reason='contract_completed' WHERE id=:id"
-                ),
-                {"day": date.today().isoformat(), "id": self.lease["id"]},
-            )
-        post = self.inspections.create(
-            self.lease["id"],
-            report_kind="post_move_out",
-            walkthrough_on=date.today(),
-            conducted_by="Operator",
-            areas=self.checklist,
+        pre = inspection_command(
+            self.inspections, "acknowledge", pre["id"], self._acknowledge_all(pre)
         )
-        post = self.inspections.acknowledge(post["id"], self._acknowledge_all(post))
-        post = self.inspections.finalize(post["id"], confirmed=True)
-        comparisons = self.inspections.save_comparisons(
+        pre = inspection_command(self.inspections, "finalize", pre["id"], confirmed=True)
+        post = self._terminate_and_create_post_report()
+        post = inspection_command(
+            self.inspections, "acknowledge", post["id"], self._acknowledge_all(post)
+        )
+        post = inspection_command(self.inspections, "finalize", post["id"], confirmed=True)
+        comparisons = inspection_command(
+            self.inspections,
+            "save_comparisons",
             self.lease["id"],
             [
                 {
@@ -439,14 +509,14 @@ class InspectionWorkflowTests(unittest.TestCase):
             )
             self.assertEqual(
                 connection.execute("SELECT COUNT(*) FROM condition_comparisons").fetchone()[0],
-                len(comparisons),
+                len(comparisons["comparisons"]),
             )
             self.assertEqual(
                 connection.execute(
                     "SELECT COUNT(*) FROM audit_events WHERE correlation_id=?",
                     (attachment_events[0].correlation_id,),
                 ).fetchone()[0],
-                3,
+                4,
             )
         restored_workspace = WorkspaceService(
             LocalConfig(Path(self.temp.name) / "restored-config.json", restored_path)
@@ -476,3 +546,9 @@ class InspectionWorkflowTests(unittest.TestCase):
         self.assertEqual(
             restored_files.content_path(restored_file).read_bytes(), b"move-in evidence"
         )
+        for original in (template, pre, evidence, post, comparisons):
+            self.assertEqual(
+                restored_inspections.recover_command(operation_id=original["operationId"]),
+                original,
+            )
+        self.assertEqual(restored_pre["revision"], comparisons["revision"])

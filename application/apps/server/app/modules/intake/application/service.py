@@ -21,11 +21,13 @@ from app.modules.intake.domain.models import (
     IntakeError,
     IntakeNotFoundError,
     IntakePayloadTooLargeError,
+    IntakeRevisionConflictError,
     IDENTITY_STATES,
     bounded,
     canonical_json,
     failure_code,
     fingerprint,
+    source_revision,
     utc_now,
     uuid,
 )
@@ -54,6 +56,8 @@ class IntakeAdmissionCommand:
     idempotency_key: str
     attachments: tuple[AttachmentInput, ...] = ()
     supersedes_source_id: str | None = None
+    expected_source_revision: int | None = None
+    expected_evidence_revision_id: str | None = None
 
     def __post_init__(self):
         uuid(self.idempotency_key, "idempotencyKey")
@@ -66,6 +70,13 @@ class IntakeAdmissionCommand:
             raise IntakeError("attachments are invalid.")
         if self.supersedes_source_id is not None:
             uuid(self.supersedes_source_id, "supersedesSourceId")
+            source_revision(self.expected_source_revision)
+            uuid(self.expected_evidence_revision_id, "expectedEvidenceRevisionId")
+        elif (
+            self.expected_source_revision is not None
+            or self.expected_evidence_revision_id is not None
+        ):
+            raise IntakeError("Admission does not accept a predecessor revision.")
 
 
 class IntakeService:
@@ -118,7 +129,7 @@ class IntakeService:
                         "Idempotency key was reused with different input.",
                         "intake_idempotency_conflict",
                     )
-                return self._view(tx, prior["source_id"]), None
+                return _operation_result(prior["result_json"]), None
             previous = None
             if command.supersedes_source_id is not None:
                 previous = tx.source(command.supersedes_source_id)
@@ -131,6 +142,11 @@ class IntakeService:
                         "The source cannot be superseded.", "intake_lifecycle_conflict"
                     )
                 self._validate_superseding_identity(command, context, previous)
+                _check_revision(
+                    previous,
+                    command.expected_source_revision,
+                    command.expected_evidence_revision_id,
+                )
             exact = None
             exact_evidence = None
             if (
@@ -166,16 +182,18 @@ class IntakeService:
                         "Trusted external source identity conflicts with retained evidence.",
                         "intake_exact_identity_conflict",
                     )
+                operation_id = str(uuid4())
+                result = {**self._view(tx, matched["id"]), "operationId": operation_id}
                 tx.insert_operation(
                     {
-                        "id": str(uuid4()),
+                        "id": operation_id,
                         "operation_type": "admit",
                         "idempotency_key": command.idempotency_key,
                         "request_fingerprint": request_fingerprint,
                         "request_payload_json": canonical_json(provisional_request),
                         "source_id": matched["id"],
                         "result_revision_id": matched["current_revision_id"],
-                        "result_json": None,
+                        "result_json": canonical_json(result),
                         "outcome": "succeeded",
                         "error_code": None,
                         "correlation_id": correlation_id,
@@ -196,7 +214,7 @@ class IntakeService:
                     actor_kind=audit_kind,
                     actor_reference=audit_reference,
                 )
-                return self._view(tx, matched["id"]), None
+                return result, None
             batch = (
                 self.files.attachment_batch(tx.file_connection())
                 if command.attachments and self.files
@@ -232,6 +250,7 @@ class IntakeService:
                 final_request_fingerprint = fingerprint(final_request)
                 source = {
                     "id": source_id,
+                    "source_revision": 1,
                     "source_kind": command.envelope.source_kind,
                     "channel": command.envelope.channel,
                     "origin_system": command.origin_system,
@@ -275,6 +294,7 @@ class IntakeService:
                             "technical_status": "superseded",
                             "superseded_by_source_id": source_id,
                             "updated_at": now,
+                            "source_revision": previous["source_revision"] + 1,
                         },
                     )
                 tx.insert_source(source)
@@ -291,16 +311,18 @@ class IntakeService:
                             "display_order": order,
                         }
                     )
+                operation_id = str(uuid4())
+                result = {**self._view(tx, source_id), "operationId": operation_id}
                 tx.insert_operation(
                     {
-                        "id": str(uuid4()),
+                        "id": operation_id,
                         "operation_type": "supersede" if command.supersedes_source_id else "admit",
                         "idempotency_key": command.idempotency_key,
                         "request_fingerprint": final_request_fingerprint,
                         "request_payload_json": canonical_json(final_request),
                         "source_id": source_id,
                         "result_revision_id": revision_id,
-                        "result_json": None,
+                        "result_json": canonical_json(result),
                         "outcome": "succeeded",
                         "error_code": None,
                         "correlation_id": correlation_id,
@@ -349,7 +371,7 @@ class IntakeService:
                     actor_reference=audit_reference,
                 )
                 self._candidate(tx, source_id, revision["content_fingerprint"], now, correlation_id)
-                return self._view(tx, source_id), batch
+                return result, batch
             except BaseException as error:
                 if batch is not None:
                     batch.rollback(error)
@@ -372,10 +394,56 @@ class IntakeService:
             batch.commit()
         return result
 
-    def supersede(self, source_id: str, replacement: IntakeAdmissionCommand) -> dict[str, object]:
+    def supersede(
+        self,
+        source_id: str,
+        replacement: IntakeAdmissionCommand,
+        *,
+        expected_source_revision: int,
+        expected_evidence_revision_id: str,
+    ) -> dict[str, object]:
         """Create a replacement evidence source in the same admission transaction."""
         uuid(source_id, "sourceId")
-        return self.admit(replace(replacement, supersedes_source_id=source_id))
+        return self.admit(
+            replace(
+                replacement,
+                supersedes_source_id=source_id,
+                expected_source_revision=expected_source_revision,
+                expected_evidence_revision_id=expected_evidence_revision_id,
+            )
+        )
+
+    def receipt(self, operation_id: str) -> dict[str, object]:
+        uuid(operation_id, "operationId")
+        return self._receipt(lambda tx: tx.operation_by_id(operation_id))
+
+    def receipt_by_key(self, idempotency_key: str) -> dict[str, object]:
+        uuid(idempotency_key, "idempotencyKey")
+        return self._receipt(lambda tx: tx.operation(idempotency_key))
+
+    def _receipt(self, lookup) -> dict[str, object]:
+        def operation(tx):
+            row = lookup(tx)
+            if (
+                row is None
+                or row["actor_kind"] != "local_operator"
+                or row["operation_type"] in {"integrity_failed", "integrity_restored"}
+            ):
+                raise IntakeNotFoundError("Intake command receipt was not found.")
+            result = _operation_result(row["result_json"])
+            if "evidence" in result:
+                tx.record(
+                    entity_type="intake_source",
+                    entity_id=row["source_id"],
+                    action="evidence_read",
+                    before=None,
+                    after={"sourceId": row["source_id"], "revision": row["result_revision_id"]},
+                    reason="intake_receipt_read",
+                    correlation_id=str(uuid4()),
+                )
+            return result
+
+        return self.unit_of_work.write(operation)
 
     def get(self, source_id: str) -> dict[str, object]:
         # Evidence reads are deliberately writes: the audit event is part of
@@ -461,17 +529,30 @@ class IntakeService:
         return self.unit_of_work.read(operation)
 
     def correct(
-        self, source_id: str, envelope: EvidenceEnvelope, reason: str, idempotency_key: str
+        self,
+        source_id: str,
+        envelope: EvidenceEnvelope,
+        reason: str,
+        idempotency_key: str,
+        *,
+        expected_source_revision: int,
+        expected_evidence_revision_id: str,
     ) -> dict[str, object]:
         uuid(source_id, "sourceId")
         uuid(idempotency_key, "idempotencyKey")
+        source_revision(expected_source_revision)
+        uuid(expected_evidence_revision_id, "expectedEvidenceRevisionId")
         reason = bounded(reason, "correctionReason", 1000, required=True)
 
         def operation(tx):
             source = tx.source(source_id)
             if source is None:
                 raise IntakeNotFoundError("Intake source was not found.")
-            old = tx.revision(source["current_revision_id"])
+            old = tx.revision(expected_evidence_revision_id)
+            if old is None or old["source_id"] != source_id:
+                raise IntakeConflictError(
+                    "Evidence revision does not belong to the source.", "intake_revision_conflict"
+                )
             old_envelope = json.loads(old["envelope_json"])
             if any(
                 getattr(envelope, field) != old_envelope.get(key)
@@ -488,7 +569,13 @@ class IntakeService:
                     "intake_supersession_required",
                 )
             payload = envelope.canonical(tuple(old_envelope["attachments"]))
-            request_payload = {"correct": source_id, "envelope": payload, "reason": reason}
+            request_payload = {
+                "correct": source_id,
+                "envelope": payload,
+                "reason": reason,
+                "expectedSourceRevision": expected_source_revision,
+                "expectedEvidenceRevisionId": expected_evidence_revision_id,
+            }
             request = fingerprint(request_payload)
             prior = tx.operation(idempotency_key)
             if prior:
@@ -502,6 +589,7 @@ class IntakeService:
                         "Idempotency key is not a correction.", "intake_idempotency_conflict"
                     )
                 return _operation_result(prior["result_json"])
+            _check_revision(source, expected_source_revision, expected_evidence_revision_id)
             if source["technical_status"] == "superseded":
                 raise IntakeConflictError("Superseded source cannot be corrected.")
             now = utc_now()
@@ -525,7 +613,14 @@ class IntakeService:
                 "superseded_by_revision_id": None,
             }
             tx.insert_revision(revision)
-            tx.update_source(source_id, {"current_revision_id": revision_id, "updated_at": now})
+            tx.update_source(
+                source_id,
+                {
+                    "current_revision_id": revision_id,
+                    "updated_at": now,
+                    "source_revision": source["source_revision"] + 1,
+                },
+            )
             tx.replace_revision(old["id"], {"superseded_by_revision_id": revision_id})
             tx.copy_attachments(old["id"], revision_id)
             self._candidate(tx, source_id, revision["content_fingerprint"], now, correlation_id)
@@ -547,6 +642,7 @@ class IntakeService:
             result = tx.detail_projection(source_id, pending_operation=operation)
             if result is None:
                 raise IntakeNotFoundError("Intake source was not found.")
+            result["operationId"] = operation["id"]
             operation["result_json"] = canonical_json(result)
             tx.insert_operation(operation)
             tx.record(
@@ -583,6 +679,7 @@ class IntakeService:
         reason: str,
         idempotency_key: str,
         expected_revision: str,
+        expected_source_revision: int,
         expected_status: str,
     ) -> dict[str, object]:
         transition = AttentionTransition(
@@ -591,6 +688,7 @@ class IntakeService:
             reason=reason,
             idempotency_key=idempotency_key,
             expected_revision=expected_revision,
+            expected_source_revision=expected_source_revision,
             expected_status=expected_status,
             correlation_id=str(uuid4()),
         )
@@ -639,6 +737,7 @@ class IntakeService:
                     "technical_status": target,
                     "failure_code": None if available else code,
                     "updated_at": now,
+                    "source_revision": source["source_revision"] + 1,
                 },
             )
             tx.insert_operation(
@@ -790,7 +889,7 @@ def _operation_result(value: object) -> dict[str, object]:
         result = json.loads(str(value))
     except json.JSONDecodeError as error:
         raise IntakeConflictError(
-            "Correction replay result is unavailable.", "intake_lifecycle_conflict"
+            "Command replay result is unavailable.", "intake_lifecycle_conflict"
         ) from error
     if not isinstance(result, dict):
         raise IntakeConflictError(
@@ -812,7 +911,7 @@ def _digest(path: Path) -> str:
 def _admission_request(
     command: IntakeAdmissionCommand, context: IntakeAdmissionContext, envelope: dict[str, object]
 ) -> dict[str, object]:
-    return {
+    result = {
         "admit": envelope,
         "origin": command.origin_system,
         "scope": context.account_scope_hash,
@@ -820,3 +919,17 @@ def _admission_request(
         "submitter": _submitter_fingerprint(context),
         "supersedes": command.supersedes_source_id,
     }
+    if command.supersedes_source_id is not None:
+        result["expectedSourceRevision"] = command.expected_source_revision
+        result["expectedEvidenceRevisionId"] = command.expected_evidence_revision_id
+    return result
+
+
+def _check_revision(
+    source, expected_source_revision: int, expected_evidence_revision_id: str
+) -> None:
+    if (
+        source["source_revision"] != expected_source_revision
+        or source["current_revision_id"] != expected_evidence_revision_id
+    ):
+        raise IntakeRevisionConflictError(source)

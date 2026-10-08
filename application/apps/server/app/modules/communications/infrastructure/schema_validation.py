@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from datetime import UTC, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -11,6 +12,17 @@ from sqlalchemy import inspect, text
 from sqlalchemy.dialects import sqlite
 
 from app.modules.communications.application.ports import CommunicationContextOperations
+from app.modules.communications.application.service import (
+    CommunicationCommand,
+    FollowUpInput,
+    LinkInput,
+    ParticipantInput,
+    PatchCommand,
+    _canonical,
+    _request,
+    _utc,
+)
+from app.modules.communications.domain.models import Communication
 from app.modules.communications.infrastructure.sqlalchemy_models import (
     CommunicationLinkModel,
     CommunicationModel,
@@ -26,6 +38,7 @@ MODELS = (
     CommunicationOperationModel,
 )
 OPERATION_TRIGGERS = {
+    "communication_operations_no_replace": "CREATE TRIGGER communication_operations_no_replace BEFORE INSERT ON communication_operations WHEN EXISTS (SELECT 1 FROM communication_operations WHERE id = NEW.id OR idempotency_key = NEW.idempotency_key) BEGIN SELECT RAISE(ABORT, 'communication operations are immutable'); END",
     "communication_operations_no_update": "CREATE TRIGGER communication_operations_no_update BEFORE UPDATE ON communication_operations BEGIN SELECT RAISE(ABORT, 'communication operations are immutable'); END",
     "communication_operations_no_delete": "CREATE TRIGGER communication_operations_no_delete BEFORE DELETE ON communication_operations BEGIN SELECT RAISE(ABORT, 'communication operations are immutable'); END",
 }
@@ -135,6 +148,8 @@ def _validate_data(connection, context: CommunicationContextOperations | None) -
     rows = connection.execute(text("SELECT * FROM communications")).mappings().all()
     by_id = {row["id"]: row for row in rows}
     for row in rows:
+        if type(row["revision"]) is not int or row["revision"] < 1:
+            raise MigrationSchemaError("COM-001 communication revision is invalid.")
         try:
             UUID(row["id"])
             ZoneInfo(row["occurred_timezone"])
@@ -250,6 +265,7 @@ def _validate_data(connection, context: CommunicationContextOperations | None) -
         connection.execute(text("SELECT * FROM communication_operations")).mappings()
     )
     for row in operation_rows:
+        _validate_receipt(connection, row, by_id)
         _uuid(row["id"], "operation")
         try:
             UUID(row["idempotency_key"])
@@ -286,11 +302,319 @@ def _validate_data(connection, context: CommunicationContextOperations | None) -
         )
         if not valid:
             raise MigrationSchemaError("COM-001 operation target, result, or action is invalid.")
-        if not _has_operation_audit(connection, action, target, result, row["correlation_id"]):
+        if row["outcome"] != "no_op" and not _has_operation_audit(
+            connection, action, target, result, row["correlation_id"]
+        ):
             raise MigrationSchemaError("COM-001 operation audit correlation is invalid.")
     _validate_operation_coverage(by_id, operation_rows)
     _validate_follow_up_audits(connection, operation_rows)
     _validate_audit_operation_coverage(connection, operation_rows)
+    _validate_revisions(connection, by_id, operation_rows)
+
+
+def _validate_receipt(connection, row, by_id) -> None:
+    try:
+        request = json.loads(row["request_json"])
+        response = json.loads(row["response_json"])
+        expected = row["expected_revision"]
+        result_revision = row["result_revision"]
+        if (
+            type(expected) is not int
+            or expected < 0
+            or type(result_revision) is not int
+            or result_revision < 1
+        ):
+            raise ValueError("revision")
+        if request.keys() != {"action", "target", "value", "expectedRevision"}:
+            raise ValueError("request shape")
+        if (
+            request["action"] != row["action"]
+            or request["target"] != row["target_communication_id"]
+            or request["expectedRevision"] != expected
+        ):
+            raise ValueError("request metadata")
+        value = request["value"]
+        action = row["action"]
+        if action == "corrected":
+            if (
+                not isinstance(value, list)
+                or len(value) != 2
+                or not isinstance(value[1], str)
+                or not 1 <= len(value[1].strip()) <= 1000
+                or value[1] != value[1].strip()
+            ):
+                raise ValueError("correction")
+            payload = _request_payload(value[0], patch=False)
+            command = (payload, value[1])
+        elif action == "created":
+            command = _request_payload(value, patch=False)
+        elif action == "patched":
+            command = _request_payload(value, patch=True)
+        elif action == "recorded":
+            command = FollowUpInput(**value) if value is not None else None
+        else:
+            raise ValueError("action")
+        if (
+            _request(action, request["target"], command, expected) != row["request_json"]
+            or hashlib.sha256(row["request_json"].encode()).hexdigest()
+            != row["request_fingerprint"]
+        ):
+            raise ValueError("fingerprint")
+        if _canonical(response) != row["response_json"]:
+            raise ValueError("response canonicalization")
+        core_keys = Communication(**dict(by_id[row["result_communication_id"]])).to_dict().keys()
+        if response.keys() != set(core_keys) | {
+            "participants",
+            "links",
+            "followUpTasks",
+            "operationId",
+            "outcome",
+        }:
+            raise ValueError("response shape")
+        if type(response["revision"]) is not int or not response["participants"]:
+            raise ValueError("response revision or participants")
+        _validate_payload_result(command, action, response, row["follow_up_task_id"])
+        if (
+            response["operationId"] != row["id"]
+            or response["id"] != row["result_communication_id"]
+            or response["revision"] != result_revision
+            or response["outcome"] != row["outcome"]
+        ):
+            raise ValueError("response identity")
+        if row["outcome"] not in {"applied", "no_op"}:
+            raise ValueError("outcome")
+        if action == "created" and expected != 0 or action != "created" and expected < 1:
+            raise ValueError("expected revision")
+        predicted = (
+            1 if action in {"created", "corrected"} else expected + (row["outcome"] == "applied")
+        )
+        if predicted != result_revision or result_revision > by_id[response["id"]]["revision"]:
+            raise ValueError("result revision")
+        events = list(
+            connection.execute(
+                text(
+                    "SELECT entity_type, entity_id, action, before_snapshot, after_snapshot FROM audit_events WHERE correlation_id = :id"
+                ),
+                {"id": row["correlation_id"]},
+            ).mappings()
+        )
+        if row["outcome"] == "no_op":
+            if action != "patched" or events or row["follow_up_task_id"] is not None:
+                raise ValueError("no-op audit")
+            prior = (
+                connection.execute(
+                    text(
+                        "SELECT response_json FROM communication_operations WHERE result_communication_id = :id AND result_revision = :revision AND outcome = 'applied'"
+                    ),
+                    {"id": response["id"], "revision": expected},
+                )
+                .scalars()
+                .all()
+            )
+            if len(prior) != 1:
+                raise ValueError("no-op history")
+            original = json.loads(prior[0])
+            if (
+                any(response[key] != original[key] for key in core_keys)
+                or response["status"] != "draft"
+            ):
+                raise ValueError("no-op snapshot")
+            for collection in ("participants", "links"):
+
+                def clean(items):
+                    return [
+                        {key: value for key, value in item.items() if key != "context"}
+                        for item in items
+                    ]
+
+                if clean(response[collection]) != clean(original[collection]):
+                    raise ValueError("no-op children")
+            if response["followUpTasks"]:
+                raise ValueError("draft follow-up")
+            return
+        result_action = {
+            "created": "created",
+            "corrected": "created",
+            "recorded": "recorded",
+            "patched": "updated",
+        }[action]
+        matching = [
+            event
+            for event in events
+            if event["entity_type"] == "communication"
+            and event["entity_id"] == response["id"]
+            and event["action"] == result_action
+        ]
+        if len(matching) != 1:
+            raise ValueError("result audit")
+        after = json.loads(matching[0]["after_snapshot"])
+        keys = Communication(**dict(by_id[response["id"]])).to_dict().keys()
+        if after != {key: response[key] for key in keys}:
+            raise ValueError("result snapshot")
+        if (
+            action in {"patched", "recorded"}
+            and json.loads(matching[0]["before_snapshot"])["revision"] != expected
+        ):
+            raise ValueError("before revision")
+        if action == "corrected":
+            source_events = [
+                event
+                for event in events
+                if event["entity_type"] == "communication"
+                and event["entity_id"] == row["target_communication_id"]
+                and event["action"] == "superseded"
+            ]
+            if (
+                len(source_events) != 1
+                or json.loads(source_events[0]["before_snapshot"])["revision"] != expected
+                or json.loads(source_events[0]["after_snapshot"])["revision"] != expected + 1
+            ):
+                raise ValueError("correction revision")
+        for kind, collection in (
+            ("communication_participant", "participants"),
+            ("communication_link", "links"),
+        ):
+            for child in response[collection]:
+                _uuid(child["id"], collection)
+                if child["communicationId"] != response["id"]:
+                    raise ValueError("child parent")
+                child_events = list(
+                    connection.execute(
+                        text(
+                            "SELECT after_snapshot FROM audit_events WHERE entity_type = :kind AND entity_id = :id AND action IN ('created','updated')"
+                        ),
+                        {"kind": kind, "id": child["id"]},
+                    ).mappings()
+                )
+                snapshot = {key: value for key, value in child.items() if key != "context"}
+                if not any(
+                    json.loads(event["after_snapshot"]) == snapshot for event in child_events
+                ):
+                    raise ValueError("child snapshot")
+        task_id = row["follow_up_task_id"]
+        if task_id is not None and task_id not in {
+            task["id"] for task in response["followUpTasks"]
+        }:
+            raise ValueError("follow-up receipt")
+        for task in response["followUpTasks"]:
+            task_events = connection.execute(
+                text(
+                    "SELECT after_snapshot FROM audit_events WHERE entity_type = 'task' AND entity_id = :id"
+                ),
+                {"id": task["id"]},
+            ).scalars()
+            if not any(
+                all(json.loads(snapshot).get(key) == value for key, value in task.items())
+                for snapshot in task_events
+                if snapshot
+            ):
+                raise ValueError("follow-up snapshot")
+    except (KeyError, TypeError, ValueError, AttributeError) as error:
+        raise MigrationSchemaError("COM-001 immutable command receipt is invalid.") from error
+
+
+def _request_payload(value, *, patch):
+    values = dict(value)
+    if values.get("participants") is not None:
+        values["participants"] = tuple(ParticipantInput(**item) for item in values["participants"])
+    if values.get("links") is not None:
+        values["links"] = tuple(LinkInput(**item) for item in values["links"])
+    if values.get("follow_up") is not None:
+        values["follow_up"] = FollowUpInput(**values["follow_up"])
+    return PatchCommand(**values) if patch else CommunicationCommand(**values)
+
+
+def _validate_payload_result(command, action, response, task_id):
+    payload = command[0] if action == "corrected" else command
+    if action != "recorded":
+        names = {
+            "subject": "subject",
+            "body": "body",
+            "occurred_at_utc": "occurredAtUtc",
+            "occurred_timezone": "occurredTimezone",
+        }
+        if action in {"created", "corrected"}:
+            names.update({"direction": "direction", "channel": "channel"})
+        for name, key in names.items():
+            value = getattr(payload, name)
+            if value is not None and response[key] != (
+                _utc(value) if name == "occurred_at_utc" else value
+            ):
+                raise ValueError("payload result")
+        for name, keys in (
+            ("participants", ("partyId", "partyContactMethodId", "role")),
+            ("links", ("entityType", "entityId")),
+        ):
+            items = getattr(payload, name)
+            if items is not None:
+                expected = (
+                    [(x.party_id, x.party_contact_method_id, x.role) for x in items]
+                    if name == "participants"
+                    else [(x.entity_type, x.entity_id) for x in items]
+                )
+                actual = [tuple(x.get(key) for key in keys) for x in response[name]]
+                if (
+                    len(expected) != len(set(expected))
+                    or len(actual) != len(set(actual))
+                    or set(actual) != set(expected)
+                ):
+                    raise ValueError("payload children")
+    if action == "corrected" and response["correctionReason"] != command[1]:
+        raise ValueError("correction reason")
+    if (
+        action == "created"
+        and response["status"] != ("recorded" if payload.record else "draft")
+        or action in {"recorded", "corrected"}
+        and response["status"] != "recorded"
+        or action == "patched"
+        and response["status"] != "draft"
+    ):
+        raise ValueError("result lifecycle")
+    follow_up = command if action == "recorded" else getattr(payload, "follow_up", None)
+    if (follow_up is None) != (task_id is None):
+        raise ValueError("follow-up request")
+    if follow_up is not None:
+        tasks = [task for task in response["followUpTasks"] if task["id"] == task_id]
+        if (
+            len(tasks) != 1
+            or tasks[0]["title"] != follow_up.title
+            or tasks[0]["status"] != "open"
+            or tasks[0].get("dueAtUtc")
+            != (_utc(follow_up.due_at_utc) if follow_up.due_at_utc else None)
+            or tasks[0].get("dueTimezone") != follow_up.due_timezone
+        ):
+            raise ValueError("follow-up result")
+
+
+def _validate_revisions(connection, by_id, operations):
+    if len({row["correlation_id"] for row in operations}) != len(operations):
+        raise MigrationSchemaError("COM-001 operation correlations must be unique.")
+    for item_id, item in by_id.items():
+        changes = sorted(
+            row["expected_revision"]
+            for row in operations
+            if row["target_communication_id"] == item_id and row["outcome"] == "applied"
+        )
+        if changes != list(range(1, item["revision"])):
+            raise MigrationSchemaError("COM-001 revision history is incomplete.")
+        latest = connection.execute(
+            text(
+                "SELECT after_snapshot FROM audit_events WHERE entity_type = 'communication' AND entity_id = :id AND action IN ('created','updated','recorded','superseded')"
+            ),
+            {"id": item_id},
+        ).scalars()
+        current = Communication(**dict(item)).to_dict()
+        if not any(json.loads(snapshot) == current for snapshot in latest if snapshot):
+            raise MigrationSchemaError("COM-001 current state differs from revision history.")
+        if (
+            sum(
+                row["result_communication_id"] == item_id
+                and row["action"] in {"created", "corrected"}
+                for row in operations
+            )
+            != 1
+        ):
+            raise MigrationSchemaError("COM-001 creation receipt is not unique.")
 
 
 def _uuid(value: object, label: str) -> None:

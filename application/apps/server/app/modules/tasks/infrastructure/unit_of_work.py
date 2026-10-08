@@ -19,12 +19,16 @@ from app.modules.tasks.application.waiting import (
     WaitingOperation,
     WaitingStorageFailure,
 )
+from app.modules.tasks.application.creation import TaskCreationOperation
+from app.modules.tasks.application.mutations import TaskMutationOperation
 from app.modules.tasks.application.ports import DueReminderSummary, TaskSummary, TaskTransaction
 from app.modules.tasks.domain.models import Task, TaskReminder, due_bucket, waiting_facts
 from app.modules.tasks.infrastructure.sqlalchemy_models import (
     TaskModel,
     TaskReminderModel,
     TaskWaitingOperationModel,
+    TaskCreationOperationModel,
+    TaskMutationOperationModel,
 )
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
@@ -51,6 +55,14 @@ class SQLiteTaskUnitOfWork:
         with _waiting_storage_errors(), self.engine.connect() as connection:
             return _SQLiteTaskTransaction(connection, self.recorder).waiting_operation(key)
 
+    def creation_operation(self, key):
+        with _waiting_storage_errors(), self.engine.connect() as connection:
+            return _SQLiteTaskTransaction(connection, self.recorder).creation_operation(key)
+
+    def mutation_operation(self, key):
+        with _waiting_storage_errors(), self.engine.connect() as connection:
+            return _SQLiteTaskTransaction(connection, self.recorder).mutation_operation(key)
+
     def write_waiting(self, operation: Callable[[TaskTransaction], Result]) -> Result:
         with _waiting_storage_errors():
             return self.write(operation)
@@ -62,12 +74,16 @@ class SQLiteTaskUnitOfWork:
     def get(self, task_id: str) -> Task | None:
         with Session(self.engine) as session:
             row = session.get(TaskModel, task_id)
-            return _task(row) if row else None
+            return _task(row) if row and row.deleted_at_utc is None else None
 
     def list(self, status: str | None = None) -> list[Task]:
         with Session(self.engine) as session:
-            query = select(TaskModel).order_by(
-                TaskModel.due_at_utc.is_(None), TaskModel.due_at_utc, TaskModel.created_at_utc
+            query = (
+                select(TaskModel)
+                .where(TaskModel.deleted_at_utc.is_(None))
+                .order_by(
+                    TaskModel.due_at_utc.is_(None), TaskModel.due_at_utc, TaskModel.created_at_utc
+                )
             )
             if status:
                 query = query.where(TaskModel.status == status)
@@ -85,7 +101,7 @@ class SQLiteTaskUnitOfWork:
     ) -> list[Task]:
         with Session(self.engine) as session:
             no_due = TaskModel.due_at_utc.is_(None)
-            query = select(TaskModel)
+            query = select(TaskModel).where(TaskModel.deleted_at_utc.is_(None))
             query = query.where(TaskModel.status.in_(statuses))
             if priorities is not None:
                 query = query.where(TaskModel.priority.in_(priorities))
@@ -167,6 +183,7 @@ def _summary_tasks(
     connection: Any, *, bucket: str, now: datetime, limit: int
 ) -> tuple[int, list[Task]]:
     condition = and_(
+        TaskModel.deleted_at_utc.is_(None),
         TaskModel.status.in_(("open", "in_progress")),
         TaskModel.due_at_utc.is_not(None),
         func.task_due_bucket(
@@ -195,6 +212,7 @@ def _due_reminders_summary(
     connection: Any, *, now: datetime, limit: int
 ) -> tuple[int, list[DueReminderSummary]]:
     condition = and_(
+        TaskModel.deleted_at_utc.is_(None),
         TaskReminderModel.status == "pending",
         TaskReminderModel.remind_at_utc <= now.isoformat(),
     )
@@ -241,13 +259,63 @@ class _SQLiteTaskTransaction:
         self.connection = connection
         self.recorder = recorder
 
+    def mutation_operation(self, key):
+        row = (
+            self.connection.execute(
+                TaskMutationOperationModel.__table__.select().where(
+                    TaskMutationOperationModel.idempotency_key == key
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return TaskMutationOperation(**row) if row else None
+
+    def insert_mutation_operation(self, operation):
+        self.connection.execute(
+            TaskMutationOperationModel.__table__.insert().values(**operation.__dict__)
+        )
+
+    def creation_operation(self, key):
+        row = (
+            self.connection.execute(
+                TaskCreationOperationModel.__table__.select().where(
+                    TaskCreationOperationModel.idempotency_key == key
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return TaskCreationOperation(**row) if row else None
+
+    def insert_creation_operation(self, operation):
+        self.connection.execute(
+            TaskCreationOperationModel.__table__.insert().values(**operation.__dict__)
+        )
+
     def get_task(self, task_id: str) -> Task | None:
         row = (
-            self.connection.execute(TaskModel.__table__.select().where(TaskModel.id == task_id))
+            self.connection.execute(
+                TaskModel.__table__.select().where(
+                    TaskModel.id == task_id, TaskModel.deleted_at_utc.is_(None)
+                )
+            )
             .mappings()
             .first()
         )
         return _task_mapping(row) if row else None
+
+    def has_non_dismissed_reminders(self, task_id):
+        return (
+            self.connection.scalar(
+                select(TaskReminderModel.id)
+                .where(
+                    TaskReminderModel.task_id == task_id, TaskReminderModel.status != "dismissed"
+                )
+                .limit(1)
+            )
+            is not None
+        )
 
     def insert_task(self, task: Task) -> None:
         self.connection.execute(TaskModel.__table__.insert().values(**_task_values(task)))
@@ -437,6 +505,7 @@ class _FollowUpReadTransaction:
         )
         predicates = [
             TaskModel.status.in_(("open", "in_progress")),
+            TaskModel.deleted_at_utc.is_(None),
             TaskModel.waiting_for_kind.is_not(None),
         ]
         if query.state is not None:

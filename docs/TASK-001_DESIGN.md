@@ -2,9 +2,85 @@
 
 ## Status
 
-In progress — pending UI and remaining contract verification. As inspected October 7, 2026 at `5ca7672`, `GET /api/tasks/summary` already returns bounded overdue, today, next-seven-day, and due-reminder collections with complete totals, a typed response, and mutually exclusive Task due classifications under one captured instant and read snapshot. Focused summary tests passed (3 tests). UI-001 and DASH-001 must consume these server facts rather than reproduce them in the browser. This confirms the summary boundary, not every task edit/delete/confirmation or retained-schema requirement in this design. [TASK-002](TASK-002_DESIGN.md#resolved-design-decisions) adds waiting/revision facts, `asOf`, and transaction-aware bounded projections without replacing the four summary buckets.
+In progress — pending UI implementation. The backend summary returns bounded overdue,
+today, next-seven-day and due-reminder collections with complete totals and one read
+snapshot. Recoverable creation, editing, deletion, lifecycle and reminder commands
+have source-owned revision/key/receipt contracts; deletion retains tombstones.
+UI-001 and DASH-001 consume these server facts rather than reproducing policy in
+the browser. New browser controls and OPS command forms remain independently gated.
+[TASK-002](TASK-002_DESIGN.md#resolved-design-decisions) adds waiting/revision facts,
+`asOf`, and transaction-aware bounded projections without replacing the four buckets.
 
 ## Purpose
+
+### Recoverable creation contract
+
+The consequential HTTP creation command requires `expectedRevision: 0` and a
+UUID `idempotencyKey`. `TaskService.create_command` inserts the task, an immutable
+`task_creation_operations` receipt and correlated Task/operation audits in one
+immediate transaction. The receipt stores canonical request JSON and SHA-256,
+the full original typed response (revision 1 and `operationId`), correlation ID
+and captured UTC timestamp. Unique key and task constraints and append-only
+triggers retain this history indefinitely; no legacy migration is supported.
+Same-key/same-payload replay returns the stored response, including its original
+`asOf`, regardless of later task changes; changed reuse is 409.
+`GET /api/tasks/creation-operations/{key}` exposes the recorded result. A narrow
+source-owned receipt reader enables OPS recovery on the caller's connection.
+Creation has no pre-existing Task revision, so only exact integer zero is valid.
+Internal `create`/`new_task` callers remain non-recoverable, and this contract does
+not enable automatic retries for other task mutations.
+
+### Recoverable lifecycle and reminder contract
+
+Consequential HTTP start, complete, cancel, reopen, add-reminder, acknowledge and
+dismiss commands require positive integer `expectedRevision` and UUID
+`idempotencyKey`. `TaskMutationService` is the owning application boundary.
+Reminders use the parent Task revision; each command advances it once, including
+all terminal waiting/reminder effects. Outcome notes are bounded to 4,000
+characters and reminder inputs must be aware timestamps normalized to UTC.
+
+The current baseline includes append-only `task_mutation_operations`: UUID ID,
+globally unique key within this command family, Task foreign key, action,
+expected/resulting revisions, canonical request and SHA-256 fingerprint, complete
+immutable result JSON, correlation ID and UTC commit instant. Task/revision is
+unique for effective mutations, whose resulting revision is exactly expected
+revision plus one; no-op edit receipts retain the expected revision. All changes
+and audits commit atomically. Retained validation reconstructs the original
+response from the correlated Task/reminder history and validates replay identity.
+
+Same-key identical retry returns the original response before lifecycle checks;
+changed payload or stale revision is 409, with current revision for stale requests.
+The typed response contains `task`, nullable `reminder`, `revision`, and
+`operationId`. `GET /api/tasks/mutation-operations/{key}` returns that response
+without recalculating state. Missing targets or receipts are 404. Legacy internal
+Task service helpers are not recoverable UI commands. New OPS form registration,
+Task editing and deletion use the same command family as specified below.
+
+### Recoverable editing and deletion contract
+
+PATCH and DELETE require the parent Task's positive `expectedRevision` and UUID
+`idempotencyKey`. Partial edits preserve omitted fields and distinguish explicit
+nulls in the canonical request. Business fields are normalized before comparison.
+An unchanged edit records an immutable receipt but changes neither revision nor
+timestamp and emits no Task-change event. Effective edits advance revision once.
+The effective-revision uniqueness index excludes no-op receipts; no-op results
+retain the expected revision. All results replay their original full snapshot.
+
+Deletion requires an open Task with no non-dismissed reminders and exact boolean
+`confirmed: true`. It retains the Task as a tombstone with `deletedAtUtc`, advances
+revision once, and clears waiting in the same transaction. Ordinary detail,
+lists, summaries, search, and related previews exclude tombstones. Historical
+references and immutable receipts retain their identities; original commands
+still replay after deletion and encrypted restore. No physical deletion removes
+operational audit or command history. New references cannot select deleted Tasks.
+The mutation receipt's insertion guard also rejects SQLite `INSERT OR REPLACE`
+collisions even when recursive triggers are disabled.
+
+Complete, cancel, reopen, acknowledge, dismiss, and delete all require exact
+boolean confirmation. Start, add-reminder, and edit do not accept a destructive
+confirmation. The HTTP boundary declares typed results and stable operation IDs;
+no new OPS recovery forms or consequential browser controls are enabled by this
+backend implementation.
 
 `TASK-001` provides a lightweight local “action center” that future modules can rely on for tracking work items with due dates, reminders, and generic record links—without becoming a calendar, communications system, or automation engine.
 
@@ -144,7 +220,7 @@ All IDs are UUIDs. Timestamps are timezone-aware UTC text (`YYYY-MM-DDTHH:MM:SSZ
 
 ### Delete a task
 
-`DELETE /api/tasks/{id}` is allowed **only** when the task has `status = 'open'` AND no reminders exist (or all reminders are `dismissed`). This prevents accidental deletion of tasks with history. The endpoint requires `StrictBool confirmed: true`. The deletion and its audit event occur in the same transaction.
+`DELETE /api/tasks/{id}` is allowed **only** when the task has `status = 'open'` AND no reminders exist (or all reminders are `dismissed`). The endpoint requires `StrictBool confirmed: true`, the expected parent revision, and a UUID idempotency key. A retained deletion tombstone, waiting cleanup, audit event, and immutable receipt commit in the same transaction; normal reads no longer expose the Task.
 
 ### Add reminders
 

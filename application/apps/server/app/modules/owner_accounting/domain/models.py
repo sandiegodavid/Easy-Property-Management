@@ -199,6 +199,7 @@ class OwnerRentReport:
     replaces_report_id: str | None
     created_at: str
     updated_at: str
+    report_revision: int = 0
 
     def to_dict(self):
         return _camel(asdict(self))

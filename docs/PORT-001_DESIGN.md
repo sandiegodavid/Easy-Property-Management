@@ -134,6 +134,25 @@ Use “owner” and “managed for” in labels. Reserve jargon such as “party
 
 ## API contract
 
+### Approved UI-001 command-safety extension
+
+UI-001 Slice 14 adds one required `properties.property_revision` (exact integer,
+at least one) and append-only `portfolio_inventory_operations`. Property creation
+requires revision zero; Property edits/lifecycle, ownership replacement, and
+Space inventory commands share the current parent Property revision and require
+an idempotency key. Effective commands advance once, including cascades; no-change
+commands retain revision/timestamp and store a no-change receipt. Replay returns
+the complete original response before current lifecycle validation. Stale
+revisions return a typed 409 with the latest Property; changed reuse returns 409.
+Receipts, domain effects and correlated audits commit atomically and survive
+encrypted restore. Read-only recovery supports operation ID and global or
+Property-scoped key. The independent PORT-003 Space status revision is unchanged.
+
+[PORT-001_COMMAND_READINESS.md](PORT-001_COMMAND_READINESS.md) defines the added
+record, API fields, recovery paths and validation matrix. Party lifecycle is not
+included in this revision scope. No compatibility migration or browser controls
+are introduced.
+
 All endpoints require a ready local workspace. Request models are typed Pydantic models; application commands repeat the core validation so direct callers cannot bypass it.
 
 | Method | Path | Intent |

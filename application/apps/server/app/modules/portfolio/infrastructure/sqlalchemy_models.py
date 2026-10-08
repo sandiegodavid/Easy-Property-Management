@@ -24,7 +24,9 @@ class PropertyModel(LocalBase):
     archived_at: Mapped[str | None] = mapped_column(String)
     property_type: Mapped[str] = mapped_column(String, nullable=False)
     inventory_layout: Mapped[str] = mapped_column(String, nullable=False)
+    property_revision: Mapped[int] = mapped_column(nullable=False, default=1)
     __table_args__ = (
+        CheckConstraint("typeof(property_revision) = 'integer' AND property_revision >= 1"),
         CheckConstraint("status IN ('active', 'archived')"),
         CheckConstraint("property_type IN ('single_family_home', 'condo', 'townhome', 'office')"),
         CheckConstraint("inventory_layout IN ('single_space', 'whole_office', 'office_suites')"),
@@ -34,6 +36,46 @@ class PropertyModel(LocalBase):
         CheckConstraint("length(trim(country_code)) = 2"),
         CheckConstraint("length(trim(time_zone)) > 0"),
         Index("properties_status_name", "status", "display_name"),
+    )
+
+
+class PortfolioInventoryOperationModel(LocalBase):
+    __tablename__ = "portfolio_inventory_operations"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    property_id: Mapped[str] = mapped_column(ForeignKey("properties.id"), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    expected_revision: Mapped[int] = mapped_column(nullable=False)
+    result_revision: Mapped[int] = mapped_column(nullable=False)
+    effective: Mapped[int] = mapped_column(nullable=False)
+    request_json: Mapped[str] = mapped_column(String, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    response_json: Mapped[str] = mapped_column(String, nullable=False)
+    response_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint("typeof(expected_revision) = 'integer' AND expected_revision >= 0"),
+        CheckConstraint(
+            "typeof(result_revision) = 'integer' AND result_revision >= 1 AND result_revision = expected_revision + effective"
+        ),
+        CheckConstraint("typeof(effective) = 'integer' AND effective IN (0, 1)"),
+        CheckConstraint(
+            "length(trim(idempotency_key)) BETWEEN 1 AND 200 AND idempotency_key = trim(idempotency_key)"
+        ),
+        CheckConstraint(
+            "length(request_fingerprint) = 64 AND request_fingerprint NOT GLOB '*[^0-9a-f]*'"
+        ),
+        CheckConstraint(
+            "length(response_fingerprint) = 64 AND response_fingerprint NOT GLOB '*[^0-9a-f]*'"
+        ),
+        Index(
+            "inventory_property_revision",
+            "property_id",
+            "result_revision",
+            unique=True,
+            sqlite_where=text("effective = 1"),
+        ),
     )
 
 

@@ -6,6 +6,10 @@ from datetime import timedelta
 from sqlalchemy import CheckConstraint, UniqueConstraint, inspect, select, text
 
 from app.modules.operator.application.recovery_schemas import validate_payload
+from app.modules.operator.application.ports import RecoveryBinding
+from app.modules.operator.application.command_forms import COMMAND_SCHEMAS
+from app.modules.operator.application.recovery_results import receipt_projection
+from collections.abc import Mapping
 from app.modules.operator.domain.models import (
     Preferences,
     canonical,
@@ -21,6 +25,7 @@ from app.modules.operator.infrastructure.sqlalchemy_models import (
     OperatorOperationModel,
     OperatorRecoveryModel,
     OperatorPreferenceModel,
+    OperatorCoverageReviewModel,
     trigger_sql,
 )
 from app.platform.migration_errors import MigrationSchemaError
@@ -98,6 +103,63 @@ def portable_json(value):
     return parsed
 
 
+def validate_command_recovery(connection, bindings: Mapping[str, RecoveryBinding]):
+    """Historical evidence: never apply today's lifecycle/revision to an old attempt."""
+    if set(bindings) != set(COMMAND_SCHEMAS):
+        raise MigrationSchemaError("Operator recovery binding registry is incomplete.")
+    try:
+        rows = connection.execute(
+            select(OperatorRecoveryModel.__table__).where(
+                OperatorRecoveryModel.form_key.in_(tuple(bindings))
+            )
+        ).mappings()
+        for row in rows:
+            binding = bindings[row["form_key"]]
+            payload = portable_json(row["payload_json"])
+            if row["source_kind"] != binding.source_kind:
+                raise ValueError("Recovery has the wrong source kind.")
+            if binding.source_kind is None:
+                if row["source_id"] is not None or row["base_source_revision"] is not None:
+                    raise ValueError("Creation form cannot retain official source state.")
+            elif (
+                row["source_id"] is None
+                or not isinstance(row["base_source_revision"], str)
+                or not row["base_source_revision"].isdecimal()
+                or str(int(row["base_source_revision"])) != row["base_source_revision"]
+            ):
+                raise ValueError("Recovery source revision is invalid.")
+            if row["attempt_key"] is not None:
+                calculated = binding.fingerprint(row["source_id"], payload, row["attempt_key"])
+                if calculated != row["request_fingerprint"]:
+                    raise ValueError("Recovery attempt no longer matches its saved command.")
+            if row["receipt_json"] is not None:
+                receipt = portable_json(row["receipt_json"])
+                outcome = binding.reader.outcome(
+                    connection, row["attempt_key"], family=binding.family
+                )
+                if (
+                    outcome is None
+                    or receipt
+                    != receipt_projection(outcome, binding.source_kind, row["attempt_key"])
+                    or outcome.action != binding.receipt_action
+                    or outcome.request_fingerprint != row["request_fingerprint"]
+                    or (binding.source_kind is not None and outcome.source_id != row["source_id"])
+                ):
+                    raise ValueError("Reconciled recovery lost its original owning receipt.")
+    except (ValueError, TypeError, KeyError) as error:
+        raise MigrationSchemaError("Retained command recovery evidence is invalid.") from error
+
+
+def validate_coverage_targets(connection, portfolio):
+    """Retained target existence through its source owner, never OPS foreign SQL."""
+    from app.platform.coverage import CoverageSubject
+
+    for row in connection.execute(select(OperatorCoverageReviewModel.__table__)).mappings():
+        subject = CoverageSubject(row["subject_kind"], row["subject_id"])
+        if portfolio.location(connection, subject, as_of=utc(row["created_at"])) is None:
+            raise MigrationSchemaError("Retained coverage target is missing.")
+
+
 RECOVERY_FIELDS = {
     "id": "id",
     "formKey": "form_key",
@@ -160,8 +222,98 @@ def validate_operator_data(connection):
         if active > MAX_ACTIVE_RECOVERY:
             raise ValueError("Recovery capacity exceeded.")
         _validate_operations(connection, preferences, recovery)
+        _validate_coverage_reviews(connection)
     except (ValueError, TypeError, KeyError, AttributeError) as error:
         raise MigrationSchemaError("Retained Operator data is invalid.") from error
+
+
+def _validate_coverage_reviews(connection):
+    from app.modules.operator.application.coverage_models import (
+        CoverageReview,
+        review_audit_snapshot,
+    )
+    from app.modules.operator.application.coverage_models import CoverageResult
+    from datetime import date
+    from zoneinfo import ZoneInfo
+
+    events = {
+        row["entity_id"]: row
+        for row in connection.execute(
+            text(
+                "SELECT * FROM audit_events WHERE entity_type='operator_coverage_review' ORDER BY rowid"
+            )
+        ).mappings()
+    }
+    count = connection.execute(
+        text("SELECT count(*) FROM audit_events WHERE entity_type='operator_coverage_review'")
+    ).scalar_one()
+    if count != len(events):
+        raise ValueError("Duplicate coverage audit.")
+    for row in connection.execute(select(OperatorCoverageReviewModel.__table__)).mappings():
+        for key in ("id", "subject_id", "idempotency_key", "correlation_id"):
+            identifier(row[key])
+        utc(row["created_at"])
+        request = portable_json(row["request_json"])
+        command = CoverageReview.model_validate(
+            {**request, "idempotency_key": row["idempotency_key"]}
+        )
+        if (
+            command.model_dump(mode="json", exclude={"idempotency_key"}) != request
+            or fingerprint(request) != row["request_fingerprint"]
+        ):
+            raise ValueError("Coverage request was rewritten.")
+        for stored, requested in (
+            ("subject_kind", "subject_kind"),
+            ("subject_id", "subject_id"),
+            ("area", "area"),
+            ("evidence_revision", "expected_evidence_revision"),
+            ("basis", "basis"),
+            ("next_review_on", "next_review_on"),
+        ):
+            if row[stored] != request[requested]:
+                raise ValueError("Coverage decision differs from its command.")
+        if row["reason"] != command.reason.strip():
+            raise ValueError("Review reason differs from its command.")
+        result = portable_json(row["result_json"])
+        CoverageResult.model_validate(result)
+        if (
+            result["effectiveLocalDate"]
+            != utc(row["created_at"]).astimezone(ZoneInfo(row["time_zone"])).date().isoformat()
+        ):
+            raise ValueError("Coverage result lost its property-local date.")
+        if any(
+            result[key] != row[stored]
+            for key, stored in (
+                ("operationId", "id"),
+                ("subjectKind", "subject_kind"),
+                ("subjectId", "subject_id"),
+                ("area", "area"),
+                ("evidenceRevision", "evidence_revision"),
+                ("asOf", "created_at"),
+                ("lastManualReviewAt", "created_at"),
+            )
+        ):
+            raise ValueError("Coverage replay result differs from decision.")
+        if command.basis == "not_applicable" and result["state"] != "not_applicable":
+            raise ValueError("Invalid historical non-applicability.")
+        if row["next_review_on"] and date.fromisoformat(
+            row["next_review_on"]
+        ) <= date.fromisoformat(result["effectiveLocalDate"]):
+            raise ValueError("Invalid review date.")
+        event = events.pop(row["id"], None)
+        expected = review_audit_snapshot(row, result)
+        if (
+            event is None
+            or event["action"] != "recorded"
+            or event["actor_kind"] != "local_operator"
+            or event["correlation_id"] != row["correlation_id"]
+            or event["occurred_at"] != row["created_at"]
+            or event["before_snapshot"] is not None
+            or json.loads(event["after_snapshot"]) != expected
+        ):
+            raise ValueError("Coverage audit evidence is incomplete.")
+    if events:
+        raise ValueError("Coverage audit lost its decision.")
 
 
 def _validate_operations(connection, preferences, recovery):
@@ -341,8 +493,7 @@ def _validate_recovery_history(history):
                 changed.update(("attemptKey", "requestFingerprint"))
                 identifier(state["attemptKey"])
                 if (
-                    state["formKey"] == "task.create"
-                    or utc(row["created_at"]) >= utc(previous["expiresAt"])
+                    utc(row["created_at"]) >= utc(previous["expiresAt"])
                     or len(state["requestFingerprint"]) != 64
                     or any(c not in "0123456789abcdef" for c in state["requestFingerprint"])
                 ):
@@ -404,7 +555,11 @@ def _validate_request_result(row, request, result):
         if (
             result["status"] != "outcome_unknown"
             or result["attemptKey"] != request["attemptKey"]
-            or result["requestFingerprint"] != request["requestFingerprint"]
+            or (
+                request["requestFingerprint"] is not None
+                and result["requestFingerprint"] != request["requestFingerprint"]
+            )
+            or (request["requestFingerprint"] is None and result["formKey"] not in COMMAND_SCHEMAS)
         ):
             raise ValueError("Recovery attempt differs from its receipt.")
     else:

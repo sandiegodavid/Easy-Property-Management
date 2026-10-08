@@ -81,6 +81,7 @@ class LinkForm(Contract):
         "task",
         "maintenance_issue",
         "owner_concern",
+        "intake_source",
     ]
     entityId: UUID
 
@@ -103,15 +104,22 @@ SCHEMAS = {
 }
 
 
+def registered_schemas():
+    from app.modules.operator.application.command_forms import COMMAND_SCHEMAS
+
+    return {**SCHEMAS, **COMMAND_SCHEMAS}
+
+
 def validate_payload(form_key, schema_version, payload):
-    if form_key not in SCHEMAS or type(schema_version) is not int or schema_version != 1:
+    schemas = registered_schemas()
+    if form_key not in schemas or type(schema_version) is not int or schema_version != 1:
         raise OperatorError("Recovery form or schema version is unsupported.")
     try:
         encoded = canonical(payload)
         if len(encoded.encode("utf-8")) > MAX_RECOVERY_BYTES:
             raise OperatorTooLarge("Recovery payload exceeds 64 KiB.")
         # Incomplete fields are allowed; extra fields, bytes and domain state are not.
-        validated = SCHEMAS[form_key].model_validate(payload)
+        validated = schemas[form_key].model_validate(payload)
         return validated.model_dump(mode="json", exclude_unset=True)
     except ValidationError as error:
         if any(is_size_limit_violation(item) for item in error.errors()):

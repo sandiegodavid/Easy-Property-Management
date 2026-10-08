@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Collection
-from typing import Any, Protocol, TypeVar
+from typing import Any, Literal, Protocol, TypeVar
 
 from app.modules.portfolio.domain.models import (
     Party,
@@ -15,6 +15,8 @@ from app.modules.portfolio.domain.models import (
 )
 
 Result = TypeVar("Result")
+
+PropertyView = tuple[Property, list[PropertyOwnership], dict[str, Party], list[Space]]
 
 
 class PortfolioContextReader(Protocol):
@@ -63,12 +65,30 @@ class PropertyArchiveGuard(Protocol):
 class PortfolioConflictError(RuntimeError):
     """The requested change conflicts with concurrent or source-owned state."""
 
-    def __init__(self, message: str, *, current_status: dict[str, object] | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        current_status: dict[str, object] | None = None,
+        code: Literal[
+            "portfolio_conflict",
+            "portfolio_status_payload_conflict",
+            "portfolio_status_revision_conflict",
+            "portfolio_status_lifecycle_conflict",
+            "portfolio_inventory_payload_conflict",
+            "portfolio_inventory_revision_conflict",
+        ] = "portfolio_conflict",
+    ) -> None:
         super().__init__(message)
         self.current_status = current_status
+        self.code = code
 
 
 class PortfolioTransaction(Protocol):
+    def inventory_operation(
+        self, *, operation_id: str | None = None, idempotency_key: str | None = None
+    ) -> dict[str, object] | None: ...
+    def insert_inventory_operation(self, operation: dict[str, object]) -> None: ...
     def get_property(self, property_id: str) -> Property | None: ...
     def get_party(self, party_id: str) -> Party | None: ...
     def ownerships_at(self, property_id: str, when: str) -> list[PropertyOwnership]: ...
@@ -93,6 +113,7 @@ class PortfolioTransaction(Protocol):
     def insert_availability(self, availability: SpaceAvailability) -> None: ...
     def replace_availability(self, availability: SpaceAvailability) -> None: ...
     def status_operation(self, idempotency_key: str) -> dict[str, object] | None: ...
+    def status_operation_by_id(self, operation_id: str) -> dict[str, object] | None: ...
     def insert_status_operation(self, operation: dict[str, object]) -> None: ...
     def property_views(
         self, *, status: str | None = None

@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from app.modules.finance.tests.commands import deposit_command, prepaid_command
+
+from app.modules.finance.tests.commands import rent_command
+
+
+from app.modules.portfolio.tests.commands import inventory_command
+
 import json
 import sqlite3
 import tempfile
@@ -27,6 +34,7 @@ from app.modules.finance.api.deposit_router import (
 from app.modules.finance.api.router import ExpectationResponse
 from app.modules.finance.application.deposit_file_links import DepositFileLinkValidator
 from app.modules.finance.application.deposit_service import DepositService
+from app.modules.finance.application.expense_service import ExpenseService
 from app.modules.finance.application.ports import LeaseTermFinanceSnapshot
 from app.modules.finance.application.prepaid_check_service import PrepaidCheckService
 from app.modules.finance.application.service import (
@@ -54,10 +62,13 @@ from app.modules.finance.domain.models import (
     SynchronizeExpectationsCommand,
     VoidCommand,
 )
+from app.modules.finance.domain.expense_models import ExpenseCreateCommand
+from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpenseUnitOfWork
 from app.modules.finance.infrastructure.deposit_unit_of_work import SQLiteDepositUnitOfWork
 from app.modules.finance.infrastructure.file_link_facts import SQLiteDepositFileLinkFacts
 from app.modules.finance.infrastructure.unit_of_work import SQLiteFinanceUnitOfWork
 from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
+from app.modules.leases.tests.commands import lease_command
 from app.modules.leases.application.service import (
     LeaseCreateCommand,
     LeaseService,
@@ -91,6 +102,7 @@ from app.modules.tenants.infrastructure.unit_of_work import (
     SQLiteTenantProfileAvailability,
     SQLiteTenantUnitOfWork,
 )
+from app.modules.vendors.infrastructure.context_reader import SQLiteProviderContextReader
 from app.modules.workspace.application.backup_service import BackupService
 from app.modules.workspace.application.service import WorkspaceService
 from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
@@ -116,7 +128,9 @@ class FinanceWorkflowTests(unittest.TestCase):
             SQLitePortfolioUnitOfWork(db, recorder),
             time_zone_resolver=BundledAddressTimeZoneResolver(),
         )
-        property_record = portfolio.create_property(
+        property_record = inventory_command(
+            portfolio,
+            "create_property",
             PropertyCreateCommand(
                 "Rent home",
                 "1 Main Street",
@@ -125,7 +139,7 @@ class FinanceWorkflowTests(unittest.TestCase):
                 "single_family_home",
                 (OwnershipInput("local_operator"),),
                 region="OR",
-            )
+            ),
         )
         space_id = portfolio.get_property(property_record.id)["spaces"][0]["id"]
         tenant = TenantService(
@@ -137,7 +151,11 @@ class FinanceWorkflowTests(unittest.TestCase):
                 SQLitePartyReadOperations(party_operations),
             ),
             SharedPartyFactory(),
-        ).create(TenantCreateCommand("individual", "Rent Tenant"))
+        ).create(
+            TenantCreateCommand("individual", "Rent Tenant"),
+            expected_revision=0,
+            idempotency_key=str(uuid4()),
+        )
         leases = LeaseService(
             SQLiteLeaseUnitOfWork(
                 db,
@@ -154,7 +172,9 @@ class FinanceWorkflowTests(unittest.TestCase):
             today = date(
                 today.year + (today.month == 12), 1 if today.month == 12 else today.month + 1, 1
             )
-        lease = leases.create(
+        lease = lease_command(
+            leases,
+            "create",
             LeaseCreateCommand(
                 space_id,
                 "residential",
@@ -163,9 +183,11 @@ class FinanceWorkflowTests(unittest.TestCase):
                 today,
                 TermCommand(100_000, "USD", "monthly", 1, 0),
                 (ParticipantCommand(tenant["id"], "primary_tenant"),),
-            )
+            ),
         )
-        self.lease = leases.execute(
+        self.lease = lease_command(
+            leases,
+            "execute",
             lease["id"],
             executed_on=today,
             confirmed=True,
@@ -206,11 +228,16 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_security_deposit_account_receipt_and_zero_settlement_lifecycle(self):
         term = self.lease["terms"][0]
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
         DepositResponse.model_validate(account)
-        receipt = self.deposits.record_receipt(
+        receipt = deposit_command(
+            self.deposits,
+            "record_receipt",
             account["id"],
             DepositReceiptCommand(
                 str(uuid4()),
@@ -225,7 +252,9 @@ class FinanceWorkflowTests(unittest.TestCase):
         self.assertEqual(receipt["amount"], "10.00")
         ReceiptResponse.model_validate(receipt)
         # The draft lifecycle is auditable and its timing override is explicit.
-        settlement = self.deposits.create_settlement(
+        settlement = deposit_command(
+            self.deposits,
+            "create_settlement",
             account["id"],
             SettlementCreateCommand(
                 date.today().isoformat(),
@@ -299,10 +328,15 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_deduction_evidence_must_be_available_and_archived_before_deletion(self):
         term = self.lease["terms"][0]
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        settlement = self.deposits.create_settlement(
+        settlement = deposit_command(
+            self.deposits,
+            "create_settlement",
             account["id"],
             SettlementCreateCommand(
                 date.today().isoformat(),
@@ -310,7 +344,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 eligibility_override_reason="Documented test closure",
             ),
         )
-        deduction = self.deposits.add_deduction(
+        deduction = deposit_command(
+            self.deposits,
+            "add_deduction",
             settlement["id"],
             DeductionCommand("damage", "1.00", "Wall repair", "Photo evidence"),
         )
@@ -326,7 +362,7 @@ class FinanceWorkflowTests(unittest.TestCase):
         )
         link_id = self.files.get(stored.id).links[0]["id"]
         with self.assertRaisesRegex(FinanceConflictError, "Archive deduction evidence"):
-            self.deposits.delete_deduction(deduction["id"])
+            deposit_command(self.deposits, "delete_deduction", deduction["id"])
 
         with self.files.unit_of_work.engine.begin() as connection:
             connection.execute(
@@ -336,7 +372,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 {"id": stored.id},
             )
         with self.assertRaisesRegex(FinanceConflictError, "requires at least one source"):
-            self.deposits.approve_settlement(
+            deposit_command(
+                self.deposits,
+                "approve_settlement",
                 settlement["id"],
                 True,
                 zero_dollar_closure_confirmed=True,
@@ -344,7 +382,7 @@ class FinanceWorkflowTests(unittest.TestCase):
 
         self.files.archive_link(link_id, confirmed=True, reason="Evidence was attached in error.")
         self.assertEqual(
-            self.deposits.delete_deduction(deduction["id"]),
+            deposit_command(self.deposits, "delete_deduction", deduction["id"]),
             {
                 "deleted": True,
                 "id": deduction["id"],
@@ -353,7 +391,9 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_prepaid_check_deposit_is_correlated_with_one_expectation(self):
         term = self.lease["terms"][0]
-        expectations = self.finance.synchronize(
+        expectations = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -380,7 +420,9 @@ class FinanceWorkflowTests(unittest.TestCase):
             ),
             now=clock,
         )
-        check = prepaid.create(
+        check = prepaid_command(
+            prepaid,
+            "create",
             PrepaidCheckCommand(
                 expectation["id"],
                 self.lease["participants"][0]["tenantPartyId"],
@@ -388,10 +430,12 @@ class FinanceWorkflowTests(unittest.TestCase):
                 (date.today() + timedelta(days=1)).isoformat(),
                 "Check •••• 1234",
                 str(uuid4()),
-            )
+            ),
         )
         self.assertEqual(check["depositEligibility"], "eligible")
-        deposited = prepaid.deposit(check["id"], PrepaidCheckTransitionCommand(str(uuid4()), True))
+        deposited = prepaid_command(
+            prepaid, "deposit", check["id"], PrepaidCheckTransitionCommand(str(uuid4()), True)
+        )
         self.assertEqual(deposited["status"], "deposited")
         self.assertIsNotNone(deposited["receiptId"])
         self.assertEqual(self.finance.expectation(expectation["id"])["settlementStatus"], "paid")
@@ -404,7 +448,9 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_voided_prepaid_check_can_be_replaced_once(self):
         term = self.lease["terms"][0]
-        expectations = self.finance.synchronize(
+        expectations = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -430,7 +476,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 + timedelta(hours=12)
             ),
         )
-        check = prepaid.create(
+        check = prepaid_command(
+            prepaid,
+            "create",
             PrepaidCheckCommand(
                 expectation["id"],
                 self.lease["participants"][0]["tenantPartyId"],
@@ -438,13 +486,17 @@ class FinanceWorkflowTests(unittest.TestCase):
                 (date.today() + timedelta(days=3)).isoformat(),
                 None,
                 str(uuid4()),
-            )
+            ),
         )
-        prepaid.void(
+        prepaid_command(
+            prepaid,
+            "void",
             check["id"],
             PrepaidCheckTransitionCommand(str(uuid4()), True, "Replacement check received"),
         )
-        replacement = prepaid.replace(
+        replacement = prepaid_command(
+            prepaid,
+            "replace",
             check["id"],
             PrepaidCheckCommand(
                 expectation["id"],
@@ -462,7 +514,9 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_prepaid_check_rejects_prorated_expectations_and_requires_explicit_replacement(self):
         term = self.lease["terms"][0]
-        expectations = self.finance.synchronize(
+        expectations = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -478,7 +532,9 @@ class FinanceWorkflowTests(unittest.TestCase):
             key=lambda item: item["periodEndsOn"],
         )
         boundary = date.fromisoformat(complete["periodEndsOn"]) + timedelta(days=15)
-        prorated = self.finance.synchronize(
+        prorated = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -506,7 +562,9 @@ class FinanceWorkflowTests(unittest.TestCase):
             ),
         )
         with self.assertRaises(FinanceConflictError):
-            prepaid.create(
+            prepaid_command(
+                prepaid,
+                "create",
                 PrepaidCheckCommand(
                     prorated["id"],
                     self.lease["participants"][0]["tenantPartyId"],
@@ -514,9 +572,11 @@ class FinanceWorkflowTests(unittest.TestCase):
                     (date.today() + timedelta(days=2)).isoformat(),
                     None,
                     str(uuid4()),
-                )
+                ),
             )
-        check = prepaid.create(
+        check = prepaid_command(
+            prepaid,
+            "create",
             PrepaidCheckCommand(
                 complete["id"],
                 self.lease["participants"][0]["tenantPartyId"],
@@ -524,14 +584,18 @@ class FinanceWorkflowTests(unittest.TestCase):
                 (date.today() + timedelta(days=2)).isoformat(),
                 None,
                 str(uuid4()),
-            )
+            ),
         )
-        prepaid.void(
+        prepaid_command(
+            prepaid,
+            "void",
             check["id"],
             PrepaidCheckTransitionCommand(str(uuid4()), True, "Printed check was spoiled"),
         )
         with self.assertRaises(FinanceConflictError):
-            prepaid.create(
+            prepaid_command(
+                prepaid,
+                "create",
                 PrepaidCheckCommand(
                     complete["id"],
                     self.lease["participants"][0]["tenantPartyId"],
@@ -539,9 +603,11 @@ class FinanceWorkflowTests(unittest.TestCase):
                     (date.today() + timedelta(days=3)).isoformat(),
                     None,
                     str(uuid4()),
-                )
+                ),
             )
-        replacement = prepaid.replace(
+        replacement = prepaid_command(
+            prepaid,
+            "replace",
             check["id"],
             PrepaidCheckCommand(
                 complete["id"],
@@ -561,7 +627,9 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_prepaid_check_can_adopt_one_compatible_existing_receipt(self):
         term = self.lease["terms"][0]
-        expectations = self.finance.synchronize(
+        expectations = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -587,7 +655,9 @@ class FinanceWorkflowTests(unittest.TestCase):
             ),
             now=clock,
         )
-        check = prepaid.create(
+        check = prepaid_command(
+            prepaid,
+            "create",
             PrepaidCheckCommand(
                 expectation["id"],
                 self.lease["participants"][0]["tenantPartyId"],
@@ -595,9 +665,11 @@ class FinanceWorkflowTests(unittest.TestCase):
                 (date.today() + timedelta(days=1)).isoformat(),
                 "Check •••• 4321",
                 str(uuid4()),
-            )
+            ),
         )
-        receipt = self.finance.record_receipt(
+        receipt = rent_command(
+            self.finance,
+            "record_receipt",
             RecordReceiptCommand(
                 self.lease["id"],
                 str(uuid4()),
@@ -606,9 +678,11 @@ class FinanceWorkflowTests(unittest.TestCase):
                 "USD",
                 (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
                 "check",
-            )
+            ),
         )
-        deposited = prepaid.deposit(
+        deposited = prepaid_command(
+            prepaid,
+            "deposit",
             check["id"],
             PrepaidCheckTransitionCommand(str(uuid4()), True, existing_receipt_id=receipt["id"]),
         )
@@ -616,7 +690,9 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_prepaid_check_restore_rejects_one_way_replacement_lineage(self):
         term = self.lease["terms"][0]
-        expectations = self.finance.synchronize(
+        expectations = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -641,7 +717,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 + timedelta(hours=12)
             ),
         )
-        original = prepaid.create(
+        original = prepaid_command(
+            prepaid,
+            "create",
             PrepaidCheckCommand(
                 expectation["id"],
                 self.lease["participants"][0]["tenantPartyId"],
@@ -649,10 +727,17 @@ class FinanceWorkflowTests(unittest.TestCase):
                 (date.today() + timedelta(days=2)).isoformat(),
                 None,
                 str(uuid4()),
-            )
+            ),
         )
-        prepaid.void(original["id"], PrepaidCheckTransitionCommand(str(uuid4()), True, "Spoiled"))
-        prepaid.replace(
+        prepaid_command(
+            prepaid,
+            "void",
+            original["id"],
+            PrepaidCheckTransitionCommand(str(uuid4()), True, "Spoiled"),
+        )
+        prepaid_command(
+            prepaid,
+            "replace",
             original["id"],
             PrepaidCheckCommand(
                 expectation["id"],
@@ -686,10 +771,15 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_account_reload_includes_the_current_settlement_state(self):
         term = self.lease["terms"][0]
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        settlement = self.deposits.create_settlement(
+        settlement = deposit_command(
+            self.deposits,
+            "create_settlement",
             account["id"],
             SettlementCreateCommand(
                 date.today().isoformat(),
@@ -705,7 +795,9 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_later_source_lifecycle_changes_warn_without_invalidating_approval(self):
         term = self.lease["terms"][0]
-        expectation = self.finance.synchronize(
+        expectation = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -713,10 +805,15 @@ class FinanceWorkflowTests(unittest.TestCase):
                 date.today().replace(day=1).isoformat(),
             ),
         )[0]
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        self.deposits.record_receipt(
+        deposit_command(
+            self.deposits,
+            "record_receipt",
             account["id"],
             DepositReceiptCommand(
                 str(uuid4()),
@@ -728,7 +825,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 overage_reason="Documented receipt",
             ),
         )
-        settlement = self.deposits.create_settlement(
+        settlement = deposit_command(
+            self.deposits,
+            "create_settlement",
             account["id"],
             SettlementCreateCommand(
                 date.today().isoformat(),
@@ -736,15 +835,25 @@ class FinanceWorkflowTests(unittest.TestCase):
                 eligibility_override_reason="Early documented closure",
             ),
         )
-        deduction = self.deposits.add_deduction(
-            settlement["id"], DeductionCommand("unpaid_rent", "1.00", "Rent", "Review")
+        deduction = deposit_command(
+            self.deposits,
+            "add_deduction",
+            settlement["id"],
+            DeductionCommand("unpaid_rent", "1.00", "Rent", "Review"),
         )
-        source = self.deposits.add_deduction_source(
-            deduction["id"], "rent_expectation", expectation["id"]
+        source = deposit_command(
+            self.deposits,
+            "add_deduction_source",
+            deduction["id"],
+            "rent_expectation",
+            expectation["id"],
         )
-        approved = self.deposits.approve_settlement(settlement["id"], True)
-        self.finance.void_expectation(
-            expectation["id"], VoidCommand(True, "Corrected rent expectation")
+        approved = deposit_command(self.deposits, "approve_settlement", settlement["id"], True)
+        rent_command(
+            self.finance,
+            "void_expectation",
+            expectation["id"],
+            VoidCommand(True, "Corrected rent expectation"),
         )
         validate_latest_schema(self.workspace.paths.database)
         detail = self.deposits.settlement(approved["id"])
@@ -752,10 +861,15 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_completed_settlement_refund_must_be_corrected_through_settlement_replacement(self):
         term = self.lease["terms"][0]
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        self.deposits.record_receipt(
+        deposit_command(
+            self.deposits,
+            "record_receipt",
             account["id"],
             DepositReceiptCommand(
                 str(uuid4()),
@@ -767,7 +881,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 overage_reason="Documented receipt",
             ),
         )
-        settlement = self.deposits.create_settlement(
+        settlement = deposit_command(
+            self.deposits,
+            "create_settlement",
             account["id"],
             SettlementCreateCommand(
                 date.today().isoformat(),
@@ -775,8 +891,10 @@ class FinanceWorkflowTests(unittest.TestCase):
                 eligibility_override_reason="Early documented closure",
             ),
         )
-        approved = self.deposits.approve_settlement(settlement["id"], True)
-        refund = self.deposits.record_refund(
+        approved = deposit_command(self.deposits, "approve_settlement", settlement["id"], True)
+        refund = deposit_command(
+            self.deposits,
+            "record_refund",
             approved["id"],
             DepositRefundCommand(
                 str(uuid4()),
@@ -786,13 +904,17 @@ class FinanceWorkflowTests(unittest.TestCase):
                 "USD",
             ),
         )
-        self.deposits.complete_settlement(approved["id"], False)
+        deposit_command(self.deposits, "complete_settlement", approved["id"], False)
         with self.assertRaises(FinanceConflictError):
-            self.deposits.void_refund(refund["id"], VoidCommand(True, "Incorrect payment"))
+            deposit_command(
+                self.deposits, "void_refund", refund["id"], VoidCommand(True, "Incorrect payment")
+            )
 
     def test_rent_expectation_source_snapshots_active_outstanding_balance(self):
         term = self.lease["terms"][0]
-        expectation = self.finance.synchronize(
+        expectation = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -800,7 +922,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 date.today().replace(day=1).isoformat(),
             ),
         )[0]
-        self.finance.record_receipt(
+        rent_command(
+            self.finance,
+            "record_receipt",
             RecordReceiptCommand(
                 self.lease["id"],
                 str(uuid4()),
@@ -809,12 +933,17 @@ class FinanceWorkflowTests(unittest.TestCase):
                 "USD",
                 (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
                 "cash",
-            )
+            ),
         )
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        settlement = self.deposits.create_settlement(
+        settlement = deposit_command(
+            self.deposits,
+            "create_settlement",
             account["id"],
             SettlementCreateCommand(
                 date.today().isoformat(),
@@ -822,11 +951,18 @@ class FinanceWorkflowTests(unittest.TestCase):
                 eligibility_override_reason="Early documented closure",
             ),
         )
-        deduction = self.deposits.add_deduction(
-            settlement["id"], DeductionCommand("unpaid_rent", "1.00", "Rent", "Review")
+        deduction = deposit_command(
+            self.deposits,
+            "add_deduction",
+            settlement["id"],
+            DeductionCommand("unpaid_rent", "1.00", "Rent", "Review"),
         )
-        source = self.deposits.add_deduction_source(
-            deduction["id"], "rent_expectation", expectation["id"]
+        source = deposit_command(
+            self.deposits,
+            "add_deduction_source",
+            deduction["id"],
+            "rent_expectation",
+            expectation["id"],
         )
         self.assertEqual(source["outstandingAmount"], "0.00")
 
@@ -845,10 +981,15 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_zero_dollar_closure_requires_distinct_approval_confirmation(self):
         term = self.lease["terms"][0]
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        settlement = self.deposits.create_settlement(
+        settlement = deposit_command(
+            self.deposits,
+            "create_settlement",
             account["id"],
             SettlementCreateCommand(
                 date.today().isoformat(),
@@ -857,14 +998,16 @@ class FinanceWorkflowTests(unittest.TestCase):
             ),
         )
         with self.assertRaises(FinanceConflictError):
-            self.deposits.approve_settlement(settlement["id"], True)
-        approved = self.deposits.approve_settlement(
+            deposit_command(self.deposits, "approve_settlement", settlement["id"], True)
+        approved = deposit_command(
+            self.deposits,
+            "approve_settlement",
             settlement["id"],
             True,
             zero_dollar_closure_confirmed=True,
         )
         self.assertEqual(approved["status"], "approved")
-        completed = self.deposits.complete_settlement(approved["id"], True)
+        completed = deposit_command(self.deposits, "complete_settlement", approved["id"], True)
         self.assertEqual(completed["status"], "completed")
 
     def test_empty_settlement_requires_zero_dollar_confirmation_when_deposit_was_expected(self):
@@ -876,10 +1019,15 @@ class FinanceWorkflowTests(unittest.TestCase):
                 ),
                 {"id": term["id"]},
             )
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        settlement = self.deposits.create_settlement(
+        settlement = deposit_command(
+            self.deposits,
+            "create_settlement",
             account["id"],
             SettlementCreateCommand(
                 date.today().isoformat(),
@@ -888,8 +1036,10 @@ class FinanceWorkflowTests(unittest.TestCase):
             ),
         )
         with self.assertRaises(FinanceConflictError):
-            self.deposits.approve_settlement(settlement["id"], True)
-        approved = self.deposits.approve_settlement(
+            deposit_command(self.deposits, "approve_settlement", settlement["id"], True)
+        approved = deposit_command(
+            self.deposits,
+            "approve_settlement",
             settlement["id"],
             True,
             zero_dollar_closure_confirmed=True,
@@ -898,10 +1048,15 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_deposit_receipt_and_refund_checks_reject_voids_without_reasons(self):
         term = self.lease["terms"][0]
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        receipt = self.deposits.record_receipt(
+        receipt = deposit_command(
+            self.deposits,
+            "record_receipt",
             account["id"],
             DepositReceiptCommand(
                 str(uuid4()),
@@ -913,7 +1068,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 overage_reason="Documented receipt",
             ),
         )
-        settlement = self.deposits.create_settlement(
+        settlement = deposit_command(
+            self.deposits,
+            "create_settlement",
             account["id"],
             SettlementCreateCommand(
                 date.today().isoformat(),
@@ -921,9 +1078,11 @@ class FinanceWorkflowTests(unittest.TestCase):
                 eligibility_override_reason="Early documented closure",
             ),
         )
-        approved = self.deposits.approve_settlement(settlement["id"], True)
+        approved = deposit_command(self.deposits, "approve_settlement", settlement["id"], True)
         recipient_id = self.lease["participants"][0]["tenantPartyId"]
-        refund = self.deposits.record_refund(
+        refund = deposit_command(
+            self.deposits,
+            "record_refund",
             approved["id"],
             DepositRefundCommand(
                 str(uuid4()),
@@ -952,10 +1111,15 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_deposit_database_rejects_invalid_persisted_dates_and_aggregate_amounts(self):
         term = self.lease["terms"][0]
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        receipt = self.deposits.record_receipt(
+        receipt = deposit_command(
+            self.deposits,
+            "record_receipt",
             account["id"],
             DepositReceiptCommand(
                 str(uuid4()),
@@ -967,7 +1131,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 overage_reason="Documented receipt",
             ),
         )
-        settlement = self.deposits.create_settlement(
+        settlement = deposit_command(
+            self.deposits,
+            "create_settlement",
             account["id"],
             SettlementCreateCommand(
                 date.today().isoformat(),
@@ -1002,10 +1168,15 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_restore_rejects_removed_receipt_capture_from_voided_approved_settlement(self):
         term = self.lease["terms"][0]
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        self.deposits.record_receipt(
+        deposit_command(
+            self.deposits,
+            "record_receipt",
             account["id"],
             DepositReceiptCommand(
                 str(uuid4()),
@@ -1017,7 +1188,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 overage_reason="Documented receipt",
             ),
         )
-        settlement = self.deposits.create_settlement(
+        settlement = deposit_command(
+            self.deposits,
+            "create_settlement",
             account["id"],
             SettlementCreateCommand(
                 date.today().isoformat(),
@@ -1025,8 +1198,13 @@ class FinanceWorkflowTests(unittest.TestCase):
                 eligibility_override_reason="Early documented closure",
             ),
         )
-        approved = self.deposits.approve_settlement(settlement["id"], True)
-        self.deposits.void_settlement(approved["id"], VoidCommand(True, "Settlement correction"))
+        approved = deposit_command(self.deposits, "approve_settlement", settlement["id"], True)
+        deposit_command(
+            self.deposits,
+            "void_settlement",
+            approved["id"],
+            VoidCommand(True, "Settlement correction"),
+        )
         with self.finance.unit_of_work.engine.begin() as connection:
             connection.execute(
                 text("DELETE FROM security_deposit_settlement_receipts WHERE settlement_id = :id"),
@@ -1037,7 +1215,9 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_restore_rejects_missing_rent_snapshot_from_voided_approved_settlement(self):
         term = self.lease["terms"][0]
-        expectation = self.finance.synchronize(
+        expectation = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -1045,10 +1225,15 @@ class FinanceWorkflowTests(unittest.TestCase):
                 date.today().replace(day=1).isoformat(),
             ),
         )[0]
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        self.deposits.record_receipt(
+        deposit_command(
+            self.deposits,
+            "record_receipt",
             account["id"],
             DepositReceiptCommand(
                 str(uuid4()),
@@ -1060,7 +1245,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 overage_reason="Documented receipt",
             ),
         )
-        settlement = self.deposits.create_settlement(
+        settlement = deposit_command(
+            self.deposits,
+            "create_settlement",
             account["id"],
             SettlementCreateCommand(
                 date.today().isoformat(),
@@ -1068,17 +1255,26 @@ class FinanceWorkflowTests(unittest.TestCase):
                 eligibility_override_reason="Early documented closure",
             ),
         )
-        deduction = self.deposits.add_deduction(
+        deduction = deposit_command(
+            self.deposits,
+            "add_deduction",
             settlement["id"],
             DeductionCommand("unpaid_rent", "1.00", "Rent", "Review"),
         )
-        source = self.deposits.add_deduction_source(
+        source = deposit_command(
+            self.deposits,
+            "add_deduction_source",
             deduction["id"],
             "rent_expectation",
             expectation["id"],
         )
-        approved = self.deposits.approve_settlement(settlement["id"], True)
-        self.deposits.void_settlement(approved["id"], VoidCommand(True, "Settlement correction"))
+        approved = deposit_command(self.deposits, "approve_settlement", settlement["id"], True)
+        deposit_command(
+            self.deposits,
+            "void_settlement",
+            approved["id"],
+            VoidCommand(True, "Settlement correction"),
+        )
         with self.finance.unit_of_work.engine.begin() as connection:
             connection.execute(
                 text(
@@ -1091,7 +1287,9 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_restore_rejects_removed_source_from_voided_approved_deduction(self):
         term = self.lease["terms"][0]
-        expectation = self.finance.synchronize(
+        expectation = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -1099,10 +1297,15 @@ class FinanceWorkflowTests(unittest.TestCase):
                 date.today().replace(day=1).isoformat(),
             ),
         )[0]
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        self.deposits.record_receipt(
+        deposit_command(
+            self.deposits,
+            "record_receipt",
             account["id"],
             DepositReceiptCommand(
                 str(uuid4()),
@@ -1114,7 +1317,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 overage_reason="Documented receipt",
             ),
         )
-        settlement = self.deposits.create_settlement(
+        settlement = deposit_command(
+            self.deposits,
+            "create_settlement",
             account["id"],
             SettlementCreateCommand(
                 date.today().isoformat(),
@@ -1122,17 +1327,26 @@ class FinanceWorkflowTests(unittest.TestCase):
                 eligibility_override_reason="Early documented closure",
             ),
         )
-        deduction = self.deposits.add_deduction(
+        deduction = deposit_command(
+            self.deposits,
+            "add_deduction",
             settlement["id"],
             DeductionCommand("unpaid_rent", "1.00", "Rent", "Review"),
         )
-        source = self.deposits.add_deduction_source(
+        source = deposit_command(
+            self.deposits,
+            "add_deduction_source",
             deduction["id"],
             "rent_expectation",
             expectation["id"],
         )
-        approved = self.deposits.approve_settlement(settlement["id"], True)
-        self.deposits.void_settlement(approved["id"], VoidCommand(True, "Settlement correction"))
+        approved = deposit_command(self.deposits, "approve_settlement", settlement["id"], True)
+        deposit_command(
+            self.deposits,
+            "void_settlement",
+            approved["id"],
+            VoidCommand(True, "Settlement correction"),
+        )
         with self.finance.unit_of_work.engine.begin() as connection:
             connection.execute(
                 text("DELETE FROM security_deposit_deduction_sources WHERE id = :id"),
@@ -1143,10 +1357,15 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_restore_rejects_unconfirmed_expense_reuse_across_approved_settlements(self):
         term = self.lease["terms"][0]
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        self.deposits.record_receipt(
+        deposit_command(
+            self.deposits,
+            "record_receipt",
             account["id"],
             DepositReceiptCommand(
                 str(uuid4()),
@@ -1158,43 +1377,43 @@ class FinanceWorkflowTests(unittest.TestCase):
                 overage_reason="Documented receipt",
             ),
         )
-        expense_id = str(uuid4())
-        stamp = datetime.now(UTC).isoformat()
         with self.finance.unit_of_work.engine.begin() as connection:
             category_id = connection.execute(
                 text(
                     "SELECT id FROM expense_categories WHERE archived_at IS NULL ORDER BY display_order, id LIMIT 1"
                 )
             ).scalar_one()
-            connection.execute(
-                text(
-                    """INSERT INTO expenses (
-                    id, idempotency_key, request_fingerprint, property_id, space_id,
-                    category_id, provider_party_id, payee_name, paid_by_kind,
-                    paid_by_party_id, paid_on, amount_minor, currency_code, description,
-                    reference, notes, replaces_expense_id, voided_at, void_reason,
-                    created_at, updated_at
-                ) VALUES (
-                    :id, :key, :fingerprint, :property_id, :space_id,
-                    :category_id, NULL, 'Repair shop', 'local_operator',
-                    NULL, :paid_on, 100, 'USD', 'Repair expense',
-                    NULL, NULL, NULL, NULL, NULL, :stamp, :stamp
-                )"""
-                ),
-                {
-                    "id": expense_id,
-                    "key": str(uuid4()),
-                    "fingerprint": "a" * 64,
-                    "property_id": account["propertyId"],
-                    "space_id": account["spaceId"],
-                    "category_id": category_id,
-                    "paid_on": date.today().isoformat(),
-                    "stamp": stamp,
-                },
+        database = self.workspace.paths.database
+        expenses = ExpenseService(
+            SQLiteExpenseUnitOfWork(
+                database,
+                AuditRecorder(SQLiteAuditRepository(database)),
+                SQLitePortfolioContextReader(),
+                SQLiteProviderContextReader(),
+                SQLitePartyOperations(database),
+                self.file_reader,
             )
+        )
+        expense_id = expenses.record_expense(
+            ExpenseCreateCommand(
+                str(uuid4()),
+                account["propertyId"],
+                category_id,
+                "local_operator",
+                date.today().isoformat(),
+                "1.00",
+                "USD",
+                "Repair expense",
+                space_id=account["spaceId"],
+                payee_name="Repair shop",
+            ),
+            expected_revision=0,
+        )["id"]
 
         def settlement(replaces_settlement_id=None, *, duplicate_use_confirmed=False):
-            item = self.deposits.create_settlement(
+            item = deposit_command(
+                self.deposits,
+                "create_settlement",
                 account["id"],
                 SettlementCreateCommand(
                     date.today().isoformat(),
@@ -1203,20 +1422,29 @@ class FinanceWorkflowTests(unittest.TestCase):
                     replaces_settlement_id=replaces_settlement_id,
                 ),
             )
-            deduction = self.deposits.add_deduction(
+            deduction = deposit_command(
+                self.deposits,
+                "add_deduction",
                 item["id"],
                 DeductionCommand("damage", "1.00", "Repair", "Documented cost"),
             )
-            source = self.deposits.add_deduction_source(
+            source = deposit_command(
+                self.deposits,
+                "add_deduction_source",
                 deduction["id"],
                 "expense",
                 expense_id,
                 duplicate_use_confirmed=duplicate_use_confirmed,
             )
-            return self.deposits.approve_settlement(item["id"], True), source
+            return deposit_command(self.deposits, "approve_settlement", item["id"], True), source
 
         first, _ = settlement()
-        self.deposits.void_settlement(first["id"], VoidCommand(True, "Settlement correction"))
+        deposit_command(
+            self.deposits,
+            "void_settlement",
+            first["id"],
+            VoidCommand(True, "Settlement correction"),
+        )
         _, repeated_source = settlement(first["id"], duplicate_use_confirmed=True)
         validate_latest_schema(self.workspace.paths.database)
         with self.finance.unit_of_work.engine.begin() as connection:
@@ -1231,10 +1459,15 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_security_deposit_http_responses_validate_the_persisted_detail_shape(self):
         term = self.lease["terms"][0]
-        account = self.deposits.create_account(
-            self.lease["id"], DepositAccountCreateCommand(term["id"])
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(term["id"]),
         )
-        settlement = self.deposits.create_settlement(
+        settlement = deposit_command(
+            self.deposits,
+            "create_settlement",
             account["id"],
             SettlementCreateCommand(
                 date.today().isoformat(),
@@ -1242,11 +1475,15 @@ class FinanceWorkflowTests(unittest.TestCase):
                 eligibility_override_reason="Early documented closure",
             ),
         )
-        deduction = self.deposits.add_deduction(
+        deduction = deposit_command(
+            self.deposits,
+            "add_deduction",
             settlement["id"],
             DeductionCommand("damage", "1.00", "Wall repair", "Inspection estimate"),
         )
-        recorded = self.deposits.record_receipt(
+        recorded = deposit_command(
+            self.deposits,
+            "record_receipt",
             account["id"],
             DepositReceiptCommand(
                 str(uuid4()),
@@ -1270,6 +1507,8 @@ class FinanceWorkflowTests(unittest.TestCase):
                     "amount": "1.00",
                     "description": "Wall repair",
                     "rationale": "Inspection estimate",
+                    "expectedRevision": self.deposits.revision(account["id"]),
+                    "idempotencyKey": str(uuid4()),
                 },
             )
         self.assertEqual(account_response.status_code, 200, account_response.text)
@@ -1289,11 +1528,13 @@ class FinanceWorkflowTests(unittest.TestCase):
             (date.today() + timedelta(days=60)).isoformat(),
             date.today().replace(day=1).isoformat(),
         )
-        rows = self.finance.synchronize(self.lease["id"], command)
+        rows = rent_command(self.finance, "synchronize", self.lease["id"], command)
         self.assertTrue(rows)
-        self.assertEqual([], self.finance.synchronize(self.lease["id"], command))
+        self.assertEqual([], rent_command(self.finance, "synchronize", self.lease["id"], command))
         expectation = rows[0]
-        receipt = self.finance.record_receipt(
+        receipt = rent_command(
+            self.finance,
+            "record_receipt",
             RecordReceiptCommand(
                 self.lease["id"],
                 str(uuid4()),
@@ -1302,7 +1543,7 @@ class FinanceWorkflowTests(unittest.TestCase):
                 "USD",
                 (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
                 "cash",
-            )
+            ),
         )
         self.assertEqual(receipt["allocations"][0]["expectationId"], expectation["id"])
         view = self.finance.expectation(expectation["id"])
@@ -1311,14 +1552,18 @@ class FinanceWorkflowTests(unittest.TestCase):
         self.assertEqual(view["allocationSummaries"][0]["receiptLifecycleStatus"], "active")
         self.assertNotIn("voidedAt", view["allocationSummaries"][0])
         ExpectationResponse.model_validate(view)
-        self.finance.void_receipt(receipt["id"], VoidCommand(True, "Correction"))
-        voided = self.finance.void_expectation(expectation["id"], VoidCommand(True, "Duplicate"))
+        rent_command(self.finance, "void_receipt", receipt["id"], VoidCommand(True, "Correction"))
+        voided = rent_command(
+            self.finance, "void_expectation", expectation["id"], VoidCommand(True, "Duplicate")
+        )
         self.assertEqual(voided["allocationCount"], 1)
         self.assertEqual(voided["allocationSummaries"][0]["receiptLifecycleStatus"], "voided")
 
     def test_receipt_payment_method_is_immutable_and_idempotency_sensitive(self):
         term = self.lease["terms"][0]
-        expectation = self.finance.synchronize(
+        expectation = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -1338,12 +1583,14 @@ class FinanceWorkflowTests(unittest.TestCase):
             "Personal check",
             "Check •••• 9182",
         )
-        receipt = self.finance.record_receipt(command)
+        receipt = rent_command(self.finance, "record_receipt", command)
         self.assertEqual(receipt["paymentMethodKind"], "check")
         self.assertEqual(receipt["maskedReference"], "Check •••• 9182")
-        self.assertEqual(self.finance.record_receipt(command)["id"], receipt["id"])
+        self.assertEqual(rent_command(self.finance, "record_receipt", command)["id"], receipt["id"])
         with self.assertRaises(FinanceConflictError):
-            self.finance.record_receipt(
+            rent_command(
+                self.finance,
+                "record_receipt",
                 RecordReceiptCommand(
                     self.lease["id"],
                     key,
@@ -1356,7 +1603,7 @@ class FinanceWorkflowTests(unittest.TestCase):
                         ),
                     ),
                     "cash",
-                )
+                ),
             )
 
     def test_payment_method_validation_and_suggestion_route(self):
@@ -1387,7 +1634,9 @@ class FinanceWorkflowTests(unittest.TestCase):
             )
         self.assertEqual(empty.status_code, 204, empty.text)
         term = self.lease["terms"][0]
-        expectation = self.finance.synchronize(
+        expectation = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -1395,7 +1644,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 date.today().replace(day=1).isoformat(),
             ),
         )[0]
-        self.finance.record_receipt(
+        rent_command(
+            self.finance,
+            "record_receipt",
             RecordReceiptCommand(
                 self.lease["id"],
                 str(uuid4()),
@@ -1405,7 +1656,7 @@ class FinanceWorkflowTests(unittest.TestCase):
                 (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
                 "other",
                 other_payment_method_note="Money order",
-            )
+            ),
         )
         with TestClient(create_app(self.workspace.config.config_path)) as client:
             suggested = client.get(
@@ -1417,7 +1668,9 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_receipt_http_contract_requires_and_returns_payment_method_snapshot(self):
         term = self.lease["terms"][0]
-        expectation = self.finance.synchronize(
+        expectation = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -1428,6 +1681,9 @@ class FinanceWorkflowTests(unittest.TestCase):
         payload = {
             "leaseId": self.lease["id"],
             "idempotencyKey": str(uuid4()),
+            "expectedRevision": self.finance.rent_ledger_revision(self.lease["id"])[
+                "rentLedgerRevision"
+            ],
             "receivedOn": date.today().isoformat(),
             "amountMinor": expectation["expectedAmountMinor"],
             "currencyCode": "USD",
@@ -1457,7 +1713,9 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_duplicate_receipt_requires_explicit_transactional_review(self):
         term = self.lease["terms"][0]
-        rows = self.finance.synchronize(
+        rows = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -1466,7 +1724,9 @@ class FinanceWorkflowTests(unittest.TestCase):
             ),
         )
         first, second = rows[:2]
-        self.finance.record_receipt(
+        rent_command(
+            self.finance,
+            "record_receipt",
             RecordReceiptCommand(
                 self.lease["id"],
                 str(uuid4()),
@@ -1475,10 +1735,12 @@ class FinanceWorkflowTests(unittest.TestCase):
                 "USD",
                 (ReceiptAllocationCommand(first["id"], 100),),
                 "cash",
-            )
+            ),
         )
         with self.assertRaises(FinanceConflictError):
-            self.finance.record_receipt(
+            rent_command(
+                self.finance,
+                "record_receipt",
                 RecordReceiptCommand(
                     self.lease["id"],
                     str(uuid4()),
@@ -1487,9 +1749,11 @@ class FinanceWorkflowTests(unittest.TestCase):
                     "USD",
                     (ReceiptAllocationCommand(second["id"], 100),),
                     "online_payment",
-                )
+                ),
             )
-        confirmed = self.finance.record_receipt(
+        confirmed = rent_command(
+            self.finance,
+            "record_receipt",
             RecordReceiptCommand(
                 self.lease["id"],
                 str(uuid4()),
@@ -1500,7 +1764,7 @@ class FinanceWorkflowTests(unittest.TestCase):
                 "online_payment",
                 duplicate_confirmed=True,
                 duplicate_reason="Separate same-day payment.",
-            )
+            ),
         )
         event = SQLiteAuditRepository(self.workspace.paths.database).history(
             "rent_receipt",
@@ -1523,7 +1787,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 masked_reference="access_token=sk-live-secret",
             )
         term = self.lease["terms"][0]
-        expectation = self.finance.synchronize(
+        expectation = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -1531,7 +1797,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 date.today().replace(day=1).isoformat(),
             ),
         )[0]
-        receipt = self.finance.record_receipt(
+        receipt = rent_command(
+            self.finance,
+            "record_receipt",
             RecordReceiptCommand(
                 self.lease["id"],
                 str(uuid4()),
@@ -1541,7 +1809,7 @@ class FinanceWorkflowTests(unittest.TestCase):
                 (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
                 "check",
                 masked_reference="Check •••• 9182",
-            )
+            ),
         )
         with self.finance.unit_of_work.engine.begin() as connection:
             connection.execute(
@@ -1597,12 +1865,16 @@ class FinanceWorkflowTests(unittest.TestCase):
         self.assertEqual(
             self.finance.payment_method_suggestion(self.lease["id"])["paymentMethodKind"], "check"
         )
-        self.finance.void_receipt(latest.id, VoidCommand(True, "Corrected receipt"))
+        rent_command(
+            self.finance, "void_receipt", latest.id, VoidCommand(True, "Corrected receipt")
+        )
         self.assertEqual(
             self.finance.payment_method_suggestion(self.lease["id"])["paymentMethodKind"], "cash"
         )
         term = self.lease["terms"][0]
-        expectation = self.finance.synchronize(
+        expectation = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -1610,7 +1882,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 date.today().replace(day=1).isoformat(),
             ),
         )[0]
-        created = self.finance.record_receipt(
+        created = rent_command(
+            self.finance,
+            "record_receipt",
             RecordReceiptCommand(
                 self.lease["id"],
                 str(uuid4()),
@@ -1622,7 +1896,7 @@ class FinanceWorkflowTests(unittest.TestCase):
                 payment_method_label="Internal transfer",
                 masked_reference="•••• 1234",
                 other_payment_method_note="Recorded from portal receipt",
-            )
+            ),
         )
         with TestClient(create_app(self.workspace.config.config_path)) as client:
             activity = client.get("/api/audit/events").json()["events"]
@@ -1638,7 +1912,9 @@ class FinanceWorkflowTests(unittest.TestCase):
     @fast_backup_encryption()
     def test_receipt_method_snapshot_survives_encrypted_backup_and_restore(self):
         term = self.lease["terms"][0]
-        expectation = self.finance.synchronize(
+        expectation = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -1646,7 +1922,9 @@ class FinanceWorkflowTests(unittest.TestCase):
                 date.today().replace(day=1).isoformat(),
             ),
         )[0]
-        receipt = self.finance.record_receipt(
+        receipt = rent_command(
+            self.finance,
+            "record_receipt",
             RecordReceiptCommand(
                 self.lease["id"],
                 str(uuid4()),
@@ -1657,7 +1935,7 @@ class FinanceWorkflowTests(unittest.TestCase):
                 "check",
                 "Personal check",
                 "Check •••• 9182",
-            )
+            ),
         )
         backups = BackupService(
             self.workspace,
@@ -1689,7 +1967,9 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_replacement_chain_filter_returns_complete_lineage(self):
         term = self.lease["terms"][0]
-        expectation = self.finance.synchronize(
+        expectation = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -1699,7 +1979,9 @@ class FinanceWorkflowTests(unittest.TestCase):
         )[0]
 
         def record(replaces=None):
-            return self.finance.record_receipt(
+            return rent_command(
+                self.finance,
+                "record_receipt",
                 RecordReceiptCommand(
                     self.lease["id"],
                     str(uuid4()),
@@ -1713,13 +1995,13 @@ class FinanceWorkflowTests(unittest.TestCase):
                     ),
                     "cash",
                     replaces_receipt_id=replaces,
-                )
+                ),
             )
 
         first = record()
-        self.finance.void_receipt(first["id"], VoidCommand(True, "Correction"))
+        rent_command(self.finance, "void_receipt", first["id"], VoidCommand(True, "Correction"))
         second = record(first["id"])
-        self.finance.void_receipt(second["id"], VoidCommand(True, "Correction"))
+        rent_command(self.finance, "void_receipt", second["id"], VoidCommand(True, "Correction"))
         third = record(second["id"])
         lineage = self.finance.list_receipts(replaces_receipt_id=first["id"], include_voided=True)
         self.assertEqual(
@@ -1882,7 +2164,7 @@ class FinanceWorkflowTests(unittest.TestCase):
             "Initial responsibility boundary",
             True,
         )
-        self.finance.synchronize(self.lease["id"], initial)
+        rent_command(self.finance, "synchronize", self.lease["id"], initial)
         extended = SynchronizeExpectationsCommand(
             term["id"],
             (start + timedelta(days=60)).isoformat(),
@@ -1891,7 +2173,7 @@ class FinanceWorkflowTests(unittest.TestCase):
             "Extended responsibility boundary",
             True,
         )
-        supplement = self.finance.synchronize(self.lease["id"], extended)
+        supplement = rent_command(self.finance, "synchronize", self.lease["id"], extended)
         self.assertEqual(len(supplement), 1)
         next_regular_due = date(
             regular_due.year + (regular_due.month == 12),
@@ -1907,7 +2189,7 @@ class FinanceWorkflowTests(unittest.TestCase):
                 )
             ),
         )
-        self.assertEqual(self.finance.synchronize(self.lease["id"], extended), [])
+        self.assertEqual(rent_command(self.finance, "synchronize", self.lease["id"], extended), [])
         second_extension = SynchronizeExpectationsCommand(
             term["id"],
             (start + timedelta(days=60)).isoformat(),
@@ -1916,12 +2198,16 @@ class FinanceWorkflowTests(unittest.TestCase):
             "Second responsibility extension",
             True,
         )
-        second_supplement = self.finance.synchronize(self.lease["id"], second_extension)
+        second_supplement = rent_command(
+            self.finance, "synchronize", self.lease["id"], second_extension
+        )
         self.assertEqual(len(second_supplement), 1)
         self.assertEqual(
             second_supplement[0]["expectedAmountMinor"], supplement[0]["expectedAmountMinor"]
         )
-        self.assertEqual(self.finance.synchronize(self.lease["id"], second_extension), [])
+        self.assertEqual(
+            rent_command(self.finance, "synchronize", self.lease["id"], second_extension), []
+        )
         full_interval = SynchronizeExpectationsCommand(
             term["id"],
             (start + timedelta(days=60)).isoformat(),
@@ -1930,7 +2216,9 @@ class FinanceWorkflowTests(unittest.TestCase):
             "Responsibility through the complete period",
             True,
         )
-        final_supplement = self.finance.synchronize(self.lease["id"], full_interval)
+        final_supplement = rent_command(
+            self.finance, "synchronize", self.lease["id"], full_interval
+        )
         self.assertEqual(len(final_supplement), 1)
         first_interval = self.finance.list_expectations(lease_id=self.lease["id"], page_size=100)[
             "items"
@@ -1942,7 +2230,9 @@ class FinanceWorkflowTests(unittest.TestCase):
             and item["periodEndsOn"] <= (next_regular_due - timedelta(days=1)).isoformat()
         ]
         self.assertEqual(sum(item["expectedAmountMinor"] for item in covered), 100_000)
-        self.assertEqual(self.finance.synchronize(self.lease["id"], full_interval), [])
+        self.assertEqual(
+            rent_command(self.finance, "synchronize", self.lease["id"], full_interval), []
+        )
 
     def test_horizon_does_not_prorate_first_stub_without_a_boundary(self):
         snapshot = LeaseTermFinanceSnapshot(
@@ -1993,7 +2283,9 @@ class FinanceWorkflowTests(unittest.TestCase):
             )
             rows.append(record)
         self.finance.unit_of_work.write(lambda tx: [tx.insert_expectation(row) for row in rows])
-        self.finance.record_receipt(
+        rent_command(
+            self.finance,
+            "record_receipt",
             RecordReceiptCommand(
                 self.lease["id"],
                 str(uuid4()),
@@ -2002,14 +2294,16 @@ class FinanceWorkflowTests(unittest.TestCase):
                 "USD",
                 (ReceiptAllocationCommand(rows[2].id, 100),),
                 "cash",
-            )
+            ),
         )
         page = self.finance.list_expectations(lease_id=self.lease["id"], status="paid", page_size=1)
         self.assertEqual([item["id"] for item in page["items"]], [rows[2].id])
 
     def test_conflicting_anchor_is_rejected_after_first_schedule(self):
         term = self.lease["terms"][0]
-        self.finance.synchronize(
+        rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],
@@ -2018,7 +2312,9 @@ class FinanceWorkflowTests(unittest.TestCase):
             ),
         )
         with self.assertRaises(FinanceConflictError):
-            self.finance.synchronize(
+            rent_command(
+                self.finance,
+                "synchronize",
                 self.lease["id"],
                 SynchronizeExpectationsCommand(
                     term["id"],
@@ -2029,7 +2325,9 @@ class FinanceWorkflowTests(unittest.TestCase):
 
     def test_historical_expectation_remains_presentable_after_lease_void(self):
         term = self.lease["terms"][0]
-        item = self.finance.synchronize(
+        item = rent_command(
+            self.finance,
+            "synchronize",
             self.lease["id"],
             SynchronizeExpectationsCommand(
                 term["id"],

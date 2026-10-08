@@ -155,6 +155,122 @@ Responses use explicit Pydantic models. They return stable IDs, party identity, 
 
 Errors distinguish missing records (`404`), malformed requests (`422`), oversized request content (`413`), invalid business rules (`400`), and duplicate, lifecycle, role/contact-reference, lease-participation, or concurrent-write conflicts (`409`).
 
+### UI-001 Slice 21: shared identity command recovery
+
+Party identity create, patch, archive and restore require `expectedRevision` and
+a canonical UUID `idempotencyKey`, including direct application callers. Creation
+requires revision zero and initializes the Party at revision one. Each effective
+identity change increments that revision once. An unchanged patch retains the
+revision and timestamp, writes an immutable command receipt, and emits no Party
+change event. Slice 22 extends this contract to contact mutations; Tenant and
+Provider commands retain their existing contracts until their own readiness slices.
+
+The Party-owned `party_command_operations` table records a UUID operation ID,
+Party foreign key, globally unique UUID key, action, canonical semantic request
+JSON and SHA-256 fingerprint, expected/resulting revisions, immutable result JSON,
+UTC creation instant and correlation ID. Update/delete/replace triggers protect
+receipts. The greenfield baseline and workspace/archive/restore validators enforce
+the exact schema, request identity, revision chain and correlated audit evidence.
+
+Same-key/same-payload replay returns the original identity mutation result before
+current lifecycle/revision checks, even after later changes. Changed key reuse
+returns `party_idempotency_conflict`; stale revisions return
+`party_revision_conflict` with the current identity snapshot. Mutation results
+contain required `revision` and `operationId` and identity fields only; current
+contact methods and roles remain on read-only Party detail, not replay snapshots.
+Read-only `GET /api/parties/operations/{operationId}` and
+`GET /api/parties/operations/by-key/{idempotencyKey}` perform indexed receipt reads
+and return the original result, or 404. These routes do not create OPS attempts.
+
+Party effects, initial contacts, immutable receipt and `party_command_operation`
+`recorded` audit event commit in the same immediate transaction and share the
+Party event correlation. Receipt audits contain metadata only, not the retained
+request or contact values. Audit failure rolls back all effects. No consequential
+browser controls or automatic retries are enabled by this source contract.
+
+### UI-001 Slice 22: shared contact command recovery
+
+Contact add, edit, archive and restore require the current Party's
+`expectedRevision` (an exact positive integer) and canonical UUID
+`idempotencyKey` for both HTTP and application callers. Initial contacts created
+with a Party remain part of its creation command, not separate revision changes.
+Every effective standalone contact mutation advances the shared Party revision
+once and updates its timestamp; unchanged edits retain both timestamps and
+revision while recording an immutable receipt. Identity and contact commands
+share one globally unique key namespace, so changed reuse across either family
+returns the same typed conflict.
+
+The existing `party_command_operations` ledger adds the nullable
+`contact_method_id` foreign key. It is required exactly for the `contact_add`,
+`contact_update`, `contact_archive` and `contact_restore` actions. Stored requests
+include the target contact and normalized command, or confirmed archival with
+canonical role-reference resolutions. Resolutions are bounded to twenty, have
+unique role/record identities and are fingerprinted in stable role/record order.
+Contact mutation results contain the original contact representation, required
+Party `revision` and `operationId`. Shared ID/key recovery routes return a typed
+identity-or-contact result without recomputing it from live state.
+
+Archival checks current owning-role references on the caller's connection;
+replacement contacts must be active, different, and owned by that Party. Each
+resolution must be consumed by a registered owning-role guard. Preference effects,
+contact mutation, Party revision, immutable receipt and their correlated audit
+events commit in one immediate transaction. Receipt audit metadata excludes
+contact values and request bodies. Contact audit values retain the existing
+general-activity redaction. Replay precedes lifecycle and reference validation,
+so an old successful archive can be recovered after subsequent restoration.
+
+Exact current-schema and retained-history validation check contact result
+ownership, normalized values, legal audit transitions, shared revisions,
+correlated reference-resolution evidence and the current contact's correspondence
+to its last receipt. Encrypted backup/restore preserves contacts, references,
+receipts and audits. Independent Tenant command recovery is delivered by Slice 23
+below. Provider command recovery, new OPS registrations and browser controls remain gated.
+
+### UI-001 Slice 23: Tenant command recovery
+
+`tenant_profiles.revision` is a required integer starting at one and is independent
+of the shared Party revision. Creation and designation require `expectedRevision=0`;
+profile/preference edits, archive and restore require the exact positive Tenant
+revision. Every public application and HTTP command requires a canonical UUID
+`idempotencyKey`. Effective changes increment once; unchanged patches retain
+revision/timestamps while recording a receipt without a profile mutation event.
+
+The append-only `tenant_command_operations` table stores UUID `id`, profile
+`party_id` foreign key, `action` (`create`, `designate`, `patch`, `archive`, `restore`,
+`resolve_contact`), globally unique Tenant `idempotency_key`, canonical
+`request_json`, lowercase SHA-256 `request_fingerprint`, exact integer
+`expected_revision`/`resulting_revision`, canonical `result_json`, UUID
+`correlation_id`, and UTC `created_at`. Update, delete and replace prevention
+triggers protect the ledger. Tenant and Party key namespaces remain separate.
+Requests preserve omitted-versus-explicit-null patch fields. Replay returns the
+original stored response before current lifecycle/revision validation; changed
+key reuse conflicts. Current Tenant detail/list expose Tenant `revision` and
+`partyRevision`. Public mutation snapshots additionally require `operationId` and
+retain their original profile, identity and contacts, not later live enrichments.
+
+`GET /api/tenants/operations/{operationId}` and
+`GET /api/tenants/operations/by-key/{idempotencyKey}` read original results through
+one indexed lookup. Stale Tenant conflicts return `tenant_revision_conflict` and
+the current profile. Contact archival requires `expectedTenantRevision` for each
+Tenant reference resolution; stale preferences produce a 409 with `currentTenant`
+and leave both modules unchanged. Successful resolutions increment Tenant revision
+once and write an internal `resolve_contact` receipt under a deterministic UUID
+derived from the parent correlation and Tenant identity. Its result is profile-only
+because the enclosing Party receipt owns the eventual contact outcome. Both
+receipts and all audit events commit atomically; parent replay never repeats the
+resolution. Receipt audits contain metadata only, not notes or contact values.
+
+Tenant creation owns the compound command and uses Party's factory and
+transaction ports to create the identity/initial contacts with one correlation;
+it does not issue a second standalone Party command. Designation does not mutate
+the selected Party. Profile commands do not advance Party revision; standalone
+identity/contact commands retain Party-owned concurrency from Slices 21–22.
+Exact schema and retained-data validation enforce normalized requests, fingerprints,
+original response shapes, revision lineage, correlated profile/receipt/creation
+audit evidence, and the current profile's correspondence to its last receipt.
+Encrypted backup/export/restore preserves these rows and histories. Provider
+recovery, new OPS forms and consequential browser controls remain gated.
+
 ## Audit, privacy, and portability
 
 Each mutation writes its data rows and `AUDIT-001` change event in one immediate transaction. A multi-row party/profile/contact create or preference change shares one correlation ID. Audit entity types are `party`, `party_contact_method`, and `tenant_profile`; tenant-owned storage and `tenant_contact_method` events do not remain in the latest-only format. Audit snapshots include stable IDs, lifecycle state, profile preference, and contact-method metadata and values because they are required to understand a contact change; generalized activity redacts display values, normalized values, and phone extensions when the caller has no party-contact context.

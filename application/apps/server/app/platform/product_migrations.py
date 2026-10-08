@@ -43,8 +43,14 @@ from app.modules.owner_management.infrastructure.schema_validation import (
     validate_owner_concern_schema,
 )
 from app.modules.operator.infrastructure.schema_validation import validate_operator_schema
+from app.modules.operator.infrastructure.schema_validation import validate_coverage_targets
+from app.modules.operator.infrastructure.schema_validation import validate_command_recovery
+from app.bootstrap.operator_recovery_composition import compose_recovery_bindings
+from app.bootstrap.operator_coverage import compose_coverage_sources
 from app.modules.portfolio.infrastructure.schema_validation import validate_portfolio_schema
+from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations
 from app.modules.tasks.infrastructure.schema_validation import validate_task_schema
+from app.modules.parties.infrastructure.schema_validation import validate_party_schema
 from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
 from app.modules.tenants.infrastructure.schema_validation import validate_tenant_schema
 from app.modules.vendors.infrastructure.schema_validation import (
@@ -104,6 +110,7 @@ def validate_latest_schema(database_path: Path) -> None:
                 "operator_preferences",
                 "operator_recovery_records",
                 "operator_operations",
+                "operator_coverage_reviews",
                 "alembic_version",
                 "workspace_metadata",
                 "audit_events",
@@ -111,25 +118,33 @@ def validate_latest_schema(database_path: Path) -> None:
                 "file_content_locations",
                 "file_links",
                 "file_publication_cleanup_attentions",
+                "file_command_operations",
                 "tasks",
                 "task_reminders",
                 "task_waiting_operations",
+                "task_creation_operations",
+                "task_mutation_operations",
                 "parties",
+                "party_command_operations",
                 "properties",
+                "portfolio_inventory_operations",
                 "property_ownerships",
                 "spaces",
                 "space_occupancy_periods",
                 "space_availability",
                 "space_status_operations",
                 "tenant_profiles",
+                "tenant_command_operations",
                 "party_contact_methods",
                 "leases",
+                "lease_command_operations",
                 "lease_term_versions",
                 "lease_participants",
                 "lease_renewal_options",
                 "lease_termination_cases",
                 "lease_termination_proposals",
                 "condition_reports",
+                "inspection_command_operations",
                 "condition_areas",
                 "condition_observations",
                 "condition_report_acknowledgments",
@@ -137,6 +152,8 @@ def validate_latest_schema(database_path: Path) -> None:
                 "condition_checklist_templates",
                 "condition_checklist_template_items",
                 "provider_profiles",
+                "provider_command_operations",
+                "provider_category_command_operations",
                 "provider_categories",
                 "provider_category_assignments",
                 "provider_services",
@@ -145,12 +162,15 @@ def validate_latest_schema(database_path: Path) -> None:
                 "provider_references",
                 "provider_reputation_links",
                 "rent_expectations",
+                "finance_command_operations",
+                "finance_command_revisions",
                 "rent_expectation_timeliness_reviews",
                 "rent_receipts",
                 "rent_receipt_allocations",
                 "prepaid_checks",
                 "prepaid_check_operations",
                 "expense_categories",
+                "expense_category_command_operations",
                 "expenses",
                 "expense_refunds",
                 "security_deposit_accounts",
@@ -166,6 +186,7 @@ def validate_latest_schema(database_path: Path) -> None:
                 "communication_links",
                 "communication_operations",
                 "maintenance_issues",
+                "maintenance_command_receipts",
                 "maintenance_appointments",
                 "maintenance_cost_contexts",
                 "maintenance_issue_expense_links",
@@ -177,8 +198,9 @@ def validate_latest_schema(database_path: Path) -> None:
                 "owner_rent_report_operations",
                 "owner_concerns",
                 "owner_concern_follow_up_operations",
+                "owner_concern_command_operations",
                 "ai_settings",
-                "ai_settings_operations",
+                "ai_command_operations",
                 "ai_model_connections",
                 "ai_action_limits",
                 "ai_runs",
@@ -206,9 +228,9 @@ def validate_latest_schema(database_path: Path) -> None:
                 validate_audit_schema,
                 validate_file_schema,
                 validate_task_schema,
+                validate_party_schema,
                 validate_portfolio_schema,
                 validate_tenant_schema,
-                validate_lease_schema,
                 validate_inspection_schema,
                 validate_vendor_schema,
                 validate_finance_schema,
@@ -218,7 +240,14 @@ def validate_latest_schema(database_path: Path) -> None:
                 validate_operator_schema,
             ):
                 validator(connection)
+            lease_operations = SQLitePortfolioLeaseOperations(database_path)
+            try:
+                validate_lease_schema(connection, lease_operations)
+            finally:
+                lease_operations.engine.dispose()
             validate_file_data(connection, build_file_link_policy_registry().as_mapping())
+            validate_coverage_targets(connection, compose_coverage_sources().portfolio)
+            validate_command_recovery(connection, compose_recovery_bindings())
             validate_intake_schema(connection)
             validate_ai_governance_schema(
                 connection,

@@ -5,7 +5,9 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, status
-from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
+
+from app.modules.finance.api.conflicts import FinanceConflictResponse
 
 from app.platform.api_errors import domain_problem, workspace_unavailable
 
@@ -24,7 +26,11 @@ class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class CreateInput(Contract):
+class CommandInput(Contract):
+    expectedRevision: StrictInt = Field(ge=0)
+
+
+class CreateInput(CommandInput):
     expectationId: UUID
     payerPartyId: UUID
     receivedOn: date
@@ -33,21 +39,21 @@ class CreateInput(Contract):
     idempotencyKey: UUID
 
 
-class DepositInput(Contract):
+class DepositInput(CommandInput):
     idempotencyKey: UUID
     confirmed: StrictBool
     occurredOn: date | None = None
     existingReceiptId: UUID | None = None
 
 
-class ReturnInput(Contract):
+class ReturnInput(CommandInput):
     idempotencyKey: UUID
     confirmed: StrictBool
     reason: str = Field(min_length=1, max_length=1000)
     returnedOn: date
 
 
-class VoidInput(Contract):
+class VoidInput(CommandInput):
     idempotencyKey: UUID
     confirmed: StrictBool
     reason: str = Field(min_length=1, max_length=1000)
@@ -108,8 +114,17 @@ class PrepaidCheckPageResponse(Contract):
     nextCursor: str | None
 
 
+class PrepaidCheckMutationResponse(PrepaidCheckResponse):
+    rentLedgerRevision: StrictInt
+    operationId: UUID
+
+
 def build_router(service: PrepaidCheckService, runtime: WorkspaceRuntime) -> APIRouter:
-    router = APIRouter(prefix="/api/prepaid-checks", tags=["finance"])
+    router = APIRouter(
+        prefix="/api/prepaid-checks",
+        tags=["finance"],
+        responses={409: {"model": FinanceConflictResponse}},
+    )
 
     def ready(write: bool = False):
         if not runtime.ready or runtime.error:
@@ -155,12 +170,19 @@ def build_router(service: PrepaidCheckService, runtime: WorkspaceRuntime) -> API
     def void_command(data: VoidInput) -> PrepaidCheckTransitionCommand:
         return PrepaidCheckTransitionCommand(str(data.idempotencyKey), data.confirmed, data.reason)
 
-    @router.post("", response_model=PrepaidCheckResponse, status_code=status.HTTP_201_CREATED)
+    @router.post(
+        "",
+        response_model=PrepaidCheckMutationResponse,
+        status_code=status.HTTP_201_CREATED,
+        operation_id="createPrepaidCheck",
+    )
     def create(data: CreateInput):
         ready(True)
-        return invoke(lambda: service.create(create_command(data)))
+        return invoke(
+            lambda: service.create(create_command(data), expected_revision=data.expectedRevision)
+        )
 
-    @router.get("", response_model=PrepaidCheckPageResponse)
+    @router.get("", response_model=PrepaidCheckPageResponse, operation_id="listPrepaidChecks")
     def list_checks(
         leaseId: UUID | None = None,
         propertyId: UUID | None = None,
@@ -187,36 +209,65 @@ def build_router(service: PrepaidCheckService, runtime: WorkspaceRuntime) -> API
             )
         )
 
-    @router.get("/{check_id}", response_model=PrepaidCheckResponse)
+    @router.get("/{check_id}", response_model=PrepaidCheckResponse, operation_id="getPrepaidCheck")
     def get(check_id: UUID):
         ready()
         return invoke(lambda: service.get(str(check_id)))
 
-    @router.post("/{check_id}/deposit", response_model=PrepaidCheckResponse)
+    @router.post(
+        "/{check_id}/deposit",
+        response_model=PrepaidCheckMutationResponse,
+        operation_id="depositPrepaidCheck",
+    )
     def deposit(check_id: UUID, data: DepositInput):
         ready(True)
-        return invoke(lambda: service.deposit(str(check_id), deposit_command(data)))
+        return invoke(
+            lambda: service.deposit(
+                str(check_id), deposit_command(data), expected_revision=data.expectedRevision
+            )
+        )
 
-    @router.post("/{check_id}/return", response_model=PrepaidCheckResponse)
+    @router.post(
+        "/{check_id}/return",
+        response_model=PrepaidCheckMutationResponse,
+        operation_id="returnPrepaidCheck",
+    )
     def return_check(check_id: UUID, data: ReturnInput):
         ready(True)
-        return invoke(lambda: service.return_check(str(check_id), return_command(data)))
+        return invoke(
+            lambda: service.return_check(
+                str(check_id), return_command(data), expected_revision=data.expectedRevision
+            )
+        )
 
-    @router.post("/{check_id}/void", response_model=PrepaidCheckResponse)
+    @router.post(
+        "/{check_id}/void",
+        response_model=PrepaidCheckMutationResponse,
+        operation_id="voidPrepaidCheck",
+    )
     def void(check_id: UUID, data: VoidInput):
         ready(True)
-        return invoke(lambda: service.void(str(check_id), void_command(data)))
+        return invoke(
+            lambda: service.void(
+                str(check_id), void_command(data), expected_revision=data.expectedRevision
+            )
+        )
 
     @router.post(
         "/{check_id}/replace",
-        response_model=PrepaidCheckResponse,
+        response_model=PrepaidCheckMutationResponse,
+        operation_id="replacePrepaidCheck",
         status_code=status.HTTP_201_CREATED,
     )
     def replace(check_id: UUID, data: ReplaceInput):
         ready(True)
         return invoke(
             lambda: service.replace(
-                str(check_id), create_command(data), confirmed=data.confirmed, reason=data.reason
+                str(check_id),
+                create_command(data),
+                confirmed=data.confirmed,
+                reason=data.reason,
+                expected_revision=data.expectedRevision,
             )
         )
 

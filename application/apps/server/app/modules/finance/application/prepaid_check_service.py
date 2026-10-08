@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, date, datetime, time
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
+from app.modules.finance.application.commands import (
+    FinanceCommandIdentity,
+    FinanceCommandOutcome,
+    FinanceScope,
+    apply_finance_command,
+    validate_command_concurrency,
+)
 from app.modules.finance.application.ports import FinanceUnitOfWork
 from app.modules.finance.application.receipt_handoff import (
     compatible_prepaid_receipt,
@@ -34,14 +41,14 @@ class PrepaidCheckService:
         self.unit_of_work = unit_of_work
         self.now = now
 
-    def create(self, command: PrepaidCheckCommand) -> dict[str, object]:
-        def operation(tx):
-            replay = self._replay(
-                tx, command.idempotency_key, "create", _fingerprint(command.__dict__)
+    def create(self, command: PrepaidCheckCommand, *, expected_revision: int) -> dict[str, object]:
+        instant = self.now()
+
+        def operation(tx, context):
+            self._ensure_unused_operation_key(tx, command.idempotency_key)
+            expectation, zone = self._eligible_expectation(
+                tx, command, require_open_balance=True, instant=instant
             )
-            if replay is not None:
-                return self._view(tx, replay)
-            expectation, zone = self._eligible_expectation(tx, command, require_open_balance=True)
             if any(
                 item.expectation_id == expectation.id
                 for item in tx.prepaid_checks(lease_id=expectation.lease_id)
@@ -50,8 +57,8 @@ class PrepaidCheckService:
                     "An expectation with prepaid-check history must use explicit replacement.",
                     "prepaid_check_replacement_required",
                 )
-            correlation = str(uuid4())
-            now = self._stamp()
+            correlation = context.correlation_id
+            now = context.committed_at
             item = PrepaidCheck(
                 str(uuid4()),
                 expectation.id,
@@ -87,8 +94,9 @@ class PrepaidCheckService:
                 due_at_utc=local_due,
                 due_timezone=zone,
                 correlation_id=correlation,
+                committed_at=context.committed_at,
             )
-            item = replace(item, reminder_task_id=task_id, updated_at=self._stamp())
+            item = replace(item, reminder_task_id=task_id, updated_at=context.committed_at)
             tx.replace_prepaid_check(item)
             self._record_operation(
                 tx,
@@ -98,6 +106,8 @@ class PrepaidCheckService:
                 command.idempotency_key,
                 _fingerprint(command.__dict__),
                 correlation,
+                context.operation_id,
+                context.committed_at,
             )
             tx.record_change(
                 entity_type="prepaid_check",
@@ -108,9 +118,50 @@ class PrepaidCheckService:
                 reason="prepaid_check_created",
                 correlation_id=correlation,
             )
-            return self._view(tx, item)
+            return self._view(tx, item, instant)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="create_prepaid_check",
+            target_id=command.expectation_id,
+            command=command,
+            expected_revision=expected_revision,
+            instant=instant,
+            extra={},
+        )
+
+    def _command_write(
+        self, operation, *, action, target_id, command, expected_revision, instant, extra
+    ):
+        validate_command_concurrency(expected_revision, command.idempotency_key)
+
+        def write(tx):
+            prior = tx.commands.command_operation(command.idempotency_key)
+            if prior is not None:
+                lease_id = prior["scope_id"]
+            elif action == "create_prepaid_check":
+                expectation = tx.expectation(command.expectation_id)
+                if expectation is None:
+                    raise FinanceNotFoundError("Rent expectation was not found.")
+                lease_id = expectation.lease_id
+            else:
+                lease_id = self._require(tx, target_id).lease_id
+            identity = FinanceCommandIdentity(
+                FinanceScope("rent_ledger", lease_id),
+                action,
+                target_id,
+                expected_revision,
+                command.idempotency_key,
+                {**asdict(command), **extra},
+            )
+            return apply_finance_command(
+                tx.commands,
+                identity,
+                lambda context: FinanceCommandOutcome(operation(tx, context), True),
+                instant=instant,
+            )
+
+        return self.unit_of_work.write(write)
 
     def get(self, check_id: str) -> dict[str, object]:
         def operation(tx):
@@ -206,20 +257,22 @@ class PrepaidCheckService:
 
         return self.unit_of_work.read(operation)
 
-    def deposit(self, check_id: str, command: PrepaidCheckTransitionCommand) -> dict[str, object]:
-        def operation(tx):
+    def deposit(
+        self, check_id: str, command: PrepaidCheckTransitionCommand, *, expected_revision: int
+    ) -> dict[str, object]:
+        instant = self.now()
+
+        def operation(tx, context):
             item = self._require(tx, check_id)
             fingerprint = _fingerprint({"id": check_id, "action": "deposit", **command.__dict__})
-            replay = self._replay(tx, command.idempotency_key, "deposit", fingerprint)
-            if replay is not None:
-                return self._view(tx, replay)
+            self._ensure_unused_operation_key(tx, command.idempotency_key)
             if item.status != "scheduled":
                 raise self._conflict("Only scheduled prepaid checks may be deposited.")
             zone = tx.lease_time_zone(item.lease_id)
-            if zone is None or self._eligibility(item, zone) != "eligible":
+            if zone is None or self._eligibility(item, zone, instant) != "eligible":
                 raise self._conflict("Prepaid check is not eligible for deposit.")
             if not tx.participant_active(
-                item.lease_id, item.payer_party_id, self._today(zone).isoformat()
+                item.lease_id, item.payer_party_id, self._today(zone, instant).isoformat()
             ):
                 raise self._conflict(
                     "Prepaid-check payer must still be an active lease participant.",
@@ -240,24 +293,28 @@ class PrepaidCheckService:
                 raise self._conflict(
                     "Selected receipt does not represent the complete expectation balance."
                 )
-            deposited_on = command.occurred_on or self._today(zone).isoformat()
-            if date.fromisoformat(deposited_on) > self._today(zone):
+            deposited_on = command.occurred_on or self._today(zone, instant).isoformat()
+            if date.fromisoformat(deposited_on) > self._today(zone, instant):
                 raise FinanceError("Deposit date cannot be in the future.")
             if deposited_on < item.check_dated_on:
                 raise FinanceError("Deposit date cannot be before the check date.")
-            correlation = str(uuid4())
+            correlation = context.correlation_id
             receipt, _created_receipt = self._select_or_create_receipt(
-                tx, item, command, deposited_on, existing_receipt, correlation
+                tx, item, command, deposited_on, existing_receipt, correlation, instant
             )
             updated = replace(
                 item,
                 status="deposited",
                 receipt_id=receipt.id,
                 deposited_on=deposited_on,
-                updated_at=self._stamp(),
+                updated_at=context.committed_at,
             )
             tx.replace_prepaid_check(updated)
-            tx.dismiss_prepaid_check_reminder(updated.reminder_task_id, correlation_id=correlation)
+            tx.dismiss_prepaid_check_reminder(
+                updated.reminder_task_id,
+                correlation_id=correlation,
+                committed_at=context.committed_at,
+            )
             self._record_operation(
                 tx,
                 updated.id,
@@ -266,6 +323,8 @@ class PrepaidCheckService:
                 command.idempotency_key,
                 fingerprint,
                 correlation,
+                context.operation_id,
+                context.committed_at,
             )
             tx.record_change(
                 entity_type="prepaid_check",
@@ -276,22 +335,30 @@ class PrepaidCheckService:
                 reason="prepaid_check_deposited",
                 correlation_id=correlation,
             )
-            return self._view(tx, updated)
+            return self._view(tx, updated, instant)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="deposit_prepaid_check",
+            target_id=check_id,
+            command=command,
+            expected_revision=expected_revision,
+            instant=instant,
+            extra={},
+        )
 
     def return_check(
-        self, check_id: str, command: PrepaidCheckTransitionCommand
+        self, check_id: str, command: PrepaidCheckTransitionCommand, *, expected_revision: int
     ) -> dict[str, object]:
         if command.reason is None:
             raise FinanceError("A return reason is required.")
 
-        def operation(tx):
+        instant = self.now()
+
+        def operation(tx, context):
             item = self._require(tx, check_id)
             fingerprint = _fingerprint({"id": check_id, "action": "return", **command.__dict__})
-            replay = self._replay(tx, command.idempotency_key, "return", fingerprint)
-            if replay is not None:
-                return self._view(tx, replay)
+            self._ensure_unused_operation_key(tx, command.idempotency_key)
             if item.status != "deposited" or item.receipt_id is None:
                 raise self._conflict("Only deposited prepaid checks may be returned.")
             receipt = tx.receipt(item.receipt_id)
@@ -300,16 +367,16 @@ class PrepaidCheckService:
             zone = tx.lease_time_zone(item.lease_id)
             if zone is None:
                 raise FinanceConflictError("Prepaid-check lease context is unavailable.")
-            returned_on = command.occurred_on or self._today(zone).isoformat()
-            if date.fromisoformat(returned_on) > self._today(zone):
+            returned_on = command.occurred_on or self._today(zone, instant).isoformat()
+            if date.fromisoformat(returned_on) > self._today(zone, instant):
                 raise FinanceError("Return date cannot be in the future.")
             if item.deposited_on is None or returned_on < item.deposited_on:
                 raise FinanceError("Return date cannot be before the deposit date.")
-            correlation = str(uuid4())
+            correlation = context.correlation_id
             void_receipt_in_transaction(
                 tx,
                 receipt,
-                now=self.now,
+                now=lambda: instant,
                 reason="Prepaid check returned: " + command.reason,
                 correlation_id=correlation,
             )
@@ -318,7 +385,7 @@ class PrepaidCheckService:
                 status="returned",
                 returned_on=returned_on,
                 returned_reason=command.reason,
-                updated_at=self._stamp(),
+                updated_at=context.committed_at,
             )
             tx.replace_prepaid_check(updated)
             self._record_operation(
@@ -329,6 +396,8 @@ class PrepaidCheckService:
                 command.idempotency_key,
                 fingerprint,
                 correlation,
+                context.operation_id,
+                context.committed_at,
             )
             tx.record_change(
                 entity_type="prepaid_check",
@@ -339,32 +408,46 @@ class PrepaidCheckService:
                 reason="prepaid_check_returned",
                 correlation_id=correlation,
             )
-            return self._view(tx, updated)
+            return self._view(tx, updated, instant)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="return_prepaid_check",
+            target_id=check_id,
+            command=command,
+            expected_revision=expected_revision,
+            instant=instant,
+            extra={},
+        )
 
-    def void(self, check_id: str, command: PrepaidCheckTransitionCommand) -> dict[str, object]:
+    def void(
+        self, check_id: str, command: PrepaidCheckTransitionCommand, *, expected_revision: int
+    ) -> dict[str, object]:
         if command.reason is None:
             raise FinanceError("A void reason is required.")
 
-        def operation(tx):
+        instant = self.now()
+
+        def operation(tx, context):
             item = self._require(tx, check_id)
             fingerprint = _fingerprint({"id": check_id, "action": "void", **command.__dict__})
-            replay = self._replay(tx, command.idempotency_key, "void", fingerprint)
-            if replay is not None:
-                return self._view(tx, replay)
+            self._ensure_unused_operation_key(tx, command.idempotency_key)
             if item.status != "scheduled":
                 raise self._conflict("Only scheduled prepaid checks may be voided.")
-            correlation = str(uuid4())
+            correlation = context.correlation_id
             updated = replace(
                 item,
                 status="voided",
-                voided_at=self._stamp(),
+                voided_at=context.committed_at,
                 void_reason=command.reason,
-                updated_at=self._stamp(),
+                updated_at=context.committed_at,
             )
             tx.replace_prepaid_check(updated)
-            tx.dismiss_prepaid_check_reminder(updated.reminder_task_id, correlation_id=correlation)
+            tx.dismiss_prepaid_check_reminder(
+                updated.reminder_task_id,
+                correlation_id=correlation,
+                committed_at=context.committed_at,
+            )
             self._record_operation(
                 tx,
                 updated.id,
@@ -373,6 +456,8 @@ class PrepaidCheckService:
                 command.idempotency_key,
                 fingerprint,
                 correlation,
+                context.operation_id,
+                context.committed_at,
             )
             tx.record_change(
                 entity_type="prepaid_check",
@@ -383,15 +468,24 @@ class PrepaidCheckService:
                 reason="prepaid_check_voided",
                 correlation_id=correlation,
             )
-            return self._view(tx, updated)
+            return self._view(tx, updated, instant)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="void_prepaid_check",
+            target_id=check_id,
+            command=command,
+            expected_revision=expected_revision,
+            instant=instant,
+            extra={},
+        )
 
     def replace(
         self,
         check_id: str,
         command: PrepaidCheckCommand,
         *,
+        expected_revision: int,
         confirmed: bool,
         reason: str | None = None,
     ) -> dict[str, object]:
@@ -405,14 +499,14 @@ class PrepaidCheckService:
         ):
             raise FinanceError("A replacement reason between 1 and 1000 characters is required.")
 
-        def operation(tx):
+        instant = self.now()
+
+        def operation(tx, context):
             previous = self._require(tx, check_id)
             fingerprint = _fingerprint(
                 {"id": check_id, "action": "replace", "reason": reason, **command.__dict__}
             )
-            replay = self._replay(tx, command.idempotency_key, "replace", fingerprint)
-            if replay is not None:
-                return self._view(tx, replay)
+            self._ensure_unused_operation_key(tx, command.idempotency_key)
             if (
                 previous.status not in {"returned", "voided"}
                 or previous.replaced_by_prepaid_check_id is not None
@@ -423,11 +517,13 @@ class PrepaidCheckService:
                 or command.payer_party_id != previous.payer_party_id
             ):
                 raise self._conflict("Replacement must retain the original expectation and payer.")
-            expectation, zone = self._eligible_expectation(tx, command, require_open_balance=True)
+            expectation, zone = self._eligible_expectation(
+                tx, command, require_open_balance=True, instant=instant
+            )
             if expectation.id != previous.expectation_id or zone is None:
                 raise self._conflict("Replacement expectation is no longer eligible.")
-            correlation = str(uuid4())
-            now = self._stamp()
+            correlation = context.correlation_id
+            now = context.committed_at
             replacement = PrepaidCheck(
                 str(uuid4()),
                 previous.expectation_id,
@@ -467,6 +563,7 @@ class PrepaidCheckService:
                     due_at_utc=due,
                     due_timezone=zone,
                     correlation_id=correlation,
+                    committed_at=context.committed_at,
                 ),
             )
             tx.replace_prepaid_check(replacement)
@@ -475,7 +572,7 @@ class PrepaidCheckService:
                 status="replaced",
                 replaced_by_prepaid_check_id=replacement.id,
                 replacement_reason=reason,
-                updated_at=self._stamp(),
+                updated_at=context.committed_at,
             )
             tx.replace_prepaid_check(previous_updated)
             self._record_operation(
@@ -486,6 +583,8 @@ class PrepaidCheckService:
                 command.idempotency_key,
                 fingerprint,
                 correlation,
+                context.operation_id,
+                context.committed_at,
             )
             tx.record_change(
                 entity_type="prepaid_check",
@@ -505,9 +604,17 @@ class PrepaidCheckService:
                 reason="prepaid_check_replacement_created",
                 correlation_id=correlation,
             )
-            return self._view(tx, replacement)
+            return self._view(tx, replacement, instant)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="replace_prepaid_check",
+            target_id=check_id,
+            command=command,
+            expected_revision=expected_revision,
+            instant=instant,
+            extra={"confirmed": confirmed, "reason": reason},
+        )
 
     def _select_or_create_receipt(
         self,
@@ -517,6 +624,7 @@ class PrepaidCheckService:
         deposited_on: str,
         existing_receipt: RentReceipt | None,
         correlation_id: str,
+        instant: datetime,
     ) -> tuple[RentReceipt, bool]:
         if existing_receipt is not None:
             return existing_receipt, False
@@ -533,7 +641,7 @@ class PrepaidCheckService:
         receipt = record_receipt_in_transaction(
             tx,
             internal,
-            now=self.now,
+            now=lambda: instant,
             correlation_id=correlation_id,
             audit_reason="prepaid_check_deposited",
             duplicate_conflict=lambda duplicates: self._conflict(
@@ -561,7 +669,7 @@ class PrepaidCheckService:
             raise self._conflict(str(error)) from error
 
     def _eligible_expectation(
-        self, tx, command: PrepaidCheckCommand, *, require_open_balance: bool
+        self, tx, command: PrepaidCheckCommand, *, require_open_balance: bool, instant: datetime
     ) -> tuple[RentExpectation, str]:
         expectation = tx.expectation(command.expectation_id)
         if expectation is None:
@@ -579,13 +687,13 @@ class PrepaidCheckService:
         if zone is None:
             raise self._conflict("Prepaid-check lease context is unavailable.")
         if not tx.participant_active(
-            expectation.lease_id, command.payer_party_id, self._today(zone).isoformat()
+            expectation.lease_id, command.payer_party_id, self._today(zone, instant).isoformat()
         ):
             raise self._conflict(
                 "Prepaid-check payer must be an active lease participant.",
                 "prepaid_check_inactive_payer",
             )
-        if date.fromisoformat(command.received_on) > self._today(zone):
+        if date.fromisoformat(command.received_on) > self._today(zone, instant):
             raise FinanceError("Received date cannot be in the future.")
         if require_open_balance and tx.allocated_amount(expectation.id):
             raise self._conflict(
@@ -606,16 +714,12 @@ class PrepaidCheckService:
             raise FinanceNotFoundError("Prepaid check was not found.")
         return item
 
-    def _replay(self, tx, key: str, action: str, fingerprint: str) -> PrepaidCheck | None:
-        row = tx.prepaid_check_by_operation_key(key)
-        if row is None:
-            return None
-        if row["action"] != action or row["request_fingerprint"] != fingerprint:
+    def _ensure_unused_operation_key(self, tx, key: str) -> None:
+        if tx.prepaid_check_by_operation_key(key) is not None:
             raise self._conflict(
-                "Idempotency key was already used with a different prepaid-check request.",
+                "Prepaid-check key has no corresponding command result.",
                 "prepaid_check_idempotency_conflict",
             )
-        return self._require(tx, row["result_prepaid_check_id"])
 
     def _record_operation(
         self,
@@ -626,21 +730,23 @@ class PrepaidCheckService:
         key: str,
         fingerprint: str,
         correlation: str,
+        operation_id: str,
+        committed_at: str,
     ) -> None:
         tx.insert_prepaid_check_operation(
             {
-                "id": str(uuid4()),
+                "id": operation_id,
                 "target_prepaid_check_id": target_check_id,
                 "result_prepaid_check_id": result_check_id,
                 "action": action,
                 "idempotency_key": key,
                 "request_fingerprint": fingerprint,
                 "correlation_id": correlation,
-                "created_at": self._stamp(),
+                "created_at": committed_at,
             }
         )
 
-    def _view(self, tx, item: PrepaidCheck) -> dict[str, object]:
+    def _view(self, tx, item: PrepaidCheck, instant=None) -> dict[str, object]:
         expectation = tx.expectation(item.expectation_id)
         zone = tx.lease_time_zone(item.lease_id)
         context = (
@@ -655,7 +761,7 @@ class PrepaidCheckService:
             **item.to_dict(),
             "propertyId": context.property_id,
             "spaceId": context.space_id,
-            "depositEligibility": self._eligibility(item, zone),
+            "depositEligibility": self._eligibility(item, zone, instant),
             "reminderStatus": tx.prepaid_check_reminder_status(item.reminder_task_id),
             "expectation": {
                 "id": expectation.id,
@@ -673,20 +779,17 @@ class PrepaidCheckService:
             },
         }
 
-    def _eligibility(self, item: PrepaidCheck, zone: str) -> str:
+    def _eligibility(self, item: PrepaidCheck, zone: str, instant=None) -> str:
         if item.status != "scheduled":
             return "not_applicable"
         return (
             "eligible"
-            if date.fromisoformat(item.check_dated_on) <= self._today(zone)
+            if date.fromisoformat(item.check_dated_on) <= self._today(zone, instant)
             else "not_yet_eligible"
         )
 
-    def _today(self, zone: str) -> date:
-        return self.now().astimezone(ZoneInfo(zone)).date()
-
-    def _stamp(self) -> str:
-        return self.now().astimezone(UTC).isoformat()
+    def _today(self, zone: str, instant=None) -> date:
+        return (instant or self.now()).astimezone(ZoneInfo(zone)).date()
 
 
 def _fingerprint(value: object) -> str:

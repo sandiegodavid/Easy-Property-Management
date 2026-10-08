@@ -87,3 +87,26 @@ class FilePublicationCleanupAttentionModel(LocalBase):
     provider: Mapped[str] = mapped_column(String, nullable=False)
     opened_at: Mapped[str] = mapped_column(String, nullable=False)
     resolved_at: Mapped[str | None] = mapped_column(String)
+
+
+class FileCommandOperationModel(LocalBase):
+    __tablename__ = "file_command_operations"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False)
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    request_json: Mapped[str] = mapped_column(String, nullable=False)
+    file_id: Mapped[str] = mapped_column(ForeignKey("file_records.id"), nullable=False)
+    link_id: Mapped[str] = mapped_column(ForeignKey("file_links.id"), nullable=False)
+    result_json: Mapped[str] = mapped_column(String, nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint("action IN ('upload', 'archive_link')"),
+        CheckConstraint(
+            "length(request_fingerprint) = 64 AND request_fingerprint NOT GLOB '*[^0-9a-f]*'"
+        ),
+        CheckConstraint("json_valid(request_json) AND json_type(request_json) = 'object'"),
+        CheckConstraint("json_valid(result_json) AND json_type(result_json) = 'object'"),
+        Index("file_command_operations_key", "idempotency_key", unique=True),
+    )

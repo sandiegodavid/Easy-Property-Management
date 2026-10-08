@@ -2,16 +2,32 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Query, status
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    model_validator,
+)
 
 from app.platform.api_errors import domain_problem, workspace_unavailable
 
 from app.modules.parties.application.service import PartyValidationError
 from app.modules.portfolio.application.ports import PortfolioConflictError
+from app.modules.portfolio.application.status_contracts import (
+    ManualStatusConflictResponse,
+    ManualStatusMutationResponse,
+    ManualStatusOperationReceipt,
+    SpaceResponse,
+    SpaceStatusResponse,
+)
 from app.modules.portfolio.application.service import (
     AvailabilityCommand,
     OccupancyCommand,
@@ -32,6 +48,11 @@ class ContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class InventoryRequest(ContractModel):
+    expectedPropertyRevision: StrictInt = Field(ge=0)
+    idempotencyKey: str = Field(min_length=1, max_length=200, pattern=r"^\S(?:.*\S)?$")
+
+
 class PartyRequest(ContractModel):
     partyKind: Literal["individual", "organization"]
     displayName: str = Field(min_length=1, max_length=240)
@@ -39,12 +60,12 @@ class PartyRequest(ContractModel):
 
 class OwnershipRequest(ContractModel):
     ownerKind: Literal["local_operator", "client_owner"]
-    partyId: str | None = None
+    partyId: UUID | None = None
     inlineParty: PartyRequest | None = None
 
     @model_validator(mode="after")
     def validate_party_reference(self) -> "OwnershipRequest":
-        party_id = self.partyId.strip() if self.partyId is not None else None
+        party_id = self.partyId
         if self.ownerKind == "local_operator" and (
             party_id is not None or self.inlineParty is not None
         ):
@@ -55,7 +76,8 @@ class OwnershipRequest(ContractModel):
         return self
 
 
-class PropertyCreateRequest(ContractModel):
+class PropertyCreateRequest(InventoryRequest):
+    expectedPropertyRevision: StrictInt = Field(ge=0, le=0)
     displayName: str = Field(min_length=1, max_length=240)
     addressLine1: str = Field(min_length=1, max_length=240)
     addressLine2: str | None = Field(None, max_length=240)
@@ -78,11 +100,15 @@ class SpaceCreateRequest(ContractModel):
     availability: "AvailabilityRequest | None" = None
 
 
+class SpaceAddRequest(SpaceCreateRequest, InventoryRequest):
+    pass
+
+
 class OccupancyRequest(ContractModel):
     occupancyStatus: Literal["occupied", "vacant", "unknown"]
     effectiveOn: date
     note: str | None = Field(None, max_length=1000)
-    expectedRevision: int | None = Field(None, ge=0)
+    expectedRevision: StrictInt | None = Field(None, ge=0)
     idempotencyKey: str | None = Field(None, min_length=1, max_length=200)
 
 
@@ -90,7 +116,7 @@ class AvailabilityRequest(ContractModel):
     availabilityStatus: Literal["available_now", "available_on", "not_available", "unknown"]
     availableOn: date | None = None
     note: str | None = Field(None, max_length=1000)
-    expectedRevision: int | None = Field(None, ge=0)
+    expectedRevision: StrictInt | None = Field(None, ge=0)
     idempotencyKey: str | None = Field(None, min_length=1, max_length=200)
 
     @model_validator(mode="after")
@@ -101,19 +127,19 @@ class AvailabilityRequest(ContractModel):
 
 
 class OccupancyMutationRequest(OccupancyRequest):
-    expectedRevision: int = Field(ge=0)
+    expectedRevision: StrictInt = Field(ge=0)
     idempotencyKey: str = Field(min_length=1, max_length=200)
 
 
 class AvailabilityMutationRequest(AvailabilityRequest):
-    expectedRevision: int = Field(ge=0)
+    expectedRevision: StrictInt = Field(ge=0)
     idempotencyKey: str = Field(min_length=1, max_length=200)
 
 
 class SpaceClassificationRequest(ContractModel):
     occupancy: OccupancyRequest | None = None
     availability: AvailabilityRequest | None = None
-    expectedRevision: int = Field(ge=0)
+    expectedRevision: StrictInt = Field(ge=0)
     idempotencyKey: str = Field(min_length=1, max_length=200)
 
     @model_validator(mode="after")
@@ -130,22 +156,22 @@ class SpaceClassificationRequest(ContractModel):
 class OccupancyCorrectionRequest(ContractModel):
     occupancy: OccupancyRequest
     reason: str = Field(min_length=1, max_length=1000)
-    expectedRevision: int = Field(ge=0)
+    expectedRevision: StrictInt = Field(ge=0)
     idempotencyKey: str = Field(min_length=1, max_length=200)
 
 
 class StatusMutationRequest(ContractModel):
-    expectedRevision: int = Field(ge=0)
+    expectedRevision: StrictInt = Field(ge=0)
     idempotencyKey: str = Field(min_length=1, max_length=200)
 
 
-class SpacePatchRequest(ContractModel):
+class SpacePatchRequest(InventoryRequest):
     displayName: str | None = Field(None, min_length=1, max_length=120)
     suiteOrFloor: str | None = Field(None, max_length=80)
     notes: str | None = Field(None, max_length=4000)
 
 
-class PropertyPatchRequest(ContractModel):
+class PropertyPatchRequest(InventoryRequest):
     displayName: str | None = Field(None, min_length=1, max_length=240)
     addressLine1: str | None = Field(None, min_length=1, max_length=240)
     addressLine2: str | None = Field(None, max_length=240)
@@ -156,8 +182,8 @@ class PropertyPatchRequest(ContractModel):
     notes: str | None = Field(None, max_length=4000)
 
 
-class OwnershipReplaceRequest(ContractModel):
-    effectiveOn: str
+class OwnershipReplaceRequest(InventoryRequest):
+    effectiveOn: date
     ownerships: list[OwnershipRequest] = Field(min_length=1)
 
 
@@ -165,64 +191,11 @@ class ConfirmationRequest(ContractModel):
     confirmed: StrictBool
 
 
-class SpaceResponse(ContractModel):
-    id: str
-    propertyId: str
-    spaceKind: Literal["whole_home", "whole_office", "office_suite"]
-    displayName: str
-    suiteOrFloor: str | None
-    notes: str | None
-    status: Literal["active", "archived"]
-    revision: int
-    createdAt: str
-    updatedAt: str
-    archivedAt: str | None
+class InventoryConfirmationRequest(InventoryRequest):
+    confirmed: StrictBool
 
 
-class OccupancyPeriodResponse(ContractModel):
-    id: str
-    spaceId: str
-    occupancyStatus: Literal["occupied", "vacant", "unknown"]
-    startsOn: date
-    endsOn: date | None
-    recordState: Literal["valid", "cancelled", "superseded"]
-    supersededById: str | None
-    sourceKind: Literal["manual", "lease"]
-    sourceId: str | None
-    note: str | None
-    createdAt: datetime
-    endedAt: datetime | None
-    cancelledAt: datetime | None
-
-
-class AvailabilityResponse(ContractModel):
-    spaceId: str
-    availabilityStatus: Literal["available_now", "available_on", "not_available", "unknown"]
-    availableOn: date | None
-    sourceKind: Literal["manual", "listing", "lease"]
-    sourceId: str | None
-    note: str | None
-    updatedAt: datetime
-    recordedStatus: Literal["available_now", "available_on", "not_available", "unknown"]
-    effectiveStatus: Literal["available_now", "available_on", "not_available", "unknown"]
-
-
-class AttentionReasonResponse(ContractModel):
-    code: Literal[
-        "occupancy_unknown", "availability_unknown", "source_conflict", "missing_status_record"
-    ]
-    resolution: str
-
-
-class SpaceStatusResponse(SpaceResponse):
-    currentOccupancy: OccupancyPeriodResponse
-    scheduledOccupancy: OccupancyPeriodResponse | None
-    scheduledOccupancyTimeline: list[OccupancyPeriodResponse]
-    availability: AvailabilityResponse
-    attentionReasons: list[AttentionReasonResponse]
-    asOf: datetime
-    effectiveLocalDate: date
-    operationId: str | None = None
+MANUAL_STATUS_RESPONSES = {409: {"model": ManualStatusConflictResponse}}
 
 
 class PropertyStatusSummaryResponse(ContractModel):
@@ -247,32 +220,33 @@ class PortfolioStatusSummaryResponse(ContractModel):
     nearestAvailableOn: date | None
     needsAttentionSpaceCount: int
     needsAttentionPropertyCount: int
-    asOf: datetime
+    asOf: AwareDatetime
 
 
 class PartyResponse(ContractModel):
-    id: str
+    id: UUID
     partyKind: Literal["individual", "organization"]
     displayName: str
-    createdAt: str
-    updatedAt: str
-    archivedAt: str | None
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
+    archivedAt: AwareDatetime | None
 
 
 class OwnershipResponse(ContractModel):
-    id: str
-    propertyId: str
+    id: UUID
+    propertyId: UUID
     ownerKind: Literal["local_operator", "client_owner"]
-    partyId: str | None
+    partyId: UUID | None
     party: PartyResponse | None
-    startsOn: str
-    endsOn: str | None
-    createdAt: str
-    endedAt: str | None
+    startsOn: date
+    endsOn: date | None
+    createdAt: AwareDatetime
+    endedAt: AwareDatetime | None
 
 
 class PropertyResponse(ContractModel):
-    id: str
+    propertyRevision: StrictInt = Field(ge=1)
+    id: UUID
     displayName: str
     addressLine1: str
     addressLine2: str | None
@@ -283,24 +257,77 @@ class PropertyResponse(ContractModel):
     timeZone: str
     notes: str | None
     status: Literal["active", "archived"]
-    createdAt: str
-    updatedAt: str
-    archivedAt: str | None
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
+    archivedAt: AwareDatetime | None
     propertyType: Literal["single_family_home", "condo", "townhome", "office"]
     inventoryLayout: Literal["single_space", "whole_office", "office_suites"]
     ownershipContext: Literal["self_owned", "managed_for_owner", "mixed"]
     ownerships: list[OwnershipResponse]
     spaces: list[SpaceStatusResponse]
     statusSummary: PropertyStatusSummaryResponse
-    asOf: datetime
+    asOf: AwareDatetime
     effectiveLocalDate: date
+
+
+class PropertyMutationResponse(PropertyResponse):
+    operationId: UUID
+
+
+class SpaceInventoryMutationResponse(SpaceResponse):
+    id: UUID
+    propertyId: UUID
+    propertyRevision: StrictInt = Field(ge=1)
+    operationId: UUID
+    asOf: AwareDatetime
+    effectiveLocalDate: date
+
+
+class InventoryOperationReceipt(ContractModel):
+    operationId: UUID
+    propertyId: UUID
+    action: Literal[
+        "create_property",
+        "patch_property",
+        "archive_property",
+        "restore_property",
+        "replace_ownerships",
+        "add_space",
+        "patch_space",
+        "archive_space",
+        "restore_space",
+    ]
+    idempotencyKey: str
+    expectedPropertyRevision: StrictInt = Field(ge=0)
+    propertyRevision: StrictInt = Field(ge=1)
+    effective: bool
+    correlationId: UUID
+    committedAt: AwareDatetime
+    result: PropertyMutationResponse | SpaceInventoryMutationResponse
+
+
+class InventoryConflictDetail(ContractModel):
+    code: Literal[
+        "portfolio_conflict",
+        "portfolio_inventory_payload_conflict",
+        "portfolio_inventory_revision_conflict",
+    ]
+    message: str
+    currentStatus: PropertyResponse | None = None
+
+
+class InventoryConflictResponse(ContractModel):
+    detail: InventoryConflictDetail
+
+
+INVENTORY_RESPONSES = {409: {"model": InventoryConflictResponse}}
 
 
 class PropertyPageResponse(ContractModel):
     items: list[PropertyResponse]
     nextCursor: str | None
     matchingTotal: int
-    asOf: datetime
+    asOf: AwareDatetime
 
 
 def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRouter:
@@ -320,31 +347,46 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
         except PortfolioConflictError as error:
             detail: object = str(error)
             if error.current_status is not None:
-                detail = {"message": str(error), "currentStatus": error.current_status}
+                detail = {
+                    "message": str(error),
+                    "currentStatus": (
+                        PropertyResponse
+                        if "ownershipContext" in error.current_status
+                        else SpaceStatusResponse
+                    )
+                    .model_validate(error.current_status)
+                    .model_dump(mode="json"),
+                }
             if isinstance(detail, dict):
                 raise domain_problem(
                     error,
                     status_code=409,
-                    code="portfolio_conflict",
+                    code=error.code,
                     **{key: value for key, value in detail.items() if key != "message"},
                 ) from error
-            raise domain_problem(error, status_code=409, code="portfolio_conflict") from error
+            raise domain_problem(error, status_code=409, code=error.code) from error
         except PortfolioError as error:
             raise domain_problem(error, status_code=400, code="portfolio_validation") from error
         except PartyValidationError as error:
             raise domain_problem(error, status_code=400, code="portfolio_validation") from error
 
     @router.post(
-        "/api/properties", response_model=PropertyResponse, status_code=status.HTTP_201_CREATED
+        "/api/properties",
+        response_model=PropertyMutationResponse,
+        status_code=status.HTTP_201_CREATED,
+        operation_id="createPortfolioProperty",
+        responses=INVENTORY_RESPONSES,
     )
     def create_property(data: PropertyCreateRequest):
         require_ready(write=True)
 
-        def create_and_load() -> dict[str, object]:
-            property_id = service.create_property(_create(data)).id
-            return service.get_property(property_id)
-
-        return invoke(create_and_load)
+        return invoke(
+            lambda: service.create_property(
+                _create(data),
+                expected_revision=data.expectedPropertyRevision,
+                idempotency_key=data.idempotencyKey,
+            )
+        )
 
     @router.get(
         "/api/properties",
@@ -374,95 +416,244 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
             )
         )
 
-    @router.get("/api/properties/{property_id}", response_model=PropertyResponse)
-    def get_property(property_id: str):
+    @router.get(
+        "/api/properties/{property_id}",
+        response_model=PropertyResponse,
+        operation_id="getPortfolioProperty",
+    )
+    def get_property(property_id: UUID):
         require_ready()
-        return invoke(lambda: service.get_property(property_id))
+        return invoke(lambda: service.get_property(str(property_id)))
 
-    @router.get("/api/portfolio/status-summary", response_model=PortfolioStatusSummaryResponse)
+    @router.get(
+        "/api/portfolio/status-summary",
+        response_model=PortfolioStatusSummaryResponse,
+        operation_id="getPortfolioStatusSummary",
+    )
     def get_portfolio_status_summary():
         require_ready()
         return invoke(service.portfolio_status_summary)
 
-    @router.patch("/api/properties/{property_id}", response_model=PropertyResponse)
-    def patch_property(property_id: str, data: PropertyPatchRequest):
+    @router.patch(
+        "/api/properties/{property_id}",
+        response_model=PropertyMutationResponse,
+        operation_id="patchPortfolioProperty",
+        responses=INVENTORY_RESPONSES,
+    )
+    def patch_property(property_id: UUID, data: PropertyPatchRequest):
         require_ready(write=True)
 
-        def patch_and_load() -> dict[str, object]:
-            updated = service.patch_property(property_id, data.model_dump(exclude_unset=True))
-            return service.get_property(updated.id)
+        return invoke(
+            lambda: service.patch_property(
+                str(property_id),
+                data.model_dump(
+                    exclude_unset=True, exclude={"expectedPropertyRevision", "idempotencyKey"}
+                ),
+                expected_revision=data.expectedPropertyRevision,
+                idempotency_key=data.idempotencyKey,
+            )
+        )
 
-        return invoke(patch_and_load)
-
-    @router.post("/api/properties/{property_id}/archive", response_model=PropertyResponse)
-    def archive_property(property_id: str, data: ConfirmationRequest):
+    @router.post(
+        "/api/properties/{property_id}/archive",
+        response_model=PropertyMutationResponse,
+        operation_id="archivePortfolioProperty",
+        responses=INVENTORY_RESPONSES,
+    )
+    def archive_property(property_id: UUID, data: InventoryConfirmationRequest):
         require_ready(write=True)
 
-        def archive_and_load() -> dict[str, object]:
-            archived = service.archive_property(property_id, confirmed=data.confirmed)
-            return service.get_property(archived.id)
+        return invoke(
+            lambda: service.archive_property(
+                str(property_id),
+                confirmed=data.confirmed,
+                expected_revision=data.expectedPropertyRevision,
+                idempotency_key=data.idempotencyKey,
+            )
+        )
 
-        return invoke(archive_and_load)
-
-    @router.post("/api/properties/{property_id}/restore", response_model=PropertyResponse)
-    def restore_property(property_id: str):
+    @router.post(
+        "/api/properties/{property_id}/restore",
+        response_model=PropertyMutationResponse,
+        operation_id="restorePortfolioProperty",
+        responses=INVENTORY_RESPONSES,
+    )
+    def restore_property(property_id: UUID, data: InventoryRequest):
         require_ready(write=True)
 
-        def restore_and_load() -> dict[str, object]:
-            restored = service.restore_property(property_id)
-            return service.get_property(restored.id)
+        return invoke(
+            lambda: service.restore_property(
+                str(property_id),
+                expected_revision=data.expectedPropertyRevision,
+                idempotency_key=data.idempotencyKey,
+            )
+        )
 
-        return invoke(restore_and_load)
-
-    @router.put("/api/properties/{property_id}/ownerships", response_model=PropertyResponse)
-    def replace_ownerships(property_id: str, data: OwnershipReplaceRequest):
+    @router.put(
+        "/api/properties/{property_id}/ownerships",
+        response_model=PropertyMutationResponse,
+        operation_id="replacePortfolioOwnerships",
+        responses=INVENTORY_RESPONSES,
+    )
+    def replace_ownerships(property_id: UUID, data: OwnershipReplaceRequest):
         require_ready(write=True)
         return invoke(
             lambda: service.replace_ownerships(
-                property_id, _ownerships(data.ownerships), data.effectiveOn
+                str(property_id),
+                _ownerships(data.ownerships),
+                data.effectiveOn.isoformat(),
+                expected_revision=data.expectedPropertyRevision,
+                idempotency_key=data.idempotencyKey,
             )
         )
 
     @router.post(
         "/api/properties/{property_id}/spaces",
-        response_model=SpaceResponse,
+        response_model=SpaceInventoryMutationResponse,
         status_code=status.HTTP_201_CREATED,
+        operation_id="addPortfolioSpace",
+        responses=INVENTORY_RESPONSES,
     )
-    def add_space(property_id: str, data: SpaceCreateRequest):
+    def add_space(property_id: UUID, data: SpaceAddRequest):
         require_ready(write=True)
-        return invoke(lambda: service.add_space(property_id, _space(data)).to_dict())
+        return invoke(
+            lambda: service.add_space(
+                str(property_id),
+                _space(data),
+                expected_revision=data.expectedPropertyRevision,
+                idempotency_key=data.idempotencyKey,
+            )
+        )
 
-    @router.post("/api/spaces/{space_id}/archive", response_model=SpaceResponse)
-    def archive_space(space_id: str, data: ConfirmationRequest):
+    @router.post(
+        "/api/spaces/{space_id}/archive",
+        response_model=SpaceInventoryMutationResponse,
+        operation_id="archivePortfolioSpace",
+        responses=INVENTORY_RESPONSES,
+    )
+    def archive_space(space_id: UUID, data: InventoryConfirmationRequest):
         require_ready(write=True)
-        return invoke(lambda: service.archive_space(space_id, confirmed=data.confirmed).to_dict())
+        return invoke(
+            lambda: service.archive_space(
+                str(space_id),
+                confirmed=data.confirmed,
+                expected_revision=data.expectedPropertyRevision,
+                idempotency_key=data.idempotencyKey,
+            )
+        )
 
-    @router.patch("/api/spaces/{space_id}", response_model=SpaceResponse)
-    def patch_space(space_id: str, data: SpacePatchRequest):
+    @router.patch(
+        "/api/spaces/{space_id}",
+        response_model=SpaceInventoryMutationResponse,
+        operation_id="patchPortfolioSpace",
+        responses=INVENTORY_RESPONSES,
+    )
+    def patch_space(space_id: UUID, data: SpacePatchRequest):
         require_ready(write=True)
         return invoke(
             lambda: service.patch_space(
-                space_id,
-                data.model_dump(exclude_unset=True),
-            ).to_dict()
+                str(space_id),
+                data.model_dump(
+                    exclude_unset=True, exclude={"expectedPropertyRevision", "idempotencyKey"}
+                ),
+                expected_revision=data.expectedPropertyRevision,
+                idempotency_key=data.idempotencyKey,
+            )
         )
 
-    @router.post("/api/spaces/{space_id}/restore", response_model=SpaceResponse)
-    def restore_space(space_id: str):
+    @router.post(
+        "/api/spaces/{space_id}/restore",
+        response_model=SpaceInventoryMutationResponse,
+        operation_id="restorePortfolioSpace",
+        responses=INVENTORY_RESPONSES,
+    )
+    def restore_space(space_id: UUID, data: InventoryRequest):
         require_ready(write=True)
-        return invoke(lambda: service.restore_space(space_id).to_dict())
+        return invoke(
+            lambda: service.restore_space(
+                str(space_id),
+                expected_revision=data.expectedPropertyRevision,
+                idempotency_key=data.idempotencyKey,
+            )
+        )
 
-    @router.get("/api/spaces/{space_id}/status", response_model=SpaceStatusResponse)
-    def get_space_status(space_id: str):
+    @router.get(
+        "/api/portfolio/inventory-operations/by-key",
+        response_model=InventoryOperationReceipt,
+        operation_id="getPortfolioInventoryOperationByGlobalKey",
+    )
+    def get_inventory_operation_by_global_key(
+        idempotencyKey: str = Query(min_length=1, max_length=200),
+    ):
         require_ready()
-        return invoke(lambda: service.get_space_status(space_id))
+        return invoke(lambda: service.get_inventory_operation(idempotency_key=idempotencyKey))
 
-    @router.put("/api/spaces/{space_id}/occupancy", response_model=SpaceStatusResponse)
-    def change_occupancy(space_id: str, data: OccupancyMutationRequest):
+    @router.get(
+        "/api/portfolio/inventory-operations/{operation_id}",
+        response_model=InventoryOperationReceipt,
+        operation_id="getPortfolioInventoryOperation",
+    )
+    def get_inventory_operation(operation_id: UUID):
+        require_ready()
+        return invoke(lambda: service.get_inventory_operation(operation_id=str(operation_id)))
+
+    @router.get(
+        "/api/properties/{property_id}/inventory-operations/by-key",
+        response_model=InventoryOperationReceipt,
+        operation_id="getPortfolioInventoryOperationByKey",
+    )
+    def get_inventory_operation_by_key(
+        property_id: UUID, idempotencyKey: str = Query(min_length=1, max_length=200)
+    ):
+        require_ready()
+        return invoke(
+            lambda: service.get_inventory_operation(
+                property_id=str(property_id), idempotency_key=idempotencyKey
+            )
+        )
+
+    @router.get(
+        "/api/spaces/{space_id}/status",
+        response_model=SpaceStatusResponse,
+        operation_id="getPortfolioSpaceStatus",
+    )
+    def get_space_status(space_id: UUID):
+        require_ready()
+        return invoke(lambda: service.get_space_status(str(space_id)))
+
+    @router.get(
+        "/api/portfolio/status-operations/{operation_id}",
+        response_model=ManualStatusOperationReceipt,
+        operation_id="getPortfolioStatusOperation",
+    )
+    def get_status_operation(operation_id: UUID):
+        require_ready()
+        return invoke(lambda: service.get_status_operation(operation_id=str(operation_id)))
+
+    @router.get(
+        "/api/spaces/{space_id}/status-operations/{idempotency_key}",
+        response_model=ManualStatusOperationReceipt,
+        operation_id="getPortfolioStatusOperationByKey",
+    )
+    def get_status_operation_by_key(space_id: UUID, idempotency_key: str):
+        require_ready()
+        return invoke(
+            lambda: service.get_status_operation(
+                space_id=str(space_id), idempotency_key=idempotency_key
+            )
+        )
+
+    @router.put(
+        "/api/spaces/{space_id}/occupancy",
+        response_model=ManualStatusMutationResponse,
+        responses=MANUAL_STATUS_RESPONSES,
+        operation_id="changePortfolioSpaceOccupancy",
+    )
+    def change_occupancy(space_id: UUID, data: OccupancyMutationRequest):
         require_ready(write=True)
         return invoke(
             lambda: service.change_occupancy(
-                space_id,
+                str(space_id),
                 _occupancy(data),
                 expected_revision=data.expectedRevision,
                 idempotency_key=data.idempotencyKey,
@@ -471,28 +662,33 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
 
     @router.post(
         "/api/spaces/{space_id}/occupancy/scheduled/{period_id}/cancel",
-        response_model=SpaceStatusResponse,
+        response_model=ManualStatusMutationResponse,
+        responses=MANUAL_STATUS_RESPONSES,
+        operation_id="cancelPortfolioScheduledOccupancy",
     )
-    def cancel_scheduled_occupancy(space_id: str, period_id: str, data: StatusMutationRequest):
+    def cancel_scheduled_occupancy(space_id: UUID, period_id: UUID, data: StatusMutationRequest):
         require_ready(write=True)
         return invoke(
             lambda: service.cancel_scheduled_occupancy(
-                space_id,
-                period_id,
+                str(space_id),
+                str(period_id),
                 expected_revision=data.expectedRevision,
                 idempotency_key=data.idempotencyKey,
             )
         )
 
     @router.post(
-        "/api/spaces/{space_id}/occupancy/{period_id}/correct", response_model=SpaceStatusResponse
+        "/api/spaces/{space_id}/occupancy/{period_id}/correct",
+        response_model=ManualStatusMutationResponse,
+        responses=MANUAL_STATUS_RESPONSES,
+        operation_id="correctPortfolioSpaceOccupancy",
     )
-    def correct_occupancy(space_id: str, period_id: str, data: OccupancyCorrectionRequest):
+    def correct_occupancy(space_id: UUID, period_id: UUID, data: OccupancyCorrectionRequest):
         require_ready(write=True)
         return invoke(
             lambda: service.correct_occupancy(
-                space_id,
-                period_id,
+                str(space_id),
+                str(period_id),
                 OccupancyCorrectionCommand(_occupancy(data.occupancy), data.reason),
                 expected_revision=data.expectedRevision,
                 idempotency_key=data.idempotencyKey,
@@ -501,18 +697,20 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
 
     @router.put(
         "/api/spaces/{space_id}/occupancy/scheduled/{period_id}/reschedule",
-        response_model=SpaceStatusResponse,
+        response_model=ManualStatusMutationResponse,
+        responses=MANUAL_STATUS_RESPONSES,
+        operation_id="reschedulePortfolioScheduledOccupancy",
     )
     def reschedule_scheduled_occupancy(
-        space_id: str,
-        period_id: str,
+        space_id: UUID,
+        period_id: UUID,
         data: OccupancyMutationRequest,
     ):
         require_ready(write=True)
         return invoke(
             lambda: service.reschedule_scheduled_occupancy(
-                space_id,
-                period_id,
+                str(space_id),
+                str(period_id),
                 _occupancy(data),
                 expected_revision=data.expectedRevision,
                 idempotency_key=data.idempotencyKey,
@@ -521,40 +719,54 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
 
     @router.put(
         "/api/spaces/{space_id}/occupancy/scheduled/{period_id}/replace",
-        response_model=SpaceStatusResponse,
+        response_model=ManualStatusMutationResponse,
+        responses=MANUAL_STATUS_RESPONSES,
         deprecated=True,
+        operation_id="replacePortfolioScheduledOccupancy",
     )
-    def replace_scheduled_occupancy(space_id: str, period_id: str, data: OccupancyMutationRequest):
+    def replace_scheduled_occupancy(
+        space_id: UUID, period_id: UUID, data: OccupancyMutationRequest
+    ):
         """Compatibility alias retained for callers of the pre-PORT-003 operation."""
         require_ready(write=True)
         return invoke(
             lambda: service.replace_scheduled_occupancy(
-                space_id,
-                period_id,
+                str(space_id),
+                str(period_id),
                 _occupancy(data),
                 expected_revision=data.expectedRevision,
                 idempotency_key=data.idempotencyKey,
             )
         )
 
-    @router.put("/api/spaces/{space_id}/availability", response_model=SpaceStatusResponse)
-    def change_availability(space_id: str, data: AvailabilityMutationRequest):
+    @router.put(
+        "/api/spaces/{space_id}/availability",
+        response_model=ManualStatusMutationResponse,
+        responses=MANUAL_STATUS_RESPONSES,
+        operation_id="changePortfolioSpaceAvailability",
+    )
+    def change_availability(space_id: UUID, data: AvailabilityMutationRequest):
         require_ready(write=True)
         return invoke(
             lambda: service.change_availability(
-                space_id,
+                str(space_id),
                 _availability(data),
                 expected_revision=data.expectedRevision,
                 idempotency_key=data.idempotencyKey,
             )
         )
 
-    @router.put("/api/spaces/{space_id}/classification", response_model=SpaceStatusResponse)
-    def classify_space(space_id: str, data: SpaceClassificationRequest):
+    @router.put(
+        "/api/spaces/{space_id}/classification",
+        response_model=ManualStatusMutationResponse,
+        responses=MANUAL_STATUS_RESPONSES,
+        operation_id="classifyPortfolioSpace",
+    )
+    def classify_space(space_id: UUID, data: SpaceClassificationRequest):
         require_ready(write=True)
         return invoke(
             lambda: service.classify_space(
-                space_id,
+                str(space_id),
                 SpaceClassificationCommand(
                     None if data.occupancy is None else _occupancy(data.occupancy),
                     None if data.availability is None else _availability(data.availability),
@@ -575,7 +787,7 @@ def _ownerships(items: list[OwnershipRequest]) -> tuple[OwnershipInput, ...]:
     return tuple(
         OwnershipInput(
             item.ownerKind,
-            item.partyId,
+            None if item.partyId is None else str(item.partyId),
             None if item.inlineParty is None else _party(item.inlineParty),
         )
         for item in items

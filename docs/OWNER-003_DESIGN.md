@@ -147,6 +147,7 @@ All identifiers and operation idempotency keys are UUIDs. Amounts are positive i
 | `verified_receipt_id` | Null unless verified; then required and unique. |
 | `reviewed_at`, `review_note` | Null while pending; both required for verified or rejected. `review_note` is the verification note or rejection reason. |
 | `replaces_report_id` | Optional unique self-reference to a terminal prior report; never self-referential. |
+| `report_revision` | Required positive integer; starts at one and advances once per effective report command. |
 | `created_at`, `updated_at` | Required UTC timestamps. A no-op does not advance `updated_at`. |
 
 Database checks enforce bounded stored shapes, USD/amount rules, FIN-006 conditional fields, exhaustive status/nullability pairs, non-self replacement, and unique receipt/report and replacement edges. Application validation enforces lease/property context, property-local dates, historical owner eligibility, current replacement state, evidence, exact receipt compatibility, and nonbranching lineage.
@@ -162,9 +163,24 @@ Database checks enforce bounded stored shapes, USD/amount rules, FIN-006 conditi
 | `request_fingerprint` | Required canonical SHA-256 fingerprint of the semantic command. |
 | `result_receipt_id` | Present only when verification returns a receipt. |
 | `receipt_created` | Null for `create`, `patch`, and `reject`. For `verify`, immutable `0` means the report adopted the explicitly selected existing receipt; immutable `1` means verification created the receipt and its allocations under the operation correlation. |
+| `expected_revision`, `result_revision`, `effective` | Required exact revisions and effect flag; unchanged patches retain the revision, other effective commands advance once. |
+| `request_json`, `response_json`, `response_fingerprint` | Required canonical command and immutable original result, with canonical SHA-256 result hash. Request identity includes action, target, expected revision and complete semantic payload. |
 | `correlation_id`, `created_at` | Required audit correlation and UTC timestamp. |
 
-Operation records are append-only and are the retry authority. Same key and same semantic request returns the original current representation without repeating file checks, receipt creation, allocations, or audit events. Same key with a changed request returns typed `409`.
+Operation records are append-only and are the retry authority. Same key and same
+semantic request returns the immutable original response before lifecycle checks,
+even after a later patch/review; it never combines an older operation with current
+state. Same key with a changed request or a stale revision returns typed `409`.
+
+UI-001 Slice 15 requires `expectedRevision` on create (zero), patch, verify and
+reject, alongside the UUID key. Verification additionally requires
+`expectedRentLedgerRevision`. It checks both scopes on the same connection;
+receipt creation advances the ledger once, while explicit adoption does not.
+Report responses include `reportRevision`; mutations require `operationId`, and
+verification also requires `rentLedgerRevision`. Both receipts and all correlated
+audits commit or roll back with verification. Read-only
+`GET /api/owner-rent-report-operations/{idempotency_key}` returns the immutable
+result. See [Slice 15 readiness](FINANCE_COMMAND_READINESS.md).
 
 ## Application and infrastructure boundaries
 

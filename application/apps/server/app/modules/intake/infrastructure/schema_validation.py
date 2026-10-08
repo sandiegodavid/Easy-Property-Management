@@ -145,6 +145,8 @@ def validate_intake_data(connection) -> None:
     }
     for source in sources.values():
         _uuid(source["id"])
+        if type(source["source_revision"]) is not int or source["source_revision"] < 1:
+            raise MigrationSchemaError("INGEST-001 source revision is invalid.")
         _timestamp(source["occurred_at_utc"])
         _timestamp(source["received_at_utc"])
         _timestamp(source["created_at"])
@@ -384,6 +386,8 @@ def _validate_operations(connection, sources, revisions, audits):
         ]
         kind = operation["operation_type"]
         _validate_operation_payload(operation, payload, result, sources, revisions, related)
+        if kind not in {"integrity_failed", "integrity_restored"}:
+            _validate_command_result(operation, result)
         if kind == "admit":
             admitted = _audit(related, "intake_source", operation["source_id"], "admitted")
             replayed = _audit(
@@ -449,7 +453,6 @@ def _validate_operations(connection, sources, revisions, audits):
                 )
             ):
                 raise MigrationSchemaError("INGEST-001 attention operation audit is invalid.")
-            _validate_attention_result(operation)
             expected.add(_audit_key(event))
         elif kind in {"integrity_failed", "integrity_restored"}:
             event = _require_audit(related, "intake_source", operation["source_id"], kind)
@@ -458,8 +461,13 @@ def _validate_operations(connection, sources, revisions, audits):
                 ("ready", "failed") if kind == "integrity_failed" else ("failed", "ready")
             )
             if (
-                set(before) != {"technicalStatus"}
+                set(before) not in ({"technicalStatus"}, {"technicalStatus", "failureCode"})
                 or before["technicalStatus"] != expected_before
+                or (
+                    "failureCode" in before
+                    and before["failureCode"]
+                    != (None if expected_before == "ready" else "attachment_content_unavailable")
+                )
                 or set(after) != {"technicalStatus", "failureCode"}
                 or after["technicalStatus"] != expected_after
                 or (expected_after == "failed" and after["failureCode"] not in FAILURE_CODES)
@@ -586,6 +594,10 @@ def _validate_operation_payload(operation, payload, result, sources, revisions, 
             },
             "supersedes": None if replay else source["supersedes_source_id"],
         }
+        if kind == "supersede":
+            identity["expectedSourceRevision"] = payload.get("expectedSourceRevision")
+            identity["expectedEvidenceRevisionId"] = payload.get("expectedEvidenceRevisionId")
+            _validate_expected_revision(payload, revisions, source["supersedes_source_id"])
         admitted_revisions = [
             row
             for row in revisions.values()
@@ -603,8 +615,11 @@ def _validate_operation_payload(operation, payload, result, sources, revisions, 
             "correct": operation["source_id"],
             "envelope": json.loads(result["envelope_json"]),
             "reason": result["correction_reason"],
+            "expectedSourceRevision": payload.get("expectedSourceRevision"),
+            "expectedEvidenceRevisionId": result["supersedes_revision_id"],
         }:
             raise MigrationSchemaError("INGEST-001 correction request payload is invalid.")
+        _validate_expected_revision(payload, revisions, operation["source_id"])
     elif kind == "attention_transition":
         event = _require_audit(
             related, "intake_source", operation["source_id"], "attention_changed"
@@ -615,6 +630,7 @@ def _validate_operation_payload(operation, payload, result, sources, revisions, 
             "target",
             "reason",
             "expectedRevision",
+            "expectedSourceRevision",
             "expectedStatus",
             "actorKind",
             "actorReference",
@@ -630,6 +646,11 @@ def _validate_operation_payload(operation, payload, result, sources, revisions, 
             or not _payload_text(payload["reason"], 1000)
         ):
             raise MigrationSchemaError("INGEST-001 attention request payload is invalid.")
+        if (
+            type(payload["expectedSourceRevision"]) is not int
+            or payload["expectedSourceRevision"] < 1
+        ):
+            raise MigrationSchemaError("INGEST-001 expected source revision is invalid.")
     elif kind in {"integrity_failed", "integrity_restored"}:
         event = _require_audit(related, "intake_source", operation["source_id"], kind)
         _, after = _snapshots(event)
@@ -645,19 +666,38 @@ def _validate_operation_payload(operation, payload, result, sources, revisions, 
             raise MigrationSchemaError("INGEST-001 integrity request payload is invalid.")
 
 
-def _validate_attention_result(operation) -> None:
+def _validate_command_result(operation, revision) -> None:
     try:
         result = json.loads(operation["result_json"])
         if (
             canonical_json(result) != operation["result_json"]
             or result["sourceId"] != operation["source_id"]
             or result["revision"] != operation["result_revision_id"]
+            or result["evidenceRevisionId"] != operation["result_revision_id"]
+            or result["operationId"] != operation["id"]
+            or type(result["sourceRevision"]) is not int
+            or result["sourceRevision"] < 1
+            or result["fingerprint"] != revision["content_fingerprint"]
+            or (
+                "evidence" in result and result["evidence"] != json.loads(revision["envelope_json"])
+            )
             or result["attentionStatus"]
             not in {"unprocessed", "in_review", "resolved", "dismissed"}
         ):
             raise ValueError
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-        raise MigrationSchemaError("INGEST-001 attention operation result is invalid.") from error
+        raise MigrationSchemaError("INGEST-001 command operation result is invalid.") from error
+
+
+def _validate_expected_revision(payload, revisions, source_id):
+    revision = revisions.get(payload.get("expectedEvidenceRevisionId"))
+    if (
+        type(payload.get("expectedSourceRevision")) is not int
+        or payload["expectedSourceRevision"] < 1
+        or revision is None
+        or revision["source_id"] != source_id
+    ):
+        raise MigrationSchemaError("INGEST-001 expected revision is invalid.")
 
 
 def _payload_text(value, maximum: int) -> bool:
@@ -774,6 +814,9 @@ def _validate_lifecycle_consequences(sources, operations, audits):
                 if source_id in state:
                     raise MigrationSchemaError("INGEST-001 source was admitted more than once.")
                 state[source_id] = {
+                    "revision": 1,
+                    "evidence": operation["result_revision_id"],
+                    "updated_at": operation["created_at"],
                     "technical": "ready",
                     "attention": "unprocessed",
                     "failure": None,
@@ -789,10 +832,30 @@ def _validate_lifecycle_consequences(sources, operations, audits):
             ):
                 raise MigrationSchemaError("INGEST-001 supersession lifecycle is invalid.")
             state[source_id] = {"technical": "ready", "attention": "unprocessed", "failure": None}
+            state[source_id]["revision"] = 1
+            state[source_id]["evidence"] = operation["result_revision_id"]
+            state[source_id]["updated_at"] = operation["created_at"]
+            payload = json.loads(operation["request_payload_json"])
+            if (
+                payload["expectedSourceRevision"] != state[predecessor]["revision"]
+                or payload["expectedEvidenceRevisionId"] != state[predecessor]["evidence"]
+            ):
+                raise MigrationSchemaError("INGEST-001 supersession revision is invalid.")
+            state[predecessor]["revision"] += 1
+            state[predecessor]["updated_at"] = operation["created_at"]
             state[predecessor]["technical"] = "superseded"
         elif kind == "correct":
             if source_id not in state or state[source_id]["technical"] == "superseded":
                 raise MigrationSchemaError("INGEST-001 correction lifecycle is invalid.")
+            payload = json.loads(operation["request_payload_json"])
+            if (
+                payload["expectedSourceRevision"] != state[source_id]["revision"]
+                or payload["expectedEvidenceRevisionId"] != state[source_id]["evidence"]
+            ):
+                raise MigrationSchemaError("INGEST-001 correction revision is invalid.")
+            state[source_id]["revision"] += 1
+            state[source_id]["evidence"] = operation["result_revision_id"]
+            state[source_id]["updated_at"] = operation["created_at"]
         elif kind == "attention_transition":
             current = state.get(source_id)
             before, after = _snapshots(
@@ -805,6 +868,14 @@ def _validate_lifecycle_consequences(sources, operations, audits):
             ):
                 raise MigrationSchemaError("INGEST-001 attention lifecycle is invalid.")
             current["attention"] = after["attentionStatus"]
+            payload = json.loads(operation["request_payload_json"])
+            if (
+                payload["expectedSourceRevision"] != current["revision"]
+                or payload["expectedRevision"] != current["evidence"]
+            ):
+                raise MigrationSchemaError("INGEST-001 attention revision is invalid.")
+            current["revision"] += 1
+            current["updated_at"] = operation["created_at"]
         elif kind in {"integrity_failed", "integrity_restored"}:
             current = state.get(source_id)
             before, after = _snapshots(_require_audit(related, "intake_source", source_id, kind))
@@ -820,10 +891,42 @@ def _validate_lifecycle_consequences(sources, operations, audits):
                 raise MigrationSchemaError("INGEST-001 integrity lifecycle is invalid.")
             current["technical"] = expected_after
             current["failure"] = after["failureCode"]
+            current["revision"] += 1
+            current["updated_at"] = operation["created_at"]
+        if kind not in {"integrity_failed", "integrity_restored"}:
+            result = json.loads(operation["result_json"])
+            if result["sourceRevision"] != state[source_id]["revision"]:
+                raise MigrationSchemaError("INGEST-001 operation result revision is invalid.")
+            current = state[source_id]
+            if (
+                result["revision"],
+                result["technicalStatus"],
+                result["attentionStatus"],
+                result["failureCode"],
+                result["updatedAt"],
+            ) != (
+                current["evidence"],
+                current["technical"],
+                current["attention"],
+                current["failure"],
+                current["updated_at"],
+            ):
+                raise MigrationSchemaError(
+                    "INGEST-001 command receipt contradicts its resulting state."
+                )
     if set(state) != set(sources):
         raise MigrationSchemaError("INGEST-001 source admission lifecycle is incomplete.")
     for source_id, source in sources.items():
         current = state[source_id]
+        if current["revision"] != source["source_revision"]:
+            raise MigrationSchemaError(
+                "INGEST-001 retained source revision contradicts operations."
+            )
+        if (current["evidence"], current["updated_at"]) != (
+            source["current_revision_id"],
+            source["updated_at"],
+        ):
+            raise MigrationSchemaError("INGEST-001 retained source state contradicts operations.")
         if (current["technical"], current["attention"], current["failure"]) != (
             source["technical_status"],
             source["attention_status"],

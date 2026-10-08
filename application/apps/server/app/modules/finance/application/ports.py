@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar
 
 from app.modules.finance.domain.models import PrepaidCheck, RentExpectation, RentReceipt
+from app.modules.finance.application.commands import FinanceCommandTransaction
 
 Result = TypeVar("Result")
 
@@ -46,11 +47,13 @@ class ReceiptTransactionOperations(Protocol):
     """Neutral FIN-001 operations on a caller-owned transaction."""
 
     def transaction(self, connection: Any): ...
+    def command_transaction(self, connection: Any) -> FinanceCommandTransaction: ...
     def record_receipt(
         self,
         connection: Any,
         command: Any,
         *,
+        expected_revision: int,
         now: Callable[[], Any],
         correlation_id: str,
         audit_reason: str,
@@ -76,6 +79,8 @@ class RecordedReceipt:
 
 
 class FinanceTransaction(Protocol):
+    commands: FinanceCommandTransaction
+
     def lease_term_snapshot(
         self, lease_id: str, term_id: str
     ) -> LeaseTermFinanceSnapshot | None: ...
@@ -169,10 +174,16 @@ class FinanceTransaction(Protocol):
     def replace_prepaid_check(self, item: PrepaidCheck) -> None: ...
     def insert_prepaid_check_operation(self, item: dict[str, Any]) -> None: ...
     def create_prepaid_check_reminder(
-        self, *, check_id: str, due_at_utc: str, due_timezone: str, correlation_id: str
+        self,
+        *,
+        check_id: str,
+        due_at_utc: str,
+        due_timezone: str,
+        correlation_id: str,
+        committed_at: str,
     ) -> str: ...
     def dismiss_prepaid_check_reminder(
-        self, task_id: str | None, *, correlation_id: str
+        self, task_id: str | None, *, correlation_id: str, committed_at: str
     ) -> None: ...
     def prepaid_check_reminder_status(self, task_id: str | None) -> str | None: ...
     def record_change(self, **change: Any) -> None: ...

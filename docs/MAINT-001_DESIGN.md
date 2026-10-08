@@ -14,6 +14,8 @@ The boundary is deliberate:
 
 MAINT-001 is a backend/API slice. It does not implement React screens, provider quotes or assignment, reporter attribution, communication history, work journals, calendar synchronization, AI triage, or external intake.
 
+The approved UI-001 command-safety amendment applies one shared issue revision and immutable command receipts to all currently implemented source-owned issue and child mutations, including MAINT-002 quote/assignment, MAINT-003 work-journal and MAINT-004 reporter-correction commands. Those features retain their owning product policies. [MAINT-001_COMMAND_READINESS.md](MAINT-001_COMMAND_READINESS.md) records the exact current schema, integration contract and focused validation matrix. This amendment establishes backend readiness; it does not enable UI controls or change FILE-001 or TASK-001 ownership.
+
 ## Scope
 
 MAINT-001 provides:
@@ -135,11 +137,13 @@ MAINT-001 may atomically create a TASK-001 task related to `maintenance_issue`. 
 
 Task status never changes issue status, and resolving or cancelling an issue does not silently complete or cancel linked tasks. Detail and list views surface active linked tasks so the operator can resolve them deliberately. This retains one owner for each lifecycle and avoids bidirectional synchronization.
 
-### Create retries are idempotent without a generic workflow framework
+### All source-owned mutations share issue revision and immutable receipts
 
-Every issue, appointment, cost-context, expense-link, and follow-up create request carries a client-generated UUID `idempotencyKey`. For same-module creates, the created record stores the key and a canonical request fingerprint. Repeating a key at the same endpoint with the same semantic payload returns the original resource identity and its current representation without new rows, timestamps, or audit events; reuse with a different payload returns typed `409`.
+Every included issue or child mutation carries a client-generated UUID `idempotencyKey` and required `expectedRevision`. Issue creation requires zero; subsequent commands check the current shared issue revision, including commands addressed by child ID. Each effective action advances that revision exactly once, including replacements that write multiple children. A semantically unchanged edit retains its revision and persists an immutable no-op receipt.
 
-Follow-up creation coordinates a Maintenance record, a TASK-001 task, and correlated audit events. A small Maintenance-owned follow-up-operation record therefore stores the key, request fingerprint, issue ID, resulting task ID, and correlation ID so an uncertain retry can return the same task identity and its current representation. This record is not a general workflow engine. Non-create lifecycle commands use current-state validation and do not gain operation records merely for symmetry.
+Maintenance stores the full canonical semantic command envelope and original response in `maintenance_command_receipts`. Replay precedes current target, revision, lifecycle and external-context validation. Repeating an identical command returns its original response, revision and operation UUID even after later writes or Task deletion; it creates no additional rows or audits. Changed payload reuse returns `idempotency_conflict`, and a new command with a stale precondition returns `stale_revision`, both with current issue revision metadata. Lifecycle, reporter, appointment, cost, expense-link, quote, assignment, follow-up and work-journal commands use this same boundary.
+
+Follow-up creation also retains its narrow Maintenance-owned follow-up-operation record for cross-module Task identity and audit lineage. Its correlation UUID matches the immutable command operation. Created-row keys and fingerprints remain source creation evidence, but mutable resource rows and current Tasks are not the retry authority. All domain effects, the issue revision, receipt and correlated audits reuse one caller-owned transaction; no generic repository/workflow framework or nested transaction is introduced.
 
 ### Evidence uses FILE-001 without duplicating file metadata
 
@@ -162,6 +166,7 @@ All IDs are UUIDs. UTC timestamps are timezone-aware ISO text. Monetary context 
 | Field | Rule |
 | --- | --- |
 | `id` | Stable UUID primary key. |
+| `revision` | Required integer >= 1, default 1; shared optimistic precondition for all included source-owned issue/child commands. |
 | `property_id` | Required Portfolio property reference. |
 | `space_id` | Optional Portfolio space reference belonging to `property_id`. |
 | `summary` | Required trimmed operator-facing text, 1–240 characters. |
@@ -174,7 +179,7 @@ All IDs are UUIDs. UTC timestamps are timezone-aware ISO text. Monetary context 
 | `reported_timezone` | Required property IANA time-zone snapshot. |
 | `resolution_summary`, `resolved_at` | Both required exactly when status is `resolved`. |
 | `cancellation_reason`, `cancelled_at` | Both required exactly when status is `cancelled`. |
-| `idempotency_key`, `request_fingerprint` | Required create-retry identity and canonical payload fingerprint; key unique for issue creation. |
+| `idempotency_key`, `request_fingerprint` | Retained source creation identity/fingerprint; key unique for issue creation. Immutable command receipts own replay. |
 | `created_at`, `updated_at` | Required UTC timestamps. No-op requests do not change `updated_at`. |
 
 Indexes support `(status, priority, reported_at_utc)`, `(property_id, status, reported_at_utc)`, `(space_id, status, reported_at_utc)`, and `(category, status)`. Database checks enforce vocabulary and paired terminal fields; application validation enforces property/space ownership, lifecycle, time zone, and cross-row appointment rules.
@@ -242,7 +247,22 @@ A partial unique index allows only one active link for an expense and prevents d
 | `correlation_id` | Required audit correlation UUID. |
 | `created_at` | Required UTC timestamp. |
 
-This table exists only because follow-up creation coordinates a cross-module result that must be recoverable after an uncertain response. It must not become a generic operation or orchestration abstraction.
+This table retains source-owned cross-module Task identity and audit lineage. The immutable command receipt owns retry responses; historical Task facts retain tombstones even when normal Task GET hides them. It must not become a generic operation or orchestration abstraction.
+
+### `maintenance_command_receipts`
+
+| Field | Rule |
+| --- | --- |
+| `id` | Operation UUID primary key, distinct from resource identity. |
+| `idempotency_key` | Required client UUID, unique across included commands. |
+| `issue_id` | Required issue FK identifying the shared aggregate. |
+| `action`, `target_kind`, `target_id` | Required source operation/action and target kind; target ID is null only for issue creation. |
+| `expected_revision`, `revision`, `effective` | Required integer precondition/result and 0/1 effective flag; result = expected + effective. Creation uses 0/1/1. |
+| `request_payload`, `request_fingerprint` | Full canonical JSON semantic envelope and SHA-256, including target, expected revision, confirmation, reasons and patch field presence. |
+| `response_payload`, `response_fingerprint` | Full original response JSON and SHA-256, including required `revision` and `operationId`. |
+| `created_at` | Required aware UTC instant. |
+
+The table has an `(issue_id, revision)` index and a unique `(issue_id, revision)` index WHERE `effective=1`. Model checks enforce integer revision rules, valid JSON objects, fingerprint lengths, target-kind vocabulary and creation/noncreation target shape. Append-only UPDATE/DELETE triggers plus a BEFORE INSERT collision guard reject replacement of an existing ID, key or effective issue/revision pair, including SQLite `INSERT OR REPLACE` with recursive triggers off. Exact schema and retained-data validation require these triggers, contiguous effective revision chains, canonical request/response evidence and correlated command audits. The readiness supplement contains the complete column/constraint/trigger inventory.
 
 ### No dedicated maintenance-task link table
 
@@ -252,7 +272,7 @@ TASK-001 already owns the generic `related_entity_type`, `related_entity_id`, an
 
 ### Record an issue
 
-`POST /api/maintenance-issues` validates the active property/space context, property time zone, category, priority, reported instant, summary, description, and create idempotency in one immediate transaction. It inserts the issue and correlated audit event. Creating an official issue is an operator action; future ingestion and AI drafts remain separate until operator approval.
+`POST /api/maintenance-issues` first checks the immutable receipt for replay, then validates revision zero, active property/space context, property time zone, category, priority, reported instant, summary and description in one transaction. It inserts the issue at revision one, original command receipt and correlated audit events. Creating an official issue is an operator action; future ingestion and AI drafts remain separate until operator approval.
 
 ### Edit issue details
 
@@ -260,7 +280,7 @@ TASK-001 already owns the generic `related_entity_type`, `related_entity_id`, an
 
 ### Start, resolve, cancel, and reopen
 
-Dedicated lifecycle endpoints enforce the status graph. Resolution and cancellation require explicit confirmation and their respective narrative. Reopen requires confirmation and a reason. Every transition writes one issue audit event; no child records or cross-module records transition implicitly.
+Dedicated lifecycle endpoints enforce the status graph after receipt replay and shared revision validation. Resolution and cancellation require explicit confirmation and their respective narrative. Reopen requires confirmation and a reason. Every effective transition writes its issue audit event, command audit and immutable original-response receipt and advances the revision once; no child records or cross-module records transition implicitly.
 
 ### Schedule or reschedule an appointment
 
@@ -316,13 +336,14 @@ The currently implemented Portfolio and File readers already provide most requir
 
 ## API contract
 
-All endpoints require a ready workspace. Mutations require the writer lock. Request models reject unknown fields and use typed UUIDs, strict booleans, aware timestamps, ISO dates, and exact decimal strings. Every create endpoint in the table requires a UUID `idempotencyKey`; same-payload retries return the original resource identity and current representation, while changed-payload reuse returns `409`. Application commands repeat essential validation for direct callers.
+All endpoints require a ready workspace. Mutations require the writer lock. Request models reject unknown fields and use typed UUIDs, strict booleans, aware timestamps, ISO dates, and exact decimal strings. Every included mutation requires UUID `idempotencyKey` and strict nonnegative integer `expectedRevision` (zero only for issue creation). Same-command retries return the full original response before current validation; changed-payload reuse and stale revisions return typed `409` with `currentRevision`. Successful commands retain resource shapes and add required `revision` and `operationId`; issue reads expose current revision. Application commands require the same concurrency metadata for direct callers. Consequential routes and receipt GET have explicit stable OpenAPI operation IDs for generated clients.
 
 | Method | Path | Intent |
 | --- | --- | --- |
 | `POST` | `/api/maintenance-issues` | Record an official issue. |
 | `GET` | `/api/maintenance-issues` | Return a filtered cursor page. |
 | `GET` | `/api/maintenance-issues/{issueId}` | Return complete issue detail and projections. |
+| `GET` | `/api/maintenance-command-receipts/{operationId}` | Return the immutable original command request/response and operation metadata. |
 | `PATCH` | `/api/maintenance-issues/{issueId}` | Edit active issue details. |
 | `POST` | `/api/maintenance-issues/{issueId}/start` | Move an open issue to in progress. |
 | `POST` | `/api/maintenance-issues/{issueId}/resolve` | Resolve with confirmation and summary. |
@@ -352,7 +373,7 @@ Every maintenance mutation and coordinated task creation writes domain rows and 
 
 General activity redacts issue descriptions, appointment instructions/outcomes, cost source notes, resolution/cancellation narratives, access details, and task notes. It may show bounded issue summary, category, priority, status, property context, appointment time, and non-sensitive lifecycle labels. Contextual issue history may reveal full operator-authorized detail.
 
-Audit snapshots contain stored domain facts, not copied file metadata or derived Finance balances. Idempotency keys and request fingerprints are never exposed or included in audit snapshots.
+Domain audit snapshots contain stored domain facts, not copied file metadata or derived Finance balances. Idempotency keys are excluded from domain snapshots. A separate `command_recorded` audit binds operation ID, action, expected/result revision, effective flag and request/response SHA-256 digests. The operator-authorized immutable receipt lookup exposes the original request and response, including sensitive narratives; it is not a general activity summary.
 
 Maintenance rows, links, related generic file links, task relations, audit events, and stable cross-module IDs participate in exact current-schema validation and encrypted backup/export/restore. Archive validation rejects missing issue parents, invalid child lifecycle pairs, cross-property space/expense links, duplicate active expense links, invalid task relation shapes, and broken correction lineage.
 
@@ -379,7 +400,7 @@ MAINT-001 backend/API scope is complete when:
 8. List/detail projections use bounded set-based queries and expose no N+1 behavior as page size or linked-record count grows.
 9. All retained maintenance records, links, task relations, evidence, audit events, and correction lineage survive encrypted backup/restore with stable IDs.
 10. Typed APIs reject unknown or malformed fields and return controlled `404`, `400`, `409`, `413`, and `422` outcomes.
-11. Retrying any create command with the same key and semantic payload returns the same resource identity and current representation without duplicate domain rows, tasks, or audit events; changed-payload key reuse returns `409`.
+11. Retrying any included issue or child command with the same key and full semantic payload returns its original immutable response before current validation, without duplicate rows, Tasks, revisions or audits. Changed-payload reuse and stale revisions return typed `409` with current issue revision. Effective commands advance the shared revision once; no-op edits persist receipts without advancing it. Receipt schema, audit evidence and replay survive encrypted restore.
 
 Overall MAINT-001 must not be marked as a finished operator workflow until `UI-001` delivers the maintenance interface and MAINT-004 delivers reporter attribution.
 
@@ -421,7 +442,7 @@ TASK-001 identifies maintenance appointments and follow-ups as consumers, but ne
 
 ### 8. Mutation retry and idempotency behavior is unspecified
 
-The backlog does not say how a client safely retries issue, appointment, cost-context, expense-link, or coordinated follow-up creation after an uncertain response. Decision: require client-generated idempotency keys for every create operation. Persist the key and request fingerprint on same-module created records; use a Maintenance-owned operation record only for coordinated follow-up creation whose TASK-001 result must be replayed. Do not add a generic workflow framework.
+The original decision covered creation fingerprints and current-representation retries only. The user approved replacing it for UI-001 command safety: all implemented source-owned issue/child mutations require keys and shared issue revision preconditions, and atomically retain immutable full original-response receipts with correlated audit evidence. This supersedes creation-only receipts and current-representation retry behavior. Existing MAINT-002/003/004 domain policies and independent Task/File ownership remain intact. Do not add a generic workflow framework. See [MAINT-001_COMMAND_READINESS.md](MAINT-001_COMMAND_READINESS.md) for exact integration and verification details.
 
 ## Dependencies and follow-on work
 

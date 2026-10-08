@@ -1,5 +1,20 @@
 # FIN-008 — Security-Deposit Receipt and Settlement
 
+## UI-001 Slice 15 command-contract amendment — October 8, 2026
+
+All account, receipt, settlement, deduction, credit, source and refund mutations
+require `expectedRevision` and a UUID `idempotencyKey`, including direct calls and
+child deletion. Account creation requires zero; all child commands share the
+account revision. Effective commands advance once; unchanged draft patches retain
+their timestamp/revision and record a no-op. Mutation responses require
+`depositAccountRevision` and `operationId`; account reads expose the current
+revision. Exact retries return the immutable original response even after a later
+transition or child deletion. Changed reuse/stale revisions return typed `409`.
+Finance's read-only command-key lookup recovers retained results. Business writes,
+revision, receipt and correlated audits are atomic and included in retained-data
+and encrypted-backup validation. Existing monetary, approval, evidence and
+replacement rules remain unchanged. See [Slice 15 readiness](FINANCE_COMMAND_READINESS.md).
+
 ## Purpose
 
 `FIN-008` gives the local operator a truthful, reviewable record of security-deposit funds received for one lease, the evidence-backed deductions and credits used in settlement, the amount due back, and the refunds actually completed. It records the operator's decision; it does not make legal determinations or move money.

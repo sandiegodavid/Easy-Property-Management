@@ -162,10 +162,58 @@ Purpose `receipt` on an expense means documentary evidence; it is not a FIN-001 
 
 ## API and read behavior
 
-- `POST /api/files` accepts one multipart upload plus required `entity_type`, `entity_id`, and `purpose` through the configured default provider. The client cannot select a storage provider.
+- `POST /api/files` accepts one multipart upload plus required `entity_type`, `entity_id`, `purpose`, and UUID `idempotency_key` through the configured default provider. The client cannot select a storage provider.
 - `GET /api/files/{fileId}` returns portable logical metadata, current provider/state information, and retained links. It never returns a usable credential or unrestricted local path.
 - `GET /api/files/{fileId}/content` verifies availability and integrity, then returns bytes using the recorded media type and a safe download name.
-- `POST /api/file-links/{linkId}/archive` requires explicit confirmation, a bounded reason, and owning-domain approval. It archives only the association.
+- `POST /api/file-links/{linkId}/archive` requires explicit confirmation, a bounded reason, `expectedRevision`, UUID `idempotencyKey`, and owning-domain approval. It archives only the association.
+
+### UI-001 command recovery
+
+Public uploads and link archival retain immutable original command results in
+`file_command_operations`, atomically with file/link changes and correlated audit
+events. The globally unique UUID key covers both command kinds. Upload fingerprints
+include the verified SHA-256, normalized name and media type, target, and purpose;
+archive fingerprints include the link, expected revision, confirmation, and reason.
+Changed reuse returns `file_command_conflict` (`409`). Replay precedes current
+target policy checks and returns the original result after subsequent archival,
+storage verification, provider changes, or restore.
+
+A link's revision is 1 while active and 2 after its irreversible archival. This
+revision belongs to the association, not its file's verification state or its
+owning aggregate. Archive checks that revision under the immediate transaction
+and returns `file_revision_conflict` (`409`) with the current link and revision.
+Same-key archive replay returns the original archive result, including its time
+and operation identity. Metadata exposes each link's current revision.
+
+`GET /api/files/commands/{operationId}` and
+`GET /api/files/commands/by-key/{idempotencyKey}` recover only committed original
+results, using one indexed read; missing receipts return `404`. Recovery never
+reads or republishes bytes. A lost upload response is reconciled through these
+reads, never automatically resubmitted. Upload results include the original
+association and `operationId`; archive results include `revision`, `updatedAt`,
+and `operationId`. A post-commit publication-release failure can therefore be
+recovered without creating duplicate logical metadata. Publication and cleanup
+remain outside SQLite's writer lock, with a second keyed check inside the metadata
+transaction to serialize racing submissions. A losing publication is rolled back.
+
+The append-only operation table contains non-null `id`, `idempotency_key`,
+`action` (`upload` or `archive_link`), `request_fingerprint`, canonical
+`request_json`, `file_id`, `link_id`, canonical `result_json`, `correlation_id`, and
+UTC `created_at`. File and link references have foreign keys. The key has a unique
+index, and update, delete, and replacement-insert triggers prevent rewriting
+receipts. Retained validation recomputes fingerprints, checks original metadata
+and associations, and requires the corresponding correlated mutation and operation
+audit events. General activity exposes only the action and timestamp; contextual
+recovery retains normalized evidence metadata, never bytes or provider locators.
+
+Caller-owned attachment batches remain part of their owning command's transaction
+and recovery receipt. Intake import recovery is provided by Intake; Inspection
+attachment recovery is gated until its report command contract is completed.
+Internal `add`, `archive_link`, and `link_existing_file` primitives do not establish
+independent OPS recoverability. No new generic linking endpoint is introduced.
+Storage verification retains its explicit page continuation and clean-versus-scan
+result semantics. It has no immutable command receipt and remains outside OPS
+unknown-outcome recovery; a resumed verification is an explicit operator action.
 
 Owning workflows may use an internal `link_existing_file` application command; there is no public generic equivalent. Normal domain evidence lists show active links. An active `missing` or `quarantined` item remains visible in its owning context with an explicit unavailable status and disabled open action. Archived links are omitted from normal evidence lists and remain available in the owning record's contextual history. `GET /api/files/{fileId}` includes active and archived link metadata. Archive reasons are visible to the local operator in contextual record and link history but remain redacted from global activity.
 

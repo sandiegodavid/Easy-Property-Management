@@ -69,10 +69,11 @@ class SQLiteMoneySummaryUnitOfWork:
 
 
 class SQLiteMoneyReadTransaction:
-    def __init__(self, connection, portfolio, leases, marker):
+    def __init__(self, connection, portfolio, leases, marker, property_scope=None):
         self.connection, self.marker = connection, marker
         self.properties = portfolio.properties()
         self.locations = leases.locations()
+        self.property_scope = property_scope
 
     def source_marker(self):
         return self.marker.marker(self.connection)
@@ -84,6 +85,9 @@ class SQLiteMoneyReadTransaction:
             if query.property_state != "all"
             else literal(True),
             p.property_id.in_(query.property_ids) if query.property_ids else literal(True),
+            p.property_id.in_(select(self.property_scope.c.property_id))
+            if self.property_scope is not None
+            else literal(True),
         )
 
     def scope(self, query):
@@ -173,35 +177,20 @@ class SQLiteMoneyReadTransaction:
             SecurityDepositSettlementModel.__table__,
         )
 
-        def projection(
-            kind,
-            source,
-            business_on,
-            amount,
-            location,
-            *,
-            lease=None,
-            space=None,
-            account=None,
-            parent=None,
-            authorization=None,
-            party=None,
-            state="active",
-        ):
+        def projection(kind, source, business_on, amount, location, **context):
+            state = context.get("state", "active")
             return select(
                 literal(kind).label("source_kind"),
                 source.c.id.label("source_id"),
                 location.c.property_id,
                 business_on.label("business_on"),
                 amount.label("amount_minor"),
-                (lease if lease is not None else literal(None)).label("lease_id"),
-                (space if space is not None else literal(None)).label("space_id"),
-                (account if account is not None else literal(None)).label("account_id"),
-                (parent if parent is not None else literal(None)).label("parent_id"),
-                (authorization if authorization is not None else literal(None)).label(
-                    "authorization_id"
+                *(
+                    (context[name] if context.get(name) is not None else literal(None)).label(
+                        name + "_id"
+                    )
+                    for name in ("lease", "space", "account", "parent", "authorization", "party")
                 ),
-                (party if party is not None else literal(None)).label("party_id"),
                 (literal(state) if isinstance(state, str) else state).label("lifecycle"),
             )
 

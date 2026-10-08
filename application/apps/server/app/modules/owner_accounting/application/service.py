@@ -1,12 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, date, datetime
-from hashlib import sha256
-from json import dumps
+from json import loads
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from app.modules.finance.application.commands import (
+    canonical_json,
+    fingerprint as command_fingerprint,
+    validate_command_concurrency,
+)
 from app.modules.finance.domain.models import (
     ReceiptAllocationCommand,
     RecordReceiptCommand,
@@ -28,28 +32,23 @@ class OwnerRentReportService:
         self.unit_of_work = unit_of_work
         self.now = now
 
-    def create(self, command: OwnerRentReportCommand):
-        fingerprint = _fingerprint(command.__dict__)
+    def create(self, command: OwnerRentReportCommand, *, expected_revision: int):
 
-        def operation(tx):
-            retry = tx.report_by_operation_key(command.idempotency_key)
-            if retry:
-                if retry["request_fingerprint"] != fingerprint:
-                    raise OwnerReportConflictError(
-                        "Idempotency key was already used for a different request."
-                    )
-                return self._view(tx, _required(tx.report(retry["report_id"])))
-            context = self._validate_claim(tx, command)
+        instant = self.now()
+        report_id = str(uuid4())
+
+        def operation(tx, correlation):
+            context = self._validate_claim(tx, command, instant)
             if command.replaces_report_id:
                 prior = _required(tx.report(command.replaces_report_id))
                 if prior.status == "pending":
                     raise OwnerReportConflictError("Only terminal reports can be replaced.")
                 if tx.replacement_exists(prior.id):
                     raise OwnerReportConflictError("Report already has a replacement.")
-            stamp = self.now().astimezone(UTC).isoformat()
+            stamp = instant.astimezone(UTC).isoformat()
             party = tx.owner_party(command.owner_party_id)
             item = OwnerRentReport(
-                str(uuid4()),
+                report_id,
                 command.lease_id,
                 context["property_id"],
                 context["space_id"],
@@ -72,48 +71,35 @@ class OwnerRentReportService:
                 command.replaces_report_id,
                 stamp,
                 stamp,
+                report_revision=1,
             )
             tx.insert_report(item)
-            correlation = str(uuid4())
-            self._operation(
-                tx,
-                {
-                    "id": str(uuid4()),
-                    "idempotency_key": command.idempotency_key,
-                    "action": "create",
-                    "report_id": item.id,
-                    "request_fingerprint": fingerprint,
-                    "result_receipt_id": None,
-                    "correlation_id": correlation,
-                    "created_at": stamp,
-                },
-            )
-            tx.record_change(
-                entity_type="owner_rent_report",
-                entity_id=item.id,
-                action="created",
-                before=None,
-                after=item.to_dict(),
-                reason="Owner rent report recorded.",
-                correlation_id=correlation,
-            )
             return self._view(tx, item)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="create",
+            report_id=report_id,
+            key=command.idempotency_key,
+            expected_revision=expected_revision,
+            payload=asdict(command),
+            instant=instant,
+        )
 
-    def patch(self, report_id: str, values: dict[str, object], idempotency_key: str):
+    def patch(
+        self,
+        report_id: str,
+        values: dict[str, object],
+        idempotency_key: str,
+        *,
+        expected_revision: int,
+    ):
         # Patches reuse create's validation by applying a complete claim command.
-        def operation(tx):
+        instant = self.now()
+
+        def operation(tx, correlation):
             old = _required(tx.report(report_id))
             key = str(idempotency_key)
-            fingerprint = _fingerprint({"report_id": report_id, "values": values})
-            retry = tx.report_by_operation_key(key)
-            if retry:
-                if retry["request_fingerprint"] != fingerprint:
-                    raise OwnerReportConflictError(
-                        "Idempotency key was already used for a different request."
-                    )
-                return self._view(tx, _required(tx.report(retry["report_id"])))
             if old.status != "pending":
                 raise OwnerReportConflictError("Only pending reports can be changed.")
             allowed = {
@@ -144,9 +130,9 @@ class OwnerRentReportService:
                 values.get("other_payment_method_note", old.other_payment_method_note),
                 values.get("source_note", old.source_note),
             )
-            context = self._validate_claim(tx, command)
+            context = self._validate_claim(tx, command, instant)
             party = tx.owner_party(command.owner_party_id)
-            stamp = self.now().astimezone(UTC).isoformat()
+            stamp = instant.astimezone(UTC).isoformat()
             item = replace(
                 old,
                 property_id=context["property_id"],
@@ -164,46 +150,41 @@ class OwnerRentReportService:
                 source_note=command.source_note,
                 updated_at=stamp,
             )
+            if all(
+                value == getattr(old, name)
+                for name, value in asdict(item).items()
+                if name != "updated_at"
+            ):
+                return self._view(tx, old)
             tx.replace_report(item)
-            correlation = str(uuid4())
-            self._operation(
-                tx,
-                {
-                    "id": str(uuid4()),
-                    "idempotency_key": key,
-                    "action": "patch",
-                    "report_id": item.id,
-                    "request_fingerprint": fingerprint,
-                    "result_receipt_id": None,
-                    "correlation_id": correlation,
-                    "created_at": stamp,
-                },
-            )
-            tx.record_change(
-                entity_type="owner_rent_report",
-                entity_id=item.id,
-                action="patched",
-                before=old.to_dict(),
-                after=item.to_dict(),
-                reason="Pending owner rent report corrected.",
-                correlation_id=correlation,
-            )
             return self._view(tx, item)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="patch",
+            report_id=report_id,
+            key=idempotency_key,
+            expected_revision=expected_revision,
+            payload={"values": values},
+            instant=instant,
+        )
 
-    def verify(self, report_id: str, command: VerifyOwnerRentReportCommand, idempotency_key: str):
-        fingerprint = _fingerprint({"report_id": report_id, **command.__dict__})
+    def verify(
+        self,
+        report_id: str,
+        command: VerifyOwnerRentReportCommand,
+        idempotency_key: str,
+        *,
+        expected_revision: int,
+        expected_ledger_revision: int,
+    ):
+        validate_command_concurrency(expected_ledger_revision, idempotency_key)
 
-        def operation(tx):
-            retry = tx.report_by_operation_key(idempotency_key)
-            if retry:
-                if retry["request_fingerprint"] != fingerprint:
-                    raise OwnerReportConflictError(
-                        "Idempotency key was already used for a different request."
-                    )
-                return self._view(tx, _required(tx.report(retry["report_id"])))
+        instant = self.now()
+
+        def operation(tx, correlation):
             report = _required(tx.report(report_id))
+            tx.require_ledger_revision(report.lease_id, expected_ledger_revision)
             if report.status != "pending":
                 raise OwnerReportConflictError("Only pending reports can be verified.")
             if not tx.has_evidence(report.id):
@@ -214,7 +195,6 @@ class OwnerRentReportService:
                 raise OwnerReportConflictError(
                     "Owner was not a client owner on the claimed receipt date."
                 )
-            correlation = str(uuid4())
             if command.existing_receipt_id:
                 receipt = tx.receipt(command.existing_receipt_id)
                 if receipt is None:
@@ -260,7 +240,8 @@ class OwnerRentReportService:
                 self._validate_replacement_request(tx, report, command)
                 recorded = tx.record_receipt(
                     receipt_command,
-                    now=self.now,
+                    now=lambda: instant,
+                    expected_revision=expected_ledger_revision,
                     correlation_id=correlation,
                     audit_reason="Owner rent report verified.",
                     duplicate_conflict=lambda candidates: OwnerReportConflictError(
@@ -283,7 +264,7 @@ class OwnerRentReportService:
                     or sum(row["amount_minor"] for row in allocations) != report.amount_minor
                 ):
                     raise OwnerReportConflictError("Created receipt allocations are not valid.")
-            stamp = self.now().astimezone(UTC).isoformat()
+            stamp = instant.astimezone(UTC).isoformat()
             item = replace(
                 report,
                 status="verified",
@@ -293,53 +274,39 @@ class OwnerRentReportService:
                 updated_at=stamp,
             )
             tx.replace_report(item)
-            self._operation(
-                tx,
-                {
-                    "id": str(uuid4()),
-                    "idempotency_key": idempotency_key,
-                    "action": "verify",
-                    "report_id": item.id,
-                    "request_fingerprint": fingerprint,
-                    "result_receipt_id": receipt.id,
-                    "receipt_created": command.existing_receipt_id is None,
-                    "correlation_id": correlation,
-                    "created_at": stamp,
-                },
-            )
-            after = item.to_dict()
-            after["verificationEvidence"] = [
-                {"linkId": link.id, "fileId": link.file_id, "active": True, "available": True}
-                for link in tx.available_evidence_links(item.id)
-            ]
-            tx.record_change(
-                entity_type="owner_rent_report",
-                entity_id=item.id,
-                action="verified",
-                before=report.to_dict(),
-                after=after,
-                reason="Owner rent report verified.",
-                correlation_id=correlation,
-            )
-            return self._view(tx, item)
+            return {
+                **self._view(tx, item),
+                "rentLedgerRevision": expected_ledger_revision
+                + int(command.existing_receipt_id is None),
+            }
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="verify",
+            report_id=report_id,
+            key=idempotency_key,
+            expected_revision=expected_revision,
+            payload=asdict(command) | {"expected_ledger_revision": expected_ledger_revision},
+            instant=instant,
+            receipt_created=command.existing_receipt_id is None,
+        )
 
-    def reject(self, report_id: str, command: RejectOwnerRentReportCommand, idempotency_key: str):
-        fingerprint = _fingerprint({"report_id": report_id, **command.__dict__})
+    def reject(
+        self,
+        report_id: str,
+        command: RejectOwnerRentReportCommand,
+        idempotency_key: str,
+        *,
+        expected_revision: int,
+    ):
 
-        def operation(tx):
-            retry = tx.report_by_operation_key(idempotency_key)
-            if retry:
-                if retry["request_fingerprint"] != fingerprint:
-                    raise OwnerReportConflictError(
-                        "Idempotency key was already used for a different request."
-                    )
-                return self._view(tx, _required(tx.report(retry["report_id"])))
+        instant = self.now()
+
+        def operation(tx, correlation):
             report = _required(tx.report(report_id))
             if report.status != "pending":
                 raise OwnerReportConflictError("Only pending reports can be rejected.")
-            stamp = self.now().astimezone(UTC).isoformat()
+            stamp = instant.astimezone(UTC).isoformat()
             item = replace(
                 report,
                 status="rejected",
@@ -347,33 +314,131 @@ class OwnerRentReportService:
                 review_note=command.reason,
                 updated_at=stamp,
             )
-            correlation = str(uuid4())
             tx.replace_report(item)
+            return self._view(tx, item)
+
+        return self._command_write(
+            operation,
+            action="reject",
+            report_id=report_id,
+            key=idempotency_key,
+            expected_revision=expected_revision,
+            payload=asdict(command),
+            instant=instant,
+        )
+
+    def _command_write(
+        self,
+        mutation,
+        *,
+        action,
+        report_id,
+        key,
+        expected_revision,
+        payload,
+        instant,
+        receipt_created=None,
+    ):
+        validate_command_concurrency(expected_revision, key)
+        if instant.tzinfo is None or instant.utcoffset() is None:
+            raise OwnerReportError("The application clock must be timezone-aware.")
+        request = canonical_json(
+            {
+                "action": action,
+                "reportId": None if action == "create" else report_id,
+                "expectedRevision": expected_revision,
+                "payload": payload,
+            }
+        )
+        request_hash = command_fingerprint(request)
+
+        def write(tx):
+            prior = tx.report_by_operation_key(key)
+            if prior is not None:
+                if prior["request_fingerprint"] != request_hash:
+                    raise OwnerReportConflictError(
+                        "Idempotency key was reused with a different request."
+                    )
+                return loads(prior["response_json"])
+            before = None if action == "create" else _required(tx.report(report_id))
+            current = 0 if before is None else before.report_revision
+            if current != expected_revision:
+                raise OwnerReportConflictError(
+                    "Owner report revision is stale.",
+                    details={"currentRevision": current, "reportId": report_id},
+                )
+            correlation = str(uuid4())
+            response = mutation(tx, correlation)
+            persisted = _required(tx.report(report_id))
+            effective = before is None or persisted != before
+            stamp = instant.astimezone(UTC).isoformat()
+            item = replace(persisted, report_revision=current + int(effective))
+            tx.replace_report(item)
+            operation_id = str(uuid4())
+            response = {
+                **response,
+                "reportRevision": item.report_revision,
+                "operationId": operation_id,
+            }
+            after = item.to_dict()
+            if action == "verify":
+                after["verificationEvidence"] = [
+                    {"linkId": link.id, "fileId": link.file_id, "active": True, "available": True}
+                    for link in tx.available_evidence_links(item.id)
+                ]
+            tx.record_change(
+                entity_type="owner_rent_report",
+                entity_id=item.id,
+                action={
+                    "create": "created",
+                    "patch": "patched",
+                    "verify": "verified",
+                    "reject": "rejected",
+                }[action],
+                before=None if before is None else before.to_dict(),
+                after=after,
+                reason="Owner rent report command committed.",
+                correlation_id=correlation,
+            )
+            result = canonical_json(response)
             self._operation(
                 tx,
                 {
-                    "id": str(uuid4()),
-                    "idempotency_key": idempotency_key,
-                    "action": "reject",
+                    "id": operation_id,
+                    "idempotency_key": key,
+                    "action": action,
                     "report_id": item.id,
-                    "request_fingerprint": fingerprint,
-                    "result_receipt_id": None,
+                    "expected_revision": current,
+                    "result_revision": item.report_revision,
+                    "effective": int(effective),
+                    "request_json": request,
+                    "request_fingerprint": request_hash,
+                    "response_json": result,
+                    "response_fingerprint": command_fingerprint(result),
+                    "result_receipt_id": item.verified_receipt_id if action == "verify" else None,
+                    "receipt_created": receipt_created,
                     "correlation_id": correlation,
                     "created_at": stamp,
                 },
             )
-            tx.record_change(
-                entity_type="owner_rent_report",
-                entity_id=item.id,
-                action="rejected",
-                before=report.to_dict(),
-                after=item.to_dict(),
-                reason="Owner rent report rejected.",
-                correlation_id=correlation,
-            )
-            return self._view(tx, item)
+            return response
 
-        return self.unit_of_work.write(operation)
+        return self.unit_of_work.write(write)
+
+    def command_operation(self, key):
+        validate_command_concurrency(0, key)
+
+        def read(tx):
+            operation = tx.report_by_operation_key(key)
+            if operation is None:
+                raise OwnerReportNotFoundError("Owner report operation was not found.")
+            return {
+                "operationId": operation["id"],
+                "reportId": operation["report_id"],
+                "result": loads(operation["response_json"]),
+            }
+
+        return self.unit_of_work.read(read)
 
     def detail(self, report_id):
         return self.unit_of_work.read(
@@ -405,19 +470,19 @@ class OwnerRentReportService:
 
         return self.unit_of_work.read(operation)
 
-    def _validate_claim(self, tx, command):
+    def _validate_claim(self, tx, command, instant):
         context = tx.lease_context(command.lease_id)
         if context is None:
             raise OwnerReportNotFoundError("Lease was not found.")
         party = tx.owner_party(command.owner_party_id)
         if party is None:
             raise OwnerReportNotFoundError("Owner party was not found.")
-        now = self.now().astimezone(ZoneInfo(context["time_zone"]))
+        now = instant.astimezone(ZoneInfo(context["time_zone"]))
         received = date.fromisoformat(command.received_on)
         if received > now.date():
             raise OwnerReportError("Received date cannot be in the future.")
         reported = datetime.fromisoformat(command.reported_at_utc).astimezone(UTC)
-        if reported > self.now().astimezone(UTC):
+        if reported > instant.astimezone(UTC):
             raise OwnerReportError("Reported time cannot be in the future.")
         if reported.astimezone(ZoneInfo(context["time_zone"])).date() < received:
             raise OwnerReportError("Reported time cannot precede the claimed receipt day.")
@@ -564,9 +629,3 @@ def _compatible(report, receipt):
             report.other_payment_method_note,
         )
     )
-
-
-def _fingerprint(value):
-    return sha256(
-        dumps(value, sort_keys=True, default=str, separators=(",", ":")).encode()
-    ).hexdigest()

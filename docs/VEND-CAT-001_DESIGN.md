@@ -146,6 +146,7 @@ Legal / Attorney follows the same provider-category model. Practice areas remain
 | `normalized_name` | Unicode-normalized, whitespace-normalized, case-folded uniqueness key. |
 | `description` | Optional operator-facing explanation, at most 1,000 characters. |
 | `display_order` | Required nonnegative integer used before normalized name and ID for deterministic ordering. It is not unique. |
+| `revision` | Exact positive integer, initially 1 including seeds; increments once per effective category command. |
 | `created_at`, `updated_at` | UTC timestamps. |
 | `archived_at`, `archive_reason` | Both null while active; both required when archived. Reason is 1–1,000 characters. |
 | `create_idempotency_key`, `create_request_fingerprint` | Required creation-operation UUID and canonical request fingerprint for safe retry. Operator/API creation uses a client-generated key; seeded rows use reserved deterministic initializer keys. |
@@ -184,13 +185,25 @@ Required transaction operations include:
 - count effective provider assignments by category; and
 - record correlated audit changes.
 
-Category create and direct provider-assignment create use persisted idempotency keys:
+All category and independent assignment commands require persisted UUID idempotency keys and canonical semantic fingerprints:
 
-- same key and same semantic fingerprint returns the same stable record's current representation with no new audit event;
-- same key and changed content returns `409 provider_category_idempotency_conflict`; and
+- same key and same semantic fingerprint returns the immutable original result before current lifecycle/revision checks, with no new audit event;
+- same key and changed content returns `409 provider_category_idempotency_conflict` for categories or `409 provider_idempotency_conflict` for assignments; and
 - normalized-name or active-pair collision under a different key returns the appropriate uniqueness conflict.
 
-Patch, archive, and restore commands are state-aware. An exact retry returns the current representation without another audit event. A semantically conflicting lifecycle request returns `409`.
+Category creation requires expected revision zero; patch/archive/restore require the positive current category revision. Seeds start at revision one. Independent assignment commands require the positive current Provider revision; assign and restore additionally require the current positive category revision. Exact integer validation rejects booleans and coercible values for direct callers and HTTP callers. Stale commands return `409` with the current category or Provider snapshot. An effective mutation advances only its owning revision once. Category archive/restore never rewrites assignments or advances Provider revisions.
+
+Under a new key, a semantic no-op patch/archive/restore records a durable receipt without changing the business timestamp/revision or emitting a business mutation audit. An archived record retried with a different reason conflicts. Under an existing key, payload, expected revision, target and action must match the original command exactly.
+
+### UI-001 Slice 26 receipt authority (approved October 9, 2026)
+
+The current greenfield baseline adds `provider_category_command_operations` with stable UUID `id`, category foreign key, action (`create`, `patch`, `archive`, `restore`), globally unique UUID `idempotency_key`, canonical `request_json`, lowercase SHA-256 `request_fingerprint`, exact integer `expected_revision` and `resulting_revision`, canonical `result_json`, correlation UUID and UTC creation timestamp. Update/delete/replace triggers make the ledger append-only. Keys are global within this category ledger; assignment operations use the separate globally keyed Provider command ledger from Slices 24–25 with actions `assignment_create`, `assignment_archive`, and `assignment_restore`.
+
+Category original results contain `category` (including its effectiveProviderCount at commit), `revision`, and `operationId`. Assignment original results contain `kind=assignment`, `item`, the raw category snapshot, the revised Provider `profile`, `revision`, and `operationId`. These snapshots exclude live Party/contact/child enrichments. Count or name changes after commit do not alter replay. Initial assignments created by the compound Provider-create command remain inside its revision-one receipt; they do not gain independent receipts or extra increments.
+
+Source writes, revision changes, original results, metadata-only receipt audits and contextual mutation audits commit in one immediate transaction. Required audit or receipt failure rolls back everything. `GET /api/provider-categories/operations/{operationId}` and `/operations/by-key/{key}` recover category results with one indexed read; assignments use the existing Provider recovery endpoints. Recovery is read-only. Request/response/conflict models are typed and operation IDs stable; no OPS registration or consequential browser control is enabled here.
+
+Exact current-schema validation includes both ledgers and immutability trigger bodies. Retained-data validation reconstructs category histories from registered seed origins, validates canonical requests and fingerprints, revision lineage/tips, original effective counts, assignment ownership and category freshness, and correlated receipt/mutation evidence. Backup/restore retains and validates these rows and original results. This replaces the former current-representation retry semantics, with no compatibility migration.
 
 Provider creation and DATA-002 provider intake may supply zero or more category IDs. Provider profile creation and initial category assignments commit in the same immediate transaction. Initial assignment identities are derived within that owning create operation rather than accepted as separate client operations. An invalid, archived, or duplicate category rejects the whole provider operation; no partially categorized provider is created. This feature does not otherwise redesign VEND-001 provider-create retry behavior.
 
@@ -295,7 +308,7 @@ Legal / Attorney appears as a category. An attorney's practice areas appear unde
 | --- | --- |
 | Happy paths | Seed catalog exists; create/rename/reorder/archive/restore category; assign several categories; archive/restore one assignment; create provider with initial categories; filter/search and Uncategorized behavior. |
 | Invalid combinations | Blank/oversized names; duplicate normalized active names; invalid order; unknown/archived provider or category; duplicate active assignment; mismatched provider/assignment path; restore conflicts; false confirmation; missing archive reason; unknown request fields; oversized content returns 413. |
-| Idempotency and retry | Category-create and assignment-create same-key replay; changed-key fingerprint conflict; lost-response replay; repeated no-op patch/archive/restore creates no extra rows or audit events. |
+| Idempotency and retry | All category and assignment commands replay immutable original results; changed-payload conflicts and stale revisions; concurrent same-key assignment submissions; new-key no-ops retain receipts without business timestamp/revision changes or mutation audits. |
 | Transaction rollback | Audit failure, assignment failure, seed validation failure, and provider-with-initial-categories failure roll back every business and audit row. |
 | Persistence/schema | Exact columns, nullability, checks, foreign keys, partial unique indexes, seed identities, normalized values, lifecycle pairs, idempotency fingerprints, registered audit policy, and rejection of tampered retained rows. |
 | Backup/restore | Encrypted backup/export/restore preserves category IDs, custom names/order/descriptions, archived state/reasons, assignments, seed identities, idempotency replay, and audit history. |
@@ -414,7 +427,7 @@ Adding category summaries and filters to the current unbounded list would widen 
 
 The current VEND-001 child-create routes do not provide a durable lost-response replay contract. Category creation and assignment are especially likely to collide on retry because both enforce uniqueness.
 
-**Decision:** require persisted client idempotency keys and request fingerprints for category and assignment creation. Make patch and lifecycle retries state-aware and audit-free when they are no-ops.
+**Decision:** as approved in UI-001 Slice 26, require revisions and persisted UUID keys for every category and assignment command. Replay immutable original results; record accepted new-key no-op receipts without business mutation audits.
 
 ### 15. Seed restoration and edited seed identity are unspecified
 

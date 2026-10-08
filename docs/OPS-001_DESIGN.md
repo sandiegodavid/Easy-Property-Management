@@ -61,6 +61,19 @@ An unresolved consequential attempt is supported only when the owning module sup
 durable receipt/replay contract. See [the implementation matrix](OPS-001_TEST_MATRIX.md)
 for delivered and remaining slices; this does not mark OPS-001 complete.
 
+UI-001 Slice 19 subsequently registers 43 additional schema-version-1 forms for
+Task mutations/reminders/waiting, Communications commands, Maintenance issue/child
+commands, and manual Portfolio status. The exact reviewed inventory is in
+[UI-001_IMPLEMENTATION_MATRIX.md](UI-001_IMPLEMENTATION_MATRIX.md#slice-19-explicit-ops-recovery-composition).
+Their source kinds and revisions are explicit; incomplete fields remain autosavable,
+but attempt preparation requires a complete command and derives its source-owned
+semantic fingerprint before committing the attempt. The optional supplied fingerprint
+must agree. Each source reader returns a bounded projection of the immutable original
+receipt, not current state or an entire aggregate history. Full original responses
+remain accessible through the owning receipt APIs. No source command is dispatched
+by OPS, and no browser control is enabled by registration. Lease, Finance, Intake,
+Files and Inspection forms remain outside this approved batch.
+
 ## Resolved design decisions
 
 ### 1. Operator module ownership

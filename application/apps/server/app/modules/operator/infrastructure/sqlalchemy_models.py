@@ -4,6 +4,7 @@ from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.platform.sqlalchemy_models import LocalBase
+from app.modules.operator.application.recovery_schemas import registered_schemas
 
 
 class OperatorPreferenceModel(LocalBase):
@@ -44,7 +45,7 @@ class OperatorRecoveryModel(LocalBase):
     __table_args__ = (
         CheckConstraint("length(id) = 36"),
         CheckConstraint(
-            "form_key IN ('task.create','maintenance.issue.create','communication.record')"
+            "form_key IN (" + ",".join(repr(key) for key in registered_schemas()) + ")"
         ),
         CheckConstraint("typeof(schema_version) = 'integer' AND schema_version >= 1"),
         CheckConstraint("typeof(revision) = 'integer' AND revision >= 1"),
@@ -104,12 +105,59 @@ class OperatorOperationModel(LocalBase):
     )
 
 
+class OperatorCoverageReviewModel(LocalBase):
+    __tablename__ = "operator_coverage_reviews"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    subject_kind: Mapped[str] = mapped_column(String, nullable=False)
+    subject_id: Mapped[str] = mapped_column(String, nullable=False)
+    area: Mapped[str] = mapped_column(String, nullable=False)
+    time_zone: Mapped[str] = mapped_column(String, nullable=False)
+    evidence_revision: Mapped[str] = mapped_column(String, nullable=False)
+    basis: Mapped[str] = mapped_column(String, nullable=False)
+    reason: Mapped[str] = mapped_column(String, nullable=False)
+    next_review_on: Mapped[str | None] = mapped_column(String)
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    request_json: Mapped[str] = mapped_column(String, nullable=False)
+    result_json: Mapped[str] = mapped_column(String, nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    __table_args__ = (
+        CheckConstraint(
+            "length(id) = 36 AND length(subject_id) = 36 AND length(idempotency_key) = 36 AND length(correlation_id) = 36"
+        ),
+        CheckConstraint(
+            "(area = 'maintenance' AND subject_kind = 'property') OR (area IN ('occupancy','lease','rent','deposit') AND subject_kind = 'space')"
+        ),
+        CheckConstraint("basis IN ('acknowledged','not_applicable')"),
+        CheckConstraint("length(trim(time_zone)) > 0"),
+        CheckConstraint("length(trim(reason)) BETWEEN 1 AND 1000"),
+        CheckConstraint(
+            "length(evidence_revision) = 64 AND evidence_revision NOT GLOB '*[^0-9a-f]*'"
+        ),
+        CheckConstraint(
+            "length(request_fingerprint) = 64 AND request_fingerprint NOT GLOB '*[^0-9a-f]*'"
+        ),
+        CheckConstraint("json_valid(request_json) AND json_type(request_json) = 'object'"),
+        CheckConstraint("json_valid(result_json) AND json_type(result_json) = 'object'"),
+        Index(
+            "operator_coverage_subject_time",
+            "subject_kind",
+            "subject_id",
+            "area",
+            "created_at",
+            "id",
+        ),
+    )
+
+
 MODELS = (
     OperatorPreferenceModel,
     OperatorRecoveryModel,
     OperatorOperationModel,
+    OperatorCoverageReviewModel,
 )
-APPEND_ONLY = ("operator_operations",)
+APPEND_ONLY = ("operator_operations", "operator_coverage_reviews")
 
 
 def trigger_sql(table, action):

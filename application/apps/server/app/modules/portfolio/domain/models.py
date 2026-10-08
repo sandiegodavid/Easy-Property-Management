@@ -26,6 +26,7 @@ class Property:
     archived_at: str | None
     property_type: str
     inventory_layout: str
+    property_revision: int = 1
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -45,6 +46,7 @@ class Property:
             "archivedAt": self.archived_at,
             "propertyType": self.property_type,
             "inventoryLayout": self.inventory_layout,
+            "propertyRevision": self.property_revision,
         }
 
 

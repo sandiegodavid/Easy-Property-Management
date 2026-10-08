@@ -11,9 +11,11 @@ from sqlalchemy import inspect, text
 from app.modules.files.application.errors import normalize_filename, normalize_media_type
 from app.modules.files.application.ports import FileLink
 from app.platform.migration_errors import MigrationSchemaError
+from app.modules.files.infrastructure.command_validation import validate_file_commands
 
 
 def validate_file_schema(connection) -> None:
+    validate_file_commands(connection)
     inspector = inspect(connection)
     expected = {
         "file_records": {

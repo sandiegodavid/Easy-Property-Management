@@ -19,6 +19,7 @@ def validate_tenant_schema(connection) -> None:
             "created_at",
             "updated_at",
             "archived_at",
+            "revision",
         },
         "party_contact_methods": {
             "id",
@@ -52,7 +53,7 @@ def validate_tenant_schema(connection) -> None:
                 item["name"] in nullable[table]
             ):
                 raise MigrationSchemaError("TEN-001 schema is incompatible.")
-            if item["name"] == "do_not_contact":
+            if item["name"] in {"do_not_contact", "revision"}:
                 if "INT" not in str(item["type"]).upper():
                     raise MigrationSchemaError("TEN-001 schema is incompatible.")
             elif (
@@ -99,7 +100,7 @@ def validate_tenant_schema(connection) -> None:
         for table in expected
     }
     if checks != {
-        "tenant_profiles": {"do_not_contactin(0,1)"},
+        "tenant_profiles": {"do_not_contactin(0,1)", "typeof(revision)='integer'andrevision>=1"},
         "party_contact_methods": {
             "method_kindin('email','phone')",
             "statusin('active','archived')",
@@ -119,6 +120,9 @@ def validate_tenant_schema(connection) -> None:
         or normalized_index.partition("where")[2] != "status='active'"
     ):
         raise MigrationSchemaError("TEN-001 partial-index predicate is incompatible.")
+    from app.modules.tenants.infrastructure.command_validation import validate_commands
+
+    validate_commands(connection)
 
 
 def _normalise_sql(value: str) -> str:

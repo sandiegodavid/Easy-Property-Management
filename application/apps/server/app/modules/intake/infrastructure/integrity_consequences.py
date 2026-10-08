@@ -95,6 +95,7 @@ class SQLiteIntakeIntegrityConsequences:
                     "technical_status": target,
                     "failure_code": code,
                     "updated_at": now,
+                    "source_revision": source["source_revision"] + 1,
                 },
             )
             transaction.insert_operation(

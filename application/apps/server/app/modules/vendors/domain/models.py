@@ -16,6 +16,7 @@ class ProviderCategory:
     archive_reason: str | None
     create_idempotency_key: str
     create_request_fingerprint: str
+    revision: int = 1
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -28,6 +29,7 @@ class ProviderCategory:
             "updatedAt": self.updated_at,
             "archivedAt": self.archived_at,
             "archiveReason": self.archive_reason,
+            "revision": self.revision,
         }
 
 
@@ -64,11 +66,13 @@ class ProviderProfile:
     created_at: str
     updated_at: str
     archived_at: str | None
+    revision: int = 1
 
     def to_dict(self) -> dict[str, object]:
         return {
             "partyId": self.party_id,
             "selectionStatus": self.selection_status,
+            "revision": self.revision,
             "selectionReason": self.selection_reason,
             "notes": self.notes,
             "createdAt": self.created_at,

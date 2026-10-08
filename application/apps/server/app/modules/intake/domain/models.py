@@ -53,6 +53,16 @@ class IntakeNotFoundError(IntakeError):
     code = "intake_not_found"
 
 
+class IntakeRevisionConflictError(IntakeConflictError):
+    """Only non-sensitive concurrency facts cross the API error boundary."""
+
+    def __init__(self, source, code: str = "intake_revision_conflict") -> None:
+        super().__init__("Intake source changed concurrently.", code)
+        self.current_revision = source["source_revision"]
+        self.current_evidence_revision_id = source["current_revision_id"]
+        self.current_attention_status = source["attention_status"]
+
+
 class IntakeReadLimitError(IntakeError):
     code = "intake_read_limit"
 
@@ -122,6 +132,7 @@ class AttentionTransition:
     reason: str
     idempotency_key: str
     expected_revision: str
+    expected_source_revision: int
     expected_status: str
     correlation_id: str
     actor_kind: str = "local_operator"
@@ -131,6 +142,7 @@ class AttentionTransition:
         uuid(self.source_id, "sourceId")
         uuid(self.idempotency_key, "idempotencyKey")
         uuid(self.expected_revision, "expectedRevision")
+        source_revision(self.expected_source_revision)
         uuid(self.correlation_id, "correlationId")
         if self.target not in {"unprocessed", "in_review", "resolved", "dismissed"}:
             raise IntakeError("attention status is invalid.")
@@ -151,6 +163,12 @@ class AttentionTransition:
             object.__setattr__(
                 self, "actor_reference", bounded(self.actor_reference, "actorReference", 500)
             )
+
+
+def source_revision(value: object) -> int:
+    if type(value) is not int or value < 1:
+        raise IntakeError("expectedSourceRevision must be a positive integer.")
+    return value
 
 
 def utc_now() -> str:

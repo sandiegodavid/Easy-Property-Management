@@ -15,7 +15,11 @@ from app.modules.parties.application.ports import (
 )
 from app.modules.parties.domain.contact_values import contact_search_terms, like_contains_pattern
 from app.modules.parties.domain.models import Party, PartyContactMethod
-from app.modules.parties.infrastructure.sqlalchemy_models import PartyContactMethodModel, PartyModel
+from app.modules.parties.infrastructure.sqlalchemy_models import (
+    PartyContactMethodModel,
+    PartyModel,
+    PartyCommandOperationModel,
+)
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 Result = TypeVar("Result")
@@ -57,6 +61,17 @@ class SQLitePartyUnitOfWork:
                 .all()
             )
             return _party(party), [_method(item) for item in methods]
+
+    def operation(self, *, operation_id=None, key=None):
+        table = PartyCommandOperationModel.__table__
+        predicate = (
+            table.c.id == operation_id
+            if operation_id is not None
+            else table.c.idempotency_key == key
+        )
+        with self.engine.connect() as connection:
+            row = connection.execute(table.select().where(predicate)).mappings().first()
+            return dict(row) if row else None
 
 
 class SQLitePartyOperations(PartyTransactionOperations):
@@ -214,6 +229,21 @@ class _Transaction:
         self.recorder = recorder
         self.guards = guards
         self.role_guards = role_guards
+
+    def operation_by_key(self, key):
+        row = (
+            self.connection.execute(
+                PartyCommandOperationModel.__table__.select().where(
+                    PartyCommandOperationModel.idempotency_key == key
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return dict(row) if row else None
+
+    def insert_operation(self, operation):
+        self.connection.execute(PartyCommandOperationModel.__table__.insert().values(**operation))
 
     def party(self, party_id):
         row = (

@@ -116,7 +116,9 @@ class SQLiteCommunicationContextOperations:
                 .where(LeaseRenewalOptionModel.id == entity_id),
                 "renewal option",
             ),
-            "task": lambda: _existing_link(connection, TaskModel.id, entity_id, "task"),
+            "task": lambda: _existing_link(
+                connection, TaskModel.id, entity_id, "task", TaskModel.deleted_at_utc.is_(None)
+            ),
             "maintenance_issue": lambda: _one_zone(
                 connection,
                 select(MaintenanceIssueModel.reported_timezone).where(
@@ -206,6 +208,7 @@ class SQLiteCommunicationContextOperations:
             .where(
                 TaskModel.related_entity_type == "communication",
                 TaskModel.related_entity_id == communication_id,
+                TaskModel.deleted_at_utc.is_(None),
             )
             .order_by(TaskModel.created_at_utc)
         ).mappings()
@@ -233,6 +236,7 @@ class SQLiteCommunicationContextOperations:
                 select(TaskModel.related_entity_id).where(
                     TaskModel.related_entity_type == "communication",
                     TaskModel.status == status,
+                    TaskModel.deleted_at_utc.is_(None),
                     TaskModel.related_entity_id.in_(communication_ids),
                 )
             ).scalars()
@@ -268,8 +272,12 @@ def _property_zone(connection: Any, property_id: str) -> str:
     return result
 
 
-def _existing_link(connection: Any, entity_id_column: Any, entity_id: str, label: str) -> None:
+def _existing_link(
+    connection: Any, entity_id_column: Any, entity_id: str, label: str, predicate=None
+) -> None:
     query = select(entity_id_column).where(entity_id_column == entity_id)
+    if predicate is not None:
+        query = query.where(predicate)
     if connection.execute(query).scalar_one_or_none() is None:
         raise KeyError(f"Linked {label} was not found.")
 

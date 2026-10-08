@@ -61,6 +61,62 @@ The lease detail should prompt for a pre-move-in walkthrough before occupancy an
 
 ## Data model
 
+### UI-001 command recovery (Slice 18)
+
+Inspection commands use one Inspection-owned revision per lease, independent of
+Lease and Space revisions. Report creation/correction, report edits, checklist
+replacement (including observations), acknowledgments, evidence attachment,
+finalization/supersession and comparison review all require an exact non-negative
+`expectedRevision` and UUID `idempotencyKey`. Checklist-template creation and edits
+use independent per-template revisions; creation expects zero. Each accepted new
+command, including a no-op, advances its scope once. Correction finalization
+updates both reports but advances the Inspection revision only once. Business
+lifecycle rules are unchanged. FILE-001 association archival retains its separate
+association revision and draft-only Inspection policy; it is not a standalone
+Inspection command.
+
+The greenfield baseline includes append-only `inspection_command_operations`:
+UUID operation/key/correlation identities, action, canonical request JSON and
+SHA-256 fingerprint, exactly one lease/template reference, committed revision,
+canonical original response JSON, and UTC creation time. Unique indexes prevent
+key reuse and duplicate scope revisions; update, delete and replacement triggers
+protect the history. A globally keyed replay is checked before scope resolution
+and lifecycle validation. Same-key identical requests return the original result,
+even after editing, finalization or supersession; changed reuse returns 409.
+Stale commands return 409 with the current scope/revision and, for report/template
+edits, the current representation. Receipt, domain writes and correlated audit
+events commit together. General activity reveals only action, revision and time,
+not retained requests, original responses, notes or evidence identifiers.
+
+All mutation responses require `revision` and `operationId`; comparison review
+returns `{comparisons, revision, operationId}` rather than a bare array. Read
+representations expose their current revision. Read-only bounded recovery is
+available through `GET /api/inspection-commands/{operationId}` and
+`GET /api/inspection-commands/by-key/{idempotencyKey}` and returns `{result}`.
+Lookup never repeats publication or reconstructs a result from current records.
+Attachment fingerprints include verified bytes and normalized immutable metadata;
+published content must match that fingerprint. Caller-owned FILE-001 batches stay
+reachable through database commit and roll back publication on audit/commit
+failure. Post-commit release failures retain recoverable committed receipts.
+
+Current-schema, archive and restore validation include the exact command table,
+immutability triggers, contiguous scope revisions, canonical identities,
+recomputed fingerprints, original response metadata and correlated operation
+audits. Portable archives retain the complete original receipt snapshots.
+No compatibility migration, OPS form or consequential browser control is added.
+
+Focused validation matrix:
+
+| Area | Proof |
+| --- | --- |
+| Happy paths | SQLite report/template edits, child acknowledgments, attachment, finalization, correction and comparison review |
+| Invalid combinations | Missing HTTP concurrency fields, malformed direct keys/revisions, changed key reuse, stale current-state conflict and existing draft-only rules |
+| Retry | Original report/template and attachment replay; finalization replay after supersession; comparison replay after report replacement; racing duplicate creation |
+| Rollback | Receipt-audit failure and database-commit failure remove file records, receipt and newly published bytes |
+| Persistence | Exact table/index/check/trigger validation, protected immutable writes, receipt/audit correlation tampering rejection |
+| Backup/restore | Encrypted round trip preserves report/template/attachment/comparison receipts and original responses with stable evidence identities |
+| Query budget | ID/key recovery uses one indexed SELECT; shared lease revisions are projected once per report list rather than once per report |
+
 All IDs are UUIDs. Timestamps are timezone-aware UTC text. Walkthrough dates are local calendar dates.
 
 ### `condition_reports`

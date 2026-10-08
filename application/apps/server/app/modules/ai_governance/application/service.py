@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from types import MappingProxyType
 from typing import Any, Callable, Mapping
 from uuid import uuid4
+from app.modules.ai_governance.application.commands import (
+    AiCommand,
+    execute_command,
+    replay_command,
+    record_command,
+    read_command_replay,
+    require_revision,
+)
 
 from app.modules.ai_governance.application.ports import (
     AiApprovalContext,
@@ -982,11 +990,14 @@ class AiConfigurationService:
             "builtInEnabled": bool(row["built_in_enabled"]),
             "defaultConnectionId": row["default_connection_id"],
             "updatedAt": row["updated_at"],
+            "revision": row["revision"],
         }
 
-    def _connection_view(self, row):
+    def _connection_view(self, row, credential_present=_UNSET):
         present = False
-        if self.credentials is not None:
+        if credential_present is not _UNSET:
+            present = credential_present
+        elif self.credentials is not None:
             try:
                 present = self.credentials.get_credential(self.workspace_id, row["id"]) is not None
             except Exception:
@@ -1004,6 +1015,10 @@ class AiConfigurationService:
             "disclosureVersion": row["disclosure_version"],
             "disclosureAcceptedAt": row["disclosure_accepted_at"],
             "credentialPresent": present,
+            "modelArtifactDigest": row["model_artifact_digest"],
+            "quantization": row["quantization"],
+            "runtimeId": row["runtime_id"],
+            "runtimeVersion": row["runtime_version"],
             "createdAt": row["created_at"],
             "updatedAt": row["updated_at"],
         }
@@ -1019,11 +1034,22 @@ class AiConfigurationService:
             "maxCompletionTokens": x["max_completion_tokens"],
             "allowedModels": json.loads(x["allowed_models"]),
             "updatedAt": None if o is None else o["updated_at"],
+            "revision": 0 if o is None else o["revision"],
         }
 
-    def _audit(self, tx, entity_type, entity_id, action, before, after, correlation):
+    def _audit(
+        self, tx, entity_type, entity_id, action, before, after, correlation, *, event_id=None
+    ):
         _record_audit(
-            tx, entity_type, entity_id, action, before, after, correlation, "local_operator"
+            tx,
+            entity_type,
+            entity_id,
+            action,
+            before,
+            after,
+            correlation,
+            "local_operator",
+            event_id=event_id,
         )
 
     @staticmethod
@@ -1079,14 +1105,13 @@ class AiConfigurationService:
         kill_switch=None,
         built_in_enabled=None,
         default_connection_id=_UNSET,
-        idempotency_key=None,
+        idempotency_key,
+        expected_revision,
     ):
         if kill_switch is not None and type(kill_switch) is not bool:
             raise AiValidationError("killSwitch must be a boolean.")
         if built_in_enabled is not None and type(built_in_enabled) is not bool:
             raise AiValidationError("builtInEnabled must be a boolean.")
-        if idempotency_key is not None:
-            validate_uuid(idempotency_key, "idempotencyKey")
         stamp = _utc_now(self._clock)
         requested = {
             "kill_switch": kill_switch,
@@ -1096,16 +1121,12 @@ class AiConfigurationService:
             if default_connection_id is _UNSET
             else default_connection_id,
         }
-        request_fingerprint = _settings_fingerprint(requested)
+        command = AiCommand("settings", "1", expected_revision, idempotency_key, requested)
 
         def operation(tx):
             before = tx.settings()
-            values = {"updated_at": stamp}
-            prior = None if idempotency_key is None else tx.settings_operation(idempotency_key)
-            if prior:
-                if prior["request_fingerprint"] != request_fingerprint:
-                    raise AiConflictError("ai_idempotency_conflict")
-                return json.loads(prior["result_json"])
+            require_revision(command, before["revision"], self._settings_row(before))
+            values = {}
             if kill_switch is not None:
                 values["kill_switch"] = kill_switch
             if built_in_enabled is not None:
@@ -1118,28 +1139,57 @@ class AiConfigurationService:
                     raise AiNotFoundError("AI model connection was not found.")
                 values["default_connection_id"] = default_connection_id
             after = {**before, **values}
+            changed = after != before
+            if changed:
+                values.update(revision=before["revision"] + 1, updated_at=stamp)
+                after.update(values)
             result = self._settings_row(after)
-            if idempotency_key is not None:
-                tx.insert_settings_operation(
-                    {
-                        "idempotency_key": idempotency_key,
-                        "request_fingerprint": request_fingerprint,
-                        "result_json": _settings_json(result),
-                        "created_at": stamp,
-                    }
-                )
-            tx.update_settings(values)
+            if changed:
+                tx.update_settings(values)
             _record_audit(
-                tx, "ai_settings", "1", "updated", before, after, str(uuid4()), "local_operator"
+                tx,
+                "ai_settings",
+                "1",
+                "updated",
+                before,
+                after,
+                command.correlation_id,
+                "local_operator",
+                event_id=command.operation_id,
             )
             return result
 
-        return self.unit_of_work.write(operation)
+        return self.unit_of_work.write(
+            lambda tx: execute_command(tx, command, lambda: operation(tx), stamp)
+        )
 
     def connections(self):
         return [self._connection_view(row) for row in self.unit_of_work.connection_rows()]
 
-    def create_connection(self, data):
+    def command_result(self, *, operation_id=None, idempotency_key=None):
+        return _recover_command(self.unit_of_work, operation_id, idempotency_key)
+
+    def create_connection(self, data, *, expected_revision, idempotency_key):
+        allowed = {
+            "label",
+            "adapter_id",
+            "adapter_version",
+            "model_identifier",
+            "execution_location",
+            "enabled",
+            "model_artifact_digest",
+            "quantization",
+            "runtime_id",
+            "runtime_version",
+        }
+        if set(data) - allowed or type(data.get("enabled", True)) is not bool:
+            raise AiValidationError("Invalid AI connection fields.")
+        data = {
+            **data,
+            "label": _text(data.get("label"), "Connection label", 120),
+            "enabled": data.get("enabled", True),
+        }
+        command = AiCommand("connection_create", "new", expected_revision, idempotency_key, data)
         stamp = _utc_now(self._clock)
         ident = str(uuid4())
         adapter = self.adapters.require(
@@ -1171,6 +1221,7 @@ class AiConfigurationService:
         }
 
         def operation(tx):
+            require_revision(command, 0, {})
             tx.insert_connection(row)
             _record_audit(
                 tx,
@@ -1179,14 +1230,26 @@ class AiConfigurationService:
                 "created",
                 None,
                 row,
-                str(uuid4()),
+                command.correlation_id,
                 "local_operator",
+                event_id=command.operation_id,
             )
-            return row
+            return self._connection_view(row, False)
 
-        return self._connection_view(self.unit_of_work.write(operation))
+        return self.unit_of_work.write(
+            lambda tx: execute_command(tx, command, lambda: operation(tx), stamp)
+        )
 
-    def update_connection(self, connection_id, *, expected_revision, data):
+    def update_connection(self, connection_id, *, expected_revision, idempotency_key, data):
+        command = AiCommand(
+            "connection_update", connection_id, expected_revision, idempotency_key, data
+        )
+        replay = read_command_replay(self.unit_of_work, command)
+        if replay is not None:
+            return replay
+        stamp = _utc_now(self._clock)
+        current = self.unit_of_work.connection_row(connection_id)
+        present = False if current is None else self._connection_view(current)["credentialPresent"]
         if type(expected_revision) is not int or expected_revision < 1:
             raise AiValidationError("expectedRevision must be a positive integer.")
 
@@ -1194,8 +1257,7 @@ class AiConfigurationService:
             before = tx.model_connection(connection_id)
             if not before:
                 raise AiNotFoundError("AI model connection was not found.")
-            if before["revision"] != expected_revision:
-                raise AiConflictError("ai_connection_revision_conflict")
+            require_revision(command, before["revision"], self._connection_view(before, present))
             allowed = {
                 "label",
                 "enabled",
@@ -1216,9 +1278,21 @@ class AiConfigurationService:
                 for k in ("model_artifact_digest", "quantization", "runtime_id", "runtime_version")
             ):
                 self._local_fields({**before, **values}, before["execution_location"])
+            if all(before[k] == v for k, v in values.items()):
+                self._audit(
+                    tx,
+                    "ai_model_connection",
+                    connection_id,
+                    "updated",
+                    before,
+                    before,
+                    command.correlation_id,
+                    event_id=command.operation_id,
+                )
+                return self._connection_view(before, present)
             values.update(
                 revision=before["revision"] + 1,
-                updated_at=_utc_now(self._clock),
+                updated_at=stamp,
                 cloud_data_classes="[]",
                 disclosure_version=None,
                 disclosure_accepted_at=None,
@@ -1232,14 +1306,32 @@ class AiConfigurationService:
                 "updated",
                 before,
                 after,
-                str(uuid4()),
+                command.correlation_id,
                 "local_operator",
+                event_id=command.operation_id,
             )
-            return after
+            return self._connection_view(after, present)
 
-        return self._connection_view(self.unit_of_work.write(operation))
+        return self.unit_of_work.write(
+            lambda tx: execute_command(tx, command, lambda: operation(tx), stamp)
+        )
 
-    def set_disclosure(self, connection_id, *, expected_revision, disclosure_version, data_classes):
+    def set_disclosure(
+        self, connection_id, *, expected_revision, idempotency_key, disclosure_version, data_classes
+    ):
+        command = AiCommand(
+            "disclosure",
+            connection_id,
+            expected_revision,
+            idempotency_key,
+            {"disclosureVersion": disclosure_version, "dataClasses": sorted(set(data_classes))},
+        )
+        replay = read_command_replay(self.unit_of_work, command)
+        if replay is not None:
+            return replay
+        current = self.unit_of_work.connection_row(connection_id)
+        present = False if current is None else self._connection_view(current)["credentialPresent"]
+        stamp = _utc_now(self._clock)
         if (
             not disclosure_version.strip()
             or len(disclosure_version) > 80
@@ -1251,11 +1343,9 @@ class AiConfigurationService:
             before = tx.model_connection(connection_id)
             if not before:
                 raise AiNotFoundError("AI model connection was not found.")
-            if before["revision"] != expected_revision:
-                raise AiConflictError("ai_connection_revision_conflict")
+            require_revision(command, before["revision"], self._connection_view(before, present))
             if before["execution_location"] != "cloud":
                 raise AiValidationError("Only cloud connections require disclosure.")
-            stamp = _utc_now(self._clock)
             values = {
                 "cloud_data_classes": canonical_json(sorted(set(data_classes))),
                 "disclosure_version": disclosure_version,
@@ -1263,6 +1353,21 @@ class AiConfigurationService:
                 "revision": before["revision"] + 1,
                 "updated_at": stamp,
             }
+            if (
+                before["disclosure_version"] == disclosure_version
+                and before["cloud_data_classes"] == values["cloud_data_classes"]
+            ):
+                self._audit(
+                    tx,
+                    "ai_model_connection",
+                    connection_id,
+                    "disclosure_recorded",
+                    before,
+                    before,
+                    command.correlation_id,
+                    event_id=command.operation_id,
+                )
+                return self._connection_view(before, present)
             tx.replace_connection(connection_id, values)
             after = {**before, **values}
             _record_audit(
@@ -1272,12 +1377,15 @@ class AiConfigurationService:
                 "disclosure_recorded",
                 before,
                 after,
-                str(uuid4()),
+                command.correlation_id,
                 "local_operator",
+                event_id=command.operation_id,
             )
-            return after
+            return self._connection_view(after, present)
 
-        return self._connection_view(self.unit_of_work.write(operation))
+        return self.unit_of_work.write(
+            lambda tx: execute_command(tx, command, lambda: operation(tx), stamp)
+        )
 
     def set_credential(self, connection_id, credential):
         if self.credentials is None:
@@ -1395,7 +1503,9 @@ class AiConfigurationService:
         overrides = {row["action_type"]: row for row in self.unit_of_work.action_limit_rows()}
         return [self._limit_view(x, overrides.get(x.action_type)) for x in self.actions.all()]
 
-    def put_limit(self, action_type, data):
+    def put_limit(self, action_type, data, *, expected_revision, idempotency_key):
+        command = AiCommand("limit", action_type, expected_revision, idempotency_key, data)
+        stamp = _utc_now(self._clock)
         definition = self.actions.require(action_type)
         allowed = {
             "enabled",
@@ -1410,6 +1520,9 @@ class AiConfigurationService:
 
         def operation(tx):
             old = tx.action_limit(action_type)
+            require_revision(
+                command, 0 if old is None else old["revision"], self._limit_view(definition, old)
+            )
             base = _limit_values(definition, old)
             base.update(data)
             for name, ceiling in (
@@ -1438,8 +1551,21 @@ class AiConfigurationService:
                 **base,
                 "action_type": action_type,
                 "allowed_models": canonical_json(sorted(models)),
-                "updated_at": _utc_now(self._clock),
+                "updated_at": stamp,
+                "revision": 1 if old is None else old["revision"] + 1,
             }
+            if old is not None and all(old[k] == row[k] for k in allowed):
+                self._audit(
+                    tx,
+                    "ai_action_limit",
+                    action_type,
+                    "updated",
+                    old,
+                    old,
+                    command.correlation_id,
+                    event_id=command.operation_id,
+                )
+                return self._limit_view(definition, old)
             tx.put_action_limit(row)
             _record_audit(
                 tx,
@@ -1448,12 +1574,15 @@ class AiConfigurationService:
                 "updated",
                 old,
                 row,
-                str(uuid4()),
+                command.correlation_id,
                 "local_operator",
+                event_id=command.operation_id,
             )
             return self._limit_view(definition, row)
 
-        return self.unit_of_work.write(operation)
+        return self.unit_of_work.write(
+            lambda tx: execute_command(tx, command, lambda: operation(tx), stamp)
+        )
 
 
 class AiDraftReviewService:
@@ -1538,30 +1667,36 @@ class AiDraftReviewService:
         draft_id: str,
         *,
         version: int,
+        idempotency_key: str,
         payload: Mapping[str, Any],
         operator_note: str | None = None,
     ) -> dict[str, Any]:
-        return self._decide(draft_id, version, "edited", payload, operator_note)
+        return self._decide(draft_id, version, "edited", payload, operator_note, idempotency_key)
 
     def dismiss_draft(
-        self, draft_id: str, *, version: int, operator_note: str | None = None
+        self, draft_id: str, *, version: int, idempotency_key: str, operator_note: str | None = None
     ) -> dict[str, Any]:
-        return self._decide(draft_id, version, "dismissed", None, operator_note)
+        return self._decide(draft_id, version, "dismissed", None, operator_note, idempotency_key)
 
     def approve_draft(
-        self, draft_id: str, *, version: int, operator_note: str | None = None
+        self, draft_id: str, *, version: int, idempotency_key: str, operator_note: str | None = None
     ) -> dict[str, Any]:
         if type(version) is not int or version < 1:
             raise AiValidationError("Draft version must be a positive integer.")
         if operator_note is not None:
             _text(operator_note, "Operator note", 1000)
+        command = AiCommand(
+            "approved", draft_id, version, idempotency_key, {"operatorNote": operator_note}
+        )
+        replay = read_command_replay(self.unit_of_work, command)
+        if replay is not None:
+            return replay
         row = self.unit_of_work.approval_context_row(draft_id)
         if row is None:
             raise AiNotFoundError("AI draft was not found.")
+        require_revision(command, row["version"], self._draft_view(row))
         if row["status"] not in {"proposed", "edited"}:
             raise AiConflictError("ai_draft_terminal")
-        if row["version"] != version:
-            raise AiConflictError("ai_draft_version_conflict")
         context = AiApprovalContext(
             draft_id=row["id"],
             draft_version=row["version"],
@@ -1573,34 +1708,57 @@ class AiDraftReviewService:
             source_fingerprint=row["source_fingerprint"],
             correlation_id=row["correlation_id"],
             operator_note=operator_note,
+            command=replace(command, correlation_id=row["correlation_id"]),
         )
         handler = self.approval_handlers.get(context.action_type)
         if handler is None:
             raise AiConflictError("ai_approval_unavailable")
         return dict(handler.approve(context))
 
-    def _decide(self, draft_id, version, decision, payload, note):
+    def command_result(self, *, operation_id=None, idempotency_key=None):
+        return _recover_command(self.unit_of_work, operation_id, idempotency_key)
+
+    def _decide(self, draft_id, version, decision, payload, note, idempotency_key):
         if type(version) is not int or version < 1:
             raise AiValidationError("Draft version must be a positive integer.")
         if note is not None:
             _text(note, "Operator note", 1000)
+        command = AiCommand(
+            decision, draft_id, version, idempotency_key, {"payload": payload, "operatorNote": note}
+        )
+        stamp = _utc_now(self._clock)
 
         def operation(tx):
             draft = tx.draft(draft_id)
             if not draft:
                 raise AiNotFoundError("AI draft was not found.")
+            run = tx.run(draft["run_id"])
+            require_revision(
+                command,
+                draft["version"],
+                self._draft_view(
+                    {
+                        **draft,
+                        "action_type": run["action_type"],
+                        "owning_module": run["owning_module"],
+                        "source_entity_type": run["source_entity_type"],
+                        "source_entity_id": run["source_entity_id"],
+                    }
+                ),
+            )
             if draft["status"] not in {"proposed", "edited"}:
                 raise AiConflictError("ai_draft_terminal")
-            if draft["version"] != version:
-                raise AiConflictError("ai_draft_version_conflict")
-            run = tx.run(draft["run_id"])
             definition = self.actions.require(run["action_type"])
-            stamp = _utc_now(self._clock)
             before = dict(draft)
             if decision == "edited":
                 if not isinstance(payload, Mapping):
                     raise AiValidationError("Draft payload must be an object.")
-                definition.validate_payload(payload)
+                try:
+                    definition.validate_payload(payload)
+                except ValueError as error:
+                    raise AiValidationError(
+                        "Draft payload does not match the registered schema."
+                    ) from error
                 after = {
                     **draft,
                     "draft_payload": canonical_json(
@@ -1644,6 +1802,7 @@ class AiDraftReviewService:
                 after,
                 run["correlation_id"],
                 "local_operator",
+                event_id=command.operation_id,
             )
             _record_audit(
                 tx,
@@ -1665,7 +1824,39 @@ class AiDraftReviewService:
                 }
             )
 
-        return self.unit_of_work.write(operation)
+        def write(tx):
+            prior = replay_command(tx, command)
+            if prior is not None:
+                return prior
+            draft = tx.draft(draft_id)
+            if draft is None:
+                raise AiNotFoundError("AI draft was not found.")
+            run = tx.run(draft["run_id"])
+            correlated = replace(command, correlation_id=run["correlation_id"])
+            return record_command(tx, correlated, operation(tx), stamp)
+
+        return self.unit_of_work.write(write)
+
+
+def _recover_command(unit_of_work, operation_id, idempotency_key):
+    if (operation_id is None) == (idempotency_key is None):
+        raise AiValidationError("Supply exactly one operation ID or idempotency key.")
+    identity = validate_uuid(operation_id or idempotency_key, "Command identity")
+    operation_id = identity if operation_id is not None else None
+    idempotency_key = identity if idempotency_key is not None else None
+    row = unit_of_work.command_row(operation_id=operation_id, key=idempotency_key)
+    if row is None:
+        raise AiNotFoundError("AI command operation was not found.")
+    return {
+        "id": row["id"],
+        "idempotencyKey": row["idempotency_key"],
+        "action": row["action"],
+        "targetId": row["target_id"],
+        "requestFingerprint": row["request_fingerprint"],
+        "result": json.loads(row["result_json"]),
+        "correlationId": row["correlation_id"],
+        "createdAt": row["created_at"],
+    }
 
 
 def _day(value):
@@ -1691,7 +1882,7 @@ def _limit_values(
     definition: AiActionDefinition, override: Mapping[str, Any] | None
 ) -> dict[str, Any]:
     if override is not None:
-        return dict(override)
+        return {**override, "enabled": bool(override["enabled"])}
     return {
         "enabled": definition.max_runs_per_utc_day > 0,
         "connection_id": None,
@@ -1711,6 +1902,8 @@ def _record_audit(
     after: Mapping[str, Any] | None,
     correlation: str,
     actor: str,
+    *,
+    event_id: str | None = None,
 ) -> None:
     tx.record_audit(
         entity_type=entity_type,
@@ -1720,6 +1913,7 @@ def _record_audit(
         after=ai_audit_snapshot(after),
         actor=actor,
         reason=f"ai_{action}",
+        event_id=event_id,
         correlation_id=correlation,
     )
 
@@ -1745,6 +1939,28 @@ def _draft_view(row, detail=False):
             governedInput=json.loads(row["governed_input_json"]),
             sourceRevision=row["source_revision"],
             sourceFingerprint=row["source_fingerprint"],
+            supersedesDraftId=row["supersedes_draft_id"],
+            createdAt=row["created_at"],
+            terminalAt=row["terminal_at"],
+            provenance={
+                "executionKind": row["execution_kind"],
+                "transportProvider": row["transport_provider"],
+                "adapterVersion": row["adapter_version"],
+                "modelIdentifier": row["model_identifier"],
+                "executionLocation": row["execution_location"],
+                "modelArtifactDigest": row["model_artifact_digest"],
+                "quantization": row["quantization"],
+                "runtimeId": row["runtime_id"],
+                "runtimeVersion": row["runtime_version"],
+                "promptTemplateId": row["prompt_template_id"],
+                "promptTemplateVersion": row["prompt_template_version"],
+                "outputSchemaVersion": row["output_schema_version"],
+                "redactionProfile": row["redaction_profile"],
+                "redactionProfileVersion": row["redaction_profile_version"],
+                "promptTokens": row["prompt_tokens"],
+                "completionTokens": row["completion_tokens"],
+                "correlationId": row["correlation_id"],
+            },
         )
     return result
 
@@ -1776,7 +1992,3 @@ def _provider_error_detail(error: AiProviderError) -> str:
         "ai_provider_timeout": "The AI provider timed out.",
         "ai_provider_unavailable": "The AI provider is unavailable.",
     }.get(code, "The AI provider did not complete the request.")
-
-
-def _settings_json(value):
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)

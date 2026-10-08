@@ -6,7 +6,8 @@ from datetime import UTC, datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from app.modules.maintenance.application.ports import MaintenanceUnitOfWork
+from app.modules.maintenance.application.commands import execute_command, receipt_view
+from app.modules.maintenance.application.ports import MaintenanceTransaction, MaintenanceUnitOfWork
 from app.modules.maintenance.domain.models import (
     CATEGORIES,
     PRIORITIES,
@@ -71,18 +72,17 @@ class MaintenanceService:
     def __init__(self, unit_of_work: MaintenanceUnitOfWork):
         self.unit_of_work = unit_of_work
 
-    def create_issue(self, command: IssueCreate, idempotency_key: str):
-        uuid(idempotency_key, "idempotencyKey")
-        fp = fingerprint("issue", command)
-
+    def create_issue(
+        self,
+        command: IssueCreate,
+        idempotency_key: str,
+        *,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
+    ):
         def op(tx):
-            existing = tx.issue_by_key(idempotency_key)
-            if existing:
-                if existing["request_fingerprint"] != fp:
-                    raise MaintenanceConflictError(
-                        "Idempotency key payload changed.", "idempotency_conflict"
-                    )
-                return self._detail(tx, existing["id"])
+            uuid(idempotency_key, "idempotencyKey")
+            fp = fingerprint("issue", command)
             context = tx.issue_context(command.property_id, command.space_id)
             if not context:
                 raise MaintenanceNotFoundError("Property or space was not found.")
@@ -103,6 +103,7 @@ class MaintenanceService:
             now = _stamp()
             item = {
                 "id": str(uuid4()),
+                "revision": 1,
                 "property_id": command.property_id,
                 "space_id": command.space_id,
                 "summary": command.summary,
@@ -134,9 +135,27 @@ class MaintenanceService:
             )
             return self._detail(tx, item["id"])
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="create_issue",
+            target_kind="issue",
+            target_id=None,
+            payload={"command": command},
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
-    def patch_issue(self, issue_id, values):
+    def patch_issue(
+        self,
+        issue_id,
+        values,
+        *,
+        idempotency_key: str,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
+    ):
         def op(tx):
             old = self._require(tx.issue, issue_id, "Issue")
             if old["status"] not in {"open", "in_progress"}:
@@ -174,9 +193,27 @@ class MaintenanceService:
             )
             return self._detail(tx, issue_id)
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="patch_issue",
+            target_kind="issue",
+            target_id=issue_id,
+            payload={"issue_id": issue_id, "values": values},
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
-    def correct_reporter(self, issue_id, command: ReporterCorrection):
+    def correct_reporter(
+        self,
+        issue_id,
+        command: ReporterCorrection,
+        *,
+        idempotency_key: str,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
+    ):
         def op(tx):
             old = self._require(tx.issue, issue_id, "Issue")
             replacement = self._validated_reporter(
@@ -210,17 +247,37 @@ class MaintenanceService:
             )
             return self._detail(tx, issue_id)
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="correct_reporter",
+            target_kind="issue",
+            target_id=issue_id,
+            payload={"issue_id": issue_id, "command": command},
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
-    def transition(self, issue_id, action, reason=None, confirmed=None):
-        if action in {"resolve", "cancel", "reopen"}:
-            if type(confirmed) is not bool or not confirmed:
-                raise MaintenanceError("Explicit confirmation is required.")
-            reason = maintenance_text(reason, "reason", 1000, required=True)
-        elif action not in {"start", "return_to_open"}:
-            raise MaintenanceError("Transition is invalid.")
-
+    def transition(
+        self,
+        issue_id,
+        action,
+        reason=None,
+        confirmed=None,
+        *,
+        idempotency_key: str,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
+    ):
         def op(tx):
+            nonlocal reason
+            if action in {"resolve", "cancel", "reopen"}:
+                if type(confirmed) is not bool or not confirmed:
+                    raise MaintenanceError("Explicit confirmation is required.")
+                reason = maintenance_text(reason, "reason", 1000, required=True)
+            elif action not in {"start", "return_to_open"}:
+                raise MaintenanceError("Transition is invalid.")
             old = self._require(tx.issue, issue_id, "Issue")
             if action == "start" and old["status"] != "open":
                 raise MaintenanceConflictError("Issue cannot be started.")
@@ -282,20 +339,35 @@ class MaintenanceService:
             )
             return self._detail(tx, issue_id)
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="transition",
+            target_kind="issue",
+            target_id=issue_id,
+            payload={
+                "issue_id": issue_id,
+                "action": action,
+                "reason": reason,
+                "confirmed": confirmed,
+            },
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
-    def create_appointment(self, issue_id, command: AppointmentCreate, idempotency_key):
-        uuid(idempotency_key, "idempotencyKey")
-        fp = fingerprint("appointment", {"issueId": issue_id, "command": command.__dict__})
-
+    def create_appointment(
+        self,
+        issue_id,
+        command: AppointmentCreate,
+        idempotency_key,
+        *,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
+    ):
         def op(tx):
-            prior = tx.appointment_by_key(idempotency_key)
-            if prior:
-                if prior["request_fingerprint"] != fp:
-                    raise MaintenanceConflictError(
-                        "Idempotency key payload changed.", "idempotency_conflict"
-                    )
-                return _dict(dict(prior))
+            uuid(idempotency_key, "idempotencyKey")
+            fp = fingerprint("appointment", {"issueId": issue_id, "command": command.__dict__})
             issue = self._require(tx.issue, issue_id, "Issue")
             context = tx.issue_context(issue["property_id"], issue["space_id"])
             if (
@@ -338,20 +410,30 @@ class MaintenanceService:
             )
             return _dict(item)
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="create_appointment",
+            target_kind="issue",
+            target_id=issue_id,
+            payload={"issue_id": issue_id, "command": command},
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
-    def create_cost(self, issue_id, command: CostCreate, idempotency_key):
-        uuid(idempotency_key, "idempotencyKey")
-        fp = fingerprint("cost", {"issueId": issue_id, "command": command.__dict__})
-
+    def create_cost(
+        self,
+        issue_id,
+        command: CostCreate,
+        idempotency_key,
+        *,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
+    ):
         def op(tx):
-            prior = tx.cost_context_by_key(idempotency_key)
-            if prior:
-                if prior["request_fingerprint"] != fp:
-                    raise MaintenanceConflictError(
-                        "Idempotency key payload changed.", "idempotency_conflict"
-                    )
-                return _dict(dict(prior))
+            uuid(idempotency_key, "idempotencyKey")
+            fp = fingerprint("cost", {"issueId": issue_id, "command": command.__dict__})
             self._require(tx.issue, issue_id, "Issue")
             if command.replaces_cost_context_id:
                 replaced = self._require(
@@ -394,21 +476,31 @@ class MaintenanceService:
             )
             return _dict(item)
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="create_cost",
+            target_kind="issue",
+            target_id=issue_id,
+            payload={"issue_id": issue_id, "command": command},
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
-    def link_expense(self, issue_id, expense_id, idempotency_key):
-        uuid(expense_id, "expenseId")
-        uuid(idempotency_key, "idempotencyKey")
-        fp = fingerprint("expense_link", {"issue": issue_id, "expense": expense_id})
-
+    def link_expense(
+        self,
+        issue_id,
+        expense_id,
+        idempotency_key,
+        *,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
+    ):
         def op(tx):
-            prior = tx.expense_link_by_key(idempotency_key)
-            if prior:
-                if prior["request_fingerprint"] != fp:
-                    raise MaintenanceConflictError(
-                        "Idempotency key payload changed.", "idempotency_conflict"
-                    )
-                return _dict(dict(prior))
+            uuid(expense_id, "expenseId")
+            uuid(idempotency_key, "idempotencyKey")
+            fp = fingerprint("expense_link", {"issue": issue_id, "expense": expense_id})
             issue = self._require(tx.issue, issue_id, "Issue")
             expense = tx.expense(expense_id)
             if not expense:
@@ -445,10 +537,27 @@ class MaintenanceService:
             )
             return _dict(item)
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="link_expense",
+            target_kind="issue",
+            target_id=issue_id,
+            payload={"issue_id": issue_id, "expense_id": expense_id},
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
     def update_appointment(
-        self, appointment_id, command: AppointmentCreate, reschedule_reason: str | None = None
+        self,
+        appointment_id,
+        command: AppointmentCreate,
+        reschedule_reason: str | None = None,
+        *,
+        idempotency_key: str,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
     ):
         def op(tx):
             old = self._require(tx.appointment, appointment_id, "Appointment")
@@ -491,17 +600,39 @@ class MaintenanceService:
             )
             return _dict(updated)
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="update_appointment",
+            target_kind="appointment",
+            target_id=appointment_id,
+            payload={
+                "appointment_id": appointment_id,
+                "command": command,
+                "reschedule_reason": reschedule_reason,
+            },
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
     def finish_appointment(
-        self, appointment_id, *, cancelled: bool, reason: str | None, confirmed: bool
+        self,
+        appointment_id,
+        *,
+        cancelled: bool,
+        reason: str | None,
+        confirmed: bool,
+        idempotency_key: str,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
     ):
-        if type(confirmed) is not bool or not confirmed:
-            raise MaintenanceError("Explicit confirmation is required.")
-        if cancelled:
-            reason = maintenance_text(reason, "cancellationReason", 1000, required=True)
-
         def op(tx):
+            nonlocal reason
+            if type(confirmed) is not bool or not confirmed:
+                raise MaintenanceError("Explicit confirmation is required.")
+            if cancelled:
+                reason = maintenance_text(reason, "cancellationReason", 1000, required=True)
             old = self._require(tx.appointment, appointment_id, "Appointment")
             if old["status"] != "scheduled":
                 raise MaintenanceConflictError(
@@ -531,14 +662,38 @@ class MaintenanceService:
             )
             return _dict(updated)
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="finish_appointment",
+            target_kind="appointment",
+            target_id=appointment_id,
+            payload={
+                "appointment_id": appointment_id,
+                "cancelled": cancelled,
+                "reason": reason,
+                "confirmed": confirmed,
+            },
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
-    def void_cost(self, context_id, reason, confirmed):
-        if type(confirmed) is not bool or not confirmed:
-            raise MaintenanceError("Explicit confirmation is required.")
-        reason = maintenance_text(reason, "voidReason", 1000, required=True)
-
+    def void_cost(
+        self,
+        context_id,
+        reason,
+        confirmed,
+        *,
+        idempotency_key: str,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
+    ):
         def op(tx):
+            nonlocal reason
+            if type(confirmed) is not bool or not confirmed:
+                raise MaintenanceError("Explicit confirmation is required.")
+            reason = maintenance_text(reason, "voidReason", 1000, required=True)
             old = self._require(tx.cost_context, context_id, "Cost context")
             if old["voided_at"]:
                 raise MaintenanceConflictError(
@@ -558,14 +713,33 @@ class MaintenanceService:
             )
             return _dict(updated)
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="void_cost",
+            target_kind="cost_context",
+            target_id=context_id,
+            payload={"context_id": context_id, "reason": reason, "confirmed": confirmed},
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
-    def archive_expense_link(self, link_id, reason, confirmed):
-        if type(confirmed) is not bool or not confirmed:
-            raise MaintenanceError("Explicit confirmation is required.")
-        reason = maintenance_text(reason, "archiveReason", 1000, required=True)
-
+    def archive_expense_link(
+        self,
+        link_id,
+        reason,
+        confirmed,
+        *,
+        idempotency_key: str,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
+    ):
         def op(tx):
+            nonlocal reason
+            if type(confirmed) is not bool or not confirmed:
+                raise MaintenanceError("Explicit confirmation is required.")
+            reason = maintenance_text(reason, "archiveReason", 1000, required=True)
             old = self._require(tx.expense_link, link_id, "Expense link")
             if old["archived_at"]:
                 raise MaintenanceConflictError(
@@ -585,20 +759,30 @@ class MaintenanceService:
             )
             return _dict(updated)
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="archive_expense_link",
+            target_kind="expense_link",
+            target_id=link_id,
+            payload={"link_id": link_id, "reason": reason, "confirmed": confirmed},
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
-    def create_quote(self, issue_id, command: QuoteCreate, idempotency_key: str):
-        uuid(idempotency_key, "idempotencyKey")
-        fp = fingerprint("quote", {"issueId": issue_id, "command": command.__dict__})
-
+    def create_quote(
+        self,
+        issue_id,
+        command: QuoteCreate,
+        idempotency_key: str,
+        *,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
+    ):
         def op(tx):
-            prior = tx.quote_by_key(idempotency_key)
-            if prior:
-                if prior["request_fingerprint"] != fp:
-                    raise MaintenanceConflictError(
-                        "Idempotency key payload changed.", "idempotency_conflict"
-                    )
-                return _dict(dict(prior))
+            uuid(idempotency_key, "idempotencyKey")
+            fp = fingerprint("quote", {"issueId": issue_id, "command": command.__dict__})
             issue = self._require(tx.issue, issue_id, "Issue")
             if issue["status"] not in {"open", "in_progress"}:
                 raise MaintenanceConflictError("Quotes require an active issue.", "issue_closed")
@@ -648,14 +832,33 @@ class MaintenanceService:
             )
             return _dict(item)
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="create_quote",
+            target_kind="issue",
+            target_id=issue_id,
+            payload={"issue_id": issue_id, "command": command},
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
-    def withdraw_quote(self, quote_id, reason, confirmed):
-        if type(confirmed) is not bool or not confirmed:
-            raise MaintenanceError("Explicit confirmation is required.")
-        reason = maintenance_text(reason, "withdrawalReason", 1000, required=True)
-
+    def withdraw_quote(
+        self,
+        quote_id,
+        reason,
+        confirmed,
+        *,
+        idempotency_key: str,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
+    ):
         def op(tx):
+            nonlocal reason
+            if type(confirmed) is not bool or not confirmed:
+                raise MaintenanceError("Explicit confirmation is required.")
+            reason = maintenance_text(reason, "withdrawalReason", 1000, required=True)
             old = self._require(tx.quote, quote_id, "Quote")
             if old["withdrawn_at"]:
                 raise MaintenanceConflictError("Quote is already withdrawn.", "quote_withdrawn")
@@ -673,20 +876,30 @@ class MaintenanceService:
             )
             return _dict(new)
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="withdraw_quote",
+            target_kind="quote",
+            target_id=quote_id,
+            payload={"quote_id": quote_id, "reason": reason, "confirmed": confirmed},
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
-    def create_assignment(self, issue_id, command: AssignmentCreate, idempotency_key: str):
-        uuid(idempotency_key, "idempotencyKey")
-        fp = fingerprint("assignment", {"issueId": issue_id, "command": command.__dict__})
-
+    def create_assignment(
+        self,
+        issue_id,
+        command: AssignmentCreate,
+        idempotency_key: str,
+        *,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
+    ):
         def op(tx):
-            prior = tx.assignment_by_key(idempotency_key)
-            if prior:
-                if prior["request_fingerprint"] != fp:
-                    raise MaintenanceConflictError(
-                        "Idempotency key payload changed.", "idempotency_conflict"
-                    )
-                return _dict(dict(prior))
+            uuid(idempotency_key, "idempotencyKey")
+            fp = fingerprint("assignment", {"issueId": issue_id, "command": command.__dict__})
             issue = self._require(tx.issue, issue_id, "Issue")
             if issue["status"] not in {"open", "in_progress"}:
                 raise MaintenanceConflictError(
@@ -773,14 +986,33 @@ class MaintenanceService:
             )
             return _dict(item)
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="create_assignment",
+            target_kind="issue",
+            target_id=issue_id,
+            payload={"issue_id": issue_id, "command": command},
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
-    def end_assignment(self, assignment_id, reason, confirmed):
-        if type(confirmed) is not bool or not confirmed:
-            raise MaintenanceError("Explicit confirmation is required.")
-        reason = maintenance_text(reason, "endReason", 1000, required=True)
-
+    def end_assignment(
+        self,
+        assignment_id,
+        reason,
+        confirmed,
+        *,
+        idempotency_key: str,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
+    ):
         def op(tx):
+            nonlocal reason
+            if type(confirmed) is not bool or not confirmed:
+                raise MaintenanceError("Explicit confirmation is required.")
+            reason = maintenance_text(reason, "endReason", 1000, required=True)
             old = self._require(tx.assignment, assignment_id, "Assignment")
             if old["ended_at"]:
                 raise MaintenanceConflictError("Assignment is already ended.", "assignment_ended")
@@ -798,30 +1030,42 @@ class MaintenanceService:
             )
             return _dict(new)
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="end_assignment",
+            target_kind="assignment",
+            target_id=assignment_id,
+            payload={"assignment_id": assignment_id, "reason": reason, "confirmed": confirmed},
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
     def create_follow_up(
-        self, issue_id, title, notes, priority, due_at_utc, due_timezone, idempotency_key
+        self,
+        issue_id,
+        title,
+        notes,
+        priority,
+        due_at_utc,
+        due_timezone,
+        idempotency_key,
+        *,
+        expected_revision: int,
+        transaction: MaintenanceTransaction | None = None,
     ):
-        uuid(idempotency_key, "idempotencyKey")
-        payload = {
-            "issueId": issue_id,
-            "title": title,
-            "notes": notes,
-            "priority": priority,
-            "dueAtUtc": due_at_utc,
-            "dueTimezone": due_timezone,
-        }
-        fp = fingerprint("follow_up", payload)
-
         def op(tx):
-            previous = tx.follow_up_by_key(idempotency_key)
-            if previous:
-                if previous["request_fingerprint"] != fp:
-                    raise MaintenanceConflictError(
-                        "Idempotency key payload changed.", "idempotency_conflict"
-                    )
-                return _task_summary(tx.task(previous["task_id"]))
+            uuid(idempotency_key, "idempotencyKey")
+            payload = {
+                "issueId": issue_id,
+                "title": title,
+                "notes": notes,
+                "priority": priority,
+                "dueAtUtc": due_at_utc,
+                "dueTimezone": due_timezone,
+            }
+            fp = fingerprint("follow_up", payload)
             issue = self._require(tx.issue, issue_id, "Issue")
             if issue["status"] not in {"open", "in_progress"}:
                 raise MaintenanceConflictError(
@@ -880,7 +1124,24 @@ class MaintenanceService:
                 }
             )
 
-        return self.unit_of_work.write(op)
+        return execute_command(
+            self.unit_of_work,
+            op,
+            action="create_follow_up",
+            target_kind="issue",
+            target_id=issue_id,
+            payload={
+                "issue_id": issue_id,
+                "title": title,
+                "notes": notes,
+                "priority": priority,
+                "due_at_utc": due_at_utc,
+                "due_timezone": due_timezone,
+            },
+            idempotency_key=idempotency_key,
+            expected_revision=expected_revision,
+            transaction=transaction,
+        )
 
     def list_issues(
         self,
@@ -975,6 +1236,17 @@ class MaintenanceService:
             }
 
         return self.unit_of_work.read(op)
+
+    def command_receipt(self, operation_id: str):
+        operation_id = uuid(operation_id, "operationId")
+
+        def read(tx):
+            receipt = tx.command_receipt(operation_id)
+            if receipt is None:
+                raise MaintenanceNotFoundError("Command receipt was not found.")
+            return receipt_view(receipt)
+
+        return self.unit_of_work.read(read)
 
     def detail(self, issue_id):
         return self.unit_of_work.read(lambda tx: self._detail(tx, issue_id))
@@ -1244,6 +1516,7 @@ class MaintenanceService:
         )
         return {
             "id": issue["id"],
+            "revision": issue["revision"],
             "propertyId": issue["property_id"],
             "spaceId": issue["space_id"],
             "summary": issue["summary"],

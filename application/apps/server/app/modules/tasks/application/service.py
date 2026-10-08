@@ -131,6 +131,76 @@ class TaskService:
 
         return self.unit_of_work.write(create_in_transaction)
 
+    def create_command(self, data, *, expected_revision: int, idempotency_key: str) -> dict:
+        """Public recoverable creation; replay never rebuilds from current Task state."""
+        from app.modules.tasks.application.creation import (
+            TaskCreationOperation,
+            canonical,
+            creation_fingerprint,
+            creation_key,
+            creation_request,
+        )
+
+        creation_key(idempotency_key)
+        command = (
+            data if isinstance(data, TaskCreateCommand) else TaskCreateCommand.from_mapping(data)
+        )
+        request = creation_request(command, expected_revision)
+        fingerprint = creation_fingerprint(command, expected_revision)
+        instant = self.instant()
+
+        def write(tx):
+            prior = tx.creation_operation(idempotency_key)
+            if prior is not None:
+                if prior.request_fingerprint != fingerprint:
+                    raise TaskConflictError("Task creation key belongs to a different request.")
+                return loads(prior.result_json)
+            task = new_task(command, now=instant.isoformat())
+            operation_id, correlation_id = str(uuid4()), str(uuid4())
+            result = {**self.view(task, instant), "operationId": operation_id}
+            operation = TaskCreationOperation(
+                operation_id,
+                idempotency_key,
+                task.id,
+                fingerprint,
+                canonical(request),
+                canonical(result),
+                correlation_id,
+                instant.isoformat(),
+            )
+            tx.insert_task(task)
+            tx.insert_creation_operation(operation)
+            tx.record_change(
+                entity_type="task",
+                entity_id=task.id,
+                action="created",
+                before=None,
+                after=task.to_dict(),
+                reason="task_creation_command",
+                correlation_id=correlation_id,
+            )
+            tx.record_change(
+                entity_type="task_creation_operation",
+                entity_id=operation.id,
+                action="recorded",
+                before=None,
+                after=operation.audit_snapshot(),
+                reason="task_creation_recorded",
+                correlation_id=correlation_id,
+            )
+            return result
+
+        return self.unit_of_work.write_waiting(write)
+
+    def creation_receipt(self, key: str):
+        from app.modules.tasks.application.creation import creation_key
+
+        creation_key(key)
+        operation = self.unit_of_work.creation_operation(key)
+        if operation is None:
+            raise TaskNotFoundError("Task creation receipt was not found.")
+        return loads(operation.result_json)
+
     def get(self, task_id: str) -> Task:
         task = self.unit_of_work.get(task_id)
         if task is None:

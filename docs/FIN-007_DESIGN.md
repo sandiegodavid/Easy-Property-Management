@@ -1,5 +1,20 @@
 # FIN-007 — Prepaid Checks
 
+## UI-001 Slice 15 command-contract amendment — October 8, 2026
+
+Create/deposit/return/void/replace require `expectedRevision` for the shared Lease
+rent ledger and their existing UUID `idempotencyKey`, in HTTP and direct calls.
+Each action advances the ledger once, including nested receipt/allocation and
+Task/reminder effects. Existing prepaid operation rows remain the business
+authority and share the immutable Finance command's operation ID, key and
+correlation. Mutation responses require `rentLedgerRevision` and `operationId`.
+Exact retries recover the complete original response before lifecycle/date checks;
+changed reuse and stale revisions return typed `409`. Both histories and all
+effects commit or roll back together. Finance's command-key lookup is read-only.
+A replacement of a voided, never-deposited check has no deposit event or receipt.
+See [Slice 15 readiness](FINANCE_COMMAND_READINESS.md). No new OPS form or browser
+control is enabled by this contract.
+
 ## Purpose
 
 `FIN-007` records a future-dated physical check that the operator has received for one complete `FIN-001` rent-expectation period. It makes the check actionable when its date arrives without treating the check as received rent, income, or a FIN-001 receipt before the operator confirms deposit.

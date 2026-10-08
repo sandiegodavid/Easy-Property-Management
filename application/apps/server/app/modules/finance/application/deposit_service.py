@@ -6,11 +6,19 @@ transaction; this keeps account aggregates and audit records coherent.
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import UTC, date, datetime
 from hashlib import sha256
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
+from app.modules.finance.application.commands import (
+    FinanceCommandIdentity,
+    FinanceCommandOutcome,
+    FinanceScope,
+    apply_finance_command,
+    validate_command_concurrency,
+)
 from app.modules.finance.application.deposit_ports import DepositUnitOfWork
 from app.modules.finance.domain.deposit_models import (
     CreditCommand,
@@ -48,16 +56,28 @@ class DepositService:
         self.unit_of_work = unit_of_work
         self.now = now
 
-    def create_account(self, lease_id: str, command: DepositAccountCreateCommand):
-        def operation(tx):
+    def create_account(
+        self,
+        lease_id: str,
+        command: DepositAccountCreateCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
+        instant = self.now()
+        effective = True
+        account_id = str(uuid4())
+
+        def operation(tx, command_context):
+            nonlocal effective
             if tx.account_for_lease(lease_id):
                 raise FinanceConflictError("This lease already has a security-deposit account.")
             context = tx.lease_context(lease_id, command.lease_term_id)
             if context is None:
                 raise FinanceNotFoundError("Lease or lease term was not found.")
-            stamp = _stamp(self.now())
+            stamp = _stamp(instant)
             item = {
-                "id": str(uuid4()),
+                "id": account_id,
                 "lease_id": lease_id,
                 "lease_term_id": command.lease_term_id,
                 "property_id": context["propertyId"],
@@ -75,11 +95,78 @@ class DepositService:
                 "created",
                 None,
                 _account_view(item),
-                str(uuid4()),
+                command_context.correlation_id,
             )
-            return self._account_view(tx, item)
+            return self._account_view(tx, item, instant=instant)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="create_account",
+            target_id=lease_id,
+            kind="account",
+            payload=asdict(command),
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            scope_id=account_id,
+            effective=lambda: effective,
+        )
+
+    def _command_write(
+        self,
+        operation,
+        *,
+        action,
+        target_id,
+        kind,
+        payload,
+        expected_revision,
+        idempotency_key,
+        instant,
+        scope_id,
+        effective,
+    ):
+        validate_command_concurrency(expected_revision, idempotency_key)
+
+        def write(tx):
+            prior = tx.commands.command_operation(idempotency_key)
+            account_id = prior["scope_id"] if prior is not None else scope_id
+            if account_id is None:
+                account_id = self._scope_id(tx, kind, target_id)
+            identity = FinanceCommandIdentity(
+                FinanceScope("deposit_account", account_id),
+                action,
+                target_id,
+                expected_revision,
+                idempotency_key,
+                payload,
+            )
+            return apply_finance_command(
+                tx.commands,
+                identity,
+                lambda context: FinanceCommandOutcome(operation(tx, context), effective()),
+                instant=instant,
+            )
+
+        return self.unit_of_work.write(write)
+
+    @staticmethod
+    def _scope_id(tx, kind, record_id):
+        row = _required(getattr(tx, kind)(record_id), "Deposit record was not found.")
+        if kind == "account":
+            return row["id"]
+        if kind == "deduction_source":
+            row = _required(tx.deduction(row["deduction_id"]), "Deduction was not found.")
+        if kind in {"deduction", "credit", "deduction_source"}:
+            row = _required(tx.settlement(row["settlement_id"]), "Settlement was not found.")
+        return row["account_id"]
+
+    def revision(self, account_id):
+        return self.unit_of_work.read(
+            lambda tx: tx.commands.command_revision(
+                FinanceScope("deposit_account", self._scope_id(tx, "account", account_id))
+            )
+        )
 
     def account_for_lease(self, lease_id: str):
         return self.unit_of_work.read(
@@ -137,8 +224,21 @@ class DepositService:
 
         def operation(tx):
             rows = []
-            for item in tx.accounts(lease_id=lease_id, property_id=property_id, space_id=space_id):
-                view = self._account_view(tx, item)
+            accounts = tx.accounts(lease_id=lease_id, property_id=property_id, space_id=space_id)
+            revisions = {}
+            for offset in range(0, len(accounts), 500):
+                revisions.update(
+                    tx.commands.command_revisions(
+                        [
+                            FinanceScope("deposit_account", item["id"])
+                            for item in accounts[offset : offset + 500]
+                        ]
+                    )
+                )
+            for item in accounts:
+                view = self._account_view(
+                    tx, item, revision=revisions[FinanceScope("deposit_account", item["id"])]
+                )
                 if settlement_state is not None and view["settlementStatus"] != settlement_state:
                     continue
                 if deadline_state is not None and view["deadlineState"] != deadline_state:
@@ -164,20 +264,22 @@ class DepositService:
 
         return self.unit_of_work.read(operation)
 
-    def record_receipt(self, account_id: str, command: DepositReceiptCommand):
-        def operation(tx):
+    def record_receipt(
+        self, account_id: str, command: DepositReceiptCommand, *, expected_revision: int
+    ):
+        instant = self.now()
+        effective = True
+
+        def operation(tx, command_context):
+            nonlocal effective
             existing = tx.receipt_by_key(command.idempotency_key)
             if existing:
-                if existing["account_id"] != account_id or existing[
-                    "request_fingerprint"
-                ] != _aggregate_fingerprint(account_id, command.fingerprint()):
-                    raise FinanceConflictError("Idempotency key was used with a different receipt.")
-                return _receipt_view(existing)
+                raise FinanceConflictError("Receipt key has no corresponding command result.")
             account = _required(tx.account(account_id), "Security-deposit account was not found.")
             context = tx.lease_context(account["lease_id"], account["lease_term_id"])
             if (
                 date.fromisoformat(command.received_on)
-                > self.now().astimezone(ZoneInfo(context["timeZone"])).date()
+                > instant.astimezone(ZoneInfo(context["timeZone"])).date()
             ):
                 raise FinanceError("Received date cannot be in the future for the property.")
             historical = context["status"] in {"ended", "terminated", "void"}
@@ -251,7 +353,7 @@ class DepositService:
                 "replaces_receipt_id": command.replaces_receipt_id,
                 "voided_at": None,
                 "void_reason": None,
-                "created_at": _stamp(self.now()),
+                "created_at": _stamp(instant),
             }
             audit = {
                 **_receipt_view(item),
@@ -265,14 +367,37 @@ class DepositService:
             }
             tx.insert("receipt", item)
             self._audit(
-                tx, "security_deposit_receipt", item["id"], "recorded", None, audit, str(uuid4())
+                tx,
+                "security_deposit_receipt",
+                item["id"],
+                "recorded",
+                None,
+                audit,
+                command_context.correlation_id,
             )
             return _receipt_view(item)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="record_receipt",
+            target_id=account_id,
+            kind="account",
+            payload=asdict(command),
+            expected_revision=expected_revision,
+            idempotency_key=command.idempotency_key,
+            instant=instant,
+            scope_id=None,
+            effective=lambda: effective,
+        )
 
-    def void_receipt(self, receipt_id: str, command: VoidCommand):
-        def operation(tx):
+    def void_receipt(
+        self, receipt_id: str, command: VoidCommand, *, expected_revision: int, idempotency_key: str
+    ):
+        instant = self.now()
+        effective = True
+
+        def operation(tx, command_context):
+            nonlocal effective
             old = _required(tx.receipt(receipt_id), "Security-deposit receipt was not found.")
             if old["voided_at"]:
                 raise FinanceConflictError("Receipt is already voided.")
@@ -283,7 +408,7 @@ class DepositService:
                 raise FinanceConflictError(
                     "Void the settlement before voiding this captured receipt."
                 )
-            new = {**old, "voided_at": _stamp(self.now()), "void_reason": command.reason}
+            new = {**old, "voided_at": _stamp(instant), "void_reason": command.reason}
             tx.replace("receipt", new)
             self._audit(
                 tx,
@@ -292,14 +417,36 @@ class DepositService:
                 "voided",
                 _receipt_view(old),
                 _receipt_view(new),
-                str(uuid4()),
+                command_context.correlation_id,
             )
             return _receipt_view(new)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="void_receipt",
+            target_id=receipt_id,
+            kind="receipt",
+            payload=asdict(command),
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            scope_id=None,
+            effective=lambda: effective,
+        )
 
-    def create_settlement(self, account_id: str, command: SettlementCreateCommand):
-        def operation(tx):
+    def create_settlement(
+        self,
+        account_id: str,
+        command: SettlementCreateCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
+        instant = self.now()
+        effective = True
+
+        def operation(tx, command_context):
+            nonlocal effective
             account = _required(tx.account(account_id), "Security-deposit account was not found.")
             if any(row["status"] != "voided" for row in tx.settlements(account_id)):
                 raise FinanceConflictError("Only one non-voided settlement is allowed.")
@@ -330,7 +477,7 @@ class DepositService:
                 and not command.deadline_override_confirmed
             ):
                 raise FinanceConflictError("An early deadline requires confirmation and reason.")
-            stamp = _stamp(self.now())
+            stamp = _stamp(instant)
             item = {
                 "id": str(uuid4()),
                 "account_id": account_id,
@@ -360,29 +507,98 @@ class DepositService:
                 "draft_created",
                 None,
                 _settlement_view(item),
-                str(uuid4()),
+                command_context.correlation_id,
             )
             return self._settlement_view(tx, item)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="create_settlement",
+            target_id=account_id,
+            kind="account",
+            payload=asdict(command),
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            scope_id=None,
+            effective=lambda: effective,
+        )
 
-    def add_deduction(self, settlement_id: str, command: DeductionCommand):
-        return self._add_line("deduction", settlement_id, command)
+    def add_deduction(
+        self,
+        settlement_id: str,
+        command: DeductionCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
+        return self._add_line(
+            "deduction",
+            settlement_id,
+            command,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+        )
 
-    def add_credit(self, settlement_id: str, command: CreditCommand):
-        return self._add_line("credit", settlement_id, command)
+    def add_credit(
+        self,
+        settlement_id: str,
+        command: CreditCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
+        return self._add_line(
+            "credit",
+            settlement_id,
+            command,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+        )
 
-    def update_deduction(self, deduction_id: str, command: DeductionCommand):
-        return self._replace_line("deduction", deduction_id, command)
+    def update_deduction(
+        self,
+        deduction_id: str,
+        command: DeductionCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
+        return self._replace_line(
+            "deduction",
+            deduction_id,
+            command,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+        )
 
-    def update_credit(self, credit_id: str, command: CreditCommand):
-        return self._replace_line("credit", credit_id, command)
+    def update_credit(
+        self,
+        credit_id: str,
+        command: CreditCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
+        return self._replace_line(
+            "credit",
+            credit_id,
+            command,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+        )
 
-    def _replace_line(self, kind, record_id, command):
-        def operation(tx):
+    def _replace_line(
+        self, kind, record_id, command, *, expected_revision: int, idempotency_key: str
+    ):
+        instant = self.now()
+        effective = True
+
+        def operation(tx, command_context):
+            nonlocal effective
             old = _required(getattr(tx, kind)(record_id), f"{kind.title()} was not found.")
             self._draft(tx, old["settlement_id"])
-            stamp = _stamp(self.now())
+            stamp = _stamp(instant)
             if kind == "deduction":
                 new = {
                     **old,
@@ -416,7 +632,8 @@ class DepositService:
                     "override_reason": command.override_reason,
                     "updated_at": stamp,
                 }
-            if new == old:
+            if all(new[key] == old[key] for key in new if key != "updated_at"):
+                effective = False
                 return _line_view(old)
             tx.replace(kind, new)
             self._audit(
@@ -426,20 +643,45 @@ class DepositService:
                 "updated",
                 _line_view(old),
                 _line_view(new),
-                str(uuid4()),
+                command_context.correlation_id,
             )
             return _line_view(new)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="update_" + kind,
+            target_id=record_id,
+            kind=kind,
+            payload=asdict(command),
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            scope_id=None,
+            effective=lambda: effective,
+        )
 
-    def delete_deduction(self, deduction_id: str):
-        return self._delete_line("deduction", deduction_id)
+    def delete_deduction(self, deduction_id: str, *, expected_revision: int, idempotency_key: str):
+        return self._delete_line(
+            "deduction",
+            deduction_id,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+        )
 
-    def delete_credit(self, credit_id: str):
-        return self._delete_line("credit", credit_id)
+    def delete_credit(self, credit_id: str, *, expected_revision: int, idempotency_key: str):
+        return self._delete_line(
+            "credit",
+            credit_id,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+        )
 
-    def _delete_line(self, kind, record_id):
-        def operation(tx):
+    def _delete_line(self, kind, record_id, *, expected_revision: int, idempotency_key: str):
+        instant = self.now()
+        effective = True
+
+        def operation(tx, command_context):
+            nonlocal effective
             old = _required(getattr(tx, kind)(record_id), f"{kind.title()} was not found.")
             self._draft(tx, old["settlement_id"])
             if kind == "deduction":
@@ -459,7 +701,7 @@ class DepositService:
                         "deleted",
                         _source_view(source),
                         None,
-                        str(uuid4()),
+                        command_context.correlation_id,
                     )
             tx.delete(kind, record_id)
             self._audit(
@@ -469,16 +711,29 @@ class DepositService:
                 "deleted",
                 _line_view(old),
                 None,
-                str(uuid4()),
+                command_context.correlation_id,
             )
             return {"deleted": True, "id": record_id}
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="delete_" + kind,
+            target_id=record_id,
+            kind=kind,
+            payload={},
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            scope_id=None,
+            effective=lambda: effective,
+        )
 
     def patch_settlement(
         self,
         settlement_id: str,
         *,
+        expected_revision: int,
+        idempotency_key: str,
         fields: frozenset[str],
         settlement_due_on: str | None = None,
         legal_rule_reference: str | None = None,
@@ -505,7 +760,11 @@ class DepositService:
 
             settlement_due_on = local_date(settlement_due_on, "Settlement due date")
 
-        def operation(tx):
+        instant = self.now()
+        effective = True
+
+        def operation(tx, command_context):
+            nonlocal effective
             old = self._draft(tx, settlement_id)
             new = {
                 **old,
@@ -545,6 +804,7 @@ class DepositService:
                     "deadline_override_reason",
                 )
             ):
+                effective = False
                 return self._settlement_view(tx, old)
             account = _required(
                 tx.account(old["account_id"]), "Security-deposit account was not found."
@@ -569,7 +829,7 @@ class DepositService:
             ):
                 raise FinanceError("Deadline override confirmation is required.")
             self._validate_settlement_timing(tx, account, new)
-            new["updated_at"] = _stamp(self.now())
+            new["updated_at"] = _stamp(instant)
             tx.replace("settlement", new)
             self._audit(
                 tx,
@@ -578,16 +838,40 @@ class DepositService:
                 "updated",
                 _settlement_view(old),
                 _settlement_view(new),
-                str(uuid4()),
+                command_context.correlation_id,
             )
             return self._settlement_view(tx, new)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="patch_settlement",
+            target_id=settlement_id,
+            kind="settlement",
+            payload={
+                "fields": sorted(fields),
+                "settlement_due_on": settlement_due_on,
+                "legal_rule_reference": legal_rule_reference,
+                "review_notes": review_notes,
+                "deadline_override_confirmed": deadline_override_confirmed,
+                "deadline_override_reason": deadline_override_reason,
+            },
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            scope_id=None,
+            effective=lambda: effective,
+        )
 
-    def _add_line(self, kind, settlement_id, command):
-        def operation(tx):
+    def _add_line(
+        self, kind, settlement_id, command, *, expected_revision: int, idempotency_key: str
+    ):
+        instant = self.now()
+        effective = True
+
+        def operation(tx, command_context):
+            nonlocal effective
             self._draft(tx, settlement_id)
-            stamp = _stamp(self.now())
+            stamp = _stamp(instant)
             if kind == "deduction":
                 item = {
                     "id": str(uuid4()),
@@ -627,10 +911,29 @@ class DepositService:
                 }
             tx.insert(kind, item)
             entity = f"security_deposit_{kind}"
-            self._audit(tx, entity, item["id"], "created", None, _line_view(item), str(uuid4()))
+            self._audit(
+                tx,
+                entity,
+                item["id"],
+                "created",
+                None,
+                _line_view(item),
+                command_context.correlation_id,
+            )
             return _line_view(item)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="add_" + kind,
+            target_id=settlement_id,
+            kind="settlement",
+            payload=asdict(command),
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            scope_id=None,
+            effective=lambda: effective,
+        )
 
     def add_deduction_source(
         self,
@@ -638,6 +941,8 @@ class DepositService:
         source_kind: str,
         source_id: str,
         *,
+        expected_revision: int,
+        idempotency_key: str,
         historical_confirmed: bool = False,
         historical_reason: str | None = None,
         duplicate_use_confirmed: bool = False,
@@ -662,7 +967,11 @@ class DepositService:
                     "Historical source reason must be between 1 and 1000 characters."
                 )
 
-        def operation(tx):
+        instant = self.now()
+        effective = True
+
+        def operation(tx, command_context):
+            nonlocal effective
             deduction = _required(tx.deduction(deduction_id), "Deduction was not found.")
             settlement = self._draft(tx, deduction["settlement_id"])
             account = _required(
@@ -704,7 +1013,7 @@ class DepositService:
                 "historical_confirmed": historical_confirmed,
                 "historical_reason": historical_reason,
                 "duplicate_use_confirmed": duplicate_use_confirmed,
-                "created_at": _stamp(self.now()),
+                "created_at": _stamp(instant),
             }
             view = _source_view(item)
             tx.insert_source(item)
@@ -715,14 +1024,37 @@ class DepositService:
                 "created",
                 None,
                 view,
-                str(uuid4()),
+                command_context.correlation_id,
             )
             return view
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="add_deduction_source",
+            target_id=deduction_id,
+            kind="deduction",
+            payload={
+                "source_kind": source_kind,
+                "source_id": source_id,
+                "historical_confirmed": historical_confirmed,
+                "historical_reason": historical_reason,
+                "duplicate_use_confirmed": duplicate_use_confirmed,
+            },
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            scope_id=None,
+            effective=lambda: effective,
+        )
 
-    def delete_deduction_source(self, source_id: str):
-        def operation(tx):
+    def delete_deduction_source(
+        self, source_id: str, *, expected_revision: int, idempotency_key: str
+    ):
+        instant = self.now()
+        effective = True
+
+        def operation(tx, command_context):
+            nonlocal effective
             old = _required(tx.deduction_source(source_id), "Deduction source was not found.")
             deduction = _required(tx.deduction(old["deduction_id"]), "Deduction was not found.")
             self._draft(tx, deduction["settlement_id"])
@@ -734,21 +1066,42 @@ class DepositService:
                 "deleted",
                 _source_view(old),
                 None,
-                str(uuid4()),
+                command_context.correlation_id,
             )
             return {"deleted": True, "id": source_id}
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="delete_deduction_source",
+            target_id=source_id,
+            kind="deduction_source",
+            payload={},
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            scope_id=None,
+            effective=lambda: effective,
+        )
 
     def approve_settlement(
-        self, settlement_id: str, confirmed: bool, *, zero_dollar_closure_confirmed: bool = False
+        self,
+        settlement_id: str,
+        confirmed: bool,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+        zero_dollar_closure_confirmed: bool = False,
     ):
         if type(confirmed) is not bool or not confirmed:
             raise FinanceError("Approval confirmation is required.")
         if type(zero_dollar_closure_confirmed) is not bool:
             raise FinanceError("Zero-dollar closure confirmation must be boolean.")
 
-        def operation(tx):
+        instant = self.now()
+        effective = True
+
+        def operation(tx, command_context):
+            nonlocal effective
             old = self._draft(tx, settlement_id)
             receipts = tx.receipts(old["account_id"], active_only=True)
             deductions = tx.deductions(settlement_id)
@@ -791,7 +1144,7 @@ class DepositService:
                                 "snapshotted",
                                 _source_view(source),
                                 _source_view(refreshed),
-                                str(uuid4()),
+                                command_context.correlation_id,
                             )
                     if not current["active"] and not source["historical_confirmed"]:
                         raise FinanceConflictError(
@@ -828,12 +1181,12 @@ class DepositService:
                 "credit_total_minor": credit_total,
                 "deduction_total_minor": deduction_total,
                 "refund_due_minor": refund_due,
-                "approved_at": _stamp(self.now()),
-                "updated_at": _stamp(self.now()),
+                "approved_at": _stamp(instant),
+                "updated_at": _stamp(instant),
             }
             tx.replace("settlement", new)
             for receipt in receipts:
-                tx.capture_settlement_receipt(settlement_id, receipt["id"], _stamp(self.now()))
+                tx.capture_settlement_receipt(settlement_id, receipt["id"], _stamp(instant))
             self._audit(
                 tx,
                 "security_deposit_settlement",
@@ -841,21 +1194,37 @@ class DepositService:
                 "approved",
                 _settlement_view(old),
                 _settlement_view(new),
-                str(uuid4()),
+                command_context.correlation_id,
             )
             return self._settlement_view(tx, new)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="approve_settlement",
+            target_id=settlement_id,
+            kind="settlement",
+            payload={
+                "confirmed": confirmed,
+                "zero_dollar_closure_confirmed": zero_dollar_closure_confirmed,
+            },
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            scope_id=None,
+            effective=lambda: effective,
+        )
 
-    def record_refund(self, settlement_id: str, command: DepositRefundCommand):
-        def operation(tx):
+    def record_refund(
+        self, settlement_id: str, command: DepositRefundCommand, *, expected_revision: int
+    ):
+        instant = self.now()
+        effective = True
+
+        def operation(tx, command_context):
+            nonlocal effective
             old_key = tx.refund_by_key(command.idempotency_key)
             if old_key:
-                if old_key["authorized_by_settlement_id"] != settlement_id or old_key[
-                    "request_fingerprint"
-                ] != _aggregate_fingerprint(settlement_id, command.fingerprint()):
-                    raise FinanceConflictError("Idempotency key was used with a different refund.")
-                return _refund_view(old_key)
+                raise FinanceConflictError("Refund key has no corresponding command result.")
             settlement = _required(tx.settlement(settlement_id), "Settlement was not found.")
             if settlement["status"] != "approved":
                 raise FinanceConflictError("Refunds require an approved settlement.")
@@ -874,7 +1243,7 @@ class DepositService:
             )
             if (
                 date.fromisoformat(command.paid_on)
-                > self.now().astimezone(ZoneInfo(context["timeZone"])).date()
+                > instant.astimezone(ZoneInfo(context["timeZone"])).date()
             ):
                 raise FinanceError("Paid date cannot be in the future for the property.")
             allowed = command.recipient_party_id in tx.participants(account["lease_id"]) or any(
@@ -926,7 +1295,7 @@ class DepositService:
                 "replaces_refund_id": command.replaces_refund_id,
                 "voided_at": None,
                 "void_reason": None,
-                "created_at": _stamp(self.now()),
+                "created_at": _stamp(instant),
             }
             audit = {
                 **_refund_view(item),
@@ -936,14 +1305,42 @@ class DepositService:
             }
             tx.insert("refund", item)
             self._audit(
-                tx, "security_deposit_refund", item["id"], "recorded", None, audit, str(uuid4())
+                tx,
+                "security_deposit_refund",
+                item["id"],
+                "recorded",
+                None,
+                audit,
+                command_context.correlation_id,
             )
             return _refund_view(item)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="record_refund",
+            target_id=settlement_id,
+            kind="settlement",
+            payload=asdict(command),
+            expected_revision=expected_revision,
+            idempotency_key=command.idempotency_key,
+            instant=instant,
+            scope_id=None,
+            effective=lambda: effective,
+        )
 
-    def complete_settlement(self, settlement_id: str, zero_refund_confirmed: bool):
-        def operation(tx):
+    def complete_settlement(
+        self,
+        settlement_id: str,
+        zero_refund_confirmed: bool,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
+        instant = self.now()
+        effective = True
+
+        def operation(tx, command_context):
+            nonlocal effective
             old = _required(tx.settlement(settlement_id), "Settlement was not found.")
             if old["status"] != "approved":
                 raise FinanceConflictError("Only an approved settlement can be completed.")
@@ -962,8 +1359,8 @@ class DepositService:
             new = {
                 **old,
                 "status": "completed",
-                "completed_at": _stamp(self.now()),
-                "updated_at": _stamp(self.now()),
+                "completed_at": _stamp(instant),
+                "updated_at": _stamp(instant),
             }
             tx.replace("settlement", new)
             self._audit(
@@ -973,14 +1370,31 @@ class DepositService:
                 "completed",
                 _settlement_view(old),
                 _settlement_view(new),
-                str(uuid4()),
+                command_context.correlation_id,
             )
             return self._settlement_view(tx, new)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="complete_settlement",
+            target_id=settlement_id,
+            kind="settlement",
+            payload={"zero_refund_confirmed": zero_refund_confirmed},
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            scope_id=None,
+            effective=lambda: effective,
+        )
 
-    def void_refund(self, refund_id: str, command: VoidCommand):
-        def operation(tx):
+    def void_refund(
+        self, refund_id: str, command: VoidCommand, *, expected_revision: int, idempotency_key: str
+    ):
+        instant = self.now()
+        effective = True
+
+        def operation(tx, command_context):
+            nonlocal effective
             old = _required(tx.refund(refund_id), "Refund was not found.")
             if old["voided_at"] is not None:
                 raise FinanceConflictError("Refund is already voided.")
@@ -992,7 +1406,7 @@ class DepositService:
                 raise FinanceConflictError(
                     "Void and replace the completed settlement before voiding its refund."
                 )
-            new = {**old, "voided_at": _stamp(self.now()), "void_reason": command.reason}
+            new = {**old, "voided_at": _stamp(instant), "void_reason": command.reason}
             tx.replace("refund", new)
             self._audit(
                 tx,
@@ -1001,23 +1415,45 @@ class DepositService:
                 "voided",
                 _refund_view(old),
                 _refund_view(new),
-                str(uuid4()),
+                command_context.correlation_id,
             )
             return _refund_view(new)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="void_refund",
+            target_id=refund_id,
+            kind="refund",
+            payload=asdict(command),
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            scope_id=None,
+            effective=lambda: effective,
+        )
 
-    def void_settlement(self, settlement_id: str, command: VoidCommand):
-        def operation(tx):
+    def void_settlement(
+        self,
+        settlement_id: str,
+        command: VoidCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
+        instant = self.now()
+        effective = True
+
+        def operation(tx, command_context):
+            nonlocal effective
             old = _required(tx.settlement(settlement_id), "Settlement was not found.")
             if old["status"] == "voided":
                 raise FinanceConflictError("Settlement is already voided.")
             new = {
                 **old,
                 "status": "voided",
-                "voided_at": _stamp(self.now()),
+                "voided_at": _stamp(instant),
                 "void_reason": command.reason,
-                "updated_at": _stamp(self.now()),
+                "updated_at": _stamp(instant),
             }
             tx.replace("settlement", new)
             self._audit(
@@ -1027,11 +1463,22 @@ class DepositService:
                 "voided",
                 _settlement_view(old),
                 _settlement_view(new),
-                str(uuid4()),
+                command_context.correlation_id,
             )
             return self._settlement_view(tx, new)
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            action="void_settlement",
+            target_id=settlement_id,
+            kind="settlement",
+            payload=asdict(command),
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            scope_id=None,
+            effective=lambda: effective,
+        )
 
     def settlement(self, settlement_id: str):
         return self.unit_of_work.read(
@@ -1073,7 +1520,7 @@ class DepositService:
         ):
             raise FinanceConflictError("An early deadline requires confirmation and reason.")
 
-    def _account_view(self, tx, item):
+    def _account_view(self, tx, item, *, instant=None, revision=None):
         view = _account_view(item)
         receipts = tx.receipts(item["id"], active_only=True)
         refunds = tx.refunds(item["id"], active_only=True)
@@ -1083,7 +1530,12 @@ class DepositService:
             tx.lease_context(item["lease_id"], item["lease_term_id"]),
             "Lease context was not found.",
         )
-        today = self.now().astimezone(ZoneInfo(context["timeZone"])).date().isoformat()
+        today = (instant or self.now()).astimezone(ZoneInfo(context["timeZone"])).date().isoformat()
+        view["depositAccountRevision"] = (
+            tx.commands.command_revision(FinanceScope("deposit_account", item["id"]))
+            if revision is None
+            else revision
+        )
         deadline_state = None
         if settlement is not None:
             deadline_state = (

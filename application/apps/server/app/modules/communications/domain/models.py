@@ -21,6 +21,7 @@ class Communication:
     correction_reason: str | None
     created_at: str
     updated_at: str
+    revision: int = 1
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -38,6 +39,7 @@ class Communication:
             "correctionReason": self.correction_reason,
             "createdAt": self.created_at,
             "updatedAt": self.updated_at,
+            "revision": self.revision,
         }
 
 
@@ -92,3 +94,8 @@ class CommunicationOperation:
     correlation_id: str
     created_at: str
     follow_up_task_id: str | None
+    expected_revision: int
+    result_revision: int
+    outcome: str
+    request_json: str
+    response_json: str

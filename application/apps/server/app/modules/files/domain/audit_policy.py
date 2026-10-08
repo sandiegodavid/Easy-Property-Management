@@ -26,3 +26,13 @@ class FileLinkActivitySnapshotPolicy(DefaultAuditSnapshotPolicy):
 
 
 FILE_LINK_ACTIVITY_SNAPSHOT_POLICY = FileLinkActivitySnapshotPolicy()
+
+
+class FileCommandActivitySnapshotPolicy(DefaultAuditSnapshotPolicy):
+    def redact(self, snapshot: Mapping[str, Any] | None) -> dict[str, Any] | None:
+        if snapshot is None:
+            return None
+        return {"action": snapshot.get("action"), "created_at": snapshot.get("created_at")}
+
+
+FILE_COMMAND_ACTIVITY_SNAPSHOT_POLICY = FileCommandActivitySnapshotPolicy()

@@ -8,6 +8,18 @@ from pydantic import AwareDatetime, Field, StrictBool, StrictInt
 
 from app.modules.operator.domain.models import Contract, OperatorError
 from app.platform.api_errors import domain_problem
+from app.modules.operator.application.directory_service import OperatorDirectoryService
+from app.modules.operator.api.directory_router import register_directory
+from app.modules.operator.api.overview_router import register_overviews
+from app.modules.operator.application.overview_service import OperatorOverviewService
+from app.modules.operator.application.search_service import OperatorSearchService
+from app.modules.operator.api.search_router import register_search
+from app.modules.operator.api.coverage_router import register_coverage
+from app.modules.operator.application.coverage_service import OperatorCoverageService
+from app.modules.operator.application.recovery_schemas import registered_schemas
+from app.modules.operator.application.command_forms import COMMAND_SCHEMAS, command_source_kind
+
+FormKey = Literal[tuple(registered_schemas())]
 
 
 class PreferenceResponse(Contract):
@@ -51,17 +63,19 @@ class PreferenceInput(MutationInput):
 
 
 class RecoveryInput(MutationInput):
-    formKey: Literal["task.create", "maintenance.issue.create", "communication.record"]
+    formKey: FormKey
     schemaVersion: StrictInt = Field(ge=1)
     payload: dict[str, Any]
-    sourceKind: Literal["property", "space", "party"] | None = None
+    sourceKind: (
+        Literal["property", "space", "party", "task", "communication", "maintenance_issue"] | None
+    ) = None
     sourceId: UUID | None = None
     baseSourceRevision: str | None = Field(None, max_length=100)
 
 
 class AttemptInput(MutationInput):
     attemptKey: UUID
-    requestFingerprint: str = Field(pattern="^[0-9a-f]{64}$")
+    requestFingerprint: str | None = Field(None, pattern="^[0-9a-f]{64}$")
 
 
 class RecoveryMetadata(Contract):
@@ -77,11 +91,34 @@ class RecoveryMetadata(Contract):
     baseSourceRevision: str | None
 
 
+class RecoveredCommandResult(Contract):
+    targetId: UUID
+    revision: StrictInt = Field(ge=0)
+    status: str | None = Field(max_length=100)
+    operationId: UUID
+
+
+class RecoveryReceipt(Contract):
+    sourceKind: str
+    sourceId: UUID
+    receiptId: UUID
+    attemptKey: UUID
+    result: RecoveredCommandResult | None = None
+
+
+class RecoveryFormDescriptor(Contract):
+    formKey: FormKey
+    schemaVersion: Literal[1]
+    sourceKind: str | None
+    fingerprintMode: Literal["source_owned", "caller_provided"]
+    payloadSchema: dict[str, Any]
+
+
 class RecoveryResponse(RecoveryMetadata):
     payload: dict[str, Any]
     attemptKey: UUID | None
     requestFingerprint: str | None
-    receipt: dict[str, Any] | None
+    receipt: RecoveryReceipt | None
     reuseState: str
     asOf: AwareDatetime
     operationId: UUID | None = None
@@ -101,19 +138,52 @@ class ExpiryResponse(Contract):
     mayHaveMore: StrictBool
 
 
-def build_router(service):
+def invoke(operation):
+    try:
+        return operation()
+    except OperatorError as error:
+        details = (
+            {"currentRevision": error.current_revision}
+            if getattr(error, "current_revision", None) is not None
+            else {}
+        )
+        raise domain_problem(error, status_code=error.status_code, **details) from error
+
+
+def build_router(
+    service,
+    directories: OperatorDirectoryService | None = None,
+    overviews: OperatorOverviewService | None = None,
+    search: OperatorSearchService | None = None,
+    coverage: OperatorCoverageService | None = None,
+):
     router = APIRouter(prefix="/api/operator", tags=["operator"])
 
-    def invoke(operation):
-        try:
-            return operation()
-        except OperatorError as error:
-            details = (
-                {"currentRevision": error.current_revision}
-                if getattr(error, "current_revision", None) is not None
-                else {}
-            )
-            raise domain_problem(error, status_code=error.status_code, **details) from error
+    @router.get(
+        "/recovery-forms",
+        response_model=list[RecoveryFormDescriptor],
+        operation_id="listOperatorRecoveryForms",
+    )
+    def recovery_forms():
+        return [
+            {
+                "formKey": key,
+                "schemaVersion": 1,
+                "sourceKind": command_source_kind(key) if key in COMMAND_SCHEMAS else None,
+                "fingerprintMode": "source_owned" if key in COMMAND_SCHEMAS else "caller_provided",
+                "payloadSchema": schema.model_json_schema(),
+            }
+            for key, schema in registered_schemas().items()
+        ]
+
+    if directories is not None:
+        register_directory(router, directories, invoke)
+    if overviews is not None:
+        register_overviews(router, overviews, invoke)
+    if search is not None:
+        register_search(router, search, invoke)
+    if coverage is not None:
+        register_coverage(router, coverage, invoke)
 
     @router.get("/bootstrap", response_model=BootstrapResponse, operation_id="getOperatorBootstrap")
     def bootstrap():
@@ -139,6 +209,11 @@ def build_router(service):
             )
         )
 
+    register_recovery(router, service)
+    return router
+
+
+def register_recovery(router, service):
     @router.get("/recovery", response_model=RecoveryPage, operation_id="listOperatorRecovery")
     def recovery_records(
         limit: int = Query(50, ge=1, le=100), cursor: str | None = Query(None, max_length=4096)
@@ -228,5 +303,3 @@ def build_router(service):
                 idempotency_key=str(data.idempotencyKey),
             )
         )
-
-    return router

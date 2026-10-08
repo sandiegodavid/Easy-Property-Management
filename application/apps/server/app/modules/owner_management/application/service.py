@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from base64 import urlsafe_b64decode, urlsafe_b64encode
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from json import dumps, loads
@@ -9,6 +9,12 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from app.modules.owner_management.application.ports import OwnerConcernUnitOfWork
+from app.modules.owner_management.application.commands import (
+    ConcernCommand,
+    finish,
+    start,
+    fingerprint as command_fingerprint,
+)
 from app.modules.owner_management.domain.models import (
     ACTIVE_STATUSES,
     PRIORITIES,
@@ -30,18 +36,18 @@ class OwnerConcernService:
         self.unit_of_work = unit_of_work
         self.now = now
 
-    def create(self, command: ConcernCreateCommand) -> dict[str, object]:
+    def create(self, command: ConcernCreateCommand, *, expected_revision: int) -> dict[str, object]:
         fingerprint = _fingerprint(command)
+        payload = asdict(command)
+        payload.pop("idempotency_key")
+        receipt = ConcernCommand(
+            "create", None, expected_revision, command.idempotency_key, payload
+        )
 
         def operation(tx):
-            retry = tx.operation(command.idempotency_key)
-            if retry:
-                if retry["request_fingerprint"] != fingerprint:
-                    raise OwnerConcernConflictError(
-                        "Idempotency key was already used for a different request.",
-                        "idempotency_conflict",
-                    )
-                return self._view(tx, _required(tx.concern(str(retry["id"]))))
+            retry = start(tx, receipt, self._view)
+            if retry is not None:
+                return retry
             context = self._context(tx, command)
             self._future_limit(command.raised_at_utc)
             if command.originating_communication_id and not tx.originating_communication(
@@ -122,27 +128,39 @@ class OwnerConcernService:
                 reason="owner_concern_created",
                 correlation_id=correlation,
             )
+            task = None
             if command.follow_up:
-                self._create_follow_up(
+                task = self._create_follow_up(
                     tx,
                     item,
                     command.follow_up,
                     command.idempotency_key,
-                    fingerprint,
+                    command_fingerprint(receipt.request()),
                     correlation,
                     stamp,
                 )
-            return self._view(tx, item)
+            return finish(tx, receipt, item, self._view(tx, item), stamp, correlation, task)
 
         return self.unit_of_work.write(operation)
 
-    def patch(self, concern_id: str, values: dict[str, object]) -> dict[str, object]:
+    def patch(
+        self,
+        concern_id: str,
+        values: dict[str, object],
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ) -> dict[str, object]:
         uuid(concern_id, "Concern ID")
         allowed = {"summary", "description", "priority"}
         if not set(values).issubset(allowed):
             raise OwnerConcernError("Patch contains unsupported fields.")
+        receipt = ConcernCommand("patch", concern_id, expected_revision, idempotency_key, values)
 
         def operation(tx):
+            retry = start(tx, receipt, self._view)
+            if retry is not None:
+                return retry
             current = _required(tx.concern(concern_id))
             if current.status not in ACTIVE_STATUSES:
                 raise OwnerConcernConflictError(
@@ -166,13 +184,16 @@ class OwnerConcernService:
                 current.description,
                 current.priority,
             ):
-                return self._view(tx, current)
+                return finish(
+                    tx, receipt, current, self._view(tx, current), _stamp(self.now()), str(uuid4())
+                )
             updated = replace(
                 current,
                 summary=summary,
                 description=description,
                 priority=priority,
                 updated_at_utc=_stamp(self.now()),
+                revision=current.revision + 1,
             )
             correlation = str(uuid4())
             tx.replace_concern(updated)
@@ -185,20 +206,39 @@ class OwnerConcernService:
                 reason="owner_concern_updated",
                 correlation_id=correlation,
             )
-            return self._view(tx, updated)
+            return finish(
+                tx, receipt, updated, self._view(tx, updated), updated.updated_at_utc, correlation
+            )
 
         return self.unit_of_work.write(operation)
 
     def transition(
-        self, concern_id: str, target: str, *, confirmed: bool, narrative: str | None = None
+        self,
+        concern_id: str,
+        target: str,
+        *,
+        confirmed: bool,
+        narrative: str | None = None,
+        expected_revision: int,
+        idempotency_key: str,
     ) -> dict[str, object]:
         uuid(concern_id, "Concern ID")
         if confirmed is not True:
             raise OwnerConcernError("Explicit confirmation is required.")
         if target not in {"in_progress", "open", "resolved", "dismissed"}:
             raise OwnerConcernError("Concern status is invalid.")
+        receipt = ConcernCommand(
+            target,
+            concern_id,
+            expected_revision,
+            idempotency_key,
+            {"confirmed": confirmed, "narrative": narrative},
+        )
 
         def operation(tx):
+            retry = start(tx, receipt, self._view)
+            if retry is not None:
+                return retry
             current = _required(tx.concern(concern_id))
             allowed = {
                 "open": {"in_progress", "resolved", "dismissed"},
@@ -235,6 +275,7 @@ class OwnerConcernService:
                 resolution_summary=narrative_value if target == "resolved" else None,
                 dismissed_at_utc=stamp if target == "dismissed" else None,
                 dismissal_reason=narrative_value if target == "dismissed" else None,
+                revision=current.revision + 1,
             )
             correlation = str(uuid4())
             tx.replace_concern(updated)
@@ -252,35 +293,65 @@ class OwnerConcernService:
                 reason="owner_concern_status_changed",
                 correlation_id=correlation,
             )
-            return self._view(tx, updated)
+            return finish(tx, receipt, updated, self._view(tx, updated), stamp, correlation)
 
         return self.unit_of_work.write(operation)
 
     def follow_up(
-        self, concern_id: str, follow_up: FollowUpInput, idempotency_key: str
+        self,
+        concern_id: str,
+        follow_up: FollowUpInput,
+        idempotency_key: str,
+        *,
+        expected_revision: int,
     ) -> dict[str, object]:
+        if not isinstance(follow_up, FollowUpInput):
+            raise OwnerConcernError("Follow-up input is invalid.")
         uuid(concern_id, "Concern ID")
         uuid(idempotency_key, "Idempotency key")
-        fingerprint = _fingerprint((concern_id, follow_up))
+        receipt = ConcernCommand(
+            "follow_up", concern_id, expected_revision, idempotency_key, asdict(follow_up)
+        )
 
         def operation(tx):
-            prior = tx.follow_up_operation(idempotency_key)
-            if prior:
-                if prior["request_fingerprint"] != fingerprint:
-                    raise OwnerConcernConflictError(
-                        "Idempotency key was already used for a different follow-up.",
-                        "idempotency_conflict",
-                    )
-                return self._view(tx, _required(tx.concern(concern_id)))
+            prior = start(tx, receipt, self._view)
+            if prior is not None:
+                return prior
             concern = _required(tx.concern(concern_id))
             correlation = str(uuid4())
             stamp = _stamp(self.now())
-            self._create_follow_up(
-                tx, concern, follow_up, idempotency_key, fingerprint, correlation, stamp
+            updated = replace(concern, revision=concern.revision + 1, updated_at_utc=stamp)
+            tx.replace_concern(updated)
+            task = self._create_follow_up(
+                tx,
+                updated,
+                follow_up,
+                idempotency_key,
+                command_fingerprint(receipt.request()),
+                correlation,
+                stamp,
+                before=concern,
             )
-            return self._view(tx, concern)
+            return finish(tx, receipt, updated, self._view(tx, updated), stamp, correlation, task)
 
         return self.unit_of_work.write(operation)
+
+    def command_operation(self, operation_id: str) -> dict[str, object]:
+        self._identifier(operation_id)
+        return self.unit_of_work.read(
+            lambda tx: loads(_required(tx.command_operation(operation_id))["result_json"])
+        )
+
+    def command_operation_by_key(self, key: str) -> dict[str, object]:
+        self._identifier(key)
+        return self.unit_of_work.read(
+            lambda tx: loads(_required(tx.command_operation_by_key(key))["result_json"])
+        )
+
+    @staticmethod
+    def _identifier(value):
+        if not isinstance(value, str) or uuid(value, "Operation identity") != value:
+            raise OwnerConcernError("Operation identity must be a canonical UUID.")
 
     def get(self, concern_id: str) -> dict[str, object]:
         uuid(concern_id, "Concern ID")
@@ -407,7 +478,9 @@ class OwnerConcernService:
         except ValueError as error:
             raise OwnerConcernError(str(error)) from error
 
-    def _create_follow_up(self, tx, concern, follow_up, key, fingerprint, correlation, stamp):
+    def _create_follow_up(
+        self, tx, concern, follow_up, key, fingerprint, correlation, stamp, *, before=None
+    ):
         task = tx.create_task(
             {
                 "title": follow_up.title,
@@ -426,8 +499,8 @@ class OwnerConcernService:
             entity_type="owner_concern",
             entity_id=concern.id,
             action="follow_up_created",
-            before=None,
-            after={"taskId": task.id},
+            before=before.to_dict() if before is not None else None,
+            after={**concern.to_dict(), "taskId": task.id},
             reason="owner_concern_follow_up_created",
             correlation_id=correlation,
         )
@@ -450,6 +523,7 @@ class OwnerConcernService:
             reason="owner_concern_follow_up_operation_created",
             correlation_id=correlation,
         )
+        return task
 
     def _view(self, tx, concern):
         data = concern.to_dict()

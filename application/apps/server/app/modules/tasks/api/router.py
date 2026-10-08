@@ -16,6 +16,7 @@ from pydantic import (
 
 from app.modules.tasks.application.waiting import FollowUpQuery, WaitingCommand, WaitingError
 from app.modules.tasks.application.waiting_service import TaskWaitingService
+from app.modules.tasks.application.mutations import TaskMutationCommand, TaskMutationService
 
 from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
 
@@ -29,9 +30,14 @@ from app.modules.workspace.application.runtime import WorkspaceRuntime
 
 
 def build_router(
-    service: TaskService, runtime: WorkspaceRuntime, waiting: TaskWaitingService | None = None
+    service: TaskService,
+    runtime: WorkspaceRuntime,
+    waiting: TaskWaitingService | None = None,
+    mutations: TaskMutationService | None = None,
 ) -> APIRouter:
-    router = APIRouter(prefix="/api/tasks", tags=["tasks"])
+    router = APIRouter(
+        prefix="/api/tasks", tags=["tasks"], responses={409: {"model": TaskConflictResponse}}
+    )
 
     def ready(write: bool = False) -> None:
         if not runtime.ready or runtime.error:
@@ -56,12 +62,32 @@ def build_router(
         except TaskError as error:
             raise domain_problem(error, status_code=400, code="task_validation") from error
 
-    @router.post("", status_code=status.HTTP_201_CREATED, response_model=TaskResponse)
-    def create(data: TaskCreateRequest):
+    @router.post(
+        "",
+        status_code=status.HTTP_201_CREATED,
+        response_model=TaskCreationResponse,
+        operation_id="createTask",
+    )
+    def create(data: TaskCreationRequest):
         ready(True)
-        return invoke(lambda: service.view(service.create(data.model_dump())))
+        return invoke(
+            lambda: service.create_command(
+                data.model_dump(mode="json", exclude={"expectedRevision", "idempotencyKey"}),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
 
-    @router.get("", response_model=TaskPageResponse)
+    @router.get(
+        "/creation-operations/{key}",
+        response_model=TaskCreationResponse,
+        operation_id="getTaskCreationOperation",
+    )
+    def creation_receipt(key: UUID):
+        ready()
+        return invoke(lambda: service.creation_receipt(str(key)))
+
+    @router.get("", response_model=TaskPageResponse, operation_id="listTasks")
     def list_tasks(
         status: str | None = None,
         due: str | None = None,
@@ -187,57 +213,114 @@ def build_router(
     def reschedule(task_id: UUID, data: FollowUpRequest):
         return waiting_change(task_id, data, "reschedule")
 
-    @router.get("/{task_id}", response_model=TaskResponse)
-    def get(task_id: str):
+    @router.get("/{task_id}", response_model=TaskResponse, operation_id="getTask")
+    def get(task_id: UUID):
         ready()
-        return invoke(lambda: service.view(service.get(task_id)))
+        return invoke(lambda: service.view(service.get(str(task_id))))
 
-    @router.post("/{task_id}/complete")
-    def complete(task_id: str, data: OutcomeRequest | None = None):
+    @router.get(
+        "/mutation-operations/{key}",
+        response_model=TaskMutationResponse,
+        operation_id="getTaskMutationOperation",
+    )
+    def mutation_receipt(key: UUID):
+        ready()
+        if mutations is None:
+            raise workspace_unavailable("Task mutation service is unavailable.")
+        return invoke(lambda: mutations.operation(str(key)))
+
+    def task_change(task_id, data, action, reminder_id=None):
         ready(True)
+        if mutations is None:
+            raise workspace_unavailable("Task mutation service is unavailable.")
         return invoke(
-            lambda: service.transition(
-                task_id, "completed", data.outcomeNote if data else None
-            ).to_dict()
+            lambda: mutations.mutate(
+                TaskMutationCommand(
+                    str(task_id),
+                    action,
+                    data.expectedRevision,
+                    str(data.idempotencyKey),
+                    outcome_note=getattr(data, "outcomeNote", None),
+                    reminder_id=str(reminder_id) if reminder_id else None,
+                    remind_at_utc=data.remindAtUtc.isoformat()
+                    if hasattr(data, "remindAtUtc")
+                    else None,
+                    changes=tuple(
+                        sorted(
+                            (
+                                PATCH_FIELDS[key],
+                                value.isoformat()
+                                if isinstance(value, datetime)
+                                else str(value)
+                                if isinstance(value, UUID)
+                                else value,
+                            )
+                            for key, value in data.model_dump(
+                                exclude={"expectedRevision", "idempotencyKey"}, exclude_unset=True
+                            ).items()
+                        )
+                    )
+                    if action == "edit"
+                    else (),
+                    confirmed=getattr(data, "confirmed", False),
+                )
+            )
         )
 
-    @router.post("/{task_id}/start")
-    def start(task_id: str):
-        ready(True)
-        return invoke(lambda: service.transition(task_id, "in_progress").to_dict())
+    @router.post(
+        "/{task_id}/complete", response_model=TaskMutationResponse, operation_id="completeTask"
+    )
+    def complete(task_id: UUID, data: OutcomeRequest):
+        return task_change(task_id, data, "complete")
 
-    @router.post("/{task_id}/reopen")
-    def reopen(task_id: str):
-        ready(True)
-        return invoke(lambda: service.transition(task_id, "open").to_dict())
+    @router.post("/{task_id}/start", response_model=TaskMutationResponse, operation_id="startTask")
+    def start(task_id: UUID, data: TaskMutationRequest):
+        return task_change(task_id, data, "start")
 
-    @router.post("/{task_id}/cancel")
-    def cancel(task_id: str, data: OutcomeRequest | None = None):
-        ready(True)
-        return invoke(
-            lambda: service.transition(
-                task_id, "cancelled", data.outcomeNote if data else None
-            ).to_dict()
-        )
+    @router.patch("/{task_id}", response_model=TaskMutationResponse, operation_id="editTask")
+    def edit(task_id: UUID, data: TaskPatchRequest):
+        return task_change(task_id, data, "edit")
 
-    @router.post("/{task_id}/reminders", status_code=status.HTTP_201_CREATED)
-    def add_reminder(task_id: str, data: ReminderRequest):
-        ready(True)
-        return invoke(lambda: service.add_reminder(task_id, data.remindAtUtc).to_dict())
+    @router.delete("/{task_id}", response_model=TaskMutationResponse, operation_id="deleteTask")
+    def delete(task_id: UUID, data: TaskConfirmationRequest):
+        return task_change(task_id, data, "delete")
 
-    @router.post("/{task_id}/reminders/{reminder_id}/acknowledge")
-    def acknowledge(task_id: str, reminder_id: str):
-        ready(True)
-        return invoke(
-            lambda: service.set_reminder_status(task_id, reminder_id, "acknowledged").to_dict()
-        )
+    @router.post(
+        "/{task_id}/reopen", response_model=TaskMutationResponse, operation_id="reopenTask"
+    )
+    def reopen(task_id: UUID, data: TaskConfirmationRequest):
+        return task_change(task_id, data, "reopen")
 
-    @router.post("/{task_id}/reminders/{reminder_id}/dismiss")
-    def dismiss(task_id: str, reminder_id: str):
-        ready(True)
-        return invoke(
-            lambda: service.set_reminder_status(task_id, reminder_id, "dismissed").to_dict()
-        )
+    @router.post(
+        "/{task_id}/cancel", response_model=TaskMutationResponse, operation_id="cancelTask"
+    )
+    def cancel(task_id: UUID, data: OutcomeRequest):
+        return task_change(task_id, data, "cancel")
+
+    @router.post(
+        "/{task_id}/reminders",
+        status_code=status.HTTP_201_CREATED,
+        response_model=TaskMutationResponse,
+        operation_id="addTaskReminder",
+    )
+    def add_reminder(task_id: UUID, data: ReminderRequest):
+        return task_change(task_id, data, "add_reminder")
+
+    @router.post(
+        "/{task_id}/reminders/{reminder_id}/acknowledge",
+        response_model=TaskMutationResponse,
+        operation_id="acknowledgeTaskReminder",
+    )
+    def acknowledge(task_id: UUID, reminder_id: UUID, data: TaskConfirmationRequest):
+        return task_change(task_id, data, "acknowledge", reminder_id)
+
+    @router.post(
+        "/{task_id}/reminders/{reminder_id}/dismiss",
+        response_model=TaskMutationResponse,
+        operation_id="dismissTaskReminder",
+    )
+    def dismiss(task_id: UUID, reminder_id: UUID, data: TaskConfirmationRequest):
+        return task_change(task_id, data, "dismiss", reminder_id)
 
     return router
 
@@ -246,30 +329,41 @@ class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class TaskConflictDetail(Contract):
+    code: Literal["task_conflict", "task_waiting_conflict"]
+    message: str
+    currentRevision: StrictInt | None = Field(default=None, ge=0)
+
+
+class TaskConflictResponse(Contract):
+    detail: TaskConflictDetail
+
+
 class TaskResponse(Contract):
-    id: str
+    id: UUID
     title: str
     notes: str | None
     status: Literal["open", "in_progress", "completed", "cancelled"]
     priority: Literal["low", "normal", "high", "urgent"]
-    dueAtUtc: datetime | None
+    dueAtUtc: AwareDatetime | None
     dueTimezone: str | None
     isAllDay: bool
-    completedAtUtc: datetime | None
-    cancelledAtUtc: datetime | None
+    completedAtUtc: AwareDatetime | None
+    cancelledAtUtc: AwareDatetime | None
     outcomeNote: str | None
     relatedEntityType: str | None
     relatedEntityId: str | None
     relatedLabel: str | None
-    createdAtUtc: datetime
-    updatedAtUtc: datetime
-    revision: int
+    createdAtUtc: AwareDatetime
+    updatedAtUtc: AwareDatetime
+    revision: StrictInt = Field(ge=0)
     waitingForKind: str | None
     waitingForLabel: str | None
     followUpAt: AwareDatetime | None
     followUpTimezone: str | None
     waitingSetAtUtc: AwareDatetime | None
     waitingClearedAtUtc: AwareDatetime | None
+    deletedAtUtc: AwareDatetime | None
     isWaiting: bool
     waitingFor: "WaitingForResponse | None"
     followUpState: Literal["scheduled", "due", "overdue", "unscheduled"] | None
@@ -280,19 +374,19 @@ class TaskResponse(Contract):
 
 
 class DueReminderResponse(Contract):
-    id: str
-    taskId: str
-    remindAtUtc: datetime
+    id: UUID
+    taskId: UUID
+    remindAtUtc: AwareDatetime
     status: Literal["pending", "acknowledged", "dismissed", "sent"]
-    acknowledgedAtUtc: datetime | None
-    dismissedAtUtc: datetime | None
-    createdAtUtc: datetime
+    acknowledgedAtUtc: AwareDatetime | None
+    dismissedAtUtc: AwareDatetime | None
+    createdAtUtc: AwareDatetime
     taskTitle: str
-    taskDueAtUtc: datetime | None
+    taskDueAtUtc: AwareDatetime | None
     taskDueTimezone: str | None
     taskIsAllDay: bool
     relatedLabel: str | None
-    taskRevision: int
+    taskRevision: StrictInt = Field(ge=0)
     taskWaitingForKind: str | None
     taskWaitingForLabel: str | None
     taskFollowUpAt: AwareDatetime | None
@@ -324,9 +418,9 @@ class TaskPageResponse(Contract):
 class TaskCreateRequest(Contract):
     title: str = Field(min_length=1, max_length=240)
     notes: str | None = None
-    status: str = "open"
-    priority: str = "normal"
-    dueAtUtc: str | None = None
+    status: Literal["open", "in_progress", "completed", "cancelled"] = "open"
+    priority: Literal["low", "normal", "high", "urgent"] = "normal"
+    dueAtUtc: AwareDatetime | None = None
     dueTimezone: str | None = None
     isAllDay: StrictBool = False
     relatedEntityType: str | None = None
@@ -351,12 +445,90 @@ class TaskCreateRequest(Contract):
         return self
 
 
-class OutcomeRequest(Contract):
-    outcomeNote: str | None = None
+class TaskMutationRequest(Contract):
+    expectedRevision: StrictInt = Field(ge=1)
+    idempotencyKey: UUID
 
 
-class ReminderRequest(Contract):
-    remindAtUtc: str = Field(min_length=1)
+class TaskConfirmationRequest(TaskMutationRequest):
+    confirmed: StrictBool
+
+    @model_validator(mode="after")
+    def confirmation(self):
+        if not self.confirmed:
+            raise ValueError("confirmed=true is required.")
+        return self
+
+
+class OutcomeRequest(TaskConfirmationRequest):
+    outcomeNote: str | None = Field(default=None, min_length=1, max_length=4000)
+
+
+PATCH_FIELDS = {
+    "title": "title",
+    "notes": "notes",
+    "priority": "priority",
+    "dueAtUtc": "due_at_utc",
+    "dueTimezone": "due_timezone",
+    "isAllDay": "is_all_day",
+    "relatedEntityType": "related_entity_type",
+    "relatedEntityId": "related_entity_id",
+    "relatedLabel": "related_label",
+}
+
+
+class TaskPatchRequest(TaskMutationRequest):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    notes: str | None = Field(default=None, max_length=10_000)
+    priority: Literal["low", "normal", "high", "urgent"] | None = None
+    dueAtUtc: AwareDatetime | None = None
+    dueTimezone: str | None = None
+    isAllDay: StrictBool | None = None
+    relatedEntityType: str | None = Field(default=None, min_length=1, max_length=64)
+    relatedEntityId: UUID | None = None
+    relatedLabel: str | None = Field(default=None, min_length=1, max_length=255)
+
+    @model_validator(mode="after")
+    def changed_fields(self):
+        selected = self.model_fields_set & PATCH_FIELDS.keys()
+        if not selected:
+            raise ValueError("At least one editable field is required.")
+        if any(
+            name in selected and getattr(self, name) is None
+            for name in ("title", "priority", "isAllDay")
+        ):
+            raise ValueError("Title, priority and all-day state cannot be cleared.")
+        return self
+
+
+class TaskCreationRequest(TaskCreateRequest):
+    expectedRevision: StrictInt = Field(ge=0, le=0)
+    idempotencyKey: UUID
+
+
+class TaskCreationResponse(TaskResponse):
+    operationId: UUID
+
+
+class ReminderRequest(TaskMutationRequest):
+    remindAtUtc: AwareDatetime
+
+
+class ReminderResponse(Contract):
+    id: UUID
+    taskId: UUID
+    remindAtUtc: AwareDatetime
+    status: Literal["pending", "acknowledged", "dismissed"]
+    acknowledgedAtUtc: AwareDatetime | None
+    dismissedAtUtc: AwareDatetime | None
+    createdAtUtc: AwareDatetime
+
+
+class TaskMutationResponse(Contract):
+    task: TaskResponse
+    reminder: ReminderResponse | None
+    revision: StrictInt
+    operationId: UUID
 
 
 class WaitingForResponse(Contract):

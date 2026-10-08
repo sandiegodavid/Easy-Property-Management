@@ -12,13 +12,25 @@ current-baseline persistence, focused tests, then runtime/schema/archive integra
 - Registered incomplete forms: `task.create`, `maintenance.issue.create`, and
   `communication.record`, version 1. These do not create official records or domain drafts.
 - Recovery list/load/save/discard, bounded explicit expiry, and unresolved-attempt retention.
-- Maintenance and Communications provide source-owned receipt projections for reconciliation.
-  Task creation has no durable creation receipt, so recoverable command-attempt admission
-  is deliberately unavailable for that form; saving/restoring incomplete Task input works.
+- Maintenance, Communications and Task creation provide source-owned receipts.
+  Recoverable Task creation now requires revision zero and a UUID key, persists
+  its original response atomically, and replays independently of later Task changes.
+  Other Task commands are not thereby enabled. See
+  [UI readiness slice 7](UI-001_IMPLEMENTATION_MATRIX.md#slice-7-recoverable-task-creation)
+  for concurrent retry, rollback, retained validation and encrypted restore proofs.
 - Current greenfield baseline includes `operator_preferences`,
   `operator_recovery_records`, and append-only `operator_operations`.
   Receipts are retained indefinitely, exceeding the minimum 30-day requirement.
+- The subsequent coverage slice adds append-only `operator_coverage_reviews`,
+  retaining review commands, evidence revisions, operation results, the original
+  property time zone, and correlated audit identity. See
+  [the UI readiness matrix](UI-001_IMPLEMENTATION_MATRIX.md#slice-5-area-specific-coverage-and-durable-reviews)
+  for its source-owned contracts and focused acceptance proofs.
 - Runtime composition and workspace-open/archive/restore schema validation include OPS records.
+- Batched directory and overview coverage is delivered in
+  [UI readiness slice 6](UI-001_IMPLEMENTATION_MATRIX.md#slice-6-batched-directory-and-overview-coverage).
+  Counted card previews and independently paged overview coverage share bounded
+  source batches, effective membership, the caller's read snapshot and review policy.
 - Recovery cursors bind filters, workspace, runtime epoch, audit marker and captured instant;
   they expire after 15 minutes and use the last returned record, not the excluded record.
 
@@ -49,9 +61,7 @@ These are not implemented or advertised as available capabilities:
 2. Finance composition on the same deferred snapshot, including large owner scopes and explicit
    whole-property money periods; Task previews on the shared connection and instant.
 3. Initial registered metadata search types with independent bounded group cursors and availability.
-4. Area-specific coverage derivation, append-only review decisions, allowed non-applicability,
-   evidence-revision conflicts and reusable DASH-001 reads.
-5. Focused integration proofs for collection snapshot consistency, independent overview failures,
+4. Focused integration proofs for collection snapshot consistency, independent overview failures,
    directory/search query ceilings, effective-date invalidation and coverage backup/restore.
 
 The complete server suite is intentionally not run; the request limits validation to focused tests.

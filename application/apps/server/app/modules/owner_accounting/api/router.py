@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from enum import Enum
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, status
@@ -50,7 +51,11 @@ class AllocationInput(Contract):
     amountMinor: StrictInt = Field(gt=0)
 
 
-class ReportInput(Contract):
+class CommandInput(Contract):
+    expectedRevision: StrictInt = Field(ge=0)
+
+
+class ReportInput(CommandInput):
     leaseId: UUID
     ownerPartyId: UUID
     receivedOn: date
@@ -65,7 +70,7 @@ class ReportInput(Contract):
     replacesReportId: UUID | None = None
 
 
-class PatchInput(Contract):
+class PatchInput(CommandInput):
     ownerPartyId: UUID | None = None
     receivedOn: date | None = None
     amountMinor: StrictInt | None = Field(None, gt=0, le=9_999_999_999)
@@ -78,7 +83,8 @@ class PatchInput(Contract):
     idempotencyKey: UUID
 
 
-class VerifyInput(Contract):
+class VerifyInput(CommandInput):
+    expectedRentLedgerRevision: StrictInt = Field(ge=0)
     confirmed: StrictBool
     reviewNote: str = Field(min_length=1, max_length=1000)
     idempotencyKey: UUID
@@ -101,45 +107,74 @@ class VerifyInput(Contract):
         return self
 
 
-class RejectInput(Contract):
+class RejectInput(CommandInput):
     confirmed: StrictBool
     reason: str = Field(min_length=1, max_length=1000)
     idempotencyKey: UUID
 
 
+class OwnerEvidenceLinkResponse(Contract):
+    id: UUID
+    entity_type: str
+    entity_id: UUID
+    purpose: str
+    created_at: AwareDatetime
+    file_id: UUID | None
+    archived_at: AwareDatetime | None
+    archive_reason: str | None
+    original_name: str
+    media_type: str
+    size_bytes: StrictInt = Field(ge=0)
+    content_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    storage_state: Literal["available", "missing", "quarantined"]
+    verified_at: AwareDatetime
+
+
+class OwnerReceiptAllocationResponse(Contract):
+    id: UUID
+    receiptId: UUID
+    expectationId: UUID
+    amountMinor: StrictInt = Field(gt=0)
+    createdAt: AwareDatetime
+    expectationDueOn: date | None
+    expectationPeriodStartsOn: date | None
+    expectationPeriodEndsOn: date | None
+
+
 class OwnerRentReportResponse(Contract):
-    id: str
-    leaseId: str
-    propertyId: str
-    spaceId: str
+    reportRevision: StrictInt = Field(ge=1)
+    id: UUID
+    leaseId: UUID
+    propertyId: UUID
+    spaceId: UUID
     propertyTimezoneSnapshot: str
-    ownerPartyId: str
+    ownerPartyId: UUID
     ownerDisplayNameSnapshot: str
-    receivedOn: str
-    amountMinor: int
+    receivedOn: date
+    amountMinor: StrictInt = Field(gt=0)
     currencyCode: str
     paymentMethodKind: PaymentMethodKind
     paymentMethodLabel: str | None
     maskedReference: str | None
     otherPaymentMethodNote: str | None
-    reportedAtUtc: str
+    reportedAtUtc: AwareDatetime
     sourceNote: str | None
     status: ReportStatus
-    verifiedReceiptId: str | None
-    reviewedAt: str | None
+    verifiedReceiptId: UUID | None
+    reviewedAt: AwareDatetime | None
     reviewNote: str | None
-    replacesReportId: str | None
-    createdAt: str
-    updatedAt: str
+    replacesReportId: UUID | None
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
     receiptLifecycleStatus: ReceiptLifecycle | None
-    financiallyEffective: bool
-    evidenceCount: int
-    files: list[dict[str, object]] | None = None
-    receiptAllocations: list[dict[str, object]] | None = None
-    currentOwnerState: str | None = None
-    priorReportId: str | None = None
-    replacementReportId: str | None = None
-    replacementReceiptId: str | None = None
+    financiallyEffective: StrictBool
+    evidenceCount: StrictInt = Field(ge=0)
+    files: list[OwnerEvidenceLinkResponse] | None = None
+    receiptAllocations: list[OwnerReceiptAllocationResponse] | None = None
+    currentOwnerState: Literal["active", "archived"] | None = None
+    priorReportId: UUID | None = None
+    replacementReportId: UUID | None = None
+    replacementReceiptId: UUID | None = None
 
 
 class OwnerRentReportPageResponse(Contract):
@@ -147,8 +182,45 @@ class OwnerRentReportPageResponse(Contract):
     nextCursor: str | None
 
 
+class OwnerRentReportMutationResponse(OwnerRentReportResponse):
+    operationId: UUID
+
+
+class OwnerRentReportVerificationResponse(OwnerRentReportMutationResponse):
+    rentLedgerRevision: StrictInt = Field(ge=0)
+
+
+class OwnerReportRecoveryResponse(Contract):
+    operationId: UUID
+    reportId: UUID
+    result: OwnerRentReportVerificationResponse | OwnerRentReportMutationResponse
+
+
+class OwnerReportConflictContext(Contract):
+    currentRevision: StrictInt | None = Field(None, ge=0)
+    reportId: UUID | None = None
+    candidateReceiptIds: list[UUID] | None = None
+
+
+class OwnerReportConflictDetail(Contract):
+    code: str
+    message: str
+    details: OwnerReportConflictContext | None = None
+    scopeKind: str | None = None
+    scopeId: UUID | None = None
+    currentRevision: StrictInt | None = Field(None, ge=0)
+
+
+class OwnerReportConflictResponse(Contract):
+    detail: OwnerReportConflictDetail
+
+
 def build_router(service: OwnerRentReportService, runtime):
-    router = APIRouter(prefix="/api", tags=["owner-accounting"])
+    router = APIRouter(
+        prefix="/api",
+        tags=["owner-accounting"],
+        responses={409: {"model": OwnerReportConflictResponse}},
+    )
 
     def ready(write=False):
         if not runtime.ready or runtime.error:
@@ -171,7 +243,7 @@ def build_router(service: OwnerRentReportService, runtime):
             ) from error
         except FinanceConflictError as error:
             raise domain_problem(
-                error, status_code=409, code="owner_rent_report_conflict"
+                error, status_code=409, code=error.code, **error.details
             ) from error
         except FinanceError as error:
             raise domain_problem(
@@ -181,7 +253,8 @@ def build_router(service: OwnerRentReportService, runtime):
     @router.post(
         "/owner-rent-reports",
         status_code=status.HTTP_201_CREATED,
-        response_model=OwnerRentReportResponse,
+        response_model=OwnerRentReportMutationResponse,
+        operation_id="createOwnerRentReport",
     )
     def create(data: ReportInput):
         ready(True)
@@ -200,11 +273,16 @@ def build_router(service: OwnerRentReportService, runtime):
                     data.otherPaymentMethodNote,
                     data.sourceNote,
                     str(data.replacesReportId) if data.replacesReportId else None,
-                )
+                ),
+                expected_revision=data.expectedRevision,
             )
         )
 
-    @router.get("/owner-rent-reports", response_model=OwnerRentReportPageResponse)
+    @router.get(
+        "/owner-rent-reports",
+        response_model=OwnerRentReportPageResponse,
+        operation_id="listOwnerRentReports",
+    )
     def reports(
         ownerPartyId: UUID | None = None,
         propertyId: UUID | None = None,
@@ -250,15 +328,23 @@ def build_router(service: OwnerRentReportService, runtime):
             )
         )
 
-    @router.get("/owner-rent-reports/{report_id}", response_model=OwnerRentReportResponse)
+    @router.get(
+        "/owner-rent-reports/{report_id}",
+        response_model=OwnerRentReportResponse,
+        operation_id="getOwnerRentReport",
+    )
     def detail(report_id: UUID):
         ready()
         return invoke(lambda: service.detail(str(report_id)))
 
-    @router.patch("/owner-rent-reports/{report_id}", response_model=OwnerRentReportResponse)
+    @router.patch(
+        "/owner-rent-reports/{report_id}",
+        response_model=OwnerRentReportMutationResponse,
+        operation_id="patchOwnerRentReport",
+    )
     def patch(report_id: UUID, data: PatchInput):
         ready(True)
-        raw = data.model_dump(exclude={"idempotencyKey"}, exclude_unset=True)
+        raw = data.model_dump(exclude={"idempotencyKey", "expectedRevision"}, exclude_unset=True)
         names = {
             "ownerPartyId": "owner_party_id",
             "receivedOn": "received_on",
@@ -280,9 +366,20 @@ def build_router(service: OwnerRentReportService, runtime):
             )
             for key, value in raw.items()
         }
-        return invoke(lambda: service.patch(str(report_id), values, str(data.idempotencyKey)))
+        return invoke(
+            lambda: service.patch(
+                str(report_id),
+                values,
+                str(data.idempotencyKey),
+                expected_revision=data.expectedRevision,
+            )
+        )
 
-    @router.post("/owner-rent-reports/{report_id}/verify", response_model=OwnerRentReportResponse)
+    @router.post(
+        "/owner-rent-reports/{report_id}/verify",
+        response_model=OwnerRentReportVerificationResponse,
+        operation_id="verifyOwnerRentReport",
+    )
     def verify(report_id: UUID, data: VerifyInput):
         ready(True)
         return invoke(
@@ -300,10 +397,16 @@ def build_router(service: OwnerRentReportService, runtime):
                     str(data.replacesReceiptId) if data.replacesReceiptId else None,
                 ),
                 str(data.idempotencyKey),
+                expected_revision=data.expectedRevision,
+                expected_ledger_revision=data.expectedRentLedgerRevision,
             )
         )
 
-    @router.post("/owner-rent-reports/{report_id}/reject", response_model=OwnerRentReportResponse)
+    @router.post(
+        "/owner-rent-reports/{report_id}/reject",
+        response_model=OwnerRentReportMutationResponse,
+        operation_id="rejectOwnerRentReport",
+    )
     def reject(report_id: UUID, data: RejectInput):
         ready(True)
         return invoke(
@@ -311,7 +414,17 @@ def build_router(service: OwnerRentReportService, runtime):
                 str(report_id),
                 RejectOwnerRentReportCommand(data.confirmed, data.reason),
                 str(data.idempotencyKey),
+                expected_revision=data.expectedRevision,
             )
         )
+
+    @router.get(
+        "/owner-rent-report-operations/{key}",
+        response_model=OwnerReportRecoveryResponse,
+        operation_id="getOwnerRentReportOperation",
+    )
+    def operation(key: UUID):
+        ready()
+        return invoke(lambda: service.command_operation(str(key)))
 
     return router

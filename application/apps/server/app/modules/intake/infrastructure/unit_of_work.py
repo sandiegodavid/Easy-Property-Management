@@ -115,6 +115,17 @@ class SQLiteIntakeTransaction:
             .first()
         )
 
+    def operation_by_id(self, operation_id: str):
+        return (
+            self.connection.execute(
+                select(IntakeSourceOperationModel).where(
+                    IntakeSourceOperationModel.id == operation_id
+                )
+            )
+            .mappings()
+            .first()
+        )
+
     def exact_source_for_evidence(
         self,
         current_source_id: str,

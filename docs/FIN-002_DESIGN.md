@@ -1,5 +1,56 @@
 # FIN-002 — Recorded Property Expenses
 
+## UI-001 Slice 15 command-contract amendment — October 8, 2026
+
+Record/patch/void Expense and record/void refund require `expectedRevision` and a
+UUID `idempotencyKey`, including direct application calls. Creation reuses its
+existing key and requires revision zero. One Expense revision covers its refunds;
+effective changes advance once, while an unchanged patch records a no-op receipt
+without changing the timestamp or revision. Mutation results require
+`expenseRevision` and `operationId`; current Expense views include the revision.
+Exact retries return the immutable original response before lifecycle checks;
+changed reuse and stale revisions return typed `409`. Source writes, revision,
+receipt and correlated audits are atomic. Finance's read-only command-key lookup
+recovers the original result. Expense-category administration uses the Slice 28
+contract below. See [Slice 15 readiness](FINANCE_COMMAND_READINESS.md).
+
+## UI-001 Slice 28 category-command amendment — October 9, 2026
+
+Category administration owns a revision separate from Expense/refund revisions.
+Seeded and newly created categories start at revision one. Create requires
+`expectedRevision: 0`; patch/archive/restore requires a positive exact integer.
+Every mutation requires a canonical UUID `idempotencyKey` in its request body,
+including direct application calls. Effective changes advance the category
+revision once. A semantically unchanged patch records an immutable receipt but
+preserves the category timestamp, revision and business audit history.
+
+Same-key replay returns the original result before lifecycle/revision checks.
+Changed reuse returns `expense_category_idempotency_conflict`; stale revisions
+return `expense_category_revision_conflict` with `currentCategory` and
+`currentRevision`. Mutation responses include required `revision` and
+`operationId`. Archival/restoration with a fresh key still obeys the existing
+lifecycle guards. Changing categories never advances existing Expense revisions
+or rewrites their original command responses.
+
+`expense_category_command_operations` stores `id`, `category_id`, `action`,
+globally unique category-command `idempotency_key`, canonical `request_json`,
+SHA-256 `request_fingerprint`, `expected_revision`, `resulting_revision`,
+canonical original `result_json`, `correlation_id` and `created_at`. Its actions
+are `create`, `patch`, `archive` and `restore`. The append-only ledger has update,
+delete and replacement prevention triggers. Category effects, revision, receipt
+and correlated `expense_category` / `expense_category_command_operation` audits
+commit or roll back together. Seed history is anchored to the registered original
+category definitions. Current-schema and restore validation reconstruct legal
+command/audit chains and reject altered results or revision tips.
+
+Read-only recovery at `/api/expense-categories/operations/{operationId}` and
+`/api/expense-categories/operations/by-key/{key}` returns the stored original
+representation through one indexed lookup. Category keys have their own ledger
+namespace. Maintenance retains MAINT-001's fixed vocabulary and has no category
+administration workflow; its issue category changes already use the delivered
+issue revision and receipt contract. Additional OPS registrations and browser
+controls remain gated.
+
 ## Purpose
 
 `FIN-002` gives the local operator a truthful record of property spending that has already occurred: what was paid, when it was paid, which property it belongs to, who was paid, who paid it, how it was categorized, and which files support it. It does not create bills, predict obligations, or initiate payment.
@@ -99,6 +150,7 @@ All IDs and idempotency keys are UUIDs. API monetary values are fixed-scale deci
 | `display_order` | Required integer from 0 through 10,000. |
 | `archived_at` | Null while active; UTC timestamp after archival. |
 | `created_at`, `updated_at` | Required UTC timestamps. No-op updates do not advance `updated_at`. |
+| `revision` | Category-owned positive integer, initially 1; one increment per effective administration command. |
 
 ### `expenses`
 
@@ -189,6 +241,8 @@ All routes require a ready workspace. Mutations require the writer lock. Request
 | Method | Path | Intent |
 | --- | --- | --- |
 | `GET` | `/api/expense-categories` | List active categories, optionally including archived history. |
+| `GET` | `/api/expense-categories/operations/{operationId}` | Recover the immutable original category command result by operation ID. |
+| `GET` | `/api/expense-categories/operations/by-key/{key}` | Recover the immutable original category command result by canonical UUID key. |
 | `POST` | `/api/expense-categories` | Create a category. |
 | `PATCH` | `/api/expense-categories/{categoryId}` | Update a category's label, description, or display order. |
 | `POST` | `/api/expense-categories/{categoryId}/archive` | Archive a category after confirmation. |
@@ -221,7 +275,7 @@ Every protocol call uses the caller's existing immediate transaction. Finance ap
 
 ## Audit, privacy, and portability
 
-Every mutation persists business rows and `AUDIT-001` changes atomically under one correlation ID. Entity types are `expense_category`, `expense`, `expense_refund`, and the existing `file_link`. Category changes, historical-reference confirmations, duplicate confirmations, lifecycle transitions, and replacement lineage are explicit in contextual history. No-op/idempotent replays create no audit event.
+Every mutation persists business rows and `AUDIT-001` changes atomically under one correlation ID. Entity types include `expense_category`, `expense_category_command_operation`, `expense`, `expense_refund`, and the existing `file_link`. Category changes, historical-reference confirmations, duplicate confirmations, lifecycle transitions, and replacement lineage are explicit in contextual history. Replays create no audit event; accepted category no-ops retain their command receipt audit without a business mutation event.
 
 General activity may show the action, property, paid/refund date, and lifecycle, but redacts amount, payee, provider and payer IDs, description, reference, notes, idempotency keys, reasons, and replacement references. Contextual Finance history may reveal the complete local record to the operator. Audit presentation policies are registered before any expense workflow is available, preserving fail-closed behavior.
 

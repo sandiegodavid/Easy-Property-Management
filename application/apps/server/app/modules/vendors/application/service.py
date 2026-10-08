@@ -1,7 +1,8 @@
 """Provider-directory use cases and invariants."""
 
+import json
 import unicodedata
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, date, datetime
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 from uuid import NAMESPACE_URL, uuid4, uuid5
@@ -13,6 +14,18 @@ from app.modules.parties.application.service import (
     SharedPartyFactory,
 )
 from app.modules.parties.domain.models import PartyContactMethod
+from app.modules.vendors.application.category_commands import (
+    CategoryCommand,
+    start_category,
+    finish_category,
+    check_category_revision,
+)
+from app.modules.vendors.application.commands import ProviderCommand, finish, start, identifier
+from app.modules.vendors.application.errors import (
+    ProviderError,
+    ProviderNotFoundError,
+    ProviderLifecycleConflict,
+)
 from app.modules.vendors.application.ports import (
     ProviderStorageConflict,
     ProviderTransaction,
@@ -30,18 +43,6 @@ from app.modules.vendors.domain.models import ProviderReputationLink
 from app.modules.vendors.domain.models import ProviderService as ProviderServiceRecord
 from app.modules.vendors.domain.models import ProviderServiceArea as ProviderServiceAreaRecord
 from app.modules.vendors.domain.models import ProviderWorkHistory as ProviderWorkHistoryRecord
-
-
-class ProviderError(RuntimeError):
-    pass
-
-
-class ProviderNotFoundError(ProviderError):
-    pass
-
-
-class ProviderLifecycleConflict(ProviderError):
-    pass
 
 
 class ProviderCategoryIdempotencyConflict(ProviderLifecycleConflict):
@@ -317,6 +318,8 @@ class ProviderService:
         party_command: PartyCreateCommand,
         profile: ProviderProfileCommand,
         *,
+        expected_revision: int,
+        idempotency_key: str,
         contacts: tuple[ContactMethodCommand, ...] = (),
         services: tuple[ServiceCommand, ...] = (),
         areas: tuple[ServiceAreaCommand, ...] = (),
@@ -333,6 +336,8 @@ class ProviderService:
             isinstance(item, ContactMethodCommand) for item in contacts
         ):
             raise ProviderError("Provider contacts are invalid.")
+        if type(confirmed_new_party) is not bool:
+            raise ProviderError("confirmedNewParty must be a boolean.")
         initial = (
             ("service", services),
             ("area", areas),
@@ -349,9 +354,29 @@ class ProviderService:
         category_ids = tuple(_uuid(value, "Category ID") for value in category_ids)
         if len(category_ids) != len(set(category_ids)):
             raise ProviderLifecycleConflict("A category can be assigned only once.")
-        now, correlation = _now(), str(uuid4())
+        identity = ProviderCommand(
+            "create",
+            None,
+            expected_revision,
+            idempotency_key,
+            {
+                "party": asdict(party_command),
+                "profile": asdict(profile),
+                "contacts": [asdict(c) for c in contacts],
+                "services": [asdict(c) for c in services],
+                "areas": [asdict(c) for c in areas],
+                "work_history": [asdict(c) for c in work_history],
+                "references": [asdict(c) for c in references],
+                "category_ids": sorted(category_ids),
+                "confirmed_new_party": confirmed_new_party,
+            },
+        )
+        correlation = str(uuid4())
 
         def write(tx: ProviderTransaction):
+            if replay := start(tx, identity):
+                return replay
+            now = _now()
             methods = [_new_contact("", command, now) for command in contacts]
             _unique_contacts(methods)
             candidates = tx.duplicate_party_ids(methods, 10)
@@ -364,7 +389,7 @@ class ProviderService:
                 entity_id=party.id,
                 action="created",
                 before=None,
-                after=party.to_dict(),
+                after=party.identity_snapshot(),
                 reason="provider_party_created",
                 correlation_id=correlation,
             )
@@ -431,14 +456,29 @@ class ProviderService:
                         reason=f"provider_{kind}_created",
                         correlation_id=correlation,
                     )
-            return party.id
+            return finish(tx, identity, provider, now, correlation)
 
-        return self._write_detail(write)
+        return self._command_write(write)
 
-    def designate(self, party_id: str, profile: ProviderProfileCommand) -> dict[str, object]:
-        now, correlation = _now(), str(uuid4())
+    def designate(
+        self,
+        party_id: str,
+        profile: ProviderProfileCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ) -> dict[str, object]:
+        if not isinstance(profile, ProviderProfileCommand):
+            raise ProviderError("A valid Provider profile command is required.")
+        identity = ProviderCommand(
+            "designate", party_id, expected_revision, idempotency_key, asdict(profile)
+        )
+        correlation = str(uuid4())
 
         def write(tx):
+            if replay := start(tx, identity):
+                return replay
+            now = _now()
             party = tx.party(party_id)
             if party is None:
                 raise KeyError
@@ -457,9 +497,9 @@ class ProviderService:
                 reason="provider_designated",
                 correlation_id=correlation,
             )
-            return party_id
+            return finish(tx, identity, item, now, correlation)
 
-        return self._write_detail(write)
+        return self._command_write(write)
 
     def detail(self, party_id: str, *, include_archived: bool = False) -> dict[str, object]:
         record = self.unit_of_work.detail(party_id, include_archived=include_archived)
@@ -529,9 +569,18 @@ class ProviderService:
             for item in categories
         ]
 
-    def create_category(self, command: ProviderCategoryCommand) -> dict[str, object]:
+    def create_category(
+        self, command: ProviderCategoryCommand, *, expected_revision: int
+    ) -> dict[str, object]:
         if not isinstance(command, ProviderCategoryCommand):
             raise ProviderError("Category command is invalid.")
+        identity = CategoryCommand(
+            "create",
+            None,
+            expected_revision,
+            command.idempotency_key,
+            {key: value for key, value in asdict(command).items() if key != "idempotency_key"},
+        )
         now, correlation, fingerprint = (
             _now(),
             str(uuid4()),
@@ -539,13 +588,9 @@ class ProviderService:
         )
 
         def write(tx):
-            replay = tx.category_by_create_key(command.idempotency_key)
-            if replay:
-                if replay.create_request_fingerprint != fingerprint:
-                    raise ProviderCategoryIdempotencyConflict(
-                        "Category idempotency key was reused with different content."
-                    )
-                return replay.id
+            replay = start_category(tx, identity)
+            if replay is not None:
+                return replay
             active = next(
                 (
                     item
@@ -580,18 +625,33 @@ class ProviderService:
                 reason="provider_category_created",
                 correlation_id=correlation,
             )
-            return item.id
+            return finish_category(tx, identity, item, now, correlation)
 
-        return self._category_write(write)
+        return self._command_write(write)
 
     def update_category(
-        self, category_id: str, command: ProviderCategoryPatchCommand
+        self,
+        category_id: str,
+        command: ProviderCategoryPatchCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
     ) -> dict[str, object]:
         if not isinstance(command, ProviderCategoryPatchCommand):
             raise ProviderError("Category patch is invalid.")
+        identity = CategoryCommand(
+            "patch",
+            category_id,
+            expected_revision,
+            idempotency_key,
+            {key: value for key, value in command.__dict__.items() if value is not UNSET},
+        )
         now, correlation = _now(), str(uuid4())
 
         def write(tx):
+            replay = start_category(tx, identity)
+            if replay is not None:
+                return replay
             current = tx.category(category_id)
             if current is None:
                 raise KeyError
@@ -615,8 +675,8 @@ class ProviderService:
                 else command.display_order,
             )
             if requested == current:
-                return current.id
-            updated = replace(requested, updated_at=now)
+                return finish_category(tx, identity, current, now, correlation)
+            updated = replace(requested, updated_at=now, revision=current.revision + 1)
             conflict = next(
                 (
                     item
@@ -637,19 +697,35 @@ class ProviderService:
                 reason="provider_category_updated",
                 correlation_id=correlation,
             )
-            return current.id
+            return finish_category(tx, identity, updated, now, correlation)
 
-        return self._category_write(write)
+        return self._command_write(write)
 
     def archive_category(
-        self, category_id: str, *, confirmed: bool, reason: str
+        self,
+        category_id: str,
+        *,
+        confirmed: bool,
+        reason: str,
+        expected_revision: int,
+        idempotency_key: str,
     ) -> dict[str, object]:
         if confirmed is not True:
             raise ProviderError("Archiving a category requires explicit confirmation.")
         reason = _required(reason, "Archive reason", 1000)
+        identity = CategoryCommand(
+            "archive",
+            category_id,
+            expected_revision,
+            idempotency_key,
+            {"confirmed": confirmed, "reason": reason},
+        )
         now, correlation = _now(), str(uuid4())
 
         def write(tx):
+            replay = start_category(tx, identity)
+            if replay is not None:
+                return replay
             current = tx.category(category_id)
             if current is None:
                 raise KeyError
@@ -658,8 +734,14 @@ class ProviderService:
                     raise ProviderLifecycleConflict(
                         "An archived category cannot be retried with a different archive reason."
                     )
-                return current.id
-            updated = replace(current, archived_at=now, archive_reason=reason, updated_at=now)
+                return finish_category(tx, identity, current, now, correlation)
+            updated = replace(
+                current,
+                archived_at=now,
+                archive_reason=reason,
+                updated_at=now,
+                revision=current.revision + 1,
+            )
             tx.replace_category(updated)
             tx.record_change(
                 entity_type="provider_category",
@@ -670,27 +752,41 @@ class ProviderService:
                 reason="provider_category_archived",
                 correlation_id=correlation,
             )
-            return current.id
+            return finish_category(tx, identity, updated, now, correlation)
 
-        return self._category_write(write)
+        return self._command_write(write)
 
-    def restore_category(self, category_id: str, *, confirmed: bool) -> dict[str, object]:
+    def restore_category(
+        self, category_id: str, *, confirmed: bool, expected_revision: int, idempotency_key: str
+    ) -> dict[str, object]:
         if confirmed is not True:
             raise ProviderError("Restoring a category requires explicit confirmation.")
+        identity = CategoryCommand(
+            "restore", category_id, expected_revision, idempotency_key, {"confirmed": confirmed}
+        )
         now, correlation = _now(), str(uuid4())
 
         def write(tx):
+            replay = start_category(tx, identity)
+            if replay is not None:
+                return replay
             current = tx.category(category_id)
             if current is None:
                 raise KeyError
             if current.archived_at is None:
-                return current.id
+                return finish_category(tx, identity, current, now, correlation)
             if any(
                 item.id != current.id and item.normalized_name == current.normalized_name
                 for item in tx.categories("active")
             ):
                 raise ProviderLifecycleConflict("An active category already uses this name.")
-            updated = replace(current, archived_at=None, archive_reason=None, updated_at=now)
+            updated = replace(
+                current,
+                archived_at=None,
+                archive_reason=None,
+                updated_at=now,
+                revision=current.revision + 1,
+            )
             tx.replace_category(updated)
             tx.record_change(
                 entity_type="provider_category",
@@ -701,144 +797,189 @@ class ProviderService:
                 reason="provider_category_restored",
                 correlation_id=correlation,
             )
-            return current.id
+            return finish_category(tx, identity, updated, now, correlation)
 
-        return self._category_write(write)
+        return self._command_write(write)
 
     def assign_category(
-        self, party_id: str, command: ProviderCategoryAssignmentCommand
-    ) -> dict[str, object]:
+        self,
+        party_id: str,
+        command: ProviderCategoryAssignmentCommand,
+        *,
+        expected_revision: int,
+        expected_category_revision: int,
+    ):
         if not isinstance(command, ProviderCategoryAssignmentCommand):
             raise ProviderError("Category assignment command is invalid.")
-        now, correlation, fingerprint = (
-            _now(),
-            str(uuid4()),
-            _fingerprint(party_id, command.category_id),
+        return self._assignment_mutate(
+            party_id,
+            None,
+            "create",
+            expected_revision,
+            command.idempotency_key,
+            {
+                "category_id": command.category_id,
+                "expected_category_revision": expected_category_revision,
+            },
         )
 
-        def write(tx):
-            replay = tx.assignment_by_create_key(command.idempotency_key)
-            if replay:
-                if replay.create_request_fingerprint != fingerprint:
-                    raise ProviderCategoryIdempotencyConflict(
-                        "Assignment idempotency key was reused with different content."
-                    )
-                return replay.provider_party_id
-            _available_provider(tx, party_id)
-            category = tx.category(command.category_id)
-            if category is None:
-                raise KeyError
-            if category.archived_at is not None:
-                raise ProviderLifecycleConflict("An archived category cannot be assigned.")
-            if any(
-                item.archived_at is None and item.category_id == category.id
-                for item in tx.assignments(party_id)
-            ):
-                raise ProviderLifecycleConflict(
-                    "This category is already assigned to the provider."
-                )
-            item = _assignment(party_id, category.id, now, command.idempotency_key, fingerprint)
-            tx.insert_assignment(item)
-            tx.record_change(
-                entity_type="provider_category_assignment",
-                entity_id=item.id,
-                action="created",
-                before=None,
-                after=item.to_dict(),
-                reason="provider_category_assigned",
-                correlation_id=correlation,
-            )
-            return party_id
-
-        return self._write_detail(write)
-
     def archive_category_assignment(
-        self, party_id: str, assignment_id: str, *, confirmed: bool, reason: str
-    ) -> dict[str, object]:
+        self,
+        party_id: str,
+        assignment_id: str,
+        *,
+        confirmed: bool,
+        reason: str,
+        expected_revision: int,
+        idempotency_key: str,
+    ):
         if confirmed is not True:
             raise ProviderError("Archiving a category assignment requires explicit confirmation.")
         reason = _required(reason, "Archive reason", 1000)
-        now, correlation = _now(), str(uuid4())
-
-        def write(tx):
-            _available_provider(tx, party_id)
-            current = tx.assignment(assignment_id)
-            if current is None or current.provider_party_id != party_id:
-                raise KeyError
-            if current.archived_at is not None:
-                if current.archive_reason != reason:
-                    raise ProviderLifecycleConflict(
-                        "An archived category assignment cannot be retried with a different archive reason."
-                    )
-                return party_id
-            updated = replace(current, archived_at=now, archive_reason=reason, updated_at=now)
-            tx.replace_assignment(updated)
-            tx.record_change(
-                entity_type="provider_category_assignment",
-                entity_id=current.id,
-                action="archived",
-                before=current.to_dict(),
-                after=updated.to_dict(),
-                reason="provider_category_assignment_archived",
-                correlation_id=correlation,
-            )
-            return party_id
-
-        return self._write_detail(write, include_archived=True)
+        return self._assignment_mutate(
+            party_id,
+            assignment_id,
+            "archive",
+            expected_revision,
+            idempotency_key,
+            {"confirmed": confirmed, "reason": reason},
+        )
 
     def restore_category_assignment(
-        self, party_id: str, assignment_id: str, *, confirmed: bool
-    ) -> dict[str, object]:
+        self,
+        party_id: str,
+        assignment_id: str,
+        *,
+        confirmed: bool,
+        expected_revision: int,
+        expected_category_revision: int,
+        idempotency_key: str,
+    ):
         if confirmed is not True:
             raise ProviderError("Restoring a category assignment requires explicit confirmation.")
+        return self._assignment_mutate(
+            party_id,
+            assignment_id,
+            "restore",
+            expected_revision,
+            idempotency_key,
+            {"confirmed": confirmed, "expected_category_revision": expected_category_revision},
+        )
+
+    def _assignment_mutate(self, party_id, assignment_id, verb, expected_revision, key, fields):
+        if assignment_id is not None:
+            identifier(assignment_id)
+        if verb in {"create", "restore"} and (
+            type(fields["expected_category_revision"]) is not int
+            or fields["expected_category_revision"] < 1
+        ):
+            raise ProviderError("expectedCategoryRevision must be a positive integer.")
+        identity = ProviderCommand(
+            f"assignment_{verb}",
+            party_id,
+            expected_revision,
+            key,
+            {"assignment_id": assignment_id, **fields},
+        )
         now, correlation = _now(), str(uuid4())
 
         def write(tx):
-            _available_provider(tx, party_id)
-            current = tx.assignment(assignment_id)
-            if current is None or current.provider_party_id != party_id:
-                raise KeyError
-            category = tx.category(current.category_id)
+            replay = start(tx, identity)
+            if replay is not None:
+                return replay
+            profile = _available_provider(tx, party_id)
+            current = tx.assignment(assignment_id) if assignment_id else None
+            if verb != "create" and (current is None or current.provider_party_id != party_id):
+                raise ProviderNotFoundError("Provider category assignment was not found.")
+            category = tx.category(
+                fields["category_id"] if verb == "create" else current.category_id
+            )
             if category is None:
-                raise KeyError
-            if category.archived_at is not None:
-                raise ProviderLifecycleConflict(
-                    "Restore the category before restoring its assignment."
+                raise ProviderNotFoundError("Provider category was not found.")
+            if verb in {"create", "restore"}:
+                check_category_revision(category, fields["expected_category_revision"])
+                if category.archived_at is not None:
+                    raise ProviderLifecycleConflict("Restore the category before assigning it.")
+            if verb == "archive" and current.archived_at is not None:
+                if current.archive_reason != fields["reason"]:
+                    raise ProviderLifecycleConflict("Archive reason differs.")
+                return finish(
+                    tx, identity, profile, now, correlation, child=current, category=category
                 )
-            if current.archived_at is None:
-                return party_id
-            if any(
-                item.id != current.id
-                and item.archived_at is None
-                and item.category_id == current.category_id
+            if verb == "restore" and current.archived_at is None:
+                return finish(
+                    tx, identity, profile, now, correlation, child=current, category=category
+                )
+            if verb in {"create", "restore"} and any(
+                item.archived_at is None
+                and item.category_id == category.id
+                and (current is None or item.id != current.id)
                 for item in tx.assignments(party_id)
             ):
                 raise ProviderLifecycleConflict(
                     "This category is already assigned to the provider."
                 )
-            updated = replace(current, archived_at=None, archive_reason=None, updated_at=now)
-            tx.replace_assignment(updated)
+            if verb == "create":
+                updated = _assignment(
+                    party_id, category.id, now, key, _fingerprint(party_id, category.id)
+                )
+                tx.insert_assignment(updated)
+            else:
+                updated = replace(
+                    current,
+                    updated_at=now,
+                    archived_at=now if verb == "archive" else None,
+                    archive_reason=fields["reason"] if verb == "archive" else None,
+                )
+                tx.replace_assignment(updated)
+            action = {"create": "created", "archive": "archived", "restore": "restored"}[verb]
             tx.record_change(
                 entity_type="provider_category_assignment",
-                entity_id=current.id,
-                action="restored",
-                before=current.to_dict(),
+                entity_id=updated.id,
+                action=action,
+                before=current.to_dict() if current else None,
                 after=updated.to_dict(),
-                reason="provider_category_assignment_restored",
+                reason=f"provider_category_assignment_{action}",
                 correlation_id=correlation,
             )
-            return party_id
+            revised = replace(profile, revision=profile.revision + 1, updated_at=now)
+            tx.replace_profile(revised)
+            tx.record_change(
+                entity_type="provider_profile",
+                entity_id=party_id,
+                action="updated",
+                before=profile.to_dict(),
+                after=revised.to_dict(),
+                reason=f"provider_category_assignment_{action}",
+                correlation_id=correlation,
+            )
+            return finish(tx, identity, revised, now, correlation, child=updated, category=category)
 
-        return self._write_detail(write, include_archived=True)
+        return self._command_write(write)
 
     def update_profile(
-        self, party_id: str, command: ProviderProfilePatchCommand
+        self,
+        party_id: str,
+        command: ProviderProfilePatchCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
     ) -> dict[str, object]:
         if not isinstance(command, ProviderProfilePatchCommand):
             raise ProviderError("Provider patch command is invalid.")
-        now, correlation = _now(), str(uuid4())
+        identity = ProviderCommand(
+            "patch",
+            party_id,
+            expected_revision,
+            idempotency_key,
+            {name: value for name, value in command.__dict__.items() if value is not UNSET},
+        )
+        correlation = str(uuid4())
 
         def write(tx):
+            if replay := start(tx, identity):
+                return replay
+            now = _now()
             current = _active_profile(tx, party_id)
             status = (
                 current.selection_status
@@ -858,13 +999,14 @@ class ProviderService:
                 current.selection_reason,
                 current.notes,
             ):
-                return party_id
+                return finish(tx, identity, current, now, correlation)
             updated = replace(
                 current,
                 selection_status=status,
                 selection_reason=reason,
                 notes=notes,
                 updated_at=now,
+                revision=current.revision + 1,
             )
             tx.replace_profile(updated)
             tx.record_change(
@@ -876,18 +1018,28 @@ class ProviderService:
                 reason="provider_updated",
                 correlation_id=correlation,
             )
-            return party_id
+            return finish(tx, identity, updated, now, correlation)
 
-        return self._write_detail(write)
+        return self._command_write(write)
 
-    def archive(self, party_id: str, *, confirmed: bool) -> dict[str, object]:
+    def archive(
+        self, party_id: str, *, confirmed: bool, expected_revision: int, idempotency_key: str
+    ) -> dict[str, object]:
         if confirmed is not True:
             raise ProviderError("Archiving a provider requires explicit confirmation.")
-        now, correlation = _now(), str(uuid4())
+        identity = ProviderCommand(
+            "archive", party_id, expected_revision, idempotency_key, {"confirmed": confirmed}
+        )
+        correlation = str(uuid4())
 
         def write(tx):
+            if replay := start(tx, identity):
+                return replay
+            now = _now()
             current = _active_profile(tx, party_id)
-            updated = replace(current, archived_at=now, updated_at=now)
+            updated = replace(
+                current, archived_at=now, updated_at=now, revision=current.revision + 1
+            )
             tx.replace_profile(updated)
             tx.record_change(
                 entity_type="provider_profile",
@@ -898,14 +1050,20 @@ class ProviderService:
                 reason="provider_archived",
                 correlation_id=correlation,
             )
-            return party_id
+            return finish(tx, identity, updated, now, correlation)
 
-        return self._write_detail(write, include_archived=True)
+        return self._command_write(write)
 
-    def restore(self, party_id: str) -> dict[str, object]:
-        now, correlation = _now(), str(uuid4())
+    def restore(
+        self, party_id: str, *, expected_revision: int, idempotency_key: str
+    ) -> dict[str, object]:
+        identity = ProviderCommand("restore", party_id, expected_revision, idempotency_key, {})
+        correlation = str(uuid4())
 
         def write(tx):
+            if replay := start(tx, identity):
+                return replay
+            now = _now()
             current = tx.profile(party_id)
             if current is None:
                 raise KeyError
@@ -918,7 +1076,9 @@ class ProviderService:
                 )
             if current.archived_at is None:
                 raise ProviderLifecycleConflict("Provider profile is already active.")
-            updated = replace(current, archived_at=None, updated_at=now)
+            updated = replace(
+                current, archived_at=None, updated_at=now, revision=current.revision + 1
+            )
             tx.replace_profile(updated)
             tx.record_change(
                 entity_type="provider_profile",
@@ -929,334 +1089,279 @@ class ProviderService:
                 reason="provider_restored",
                 correlation_id=correlation,
             )
-            return party_id
+            return finish(tx, identity, updated, now, correlation)
 
-        return self._write_detail(write)
+        return self._command_write(write)
 
-    def add_service(self, party_id, command):
-        return self._child_create(party_id, command, "service")
+    def add_service(self, party_id, command, *, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id, None, command, "service", "create", expected_revision, idempotency_key
+        )
 
-    def update_service(self, party_id, item_id, command):
-        return self._child_update(party_id, item_id, command, "service")
+    def update_service(self, party_id, item_id, command, *, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id, item_id, command, "service", "update", expected_revision, idempotency_key
+        )
 
-    def archive_service(self, party_id, item_id, *, confirmed):
-        return self._child_archive(party_id, item_id, confirmed, "service")
+    def archive_service(self, party_id, item_id, *, confirmed, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id,
+            item_id,
+            {"confirmed": confirmed},
+            "service",
+            "archive",
+            expected_revision,
+            idempotency_key,
+        )
 
-    def restore_service(self, party_id, item_id):
-        return self._child_restore(party_id, item_id, "service")
+    def restore_service(self, party_id, item_id, *, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id, item_id, {}, "service", "restore", expected_revision, idempotency_key
+        )
 
-    def add_area(self, party_id, command):
-        return self._child_create(party_id, command, "area")
+    def add_area(self, party_id, command, *, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id, None, command, "area", "create", expected_revision, idempotency_key
+        )
 
-    def update_area(self, party_id, item_id, command):
-        return self._child_update(party_id, item_id, command, "area")
+    def update_area(self, party_id, item_id, command, *, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id, item_id, command, "area", "update", expected_revision, idempotency_key
+        )
 
-    def archive_area(self, party_id, item_id, *, confirmed):
-        return self._child_archive(party_id, item_id, confirmed, "area")
+    def archive_area(self, party_id, item_id, *, confirmed, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id,
+            item_id,
+            {"confirmed": confirmed},
+            "area",
+            "archive",
+            expected_revision,
+            idempotency_key,
+        )
 
-    def restore_area(self, party_id, item_id):
-        return self._child_restore(party_id, item_id, "area")
+    def restore_area(self, party_id, item_id, *, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id, item_id, {}, "area", "restore", expected_revision, idempotency_key
+        )
 
-    def add_work_history(self, party_id, command):
-        return self._child_create(party_id, command, "work")
+    def add_work_history(self, party_id, command, *, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id, None, command, "work", "create", expected_revision, idempotency_key
+        )
 
-    def update_work_history(self, party_id, item_id, command):
-        return self._child_update(party_id, item_id, command, "work")
+    def update_work_history(
+        self, party_id, item_id, command, *, expected_revision, idempotency_key
+    ):
+        return self._child_mutate(
+            party_id, item_id, command, "work", "update", expected_revision, idempotency_key
+        )
 
-    def archive_work_history(self, party_id, item_id, *, confirmed):
-        return self._child_archive(party_id, item_id, confirmed, "work")
+    def archive_work_history(
+        self, party_id, item_id, *, confirmed, expected_revision, idempotency_key
+    ):
+        return self._child_mutate(
+            party_id,
+            item_id,
+            {"confirmed": confirmed},
+            "work",
+            "archive",
+            expected_revision,
+            idempotency_key,
+        )
 
-    def restore_work_history(self, party_id, item_id):
-        return self._child_restore(party_id, item_id, "work")
+    def restore_work_history(self, party_id, item_id, *, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id, item_id, {}, "work", "restore", expected_revision, idempotency_key
+        )
 
-    def add_reference(self, party_id, command):
-        return self._child_create(party_id, command, "reference")
+    def add_reference(self, party_id, command, *, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id, None, command, "reference", "create", expected_revision, idempotency_key
+        )
 
-    def update_reference(self, party_id, item_id, command):
-        return self._child_update(party_id, item_id, command, "reference")
+    def update_reference(self, party_id, item_id, command, *, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id, item_id, command, "reference", "update", expected_revision, idempotency_key
+        )
 
-    def archive_reference(self, party_id, item_id, *, confirmed):
-        return self._child_archive(party_id, item_id, confirmed, "reference")
+    def archive_reference(
+        self, party_id, item_id, *, confirmed, expected_revision, idempotency_key
+    ):
+        return self._child_mutate(
+            party_id,
+            item_id,
+            {"confirmed": confirmed},
+            "reference",
+            "archive",
+            expected_revision,
+            idempotency_key,
+        )
 
-    def restore_reference(self, party_id, item_id):
-        return self._child_restore(party_id, item_id, "reference")
+    def restore_reference(self, party_id, item_id, *, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id, item_id, {}, "reference", "restore", expected_revision, idempotency_key
+        )
 
-    def add_reputation_link(
-        self, party_id: str, command: ReputationLinkCommand
-    ) -> dict[str, object]:
-        if not isinstance(command, ReputationLinkCommand):
-            raise ProviderError("Reputation-link command is invalid.")
-        now, correlation = _now(), str(uuid4())
-
-        def write(tx):
-            _available_provider(tx, party_id)
-            item = _new_reputation_link(party_id, command, now)
-            _unique_reputation_link(tx.reputation_links(party_id), item)
-            tx.insert_reputation_link(item)
-            tx.record_change(
-                entity_type="provider_reputation_link",
-                entity_id=item.id,
-                action="created",
-                before=None,
-                after=item.to_dict(),
-                reason="provider_reputation_link_created",
-                correlation_id=correlation,
-            )
-            return party_id
-
-        return self._write_detail(write)
+    def add_reputation_link(self, party_id, command, *, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id, None, command, "reputation", "create", expected_revision, idempotency_key
+        )
 
     def update_reputation_link(
-        self,
-        party_id: str,
-        link_id: str,
-        command: ReputationLinkPatchCommand,
-    ) -> dict[str, object]:
-        if not isinstance(command, ReputationLinkPatchCommand):
-            raise ProviderError("Reputation-link patch command is invalid.")
-        now, correlation = _now(), str(uuid4())
-
-        def write(tx):
-            _available_provider(tx, party_id)
-            current = _required_reputation_link(tx.reputation_links(party_id), link_id)
-            if current.archived_at is not None:
-                raise ProviderLifecycleConflict("An archived reputation link cannot be edited.")
-            complete = ReputationLinkCommand(
-                current.source_kind if command.source_kind is UNSET else command.source_kind,
-                current.url if command.url is UNSET else command.url,
-                current.source_name if command.source_name is UNSET else command.source_name,
-                current.notes if command.notes is UNSET else command.notes,
-                current.last_checked_on
-                if command.last_checked_on is UNSET
-                else command.last_checked_on,
-            )
-            business_values = (
-                complete.source_kind,
-                complete.source_name,
-                complete.normalized_source_key,
-                complete.url,
-                complete.normalized_url,
-                complete.notes,
-                complete.last_checked_on,
-            )
-            if business_values == (
-                current.source_kind,
-                current.source_name,
-                current.normalized_source_key,
-                current.url,
-                current.normalized_url,
-                current.notes,
-                current.last_checked_on,
-            ):
-                return party_id
-            updated = replace(
-                current,
-                source_kind=complete.source_kind,
-                source_name=complete.source_name,
-                normalized_source_key=complete.normalized_source_key,
-                url=complete.url,
-                normalized_url=complete.normalized_url,
-                notes=complete.notes,
-                last_checked_on=complete.last_checked_on,
-                updated_at=now,
-            )
-            _unique_reputation_link(tx.reputation_links(party_id), updated)
-            tx.replace_reputation_link(updated)
-            tx.record_change(
-                entity_type="provider_reputation_link",
-                entity_id=link_id,
-                action="updated",
-                before=current.to_dict(),
-                after=updated.to_dict(),
-                reason="provider_reputation_link_updated",
-                correlation_id=correlation,
-            )
-            return party_id
-
-        return self._write_detail(write)
+        self, party_id, item_id, command, *, expected_revision, idempotency_key
+    ):
+        return self._child_mutate(
+            party_id, item_id, command, "reputation", "update", expected_revision, idempotency_key
+        )
 
     def archive_reputation_link(
-        self,
-        party_id: str,
-        link_id: str,
-        *,
-        confirmed: bool,
-    ) -> dict[str, object]:
-        if confirmed is not True:
-            raise ProviderError("Archiving a reputation link requires explicit confirmation.")
+        self, party_id, item_id, *, confirmed, expected_revision, idempotency_key
+    ):
+        return self._child_mutate(
+            party_id,
+            item_id,
+            {"confirmed": confirmed},
+            "reputation",
+            "archive",
+            expected_revision,
+            idempotency_key,
+        )
+
+    def restore_reputation_link(self, party_id, item_id, *, expected_revision, idempotency_key):
+        return self._child_mutate(
+            party_id, item_id, {}, "reputation", "restore", expected_revision, idempotency_key
+        )
+
+    def _child_mutate(
+        self, party_id, item_id, command, kind, verb, expected_revision, idempotency_key
+    ):
+        if verb in {"create", "update"}:
+            if kind == "reputation":
+                definition = (
+                    ReputationLinkCommand if verb == "create" else ReputationLinkPatchCommand
+                )
+                if not isinstance(command, definition):
+                    raise ProviderError("Reputation-link command is invalid.")
+            else:
+                _check_command(command, kind)
+            fields = {name: value for name, value in command.__dict__.items() if value is not UNSET}
+        else:
+            fields = command
+            if verb == "archive" and fields["confirmed"] is not True:
+                raise ProviderError("Archiving a provider record requires explicit confirmation.")
+        if item_id is not None:
+            identifier(item_id)
+        identity = ProviderCommand(
+            f"{kind}_{verb}",
+            party_id,
+            expected_revision,
+            idempotency_key,
+            {"item_id": item_id, "fields": fields},
+        )
         now, correlation = _now(), str(uuid4())
 
         def write(tx):
-            _available_provider(tx, party_id)
-            current = _required_reputation_link(tx.reputation_links(party_id), link_id)
-            if current.archived_at is not None:
-                raise ProviderLifecycleConflict("Reputation link is already archived.")
-            updated = replace(current, archived_at=now, updated_at=now)
-            tx.replace_reputation_link(updated)
+            replay = start(tx, identity)
+            if replay is not None:
+                return replay
+            profile = _available_provider(tx, party_id)
+            current = None
+            children = (
+                tx.reputation_links(party_id)
+                if kind == "reputation"
+                else _children(tx, kind, party_id)
+            )
+            if verb == "create":
+                updated = (
+                    _new_reputation_link(party_id, command, now)
+                    if kind == "reputation"
+                    else _new_child(kind, party_id, command, now, tx)
+                )
+            else:
+                current = _required_child(children, item_id)
+                if verb in {"update", "archive"} and current.archived_at is not None:
+                    raise ProviderLifecycleConflict(
+                        "An archived provider record cannot be edited or archived."
+                    )
+                if verb == "restore" and current.archived_at is None:
+                    raise ProviderLifecycleConflict("Provider record is already active.")
+                if verb == "update":
+                    updated = (
+                        _update_reputation(current, command, now)
+                        if kind == "reputation"
+                        else _update_child(current, command, now, tx)
+                    )
+                    if replace(updated, updated_at=current.updated_at) == current:
+                        return finish(tx, identity, profile, now, correlation, child=current)
+                else:
+                    updated = replace(
+                        current, archived_at=now if verb == "archive" else None, updated_at=now
+                    )
+            siblings = [item for item in children if current is None or item.id != current.id]
+            if kind == "reputation":
+                _unique_reputation_link(siblings, updated)
+                (tx.insert_reputation_link if verb == "create" else tx.replace_reputation_link)(
+                    updated
+                )
+            else:
+                _unique_child(siblings, updated, kind)
+                (_insert if verb == "create" else _replace)(tx, kind, updated)
+            action = {
+                "create": "created",
+                "update": "updated",
+                "archive": "archived",
+                "restore": "restored",
+            }[verb]
             tx.record_change(
-                entity_type="provider_reputation_link",
-                entity_id=link_id,
-                action="archived",
-                before=current.to_dict(),
+                entity_type="provider_reputation_link" if kind == "reputation" else _entity(kind),
+                entity_id=updated.id,
+                action=action,
+                before=current.to_dict() if current else None,
                 after=updated.to_dict(),
-                reason="provider_reputation_link_archived",
+                reason=f"provider_{kind}_{action}",
                 correlation_id=correlation,
             )
-            return party_id
-
-        return self._write_detail(write, include_archived=True)
-
-    def restore_reputation_link(self, party_id: str, link_id: str) -> dict[str, object]:
-        now, correlation = _now(), str(uuid4())
-
-        def write(tx):
-            _available_provider(tx, party_id)
-            current = _required_reputation_link(tx.reputation_links(party_id), link_id)
-            if current.archived_at is None:
-                raise ProviderLifecycleConflict("Reputation link is already active.")
-            updated = replace(current, archived_at=None, updated_at=now)
-            _unique_reputation_link(tx.reputation_links(party_id), updated)
-            tx.replace_reputation_link(updated)
+            revised = replace(profile, revision=profile.revision + 1, updated_at=now)
+            tx.replace_profile(revised)
             tx.record_change(
-                entity_type="provider_reputation_link",
-                entity_id=link_id,
-                action="restored",
-                before=current.to_dict(),
-                after=updated.to_dict(),
-                reason="provider_reputation_link_restored",
-                correlation_id=correlation,
-            )
-            return party_id
-
-        return self._write_detail(write)
-
-    def _child_create(self, party_id, command, kind):
-        _check_command(command, kind)
-        now, correlation = _now(), str(uuid4())
-
-        def write(tx):
-            _active_profile(tx, party_id)
-            item = _new_child(kind, party_id, command, now, tx)
-            _unique_child(_children(tx, kind, party_id), item, kind)
-            _insert(tx, kind, item)
-            tx.record_change(
-                entity_type=_entity(kind),
-                entity_id=item.id,
-                action="created",
-                before=None,
-                after=item.to_dict(),
-                reason=f"provider_{kind}_created",
-                correlation_id=correlation,
-            )
-            return party_id
-
-        return self._write_detail(write)
-
-    def _child_update(self, party_id, item_id, command, kind):
-        _check_command(command, kind)
-        now, correlation = _now(), str(uuid4())
-
-        def write(tx):
-            _active_profile(tx, party_id)
-            current = _required_child(_children(tx, kind, party_id), item_id)
-            if current.archived_at is not None:
-                raise ProviderLifecycleConflict("An archived provider record cannot be edited.")
-            updated = _update_child(current, command, now, tx)
-            _unique_child(
-                [item for item in _children(tx, kind, party_id) if item.id != item_id],
-                updated,
-                kind,
-            )
-            _replace(tx, kind, updated)
-            tx.record_change(
-                entity_type=_entity(kind),
-                entity_id=item_id,
+                entity_type="provider_profile",
+                entity_id=party_id,
                 action="updated",
-                before=current.to_dict(),
-                after=updated.to_dict(),
-                reason=f"provider_{kind}_updated",
+                before=profile.to_dict(),
+                after=revised.to_dict(),
+                reason=f"provider_{kind}_{action}",
                 correlation_id=correlation,
             )
-            return party_id
+            return finish(tx, identity, revised, now, correlation, child=updated)
 
-        return self._write_detail(write)
+        return self._command_write(write)
 
-    def _child_archive(self, party_id, item_id, confirmed, kind):
-        if confirmed is not True:
-            raise ProviderError("Archiving a provider record requires explicit confirmation.")
-        now, correlation = _now(), str(uuid4())
+    def recover(self, *, operation_id=None, key=None):
+        if (operation_id is None) == (key is None):
+            raise ProviderError("Choose one receipt identity.")
+        identifier(operation_id if operation_id is not None else key)
+        row = self.unit_of_work.operation(operation_id=operation_id, key=key)
+        if row is None:
+            raise ProviderNotFoundError("Provider command receipt was not found.")
+        return json.loads(row["result_json"])
 
-        def write(tx):
-            _active_profile(tx, party_id)
-            current = _required_child(_children(tx, kind, party_id), item_id)
-            if current.archived_at is not None:
-                raise ProviderLifecycleConflict("Provider record is already archived.")
-            updated = replace(current, archived_at=now, updated_at=now)
-            _replace(tx, kind, updated)
-            tx.record_change(
-                entity_type=_entity(kind),
-                entity_id=item_id,
-                action="archived",
-                before=current.to_dict(),
-                after=updated.to_dict(),
-                reason=f"provider_{kind}_archived",
-                correlation_id=correlation,
-            )
-            return party_id
+    def recover_category(self, *, operation_id=None, key=None):
+        if (operation_id is None) == (key is None):
+            raise ProviderError("Choose one category receipt identity.")
+        identifier(operation_id if operation_id is not None else key)
+        row = self.unit_of_work.category_operation(operation_id=operation_id, key=key)
+        if row is None:
+            raise ProviderNotFoundError("Category receipt was not found.")
+        return json.loads(row["result_json"])
 
-        return self._write_detail(write, include_archived=True)
-
-    def _child_restore(self, party_id, item_id, kind):
-        now, correlation = _now(), str(uuid4())
-
-        def write(tx):
-            _active_profile(tx, party_id)
-            current = _required_child(_children(tx, kind, party_id), item_id)
-            if current.archived_at is None:
-                raise ProviderLifecycleConflict("Provider record is already active.")
-            updated = replace(current, archived_at=None, updated_at=now)
-            _unique_child(
-                [item for item in _children(tx, kind, party_id) if item.id != item_id],
-                updated,
-                kind,
-            )
-            _replace(tx, kind, updated)
-            tx.record_change(
-                entity_type=_entity(kind),
-                entity_id=item_id,
-                action="restored",
-                before=current.to_dict(),
-                after=updated.to_dict(),
-                reason=f"provider_{kind}_restored",
-                correlation_id=correlation,
-            )
-            return party_id
-
-        return self._write_detail(write)
-
-    def _write_detail(self, write, *, include_archived=False):
+    def _command_write(self, write):
         try:
-            party_id = self.unit_of_work.write(write)
+            return self.unit_of_work.write(write)
         except KeyError as error:
             raise ProviderNotFoundError("Provider, party, or property was not found.") from error
         except ProviderStorageConflict as error:
             raise ProviderLifecycleConflict(str(error)) from error
-        return self.detail(party_id, include_archived=include_archived)
-
-    def _category_write(self, write) -> dict[str, object]:
-        try:
-            category_id = self.unit_of_work.write(write)
-        except KeyError as error:
-            raise ProviderNotFoundError("Provider category was not found.") from error
-        except ProviderStorageConflict as error:
-            raise ProviderLifecycleConflict(str(error)) from error
-        category = next(
-            (item for item in self.unit_of_work.categories("all") if item.id == category_id), None
-        )
-        if category is None:
-            raise ProviderNotFoundError("Provider category was not found.")
-        count = self.unit_of_work.effective_assignment_counts([category.id]).get(category.id, 0)
-        return {**category.to_dict(), "effectiveProviderCount": count}
 
 
 class PossibleDuplicateParty(ProviderLifecycleConflict):
@@ -1280,7 +1385,7 @@ def _available_provider(tx, party_id):
     if party is None:
         raise KeyError
     if party.archived_at is not None:
-        raise ProviderLifecycleConflict("Restore the party before changing reputation links.")
+        raise ProviderLifecycleConflict("Restore the party before changing provider records.")
     return profile
 
 
@@ -1430,6 +1535,21 @@ def _update_child(current, command, now, tx):
         tx,
     )
     return replace(item, id=current.id, created_at=current.created_at)
+
+
+def _update_reputation(current, command, now):
+    complete = ReputationLinkCommand(
+        current.source_kind if command.source_kind is UNSET else command.source_kind,
+        current.url if command.url is UNSET else command.url,
+        current.source_name if command.source_name is UNSET else command.source_name,
+        current.notes if command.notes is UNSET else command.notes,
+        current.last_checked_on if command.last_checked_on is UNSET else command.last_checked_on,
+    )
+    return replace(
+        _new_reputation_link(current.party_id, complete, now),
+        id=current.id,
+        created_at=current.created_at,
+    )
 
 
 def _unique_child(items, candidate, kind):
@@ -1630,13 +1750,6 @@ def _new_reputation_link(party_id, command, now):
         now,
         None,
     )
-
-
-def _required_reputation_link(items, link_id):
-    for item in items:
-        if item.id == link_id:
-            return item
-    raise KeyError
 
 
 def _unique_reputation_link(items, candidate):

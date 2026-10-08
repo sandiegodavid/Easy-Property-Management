@@ -15,6 +15,7 @@ from .sqlalchemy_models import (
     MaintenanceAppointmentModel,
     MaintenanceAssignmentModel,
     MaintenanceCostContextModel,
+    MaintenanceCommandReceiptModel,
     MaintenanceFollowUpOperationModel,
     MaintenanceIssueExpenseLinkModel,
     MaintenanceIssueModel,
@@ -23,6 +24,7 @@ from .sqlalchemy_models import (
 )
 
 MODELS = (
+    MaintenanceCommandReceiptModel,
     MaintenanceIssueModel,
     MaintenanceAppointmentModel,
     MaintenanceCostContextModel,
@@ -35,6 +37,11 @@ MODELS = (
 OPERATION_TRIGGERS = {
     "maintenance_follow_up_operations_no_update": "CREATE TRIGGER maintenance_follow_up_operations_no_update BEFORE UPDATE ON maintenance_follow_up_operations BEGIN SELECT RAISE(ABORT, 'maintenance follow-up operations are immutable'); END",
     "maintenance_follow_up_operations_no_delete": "CREATE TRIGGER maintenance_follow_up_operations_no_delete BEFORE DELETE ON maintenance_follow_up_operations BEGIN SELECT RAISE(ABORT, 'maintenance follow-up operations are immutable'); END",
+}
+COMMAND_RECEIPT_TRIGGERS = {
+    "maintenance_command_receipts_no_replace": "CREATE TRIGGER maintenance_command_receipts_no_replace BEFORE INSERT ON maintenance_command_receipts WHEN EXISTS (SELECT 1 FROM maintenance_command_receipts WHERE id=NEW.id OR idempotency_key=NEW.idempotency_key OR (effective=1 AND NEW.effective=1 AND issue_id=NEW.issue_id AND revision=NEW.revision)) BEGIN SELECT RAISE(ABORT, 'maintenance command receipts are immutable'); END",
+    "maintenance_command_receipts_no_update": "CREATE TRIGGER maintenance_command_receipts_no_update BEFORE UPDATE ON maintenance_command_receipts BEGIN SELECT RAISE(ABORT, 'maintenance command receipts are immutable'); END",
+    "maintenance_command_receipts_no_delete": "CREATE TRIGGER maintenance_command_receipts_no_delete BEFORE DELETE ON maintenance_command_receipts BEGIN SELECT RAISE(ABORT, 'maintenance command receipts are immutable'); END",
 }
 WORK_JOURNAL_TRIGGERS = {
     "maintenance_work_journal_entries_no_update": "CREATE TRIGGER maintenance_work_journal_entries_no_update BEFORE UPDATE ON maintenance_work_journal_entries BEGIN SELECT RAISE(ABORT, 'maintenance work journal entries are immutable'); END",
@@ -148,9 +155,22 @@ def validate_maintenance_schema(connection) -> None:
     }
     if journal_triggers != {name: _trigger_sql(sql) for name, sql in WORK_JOURNAL_TRIGGERS.items()}:
         raise MigrationSchemaError("Maintenance work-journal triggers are incompatible.")
+    receipt_triggers = {
+        name: _trigger_sql(sql)
+        for name, sql in connection.exec_driver_sql(
+            "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='maintenance_command_receipts'"
+        )
+    }
+    if receipt_triggers != {
+        name: _trigger_sql(sql) for name, sql in COMMAND_RECEIPT_TRIGGERS.items()
+    }:
+        raise MigrationSchemaError("Maintenance command receipt triggers are incompatible.")
 
 
 def validate_maintenance_data(connection) -> None:
+    from .command_validation import validate_command_receipts
+
+    validate_command_receipts(connection)
     if connection.execute(text("PRAGMA foreign_key_check")).first() is not None:
         raise MigrationSchemaError("Maintenance data has broken foreign keys.")
     _validate_identifiers_and_instants(connection)

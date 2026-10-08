@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from datetime import UTC, datetime
 from hashlib import sha256
 
@@ -20,12 +19,12 @@ from app.modules.ai_governance.domain.models import (
 )
 from app.modules.ai_governance.infrastructure.sqlalchemy_models import (
     AiActionLimitModel,
+    AiCommandOperationModel,
     AiDraftModel,
     AiModelConnectionModel,
     AiReviewDecisionModel,
     AiRunModel,
     AiSettingsModel,
-    AiSettingsOperationModel,
 )
 from app.platform.migration_errors import MigrationSchemaError
 
@@ -52,7 +51,7 @@ def validate_ai_governance_schema(
     }
     required = {
         "ai_settings",
-        "ai_settings_operations",
+        "ai_command_operations",
         "ai_model_connections",
         "ai_action_limits",
         "ai_runs",
@@ -80,7 +79,7 @@ def validate_ai_governance_schema(
     ):
         raise MigrationSchemaError("AI settings reference an unknown connection.")
     _utc_timestamp(settings_row["updated_at"])
-    _validate_settings_operations(connection)
+    _validate_command_operations(connection)
     for limit in connection.execute(text("SELECT * FROM ai_action_limits")).mappings():
         try:
             action = actions.require(limit["action_type"])
@@ -329,7 +328,9 @@ def validate_ai_governance_schema(
             raise MigrationSchemaError("AI draft decision history is incompatible.")
         decisions = list(
             connection.execute(
-                text("SELECT * FROM ai_review_decisions WHERE draft_id=:id ORDER BY decided_at,id"),
+                text(
+                    "SELECT * FROM ai_review_decisions WHERE draft_id=:id ORDER BY draft_version_before,decided_at,id"
+                ),
                 {"id": draft["id"]},
             ).mappings()
         )
@@ -472,7 +473,7 @@ def validate_ai_governance_schema(
 def _validate_exact_schema(connection) -> None:
     models = (
         AiSettingsModel,
-        AiSettingsOperationModel,
+        AiCommandOperationModel,
         AiModelConnectionModel,
         AiActionLimitModel,
         AiRunModel,
@@ -562,8 +563,9 @@ def _validate_exact_schema(connection) -> None:
         ).mappings()
     }
     expected_triggers = {
-        "ai_settings_operations_no_update": "CREATE TRIGGER AI_SETTINGS_OPERATIONS_NO_UPDATE BEFORE UPDATE ON AI_SETTINGS_OPERATIONS BEGIN SELECT RAISE(ABORT, 'AI SETTINGS OPERATIONS ARE IMMUTABLE'); END",
-        "ai_settings_operations_no_delete": "CREATE TRIGGER AI_SETTINGS_OPERATIONS_NO_DELETE BEFORE DELETE ON AI_SETTINGS_OPERATIONS BEGIN SELECT RAISE(ABORT, 'AI SETTINGS OPERATIONS ARE IMMUTABLE'); END",
+        "ai_command_operations_no_update": "CREATE TRIGGER AI_COMMAND_OPERATIONS_NO_UPDATE BEFORE UPDATE ON AI_COMMAND_OPERATIONS BEGIN SELECT RAISE(ABORT, 'AI COMMAND OPERATIONS ARE IMMUTABLE'); END",
+        "ai_command_operations_no_delete": "CREATE TRIGGER AI_COMMAND_OPERATIONS_NO_DELETE BEFORE DELETE ON AI_COMMAND_OPERATIONS BEGIN SELECT RAISE(ABORT, 'AI COMMAND OPERATIONS ARE IMMUTABLE'); END",
+        "ai_command_operations_no_replace": "CREATE TRIGGER AI_COMMAND_OPERATIONS_NO_REPLACE BEFORE INSERT ON AI_COMMAND_OPERATIONS WHEN EXISTS (SELECT 1 FROM AI_COMMAND_OPERATIONS WHERE ID=NEW.ID OR IDEMPOTENCY_KEY=NEW.IDEMPOTENCY_KEY) BEGIN SELECT RAISE(ABORT, 'AI COMMAND OPERATIONS ARE IMMUTABLE'); END",
     }
     if not set(expected_triggers) <= set(triggers):
         raise MigrationSchemaError("AI settings operations are not immutable.")
@@ -579,46 +581,286 @@ def _utc_timestamp(value: str) -> datetime:
     return parsed
 
 
-def _validate_settings_operations(connection) -> None:
-    """Validate durable settings replays, not only their immutable shape."""
-    for row in connection.execute(text("SELECT * FROM ai_settings_operations")).mappings():
-        try:
-            import uuid
+def _validate_command_operations(connection):
+    from uuid import UUID
+    from app.modules.ai_governance.application.commands import command_json
 
-            if str(uuid.UUID(str(row["idempotency_key"]))) != row["idempotency_key"]:
-                raise ValueError
-            if not isinstance(row["request_fingerprint"], str) or not re.fullmatch(
-                r"[0-9a-f]{64}", row["request_fingerprint"]
-            ):
-                raise ValueError
+    actions = {
+        "settings": ("ai_settings", "updated"),
+        "connection_create": ("ai_model_connection", "created"),
+        "connection_update": ("ai_model_connection", "updated"),
+        "disclosure": ("ai_model_connection", "disclosure_recorded"),
+        "limit": ("ai_action_limit", "updated"),
+        "edited": ("ai_draft", "edited"),
+        "dismissed": ("ai_draft", "dismissed"),
+        "approved": ("ai_draft", "approved"),
+    }
+    streams = {}
+    matched_effects = set()
+    for row in connection.execute(
+        text("SELECT * FROM ai_command_operations ORDER BY created_at,id")
+    ).mappings():
+        try:
+            for field in ("id", "idempotency_key", "correlation_id"):
+                if str(UUID(row[field])) != row[field]:
+                    raise ValueError("Noncanonical command identity")
+            _utc_timestamp(row["created_at"])
+            request = json.loads(row["request_json"])
             result = json.loads(row["result_json"])
-            required = {"killSwitch", "builtInEnabled", "defaultConnectionId", "updatedAt"}
-            if set(result) != required or canonical_json(result) != row["result_json"]:
-                raise ValueError
-            if type(result["killSwitch"]) is not bool or type(result["builtInEnabled"]) is not bool:
-                raise ValueError
-            if result["defaultConnectionId"] is not None:
+            if (
+                command_json(request) != row["request_json"]
+                or command_json(result) != row["result_json"]
+                or sha256(row["request_json"].encode()).hexdigest() != row["request_fingerprint"]
+                or set(request) != {"action", "targetId", "expectedRevision", "payload"}
+                or request["action"] != row["action"]
+                or request["targetId"] != row["target_id"]
+                or type(request["expectedRevision"]) is not int
+                or request["expectedRevision"] < 0
+                or not isinstance(request["payload"], dict)
+                or result["operationId"] != row["id"]
+            ):
+                raise ValueError("Invalid command envelope")
+            audit = (
+                connection.execute(
+                    text(
+                        "SELECT * FROM audit_events WHERE entity_type='ai_command_operation' AND entity_id=:id"
+                    ),
+                    {"id": row["id"]},
+                )
+                .mappings()
+                .all()
+            )
+            snapshot = {k: v for k, v in row.items() if k not in {"request_json", "result_json"}}
+            if (
+                len(audit) != 1
+                or audit[0]["action"] != "recorded"
+                or audit[0]["correlation_id"] != row["correlation_id"]
+                or json.loads(audit[0]["after_snapshot"]) != snapshot
+            ):
+                raise ValueError("Missing command audit")
+            entity_type, action = actions[row["action"]]
+            target = result["id"] if row["action"] == "connection_create" else row["target_id"]
+            effects = (
+                connection.execute(
+                    text(
+                        "SELECT * FROM audit_events WHERE entity_type=:type AND entity_id=:id AND action=:action AND correlation_id=:correlation AND id=:operation"
+                    ),
+                    {
+                        "type": entity_type,
+                        "id": target,
+                        "action": action,
+                        "correlation": row["correlation_id"],
+                        "operation": row["id"],
+                    },
+                )
+                .mappings()
+                .all()
+            )
+            if len(effects) != 1:
+                raise ValueError("Missing correlated mutation")
+            if effects[0]["id"] in matched_effects:
+                raise ValueError("Mutation is claimed by more than one receipt")
+            matched_effects.add(effects[0]["id"])
+            after = json.loads(effects[0]["after_snapshot"])
+            before = (
+                None
+                if effects[0]["before_snapshot"] is None
+                else json.loads(effects[0]["before_snapshot"])
+            )
+            revision_field = "version" if entity_type == "ai_draft" else "revision"
+            previous = 0 if before is None else before[revision_field]
+            if previous != request["expectedRevision"] or after[revision_field] not in {
+                previous,
+                previous + 1,
+            }:
+                raise ValueError("Invalid command revision history")
+            expected_delta = (
+                1
+                if row["action"] in {"connection_create", "edited"}
+                else 0
+                if row["action"] in {"approved", "dismissed"} or before == after
+                else 1
+            )
+            if after[revision_field] != previous + expected_delta:
+                raise ValueError("Invalid command revision change")
+            if effects[0]["occurred_at"] > audit[0]["occurred_at"]:
+                raise ValueError("Command recorded before its effects")
+            if row["action"] == "approved":
                 if (
-                    str(uuid.UUID(str(result["defaultConnectionId"])))
-                    != result["defaultConnectionId"]
+                    set(result)
+                    != {
+                        "status",
+                        "resultEntityId",
+                        "resultEntityType",
+                        "draftId",
+                        "version",
+                        "updatedAt",
+                        "operationId",
+                    }
+                    or result["status"] != "approved"
                 ):
-                    raise ValueError
-                if (
+                    raise ValueError("Invalid approval result")
+                decision = (
                     connection.execute(
-                        text("SELECT 1 FROM ai_model_connections WHERE id=:id"),
-                        {"id": result["defaultConnectionId"]},
-                    ).first()
-                    is None
+                        text(
+                            "SELECT result_entity_id, result_entity_type FROM ai_review_decisions WHERE draft_id=:id AND decision='approved' AND correlation_id=:correlation"
+                        ),
+                        {"id": target, "correlation": row["correlation_id"]},
+                    )
+                    .mappings()
+                    .one()
+                )
+                if (
+                    result["resultEntityId"] != decision["result_entity_id"]
+                    or result["resultEntityType"] != decision["result_entity_type"]
+                    or result["draftId"] != target
+                    or result["version"] != after["version"]
+                    or result["updatedAt"] != after["updated_at"]
                 ):
-                    raise ValueError
-            created = _utc_timestamp(row["created_at"])
-            updated = _utc_timestamp(result["updatedAt"])
-            if updated != created:
-                raise ValueError
+                    raise ValueError("Invalid approval reference")
+            elif (
+                result.get(revision_field) != after[revision_field]
+                or result.get("updatedAt") != after["updated_at"]
+            ):
+                raise ValueError("Invalid original response")
+            _validate_original_command_result(connection, row, result, after)
+            streams.setdefault((entity_type, target), []).append(
+                (effects[0]["occurred_at"], effects[0]["id"], before, after)
+            )
         except Exception as error:
-            raise MigrationSchemaError(
-                "AI settings-operation retained data is incompatible."
-            ) from error
+            raise MigrationSchemaError("AI command history is incompatible.") from error
+    expected_effects = set(
+        connection.execute(
+            text(
+                "SELECT id FROM audit_events WHERE (entity_type='ai_settings' AND action='updated') OR (entity_type='ai_model_connection' AND action IN ('created','updated','disclosure_recorded')) OR (entity_type='ai_action_limit' AND action='updated') OR (entity_type='ai_draft' AND action IN ('edited','dismissed','approved'))"
+            )
+        ).scalars()
+    )
+    if expected_effects != matched_effects:
+        raise MigrationSchemaError("AI command receipts do not cover their mutation history.")
+    _validate_command_streams(connection, streams)
+
+
+def _validate_command_streams(connection, streams):
+    tables = {
+        "ai_settings": ("ai_settings", "singleton"),
+        "ai_model_connection": ("ai_model_connections", "id"),
+        "ai_action_limit": ("ai_action_limits", "action_type"),
+        "ai_draft": ("ai_drafts", "id"),
+    }
+    for (entity_type, target), history in streams.items():
+        history.sort(key=lambda event: (event[0], event[1]))
+        previous = None
+        revision = "version" if entity_type == "ai_draft" else "revision"
+        for _, _, before, after in history:
+            if previous is not None and before[revision] != previous[revision]:
+                raise MigrationSchemaError("AI command revision lineage is incomplete.")
+            previous = after
+        table, key = tables[entity_type]
+        current = (
+            connection.execute(text(f"SELECT * FROM {table} WHERE {key}=:id"), {"id": target})
+            .mappings()
+            .one_or_none()
+        )
+        if current is None or current[revision] != previous[revision]:
+            raise MigrationSchemaError("AI command lineage does not reach its current state.")
+        # Supersession belongs to generation rather than a review command.
+        if entity_type == "ai_draft" and current["status"] == "superseded":
+            continue
+        for name, value in previous.items():
+            if value != "[redacted]" and current.get(name) != value:
+                raise MigrationSchemaError("AI state differs from its original command history.")
+
+
+def _validate_original_command_result(connection, operation, result, after):
+    """Bind every portable result field to the correlated persisted transition."""
+    from app.modules.ai_governance.application.commands import command_json
+
+    names = {
+        "settings": {
+            "killSwitch": "kill_switch",
+            "builtInEnabled": "built_in_enabled",
+            "defaultConnectionId": "default_connection_id",
+            "revision": "revision",
+            "updatedAt": "updated_at",
+        },
+        "limit": {
+            "actionType": "action_type",
+            "enabled": "enabled",
+            "connectionId": "connection_id",
+            "maxRunsPerUtcDay": "max_runs_per_utc_day",
+            "maxPromptTokens": "max_prompt_tokens",
+            "maxCompletionTokens": "max_completion_tokens",
+            "allowedModels": "allowed_models",
+            "revision": "revision",
+            "updatedAt": "updated_at",
+        },
+        "connection": {
+            "id": "id",
+            "label": "label",
+            "revision": "revision",
+            "adapterId": "adapter_id",
+            "adapterVersion": "adapter_version",
+            "modelIdentifier": "model_identifier",
+            "executionLocation": "execution_location",
+            "enabled": "enabled",
+            "cloudDataClasses": "cloud_data_classes",
+            "disclosureVersion": "disclosure_version",
+            "disclosureAcceptedAt": "disclosure_accepted_at",
+            "modelArtifactDigest": "model_artifact_digest",
+            "quantization": "quantization",
+            "runtimeId": "runtime_id",
+            "runtimeVersion": "runtime_version",
+            "createdAt": "created_at",
+            "updatedAt": "updated_at",
+        },
+        "draft": {
+            "id": "id",
+            "runId": "run_id",
+            "entityKind": "entity_kind",
+            "status": "status",
+            "version": "version",
+            "updatedAt": "updated_at",
+        },
+    }
+    action = operation["action"]
+    if action == "approved":
+        _utc_timestamp(result["updatedAt"])
+        return
+    family = (
+        "connection"
+        if action in {"connection_create", "connection_update", "disclosure"}
+        else "draft"
+        if action in {"edited", "dismissed"}
+        else action
+    )
+    expected = {key: after[value] for key, value in names[family].items()}
+    if family == "connection":
+        if type(result.get("credentialPresent")) is not bool:
+            raise ValueError("Invalid credential presence")
+        expected["credentialPresent"] = result["credentialPresent"]
+    if family == "draft":
+        run = (
+            connection.execute(text("SELECT * FROM ai_runs WHERE id=:id"), {"id": after["run_id"]})
+            .mappings()
+            .one()
+        )
+        expected.update(
+            actionType=run["action_type"],
+            owningModule=run["owning_module"],
+            sourceEntityType=run["source_entity_type"],
+            sourceEntityId=run["source_entity_id"],
+        )
+    for key in ("enabled", "killSwitch", "builtInEnabled"):
+        if key in expected:
+            expected[key] = bool(expected[key])
+    for key in ("cloudDataClasses", "allowedModels"):
+        if key in expected:
+            expected[key] = json.loads(expected[key])
+    expected["operationId"] = operation["id"]
+    if command_json(result) != command_json(expected):
+        raise ValueError("Original response disagrees with persisted effects")
+    _utc_timestamp(result["updatedAt"])
 
 
 def _normalized_sql(value: str) -> str:

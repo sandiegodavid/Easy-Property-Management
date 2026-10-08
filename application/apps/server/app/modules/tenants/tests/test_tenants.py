@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 import json
 import sqlite3
 import tempfile
@@ -53,7 +55,13 @@ from app.platform.product_migrations import initialize_latest_schema
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 
+from app.modules.tenants.tests.command_helpers import current_tenant_command
+
+
 class TenantTests(unittest.TestCase):
+    def tenant_command(self, action, *args, **kwargs):
+        return current_tenant_command(self.tenants, action, *args, **kwargs)
+
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -79,8 +87,16 @@ class TenantTests(unittest.TestCase):
             )
         )
 
+    def contact_command(self, action, party_id, *args, **kwargs):
+        """Existing lifecycle fixtures explicitly submit the current Party revision."""
+        revision = self.contacts.unit_of_work.methods(party_id)[0].revision
+        return getattr(self.contacts, action)(
+            party_id, *args, expected_revision=revision, idempotency_key=str(uuid4()), **kwargs
+        )
+
     def test_creates_profile_contacts_and_audits_them_together(self) -> None:
-        tenant = self.tenants.create(
+        tenant = self.tenant_command(
+            "create",
             TenantCreateCommand(
                 "individual",
                 "Robin Renter",
@@ -88,7 +104,7 @@ class TenantTests(unittest.TestCase):
                     ContactMethodCommand("email", " Robin@Example.Test ", label="Home"),
                     ContactMethodCommand("phone", "+1 (503) 555-0111"),
                 ),
-            )
+            ),
         )
         self.assertEqual(tenant["profile"]["partyId"], tenant["id"])
         self.assertEqual(tenant["contactMethods"][0]["displayValue"], "Robin@Example.Test")
@@ -97,10 +113,12 @@ class TenantTests(unittest.TestCase):
         )
         self.assertEqual(
             {item.entity_type for item in events},
-            {"party", "tenant_profile", "party_contact_method"},
+            {"party", "tenant_profile", "party_contact_method", "tenant_command_operation"},
         )
         with self.assertRaises(PartyConflictError):
-            self.contacts.add(tenant["id"], ContactMethodCommand("email", "robin@example.test"))
+            self.contact_command(
+                "add", tenant["id"], ContactMethodCommand("email", "robin@example.test")
+            )
 
     def test_designates_existing_party_and_keeps_identity_when_profile_archives(self) -> None:
         portfolio = PortfolioService(
@@ -108,15 +126,16 @@ class TenantTests(unittest.TestCase):
             time_zone_resolver=BundledAddressTimeZoneResolver(),
         )
         party = portfolio.create_party(PartyCreateCommand("individual", "Existing Person"))
-        tenant = self.tenants.designate(party.id, notes="Contact after work")
-        self.tenants.archive(party.id, confirmed=True)
+        tenant = self.tenant_command("designate", party.id, notes="Contact after work")
+        self.tenant_command("archive", party.id, confirmed=True)
         archived = self.tenants.get(party.id)
         self.assertIsNone(archived["archivedAt"])
         self.assertIsNotNone(archived["profile"]["archivedAt"])
         self.assertEqual(tenant["id"], party.id)
 
     def test_preferred_contact_requires_explicit_change_before_archive(self) -> None:
-        tenant = self.tenants.create(
+        tenant = self.tenant_command(
+            "create",
             TenantCreateCommand(
                 "individual",
                 "Taylor Tenant",
@@ -124,10 +143,11 @@ class TenantTests(unittest.TestCase):
                     ContactMethodCommand("email", "taylor@example.test"),
                     ContactMethodCommand("phone", "555 555 0100"),
                 ),
-            )
+            ),
         )
         email, phone = tenant["contactMethods"]
-        self.tenants.update_profile(
+        self.tenant_command(
+            "update_profile",
             tenant["id"],
             TenantProfilePatchCommand.from_mapping(
                 {
@@ -136,14 +156,18 @@ class TenantTests(unittest.TestCase):
             ),
         )
         with self.assertRaises(PartyValidationError):
-            self.contacts.archive(tenant["id"], email["id"], confirmed=True)
-        self.contacts.archive(
+            self.contact_command("archive", tenant["id"], email["id"], confirmed=True)
+        self.contact_command(
+            "archive",
             tenant["id"],
             email["id"],
             confirmed=True,
             reference_resolutions=(
                 ContactReferenceResolution(
-                    "tenant", tenant["id"], replacement_contact_method_id=phone["id"]
+                    "tenant",
+                    tenant["id"],
+                    replacement_contact_method_id=phone["id"],
+                    expected_tenant_revision=self.tenants.get(tenant["id"])["revision"],
                 ),
             ),
         )
@@ -152,36 +176,39 @@ class TenantTests(unittest.TestCase):
         )
 
     def test_searches_contact_values_and_supports_archived_only_listing(self) -> None:
-        tenant = self.tenants.create(
+        tenant = self.tenant_command(
+            "create",
             TenantCreateCommand(
                 "individual",
                 "Searchable Person",
                 contacts=(ContactMethodCommand("email", "find-me@example.test"),),
-            )
+            ),
         )
         self.assertEqual(
             [item["id"] for item in self.tenants.list(search="find-me@example")], [tenant["id"]]
         )
-        self.tenants.archive(tenant["id"], confirmed=True)
+        self.tenant_command("archive", tenant["id"], confirmed=True)
         self.assertEqual(self.tenants.list(search="find-me@example"), [])
         self.assertEqual(
             [item["id"] for item in self.tenants.list(archive_state="archived")], [tenant["id"]]
         )
 
     def test_phone_search_uses_canonical_format(self) -> None:
-        tenant = self.tenants.create(
+        tenant = self.tenant_command(
+            "create",
             TenantCreateCommand(
                 "individual",
                 "Phone Search",
                 contacts=(ContactMethodCommand("phone", "(503) 555-0100"),),
-            )
+            ),
         )
         self.assertEqual(
             [item["id"] for item in self.tenants.list(search="503-555")], [tenant["id"]]
         )
 
     def test_shared_party_contact_values_are_searchable_without_contact_methods(self) -> None:
-        tenant = self.tenants.create(
+        tenant = self.tenant_command(
+            "create",
             TenantCreateCommand(
                 "individual",
                 "Shared Contact",
@@ -189,7 +216,7 @@ class TenantTests(unittest.TestCase):
                     ContactMethodCommand("email", "shared@example.test"),
                     ContactMethodCommand("phone", "503/555/0199"),
                 ),
-            )
+            ),
         )
         self.assertEqual(
             [item["id"] for item in self.tenants.list(search="shared@example")], [tenant["id"]]
@@ -199,19 +226,21 @@ class TenantTests(unittest.TestCase):
         )
 
     def test_alphanumeric_search_does_not_broaden_to_digits_only_phone_matches(self) -> None:
-        expected = self.tenants.create(
+        expected = self.tenant_command(
+            "create",
             TenantCreateCommand(
                 "individual",
                 "Unit Contact",
                 contacts=(ContactMethodCommand("email", "unit1@example.test"),),
-            )
+            ),
         )
-        self.tenants.create(
+        self.tenant_command(
+            "create",
             TenantCreateCommand(
                 "individual",
                 "Unrelated Phone",
                 contacts=(ContactMethodCommand("phone", "555-000-0001"),),
-            )
+            ),
         )
         self.assertEqual(
             [item["id"] for item in self.tenants.list(search="unit1@example.test")],
@@ -219,21 +248,25 @@ class TenantTests(unittest.TestCase):
         )
 
     def test_unicode_text_and_like_metacharacters_are_literal_searches(self) -> None:
-        expected = self.tenants.create(
+        expected = self.tenant_command(
+            "create",
             TenantCreateCommand(
                 "individual",
                 "租客1",
                 contacts=(ContactMethodCommand("email", "unit_one@example.test"),),
-            )
+            ),
         )
-        self.tenants.create(
+        self.tenant_command(
+            "create",
             TenantCreateCommand(
                 "individual",
                 "Unrelated",
                 contacts=(ContactMethodCommand("phone", "555-000-0001"),),
-            )
+            ),
         )
-        literal_percent = self.tenants.create(TenantCreateCommand("individual", "100% Reliable"))
+        literal_percent = self.tenant_command(
+            "create", TenantCreateCommand("individual", "100% Reliable")
+        )
         self.assertEqual(
             [item["id"] for item in self.tenants.list(search="租客1")], [expected["id"]]
         )
@@ -247,40 +280,45 @@ class TenantTests(unittest.TestCase):
         self.assertEqual(contact_search_terms("#1"), ("#1",))
 
     def test_archived_contact_value_can_be_added_again(self) -> None:
-        tenant = self.tenants.create(
+        tenant = self.tenant_command(
+            "create",
             TenantCreateCommand(
                 "individual",
                 "Reuse Contact",
                 contacts=(ContactMethodCommand("email", "reuse@example.test"),),
-            )
+            ),
         )
         old_method = tenant["contactMethods"][0]
-        self.contacts.archive(tenant["id"], old_method["id"], confirmed=True)
-        replacement = self.contacts.add(
-            tenant["id"], ContactMethodCommand("email", "REUSE@example.test")
+        self.contact_command("archive", tenant["id"], old_method["id"], confirmed=True)
+        replacement = self.contact_command(
+            "add", tenant["id"], ContactMethodCommand("email", "REUSE@example.test")
         )
         self.assertNotEqual(replacement["id"], old_method["id"])
 
     def test_archived_profile_rejects_profile_and_contact_edits(self) -> None:
-        tenant = self.tenants.create(
+        tenant = self.tenant_command(
+            "create",
             TenantCreateCommand(
                 "individual",
                 "Inactive Person",
                 contacts=(ContactMethodCommand("phone", "5035550199"),),
-            )
+            ),
         )
         method_id = tenant["contactMethods"][0]["id"]
-        self.tenants.archive(tenant["id"], confirmed=True)
+        self.tenant_command("archive", tenant["id"], confirmed=True)
         with self.assertRaises(TenantConflictError):
-            self.tenants.update_profile(
-                tenant["id"], TenantProfilePatchCommand.from_mapping({"notes": "blocked"})
+            self.tenant_command(
+                "update_profile",
+                tenant["id"],
+                TenantProfilePatchCommand.from_mapping({"notes": "blocked"}),
             )
-        updated = self.contacts.update(
-            tenant["id"], method_id, ContactMethodCommand("phone", "5035550100")
+        updated = self.contact_command(
+            "update", tenant["id"], method_id, ContactMethodCommand("phone", "5035550100")
         )
         self.assertEqual(updated["displayValue"], "5035550100")
         self.assertEqual(
-            self.contacts.archive(tenant["id"], method_id, confirmed=True)["status"], "archived"
+            self.contact_command("archive", tenant["id"], method_id, confirmed=True)["status"],
+            "archived",
         )
 
     def test_audit_failure_rolls_back_tenant_creation(self) -> None:
@@ -290,7 +328,7 @@ class TenantTests(unittest.TestCase):
             side_effect=sqlite3.DatabaseError("audit unavailable"),
         ):
             with self.assertRaises(sqlite3.DatabaseError):
-                self.tenants.create(TenantCreateCommand("individual", "Not Saved"))
+                self.tenant_command("create", TenantCreateCommand("individual", "Not Saved"))
         self.assertEqual(self.tenants.list(), [])
 
     def test_schema_validation_rejects_unrestricted_contact_uniqueness(self) -> None:
@@ -319,6 +357,8 @@ class TenantTests(unittest.TestCase):
                 json={
                     "partyKind": "individual",
                     "displayName": "Alex Tenant",
+                    "expectedRevision": 0,
+                    "idempotencyKey": str(uuid4()),
                     "contacts": [{"methodKind": "email", "value": "alex@example.test"}],
                 },
             )
@@ -346,12 +386,22 @@ class TenantTests(unittest.TestCase):
                 contact_history.json()["events"][0]["after"]["normalizedValue"], "alex@example.test"
             )
 
-            patched = client.patch(f"/api/tenants/{tenant_id}", json={"notes": "Evenings only"})
+            patched = client.patch(
+                f"/api/tenants/{tenant_id}",
+                json={
+                    "notes": "Evenings only",
+                    "expectedRevision": 1,
+                    "idempotencyKey": str(uuid4()),
+                },
+            )
             self.assertEqual(patched.status_code, 200)
             self.assertFalse(patched.json()["profile"]["doNotContact"])
-            cleared = client.patch(f"/api/tenants/{tenant_id}", json={"notes": None})
+            cleared = client.patch(
+                f"/api/tenants/{tenant_id}",
+                json={"notes": None, "expectedRevision": 2, "idempotencyKey": str(uuid4())},
+            )
             self.assertIsNone(cleared.json()["profile"]["notes"])
-            self.assertEqual(client.patch(f"/api/tenants/{tenant_id}", json={}).status_code, 400)
+            self.assertEqual(client.patch(f"/api/tenants/{tenant_id}", json={}).status_code, 422)
             self.assertEqual(
                 client.post(
                     f"/api/tenants/{tenant_id}/archive", json={"confirmed": "yes"}
@@ -360,7 +410,13 @@ class TenantTests(unittest.TestCase):
             )
 
             invalid = client.post(
-                "/api/tenants", json={"partyKind": "individual", "displayName": "   "}
+                "/api/tenants",
+                json={
+                    "partyKind": "individual",
+                    "displayName": "   ",
+                    "expectedRevision": 0,
+                    "idempotencyKey": str(uuid4()),
+                },
             )
             self.assertEqual(invalid.status_code, 400)
 
@@ -390,6 +446,8 @@ class TenantTests(unittest.TestCase):
                     "methodKind": "phone",
                     "value": "+1 (503) 555-0199 ext. 42",
                     "label": "Leasing",
+                    "expectedRevision": 1,
+                    "idempotencyKey": str(uuid4()),
                 },
             )
             self.assertEqual(response.status_code, 201)
@@ -417,7 +475,12 @@ class TenantTests(unittest.TestCase):
         contact_service = PartyContactService(
             SQLitePartyUnitOfWork(self.workspace.paths.database, AuditRecorder(self.audit))
         )
-        contact_service.add(owner.id, ContactMethodCommand("email", "owner-search@example.test"))
+        contact_service.add(
+            owner.id,
+            ContactMethodCommand("email", "owner-search@example.test"),
+            expected_revision=1,
+            idempotency_key=str(uuid4()),
+        )
         config = Path(self.temp.name) / "party-search-api.json"
         config.write_text(
             json.dumps({"localWorkspacePath": str(self.workspace.paths.root)}), encoding="utf-8"
@@ -438,7 +501,8 @@ class TenantTests(unittest.TestCase):
             )
             self.assertEqual(
                 client.post(
-                    f"/api/parties/{owner.id}/archive", json={"confirmed": True}
+                    f"/api/parties/{owner.id}/archive",
+                    json={"confirmed": True, "expectedRevision": 2, "idempotencyKey": str(uuid4())},
                 ).status_code,
                 200,
             )
@@ -461,13 +525,16 @@ class TenantTests(unittest.TestCase):
         payload = {
             "partyKind": "individual",
             "displayName": "First Person",
+            "expectedRevision": 0,
+            "idempotencyKey": str(uuid4()),
             "contacts": [{"methodKind": "email", "value": "same@example.test"}],
         }
         with TestClient(create_app(config)) as client:
             first = client.post("/api/tenants", json=payload)
             self.assertEqual(first.status_code, 201)
             duplicate = client.post(
-                "/api/tenants", json={**payload, "displayName": "Second Person"}
+                "/api/tenants",
+                json={**payload, "displayName": "Second Person", "idempotencyKey": str(uuid4())},
             )
             self.assertEqual(duplicate.status_code, 409)
             self.assertEqual(duplicate.json()["detail"]["code"], "possible_duplicate_party")
@@ -478,23 +545,27 @@ class TenantTests(unittest.TestCase):
                     **payload,
                     "displayName": "Second Person",
                     "confirmedNewParty": True,
+                    "idempotencyKey": str(uuid4()),
                 },
             )
             self.assertEqual(confirmed.status_code, 201)
 
     def test_active_tenant_role_blocks_shared_party_archival(self) -> None:
-        tenant = self.tenants.create(TenantCreateCommand("individual", "Active Tenant"))
+        tenant = self.tenant_command("create", TenantCreateCommand("individual", "Active Tenant"))
         config = Path(self.temp.name) / "guard-api.json"
         config.write_text(
             json.dumps({"localWorkspacePath": str(self.workspace.paths.root)}), encoding="utf-8"
         )
         with TestClient(create_app(config)) as client:
-            blocked = client.post(f"/api/parties/{tenant['id']}/archive", json={"confirmed": True})
+            blocked = client.post(
+                f"/api/parties/{tenant['id']}/archive",
+                json={"confirmed": True, "expectedRevision": 1, "idempotencyKey": str(uuid4())},
+            )
             self.assertEqual(blocked.status_code, 409)
         self.assertIsNone(self.tenants.get(tenant["id"])["archivedAt"])
 
     def test_database_uniqueness_treats_null_extensions_as_equal(self) -> None:
-        tenant = self.tenants.create(TenantCreateCommand("individual", "Unique Contact"))
+        tenant = self.tenant_command("create", TenantCreateCommand("individual", "Unique Contact"))
         now = "2026-01-01T00:00:00+00:00"
         with sqlite3.connect(self.workspace.paths.database) as connection:
             values = (
@@ -532,15 +603,19 @@ class TenantTests(unittest.TestCase):
                 ContactMethodCommand(kind, value)
         with self.assertRaises(PartyValidationError):
             ContactMethodCommand("phone", "5" + ("-" * 400) + "035550")
-        tenant = self.tenants.create(TenantCreateCommand("organization", "Shared Switchboard"))
-        first = self.contacts.add(tenant["id"], ContactMethodCommand("phone", "503/555/0199 x12"))
-        second = self.contacts.add(
-            tenant["id"], ContactMethodCommand("phone", "503-555-0199", extension="13")
+        tenant = self.tenant_command(
+            "create", TenantCreateCommand("organization", "Shared Switchboard")
+        )
+        first = self.contact_command(
+            "add", tenant["id"], ContactMethodCommand("phone", "503/555/0199 x12")
+        )
+        second = self.contact_command(
+            "add", tenant["id"], ContactMethodCommand("phone", "503-555-0199", extension="13")
         )
         self.assertEqual((first["extension"], second["extension"]), ("12", "13"))
         with self.assertRaises(PartyConflictError):
-            self.contacts.add(
-                tenant["id"], ContactMethodCommand("phone", "5035550199", extension="12")
+            self.contact_command(
+                "add", tenant["id"], ContactMethodCommand("phone", "5035550199", extension="12")
             )
 
     def test_party_create_rejects_duplicate_contacts_in_one_request(self) -> None:
@@ -554,6 +629,8 @@ class TenantTests(unittest.TestCase):
                 json={
                     "partyKind": "individual",
                     "displayName": "Duplicate Contact",
+                    "expectedRevision": 0,
+                    "idempotencyKey": str(uuid4()),
                     "contacts": [
                         {"methodKind": "phone", "value": "503-555-0199"},
                         {"methodKind": "phone", "value": "(503) 555 0199"},
@@ -577,7 +654,12 @@ class TenantTests(unittest.TestCase):
         ).create_party(PartyCreateCommand("organization", "Resolution Owner"))
         contact = PartyContactService(
             SQLitePartyUnitOfWork(self.workspace.paths.database, AuditRecorder(self.audit))
-        ).add(owner.id, ContactMethodCommand("email", "resolution@example.test"))
+        ).add(
+            owner.id,
+            ContactMethodCommand("email", "resolution@example.test"),
+            expected_revision=1,
+            idempotency_key=str(uuid4()),
+        )
         config = Path(self.temp.name) / "resolution-api.json"
         config.write_text(
             json.dumps({"localWorkspacePath": str(self.workspace.paths.root)}), encoding="utf-8"
@@ -587,9 +669,12 @@ class TenantTests(unittest.TestCase):
                 f"/api/parties/{owner.id}/contact-methods/{contact['id']}/archive",
                 json={
                     "confirmed": True,
+                    "expectedRevision": 2,
+                    "idempotencyKey": str(uuid4()),
                     "referenceResolutions": [
                         {
                             "role": "tenant",
+                            "expectedTenantRevision": 1,
                             "roleRecordId": owner.id,
                             "clear": True,
                         }
@@ -601,6 +686,8 @@ class TenantTests(unittest.TestCase):
                 f"/api/parties/{owner.id}/contact-methods/{contact['id']}/archive",
                 json={
                     "confirmed": True,
+                    "expectedRevision": 2,
+                    "idempotencyKey": str(uuid4()),
                     "referenceResolutions": [
                         {
                             "role": "vendor",
@@ -635,17 +722,20 @@ class TenantTests(unittest.TestCase):
             engine.dispose()
 
     def test_repeated_profile_status_changes_are_conflicts(self) -> None:
-        tenant = self.tenants.create(TenantCreateCommand("individual", "Lifecycle Tenant"))
-        self.tenants.archive(tenant["id"], confirmed=True)
+        tenant = self.tenant_command(
+            "create", TenantCreateCommand("individual", "Lifecycle Tenant")
+        )
+        self.tenant_command("archive", tenant["id"], confirmed=True)
         with self.assertRaises(TenantConflictError):
-            self.tenants.archive(tenant["id"], confirmed=True)
-        self.tenants.restore(tenant["id"])
+            self.tenant_command("archive", tenant["id"], confirmed=True)
+        self.tenant_command("restore", tenant["id"])
         with self.assertRaises(TenantConflictError):
-            self.tenants.restore(tenant["id"])
+            self.tenant_command("restore", tenant["id"])
 
     @fast_backup_encryption()
     def test_encrypted_backup_export_and_restore_preserve_tenant_data(self) -> None:
-        tenant = self.tenants.create(
+        tenant = self.tenant_command(
+            "create",
             TenantCreateCommand(
                 "individual",
                 "Backup Tenant",
@@ -654,18 +744,19 @@ class TenantTests(unittest.TestCase):
                     ContactMethodCommand("phone", "503-555-0123"),
                 ),
                 notes="Preferred language recorded locally",
-            )
+            ),
         )
         email_id = tenant["contactMethods"][0]["id"]
         phone_id = tenant["contactMethods"][1]["id"]
-        self.tenants.update_profile(
+        self.tenant_command(
+            "update_profile",
             tenant["id"],
             TenantProfilePatchCommand(
                 preferred_contact_method_id=email_id,
                 do_not_contact=True,
             ),
         )
-        self.contacts.archive(tenant["id"], phone_id, confirmed=True)
+        self.contact_command("archive", tenant["id"], phone_id, confirmed=True)
         recorder = AuditRecorder(self.audit)
         backups = BackupService(
             self.workspace,

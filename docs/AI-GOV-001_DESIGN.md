@@ -26,7 +26,7 @@ AI-GOV-001 is infrastructure and governance, not an AI feature. It does not extr
 
 The repository implements the AI Governance module, seven-table persistence model, exact-schema and retained-data validation, provider/credential ports, synchronous coordinator, settings and disclosure controls, run/draft/review APIs, transaction-aware approval completion, audit policies, and LOCAL-002 backup/restore coverage. Its static production action, approval-handler, source-validator, and source-projection registries remain empty by design; tests use a synthetic action.
 
-The implemented action contract still permits only one `approval_effect` (`create`, `update`, or `advisory_only`) and one result-reference rule. Review decisions do not persist a selected mode, the generic dismiss route has no domain-handler dispatch, and terminal approval/dismissal has no generic idempotent response replay. INGEST-002 therefore extends this current schema and registry contract rather than working around it.
+The implemented action contract still permits only one `approval_effect` (`create`, `update`, or `advisory_only`) and one result-reference rule. Review decisions do not persist a selected mode and the generic dismiss route has no domain-handler dispatch. UI-001 Slice 29 adds immutable command receipts and original-result recovery for the currently registered configuration and review commands. INGEST-002 still extends the action/mode and domain-dismissal contracts rather than working around them.
 
 There is still no durable background worker, application-wide record-version convention, or production AI capability that creates an issue proposal. Provider execution remains synchronous and outside database transactions. INGEST-002 supplies the first production review contract, while ISSUE-AI-001 or MCP-001 later supplies a real producer.
 
@@ -109,12 +109,29 @@ One singleton row owns workspace-wide settings.
 | `built_in_enabled` | Boolean, default false. Off blocks all app-initiated inference, including action-specific connection overrides, without affecting assistant grants. |
 | `default_connection_id` | Nullable reference to `ai_model_connections`; null means built-in assistance is not configured. Selection never grants disclosure permission. |
 | `updated_at` | UTC timestamp. |
+| `revision` | Positive integer, initially one; each effective settings change advances it once. |
 
 The kill switch is not duplicated on every action-limit row.
 
-### `ai_settings_operations`
+### `ai_command_operations`
 
-This append-only idempotency table records a settings operation key, semantic request fingerprint, immutable response snapshot, and creation time. It prevents an older retry from overwriting newer settings. It is validated and included in encrypted backup/restore.
+The current greenfield baseline uses one append-only command ledger for settings, connection creation/update, disclosure, action-limit overrides, and draft edit/approve/dismiss. It replaces the settings-only ledger; no compatibility format is retained.
+
+| Field | Rule |
+| --- | --- |
+| `id`, `idempotency_key` | Canonical UUID operation ID and caller key; keys are unique across this command ledger. Generation retains its separate run-key authority. |
+| `action`, `target_id` | Closed command action and owning settings/connection/action/draft identity; connection creation uses `new` in the request and its generated ID in the result. |
+| `request_json`, `request_fingerprint` | Canonical complete semantic request, including expected revision/version and omitted-versus-null settings presence; lowercase SHA-256. No credential values are admitted. |
+| `result_json` | Canonical original typed response, including `operationId` and the resulting owning revision/version. Recovery never reconstructs it from current state or device credential presence. |
+| `correlation_id`, `created_at` | Canonical correlation UUID and UTC time; effects, receipt and its `recorded` audit commit together. Review commands share the run correlation. |
+
+Update, delete and replacement writes are prohibited by baseline triggers. Exact schema and retained validation check fingerprints, response fields, revision lineage, current tips and correlated business/receipt audits. All seven governance tables remain portable under LOCAL-002.
+
+Every covered command requires an exact revision/version and UUID key at both HTTP and application boundaries. New connections and absent limit overrides require revision zero. Settings and connections start at one; absent overrides expose revision zero. Effective configuration changes advance their revision once. Configuration no-ops retain revision/time and record their own receipt; same-key replay is audit-free. Draft edits advance the version by one; terminal decisions preserve the existing draft version and reject any new terminal command. Changed key reuse returns `409 ai_idempotency_conflict`; stale revisions return `409 ai_revision_conflict` with current state and revision.
+
+Read-only `GET /api/ai/command-operations/{operationId}` and `GET /api/ai/command-operations/by-key/{key}` return the immutable receipt through one indexed lookup. Approval handlers must call transaction-bound `AiReviewOperations.approval_replay(context)` before checking source freshness or performing official writes. `complete_approval(..., command=context.command)` records the complete original approval result and correlated receipt before the owning transaction commits. A retry after source changes returns that recorded result.
+
+Credential set/delete and connection probes retain their existing explicit device operations. They have no atomic SQLite receipt/recovery contract and remain gated for recoverable UI attempts. No additional OPS forms or automatic provider retries are enabled by Slice 29.
 
 ### `ai_model_connections`
 
@@ -138,6 +155,7 @@ One optional operator override per registered action type.
 | Field | Rule |
 | --- | --- |
 | `action_type` | Primary key; must exist in the static registry. |
+| `revision` | Positive integer for a stored override; absent overrides expose zero. Effective override changes advance it once. |
 | `enabled` | Boolean. |
 | `connection_id` | Optional registered model connection override; null uses the workspace default. External proposals do not use it. |
 | `max_runs_per_utc_day` | Positive integer no greater than the registered ceiling. It applies to both provider generations and later external proposals. |

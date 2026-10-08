@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import tempfile
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, File, Form, UploadFile, status
-from pydantic import BaseModel, ConfigDict, Field, StrictBool
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
 
@@ -21,11 +22,17 @@ from app.modules.inspections.application.service import (
     InspectionService,
     ObservationInput,
 )
+from app.modules.inspections.application.commands import InspectionRevisionConflict
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 
 
 class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+class CommandRequest(Contract):
+    expectedRevision: StrictInt = Field(ge=0)
+    idempotencyKey: UUID
 
 
 class ObservationRequest(Contract):
@@ -45,35 +52,35 @@ class AreaRequest(Contract):
     notes: str | None = Field(None, max_length=4000)
 
 
-class CreateReportRequest(Contract):
+class CreateReportRequest(CommandRequest):
     reportKind: Literal["pre_move_in", "post_move_out"]
     walkthroughOn: date
     conductedBy: str = Field(min_length=1, max_length=160)
     tenantPresence: Literal["present", "not_present", "declined", "not_recorded"] = "not_recorded"
     generalNotes: str | None = Field(None, max_length=4000)
     areas: list[AreaRequest] = Field(default_factory=list)
-    templateId: str | None = Field(None, min_length=1, max_length=80)
+    templateId: UUID | None = None
 
 
-class TemplateRequest(Contract):
+class TemplateRequest(CommandRequest):
     displayName: str = Field(min_length=1, max_length=160)
     applicability: Literal["residential", "office", "any"] = "any"
     notes: str | None = Field(None, max_length=4000)
     areas: list[AreaRequest] = Field(default_factory=list)
 
 
-class TemplatePatchRequest(Contract):
+class TemplatePatchRequest(CommandRequest):
     displayName: str | None = Field(None, min_length=1, max_length=160)
     applicability: Literal["residential", "office", "any"] | None = None
     notes: str | None = Field(None, max_length=4000)
     areas: list[AreaRequest] | None = None
 
 
-class ReplaceAreasRequest(Contract):
+class ReplaceAreasRequest(CommandRequest):
     areas: list[AreaRequest]
 
 
-class ReportPatchRequest(Contract):
+class ReportPatchRequest(CommandRequest):
     walkthroughOn: date | None = None
     conductedBy: str | None = Field(None, min_length=1, max_length=160)
     tenantPresence: Literal["present", "not_present", "declined", "not_recorded"] | None = None
@@ -85,11 +92,11 @@ class AcknowledgmentItem(Contract):
     notes: str | None = Field(None, max_length=4000)
 
 
-class AcknowledgmentRequest(Contract):
+class AcknowledgmentRequest(CommandRequest):
     acknowledgments: dict[str, AcknowledgmentItem]
 
 
-class FinalizeRequest(Contract):
+class FinalizeRequest(CommandRequest):
     confirmed: StrictBool
     timingExceptionReason: str | None = Field(None, max_length=1000)
 
@@ -99,8 +106,8 @@ class CorrectionRequest(CreateReportRequest):
 
 
 class ComparisonItemRequest(Contract):
-    preObservationId: str | None = None
-    postObservationId: str | None = None
+    preObservationId: UUID | None = None
+    postObservationId: UUID | None = None
     comparisonState: Literal[
         "unchanged",
         "improved",
@@ -112,16 +119,20 @@ class ComparisonItemRequest(Contract):
     operatorNotes: str | None = Field(None, max_length=4000)
 
 
-class ComparisonRequest(Contract):
+class ComparisonRequest(CommandRequest):
     comparisons: list[ComparisonItemRequest]
 
 
 class EvidenceLinkResponse(Contract):
     id: str
+    fileId: str | None = None
+    archivedAt: AwareDatetime | None = None
+    archiveReason: str | None = None
+    revision: StrictInt = 1
     entityType: Literal["condition_observation"]
     entityId: str
     purpose: Literal["condition_photo", "supporting_document"]
-    createdAt: datetime
+    createdAt: AwareDatetime
 
 
 class EvidenceResponse(Contract):
@@ -132,8 +143,9 @@ class EvidenceResponse(Contract):
     contentSha256: str
     storageProvider: Literal["local", "s3"]
     storageState: Literal["available", "missing", "quarantined"]
-    verifiedAt: datetime
-    createdAt: datetime
+    available: bool
+    verifiedAt: AwareDatetime
+    createdAt: AwareDatetime
     links: list[EvidenceLinkResponse]
 
 
@@ -148,7 +160,7 @@ class ObservationResponse(Contract):
     cleanlinessState: Literal["clean", "needs_cleaning", "not_assessed"] | None
     observedOn: date
     isCompleted: bool
-    completedAt: datetime | None
+    completedAt: AwareDatetime | None
     notes: str | None
     sortOrder: int
     files: list[EvidenceResponse]
@@ -169,7 +181,7 @@ class AcknowledgmentResponse(Contract):
     conditionReportId: str
     leaseParticipantId: str
     status: Literal["acknowledged", "disputed", "declined", "not_requested", "pending"]
-    acknowledgedOn: datetime | None
+    acknowledgedOn: AwareDatetime | None
     notes: str | None
 
 
@@ -181,7 +193,7 @@ class TemplateItemResponse(Contract):
     itemName: str
     itemNormalizedName: str
     sortOrder: int
-    createdAt: datetime
+    createdAt: AwareDatetime
 
 
 class ComparisonItemResponse(Contract):
@@ -200,8 +212,8 @@ class ComparisonItemResponse(Contract):
         "not_comparable",
     ]
     operatorNotes: str | None
-    createdAt: datetime
-    updatedAt: datetime
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
 
 
 class AttentionResponse(Contract):
@@ -210,6 +222,7 @@ class AttentionResponse(Contract):
 
 
 class ReportResponse(Contract):
+    revision: StrictInt = Field(ge=0)
     id: str
     leaseId: str
     spaceId: str
@@ -222,50 +235,103 @@ class ReportResponse(Contract):
     correctionReason: str | None
     timingExceptionReason: str | None
     generalNotes: str | None
-    finalizedAt: datetime | None
-    createdAt: datetime
-    updatedAt: datetime
+    finalizedAt: AwareDatetime | None
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
     areas: list[AreaResponse]
     acknowledgments: list[AcknowledgmentResponse]
     acknowledgmentComplete: bool
 
 
 class ReportListResponse(Contract):
+    revision: StrictInt = Field(ge=0)
     reports: list[ReportResponse]
     attention: AttentionResponse
 
 
 class TemplateResponse(Contract):
+    revision: StrictInt = Field(ge=0)
     id: str
     displayName: str
     normalizedName: str
     applicability: Literal["residential", "office", "any"]
     notes: str | None
-    archivedAt: datetime | None
-    createdAt: datetime
-    updatedAt: datetime
+    archivedAt: AwareDatetime | None
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
     items: list[TemplateItemResponse]
 
 
 class ComparisonResponse(Contract):
+    revision: StrictInt = Field(ge=0)
     preReport: ReportResponse | None
     postReport: ReportResponse | None
     comparisons: list[ComparisonItemResponse]
     requiresFreshReview: bool
 
 
-def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRouter:
-    router = APIRouter(tags=["inspections"])
+class ReportCommandResponse(ReportResponse):
+    operationId: UUID
 
-    def ready():
+
+class TemplateCommandResponse(TemplateResponse):
+    operationId: UUID
+
+
+class EvidenceCommandResponse(EvidenceResponse):
+    revision: StrictInt = Field(ge=0)
+    operationId: UUID
+
+
+class ComparisonCommandResponse(Contract):
+    comparisons: list[ComparisonItemResponse]
+    revision: StrictInt = Field(ge=0)
+    operationId: UUID
+
+
+class CommandRecoveryResponse(Contract):
+    result: (
+        ReportCommandResponse
+        | TemplateCommandResponse
+        | EvidenceCommandResponse
+        | ComparisonCommandResponse
+    )
+
+
+class InspectionCurrentState(Contract):
+    scopeKind: Literal["lease", "template"]
+    scopeId: UUID | None
+    revision: StrictInt = Field(ge=0)
+    report: ReportResponse | None = None
+    template: TemplateResponse | None = None
+
+
+class InspectionConflictDetail(Contract):
+    code: Literal["inspection_revision_conflict", "inspection_conflict"]
+    message: str
+    current: InspectionCurrentState | None = None
+
+
+class InspectionConflictResponse(Contract):
+    detail: InspectionConflictDetail
+
+
+def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRouter:
+    router = APIRouter(tags=["inspections"], responses={409: {"model": InspectionConflictResponse}})
+
+    def ready(*, write=True):
         try:
-            runtime.require_ready(write=True)
+            runtime.require_ready(write=write)
         except Exception as error:
             raise workspace_unavailable(str(error)) from error
 
     def invoke(operation):
         try:
             return operation()
+        except InspectionRevisionConflict as error:
+            raise api_problem(
+                409, "inspection_revision_conflict", str(error), current=error.current
+            ) from error
         except InspectionNotFoundError as error:
             raise domain_problem(error, status_code=404, code="inspection_not_found") from error
         except InspectionConflictError as error:
@@ -293,35 +359,66 @@ def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRo
             for value in values
         )
 
+    def command(request):
+        return {
+            "expected_revision": request.expectedRevision,
+            "idempotency_key": str(request.idempotencyKey),
+        }
+
+    @router.get(
+        "/api/inspection-commands/by-key/{key}",
+        response_model=CommandRecoveryResponse,
+        operation_id="getInspectionCommandByKey",
+    )
+    def recover_by_key(key: UUID):
+        ready(write=False)
+        return invoke(lambda: {"result": service.recover_command(idempotency_key=str(key))})
+
+    @router.get(
+        "/api/inspection-commands/{operation_id}",
+        response_model=CommandRecoveryResponse,
+        operation_id="getInspectionCommand",
+    )
+    def recover(operation_id: UUID):
+        ready(write=False)
+        return invoke(lambda: {"result": service.recover_command(operation_id=str(operation_id))})
+
     @router.post(
         "/api/leases/{lease_id}/condition-reports",
         status_code=status.HTTP_201_CREATED,
-        response_model=ReportResponse,
+        response_model=ReportCommandResponse,
+        operation_id="createConditionReport",
     )
-    def create(lease_id: str, request: CreateReportRequest):
+    def create(lease_id: UUID, request: CreateReportRequest):
         ready()
         return invoke(
             lambda: service.create(
-                lease_id,
+                str(lease_id),
                 report_kind=request.reportKind,
                 walkthrough_on=request.walkthroughOn.isoformat(),
                 conducted_by=request.conductedBy,
                 tenant_presence=request.tenantPresence,
                 general_notes=request.generalNotes,
                 areas=areas(request.areas),
-                template_id=request.templateId,
+                template_id=str(request.templateId) if request.templateId else None,
+                **command(request),
             )
         )
 
-    @router.get("/api/leases/{lease_id}/condition-reports", response_model=ReportListResponse)
-    def list_reports(lease_id: str):
+    @router.get(
+        "/api/leases/{lease_id}/condition-reports",
+        response_model=ReportListResponse,
+        operation_id="listConditionReports",
+    )
+    def list_reports(lease_id: UUID):
         ready()
-        return invoke(lambda: service.list_for_lease(lease_id))
+        return invoke(lambda: service.list_for_lease(str(lease_id)))
 
     @router.post(
         "/api/condition-checklist-templates",
         status_code=status.HTTP_201_CREATED,
-        response_model=TemplateResponse,
+        response_model=TemplateCommandResponse,
+        operation_id="createConditionChecklistTemplate",
     )
     def create_template(request: TemplateRequest):
         ready()
@@ -331,41 +428,57 @@ def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRo
                 applicability=request.applicability,
                 notes=request.notes,
                 areas=areas(request.areas),
+                **command(request),
             )
         )
 
-    @router.get("/api/condition-checklist-templates", response_model=list[TemplateResponse])
+    @router.get(
+        "/api/condition-checklist-templates",
+        response_model=list[TemplateResponse],
+        operation_id="listConditionChecklistTemplates",
+    )
     def list_templates():
         ready()
         return invoke(service.list_templates)
 
     @router.patch(
-        "/api/condition-checklist-templates/{template_id}", response_model=TemplateResponse
+        "/api/condition-checklist-templates/{template_id}",
+        response_model=TemplateCommandResponse,
+        operation_id="patchConditionChecklistTemplate",
     )
-    def patch_template(template_id: str, request: TemplatePatchRequest):
+    def patch_template(template_id: UUID, request: TemplatePatchRequest):
         ready()
         return invoke(
             lambda: service.patch_template(
-                template_id,
+                str(template_id),
                 display_name=request.displayName,
                 applicability=request.applicability,
                 notes=request.notes,
                 notes_provided="notes" in request.model_fields_set,
                 areas=None if request.areas is None else areas(request.areas),
+                **command(request),
             )
         )
 
-    @router.get("/api/condition-reports/{report_id}", response_model=ReportResponse)
-    def get(report_id: str):
+    @router.get(
+        "/api/condition-reports/{report_id}",
+        response_model=ReportResponse,
+        operation_id="getConditionReport",
+    )
+    def get(report_id: UUID):
         ready()
-        return invoke(lambda: service.get(report_id))
+        return invoke(lambda: service.get(str(report_id)))
 
-    @router.patch("/api/condition-reports/{report_id}", response_model=ReportResponse)
-    def patch_report(report_id: str, request: ReportPatchRequest):
+    @router.patch(
+        "/api/condition-reports/{report_id}",
+        response_model=ReportCommandResponse,
+        operation_id="patchConditionReport",
+    )
+    def patch_report(report_id: UUID, request: ReportPatchRequest):
         ready()
         return invoke(
             lambda: service.patch_report(
-                report_id,
+                str(report_id),
                 walkthrough_on=None
                 if request.walkthroughOn is None
                 else request.walkthroughOn.isoformat(),
@@ -373,33 +486,48 @@ def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRo
                 tenant_presence=request.tenantPresence,
                 general_notes=request.generalNotes,
                 general_notes_provided="generalNotes" in request.model_fields_set,
+                **command(request),
             )
         )
 
-    @router.put("/api/condition-reports/{report_id}/areas", response_model=ReportResponse)
-    def replace_areas(report_id: str, request: ReplaceAreasRequest):
+    @router.put(
+        "/api/condition-reports/{report_id}/areas",
+        response_model=ReportCommandResponse,
+        operation_id="replaceConditionReportAreas",
+    )
+    def replace_areas(report_id: UUID, request: ReplaceAreasRequest):
         ready()
-        return invoke(lambda: service.replace_areas(report_id, areas(request.areas)))
+        return invoke(
+            lambda: service.replace_areas(str(report_id), areas(request.areas), **command(request))
+        )
 
-    @router.put("/api/condition-reports/{report_id}/acknowledgments", response_model=ReportResponse)
-    def acknowledge(report_id: str, request: AcknowledgmentRequest):
+    @router.put(
+        "/api/condition-reports/{report_id}/acknowledgments",
+        response_model=ReportCommandResponse,
+        operation_id="acknowledgeConditionReport",
+    )
+    def acknowledge(report_id: UUID, request: AcknowledgmentRequest):
         ready()
         return invoke(
             lambda: service.acknowledge(
-                report_id,
+                str(report_id),
                 {key: value.model_dump() for key, value in request.acknowledgments.items()},
+                **command(request),
             )
         )
 
     @router.post(
         "/api/condition-observations/{observation_id}/evidence",
         status_code=status.HTTP_201_CREATED,
-        response_model=EvidenceResponse,
+        response_model=EvidenceCommandResponse,
+        operation_id="attachConditionEvidence",
     )
     async def attach_evidence(
-        observation_id: str,
+        observation_id: UUID,
         file: UploadFile = File(...),
         purpose: Literal["condition_photo", "supporting_document"] = Form(...),
+        expected_revision: int = Form(..., ge=0),
+        idempotency_key: UUID = Form(...),
     ):
         ready()
         staged_path = None
@@ -418,11 +546,13 @@ def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRo
                     staged.write(chunk)
             return invoke(
                 lambda: service.attach_evidence(
-                    observation_id,
+                    str(observation_id),
                     staged_path,
                     file.filename or "evidence",
                     file.content_type or "application/octet-stream",
                     purpose,
+                    expected_revision=expected_revision,
+                    idempotency_key=str(idempotency_key),
                 )
             )
         except FileError as error:
@@ -435,27 +565,33 @@ def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRo
             if staged_path is not None:
                 staged_path.unlink(missing_ok=True)
 
-    @router.post("/api/condition-reports/{report_id}/finalize", response_model=ReportResponse)
-    def finalize(report_id: str, request: FinalizeRequest):
+    @router.post(
+        "/api/condition-reports/{report_id}/finalize",
+        response_model=ReportCommandResponse,
+        operation_id="finalizeConditionReport",
+    )
+    def finalize(report_id: UUID, request: FinalizeRequest):
         ready()
         return invoke(
             lambda: service.finalize(
-                report_id,
+                str(report_id),
                 confirmed=request.confirmed,
                 timing_exception_reason=request.timingExceptionReason,
+                **command(request),
             )
         )
 
     @router.post(
         "/api/condition-reports/{report_id}/corrections",
         status_code=status.HTTP_201_CREATED,
-        response_model=ReportResponse,
+        response_model=ReportCommandResponse,
+        operation_id="correctConditionReport",
     )
-    def correction(report_id: str, request: CorrectionRequest):
+    def correction(report_id: UUID, request: CorrectionRequest):
         ready()
 
         def operation():
-            source = service.get(report_id)
+            source = service.get(str(report_id))
             return service.create(
                 source["leaseId"],
                 report_kind=source["reportKind"],
@@ -464,34 +600,46 @@ def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRo
                 tenant_presence=request.tenantPresence,
                 general_notes=request.generalNotes,
                 areas=areas(request.areas),
-                correction_of=report_id,
+                correction_of=str(report_id),
                 correction_reason=request.correctionReason,
+                **command(request),
             )
 
         return invoke(operation)
 
-    @router.get("/api/leases/{lease_id}/condition-comparison", response_model=ComparisonResponse)
-    def comparison(lease_id: str):
+    @router.get(
+        "/api/leases/{lease_id}/condition-comparison",
+        response_model=ComparisonResponse,
+        operation_id="getConditionComparison",
+    )
+    def comparison(lease_id: UUID):
         ready()
-        return invoke(lambda: service.comparison(lease_id))
+        return invoke(lambda: service.comparison(str(lease_id)))
 
     @router.put(
-        "/api/leases/{lease_id}/condition-comparison", response_model=list[ComparisonItemResponse]
+        "/api/leases/{lease_id}/condition-comparison",
+        response_model=ComparisonCommandResponse,
+        operation_id="reviewConditionComparison",
     )
-    def save_comparison(lease_id: str, request: ComparisonRequest):
+    def save_comparison(lease_id: UUID, request: ComparisonRequest):
         ready()
         return invoke(
             lambda: service.save_comparisons(
-                lease_id,
+                str(lease_id),
                 [
                     {
-                        "pre_observation_id": item.preObservationId,
-                        "post_observation_id": item.postObservationId,
+                        "pre_observation_id": str(item.preObservationId)
+                        if item.preObservationId
+                        else None,
+                        "post_observation_id": str(item.postObservationId)
+                        if item.postObservationId
+                        else None,
                         "comparison_state": item.comparisonState,
                         "operator_notes": item.operatorNotes,
                     }
                     for item in request.comparisons
                 ],
+                **command(request),
             )
         )
 

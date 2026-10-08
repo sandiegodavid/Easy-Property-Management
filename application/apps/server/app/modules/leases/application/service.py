@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
+from json import loads
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
 from app.modules.inspections.application.attention import inspection_attention
+from app.modules.leases.application.commands import (
+    LeaseCommandIdentity,
+    LeaseCommandReceipt,
+    canonical_json,
+    fingerprint,
+    receipt_audit,
+)
 from app.modules.leases.application.ports import (
     LeaseConflictError,
     LeaseTransaction,
@@ -37,6 +45,11 @@ class LeaseError(ValueError):
 
 class LeaseNotFoundError(LeaseError):
     """Requested lease record does not exist."""
+
+
+@dataclass(frozen=True)
+class _UnchangedLease:
+    lease_id: str
 
 
 @dataclass(frozen=True)
@@ -269,7 +282,9 @@ class LeaseService:
         self.unit_of_work = unit_of_work
         self.inspection_attention_reader = inspection_attention_reader
 
-    def create(self, command: LeaseCreateCommand) -> dict[str, object]:
+    def create(
+        self, command: LeaseCreateCommand, *, expected_revision: int, idempotency_key: str
+    ) -> dict[str, object]:
         if not isinstance(command, LeaseCreateCommand):
             raise LeaseError("A valid lease command is required.")
         now, correlation = _now(), str(uuid4())
@@ -295,6 +310,7 @@ class LeaseService:
                 notes=command.notes,
                 created_at=now,
                 updated_at=now,
+                lease_revision=1,
             )
             tx.insert_lease(lease)
             term = _term(lease, command.initial_term, now)
@@ -337,7 +353,20 @@ class LeaseService:
                 )
             return lease.id
 
-        return self.get(self._write(write, "Space"))
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "create",
+                "space",
+                command.space_id,
+                expected_revision,
+                idempotency_key,
+                asdict(command),
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="lease",
+        )
 
     def get(self, lease_id: str) -> dict[str, object]:
         record = self.unit_of_work.lease_view(lease_id)
@@ -394,7 +423,14 @@ class LeaseService:
             )
         ]
 
-    def patch(self, lease_id: str, command: LeasePatchCommand) -> dict[str, object]:
+    def patch(
+        self,
+        lease_id: str,
+        command: LeasePatchCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ) -> dict[str, object]:
         if not isinstance(command, LeasePatchCommand):
             raise LeaseError("A valid lease patch is required.")
         correlation, now = str(uuid4()), _now()
@@ -432,6 +468,8 @@ class LeaseService:
             )
             for participant in tx.participants(lease_id):
                 _participant_range(updated, participant.starts_on, participant.ends_on)
+            if replace(updated, updated_at=lease.updated_at) == lease:
+                return _UnchangedLease(lease.id)
             tx.replace_lease(updated)
             terms = tx.terms(lease_id)
             if len(terms) != 1:
@@ -461,9 +499,24 @@ class LeaseService:
                 )
             return lease.id
 
-        return self.get(self._write(write))
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "patch",
+                "lease",
+                lease_id,
+                expected_revision,
+                idempotency_key,
+                _command_fields(command),
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="lease",
+        )
 
-    def replace_initial_term(self, lease_id: str, command: TermCommand) -> dict[str, object]:
+    def replace_initial_term(
+        self, lease_id: str, command: TermCommand, *, expected_revision: int, idempotency_key: str
+    ) -> dict[str, object]:
         if not isinstance(command, TermCommand):
             raise LeaseError("A valid lease term is required.")
         correlation, now = str(uuid4()), _now()
@@ -472,6 +525,10 @@ class LeaseService:
             lease = _required_lease(tx, lease_id)
             _require_draft(lease)
             prior = tx.terms(lease_id)
+            if len(prior) == 1 and all(
+                getattr(prior[0], field) == value for field, value in asdict(command).items()
+            ):
+                return _UnchangedLease(lease.id)
             tx.delete_terms(lease_id)
             term = _term(lease, command, now)
             tx.insert_term(term)
@@ -486,9 +543,29 @@ class LeaseService:
             )
             return lease.id
 
-        return self.get(self._write(write))
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "replace_initial_term",
+                "lease",
+                lease_id,
+                expected_revision,
+                idempotency_key,
+                asdict(command),
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="lease",
+        )
 
-    def add_participant(self, lease_id: str, command: ParticipantCommand) -> dict[str, object]:
+    def add_participant(
+        self,
+        lease_id: str,
+        command: ParticipantCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ) -> dict[str, object]:
         if not isinstance(command, ParticipantCommand):
             raise LeaseError("A valid participant is required.")
         correlation, now = str(uuid4()), _now()
@@ -516,10 +593,29 @@ class LeaseService:
             )
             return lease.id
 
-        return self.get(self._write(write))
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "add_participant",
+                "lease",
+                lease_id,
+                expected_revision,
+                idempotency_key,
+                asdict(command),
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="lease",
+        )
 
     def update_participant(
-        self, lease_id: str, participant_id: str, command: ParticipantCommand
+        self,
+        lease_id: str,
+        participant_id: str,
+        command: ParticipantCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
     ) -> dict[str, object]:
         if not isinstance(command, ParticipantCommand):
             raise LeaseError("A valid participant is required.")
@@ -540,6 +636,9 @@ class LeaseService:
                     "A tenant party may participate only once in a lease draft."
                 )
             replacement = self._participant(tx, lease, command, now, participant_id)
+            replacement = replace(replacement, created_at=current.created_at)
+            if replace(replacement, updated_at=current.updated_at) == current:
+                return _UnchangedLease(lease.id)
             tx.replace_participant(replacement)
             tx.record_change(
                 entity_type="lease_participant",
@@ -552,10 +651,25 @@ class LeaseService:
             )
             return lease.id
 
-        return self.get(self._write(write, "Lease participant"))
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "update_participant",
+                "lease",
+                lease_id,
+                expected_revision,
+                idempotency_key,
+                {"participantId": participant_id, "command": asdict(command)},
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="lease",
+        )
 
-    def remove_participant(self, lease_id: str, participant_id: str) -> dict[str, object]:
-        correlation = str(uuid4())
+    def remove_participant(
+        self, lease_id: str, participant_id: str, *, expected_revision: int, idempotency_key: str
+    ) -> dict[str, object]:
+        correlation, now = str(uuid4()), _now()
 
         def write(tx: LeaseTransaction) -> str:
             lease = _required_lease(tx, lease_id)
@@ -577,7 +691,20 @@ class LeaseService:
             )
             return lease.id
 
-        return self.get(self._write(write, "Lease participant"))
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "remove_participant",
+                "lease",
+                lease_id,
+                expected_revision,
+                idempotency_key,
+                {"participantId": participant_id},
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="lease",
+        )
 
     def execute(
         self,
@@ -586,6 +713,7 @@ class LeaseService:
         executed_on: str,
         confirmed: bool,
         expected_revision: int,
+        expected_lease_revision: int,
         idempotency_key: str,
     ) -> dict[str, object]:
         _timeline_concurrency(expected_revision, idempotency_key)
@@ -595,16 +723,6 @@ class LeaseService:
         correlation, now = str(uuid4()), _now()
 
         def write(tx: LeaseTransaction) -> tuple[str, dict[str, object]]:
-            replay = self._replay_lease_action(
-                tx,
-                lease_id,
-                "execute",
-                expected_revision,
-                idempotency_key,
-                {"executedOn": execution_date},
-            )
-            if replay is not None:
-                return lease_id, replay
             lease = _required_lease(tx, lease_id)
             _require_draft(lease)
             if lease.occupancy_starts_on < date.today().isoformat():
@@ -673,10 +791,26 @@ class LeaseService:
                 reason="lease_executed",
                 correlation_id=correlation,
             )
-            return lease.id, self._store_source_response(tx, lease.id, operation)
+            return lease.id, operation
 
-        result_id, operation = self._write(write)
-        return self._completed_source_response(operation)
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "execute",
+                "lease",
+                lease_id,
+                expected_lease_revision,
+                idempotency_key,
+                {
+                    "executedOn": execution_date,
+                    "confirmed": confirmed,
+                    "expectedSpaceRevision": expected_revision,
+                },
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="timeline",
+        )
 
     def end(
         self,
@@ -685,6 +819,7 @@ class LeaseService:
         actual_move_out_on: str,
         confirmed: bool,
         expected_revision: int,
+        expected_lease_revision: int,
         idempotency_key: str,
     ) -> dict[str, object]:
         return self._close(
@@ -694,6 +829,7 @@ class LeaseService:
             actual_move_out_on,
             confirmed,
             expected_revision=expected_revision,
+            expected_lease_revision=expected_lease_revision,
             idempotency_key=idempotency_key,
         )
 
@@ -705,6 +841,7 @@ class LeaseService:
         end_reason: str,
         confirmed: bool,
         expected_revision: int,
+        expected_lease_revision: int,
         idempotency_key: str,
     ) -> dict[str, object]:
         if end_reason not in END_REASONS - {"contract_completed"}:
@@ -716,11 +853,17 @@ class LeaseService:
             actual_move_out_on,
             confirmed,
             expected_revision=expected_revision,
+            expected_lease_revision=expected_lease_revision,
             idempotency_key=idempotency_key,
         )
 
     def create_termination_case(
-        self, lease_id: str, command: TerminationCaseCommand
+        self,
+        lease_id: str,
+        command: TerminationCaseCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
     ) -> dict[str, object]:
         if not isinstance(command, TerminationCaseCommand):
             raise LeaseError("A valid termination request is required.")
@@ -766,14 +909,27 @@ class LeaseService:
             )
             return item.id
 
-        return self.get_termination_case(self._write(write))
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "create_termination_case",
+                "lease",
+                lease_id,
+                expected_revision,
+                idempotency_key,
+                asdict(command),
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="termination_case",
+        )
 
     def list_termination_cases(self, lease_id: str) -> list[dict[str, object]]:
         if self.unit_of_work.lease_view(lease_id) is None:
             raise LeaseNotFoundError("Lease was not found.")
         return [
-            _termination_view(item, proposals, files)
-            for item, proposals, files in self.unit_of_work.termination_case_views(lease_id)
+            _termination_view(*record)
+            for record in self.unit_of_work.termination_case_views(lease_id)
         ]
 
     def get_termination_case(self, case_id: str) -> dict[str, object]:
@@ -783,7 +939,12 @@ class LeaseService:
         return _termination_view(*record)
 
     def add_termination_proposal(
-        self, case_id: str, command: TerminationProposalCommand
+        self,
+        case_id: str,
+        command: TerminationProposalCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
     ) -> dict[str, object]:
         if not isinstance(command, TerminationProposalCommand):
             raise LeaseError("A valid termination proposal is required.")
@@ -852,10 +1013,30 @@ class LeaseService:
             )
             return case.id
 
-        return self.get_termination_case(self._write(write, "Termination case"))
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "add_termination_proposal",
+                "termination_case",
+                case_id,
+                expected_revision,
+                idempotency_key,
+                asdict(command),
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="termination_case",
+        )
 
     def accept_termination_proposal(
-        self, case_id: str, proposal_id: str, *, accepted_on: str, confirmed: bool
+        self,
+        case_id: str,
+        proposal_id: str,
+        *,
+        accepted_on: str,
+        confirmed: bool,
+        expected_revision: int,
+        idempotency_key: str,
     ) -> dict[str, object]:
         if confirmed is not True:
             raise LeaseError("Accepting a termination agreement requires explicit confirmation.")
@@ -906,10 +1087,29 @@ class LeaseService:
             )
             return case.id
 
-        return self.get_termination_case(self._write(write, "Termination case"))
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "accept_termination_proposal",
+                "termination_case",
+                case_id,
+                expected_revision,
+                idempotency_key,
+                {"proposalId": proposal_id, "acceptedOn": accepted, "confirmed": confirmed},
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="termination_case",
+        )
 
     def transition_termination_case(
-        self, case_id: str, *, status: str, operator_notes: str | None = None
+        self,
+        case_id: str,
+        *,
+        status: str,
+        operator_notes: str | None = None,
+        expected_revision: int,
+        idempotency_key: str,
     ) -> dict[str, object]:
         if status not in {"under_review", "withdrawn", "declined"}:
             raise LeaseError("Unsupported termination-case transition.")
@@ -965,7 +1165,24 @@ class LeaseService:
             )
             return case_id
 
-        return self.get_termination_case(self._write(write, "Termination case"))
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "transition_termination_case",
+                "termination_case",
+                case_id,
+                expected_revision,
+                idempotency_key,
+                {
+                    "status": status,
+                    "operatorNotes": notes,
+                    "notesSupplied": operator_notes is not None,
+                },
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="termination_case",
+        )
 
     def complete_termination_case(
         self,
@@ -974,9 +1191,11 @@ class LeaseService:
         actual_move_out_on: str,
         confirmed: bool,
         expected_revision: int,
+        expected_lease_revision: int,
         idempotency_key: str,
     ) -> dict[str, object]:
         _timeline_concurrency(expected_revision, idempotency_key)
+        _timeline_concurrency(expected_lease_revision, idempotency_key)
         record = self.unit_of_work.termination_case_view(case_id)
         if record is None:
             raise LeaseNotFoundError("Termination case was not found.")
@@ -992,11 +1211,18 @@ class LeaseService:
             confirmed,
             termination_case_id=case_id,
             expected_revision=expected_revision,
+            expected_lease_revision=expected_lease_revision,
             idempotency_key=idempotency_key,
         )
 
     def void(
-        self, lease_id: str, *, confirmed: bool, expected_revision: int, idempotency_key: str
+        self,
+        lease_id: str,
+        *,
+        confirmed: bool,
+        expected_revision: int,
+        expected_lease_revision: int,
+        idempotency_key: str,
     ) -> dict[str, object]:
         _timeline_concurrency(expected_revision, idempotency_key)
         if confirmed is not True:
@@ -1004,11 +1230,6 @@ class LeaseService:
         correlation, now, today = str(uuid4()), _now(), date.today().isoformat()
 
         def write(tx: LeaseTransaction) -> tuple[str, dict[str, object]]:
-            replay = self._replay_lease_action(
-                tx, lease_id, "void", expected_revision, idempotency_key, {"confirmed": confirmed}
-            )
-            if replay is not None:
-                return lease_id, replay
             lease = _required_lease(tx, lease_id)
             if lease.status != "executed":
                 raise LeaseError("Only an executed lease can be voided.")
@@ -1085,12 +1306,31 @@ class LeaseService:
                 reason="lease_voided",
                 correlation_id=correlation,
             )
-            return lease.id, self._store_source_response(tx, lease.id, operation)
+            return lease.id, operation
 
-        result_id, operation = self._write(write)
-        return self._completed_source_response(operation)
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "void",
+                "lease",
+                lease_id,
+                expected_lease_revision,
+                idempotency_key,
+                {"confirmed": confirmed, "expectedSpaceRevision": expected_revision},
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="timeline",
+        )
 
-    def add_renewal_option(self, lease_id: str, command: RenewalCommand) -> dict[str, object]:
+    def add_renewal_option(
+        self,
+        lease_id: str,
+        command: RenewalCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
+    ) -> dict[str, object]:
         if not isinstance(command, RenewalCommand):
             raise LeaseError("A valid renewal option is required.")
         correlation, now = str(uuid4()), _now()
@@ -1124,7 +1364,20 @@ class LeaseService:
             )
             return lease.id
 
-        return self.get(self._write(write))
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "add_renewal_option",
+                "lease",
+                lease_id,
+                expected_revision,
+                idempotency_key,
+                asdict(command),
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="lease",
+        )
 
     def decide_renewal_option(
         self,
@@ -1134,6 +1387,8 @@ class LeaseService:
         status: str,
         decided_on: str,
         notes: str | None = None,
+        expected_revision: int,
+        idempotency_key: str,
     ) -> dict[str, object]:
         if status not in RENEWAL_STATUSES - {"open"}:
             raise LeaseError("A supported renewal decision is required.")
@@ -1169,10 +1424,35 @@ class LeaseService:
             )
             return lease_id
 
-        return self.get(self._write(write, "Renewal option"))
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "decide_renewal_option",
+                "lease",
+                lease_id,
+                expected_revision,
+                idempotency_key,
+                {
+                    "optionId": option_id,
+                    "status": status,
+                    "decidedOn": decision_date,
+                    "notes": normalized_notes,
+                    "notesSupplied": notes is not None,
+                },
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="lease",
+        )
 
     def update_renewal_option(
-        self, lease_id: str, option_id: str, command: RenewalPatchCommand
+        self,
+        lease_id: str,
+        option_id: str,
+        command: RenewalPatchCommand,
+        *,
+        expected_revision: int,
+        idempotency_key: str,
     ) -> dict[str, object]:
         correlation, now = str(uuid4()), _now()
 
@@ -1201,6 +1481,8 @@ class LeaseService:
                 and updated.proposed_ends_on <= updated.proposed_starts_on
             ):
                 raise LeaseError("Proposed end date must follow its start date.")
+            if replace(updated, updated_at=current.updated_at) == current:
+                return _UnchangedLease(lease_id)
             tx.replace_renewal_option(updated)
             tx.record_change(
                 entity_type="lease_renewal_option",
@@ -1213,7 +1495,20 @@ class LeaseService:
             )
             return lease_id
 
-        return self.get(self._write(write, "Renewal option"))
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                "update_renewal_option",
+                "lease",
+                lease_id,
+                expected_revision,
+                idempotency_key,
+                {"optionId": option_id, "command": _command_fields(command)},
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="lease",
+        )
 
     def _close(
         self,
@@ -1225,6 +1520,7 @@ class LeaseService:
         termination_case_id: str | None = None,
         *,
         expected_revision: int,
+        expected_lease_revision: int,
         idempotency_key: str,
     ) -> dict[str, object]:
         _timeline_concurrency(expected_revision, idempotency_key)
@@ -1234,20 +1530,6 @@ class LeaseService:
         correlation, now = str(uuid4()), _now()
 
         def write(tx: LeaseTransaction) -> tuple[str, dict[str, object]]:
-            replay = self._replay_lease_action(
-                tx,
-                lease_id,
-                status,
-                expected_revision,
-                idempotency_key,
-                {
-                    "actualMoveOutOn": move_out,
-                    "endReason": reason,
-                    "terminationCaseId": termination_case_id,
-                },
-            )
-            if replay is not None:
-                return lease_id, replay
             if move_out > date.today().isoformat():
                 raise LeaseError("Actual move-out cannot be in the future.")
             lease = _required_lease(tx, lease_id)
@@ -1374,10 +1656,28 @@ class LeaseService:
                 reason=f"lease_{status}",
                 correlation_id=correlation,
             )
-            return lease.id, self._store_source_response(tx, lease.id, operation)
+            return lease.id, operation
 
-        result_id, operation = self._write(write)
-        return self._completed_source_response(operation)
+        return self._command_write(
+            write,
+            LeaseCommandIdentity(
+                ("complete_termination_case" if termination_case_id else status),
+                "lease",
+                lease_id,
+                expected_lease_revision,
+                idempotency_key,
+                {
+                    "actualMoveOutOn": move_out,
+                    "endReason": reason,
+                    "terminationCaseId": termination_case_id,
+                    "confirmed": confirmed,
+                    "expectedSpaceRevision": expected_revision,
+                },
+            ),
+            now=now,
+            correlation=correlation,
+            response_kind="timeline",
+        )
 
     def _participant(
         self,
@@ -1532,41 +1832,10 @@ class LeaseService:
         )
 
     @staticmethod
-    def _replay_lease_action(
-        tx: LeaseTransaction,
-        lease_id: str,
-        action: str,
-        expected_revision: int,
-        idempotency_key: str,
-        request_context: dict[str, object],
-    ) -> dict[str, object] | None:
-        existing = tx.source_timeline_operation(idempotency_key)
-        if existing is None:
-            return None
-        from json import loads
-
-        result = dict(loads(str(existing["result_snapshot"])))
-        if (
-            result.get("sourceId") != lease_id
-            or result.get("action") != action
-            or result.get("requestContext") != request_context
-        ):
-            raise LeaseConflictError("Lease idempotency key was reused with a different request.")
-        if result.get("revision") != expected_revision + 1:
-            raise LeaseConflictError("Lease idempotency key was reused with a stale revision.")
-        return result
-
-    @staticmethod
     def _with_source_operation(
         lease: dict[str, object], operation: dict[str, object]
     ) -> dict[str, object]:
         return {**lease, "revision": operation["revision"], "operationId": operation["operationId"]}
-
-    def _completed_source_response(self, operation: dict[str, object]) -> dict[str, object]:
-        recorded = operation.get("consumerResult")
-        if isinstance(recorded, dict):
-            return recorded
-        raise LeaseConflictError("The recorded lease operation is missing its response snapshot.")
 
     def _store_source_response(
         self,
@@ -1592,11 +1861,172 @@ class LeaseService:
             effective_on=date.today().isoformat(),
         )
 
+    def get_command_operation(
+        self,
+        *,
+        operation_id: str | None = None,
+        idempotency_key: str | None = None,
+        lease_id: str | None = None,
+    ) -> dict[str, object]:
+        if (operation_id is None) == (idempotency_key is None):
+            raise LeaseError("Provide exactly one operation ID or idempotency key.")
+        if idempotency_key is not None:
+            _timeline_concurrency(0, idempotency_key)
+        receipt = self.unit_of_work.command_operation(
+            operation_id=operation_id, idempotency_key=idempotency_key
+        )
+        if receipt is None or (lease_id is not None and receipt["lease_id"] != lease_id):
+            raise LeaseNotFoundError("Lease command operation was not found.")
+        return {
+            "operationId": receipt["id"],
+            "idempotencyKey": receipt["idempotency_key"],
+            "leaseId": receipt["lease_id"],
+            "action": receipt["action"],
+            "expectedLeaseRevision": receipt["expected_revision"],
+            "leaseRevision": receipt["result_revision"],
+            "effective": bool(receipt["effective"]),
+            "requestFingerprint": receipt["request_fingerprint"],
+            "correlationId": receipt["correlation_id"],
+            "committedAt": receipt["created_at"],
+            "response": loads(receipt["response_json"]),
+        }
+
+    def _command_write(
+        self,
+        mutation,
+        identity: LeaseCommandIdentity,
+        *,
+        now: str,
+        correlation: str,
+        response_kind: str,
+    ) -> dict[str, object]:
+        _timeline_concurrency(identity.expected_revision, identity.idempotency_key)
+        if identity.action == "create" and identity.expected_revision != 0:
+            raise LeaseError("Lease creation requires revision zero.")
+        request = identity.request_json()
+        request_hash = fingerprint(request)
+
+        def write(tx: LeaseTransaction):
+            existing = tx.command_operation(identity.idempotency_key)
+            if existing is not None:
+                if existing["request_fingerprint"] != request_hash:
+                    raise LeaseConflictError(
+                        "Lease idempotency key was reused with a different request."
+                    )
+                return loads(existing["response_json"])
+            before = None
+            if identity.target_kind == "termination_case":
+                case = tx.termination_case(identity.target_id)
+                if case is None:
+                    raise KeyError(identity.target_id)
+                before = _required_lease(tx, case.lease_id)
+            elif identity.target_kind == "lease":
+                before = _required_lease(tx, identity.target_id)
+            if before is not None and before.lease_revision != identity.expected_revision:
+                snapshot = tx.lease_snapshot(before.id)
+                raise LeaseConflictError(
+                    "Lease revision is stale.",
+                    current_status=_view(
+                        *snapshot,
+                        inspection_attention=self._transaction_inspection_attention(tx, before),
+                    ),
+                )
+            changed = mutation(tx)
+            effective = not isinstance(changed, _UnchangedLease)
+            if not effective:
+                changed = changed.lease_id
+            source_operation = None
+            if response_kind == "timeline":
+                result_id, source_operation = changed
+                lease = _required_lease(tx, result_id)
+                operation_id = str(source_operation["operationId"])
+            elif response_kind == "termination_case":
+                result_id = changed
+                case = tx.termination_case(result_id)
+                lease = _required_lease(tx, case.lease_id)
+                operation_id = str(uuid4())
+            else:
+                result_id = changed
+                lease = _required_lease(tx, result_id)
+                operation_id = str(uuid4())
+            revised = (
+                replace(lease, lease_revision=identity.expected_revision + 1, updated_at=now)
+                if effective
+                else lease
+            )
+            if effective:
+                tx.replace_lease(revised)
+            tx.record_change(
+                entity_type="lease",
+                entity_id=revised.id,
+                action="command_applied",
+                before=None if before is None else before.to_dict(),
+                after=revised.to_dict(),
+                reason="lease_command_committed",
+                correlation_id=correlation,
+            )
+            if source_operation is not None:
+                response = self._store_source_response(tx, revised.id, source_operation)[
+                    "consumerResult"
+                ]
+            elif response_kind == "termination_case":
+                response = {
+                    **_termination_view(*tx.termination_case_snapshot(result_id)),
+                    "leaseRevision": revised.lease_revision,
+                    "operationId": operation_id,
+                }
+            else:
+                snapshot = tx.lease_snapshot(revised.id)
+                response = {
+                    **_view(
+                        *snapshot,
+                        inspection_attention=self._transaction_inspection_attention(tx, revised),
+                    ),
+                    "operationId": operation_id,
+                }
+            response_json = canonical_json(response)
+            receipt: LeaseCommandReceipt = {
+                "id": operation_id,
+                "lease_id": revised.id,
+                "idempotency_key": identity.idempotency_key,
+                "action": identity.action,
+                "expected_revision": identity.expected_revision,
+                "result_revision": revised.lease_revision,
+                "effective": int(effective),
+                "request_json": request,
+                "request_fingerprint": request_hash,
+                "response_json": response_json,
+                "response_fingerprint": fingerprint(response_json),
+                "correlation_id": correlation,
+                "created_at": now,
+            }
+            tx.insert_command_operation(receipt)
+            tx.record_change(
+                entity_type="lease_command_operation",
+                entity_id=operation_id,
+                action="recorded",
+                before=None,
+                after=receipt_audit(receipt),
+                reason="lease_command_recorded",
+                correlation_id=correlation,
+            )
+            return response
+
+        return self._write(write)
+
     def _write(self, operation, label: str = "Lease"):
         try:
             return self.unit_of_work.write(operation)
         except KeyError as error:
             raise LeaseNotFoundError(f"{label} was not found.") from error
+
+
+def _command_fields(command) -> dict[str, object]:
+    return {
+        field: value.isoformat() if isinstance(value, date) else value
+        for field in sorted(command.supplied_fields)
+        for value in [getattr(command, field)]
+    }
 
 
 def _required_lease(tx: LeaseTransaction, lease_id: str) -> Lease:
@@ -1695,11 +2125,13 @@ def _termination_view(
     item: LeaseTerminationCase,
     proposals: list[LeaseTerminationProposal],
     files: list[dict[str, object]],
+    lease_revision: int | None = None,
 ) -> dict[str, object]:
     return {
         **item.to_dict(),
         "proposals": [proposal.to_dict() for proposal in proposals],
         "files": files,
+        **({"leaseRevision": lease_revision} if lease_revision is not None else {}),
     }
 
 

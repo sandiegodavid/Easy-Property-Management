@@ -1,11 +1,13 @@
 """Typed FIN-008 HTTP contract."""
 
-from datetime import date, datetime
+from datetime import date
 from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, status
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictBool, StrictInt
+
+from app.modules.finance.api.conflicts import FinanceConflictDetail
 
 from app.platform.api_errors import domain_problem, workspace_unavailable
 
@@ -35,11 +37,16 @@ class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class AccountInput(Contract):
+class CommandInput(Contract):
+    expectedRevision: StrictInt = Field(ge=0)
+    idempotencyKey: UUID
+
+
+class AccountInput(CommandInput):
     leaseTermId: UUID
 
 
-class ReceiptInput(Contract):
+class ReceiptInput(CommandInput):
     idempotencyKey: UUID
     receivedOn: date
     amount: str = Field(pattern=r"^(?:0|[1-9][0-9]{0,7})\.[0-9]{2}$")
@@ -59,7 +66,7 @@ class ReceiptInput(Contract):
     historicalPartyReason: str | None = Field(None, max_length=1000)
 
 
-class SettlementInput(Contract):
+class SettlementInput(CommandInput):
     settlementDueOn: date
     legalRuleReference: str | None = Field(None, max_length=500)
     reviewNotes: str | None = Field(None, max_length=4000)
@@ -70,7 +77,7 @@ class SettlementInput(Contract):
     replacesSettlementId: UUID | None = None
 
 
-class SettlementPatchInput(Contract):
+class SettlementPatchInput(CommandInput):
     settlementDueOn: date | None = None
     legalRuleReference: str | None = Field(None, max_length=500)
     reviewNotes: str | None = Field(None, max_length=4000)
@@ -78,7 +85,7 @@ class SettlementPatchInput(Contract):
     deadlineOverrideReason: str | None = Field(None, max_length=1000)
 
 
-class DeductionInput(Contract):
+class DeductionInput(CommandInput):
     category: Literal[
         "unpaid_rent", "damage", "cleaning", "missing_property", "contractual_fee", "other"
     ]
@@ -87,7 +94,7 @@ class DeductionInput(Contract):
     rationale: str = Field(min_length=1, max_length=2000)
 
 
-class CreditInput(Contract):
+class CreditInput(CommandInput):
     kind: Literal["interest", "other"]
     amount: str = Field(pattern=r"^(?:0|[1-9][0-9]{0,7})\.[0-9]{2}$")
     description: str = Field(min_length=1, max_length=500)
@@ -98,7 +105,7 @@ class CreditInput(Contract):
     overrideReason: str | None = Field(None, max_length=1000)
 
 
-class DeductionSourceInput(Contract):
+class DeductionSourceInput(CommandInput):
     sourceKind: Literal[
         "inspection_comparison", "inspection_observation", "rent_expectation", "expense"
     ]
@@ -108,7 +115,7 @@ class DeductionSourceInput(Contract):
     duplicateUseConfirmed: StrictBool = False
 
 
-class RefundInput(Contract):
+class RefundInput(CommandInput):
     idempotencyKey: UUID
     recipientPartyId: UUID
     paidOn: date
@@ -124,17 +131,18 @@ class RefundInput(Contract):
     historicalPartyReason: str | None = Field(None, max_length=1000)
 
 
-class ConfirmInput(Contract):
+class ConfirmInput(CommandInput):
     confirmed: StrictBool
     zeroDollarClosureConfirmed: StrictBool = False
 
 
-class VoidInput(Contract):
+class VoidInput(CommandInput):
     confirmed: StrictBool
     reason: str = Field(min_length=1, max_length=1000)
 
 
 class DepositResponse(Contract):
+    depositAccountRevision: StrictInt
     id: UUID
     leaseId: UUID
     leaseTermId: UUID
@@ -149,8 +157,8 @@ class DepositResponse(Contract):
     settlementStatus: Literal["draft", "approved", "completed"] | None = None
     deadlineState: Literal["due", "due_today", "overdue", "complete"] | None = None
     unresolvedBalance: bool
-    createdAt: datetime
-    updatedAt: datetime
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
 
 
 class DepositPageResponse(Contract):
@@ -174,17 +182,17 @@ class ReceiptResponse(Contract):
     notes: str | None
     replacesReceiptId: UUID | None
     replacedByReceiptId: UUID | None = None
-    voidedAt: datetime | None
+    voidedAt: AwareDatetime | None
     voidReason: str | None
-    createdAt: datetime
+    createdAt: AwareDatetime
     lifecycleStatus: Literal["active", "voided"]
 
 
 class EvidenceResponse(Contract):
     fileId: UUID
     purpose: str
-    createdAt: datetime
-    archivedAt: datetime | None
+    createdAt: AwareDatetime
+    archivedAt: AwareDatetime | None
 
 
 class DeductionSourceResponse(Contract):
@@ -199,7 +207,7 @@ class DeductionSourceResponse(Contract):
     historicalConfirmed: bool
     historicalReason: str | None
     duplicateUseConfirmed: bool
-    createdAt: datetime
+    createdAt: AwareDatetime
 
 
 class DeductionLineResponse(Contract):
@@ -211,8 +219,8 @@ class DeductionLineResponse(Contract):
     amount: str
     description: str
     rationale: str
-    createdAt: datetime
-    updatedAt: datetime
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
 
 
 class DeductionResponse(DeductionLineResponse):
@@ -233,8 +241,8 @@ class CreditResponse(Contract):
     dayCount: StrictInt | None
     calculatedAmount: str | None
     overrideReason: str | None
-    createdAt: datetime
-    updatedAt: datetime
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
 
 
 class RefundResponse(Contract):
@@ -252,9 +260,9 @@ class RefundResponse(Contract):
     recipientOverrideReason: str | None
     replacesRefundId: UUID | None
     replacedByRefundId: UUID | None = None
-    voidedAt: datetime | None
+    voidedAt: AwareDatetime | None
     voidReason: str | None
-    createdAt: datetime
+    createdAt: AwareDatetime
     lifecycleStatus: Literal["active", "voided"]
 
 
@@ -273,9 +281,9 @@ class SettlementResponse(Contract):
     refundDue: str | None
     replacesSettlementId: UUID | None
     replacedBySettlementId: UUID | None
-    approvedAt: datetime | None
-    completedAt: datetime | None
-    voidedAt: datetime | None
+    approvedAt: AwareDatetime | None
+    completedAt: AwareDatetime | None
+    voidedAt: AwareDatetime | None
     voidReason: str | None
     deductions: list[DeductionResponse]
     credits: list[CreditResponse]
@@ -284,12 +292,64 @@ class SettlementResponse(Contract):
     sourceWarnings: list[str]
     inspectionWarnings: list[str]
     unsettledReceiptAmount: str
-    createdAt: datetime
-    updatedAt: datetime
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
+
+
+class DeletedMutationResponse(Contract):
+    deleted: Literal[True]
+    id: UUID
+    depositAccountRevision: StrictInt
+    operationId: UUID
+
+
+class DepositMutationResponse(DepositResponse):
+    depositAccountRevision: StrictInt
+    operationId: UUID
+
+
+class ReceiptMutationResponse(ReceiptResponse):
+    depositAccountRevision: StrictInt
+    operationId: UUID
+
+
+class SettlementMutationResponse(SettlementResponse):
+    depositAccountRevision: StrictInt
+    operationId: UUID
+
+
+class DeductionLineMutationResponse(DeductionLineResponse):
+    depositAccountRevision: StrictInt
+    operationId: UUID
+
+
+class CreditMutationResponse(CreditResponse):
+    depositAccountRevision: StrictInt
+    operationId: UUID
+
+
+class DeductionSourceMutationResponse(DeductionSourceResponse):
+    depositAccountRevision: StrictInt
+    operationId: UUID
+
+
+class RefundMutationResponse(RefundResponse):
+    depositAccountRevision: StrictInt
+    operationId: UUID
+
+
+class DepositConflictDetail(FinanceConflictDetail):
+    candidates: list[ReceiptResponse | RefundResponse] | None = None
+
+
+class DepositConflictResponse(Contract):
+    detail: DepositConflictDetail
 
 
 def build_router(service: DepositService, runtime: WorkspaceRuntime):
-    router = APIRouter(tags=["security deposits"])
+    router = APIRouter(
+        tags=["security deposits"], responses={409: {"model": DepositConflictResponse}}
+    )
 
     def ready(write=False):
         if not runtime.ready or runtime.error:
@@ -317,41 +377,61 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
         except FinanceNotFoundError as error:
             raise domain_problem(error, status_code=404, code="finance_not_found") from error
         except FinanceConflictError as error:
-            raise domain_problem(error, status_code=409, code="finance_conflict") from error
+            raise domain_problem(
+                error, status_code=409, code=error.code, **error.details
+            ) from error
         except FinanceError as error:
             raise domain_problem(error, status_code=422, code="finance_validation") from error
 
     @router.post(
         "/api/leases/{lease_id}/security-deposit",
-        response_model=DepositResponse,
+        response_model=DepositMutationResponse,
         status_code=status.HTTP_201_CREATED,
+        operation_id="createSecurityDepositAccount",
     )
     def create(lease_id: UUID, data: AccountInput):
         ready(True)
         return invoke(
             lambda: service.create_account(
-                str(lease_id), DepositAccountCreateCommand(str(data.leaseTermId))
+                str(lease_id),
+                DepositAccountCreateCommand(str(data.leaseTermId)),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
-    @router.get("/api/leases/{lease_id}/security-deposit", response_model=DepositResponse)
+    @router.get(
+        "/api/leases/{lease_id}/security-deposit",
+        response_model=DepositResponse,
+        operation_id="getLeaseSecurityDeposit",
+    )
     def lease_account(lease_id: UUID):
         ready()
         return invoke(lambda: service.account_for_lease(str(lease_id)))
 
     @router.get(
-        "/api/security-deposits/{account_id}/receipts", response_model=list[ReceiptResponse]
+        "/api/security-deposits/{account_id}/receipts",
+        response_model=list[ReceiptResponse],
+        operation_id="listSecurityDepositReceipts",
     )
     def receipt_history(account_id: UUID):
         ready()
         return invoke(lambda: service.receipt_history(str(account_id)))
 
-    @router.get("/api/security-deposits/{account_id}/refunds", response_model=list[RefundResponse])
+    @router.get(
+        "/api/security-deposits/{account_id}/refunds",
+        response_model=list[RefundResponse],
+        operation_id="listSecurityDepositRefunds",
+    )
     def refund_history(account_id: UUID):
         ready()
         return invoke(lambda: service.refund_history(str(account_id)))
 
-    @router.get("/api/security-deposits", response_model=DepositPageResponse)
+    @router.get(
+        "/api/security-deposits",
+        response_model=DepositPageResponse,
+        operation_id="listSecurityDeposits",
+    )
     def accounts(
         leaseId: UUID | None = None,
         propertyId: UUID | None = None,
@@ -378,8 +458,9 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
 
     @router.post(
         "/api/security-deposits/{account_id}/receipts",
-        response_model=ReceiptResponse,
+        response_model=ReceiptMutationResponse,
         status_code=201,
+        operation_id="recordSecurityDepositReceipt",
     )
     def receipt(account_id: UUID, data: ReceiptInput):
         ready(True)
@@ -405,20 +486,31 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
                     data.historicalPartyConfirmed,
                     data.historicalPartyReason,
                 ),
+                expected_revision=data.expectedRevision,
             )
         )
 
-    @router.post("/api/security-deposit-receipts/{receipt_id}/void", response_model=ReceiptResponse)
+    @router.post(
+        "/api/security-deposit-receipts/{receipt_id}/void",
+        response_model=ReceiptMutationResponse,
+        operation_id="voidSecurityDepositReceipt",
+    )
     def void_receipt(receipt_id: UUID, data: VoidInput):
         ready(True)
         return invoke(
-            lambda: service.void_receipt(str(receipt_id), VoidCommand(data.confirmed, data.reason))
+            lambda: service.void_receipt(
+                str(receipt_id),
+                VoidCommand(data.confirmed, data.reason),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
         )
 
     @router.post(
         "/api/security-deposits/{account_id}/settlements",
-        response_model=SettlementResponse,
+        response_model=SettlementMutationResponse,
         status_code=201,
+        operation_id="createSecurityDepositSettlement",
     )
     def settlement(account_id: UUID, data: SettlementInput):
         ready(True)
@@ -435,11 +527,15 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
                     data.deadlineOverrideReason,
                     str(data.replacesSettlementId) if data.replacesSettlementId else None,
                 ),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
     @router.patch(
-        "/api/security-deposit-settlements/{settlement_id}", response_model=SettlementResponse
+        "/api/security-deposit-settlements/{settlement_id}",
+        response_model=SettlementMutationResponse,
+        operation_id="patchSecurityDepositSettlement",
     )
     def patch_settlement(settlement_id: UUID, data: SettlementPatchInput):
         ready(True)
@@ -452,6 +548,7 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
                 "deadlineOverrideReason": "deadline_override_reason",
             }[name]
             for name in data.model_fields_set
+            if name not in {"expectedRevision", "idempotencyKey"}
         )
         return invoke(
             lambda: service.patch_settlement(
@@ -464,13 +561,16 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
                 review_notes=data.reviewNotes,
                 deadline_override_confirmed=data.deadlineOverrideConfirmed,
                 deadline_override_reason=data.deadlineOverrideReason,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
     @router.post(
         "/api/security-deposit-settlements/{settlement_id}/deductions",
-        response_model=DeductionLineResponse,
+        response_model=DeductionLineMutationResponse,
         status_code=201,
+        operation_id="addSecurityDepositDeduction",
     )
     def deduction(settlement_id: UUID, data: DeductionInput):
         ready(True)
@@ -478,13 +578,16 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
             lambda: service.add_deduction(
                 str(settlement_id),
                 DeductionCommand(data.category, data.amount, data.description, data.rationale),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
     @router.post(
         "/api/security-deposit-deductions/{deduction_id}/sources",
-        response_model=DeductionSourceResponse,
+        response_model=DeductionSourceMutationResponse,
         status_code=201,
+        operation_id="addSecurityDepositDeductionSource",
     )
     def deduction_source(deduction_id: UUID, data: DeductionSourceInput):
         ready(True)
@@ -496,16 +599,30 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
                 historical_confirmed=data.historicalConfirmed,
                 historical_reason=data.historicalReason,
                 duplicate_use_confirmed=data.duplicateUseConfirmed,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
-    @router.delete("/api/security-deposit-deduction-sources/{source_id}", response_model=dict)
-    def delete_deduction_source(source_id: UUID):
+    @router.delete(
+        "/api/security-deposit-deduction-sources/{source_id}",
+        response_model=DeletedMutationResponse,
+        operation_id="deleteSecurityDepositDeductionSource",
+    )
+    def delete_deduction_source(source_id: UUID, data: CommandInput):
         ready(True)
-        return invoke(lambda: service.delete_deduction_source(str(source_id)))
+        return invoke(
+            lambda: service.delete_deduction_source(
+                str(source_id),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
 
     @router.patch(
-        "/api/security-deposit-deductions/{deduction_id}", response_model=DeductionLineResponse
+        "/api/security-deposit-deductions/{deduction_id}",
+        response_model=DeductionLineMutationResponse,
+        operation_id="patchSecurityDepositDeduction",
     )
     def patch_deduction(deduction_id: UUID, data: DeductionInput):
         ready(True)
@@ -513,18 +630,31 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
             lambda: service.update_deduction(
                 str(deduction_id),
                 DeductionCommand(data.category, data.amount, data.description, data.rationale),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
-    @router.delete("/api/security-deposit-deductions/{deduction_id}", response_model=dict)
-    def delete_deduction(deduction_id: UUID):
+    @router.delete(
+        "/api/security-deposit-deductions/{deduction_id}",
+        response_model=DeletedMutationResponse,
+        operation_id="deleteSecurityDepositDeduction",
+    )
+    def delete_deduction(deduction_id: UUID, data: CommandInput):
         ready(True)
-        return invoke(lambda: service.delete_deduction(str(deduction_id)))
+        return invoke(
+            lambda: service.delete_deduction(
+                str(deduction_id),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
 
     @router.post(
         "/api/security-deposit-settlements/{settlement_id}/credits",
-        response_model=CreditResponse,
+        response_model=CreditMutationResponse,
         status_code=201,
+        operation_id="addSecurityDepositCredit",
     )
     def credit(settlement_id: UUID, data: CreditInput):
         ready(True)
@@ -541,10 +671,16 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
                     data.endsOn.isoformat() if data.endsOn else None,
                     data.overrideReason,
                 ),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
-    @router.patch("/api/security-deposit-credits/{credit_id}", response_model=CreditResponse)
+    @router.patch(
+        "/api/security-deposit-credits/{credit_id}",
+        response_model=CreditMutationResponse,
+        operation_id="patchSecurityDepositCredit",
+    )
     def patch_credit(credit_id: UUID, data: CreditInput):
         ready(True)
         return invoke(
@@ -560,17 +696,30 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
                     data.endsOn.isoformat() if data.endsOn else None,
                     data.overrideReason,
                 ),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
-    @router.delete("/api/security-deposit-credits/{credit_id}", response_model=dict)
-    def delete_credit(credit_id: UUID):
+    @router.delete(
+        "/api/security-deposit-credits/{credit_id}",
+        response_model=DeletedMutationResponse,
+        operation_id="deleteSecurityDepositCredit",
+    )
+    def delete_credit(credit_id: UUID, data: CommandInput):
         ready(True)
-        return invoke(lambda: service.delete_credit(str(credit_id)))
+        return invoke(
+            lambda: service.delete_credit(
+                str(credit_id),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
 
     @router.post(
         "/api/security-deposit-settlements/{settlement_id}/approve",
-        response_model=SettlementResponse,
+        response_model=SettlementMutationResponse,
+        operation_id="approveSecurityDepositSettlement",
     )
     def approve(settlement_id: UUID, data: ConfirmInput):
         ready(True)
@@ -579,32 +728,48 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
                 str(settlement_id),
                 data.confirmed,
                 zero_dollar_closure_confirmed=data.zeroDollarClosureConfirmed,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
     @router.post(
         "/api/security-deposit-settlements/{settlement_id}/complete",
-        response_model=SettlementResponse,
+        response_model=SettlementMutationResponse,
+        operation_id="completeSecurityDepositSettlement",
     )
     def complete(settlement_id: UUID, data: ConfirmInput):
         ready(True)
-        return invoke(lambda: service.complete_settlement(str(settlement_id), data.confirmed))
+        return invoke(
+            lambda: service.complete_settlement(
+                str(settlement_id),
+                data.confirmed,
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
 
     @router.post(
-        "/api/security-deposit-settlements/{settlement_id}/void", response_model=SettlementResponse
+        "/api/security-deposit-settlements/{settlement_id}/void",
+        response_model=SettlementMutationResponse,
+        operation_id="voidSecurityDepositSettlement",
     )
     def void(settlement_id: UUID, data: VoidInput):
         ready(True)
         return invoke(
             lambda: service.void_settlement(
-                str(settlement_id), VoidCommand(data.confirmed, data.reason)
+                str(settlement_id),
+                VoidCommand(data.confirmed, data.reason),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
             )
         )
 
     @router.post(
         "/api/security-deposit-settlements/{settlement_id}/refunds",
-        response_model=RefundResponse,
+        response_model=RefundMutationResponse,
         status_code=201,
+        operation_id="recordSecurityDepositRefund",
     )
     def refund(settlement_id: UUID, data: RefundInput):
         ready(True)
@@ -626,18 +791,30 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
                     data.historicalPartyConfirmed,
                     data.historicalPartyReason,
                 ),
+                expected_revision=data.expectedRevision,
             )
         )
 
-    @router.post("/api/security-deposit-refunds/{refund_id}/void", response_model=RefundResponse)
+    @router.post(
+        "/api/security-deposit-refunds/{refund_id}/void",
+        response_model=RefundMutationResponse,
+        operation_id="voidSecurityDepositRefund",
+    )
     def void_refund(refund_id: UUID, data: VoidInput):
         ready(True)
         return invoke(
-            lambda: service.void_refund(str(refund_id), VoidCommand(data.confirmed, data.reason))
+            lambda: service.void_refund(
+                str(refund_id),
+                VoidCommand(data.confirmed, data.reason),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
         )
 
     @router.get(
-        "/api/security-deposit-settlements/{settlement_id}", response_model=SettlementResponse
+        "/api/security-deposit-settlements/{settlement_id}",
+        response_model=SettlementResponse,
+        operation_id="getSecurityDepositSettlement",
     )
     def detail(settlement_id: UUID):
         ready()

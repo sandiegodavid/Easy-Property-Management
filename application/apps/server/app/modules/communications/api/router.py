@@ -7,7 +7,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
 
@@ -17,6 +17,7 @@ from app.modules.communications.application.service import (
     CommunicationError,
     CommunicationNotFoundError,
     CommunicationService,
+    CommunicationStaleRevisionError,
     FollowUpInput,
     LinkInput,
     ParticipantInput,
@@ -55,16 +56,17 @@ class LinkInputModel(Contract):
 class FollowUpInputModel(Contract):
     title: str = Field(min_length=1, max_length=240)
     notes: str | None = Field(default=None, max_length=10_000)
-    dueAtUtc: datetime | None = None
+    dueAtUtc: AwareDatetime | None = None
     dueTimezone: str | None = None
 
 
 class CommunicationInput(Contract):
+    expectedRevision: int = Field(ge=0, strict=True)
     direction: Literal["inbound", "outbound", "internal"]
     channel: Literal["phone", "email", "sms", "in_person", "letter", "other"]
     subject: str = Field(min_length=1, max_length=240)
     body: str = Field(min_length=1, max_length=10_000)
-    occurredAtUtc: datetime
+    occurredAtUtc: AwareDatetime
     occurredTimezone: str
     participants: list[ParticipantInputModel] = Field(min_length=1)
     links: list[LinkInputModel] = Field(default_factory=list)
@@ -74,9 +76,10 @@ class CommunicationInput(Contract):
 
 
 class PatchInput(Contract):
+    expectedRevision: int = Field(ge=0, strict=True)
     subject: str | None = Field(default=None, min_length=1, max_length=240)
     body: str | None = Field(default=None, min_length=1, max_length=10_000)
-    occurredAtUtc: datetime | None = None
+    occurredAtUtc: AwareDatetime | None = None
     occurredTimezone: str | None = None
     participants: list[ParticipantInputModel] | None = Field(default=None, min_length=1)
     links: list[LinkInputModel] | None = None
@@ -93,16 +96,18 @@ class PatchInput(Contract):
 
 
 class RecordInput(Contract):
+    expectedRevision: int = Field(ge=0, strict=True)
     idempotencyKey: UUID
     followUp: FollowUpInputModel | None = None
 
 
 class CorrectionInput(Contract):
+    expectedRevision: int = Field(ge=0, strict=True)
     direction: Literal["inbound", "outbound", "internal"]
     channel: Literal["phone", "email", "sms", "in_person", "letter", "other"]
     subject: str = Field(min_length=1, max_length=240)
     body: str = Field(min_length=1, max_length=10_000)
-    occurredAtUtc: datetime
+    occurredAtUtc: AwareDatetime
     occurredTimezone: str
     participants: list[ParticipantInputModel] = Field(min_length=1)
     links: list[LinkInputModel] = Field(default_factory=list)
@@ -127,6 +132,7 @@ class LinkResponse(Contract):
     entityType: str
     entityId: UUID
     propertyTimezoneSnapshot: str | None = None
+    context: dict[str, object] | None = None
 
 
 class FollowUpResponse(Contract):
@@ -138,6 +144,7 @@ class FollowUpResponse(Contract):
 
 
 class CommunicationResponse(Contract):
+    revision: int = Field(ge=1)
     id: UUID
     direction: Literal["inbound", "outbound", "internal"]
     channel: Literal["phone", "email", "sms", "in_person", "letter", "other"]
@@ -162,6 +169,37 @@ class CommunicationPage(Contract):
     nextCursor: str | None = None
 
 
+class CommunicationReceiptResponse(CommunicationResponse):
+    operationId: UUID
+    outcome: Literal["applied", "no_op"]
+
+
+class CommunicationConflictDetail(Contract):
+    code: Literal[
+        "communication_conflict", "draft_required", "correction_conflict", "timezone_conflict"
+    ]
+    message: str
+
+
+class CommunicationStaleRevisionDetail(Contract):
+    code: Literal["stale_revision"]
+    message: str
+    currentRevision: int = Field(ge=0)
+
+
+class CommunicationChangedKeyDetail(Contract):
+    code: Literal["idempotency_conflict"]
+    message: str
+
+
+class CommunicationConflictResponse(Contract):
+    detail: (
+        CommunicationStaleRevisionDetail
+        | CommunicationChangedKeyDetail
+        | CommunicationConflictDetail
+    ) = Field(discriminator="code")
+
+
 def build_router(service: CommunicationService, runtime: WorkspaceRuntime) -> APIRouter:
     router = APIRouter(prefix="/api/communications", tags=["communications"])
 
@@ -177,7 +215,12 @@ def build_router(service: CommunicationService, runtime: WorkspaceRuntime) -> AP
         except CommunicationNotFoundError as error:
             raise domain_problem(error, status_code=404) from error
         except CommunicationConflictError as error:
-            raise domain_problem(error, status_code=409) from error
+            details = (
+                {"currentRevision": error.current_revision}
+                if isinstance(error, CommunicationStaleRevisionError)
+                else {}
+            )
+            raise domain_problem(error, status_code=409, **details) from error
         except CommunicationError as error:
             raise domain_problem(error, status_code=422) from error
         except (KeyError, ValueError) as error:
@@ -218,11 +261,35 @@ def build_router(service: CommunicationService, runtime: WorkspaceRuntime) -> AP
             )
         )
 
-    @router.post("", response_model=CommunicationResponse, dependencies=[Depends(ready)])
+    @router.post(
+        "",
+        response_model=CommunicationReceiptResponse,
+        responses={409: {"model": CommunicationConflictResponse}},
+        dependencies=[Depends(ready)],
+        operation_id="createCommunication",
+    )
     def create(payload: CommunicationInput):
-        return invoke(lambda: service.create(command(payload), str(payload.idempotencyKey)))
+        return invoke(
+            lambda: service.create(
+                command(payload), str(payload.idempotencyKey), payload.expectedRevision
+            )
+        )
 
-    @router.get("", response_model=CommunicationPage, dependencies=[Depends(ready)])
+    @router.get(
+        "/operations/{operation_id}",
+        response_model=CommunicationReceiptResponse,
+        dependencies=[Depends(ready)],
+        operation_id="getCommunicationOperation",
+    )
+    def receipt(operation_id: UUID):
+        return invoke(lambda: service.receipt(str(operation_id)))
+
+    @router.get(
+        "",
+        response_model=CommunicationPage,
+        dependencies=[Depends(ready)],
+        operation_id="listCommunications",
+    )
     def list_communications(
         status: Literal["draft", "recorded", "superseded"] | None = Query(default=None),
         direction: Literal["inbound", "outbound", "internal"] | None = Query(default=None),
@@ -279,13 +346,20 @@ def build_router(service: CommunicationService, runtime: WorkspaceRuntime) -> AP
         return {"items": items, "nextCursor": next_cursor}
 
     @router.get(
-        "/{communication_id}", response_model=CommunicationResponse, dependencies=[Depends(ready)]
+        "/{communication_id}",
+        response_model=CommunicationResponse,
+        dependencies=[Depends(ready)],
+        operation_id="getCommunication",
     )
     def get(communication_id: UUID):
         return invoke(lambda: service.get(str(communication_id)))
 
     @router.patch(
-        "/{communication_id}", response_model=CommunicationResponse, dependencies=[Depends(ready)]
+        "/{communication_id}",
+        response_model=CommunicationReceiptResponse,
+        responses={409: {"model": CommunicationConflictResponse}},
+        dependencies=[Depends(ready)],
+        operation_id="patchCommunication",
     )
     def patch(communication_id: UUID, payload: PatchInput):
         return invoke(
@@ -316,25 +390,33 @@ def build_router(service: CommunicationService, runtime: WorkspaceRuntime) -> AP
                     else None,
                 ),
                 str(payload.idempotencyKey),
+                payload.expectedRevision,
             )
         )
 
     @router.post(
         "/{communication_id}/record",
-        response_model=CommunicationResponse,
+        response_model=CommunicationReceiptResponse,
+        responses={409: {"model": CommunicationConflictResponse}},
         dependencies=[Depends(ready)],
+        operation_id="recordCommunication",
     )
     def record(communication_id: UUID, payload: RecordInput):
         return invoke(
             lambda: service.record(
-                str(communication_id), follow_up(payload.followUp), str(payload.idempotencyKey)
+                str(communication_id),
+                follow_up(payload.followUp),
+                str(payload.idempotencyKey),
+                payload.expectedRevision,
             )
         )
 
     @router.post(
         "/{communication_id}/correct",
-        response_model=CommunicationResponse,
+        response_model=CommunicationReceiptResponse,
+        responses={409: {"model": CommunicationConflictResponse}},
         dependencies=[Depends(ready)],
+        operation_id="correctCommunication",
     )
     def correct(communication_id: UUID, payload: CorrectionInput):
         return invoke(
@@ -343,6 +425,7 @@ def build_router(service: CommunicationService, runtime: WorkspaceRuntime) -> AP
                 command(payload, record=True),
                 payload.correctionReason,
                 str(payload.idempotencyKey),
+                payload.expectedRevision,
             )
         )
 

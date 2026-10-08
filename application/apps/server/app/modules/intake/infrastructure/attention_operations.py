@@ -13,6 +13,7 @@ from app.modules.intake.domain.models import (
     AttentionTransition,
     IntakeConflictError,
     IntakeNotFoundError,
+    IntakeRevisionConflictError,
     attention_transition_allowed,
     canonical_json,
     fingerprint,
@@ -41,6 +42,7 @@ class SQLiteIntakeAttentionOperations:
             "target": transition.target,
             "reason": transition.reason,
             "expectedRevision": transition.expected_revision,
+            "expectedSourceRevision": transition.expected_source_revision,
             "expectedStatus": transition.expected_status,
             # These values are normalized by AttentionTransition before the
             # idempotency check.  The retry correlation is intentionally not
@@ -77,12 +79,10 @@ class SQLiteIntakeAttentionOperations:
             )
         if (
             source["current_revision_id"] != transition.expected_revision
+            or source["source_revision"] != transition.expected_source_revision
             or source["attention_status"] != transition.expected_status
         ):
-            raise IntakeConflictError(
-                "Intake attention state changed concurrently.",
-                "intake_attention_conflict",
-            )
+            raise IntakeRevisionConflictError(source, "intake_attention_conflict")
         if transition.target == source["attention_status"]:
             raise IntakeConflictError("Attention status is unchanged.", "intake_lifecycle_conflict")
         if not attention_transition_allowed(source["attention_status"], transition.target):
@@ -96,14 +96,20 @@ class SQLiteIntakeAttentionOperations:
             .where(
                 IntakeSourceModel.id == transition.source_id,
             )
-            .values(attention_status=transition.target, updated_at=now),
+            .values(
+                attention_status=transition.target,
+                updated_at=now,
+                source_revision=source["source_revision"] + 1,
+            ),
         )
         result = self.source_reader.source_projection(connection, transition.source_id)
         if result is None:
             raise IntakeNotFoundError("Intake source was not found.")
+        operation_id = str(uuid4())
+        result["operationId"] = operation_id
         connection.execute(
             IntakeSourceOperationModel.__table__.insert().values(
-                id=str(uuid4()),
+                id=operation_id,
                 operation_type="attention_transition",
                 idempotency_key=transition.idempotency_key,
                 request_fingerprint=request_fingerprint,

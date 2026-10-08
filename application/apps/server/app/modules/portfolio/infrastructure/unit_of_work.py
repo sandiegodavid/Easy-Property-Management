@@ -33,6 +33,7 @@ from app.modules.portfolio.domain.models import (
 )
 from app.modules.portfolio.infrastructure.sqlalchemy_models import (
     PropertyModel,
+    PortfolioInventoryOperationModel,
     PropertyOwnershipModel,
     SpaceAvailabilityModel,
     SpaceModel,
@@ -451,6 +452,18 @@ class _SQLitePortfolioTransaction:
     def insert_status_operation(self, operation: dict[str, object]) -> None:
         self.connection.execute(SpaceStatusOperationModel.__table__.insert().values(**operation))
 
+    def status_operation_by_id(self, operation_id: str) -> dict[str, object] | None:
+        row = (
+            self.connection.execute(
+                SpaceStatusOperationModel.__table__.select().where(
+                    SpaceStatusOperationModel.id == operation_id
+                )
+            )
+            .mappings()
+            .first()
+        )
+        return None if row is None else dict(row)
+
     def property_views(
         self, *, status: str | None = None
     ) -> list[tuple[Property, list[PropertyOwnership], dict[str, Party], list[Space]]]:
@@ -750,6 +763,21 @@ class _SQLitePortfolioTransaction:
 
     def insert_property(self, property: Property) -> None:
         self.connection.execute(PropertyModel.__table__.insert().values(**property.__dict__))
+
+    def inventory_operation(self, *, operation_id=None, idempotency_key=None):
+        table = PortfolioInventoryOperationModel.__table__
+        predicate = (
+            table.c.id == operation_id
+            if operation_id is not None
+            else table.c.idempotency_key == idempotency_key
+        )
+        row = self.connection.execute(select(table).where(predicate)).mappings().first()
+        return dict(row) if row else None
+
+    def insert_inventory_operation(self, operation):
+        self.connection.execute(
+            PortfolioInventoryOperationModel.__table__.insert().values(**operation)
+        )
 
     def replace_property(self, property: Property) -> None:
         self.connection.execute(

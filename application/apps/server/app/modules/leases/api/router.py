@@ -2,14 +2,25 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Query, status
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    model_validator,
+)
 
 from app.platform.api_errors import domain_problem, workspace_unavailable
 
+from app.modules.leases.application.commands import LeaseCommandAction
+from app.modules.portfolio.application.status_contracts import SpaceStatusResponse
 from app.modules.leases.application.ports import LeaseConflictError
 from app.modules.leases.application.service import (
     LeaseCreateCommand,
@@ -31,24 +42,38 @@ class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class LeaseCommandRequest(Contract):
+    expectedLeaseRevision: StrictInt = Field(ge=0)
+    idempotencyKey: str = Field(min_length=1, max_length=200)
+
+
 class TermRequest(Contract):
     baseRentMinor: StrictInt = Field(gt=0)
     currencyCode: str = Field(min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
     paymentFrequency: Literal["monthly", "weekly"]
-    paymentDueDay: int | None = Field(None, ge=1, le=31)
-    agreedSecurityDepositMinor: int = Field(ge=0)
+    paymentDueDay: StrictInt | None = Field(None, ge=1, le=31)
+    agreedSecurityDepositMinor: StrictInt = Field(ge=0)
 
 
 class ParticipantRequest(Contract):
-    tenantPartyId: str = Field(min_length=1, max_length=80)
+    tenantPartyId: UUID
     participantRole: Literal["primary_tenant", "co_tenant", "guarantor", "business_signatory"]
     startsOn: date | None = None
     endsOn: date | None = None
     notes: str | None = Field(None, max_length=2000)
 
 
-class LeaseCreateRequest(Contract):
-    spaceId: str = Field(min_length=1, max_length=80)
+class TermMutationRequest(TermRequest, LeaseCommandRequest):
+    pass
+
+
+class ParticipantMutationRequest(ParticipantRequest, LeaseCommandRequest):
+    pass
+
+
+class LeaseCreateRequest(LeaseCommandRequest):
+    expectedLeaseRevision: StrictInt = Field(ge=0, le=0)
+    spaceId: UUID
     leaseKind: Literal["residential", "commercial"]
     contractStartsOn: date
     contractEndsOn: date | None = None
@@ -58,7 +83,7 @@ class LeaseCreateRequest(Contract):
     notes: str | None = Field(None, max_length=4000)
 
 
-class LeasePatchRequest(Contract):
+class LeasePatchRequest(LeaseCommandRequest):
     contractStartsOn: date | None = None
     contractEndsOn: date | None = None
     occupancyStartsOn: date | None = None
@@ -66,7 +91,7 @@ class LeasePatchRequest(Contract):
 
     @model_validator(mode="after")
     def require_change(self):
-        if not self.model_fields_set:
+        if not self.model_fields_set - {"expectedLeaseRevision", "idempotencyKey"}:
             raise ValueError("At least one lease field is required")
         return self
 
@@ -75,9 +100,8 @@ class ConfirmationRequest(Contract):
     confirmed: StrictBool
 
 
-class TimelineConfirmationRequest(ConfirmationRequest):
+class TimelineConfirmationRequest(ConfirmationRequest, LeaseCommandRequest):
     expectedRevision: StrictInt = Field(ge=0)
-    idempotencyKey: str = Field(min_length=1, max_length=200)
 
 
 class ExecuteRequest(TimelineConfirmationRequest):
@@ -92,7 +116,7 @@ class TerminateRequest(EndRequest):
     endReason: Literal["early_termination", "mutual_termination", "other"]
 
 
-class TerminationCaseRequest(Contract):
+class TerminationCaseRequest(LeaseCommandRequest):
     reason: Literal["job_relocation", "military", "habitability", "mutual", "other"]
     noticeReceivedOn: date
     requestedTerminationOn: date
@@ -102,11 +126,11 @@ class TerminationCaseRequest(Contract):
     operatorNotes: str | None = Field(None, max_length=4000)
 
 
-class TerminationProposalRequest(Contract):
+class TerminationProposalRequest(LeaseCommandRequest):
     proposedTerminationOn: date
     expectedMoveOutOn: date
     rentResponsibilityEndsOn: date | None = None
-    terminationFeeMinor: int | None = Field(None, ge=0)
+    terminationFeeMinor: StrictInt | None = Field(None, ge=0)
     currencyCode: str | None = Field(None, min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
     feeWaived: StrictBool = False
     replacementTenantCondition: str | None = Field(None, max_length=2000)
@@ -115,12 +139,12 @@ class TerminationProposalRequest(Contract):
     responseDueOn: date | None = None
 
 
-class TerminationAcceptRequest(ConfirmationRequest):
-    proposalId: str = Field(min_length=1, max_length=80)
+class TerminationAcceptRequest(ConfirmationRequest, LeaseCommandRequest):
+    proposalId: UUID
     acceptedOn: date
 
 
-class TerminationCasePatchRequest(Contract):
+class TerminationCasePatchRequest(LeaseCommandRequest):
     status: Literal["under_review", "withdrawn", "declined"]
     operatorNotes: str | None = Field(None, max_length=4000)
 
@@ -130,8 +154,8 @@ class TerminationCompleteRequest(TimelineConfirmationRequest):
 
 
 class TerminationProposalResponse(Contract):
-    id: str
-    terminationCaseId: str
+    id: UUID
+    terminationCaseId: UUID
     proposalVersion: int
     proposedTerminationOn: date
     expectedMoveOutOn: date
@@ -145,12 +169,13 @@ class TerminationProposalResponse(Contract):
     responseDueOn: date | None
     status: Literal["open", "accepted", "rejected", "countered", "withdrawn", "expired"]
     decidedOn: date | None
-    createdAt: datetime
+    createdAt: AwareDatetime
 
 
 class TerminationCaseResponse(Contract):
-    id: str
-    leaseId: str
+    id: UUID
+    leaseId: UUID
+    leaseRevision: StrictInt = Field(ge=0)
     status: Literal[
         "requested", "under_review", "proposed", "accepted", "withdrawn", "declined", "completed"
     ]
@@ -164,13 +189,13 @@ class TerminationCaseResponse(Contract):
     tenantExplanation: str | None
     contractClauseReference: str | None
     operatorNotes: str | None
-    createdAt: datetime
-    updatedAt: datetime
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
     proposals: list[TerminationProposalResponse]
     files: list[LeaseFileResponse]
 
 
-class RenewalRequest(Contract):
+class RenewalRequest(LeaseCommandRequest):
     proposedStartsOn: date
     proposedEndsOn: date | None = None
     noticeDueOn: date | None = None
@@ -178,7 +203,7 @@ class RenewalRequest(Contract):
     notes: str | None = Field(None, max_length=2000)
 
 
-class RenewalDecisionRequest(Contract):
+class RenewalDecisionRequest(LeaseCommandRequest):
     status: Literal["exercised", "declined", "expired", "withdrawn"] | None = None
     decidedOn: date | None = None
     proposedStartsOn: date | None = None
@@ -189,20 +214,26 @@ class RenewalDecisionRequest(Contract):
 
     @model_validator(mode="after")
     def validate_operation(self):
-        if not self.model_fields_set:
+        if not self.model_fields_set - {"expectedLeaseRevision", "idempotencyKey"}:
             raise ValueError("At least one renewal field is required")
         if "status" in self.model_fields_set and self.status is None:
             raise ValueError("Renewal status cannot be null")
         if (self.status is None) != (self.decidedOn is None):
             raise ValueError("A renewal decision requires both status and decidedOn")
-        if self.status is not None and self.model_fields_set - {"status", "decidedOn", "notes"}:
+        if self.status is not None and self.model_fields_set - {
+            "status",
+            "decidedOn",
+            "notes",
+            "expectedLeaseRevision",
+            "idempotencyKey",
+        }:
             raise ValueError("A renewal decision cannot also edit proposal fields")
         return self
 
 
 class LeaseTermResponse(Contract):
-    id: str
-    leaseId: str
+    id: UUID
+    leaseId: UUID
     effectiveOn: date
     endsOn: date | None
     baseRentMinor: int
@@ -210,24 +241,24 @@ class LeaseTermResponse(Contract):
     paymentFrequency: Literal["monthly", "weekly"]
     paymentDueDay: int | None
     agreedSecurityDepositMinor: int
-    createdAt: datetime
+    createdAt: AwareDatetime
 
 
 class LeaseParticipantResponse(Contract):
-    id: str
-    leaseId: str
-    tenantPartyId: str
+    id: UUID
+    leaseId: UUID
+    tenantPartyId: UUID
     participantRole: Literal["primary_tenant", "co_tenant", "guarantor", "business_signatory"]
     startsOn: date
     endsOn: date | None
     notes: str | None
-    createdAt: datetime
-    updatedAt: datetime
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
 
 
 class LeaseRenewalResponse(Contract):
-    id: str
-    leaseId: str
+    id: UUID
+    leaseId: UUID
     status: Literal["open", "exercised", "declined", "expired", "withdrawn"]
     proposedStartsOn: date
     proposedEndsOn: date | None
@@ -235,18 +266,21 @@ class LeaseRenewalResponse(Contract):
     responseDueOn: date | None
     decidedOn: date | None
     notes: str | None
-    createdAt: datetime
-    updatedAt: datetime
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
 
 
 class LeaseFileResponse(Contract):
-    id: str
+    id: UUID
     originalName: str
     mediaType: str
     sizeBytes: int
     contentSha256: str
-    linkId: str
+    linkId: UUID
     purpose: str
+    storageState: Literal["available", "missing", "quarantined"]
+    available: bool
+    verifiedAt: AwareDatetime | None
 
 
 class InspectionAttentionResponse(Contract):
@@ -255,8 +289,8 @@ class InspectionAttentionResponse(Contract):
 
 
 class LeaseResponse(Contract):
-    id: str
-    spaceId: str
+    id: UUID
+    spaceId: UUID
     leaseKind: Literal["residential", "commercial"]
     status: Literal["draft", "executed", "ended", "terminated", "void"]
     contractStartsOn: date
@@ -268,28 +302,62 @@ class LeaseResponse(Contract):
         Literal["contract_completed", "early_termination", "mutual_termination", "other"] | None
     )
     notes: str | None
-    createdAt: datetime
-    updatedAt: datetime
+    createdAt: AwareDatetime
+    updatedAt: AwareDatetime
     occupancyState: Literal["none", "scheduled", "current", "ended"]
     terms: list[LeaseTermResponse]
     participants: list[LeaseParticipantResponse]
     renewalOptions: list[LeaseRenewalResponse]
     files: list[LeaseFileResponse]
     inspectionAttention: InspectionAttentionResponse
-    revision: int | None = None
-    operationId: str | None = None
+    leaseRevision: StrictInt = Field(ge=0)
+    revision: StrictInt | None = None
+    operationId: UUID | None = None
 
 
-class TimelineLeaseResponse(LeaseResponse):
+class LeaseMutationResponse(LeaseResponse):
+    operationId: UUID
+
+
+class TerminationCaseMutationResponse(TerminationCaseResponse):
+    leaseRevision: StrictInt = Field(ge=0)
+    operationId: UUID
+
+
+class TimelineLeaseResponse(LeaseMutationResponse):
     """The replayable source-timeline mutation contract."""
 
-    revision: int
-    operationId: str
+    revision: StrictInt = Field(ge=0)
+    operationId: UUID
+
+
+class LeaseOperationReceipt(Contract):
+    operationId: UUID
+    idempotencyKey: str
+    leaseId: UUID
+    action: LeaseCommandAction
+    expectedLeaseRevision: StrictInt = Field(ge=0)
+    leaseRevision: StrictInt = Field(ge=0)
+    effective: bool
+    requestFingerprint: str
+    correlationId: UUID
+    committedAt: AwareDatetime
+    response: TimelineLeaseResponse | LeaseMutationResponse | TerminationCaseMutationResponse
+
+
+class LeaseConflictDetail(Contract):
+    code: Literal["lease_conflict"]
+    message: str
+    currentStatus: LeaseResponse | SpaceStatusResponse | None = None
+
+
+class LeaseConflictResponse(Contract):
+    detail: LeaseConflictDetail
 
 
 def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
-    router = APIRouter(tags=["leases"])
-    leases = APIRouter(prefix="/api/leases")
+    router = APIRouter(tags=["leases"], responses={409: {"model": LeaseConflictResponse}})
+    leases = APIRouter(prefix="/api/leases", responses={409: {"model": LeaseConflictResponse}})
 
     def ready(write: bool = False) -> None:
         if not runtime.ready or runtime.error:
@@ -317,12 +385,23 @@ def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
         except LeaseError as error:
             raise domain_problem(error, status_code=400, code="lease_validation") from error
 
-    @leases.post("", status_code=status.HTTP_201_CREATED, response_model=LeaseResponse)
+    @leases.post(
+        "",
+        status_code=status.HTTP_201_CREATED,
+        response_model=LeaseMutationResponse,
+        operation_id="leaseCreate",
+    )
     def create(data: LeaseCreateRequest):
         ready(True)
-        return invoke(lambda: service.create(_create_command(data)))
+        return invoke(
+            lambda: service.create(
+                _create_command(data),
+                expected_revision=data.expectedLeaseRevision,
+                idempotency_key=data.idempotencyKey,
+            )
+        )
 
-    @leases.get("", response_model=list[LeaseResponse])
+    @leases.get("", response_model=list[LeaseResponse], operation_id="listLeases")
     def list_leases(
         lease_status: Literal["draft", "executed", "ended", "terminated", "void"] | None = Query(
             None, alias="status"
@@ -347,13 +426,39 @@ def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
             )
         )
 
-    @leases.get("/{lease_id}", response_model=LeaseResponse)
-    def get(lease_id: str):
+    @leases.get(
+        "/operations/{operation_id}",
+        response_model=LeaseOperationReceipt,
+        operation_id="getLeaseCommandOperation",
+    )
+    def get_operation(operation_id: UUID):
         ready()
-        return invoke(lambda: service.get(lease_id))
+        return invoke(lambda: service.get_command_operation(operation_id=str(operation_id)))
 
-    @leases.patch("/{lease_id}", response_model=LeaseResponse)
-    def patch(lease_id: str, data: LeasePatchRequest):
+    @leases.get(
+        "/{lease_id}/operations/by-key",
+        response_model=LeaseOperationReceipt,
+        operation_id="getLeaseCommandOperationByKey",
+    )
+    def get_operation_by_key(
+        lease_id: UUID,
+        idempotency_key: str = Query(alias="idempotencyKey", min_length=1, max_length=200),
+    ):
+        ready()
+        return invoke(
+            lambda: service.get_command_operation(
+                lease_id=str(lease_id),
+                idempotency_key=idempotency_key,
+            )
+        )
+
+    @leases.get("/{lease_id}", response_model=LeaseResponse, operation_id="getLease")
+    def get(lease_id: UUID):
+        ready()
+        return invoke(lambda: service.get(str(lease_id)))
+
+    @leases.patch("/{lease_id}", response_model=LeaseMutationResponse, operation_id="leasePatch")
+    def patch(lease_id: UUID, data: LeasePatchRequest):
         ready(True)
         mapping = {
             "contractStartsOn": "contract_starts_on",
@@ -361,7 +466,7 @@ def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
             "occupancyStartsOn": "occupancy_starts_on",
             "notes": "notes",
         }
-        supplied = frozenset(mapping[field] for field in data.model_fields_set)
+        supplied = frozenset(mapping[field] for field in data.model_fields_set if field in mapping)
         command = LeasePatchCommand(
             contract_starts_on=data.contractStartsOn,
             contract_ends_on=data.contractEndsOn,
@@ -369,84 +474,148 @@ def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
             notes=data.notes,
             supplied_fields=supplied,
         )
-        return invoke(lambda: service.patch(lease_id, command))
-
-    @leases.put("/{lease_id}/initial-term", response_model=LeaseResponse)
-    def replace_term(lease_id: str, data: TermRequest):
-        ready(True)
-        return invoke(lambda: service.replace_initial_term(lease_id, _term_command(data)))
-
-    @leases.post("/{lease_id}/participants", status_code=201, response_model=LeaseResponse)
-    def add_participant(lease_id: str, data: ParticipantRequest):
-        ready(True)
-        return invoke(lambda: service.add_participant(lease_id, _participant_command(data)))
-
-    @leases.patch("/{lease_id}/participants/{participant_id}", response_model=LeaseResponse)
-    def update_participant(lease_id: str, participant_id: str, data: ParticipantRequest):
-        ready(True)
         return invoke(
-            lambda: service.update_participant(lease_id, participant_id, _participant_command(data))
+            lambda: service.patch(
+                str(lease_id),
+                command,
+                expected_revision=data.expectedLeaseRevision,
+                idempotency_key=data.idempotencyKey,
+            )
         )
 
-    @leases.delete("/{lease_id}/participants/{participant_id}", response_model=LeaseResponse)
-    def remove_participant(lease_id: str, participant_id: str):
+    @leases.put(
+        "/{lease_id}/initial-term",
+        response_model=LeaseMutationResponse,
+        operation_id="leaseReplaceTerm",
+    )
+    def replace_term(lease_id: UUID, data: TermMutationRequest):
         ready(True)
-        return invoke(lambda: service.remove_participant(lease_id, participant_id))
+        return invoke(
+            lambda: service.replace_initial_term(
+                str(lease_id),
+                _term_command(data),
+                expected_revision=data.expectedLeaseRevision,
+                idempotency_key=data.idempotencyKey,
+            )
+        )
 
-    @leases.post("/{lease_id}/execute", response_model=TimelineLeaseResponse)
-    def execute(lease_id: str, data: ExecuteRequest):
+    @leases.post(
+        "/{lease_id}/participants",
+        status_code=201,
+        response_model=LeaseMutationResponse,
+        operation_id="leaseAddParticipant",
+    )
+    def add_participant(lease_id: UUID, data: ParticipantMutationRequest):
+        ready(True)
+        return invoke(
+            lambda: service.add_participant(
+                str(lease_id),
+                _participant_command(data),
+                expected_revision=data.expectedLeaseRevision,
+                idempotency_key=data.idempotencyKey,
+            )
+        )
+
+    @leases.patch(
+        "/{lease_id}/participants/{participant_id}",
+        response_model=LeaseMutationResponse,
+        operation_id="leaseUpdateParticipant",
+    )
+    def update_participant(lease_id: UUID, participant_id: UUID, data: ParticipantMutationRequest):
+        ready(True)
+        return invoke(
+            lambda: service.update_participant(
+                str(lease_id),
+                str(participant_id),
+                _participant_command(data),
+                expected_revision=data.expectedLeaseRevision,
+                idempotency_key=data.idempotencyKey,
+            )
+        )
+
+    @leases.delete(
+        "/{lease_id}/participants/{participant_id}",
+        response_model=LeaseMutationResponse,
+        operation_id="leaseRemoveParticipant",
+    )
+    def remove_participant(lease_id: UUID, participant_id: UUID, data: LeaseCommandRequest):
+        ready(True)
+        return invoke(
+            lambda: service.remove_participant(
+                str(lease_id),
+                str(participant_id),
+                expected_revision=data.expectedLeaseRevision,
+                idempotency_key=data.idempotencyKey,
+            )
+        )
+
+    @leases.post(
+        "/{lease_id}/execute", response_model=TimelineLeaseResponse, operation_id="leaseExecute"
+    )
+    def execute(lease_id: UUID, data: ExecuteRequest):
         ready(True)
         return invoke(
             lambda: service.execute(
-                lease_id,
+                str(lease_id),
                 executed_on=data.executedOn,
                 confirmed=data.confirmed,
                 expected_revision=data.expectedRevision,
+                expected_lease_revision=data.expectedLeaseRevision,
                 idempotency_key=data.idempotencyKey,
             )
         )
 
-    @leases.post("/{lease_id}/end", response_model=TimelineLeaseResponse)
-    def end(lease_id: str, data: EndRequest):
+    @leases.post("/{lease_id}/end", response_model=TimelineLeaseResponse, operation_id="leaseEnd")
+    def end(lease_id: UUID, data: EndRequest):
         ready(True)
         return invoke(
             lambda: service.end(
-                lease_id,
+                str(lease_id),
                 actual_move_out_on=data.actualMoveOutOn,
                 confirmed=data.confirmed,
                 expected_revision=data.expectedRevision,
+                expected_lease_revision=data.expectedLeaseRevision,
                 idempotency_key=data.idempotencyKey,
             )
         )
 
-    @leases.post("/{lease_id}/terminate", response_model=TimelineLeaseResponse)
-    def terminate(lease_id: str, data: TerminateRequest):
+    @leases.post(
+        "/{lease_id}/terminate", response_model=TimelineLeaseResponse, operation_id="leaseTerminate"
+    )
+    def terminate(lease_id: UUID, data: TerminateRequest):
         ready(True)
         return invoke(
             lambda: service.terminate(
-                lease_id,
+                str(lease_id),
                 actual_move_out_on=data.actualMoveOutOn,
                 end_reason=data.endReason,
                 confirmed=data.confirmed,
                 expected_revision=data.expectedRevision,
+                expected_lease_revision=data.expectedLeaseRevision,
                 idempotency_key=data.idempotencyKey,
             )
         )
 
-    @leases.post("/{lease_id}/void", response_model=TimelineLeaseResponse)
-    def void(lease_id: str, data: TimelineConfirmationRequest):
+    @leases.post("/{lease_id}/void", response_model=TimelineLeaseResponse, operation_id="leaseVoid")
+    def void(lease_id: UUID, data: TimelineConfirmationRequest):
         ready(True)
         return invoke(
             lambda: service.void(
-                lease_id,
+                str(lease_id),
                 confirmed=data.confirmed,
                 expected_revision=data.expectedRevision,
+                expected_lease_revision=data.expectedLeaseRevision,
                 idempotency_key=data.idempotencyKey,
             )
         )
 
-    @leases.post("/{lease_id}/renewal-options", status_code=201, response_model=LeaseResponse)
-    def add_renewal(lease_id: str, data: RenewalRequest):
+    @leases.post(
+        "/{lease_id}/renewal-options",
+        status_code=201,
+        response_model=LeaseMutationResponse,
+        operation_id="leaseAddRenewal",
+    )
+    def add_renewal(lease_id: UUID, data: RenewalRequest):
         ready(True)
         command = RenewalCommand(
             data.proposedStartsOn,
@@ -455,19 +624,32 @@ def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
             data.responseDueOn,
             data.notes,
         )
-        return invoke(lambda: service.add_renewal_option(lease_id, command))
+        return invoke(
+            lambda: service.add_renewal_option(
+                str(lease_id),
+                command,
+                expected_revision=data.expectedLeaseRevision,
+                idempotency_key=data.idempotencyKey,
+            )
+        )
 
-    @leases.patch("/{lease_id}/renewal-options/{option_id}", response_model=LeaseResponse)
-    def decide_renewal(lease_id: str, option_id: str, data: RenewalDecisionRequest):
+    @leases.patch(
+        "/{lease_id}/renewal-options/{option_id}",
+        response_model=LeaseMutationResponse,
+        operation_id="leaseDecideRenewal",
+    )
+    def decide_renewal(lease_id: UUID, option_id: UUID, data: RenewalDecisionRequest):
         ready(True)
         if data.status is not None:
             return invoke(
                 lambda: service.decide_renewal_option(
-                    lease_id,
-                    option_id,
+                    str(lease_id),
+                    str(option_id),
                     status=data.status,
                     decided_on=data.decidedOn,
                     notes=data.notes,
+                    expected_revision=data.expectedLeaseRevision,
+                    idempotency_key=data.idempotencyKey,
                 )
             )
         mapping = {
@@ -483,18 +665,31 @@ def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
             notice_due_on=data.noticeDueOn,
             response_due_on=data.responseDueOn,
             notes=data.notes,
-            supplied_fields=frozenset(mapping[field] for field in data.model_fields_set),
+            supplied_fields=frozenset(
+                mapping[field] for field in data.model_fields_set if field in mapping
+            ),
         )
-        return invoke(lambda: service.update_renewal_option(lease_id, option_id, command))
+        return invoke(
+            lambda: service.update_renewal_option(
+                str(lease_id),
+                str(option_id),
+                command,
+                expected_revision=data.expectedLeaseRevision,
+                idempotency_key=data.idempotencyKey,
+            )
+        )
 
     @leases.post(
-        "/{lease_id}/termination-cases", status_code=201, response_model=TerminationCaseResponse
+        "/{lease_id}/termination-cases",
+        status_code=201,
+        response_model=TerminationCaseMutationResponse,
+        operation_id="leaseCreateTerminationCase",
     )
-    def create_termination_case(lease_id: str, data: TerminationCaseRequest):
+    def create_termination_case(lease_id: UUID, data: TerminationCaseRequest):
         ready(True)
         return invoke(
             lambda: service.create_termination_case(
-                lease_id,
+                str(lease_id),
                 TerminationCaseCommand(
                     data.reason,
                     data.noticeReceivedOn,
@@ -504,24 +699,31 @@ def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
                     data.contractClauseReference,
                     data.operatorNotes,
                 ),
+                expected_revision=data.expectedLeaseRevision,
+                idempotency_key=data.idempotencyKey,
             )
         )
 
-    @leases.get("/{lease_id}/termination-cases", response_model=list[TerminationCaseResponse])
-    def list_termination_cases(lease_id: str):
+    @leases.get(
+        "/{lease_id}/termination-cases",
+        response_model=list[TerminationCaseResponse],
+        operation_id="listLeaseTerminationCases",
+    )
+    def list_termination_cases(lease_id: UUID):
         ready()
-        return invoke(lambda: service.list_termination_cases(lease_id))
+        return invoke(lambda: service.list_termination_cases(str(lease_id)))
 
     @router.post(
         "/api/termination-cases/{case_id}/proposals",
         status_code=201,
-        response_model=TerminationCaseResponse,
+        response_model=TerminationCaseMutationResponse,
+        operation_id="leaseCreateTerminationProposal",
     )
-    def create_termination_proposal(case_id: str, data: TerminationProposalRequest):
+    def create_termination_proposal(case_id: UUID, data: TerminationProposalRequest):
         ready(True)
         return invoke(
             lambda: service.add_termination_proposal(
-                case_id,
+                str(case_id),
                 TerminationProposalCommand(
                     data.proposedTerminationOn,
                     data.expectedMoveOutOn,
@@ -534,36 +736,60 @@ def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
                     data.otherTerms,
                     data.responseDueOn,
                 ),
+                expected_revision=data.expectedLeaseRevision,
+                idempotency_key=data.idempotencyKey,
             )
         )
 
-    @router.post("/api/termination-cases/{case_id}/accept", response_model=TerminationCaseResponse)
-    def accept_termination_proposal(case_id: str, data: TerminationAcceptRequest):
+    @router.post(
+        "/api/termination-cases/{case_id}/accept",
+        response_model=TerminationCaseMutationResponse,
+        operation_id="leaseAcceptTerminationProposal",
+    )
+    def accept_termination_proposal(case_id: UUID, data: TerminationAcceptRequest):
         ready(True)
         return invoke(
             lambda: service.accept_termination_proposal(
-                case_id, data.proposalId, accepted_on=data.acceptedOn, confirmed=data.confirmed
+                str(case_id),
+                str(data.proposalId),
+                accepted_on=data.acceptedOn,
+                confirmed=data.confirmed,
+                expected_revision=data.expectedLeaseRevision,
+                idempotency_key=data.idempotencyKey,
             )
         )
 
-    @router.patch("/api/termination-cases/{case_id}", response_model=TerminationCaseResponse)
-    def transition_termination_case(case_id: str, data: TerminationCasePatchRequest):
+    @router.patch(
+        "/api/termination-cases/{case_id}",
+        response_model=TerminationCaseMutationResponse,
+        operation_id="leaseTransitionTerminationCase",
+    )
+    def transition_termination_case(case_id: UUID, data: TerminationCasePatchRequest):
         ready(True)
         return invoke(
             lambda: service.transition_termination_case(
-                case_id, status=data.status, operator_notes=data.operatorNotes
+                str(case_id),
+                status=data.status,
+                operator_notes=data.operatorNotes,
+                expected_revision=data.expectedLeaseRevision,
+                idempotency_key=data.idempotencyKey,
             )
         )
 
-    @router.post("/api/termination-cases/{case_id}/complete", response_model=TimelineLeaseResponse)
-    def complete_termination_case(case_id: str, data: TerminationCompleteRequest):
+    @router.post(
+        "/api/termination-cases/{case_id}/complete",
+        response_model=TimelineLeaseResponse,
+        operation_id="leaseCompleteTerminationCase",
+    )
+    def complete_termination_case(case_id: UUID, data: TerminationCompleteRequest):
         ready(True)
         return invoke(
             lambda: service.complete_termination_case(
-                case_id,
+                str(case_id),
                 actual_move_out_on=data.actualMoveOutOn,
                 confirmed=data.confirmed,
                 expected_revision=data.expectedRevision,
+                expected_lease_revision=data.expectedLeaseRevision,
                 idempotency_key=data.idempotencyKey,
             )
         )
@@ -584,13 +810,13 @@ def _term_command(data: TermRequest) -> TermCommand:
 
 def _participant_command(data: ParticipantRequest) -> ParticipantCommand:
     return ParticipantCommand(
-        data.tenantPartyId, data.participantRole, data.startsOn, data.endsOn, data.notes
+        str(data.tenantPartyId), data.participantRole, data.startsOn, data.endsOn, data.notes
     )
 
 
 def _create_command(data: LeaseCreateRequest) -> LeaseCreateCommand:
     return LeaseCreateCommand(
-        data.spaceId,
+        str(data.spaceId),
         data.leaseKind,
         data.contractStartsOn,
         data.contractEndsOn,

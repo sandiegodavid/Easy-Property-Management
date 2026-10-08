@@ -18,6 +18,13 @@ from app.modules.files.application.errors import (
     normalize_filename,
     normalize_media_type,
 )
+from app.modules.files.application.commands import (
+    FileCommandReceipt,
+    FileRevisionConflict,
+    command_key,
+    command_json,
+    command_fingerprint,
+)
 from app.modules.files.application.ports import (
     FileAuditChange,
     FileContentStore,
@@ -25,6 +32,7 @@ from app.modules.files.application.ports import (
     FileLinkPolicyRegistry,
     FileLinkValidator,
     FileUnitOfWork,
+    FileCommandTransaction,
 )
 from app.modules.files.domain.models import StoredFile
 from app.modules.workspace.application.service import WorkspaceService
@@ -81,7 +89,10 @@ class FileAttachmentBatch:
         self.service._write_on_connection(self.connection, item, link, correlation_id)
         # The caller-owned batch needs the stable association ID to create
         # its own immutable aggregate reference without rereading the link.
-        return replace(item, links=({"id": link.id, "entityId": link.entity_id},))
+        return replace(
+            item,
+            links=(_link_snapshot(_link_for_file(link, item.id)) | {"id": link.id, "revision": 1},),
+        )
 
     def commit(self) -> None:
         if self._closed is not None:
@@ -175,6 +186,192 @@ class FileService:
 
     def attachment_batch(self, connection: Any) -> FileAttachmentBatch:
         return FileAttachmentBatch(self, connection)
+
+    def upload(
+        self,
+        source: Path,
+        original_name: str,
+        media_type: str | None,
+        *,
+        entity_type: str,
+        entity_id: str,
+        purpose: str,
+        idempotency_key: str,
+    ) -> dict[str, object]:
+        """Recoverable public upload; publication stays outside SQLite's writer lock."""
+        key = command_key(idempotency_key)
+        name, mime = normalize_filename(original_name), normalize_media_type(media_type)
+        entity_type, entity_id, purpose = _link_fields(entity_type, entity_id, purpose)
+        request = {
+            "originalName": name,
+            "mediaType": mime,
+            "contentSha256": _source_digest(source),
+            "entityType": entity_type,
+            "entityId": entity_id,
+            "purpose": purpose,
+        }
+        prior = self.unit_of_work.command_receipt(key=key)
+        if prior is not None:
+            return prior.replay("upload", request)
+        validator = self._validator(entity_type, generic_upload=True)
+        link = self._new_link(entity_type, entity_id, purpose)
+        correlation = str(uuid4())
+        content = None
+        committed = False
+        replayed = False
+        try:
+            content = self.content_store.store(source)
+            if content.content_sha256 != request["contentSha256"]:
+                raise FileError("Upload changed during publication.", "file_integrity_failed")
+            item = self._stored_item(content, name, mime)
+            linked = _link_for_file(link, item.id)
+
+            def persist(tx: FileCommandTransaction):
+                nonlocal replayed
+                existing = tx.operation_by_key(key)
+                if existing is not None:
+                    result = existing.replay("upload", request)
+                    replayed = True
+                    return result
+                tx.write_file(
+                    item,
+                    linked,
+                    self._audit_changes(item, linked, correlation),
+                    validator.validate_create,
+                )
+                result = replace(
+                    item, links=(_link_snapshot(linked) | {"id": linked.id, "revision": 1},)
+                ).to_dict()
+                receipt = self._receipt(
+                    key, "upload", request, item.id, linked.id, result, correlation
+                )
+                tx.record_operation(receipt)
+                return receipt.result()
+
+            result = self.unit_of_work.command(persist)
+            committed = not replayed
+            if replayed:
+                content.rollback()
+            else:
+                content.commit()
+            return result
+        except BaseException as error:
+            if content is not None:
+                try:
+                    if not committed:
+                        content.rollback()
+                    else:
+                        # Metadata committed: release failures must never cause re-publication.
+                        raise error
+                except BaseException as cleanup_error:
+                    incomplete = PublicationCleanupIncomplete(
+                        content.publication_id, content.storage_provider, error, cleanup_error
+                    )
+                    self._try_record_cleanup_attention(incomplete, correlation)
+                    raise incomplete from error
+            if isinstance(error, PublicationCleanupIncomplete):
+                self._try_record_cleanup_attention(error, correlation)
+            if isinstance(error, ValueError):
+                raise FileError(str(error), "file_lifecycle_conflict") from error
+            raise
+
+    def archive_command(
+        self,
+        link_id: str,
+        *,
+        confirmed: bool,
+        reason: str,
+        expected_revision: int,
+        idempotency_key: str,
+    ) -> dict[str, object]:
+        key = command_key(idempotency_key)
+        if type(expected_revision) is not int or expected_revision < 1:
+            raise FileError("Expected revision must be a positive integer.")
+        if (
+            confirmed is not True
+            or not isinstance(reason, str)
+            or not (reason := reason.strip())
+            or len(reason) > 1000
+        ):
+            raise FileError("Archive requires confirmation and a bounded reason.")
+        request = {
+            "linkId": link_id,
+            "confirmed": True,
+            "reason": reason,
+            "expectedRevision": expected_revision,
+        }
+
+        def persist(tx: FileCommandTransaction):
+            prior = tx.operation_by_key(key)
+            if prior is not None:
+                return prior.replay("archive_link", request)
+            current = tx.get_link(link_id)
+            if current is None:
+                raise FileError("File link was not found.", "file_not_found")
+            revision = 1 if current.archived_at is None else 2
+            if expected_revision != revision:
+                raise FileRevisionConflict(
+                    _link_snapshot(current) | {"id": current.id, "revision": revision}
+                )
+            if current.archived_at is not None:
+                raise FileError("File link is already archived.", "file_lifecycle_conflict")
+            validator = self._validator(current.entity_type, generic_upload=False)
+            archived = replace(current, archived_at=_now(), archive_reason=reason)
+            correlation = str(uuid4())
+            change = FileAuditChange(
+                "file_link",
+                link_id,
+                "archived",
+                _link_snapshot(archived),
+                "file_link_archived",
+                correlation,
+                _link_snapshot(current),
+            )
+            tx.archive_link(archived, change, validator.validate_archive)
+            result = _link_snapshot(archived) | {
+                "id": link_id,
+                "revision": 2,
+                "updatedAt": archived.archived_at,
+            }
+            receipt = self._receipt(
+                key, "archive_link", request, current.file_id, link_id, result, correlation
+            )
+            tx.record_operation(receipt)
+            return receipt.result()
+
+        try:
+            return self.unit_of_work.command(persist)
+        except ValueError as error:
+            raise FileError(str(error), "file_lifecycle_conflict") from error
+
+    def recover_command(
+        self, *, operation_id: str | None = None, key: str | None = None
+    ) -> dict[str, object]:
+        if (operation_id is None) == (key is None):
+            raise FileError("Supply one command identity.")
+        command_key(operation_id if operation_id is not None else key)
+        receipt = self.unit_of_work.command_receipt(operation_id=operation_id, key=key)
+        if receipt is None:
+            raise FileError("File command was not found.", "file_not_found")
+        return receipt.result()
+
+    @staticmethod
+    def _receipt(key, action, request, file_id, link_id, result, correlation):
+        operation_id = str(uuid4())
+        now = _now()
+        result = result | {"operationId": operation_id}
+        return FileCommandReceipt(
+            operation_id,
+            key,
+            action,
+            command_fingerprint(action, request),
+            command_json(request),
+            file_id,
+            link_id,
+            command_json(result),
+            correlation,
+            now,
+        )
 
     def add(
         self,

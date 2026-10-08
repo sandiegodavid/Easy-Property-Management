@@ -7,9 +7,30 @@ from pathlib import Path
 from typing import Any, Callable, Protocol, Sequence
 
 from app.modules.files.domain.models import StoredFile
+from app.modules.files.application.commands import FileCommandReceipt
+
+
+class FileCommandTransaction(Protocol):
+    def operation_by_key(self, key: str) -> FileCommandReceipt | None: ...
+    def write_file(
+        self,
+        item: StoredFile,
+        link: FileLink,
+        changes: list[FileAuditChange],
+        validate_link: Callable[[Any, FileLink], None],
+    ) -> None: ...
+    def get_link(self, link_id: str) -> FileLink | None: ...
+    def archive_link(
+        self,
+        link: FileLink,
+        change: FileAuditChange,
+        validate_link: Callable[[Any, FileLink], None],
+    ) -> None: ...
+    def record_operation(self, receipt: FileCommandReceipt) -> None: ...
 
 
 class StoredContent(Protocol):
+    publication_id: str
     storage_provider: str
     storage_state: str
     local_relative_path: str | None
@@ -162,6 +183,13 @@ class FileLinkPolicyRegistry:
 
 class FileUnitOfWork(Protocol):
     """Persists explicit file/link business changes and their audit entries atomically."""
+
+    def command(
+        self, operation: Callable[[FileCommandTransaction], dict[str, object]]
+    ) -> dict[str, object]: ...
+    def command_receipt(
+        self, *, operation_id: str | None = None, key: str | None = None
+    ) -> FileCommandReceipt | None: ...
 
     def write(
         self,

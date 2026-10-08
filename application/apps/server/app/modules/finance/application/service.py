@@ -8,6 +8,18 @@ from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
+from dataclasses import asdict
+from json import loads
+
+from app.modules.finance.application.commands import (
+    FinanceCommandIdentity,
+    FinanceCommandOutcome,
+    FinanceScope,
+    apply_finance_command,
+    canonical_uuid,
+    validate_command_concurrency,
+)
+
 from app.modules.finance.application.ports import FinanceUnitOfWork
 from app.modules.finance.application.receipt_handoff import (
     record_receipt_in_transaction,
@@ -30,7 +42,17 @@ class FinanceService:
         self.unit_of_work = unit_of_work
         self.now = now
 
-    def synchronize(self, lease_id, command: SynchronizeExpectationsCommand):
+    def synchronize(
+        self,
+        lease_id,
+        command: SynchronizeExpectationsCommand,
+        *,
+        expected_revision,
+        idempotency_key,
+    ):
+        instant = self.now()
+        correlation = str(uuid4())
+
         def operation(tx):
             snapshot = tx.lease_term_snapshot(lease_id, command.lease_term_id)
             if snapshot is None:
@@ -52,7 +74,7 @@ class FinanceService:
                 raise FinanceError("A schedule anchor is required for the first synchronization.")
             else:
                 effective_command = command
-            rows = _schedule(snapshot, effective_command, self.now())
+            rows = _schedule(snapshot, effective_command, instant)
             # A responsibility amendment can add a second, adjacent piece to an
             # already persisted occurrence.  Identity must include the covered
             # interval, not merely its due date, so repeating the amendment is
@@ -87,7 +109,6 @@ class FinanceService:
             _reconcile_proration(new, snapshot.base_rent_minor, existing)
             if len(new) > 240:
                 raise FinanceError("Synchronization may create at most 240 expectations.")
-            correlation = str(uuid4())
             for item in new:
                 tx.insert_expectation(item)
                 tx.record_change(
@@ -99,9 +120,24 @@ class FinanceService:
                     reason="Rent expectation synchronized.",
                     correlation_id=correlation,
                 )
-            return [self._expectation_view(tx, item) for item in new]
+            return FinanceCommandOutcome(
+                {"items": [self._expectation_view(tx, item, instant=instant) for item in new]},
+                bool(new),
+            )
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            FinanceCommandIdentity(
+                FinanceScope("rent_ledger", lease_id),
+                "synchronize_expectations",
+                lease_id,
+                expected_revision,
+                idempotency_key,
+                asdict(command),
+            ),
+            instant=instant,
+            correlation=correlation,
+        )
 
     def list_expectations(
         self,
@@ -184,7 +220,10 @@ class FinanceService:
 
         return self.unit_of_work.read(operation)
 
-    def record_receipt(self, command: RecordReceiptCommand):
+    def record_receipt(self, command: RecordReceiptCommand, *, expected_revision):
+        instant = self.now()
+        correlation = str(uuid4())
+
         def operation(tx):
             old = tx.receipt_by_key(command.idempotency_key)
             if old:
@@ -194,17 +233,34 @@ class FinanceService:
                     raise FinanceConflictError(
                         "Idempotency key was already used for a different receipt."
                     )
-                return self._receipt_view(old, tx.receipt_projection([old.id])[old.id])
+                raise FinanceConflictError(
+                    "This receipt key belongs to another financial workflow; use explicit adoption.",
+                    code="finance_idempotency_conflict",
+                )
             receipt = record_receipt_in_transaction(
                 tx,
                 command,
-                now=self.now,
-                correlation_id=str(uuid4()),
+                now=lambda: instant,
+                correlation_id=correlation,
                 audit_reason="Rent receipt recorded.",
             )
-            return self._receipt_view(receipt, tx.receipt_projection([receipt.id])[receipt.id])
+            return FinanceCommandOutcome(
+                self._receipt_view(receipt, tx.receipt_projection([receipt.id])[receipt.id]), True
+            )
 
-        return self.unit_of_work.write(operation)
+        return self._command_write(
+            operation,
+            FinanceCommandIdentity(
+                FinanceScope("rent_ledger", command.lease_id),
+                "record_receipt",
+                command.lease_id,
+                expected_revision,
+                command.idempotency_key,
+                _receipt_command_request(command),
+            ),
+            instant=instant,
+            correlation=correlation,
+        )
 
     def receipt(self, receipt_id):
         def operation(tx):
@@ -286,7 +342,10 @@ class FinanceService:
 
         return self.unit_of_work.read(operation)
 
-    def void_receipt(self, receipt_id, command: VoidCommand):
+    def void_receipt(self, receipt_id, command: VoidCommand, *, expected_revision, idempotency_key):
+        instant = self.now()
+        correlation = str(uuid4())
+
         def operation(tx):
             old = tx.receipt(receipt_id)
             if not old:
@@ -299,13 +358,30 @@ class FinanceService:
                     "A deposited prepaid-check receipt must be returned through FIN-007."
                 )
             new = void_receipt_in_transaction(
-                tx, old, now=self.now, reason=command.reason, correlation_id=str(uuid4())
+                tx, old, now=lambda: instant, reason=command.reason, correlation_id=correlation
             )
-            return self._receipt_view(new, tx.receipt_projection([new.id])[new.id])
+            return FinanceCommandOutcome(
+                self._receipt_view(new, tx.receipt_projection([new.id])[new.id]), True
+            )
 
-        return self.unit_of_work.write(operation)
+        return self._record_command_write(
+            operation,
+            action="void_receipt",
+            kind="receipt",
+            record_id=receipt_id,
+            command=command,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            correlation=correlation,
+        )
 
-    def void_expectation(self, expectation_id, command: VoidCommand):
+    def void_expectation(
+        self, expectation_id, command: VoidCommand, *, expected_revision, idempotency_key
+    ):
+        instant = self.now()
+        correlation = str(uuid4())
+
         def operation(tx):
             old = tx.expectation(expectation_id)
             if not old:
@@ -314,7 +390,7 @@ class FinanceService:
                 raise FinanceConflictError("Rent expectation is already voided.")
             if tx.allocated_amount(old.id):
                 raise FinanceConflictError("Allocated expectations cannot be voided.")
-            new = replace(old, voided_at=_stamp(self.now()), void_reason=command.reason)
+            new = replace(old, voided_at=_stamp(instant), void_reason=command.reason)
             tx.replace_expectation(new)
             tx.record_change(
                 entity_type="rent_expectation",
@@ -323,13 +399,33 @@ class FinanceService:
                 before=old.to_dict(),
                 after=new.to_dict(),
                 reason=None,
-                correlation_id=str(uuid4()),
+                correlation_id=correlation,
             )
-            return self._expectation_view(tx, new)
+            return FinanceCommandOutcome(self._expectation_view(tx, new, instant=instant), True)
 
-        return self.unit_of_work.write(operation)
+        return self._record_command_write(
+            operation,
+            action="void_expectation",
+            kind="expectation",
+            record_id=expectation_id,
+            command=command,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            correlation=correlation,
+        )
 
-    def review_timeliness(self, expectation_id, command: TimelinessReviewCommand):
+    def review_timeliness(
+        self,
+        expectation_id,
+        command: TimelinessReviewCommand,
+        *,
+        expected_revision,
+        idempotency_key,
+    ):
+        instant = self.now()
+        correlation = str(uuid4())
+
         def operation(tx):
             item = tx.expectation(expectation_id)
             if not item:
@@ -337,7 +433,7 @@ class FinanceService:
             if item.voided_at:
                 raise FinanceConflictError("Voided expectations cannot receive timeliness reviews.")
             received = tx.allocated_amount(item.id)
-            now_date = self._local_date(tx, item)
+            now_date = self._local_date(tx, item, instant=instant)
             reviews = tx.reviews(item.id)
             missed = (
                 bool(reviews and reviews[-1]["decision"] == "mark_missed")
@@ -355,7 +451,7 @@ class FinanceService:
                 "expectation_id": item.id,
                 "decision": command.decision,
                 "reason": command.reason,
-                "created_at": _stamp(self.now()),
+                "created_at": _stamp(instant),
             }
             tx.insert_review(row)
             tx.record_change(
@@ -365,13 +461,104 @@ class FinanceService:
                 before=None,
                 after=_camel(row),
                 reason=None,
-                correlation_id=str(uuid4()),
+                correlation_id=correlation,
             )
-            return self._expectation_view(tx, item)
+            return FinanceCommandOutcome(self._expectation_view(tx, item, instant=instant), True)
 
-        return self.unit_of_work.write(operation)
+        return self._record_command_write(
+            operation,
+            action="review_timeliness",
+            kind="expectation",
+            record_id=expectation_id,
+            command=command,
+            expected_revision=expected_revision,
+            idempotency_key=idempotency_key,
+            instant=instant,
+            correlation=correlation,
+        )
 
-    def _expectation_view(self, tx, item, projection=None, context_cache=None):
+    def rent_ledger_revision(self, lease_id):
+        scope = FinanceScope("rent_ledger", lease_id)
+
+        def read(tx):
+            if tx.lease_time_zone(lease_id) is None:
+                raise FinanceNotFoundError("Lease was not found.")
+            return {"leaseId": lease_id, "rentLedgerRevision": tx.commands.command_revision(scope)}
+
+        return self.unit_of_work.read(read)
+
+    def command_operation(self, idempotency_key):
+        canonical_uuid(idempotency_key)
+
+        def read(tx):
+            receipt = tx.commands.command_operation(idempotency_key)
+            if receipt is None:
+                raise FinanceNotFoundError("Financial operation was not found.")
+            return {
+                "operationId": receipt["id"],
+                "scopeKind": receipt["scope_kind"],
+                "scopeId": receipt["scope_id"],
+                "action": receipt["action"],
+                "expectedRevision": receipt["expected_revision"],
+                "resultRevision": receipt["result_revision"],
+                "result": loads(receipt["response_json"]),
+            }
+
+        return self.unit_of_work.read(read)
+
+    def _command_write(self, mutation, identity, *, instant, correlation):
+        return self.unit_of_work.write(
+            lambda tx: apply_finance_command(
+                tx.commands,
+                identity,
+                lambda context: mutation(tx),
+                instant=instant,
+                correlation_id=correlation,
+            )
+        )
+
+    def _record_command_write(
+        self,
+        mutation,
+        *,
+        action,
+        kind,
+        record_id,
+        command,
+        expected_revision,
+        idempotency_key,
+        instant,
+        correlation,
+    ):
+        # Resolve the scope using Finance-owned facts, without opening a second
+        # transaction. The same-key replay still precedes lifecycle validation.
+        validate_command_concurrency(expected_revision, idempotency_key)
+
+        def write(tx):
+            prior = tx.commands.command_operation(idempotency_key)
+            item = getattr(tx, kind)(record_id) if prior is None else None
+            if item is None and prior is None:
+                raise FinanceNotFoundError("Financial record was not found.")
+            lease_id = item.lease_id if prior is None else prior["scope_id"]
+            identity = FinanceCommandIdentity(
+                FinanceScope("rent_ledger", lease_id),
+                action,
+                record_id,
+                expected_revision,
+                idempotency_key,
+                asdict(command),
+            )
+            return apply_finance_command(
+                tx.commands,
+                identity,
+                lambda context: mutation(tx),
+                instant=instant,
+                correlation_id=correlation,
+            )
+
+        return self.unit_of_work.write(write)
+
+    def _expectation_view(self, tx, item, projection=None, context_cache=None, *, instant=None):
         projection = projection or tx.expectation_projection([item.id])[item.id]
         summaries = projection["summaries"]
         context_cache = context_cache if context_cache is not None else {}
@@ -399,7 +586,7 @@ class FinanceService:
         received = sum(row["amount_minor"] for row in timeline)
         outstanding = item.expected_amount_minor - received
         settlement = "paid" if not outstanding else "partial" if received else "unpaid"
-        today = self.now().astimezone(ZoneInfo(context.time_zone)).date()
+        today = (instant or self.now()).astimezone(ZoneInfo(context.time_zone)).date()
         due = date.fromisoformat(item.due_on)
         if settlement == "paid":
             paid = 0
@@ -440,11 +627,11 @@ class FinanceService:
     def _receipt_view(self, item, allocations):
         return {**item.to_dict(), "allocations": allocations}
 
-    def _local_date(self, tx, item):
+    def _local_date(self, tx, item, *, instant=None):
         zone = tx.lease_time_zone(item.lease_id)
         if zone is None:
             raise FinanceConflictError("Expectation property is unavailable.")
-        return self.now().astimezone(ZoneInfo(zone)).date()
+        return (instant or self.now()).astimezone(ZoneInfo(zone)).date()
 
 
 def _schedule(s, c, now):
@@ -700,6 +887,15 @@ def _command_payload(c):
         c.notes,
         tuple(sorted((a.expectation_id, a.amount_minor) for a in c.allocations)),
     )
+
+
+def _receipt_command_request(command):
+    """Allocation ordering is not part of a receipt's semantic identity."""
+    payload = asdict(command)
+    payload["allocations"] = sorted(
+        payload["allocations"], key=lambda item: (item["expectation_id"], item["amount_minor"])
+    )
+    return payload
 
 
 def _receipt_payload(r, allocations):

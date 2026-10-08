@@ -235,5 +235,27 @@ class _Tx:
     def record_receipt(self, command, **kwargs):
         return self.owner.receipt_operations.record_receipt(self.connection, command, **kwargs)
 
+    def require_ledger_revision(self, lease_id, expected_revision):
+        from app.modules.finance.domain.models import FinanceConflictError
+
+        current = self.ledger_revision(lease_id)
+        if current != expected_revision:
+            raise FinanceConflictError(
+                "Rent ledger revision is stale.",
+                code="finance_revision_conflict",
+                details={
+                    "scopeKind": "rent_ledger",
+                    "scopeId": lease_id,
+                    "currentRevision": current,
+                },
+            )
+
+    def ledger_revision(self, lease_id):
+        from app.modules.finance.application.commands import FinanceScope
+
+        return self.owner.receipt_operations.command_transaction(self.connection).command_revision(
+            FinanceScope("rent_ledger", lease_id)
+        )
+
     def replacement_receipt(self, receipt_id):
         return self.owner.receipt_operations.replacement_receipt(self.connection, receipt_id)

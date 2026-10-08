@@ -38,7 +38,9 @@ class SQLiteTaskContextReader:
                 func.count().over(partition_by=TaskModel.related_entity_id).label("total"),
             )
             .where(
-                TaskModel.related_entity_type == entity_type, TaskModel.related_entity_id.in_(ids)
+                TaskModel.related_entity_type == entity_type,
+                TaskModel.related_entity_id.in_(ids),
+                TaskModel.deleted_at_utc.is_(None),
             )
             .subquery()
         )
@@ -105,10 +107,12 @@ class SQLiteTaskContextReader:
                 TaskModel.is_all_day,
                 TaskModel.related_entity_type,
                 TaskModel.related_entity_id,
+                TaskModel.deleted_at_utc,
             )
             .where(
                 TaskModel.related_entity_type == entity_type,
                 TaskModel.related_entity_id.in_(set(entity_ids)),
+                TaskModel.deleted_at_utc.is_(None),
             )
             .order_by(TaskModel.created_at_utc.desc(), TaskModel.id.desc())
         ).mappings()
@@ -125,6 +129,7 @@ class SQLiteTaskContextReader:
                 .where(
                     TaskModel.related_entity_type == entity_type,
                     TaskModel.status.in_(("open", "in_progress")),
+                    TaskModel.deleted_at_utc.is_(None),
                 )
             ).scalars()
         )
@@ -142,6 +147,7 @@ class SQLiteTaskContextReader:
                     TaskModel.related_entity_type == entity_type,
                     TaskModel.related_entity_id.in_(set(entity_ids)),
                     TaskModel.status.in_(("open", "in_progress")),
+                    TaskModel.deleted_at_utc.is_(None),
                 )
             ).scalars()
         )
@@ -158,4 +164,5 @@ def _summary(row: Any) -> dict[str, Any]:
         "is_all_day": bool(row["is_all_day"]),
         "related_entity_type": row["related_entity_type"],
         "related_entity_id": row["related_entity_id"],
+        "deleted_at_utc": row["deleted_at_utc"],
     }

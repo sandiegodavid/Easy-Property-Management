@@ -1,6 +1,6 @@
 """Current SQLite schema for COM-001."""
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.platform.sqlalchemy_models import LocalBase
@@ -26,7 +26,9 @@ class CommunicationModel(LocalBase):
     correction_reason: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
     __table_args__ = (
+        CheckConstraint("revision >= 1"),
         CheckConstraint("direction IN ('inbound','outbound','internal')"),
         CheckConstraint("channel IN ('phone','email','sms','in_person','letter','other')"),
         CheckConstraint("status IN ('draft','recorded','superseded')"),
@@ -34,7 +36,7 @@ class CommunicationModel(LocalBase):
         CheckConstraint("length(trim(body)) BETWEEN 1 AND 10000"),
         CheckConstraint("length(trim(occurred_timezone)) > 0"),
         CheckConstraint(
-            "(status = 'draft' AND recorded_at IS NULL AND supersedes_communication_id IS NULL AND superseded_by_communication_id IS NULL AND correction_reason IS NULL) OR (status = 'recorded' AND recorded_at IS NOT NULL AND superseded_by_communication_id IS NULL AND ((supersedes_communication_id IS NULL AND correction_reason IS NULL) OR (supersedes_communication_id IS NOT NULL AND correction_reason IS NOT NULL AND length(trim(correction_reason)) BETWEEN 1 AND 1000))) OR (status = 'superseded' AND recorded_at IS NOT NULL AND supersedes_communication_id IS NULL AND superseded_by_communication_id IS NOT NULL AND correction_reason IS NULL)"
+            "(status = 'draft' AND recorded_at IS NULL AND supersedes_communication_id IS NULL AND superseded_by_communication_id IS NULL AND correction_reason IS NULL) OR (status = 'recorded' AND recorded_at IS NOT NULL AND superseded_by_communication_id IS NULL AND ((supersedes_communication_id IS NULL AND correction_reason IS NULL) OR (supersedes_communication_id IS NOT NULL AND correction_reason IS NOT NULL AND length(trim(correction_reason)) BETWEEN 1 AND 1000))) OR (status = 'superseded' AND recorded_at IS NOT NULL AND superseded_by_communication_id IS NOT NULL AND ((supersedes_communication_id IS NULL AND correction_reason IS NULL) OR (supersedes_communication_id IS NOT NULL AND correction_reason IS NOT NULL AND length(trim(correction_reason)) BETWEEN 1 AND 1000)))"
         ),
         Index("communications_occurred", "occurred_at_utc", "id"),
         Index("communications_status_occurred", "status", "occurred_at_utc", "id"),
@@ -89,7 +91,18 @@ class CommunicationOperationModel(LocalBase):
     correlation_id: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     follow_up_task_id: Mapped[str | None] = mapped_column(ForeignKey("tasks.id"))
+    expected_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    result_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    outcome: Mapped[str] = mapped_column(String, nullable=False)
+    request_json: Mapped[str] = mapped_column(String, nullable=False)
+    response_json: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (
+        CheckConstraint("expected_revision >= 0 AND result_revision >= 1"),
+        CheckConstraint("outcome IN ('applied','no_op')"),
+        CheckConstraint("outcome = 'applied' OR action = 'patched'"),
+        CheckConstraint(
+            "(action = 'created' AND expected_revision = 0) OR (action != 'created' AND expected_revision >= 1)"
+        ),
         CheckConstraint("action IN ('created','recorded','corrected','patched')"),
         CheckConstraint("length(request_fingerprint) = 64"),
         Index("communication_operations_result", "result_communication_id"),

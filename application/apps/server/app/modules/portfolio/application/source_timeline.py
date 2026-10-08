@@ -71,6 +71,14 @@ class SourceTimelineChangeSet:
         return sha256(dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+class SourceTimelineOperationReader(Protocol):
+    """Opaque source results read through a caller-owned connection."""
+
+    def source_timeline_operation(
+        self, connection: Any, idempotency_key: str
+    ) -> Mapping[str, object] | None: ...
+
+
 class SourceTimelineStore(Protocol):
     """Persistence primitives; policy stays in :class:`PortfolioSourceTimelineService`."""
 

@@ -13,6 +13,7 @@ from app.modules.finance.domain.models import (
 )
 from app.modules.finance.infrastructure.sqlalchemy_models import (
     ExpenseCategoryModel,
+    ExpenseCategoryCommandOperationModel,
     ExpenseModel,
     ExpenseRefundModel,
     PrepaidCheckModel,
@@ -30,9 +31,20 @@ from app.modules.finance.infrastructure.sqlalchemy_models import (
     SecurityDepositSettlementModel,
     SecurityDepositSettlementReceiptModel,
 )
+from app.modules.finance.infrastructure.command_models import (
+    FinanceCommandOperationModel,
+    FinanceCommandRevisionModel,
+)
+from app.modules.finance.infrastructure.command_validation import validate_finance_commands
+from app.modules.finance.infrastructure.category_command_validation import (
+    validate_category_commands,
+    validate_category_triggers,
+)
 from app.platform.migration_errors import MigrationSchemaError
 
 MODELS = (
+    FinanceCommandRevisionModel,
+    FinanceCommandOperationModel,
     RentExpectationModel,
     RentExpectationTimelinessReviewModel,
     RentReceiptModel,
@@ -40,6 +52,7 @@ MODELS = (
     PrepaidCheckModel,
     PrepaidCheckOperationModel,
     ExpenseCategoryModel,
+    ExpenseCategoryCommandOperationModel,
     ExpenseModel,
     ExpenseRefundModel,
     SecurityDepositAccountModel,
@@ -73,6 +86,12 @@ def validate_finance_schema(connection):
                 )
             expected_type = str(expected.type).upper()
             actual_type = str(actual["type"]).upper()
+            if model in (ExpenseCategoryModel, ExpenseCategoryCommandOperationModel):
+                default = str(expected.server_default.arg) if expected.server_default else None
+                if actual["default"] != default or actual_type != expected_type:
+                    raise MigrationSchemaError(
+                        "Finance category column definitions are incompatible."
+                    )
             if ("INT" in expected_type and "INT" not in actual_type) or (
                 "INT" not in expected_type and not ("TEXT" in actual_type or "CHAR" in actual_type)
             ):
@@ -96,6 +115,10 @@ def validate_finance_schema(connection):
         }
         if actual_fks != expected_fks:
             raise MigrationSchemaError("Finance foreign keys are incompatible.")
+        if model in (ExpenseCategoryModel, ExpenseCategoryCommandOperationModel) and any(
+            item.get("options") for item in inspector.get_foreign_keys(table.name)
+        ):
+            raise MigrationSchemaError("Finance category foreign-key options are incompatible.")
         expected_indexes = {
             item.name: (
                 tuple(column.name for column in item.columns),
@@ -135,10 +158,13 @@ def validate_finance_schema(connection):
         }
         if actual_checks != expected_checks:
             raise MigrationSchemaError("Finance checks are incompatible.")
+    validate_category_triggers(connection)
 
 
 def validate_finance_data(connection):
     """Reject cross-row and cross-module FIN-008 corruption after restore/open."""
+    validate_finance_commands(connection)
+    validate_category_commands(connection)
     if connection.execute(text("PRAGMA foreign_key_check")).first() is not None:
         raise MigrationSchemaError("Workspace contains broken foreign-key references.")
     for receipt in connection.execute(
@@ -202,7 +228,7 @@ def validate_finance_data(connection):
                       AND allocation.amount_minor = item.amount_minor)
             ) LIMIT 1""",
         """SELECT 1 FROM prepaid_checks item
-            WHERE (item.status IN ('deposited', 'returned', 'replaced') AND NOT EXISTS (
+            WHERE ((item.status = 'deposited' OR (item.status IN ('returned', 'replaced') AND item.receipt_id IS NOT NULL)) AND NOT EXISTS (
                 SELECT 1 FROM prepaid_check_operations operation WHERE operation.target_prepaid_check_id = item.id AND operation.result_prepaid_check_id = item.id AND operation.action = 'deposit'
             )) OR (item.status IN ('returned', 'replaced') AND item.receipt_id IS NOT NULL AND NOT EXISTS (
                 SELECT 1 FROM prepaid_check_operations operation WHERE operation.target_prepaid_check_id = item.id AND operation.result_prepaid_check_id = item.id AND operation.action = 'return'

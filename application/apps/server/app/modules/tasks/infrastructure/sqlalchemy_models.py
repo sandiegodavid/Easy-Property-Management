@@ -1,10 +1,20 @@
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.platform.sqlalchemy_models import LocalBase
 
+MUTATION_INSERT_GUARD = """CREATE TRIGGER task_mutation_operations_no_replace
+BEFORE INSERT ON task_mutation_operations
+WHEN EXISTS (SELECT 1 FROM task_mutation_operations
+ WHERE id = NEW.id OR idempotency_key = NEW.idempotency_key
+ OR (task_id = NEW.task_id AND resulting_revision = NEW.resulting_revision
+     AND resulting_revision > expected_revision
+     AND NEW.resulting_revision > NEW.expected_revision))
+BEGIN SELECT RAISE(ABORT, 'task mutation operations are append-only'); END"""
+
 WAITING_CHECKS = (
     "typeof(revision) = 'integer' AND revision >= 1",
+    "deleted_at_utc IS NULL OR (status = 'open' AND waiting_for_kind IS NULL)",
     "waiting_for_kind IS NULL OR waiting_for_kind IN ('person','organization','event','other')",
     "(waiting_for_kind IS NULL AND waiting_for_label IS NULL AND waiting_set_at_utc IS NULL) OR (waiting_for_kind IS NOT NULL AND waiting_for_label IS NOT NULL AND waiting_set_at_utc IS NOT NULL AND waiting_cleared_at_utc IS NULL)",
     "waiting_for_label IS NULL OR (length(waiting_for_label) BETWEEN 1 AND 255 AND waiting_for_label = trim(waiting_for_label))",
@@ -15,6 +25,7 @@ WAITING_CHECKS = (
 
 class TaskModel(LocalBase):
     __tablename__ = "tasks"
+    deleted_at_utc: Mapped[str | None] = mapped_column(String)
     id: Mapped[str] = mapped_column(String, primary_key=True)
     title: Mapped[str] = mapped_column(String)
     notes: Mapped[str | None] = mapped_column(String)
@@ -91,3 +102,61 @@ class TaskWaitingOperationModel(LocalBase):
         Index("task_waiting_operations_task", "task_id", "created_at_utc"),
     )
     request_json: Mapped[str] = mapped_column(String)
+
+
+class TaskMutationOperationModel(LocalBase):
+    __tablename__ = "task_mutation_operations"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
+    action: Mapped[str] = mapped_column(String)
+    expected_revision: Mapped[int] = mapped_column(Integer)
+    resulting_revision: Mapped[int] = mapped_column(Integer)
+    request_fingerprint: Mapped[str] = mapped_column(String)
+    request_json: Mapped[str] = mapped_column(String)
+    result_json: Mapped[str] = mapped_column(String)
+    correlation_id: Mapped[str] = mapped_column(String)
+    created_at_utc: Mapped[str] = mapped_column(String)
+    __table_args__ = (
+        UniqueConstraint("idempotency_key"),
+        Index(
+            "task_mutations_effective_revision",
+            "task_id",
+            "resulting_revision",
+            unique=True,
+            sqlite_where=text("resulting_revision > expected_revision"),
+        ),
+        CheckConstraint(
+            "action IN ('start','reopen','complete','cancel','add_reminder','acknowledge','dismiss','edit','delete')"
+        ),
+        CheckConstraint("typeof(expected_revision) = 'integer' AND expected_revision >= 1"),
+        CheckConstraint(
+            "typeof(resulting_revision) = 'integer' AND resulting_revision IN (expected_revision, expected_revision + 1) AND (action = 'edit' OR resulting_revision = expected_revision + 1)"
+        ),
+        CheckConstraint(
+            "length(request_fingerprint) = 64 AND request_fingerprint NOT GLOB '*[^0-9a-f]*'"
+        ),
+        CheckConstraint("json_valid(request_json)"),
+        CheckConstraint("json_valid(result_json)"),
+    )
+
+
+class TaskCreationOperationModel(LocalBase):
+    __tablename__ = "task_creation_operations"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String)
+    task_id: Mapped[str] = mapped_column(ForeignKey("tasks.id"))
+    request_fingerprint: Mapped[str] = mapped_column(String)
+    request_json: Mapped[str] = mapped_column(String)
+    result_json: Mapped[str] = mapped_column(String)
+    correlation_id: Mapped[str] = mapped_column(String)
+    created_at_utc: Mapped[str] = mapped_column(String)
+    __table_args__ = (
+        UniqueConstraint("idempotency_key"),
+        UniqueConstraint("task_id"),
+        CheckConstraint(
+            "length(request_fingerprint) = 64 AND request_fingerprint NOT GLOB '*[^0-9a-f]*'"
+        ),
+        CheckConstraint("json_valid(request_json)"),
+        CheckConstraint("json_valid(result_json)"),
+    )

@@ -306,14 +306,21 @@ class OperatorService:
         )
 
     def prepare_attempt(
-        self, record_id, *, attempt_key, request_fingerprint, expected_revision, idempotency_key
+        self,
+        record_id,
+        *,
+        attempt_key,
+        request_fingerprint=None,
+        expected_revision,
+        idempotency_key,
     ):
         self.ready(True)
         identifier(record_id)
         identifier(attempt_key)
         concurrency(expected_revision, idempotency_key)
-        if not isinstance(request_fingerprint, str) or not re.fullmatch(
-            "[0-9a-f]{64}", request_fingerprint
+        if request_fingerprint is not None and (
+            not isinstance(request_fingerprint, str)
+            or not re.fullmatch("[0-9a-f]{64}", request_fingerprint)
         ):
             raise OperatorError("The owning command fingerprint must be lowercase SHA-256.")
         request = {
@@ -331,19 +338,29 @@ class OperatorService:
                 return replay
             current = require_recovery(tx, record_id)
             check_revision(current["revision"], expected_revision)
-            if current["status"] != "active" or current["form_key"] == "task.create":
+            if current["status"] != "active":
                 raise OperatorConflict("This form cannot begin a recoverable command attempt.")
             if (
                 current["expires_at"] <= instant.isoformat()
                 or tx.validate_recovery(current) != "available"
             ):
                 raise OperatorConflict("Refresh this form before starting an attempt.")
+            from app.modules.operator.application.command_forms import COMMAND_SCHEMAS
+
+            if current["form_key"] in COMMAND_SCHEMAS:
+                calculated = tx.attempt_fingerprint(current, attempt_key)
+                if request_fingerprint is not None and calculated != request_fingerprint:
+                    raise OperatorConflict("The attempted command does not match the saved form.")
+            else:
+                if request_fingerprint is None:
+                    raise OperatorError("The owning command fingerprint is required.")
+                calculated = request_fingerprint
             value = {
                 **current,
                 "revision": expected_revision + 1,
                 "status": "outcome_unknown",
                 "attempt_key": attempt_key,
-                "request_fingerprint": request_fingerprint,
+                "request_fingerprint": calculated,
             }
             tx.save_recovery(value)
             return record_operation(

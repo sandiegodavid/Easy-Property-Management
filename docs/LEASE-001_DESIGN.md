@@ -63,6 +63,23 @@ Executing a lease creates a `PORT-003` occupancy period with `source_kind = leas
 
 ## Data model
 
+### UI-001 command-safety contract
+
+UI-001 Slice 13 adds one shared `lease_revision` for Lease and child mutations and
+immutable `lease_command_operations` receipts, as approved on October 8, 2026.
+Every public mutation requires the expected Lease revision and idempotency key.
+Creation starts at expected revision zero; each effective mutation advances once,
+while unchanged edits retain revision and timestamp and record a no-change receipt.
+Timeline actions additionally require the independent Portfolio Space revision
+and retain their original source operation identity and atomic consumer result.
+Responses expose `leaseRevision` and required operation identity; timeline responses
+also expose the Space `revision`. Same-key retries return the original committed
+response before lifecycle checks. Read-only lookup is available by operation ID or
+Lease-scoped key. [The owning readiness contract](LEASE-001_COMMAND_READINESS.md)
+defines the receipt inventory, recovery routes, exact retained validation, audit
+privacy and focused portability/rollback proofs. OPS composition and UI controls
+are separate gates.
+
 All IDs are UUIDs. Timestamps are UTC text. Dates are local calendar dates for the property's stored US IANA time zone and never inferred from a timestamp. Monetary values use integer minor units. The US-only MVP supports exactly one currency: `USD`. The `currency_code` field remains explicit in source records for future extension, but it must always equal `USD`; multi-currency and ISO-registry support are deferred.
 
 ### `leases`
@@ -70,6 +87,7 @@ All IDs are UUIDs. Timestamps are UTC text. Dates are local calendar dates for t
 | Field | Rules and meaning |
 | --- | --- |
 | `id` | Stable UUID primary key. |
+| `lease_revision` | Required positive integer aggregate revision; creation is one, effective Lease/child mutations increment once, and unchanged edits do not increment. |
 | `space_id` | Required foreign key to an active `spaces` record. |
 | `lease_kind` | Required enum: `residential` or `commercial`. |
 | `status` | Required enum: `draft`, `executed`, `ended`, `terminated`, or `void`. |
