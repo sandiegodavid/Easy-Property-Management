@@ -1,8 +1,8 @@
 # UI-001 Operator Experience Design
 
-This is the authoritative product, interaction, and shared frontend technical specification for UI-001 and the coordinated DASH-001 experience. It defines the operator experience, the boundary between the web client and backend capabilities, and the readiness criteria for implementation. Domain API and schema contracts identified as prerequisites still require their owning backlog items; approval of this design does not mean those capabilities are implemented.
+This is the authoritative product, interaction, and frontend technical specification for UI-001 deliverables. It defines the operator experience, the boundary between the web client and backend capabilities, and the readiness criteria for implementation. Domain API and schema contracts identified as prerequisites still require their owning backlog items; approval of this design does not mean those capabilities are implemented.
 
-All product decisions D1–D47 are confirmed. Where this document describes a feature-specific workflow, the dedicated feature design is authoritative for backend policy and its UI handoff. UI-001 remains authoritative for the shared shell, navigation, interaction patterns, accessibility, client architecture, and end-to-end composition. [ARCHITECTURE.md](ARCHITECTURE.md) governs any concern this document does not settle.
+The UI-001 product decisions below are confirmed; original decision IDs are retained for traceability. Where this document describes a feature-specific workflow, the dedicated feature design is authoritative for backend policy and its UI handoff. UI-001 remains authoritative for the shared shell, navigation, interaction patterns, accessibility, client architecture, and core end-to-end workflows. [ARCHITECTURE.md](ARCHITECTURE.md) governs any concern this document does not settle.
 
 ## Goals
 
@@ -20,9 +20,6 @@ All product decisions D1–D47 are confirmed. Where this document describes a fe
 - **Information needing review:** Missing or uncertain information that limits what the app can establish; distinct from an overdue obligation.
 - **Property workspace:** A contextual view of a property's authoritative records and related work, not a separate copy of those records.
 - **Owner workspace:** A contextual view across an owner's related properties and records. It must distinguish property-level facts from amounts attributable to that owner.
-- **Legal matter:** A manually tracked preparation/process record linking a property/lease, participants, counsel, evidence, milestones, and next actions. It is not a legal eligibility determination.
-- **HOA violation notice:** A received allegation or required-action notice tracked through response and documented resolution. A recorded allegation is not an admitted violation, and completion of a linked repair does not establish association acceptance.
-- **Shared HOA-covered repair:** One Maintenance-owned case for a building system or common element affecting one or more managed condo units, with an association-responsibility assertion, affected scope, coordination history, and explicit physical verification. It is not a provider assignment or proof of accepted coverage.
 
 ## Cross-cutting domain invariants
 
@@ -62,10 +59,6 @@ Optimize keyboard use, readable tables, and evidence comparison. Keep narrower w
 #### D16: Establish a restrained visual hierarchy
 
 Use a slim left sidebar, warm off-white canvas, white content surfaces, dark readable text, and a restrained teal accent. Clear page titles, compact summaries, structured lists, recognition-oriented property cards, and comparison-oriented financial tables take precedence over decorative dashboard cards. Pair semantic status colors with text. Provide subtle transitions, visible keyboard focus, and reduced-motion support.
-
-#### D29: Use qualified reassurance on quiet days
-
-Home says No actions due today, retaining counts for waiting, upcoming, and information-review work plus the next appointment/deadline. An empty queue never establishes that everything is handled.
 
 #### D32: Distinguish unavailable data from empty results
 
@@ -108,11 +101,7 @@ Directory presentation is part of the confirmed design.
 
 Settings includes Appearance with Light and Dark controls. Apply changes immediately throughout the interface, including inline expansions, forms, tables, status labels, and dialogs. Persist the workspace preference and preserve work when switching; a non-sensitive local cache may prevent a startup color flash. Both themes retain readable contrast, text/icon status cues, and visible keyboard focus. Theme choice is presentation state and never modifies property records.
 
-### Home, attention, follow-up, and coverage
-
-#### D6: Separate active work, waiting, and upcoming work
-
-Home presents Needs action, Waiting, and Upcoming. Urgent issues and overdue obligations come first with an understandable priority reason. A manageable initial selection has explicit totals and View all; additional records are never silently omitted. Missing-information prompts are separate unless they block an important action. D19 defines attention ordering.
+### Follow-up, setup, and coverage
 
 #### D7: Waiting work has an explicit follow-up
 
@@ -124,10 +113,6 @@ Follow the [accepted TASK-002 contract](TASK-002_DESIGN.md#resolved-design-decis
 
 Each property has a compact Coverage section for applicable areas such as occupancy, lease, rent tracking, deposits, and maintenance review. Distinguish Recorded, Needs review, Missing required information, and Not applicable. Derive states from records where possible; ask the operator only for facts the app cannot establish and retain the time of manual review. Avoid completion percentages and checks implying unsupported ongoing monitoring. D20, D33, and the explicit rules below govern applicability and review prompts.
 
-#### D13: Group related attention without merging responsibilities
-
-Group explicitly related work into one issue entry, showing its next action and other outstanding steps. Preserve every underlying task and deadline. Unrelated owner concerns remain separate. Opening the entry explains the whole situation; completing a step never silently completes other work. Exact identity and grouping rules must respect source links.
-
 #### D14: Trigger reviews from meaningful changes or explicit review dates
 
 Do not expire every review at an arbitrary interval. A relevant lease change can prompt rent-tracking review; an unrelated repair must not invalidate lease review. Explain why review is needed and distinguish recorded information from operator-reviewed information. D33 defines the initial per-area triggers.
@@ -135,10 +120,6 @@ Do not expire every review at an arbitrary interval. A relevant lease change can
 #### D18: Plan the supporting backend work explicitly
 
 Include structured waiting/follow-up, coverage reviews, and draft recovery in the delivery plan. Keep dashboard aggregation under DASH-001 and shared workflow support under UI-001 or named prerequisites. Do not present nonfunctional controls. The delivery boundaries and technical implementation design below define the dependency breakdown.
-
-#### D19: Keep urgency, appointments, and unscheduled work visible
-
-Urgent issues lead the attention queue. Today's appointments appear in a compact time-ordered strip. Other actionable work is ordered by overdue deadline, due today, then undated work needing a decision, with the reason shown. Upcoming defaults to seven days and offers a longer-range option. Undated work remains visible as Needs scheduling.
 
 #### D20: Make property setup progressive and resumable
 
@@ -216,91 +197,19 @@ The normal guided sequence is Confirm move-out, Finish inspection, Compare condi
 
 Offer Record conversation from the related owner, property, lease, or issue with context prefilled. Capture participants, channel, time, and summary. An optional Create follow-up section belongs in the same flow. Present conversations and follow-ups together chronologically while preserving separate statuses. Labels such as Record email must accurately describe recording an external interaction rather than sending it.
 
-### Providers, legal matters, and HOA coordination
+### Provider workflow
 
-#### D37: Include manual eviction/legal-matter tracking in MVP
+#### D39 (UI-001): Keep Providers accessible in context
 
-The initial release includes manual case tracking, evidence, attorney links, and reminders. Automated legal-rule interpretation is deferred. Record preparation and process facts without inferring legal eligibility, compliance, deadlines, or successful eviction. Use linked source records and separately confirmed milestones; actual move-out, rent, maintenance, and expense records retain their own lifecycles. D39–D40 define placement and lifecycle; the delivery boundaries below identify supporting implementation work.
+Providers is a configurable permanent destination, visible by default and hideable through Settings. It remains accessible from Maintenance. The directory uses shared party identity and one provider profile across service categories, including Legal / Attorney with optional practice-area labels. Formal category selection requires VEND-CAT-001. A category does not imply an active assignment or engagement; legal-matter engagement workflows are deferred.
 
-Use a typed legal-matter record linked to the property, lease, relevant parties, and any attorney or law firm. Track preparation, source facts and evidence, notices and service evidence, court reference, milestones, attorney involvement, communications, tasks, costs, and outcome. Preserve original records and versioned evidence. Any recorded deadline includes its date, source, and confirmation state.
+### Built-in AI assistance
 
-Do not infer readiness to file, legal compliance, possession, move-out, collectible tenant charges, or automatic notice delivery. Legal expenses remain Finance-owned, and attorney engagement is distinct from a maintenance assignment. A reviewed export packet distinguishes selected evidence from internal or legal notes without treating an app privacy label as a determination of legal privilege.
+<a id="d46-choose-built-in-ai-and-connected-assistants-independently"></a>
 
-#### D38: Keep MVP HOA work narrow
+#### D46 (UI-001): Configure built-in AI independently
 
-MVP supports receipt and tracking of HOA violation notices and their resolution. It also supports the D47 case: coordination of an HOA-covered common-element repair affecting condo units. Retain association/sender identity, property, original notice and any cited rule/evidence, dates, next action, communications, linked remediation work, and closure evidence. For a shared repair, retain one Maintenance-owned case, affected managed units, responsibility/coverage evidence, every contact and follow-up, and physical verification. These narrow capabilities do not require a standing HOA rules or board-management module.
-
-A violation notice remains a separate matter from its remediation work. Preserve the original notice, cited rule reference, response, disputed state, claimed amounts, linked remediation, and closure evidence. A shared repair remains a Maintenance record even when it is linked to an HOA notice or coordinated through the association.
-
-Standing rules management, architectural approval requests, assessments, board administration, and other broader HOA capabilities are explicitly deferred until after MVP. Preserve records and links so these can be added later without recreating violation or coordination history. Notice-related claimed or disputed amounts and HOA repair estimates remain contextual facts; they do not automatically create paid expenses or tenant charges.
-
-#### D39: Place Providers, legal matters, and HOA work in context
-
-Providers is a configurable permanent destination, visible by default and hideable through Settings. It remains accessible contextually from Maintenance and legal matters. Legal matters live within Leasing and the related lease/property. HOA notices live within the affected property; HOA-covered shared repairs live in Maintenance and every affected managed-property workspace. Both contribute actionable records to Home and appear in the relevant owner workspace. Do not introduce separate permanent Legal and HOA destinations in MVP.
-
-The provider directory crosses module boundaries and uses shared party identity and one provider profile. Legal / Attorney is a service category with optional practice-area labels. An attorney engagement belongs to its legal matter rather than becoming a maintenance assignment. Formal category selection depends on VEND-CAT-001 being delivered before the consuming UI.
-
-Legal and HOA work reuse Tasks, Files, Communications, Finance, and shared identity through explicit supported links. Do not squeeze either domain into repair categories or owner-concern records. Dedicated feature designs own their domain contracts and backlog sequencing.
-
-#### D40: Separate legal-matter status from milestones
-
-Use Preparing, Active, On hold, and Closed as broad manually controlled case statuses. Notice delivery, attorney engagement, filings, hearings, agreements, and outcomes are dated milestones with evidence, not a mandatory linear wizard. Each open matter displays its next action and waiting context. Closing requires an outcome and reason and never automatically ends the lease, changes occupancy, or changes financial records.
-
-#### D41: Close HOA notices through an explicit outcome
-
-Use Received, Reviewing, Action underway, Response submitted, and Closed, with flexible transitions and a separate disputed flag. Completing a linked repair can make evidence submission the next action but never closes the notice automatically. Closing records an outcome and supporting record, such as association acceptance or withdrawal. Operator closure without HOA confirmation requires a reason and an explicit unconfirmed label. Claimed fines and actual payments remain separate.
-
-#### D47: Track one shared HOA-covered repair across affected condo units
-
-When a building system or common element affects multiple condominium units, create one shared maintenance case rather than duplicate independent issues. Select a primary property for navigation and link every affected managed property or unit. If the operator does not manage every affected unit, retain a bounded free-text affected-area note without creating fake portfolio records. The case appears once on Home and in every linked property workspace.
-
-The case records the affected scope (for example, Shared building water regulator), the association responsible for coordinating or covering the work, the basis and confidence of that responsibility, and the current next action. The HOA is a saved organization/contact, not a provider assignment. If the HOA hires a contractor, preserve the contractor as a separate provider and keep the HOA relationship visible. An operator-entered coverage assertion is not proof that the HOA has accepted responsibility, and an HOA estimate or claimed charge is not a paid property expense.
-
-Show an ordered coordination timeline containing every call, email, submitted document, response, promise, appointment, and operator note. Each communication remains a distinct source-linked record. Repeated follow-ups are separate Tasks with waiting-for context and dates; completing one follow-up may schedule the next but never resolves the maintenance case. Home shows the current actionable follow-up or Waiting state without repeating the case once per affected unit.
-
-The case remains open until the physical outcome is explicitly verified. HOA acknowledgement, approval, contractor assignment, or a promised replacement date are milestones rather than resolution. Closing requires an outcome such as regulator replaced and service verified, plus the verification date/source. Unresolved damage inside an individual unit can remain a separate linked issue after the shared asset is repaired.
-
-In the summary bar, show the shared asset, affected scope, current HOA state, and next follow-up, for example: Shared water regulator · 3 units affected · Waiting for Cascadia HOA · Follow up Sep 25. Expanding it shows responsibility/coverage evidence, affected managed units, the communication timeline, current commitment, and actions to record contact, schedule another follow-up, link a contractor, or verify completion.
-
-##### HOA follow-up presentation example
-
-Inside the expanded shared-repair case, show:
-
-> **Waiting for Cascadia HOA**
->
-> Three contacts recorded · Replacement date still unconfirmed
->
-> Next follow-up: September 25
->
-> **Prepare follow-up** · **Record response**
-
-Preparing the follow-up uses the selected correspondence and latest commitment to draft a message. Review shows the proposed content, supporting records, and intended changes together. Draft approval and message sending are distinct actions. Keep the next follow-up and unresolved repair visible until separately updated or physically verified; an assistant's work status never establishes repair completion.
-
-The actions sit inside the expanded content per D35. AI-assisted preparation follows D46's availability and review controls.
-
-### Spreadsheet intake
-
-#### D43: Import properties, owners, and providers from spreadsheets
-
-Importing properties, owners, and providers from Excel and Google Sheets is a focused initial-release intake capability, separate from DATA-001's broader later import of leases, balances, and operational history. D44 and D45 define source access and existing-record behavior.
-
-Provide Import in each of the three directories and Settings → Import data. The proposed shared flow is Select source, Choose sheet, Map columns, Validate and review, Confirm import, Results. Offer templates with explicit property/owner relationship keys; preview source rows, field mappings, relationships, and intended operations before committing. Import owner identities before dependent property relationships within a coordinated batch. Reuse shared party identity for owners/providers rather than silently duplicating people or organizations.
-
-Never invent required fields, infer ownership shares, or silently merge ambiguous identities. Unknown optional information stays unknown. Rows with missing required values or unresolved relationships cannot be committed as valid records. Use create/link/skip with explicit duplicate review per D45; general overwrite/update imports are outside MVP. Produce a row-level outcome report and recoverable import history; retries must not duplicate successfully imported records. Preview source values as a snapshot and avoid executing spreadsheet macros or treating formulas as app instructions.
-
-#### D44: Support Excel uploads and direct read-only Google Sheets import
-
-Support local Excel uploads and direct Google Sheets selection through read-only authorization. Let the operator select the spreadsheet and worksheet and review a captured source snapshot before import. Import exactly the reviewed snapshot; rereading changed source values requires a new preview. Do not require a sheet to be published publicly, modify the source sheet, or introduce ongoing synchronization in MVP. Source authorization does not create an application user account; credentials follow existing local secure-storage boundaries.
-
-#### D45: Create, link, or skip; never silently overwrite
-
-MVP imports create new valid records or explicitly link/skip existing ones after duplicate review. Linking means reusing the selected identity or record to satisfy a relationship; it does not authorize changing its existing fields or merging identities. Conflicting or ambiguous matches require resolution before affected rows can commit. Preserve property-to-owner relationships through explicit mapping. Present row-level validation errors and final import results, including created, linked, skipped, and failed outcomes. Retry only unfinished work without duplicating successful writes. General existing-record overwrite/update behavior is deferred.
-
-### AI assistance and connected assistants
-
-#### D46: Choose built-in AI and connected assistants independently
-
-Following [AI integration research](AI_INTEGRATION_RESEARCH.md), Settings → **AI assistance** has two independent cards, **Built-in AI** and **Connected assistants**, plus shared pause/review controls. Keep the default presentation brief; expand setup, scope, limits, and diagnostics under non-editable summary bars following D35. AI remains optional and never becomes a permanent navigation destination.
+Settings → **AI assistance** presents built-in model/governance controls. AI remains optional and never becomes a permanent navigation destination. Keep the default presentation brief; expand setup, scope, limits, and diagnostics beneath non-editable summary bars following D35. Model configuration does not connect a personal assistant.
 
 ##### Built-in AI
 
@@ -312,36 +221,25 @@ For on-device setup, show runtime/model, installation/download requirement, disk
 
 Show task availability separately: summaries may be Ready while transcription is Unsupported. Unsupported/unavailable actions explain why and preserve manual work. No silent fallback to cloud or another vendor. An explicit “Try with [provider]” must name the destination, preserve the original draft, and pass disclosure/governance again. Keep advanced per-action model overrides and token limits collapsed by default.
 
-##### Connected assistants
+##### Governance controls and review
 
-Explain: “Let an assistant bring relevant messages and propose work for your review.” List configured connections with the actual assistant/client name, connection method, allowed property/account scope, and status. Add connection offers validated local MCP clients and a separately verified file-exchange option for Muse Agent; unvalidated candidates show Setup not verified. More than one connection is permitted, but warn about overlapping scheduled mailbox coverage. Model-provider selection and assistant selection never change one another.
+**Pause all AI assistance** blocks new built-in model calls. In-flight work may already have disclosed data; late results must pass current governance before admission. Prior disclosures cannot be recalled. Preserve existing domain-supported drafts for explicit operator review, edit, dismissal, and source-checked approval.
 
-Setup follows choose client → inspect capabilities → select scope/data disclosure → test with synthetic evidence and a proposal → enable. No universal assistant API-key box. Grant creation is explicit; the assistant cannot approve its own scope. Show technical transport details only when needed for setup or troubleshooting. File exchange does not imply on-device inference. If the required file isolation is unavailable, offer manual import instead of pretending scoped automation is safe.
+Per-action controls expose enablement, daily caps, registered model limits, and a read-only redaction profile summary. Missing usage is Unknown. These controls never approve a draft.
 
-For scheduled discovery show last contact, last successful poll, requested versus acknowledged interval/configuration, failed/partial polling, and pending proposals. For interactive clients show last activity and connection-test status; do not invent a polling schedule. Use Not configured / Setup required / Ready / Paused / Needs attention / Revoked, with a reason and recovery action. “Connected” does not mean all messages have been found. Restoring a workspace displays historical connection details with Setup required.
+Supported drafts label **Generated with [provider/model] · On this device/Cloud service**. Source, exact bounded governed input, suggestion, and operator edits remain separate. Show stale-source conflicts and require source-checked approval through the owning domain contract. Governance controls do not enable an unsupported issue-review workflow.
 
-##### Shared control and review
-
-**Pause all AI assistance** stops new model calls, assistant reads/exports, and proposal admission. Explain that prior disclosures cannot be recalled and the assistant may still run its independent schedules. In-flight work may already have left the device; late results must pass current governance before admission. Existing drafts remain available for explicit operator review, edit, dismissal, and source-checked approval. Pausing one connection does not pause the other connections; revocation is a separate explicit action.
-
-Per-action controls expose enablement, daily caps, registered model limits, and a read-only redaction profile summary. Assistant proposals use admission/payload limits rather than invented token budgets. Missing usage is Unknown. None of these controls approve a draft.
-
-Show “Drafts awaiting review” with a count and link to the normal contextual queue. Each draft labels **Generated with [provider/model] · On this device/Cloud service** or **Proposed by [assistant connection] · [connection method]**. Distinguish verified connection identity from assistant-reported model details. Source, exact bounded governed input, AI suggestion, and operator edits remain separate. A file handoff must never be labeled local inference. Show stale evidence and paused/revoked source warnings; no generic approval bypasses a stale-source conflict.
-
-##### Acceptance scenarios
-
-- Choose local assistance with a Muse file connection, then change only the model to a hosted option; assistant scope stays unchanged and cloud disclosure is required.
-- Choose Meta Model API with a different compatible MCP assistant; neither credential grants the other connection's access.
-- Test unavailable runtime, missing credential, unsupported modality, rejected disclosure, provider change, and restore; show truthful recovery/manual options.
-- Pause globally and per connection; existing drafts stay visible, new requests are blocked at the appropriate boundary, and assistant scheduling is not falsely reported stopped.
-- Review proposals from two assistants with duplicate source evidence; show source provenance and duplicate handling without two official records.
-- Use full-summary-bar mouse/keyboard expansion in both themes; input controls inside expanded panels never toggle the parent.
-
-The comparison demo uses clearly labeled simulated setup, tests, and review states. It makes no external calls and stores no credentials; it does not prove that any listed integration is implemented.
+Validate unavailable runtime, missing credential, unsupported modality, rejected disclosure, provider changes, restore, global pause, and review of retained drafts. Keep truthful recovery/manual options. Verify full-summary-bar pointer/keyboard expansion in both themes without toggling when expanded input is used.
 
 ## Feature ownership and delivery readiness
 
 UI-001 composes completed capabilities; it does not move domain policy into the browser or make a prerequisite complete by presenting a control for it. The feature designs, backlog alignment, compatibility findings, and delivery boundaries below form one readiness model.
+
+### UI-001 delivery scope
+
+UI-001 delivers the React/Vite shell, generated contracts, bootstrap, navigation/appearance, core domain directories and workspaces, Tasks, coverage, search, drafts/recovery, and AI-GOV-001 built-in model/governance controls. It supplies Home layout/disclosure primitives and source-action adapters; DASH-001 owns the complete Home aggregation and its acceptance criteria. Until that contract is available, show an explicit unavailable/limited-preview state or hide unsupported queue sections.
+
+Legal/HOA workflows, Excel/Google Sheets intake, issue-proposal review, and connected-assistant setup are outside UI-001. Their retained decisions and implementation material are in [UI-002 preliminary design](UI-002_DESIGN_preliminary.md). Backend capability alone must not expose an undelivered UI workflow.
 
 ### Authoritative feature designs
 
@@ -351,21 +249,14 @@ This document remains the product interaction and shared web-client specificatio
 | --- | --- | --- |
 | TASK-002 | [Waiting and Follow-up](TASK-002_DESIGN.md) | Waiting context, follow-up scheduling, resurfacing, and source-deadline separation. |
 | OPS-001 | [Operator Support](OPS-001_DESIGN.md) | Bootstrap, preferences, contextual compositions, search, coverage provenance, and short-form recovery. |
-| LEGAL-001 | [Manual Legal Matters](LEGAL-001_DESIGN.md) | Manual case facts, links, milestones, deadlines, closure, and safety boundaries. |
-| HOA-001 | [HOA Notice and Shared-Repair Coordination](HOA-001_DESIGN.md) | Violation notices and HOA coordination for a Maintenance-owned shared repair. |
-| DATA-002 | [Spreadsheet Intake](DATA-002_DESIGN.md) | Excel snapshot intake, create/link/skip decisions, commits, and outcomes. |
-| DATA-003 | [Read-Only Google Sheets Intake](DATA-003_DESIGN.md) | Google Sheets authorization and immutable source snapshots. |
-| HOA-002 | [Deferred Association Management](HOA-002_DESIGN.md) | Post-MVP association documents/profiles and approval workflows. |
 
 UI-001 owns the React/Vite shell, generated-client boundary, route composition, shared presentation components, accessibility, and end-to-end operator interactions. It consumes the feature contracts above and must not recreate their policy in browser code.
 
 ### Backlog alignment
 
 - TASK-002 owns waiting/follow-up behavior; OPS-001 owns shared operator support. Tasks and provider UI are explicit UI-001 scope.
-- VEND-CAT-001, CONN-001, and FIN-003 move before UI-001 so provider categories, Sheets authorization, and dashboard totals have source capabilities.
-- LEGAL-001 and HOA-001 supply manual legal matters, violation-notice records, and narrow HOA-covered shared-repair coordination before their UI. HOA-002 retains broader HOA work after MVP.
-- DATA-002 and DATA-003 supply initial Excel and read-only Sheets intake. DATA-001 retains broader later migration/update scope.
-- UI-001 remains immediately before DASH-001. LEAD-002 adds showing integration after the showing workflow exists, removing the former forward dependency.
+- VEND-CAT-001 and FIN-003 supply provider categories and money source capabilities.
+- UI-001 remains immediately before DASH-001. Showing integration arrives with LEAD-002 after its workflow exists.
 
 ### Backend compatibility by backlog item
 
@@ -397,17 +288,6 @@ These findings follow the ownership, scope, and implementation sequence in [FEAT
 - Coverage applicability, review attestations, relevant-change triggers, and freshness provenance are not represented by a general updated timestamp. OPS-001 must persist or compose the explicit facts required by D8, D14, and D33.
 - Navigation/appearance preferences and bounded contextual search/read composition do not yet have a shared backend contract. OPS-001 owns those contracts; UI-001 consumes them.
 
-#### HOA-001 — HOA coordination
-
-- Maintenance currently supports a property-level issue without a space, while Communications and Tasks support repeated contact and follow-up. Those records can remain authoritative for repair work, contact history, and reminders.
-- The backend does not yet persist an HOA responsibility/coverage assertion, association evidence, multiple affected managed units, or the identity needed to present one shared case without duplicates. HOA-001 must add those links and physical-verification closure facts without treating the association as a provider or copying the underlying Maintenance issue.
-
-#### DASH-001 — Home aggregation
-
-- Exact source-linked grouping can compose existing records. Grouping across sources requires explicit stored relationships; DASH-001 must not infer case identity from similar text, addresses, or dates.
-- TASK-001's current summary implementation exposes overdue and due reminders, while its design also calls for today and next-seven-day buckets. Existing task date queries can contribute source data, but DASH-001 must reconcile the bounded Home contract and ordering with TASK-002 semantics.
-- UI-001 owns the Home shell, disclosure components, and source-action adapters. DASH-001 owns the complete Needs action, Waiting, Upcoming, appointments, coverage-gap, and source-backed total composition.
-
 #### OWNER-002 — Owner disbursements
 
 - Disbursement calculation, approval, and recording remain unavailable until OWNER-002. General property money activity must not be labeled as money due or paid to the owner.
@@ -422,16 +302,12 @@ These findings follow the ownership, scope, and implementation sequence in [FEAT
 
 ### Delivery boundaries
 
-The design is broader than the existing UI-001 backlog row. Preserve backend-first dependency ordering and explicit readiness:
+1. **Shared operator support:** Consume waiting/follow-up semantics, coverage review state, incomplete-form recovery, navigation preferences, and bounded search/read compositions. Reuse domain drafts and preserve their lifecycles.
+2. **Providers:** Deliver the directory with shared identity, service history, and VEND-CAT-001 categories. Category selection does not create an engagement in another domain.
+3. **Core workflows:** Deliver directories, contextual workspaces, inline expansions, substantial workflow pages, and agreed core domain interactions against validated contracts. Navigation controls alone do not establish backend readiness.
+4. **Home foundation:** Deliver shared queue/calendar presentation and source-action adapters. Do not implement DASH-001 aggregation in the browser or claim complete Home coverage.
 
-1. **Shared operator support:** Implement missing waiting/follow-up semantics, coverage review state, incomplete-form recovery, navigation preferences, and bounded search/read composition. Reuse existing domain drafts rather than replacing their lifecycle rules.
-2. **Providers:** Deliver the directory with shared identity and existing service history. Bring the required VEND-CAT-001 category support before its consuming UI, rather than presenting free-form service labels as an implemented category taxonomy. Legal/Attorney belongs in the category model; engagement belongs to the legal matter.
-3. **Legal matters:** Add the authoritative case record, provider engagement links, manual statuses/milestones, deadline provenance, evidence targets, typed communication/task links, and explicit closure outcome. Do not broaden rent-adjustment rules into an unreviewed eviction deadline engine.
-4. **HOA coordination:** Add the notice record, property/sender context, original notice and rule references, response/remediation links, disputed state, claimed-charge context, and evidenced or explicitly unconfirmed closure. Also add the narrow Maintenance-owned shared-repair links for association responsibility, affected managed units, repeated contact/follow-up, and physical verification. Defer standing rules, architectural approvals, assessments, and board administration.
-5. **UI-001 workflows:** Deliver directories, contextual workspaces, inline expansions, substantial workflow pages, and the agreed domain interactions using those validated capabilities. Navigation changes alone do not establish backend feature readiness.
-6. **DASH-001 aggregation:** Compose Needs action, Waiting, Upcoming, appointments, and information review from authoritative sources. Include legal/HOA next actions and retain existing domain-specific semantics. Reconcile the current showing dependency explicitly; never imply showings exist before LEAD-002 is available.
-
-Reports, owner balances/statements, automated sending, remote access, and AI/legal-rule interpretation retain their separately agreed scope. The backlog enumerates the new prerequisites and this document supplies acceptance criteria; it must not mark existing domain items complete merely because a design or sample screen exists.
+Reports, owner balances/statements, automated sending, remote access, and legal-rule interpretation retain their separate scope. UI-001 does not mark a domain feature complete merely because a design or sample screen exists.
 
 ## Technical implementation design
 
@@ -444,7 +320,7 @@ This section translates the confirmed decisions into an implementation contract.
 - Reuse the established [implementation quality checks](CODE_QUALITY.md): TypeScript-aware ESLint recommended rules, React hooks and JSX accessibility rules, Prettier, and strict compiler validation. Run the root npm scripts against handwritten frontend code and include generated contracts in type checking. Any package-specific TypeScript configuration must retain the shared strict baseline and complete root check coverage.
 - Use React Router for route and nested-workspace composition, TanStack Query for server state, and React Hook Form for form lifecycle. These libraries manage presentation concerns only; FastAPI/Pydantic and the owning domain service remain authoritative for validation and transitions.
 - Generate TypeScript API types and a typed browser client from FastAPI OpenAPI into `application/packages/contracts`. Generated files are replaced by generation and are never hand-edited. Handwritten feature code must not recreate request or response interfaces already present in OpenAPI.
-- Keep reusable, domain-neutral presentational components in `application/packages/ui`. A component that knows about leases, deposits, HOA notices, or another domain belongs in the corresponding `apps/web/src/features` folder.
+- Keep reusable, domain-neutral presentational components in `application/packages/ui`. A component that knows about leases, deposits, maintenance issues, or another domain belongs in the corresponding `apps/web/src/features` folder.
 - Do not add a sign-in screen or browser session model for the local single-operator MVP. Access to the local process and workspace follows the local security boundary in the architecture; future SaaS authentication is a separate change.
 - Use relative `/api/...` requests. Vite proxies `/api` to the local FastAPI process during development. A production build is served on the same local origin as FastAPI, so the UI does not require permissive CORS or an operator-entered API URL.
 - The production bootstrap must reserve `/api`, `/health`, `/docs`, `/redoc`, and `/openapi.json` for FastAPI. Apply the SPA fallback only to known browser routes requested with GET/HEAD and an HTML Accept header; missing API routes and assets must retain their real errors. A packaged build must include the compiled static assets; the live workspace remains external to both source and built assets.
@@ -473,9 +349,6 @@ application/
 │       │   ├── maintenance/
 │       │   ├── providers/
 │       │   ├── communications/
-│       │   ├── legal/
-│       │   ├── hoa/
-│       │   ├── imports/
 │       │   ├── ai-review/
 │       │   └── settings/
 │       └── shared/                      # transport, formatting, generic hooks and UI adapters
@@ -516,11 +389,11 @@ Prefix all query keys with `[workspaceId, runtimeGeneration]`, followed by featu
 
 ### Route model
 
-Routes express record identity, durable workspace sections, and shareable filters. Temporary presentation state, such as one open disclosure row, stays outside the route.
+Routes express record identity, durable workspace sections, and shareable filters. Register only supported UI-001 workflows. Temporary presentation state, such as one open disclosure row, stays outside the route.
 
 | Route | Purpose |
 | --- | --- |
-| `/home` | Portfolio attention, waiting, upcoming, appointments, and information review. `/` redirects here. |
+| `/home` | Home shell and reusable attention/calendar presentation; DASH-001 supplies aggregate data. `/` redirects here. |
 | `/properties` | Property directory; search, archived state, and applicable filters use query parameters. |
 | `/properties/:propertyId/:section?` | Property workspace; default section is `overview`, followed by `units`, `leases`, `money`, `maintenance`, `conversations`, `documents`, and `details` as capabilities permit. |
 | `/owners` | Owner directory with explicit client-owner/local-operator distinctions where relevant. |
@@ -533,13 +406,10 @@ Routes express record identity, durable workspace sections, and shareable filter
 | `/money/deposit-settlements/:settlementId` | Substantial settlement draft, approval, and refund workflow. |
 | `/money/:view?` | Portfolio money views with explicit `propertyId`, `ownerId`, date, and status filters. |
 | `/maintenance` | Issue directory, appointments, assignments, and contextual access to Providers. |
-| `/maintenance/issues/:issueId/:section?` | Issue workflow, work journal, evidence, related records, and shared HOA repair context. |
+| `/maintenance/issues/:issueId/:section?` | Issue workflow, work journal, evidence, and supported related records. |
 | `/providers` and `/providers/:providerId/:section?` | Provider directory and provider workspace. |
-| `/legal/:matterId` | Manual legal-matter workflow from D37–D40. Legal matters are contextual links rather than a default permanent destination. |
-| `/hoa/notices/:noticeId` | HOA violation-notice workflow and explicit closure. |
-| `/imports/:importId/review` | Frozen spreadsheet snapshot, mapping, duplicate decisions, validation, and commit result. |
-| `/ai/review/:draftId` | Review of a governed AI or connected-assistant proposal before any official write. |
-| `/settings/:section?` | Appearance, navigation, workspace, imports, built-in AI, connected assistants, and other operator preferences. |
+| `/ai/review/:draftId` | Review of a domain-supported built-in AI draft before any official write; register only implemented handlers. |
+| `/settings/:section?` | Appearance, navigation, workspace, built-in AI, and other supported operator preferences. |
 | `/search` | Full search results. `q` and `includeArchived` are query parameters so the result can be restored after detail navigation. |
 
 Use actual nested routes for workspace tabs so refresh, browser history, and deep links retain context. Main-navigation links always use portfolio routes without inherited property or owner filters. Contextual cross-module links add visible query parameters, such as `/money?propertyId=...`; filter chips expose a one-step removal action.
@@ -550,7 +420,7 @@ Declare allowed child sections explicitly rather than accepting arbitrary `:sect
 
 ### Navigation and capability registry
 
-Define one typed destination registry containing each destination's stable ID, label, route, icon token, default position, visibility rule, and required backend capability. `PrimaryNav`, **More**, Settings customization, and route guards all consume this registry. Do not maintain separate lists that can drift.
+The registry must also track UI delivery eligibility independently of backend capability; an installed backend alone must not expose a workflow outside UI-001. Define one typed destination registry containing each destination's stable ID, label, route, icon token, default position, visibility rule, and required backend capability. `PrimaryNav`, **More**, Settings customization, and route guards all consume this registry. Do not maintain separate lists that can drift.
 
 Home and Settings are fixed. Other destinations can be shown, hidden, and reordered according to D17. A hidden destination remains in **More**, search results, contextual links, and Home obligations. If a capability is absent because its backend prerequisite is not installed, omit the destination and its creation actions; do not present a disabled imitation of an unimplemented feature. Direct navigation to a known but unavailable route presents a capability explanation and a safe return link.
 
@@ -570,7 +440,7 @@ Do not store domain records, evidence, drafts, message bodies, money data, or AI
 
 Mutations use the response as the new authoritative record and invalidate only affected query families: the edited record, its directory/workspace projections, relevant related records, and Home summary. Avoid invalidating the entire cache. Domain mutations are pessimistic: keep the current record visible with a saving state, and show committed values only after success. A reversible presentation preference may update optimistically and roll back on failure.
 
-Use Query as the single remote-data cache: route loaders may prefetch through it, but must not retain a second copy. Background refresh never resets dirty form values; retain the form's base revision and show a source-changed notice. Cancel obsolete search requests and debounce typing by 250 ms. Initially refresh active attention/connection regions every 60 seconds while visible and on window focus; stop polling when hidden or workspace-gated. Display server `asOf` times and refresh on property-local date boundaries. These checks do not constitute a background notification service.
+Use Query as the single remote-data cache: route loaders may prefetch through it, but must not retain a second copy. Background refresh never resets dirty form values; retain the form's base revision and show a source-changed notice. Cancel obsolete search requests and debounce typing by 250 ms. Initially refresh active attention/model-status regions every 60 seconds while visible and on window focus; stop polling when hidden or workspace-gated. Display server `asOf` times and refresh on property-local date boundaries. These checks do not constitute a background notification service.
 
 ### API contracts and read models
 
@@ -582,7 +452,6 @@ Existing domain endpoints remain the source for focused create, update, and life
 | Navigation and appearance preferences | OPS-001 | Versioned read/update with allowed destination IDs and server validation. |
 | Property directory and property overview | OPS-001 composition over PORT-001/002/003 and source domains; UI-001 presentation | Cursor pagination, counts that match filters, recognition fields, applicable coverage states, and availability metadata. |
 | Owner directory and cross-property overview | OPS-001 composition over PORT-001, OWNER-003/004, and source domains; UI-001 presentation | Bounded related-property, concern, conversation, lease, maintenance, and available money summaries with provenance. OWNER-001/002/005 are later accounting extensions, not prerequisites for the owner directory. |
-| Home composition | DASH-001 | Separate action, waiting, upcoming, appointment, and information-review collections; total counts; priority reason; source identity; next action; and pagination/view-all links. |
 | Global search | OPS-001 | Bounded grouped results, source type/ID, display label, context, archived marker, destination route, and a stable cursor. |
 | Incomplete-form recovery | OPS-001 | Typed form/workflow key, related record identity, schema version, revision, timestamps, payload, discard, and conflict-safe save. |
 | Coverage review facts | OPS-001 using source-domain facts | Area, applicability, derived state, cause, evidence/source revision, last manual review, trigger, and resolution route/action. |
@@ -628,7 +497,7 @@ Handle failures consistently:
 - lost connection or transient read failure: retain last successful data with an **Out of date** label and retry action. Never convert failure to zero, none, complete, or healthy.
 - partial command success: present the committed result once and isolate the failed step, as in D21. Retry only that step with the same operation identity when supported.
 
-Create/commit commands that could duplicate money, imports, communications, or other official records require an idempotency key accepted by the backend. Generate it once per operator attempt and reuse it only for a byte-equivalent retry. Disable the submit control while the request is in flight, but do not rely on the disabled control as duplicate protection.
+Create/commit commands that could duplicate money, communications, or other official records require an idempotency key accepted by the backend. Generate it once per operator attempt and reuse it only for a byte-equivalent retry. Disable the submit control while the request is in flight, but do not rely on the disabled control as duplicate protection.
 
 For each consequential command, implement `editing → submitting → committed | rejected | outcome_unknown`. A disconnected response after submit is `outcome_unknown`, not proof of failure. Persist the attempt key and request fingerprint with the workspace draft/recovery record before dispatch; resolve through the owning operation receipt or replay the identical request with the same key. Never create a fresh attempt until the earlier result is known. Existing domain operation IDs take precedence over introducing a parallel mechanism. Document receipt lookup or replay semantics, retention, and key/payload mismatch rejection in that domain's OpenAPI contract before enabling retries.
 
@@ -662,10 +531,10 @@ Each source type registers a secondary-action adapter with a stable source key, 
 - Run lightweight client checks needed for immediate usability, such as required presence and obvious formatting. Submit to the server for authoritative validation and render its field errors without translating domain rules into browser code.
 - Save substantial drafts on explicit save and after a short idle interval when the domain draft contract supports it. Serialize saves by revision; do not allow an older response to replace a newer draft.
 - Warn before abandoning unsaved short-form input. A successful draft save removes the warning. A failed save does not.
-- Require a confirmation step for consequential lifecycle actions such as void, archive with impact, lease execution/termination, settlement approval, import commit, and explicit closure. The confirmation names the record and irreversible consequence; it does not repeat routine form fields.
+- Require a confirmation step for consequential lifecycle actions such as void, archive with impact, lease execution/termination, settlement approval, and explicit source-record closure. The confirmation names the record and irreversible consequence; it does not repeat routine form fields.
 - After a successful command, update the authoritative result in place, announce it, and expose the next relevant step. Do not navigate away automatically when the operator needs to inspect the result or retry a secondary operation.
 - Follow FILE-001's actual upload contract: `POST /api/files` already accepts optional `entity_type`, `entity_id`, and `purpose` to upload with target context. Do not assume a separate generic link-creation API exists. Where the domain requires staged evidence, implement that workflow's staging/link contract explicitly. After an official record commits, retry only its failed attachment operation and retain its record ID; a lost upload response requires operation reconciliation before re-uploading.
-- AI and connected-assistant proposals always enter their review route with evidence, provenance, proposed fields, and an explicit operator commit. The provider or transport does not change the review component's trust boundary.
+- Domain-supported built-in AI drafts enter their review route with evidence, provenance, proposed fields, and an explicit operator commit. Provider selection does not change the review component's trust boundary.
 
 Internal navigation waits for acknowledged draft persistence or an explicit discard choice. Browser unload prompts are best-effort; asynchronous saves during unload are not a durability guarantee. Track dirty, saving, saved, failed, and conflicted states separately. A commit waits for pending autosave and checks the acknowledged revision. Recovery records exclude secrets and file bytes; retain server file IDs and clearly identify files that need reselection after restart.
 
@@ -718,23 +587,23 @@ Required automated coverage is intentionally risk-based:
 3. Directory tests preserve URL filters, archived state, and return context and distinguish empty, unavailable, and stale responses.
 4. Mutation tests cover validation, conflict, workspace-busy/unavailable, lost-response/idempotent retry, and the partial-success pattern from D21.
 5. Draft tests cover serialized autosave, failure, restart recovery, explicit discard, and exclusion from official summaries.
-6. Money, owner-report, settlement, import, AI-review, legal, and HOA workflows receive end-to-end tests for their consequential commit boundaries and non-duplication rules.
+6. Money, owner-report, settlement, and supported built-in AI-review workflows receive end-to-end tests for their consequential commit boundaries and non-duplication rules.
 7. Light/dark, reduced motion, 200% zoom, keyboard-only operation, and the three layout ranges receive focused visual/accessibility checks.
 8. OpenAPI generation runs in verification and fails on an uncommitted generated diff. A browser smoke test starts FastAPI with a temporary workspace and uses only the generated client transport.
 9. Switching/restoring workspaces cannot expose stale records or accept an old in-flight response. Two-tab edits produce a recoverable revision conflict. A committed write with a lost response resolves once through its original operation key.
-10. Mixed-success composite reads, sparse cursor pages, invalid deep links, missing assets/API routes, and connector-only failures preserve accurate screen states. Multipart requests from an unrelated origin are rejected.
+10. Mixed-success composite reads, sparse cursor pages, invalid deep links, missing assets/API routes, and model-configuration failures preserve accurate screen states. Multipart requests from an unrelated origin are rejected.
 
 Map the numbered design-validation scenarios below to Playwright or integration cases as their backend prerequisites land. A scenario may remain explicitly blocked by its backlog dependency; it may not be marked passing against mocked behavior alone.
 
 ### Implementation sequence and readiness gates
 
-1. **Backend readiness before UI-001:** complete the backlog-ordered TASK-002, OPS-001, legal/HOA/import/AI prerequisites and typed domain contracts, including recovery and bounded projections. OPS-001 composes owner views from existing sources without waiting for later owner accounting. Record any remaining command revision/idempotency gaps before enabling their workflows; build no React during this phase.
+1. **Backend readiness before UI-001:** complete the backlog-ordered TASK-002, OPS-001, AI-GOV-001, and core domain prerequisites and typed domain contracts, including recovery and bounded projections. OPS-001 composes owner views from existing sources without waiting for later owner accounting. Record any remaining command revision/idempotency gaps before enabling their workflows; build no React during this phase.
 2. **Scaffold and contract at UI-001:** extend the existing Node tooling workspace with the Vite app, generated contract package, relative API transport, FastAPI static/SPA delivery, and a temporary-workspace browser smoke test; verify lint, formatting, and strict type checking against actual sources.
 3. **Foundation:** implement bootstrap/workspace gate, theme, destination registry, shell, routing, accessibility primitives, async states, error normalization, disclosure components, and directory/workspace layouts.
 4. **Domain and operator workflows:** connect Properties, Owners, Leasing, Money, Maintenance, Providers, Tasks, communications, files, history, preferences, search, draft recovery, coverage, and waiting/follow-up to their completed contracts.
-5. **Review workflows:** connect legal matters, HOA notices/shared repairs, spreadsheet import, and governed AI/assistant review with revision-safe commits and failure recovery.
-6. **Home aggregation:** connect the shared queue/calendar components to DASH-001 and validate grouping, totals, ordering, and all-source expansion behavior.
-7. **Hardening:** complete the risk-based browser suite, accessibility review, failure/restart testing, theme/narrow-window review, and production packaging verification.
+5. **Core AI controls:** connect AI-GOV-001 built-in model/governance controls with revision-safe commits and failure recovery. Enable only domain-supported built-in AI handlers.
+6. **Home foundation:** implement shared queue/calendar components and core source-action adapters; verify their rendering/disclosure behavior against contract fixtures. Complete Home aggregation and real aggregate acceptance remain DASH-001 deliverables.
+7. **UI-001 hardening:** complete the risk-based browser suite, accessibility review, failure/restart testing, theme/narrow-window review, and production packaging verification.
 
 A route is ready only when its owning backend capability exists, generated types are current, initial/empty/unavailable/stale states are implemented, keyboard and narrow-layout behavior passes, and at least one real temporary-workspace integration test covers its critical read and write path. Static demo data may be used for visual development but cannot satisfy this gate.
 
@@ -744,44 +613,51 @@ UI-001 is complete when:
 
 - the React/Vite application ships through the local FastAPI runtime and uses the generated OpenAPI contract for all domain access;
 - frontend lint, formatting, and strict type checks pass against actual implementation sources and generated contracts meet reproducible-generation verification;
-- supported permanent destinations, directories, record workspaces, settings, global search, full-bar disclosures, drafts, errors, and contextual navigation meet the decisions above;
+- supported permanent destinations, directories, record workspaces, settings, global search, full-bar disclosures, drafts, errors, and contextual navigation meet this UI-001 specification;
 - every visible action either works against an implemented capability or is absent with an accurate capability explanation;
 - the browser contains no duplicated domain policy, authoritative totals, direct workspace-file access, or sensitive persisted state;
 - light and dark themes, keyboard operation, supported responsive layouts, and unavailable/busy workspace behavior pass verification;
-- UI-001-owned validation scenarios pass, while DASH-001 and later-domain scenarios remain traceably gated until their owning backlog items are delivered.
+- UI-001 validation scenarios pass; unsupported later capabilities remain accurately gated and are not UI-001 acceptance requirements.
 
 ## Design validation scenarios
 
-These scenarios derive from confirmed decisions and must be included in implementation acceptance:
+These UI-001 scenarios retain their original numbers for traceability. Gaps in numbering identify scenarios moved to the follow-up design. Home aggregation acceptance belongs to DASH-001; UI-001 validates reusable presentation and core source actions independently.
 
-1. Hide Owners and reorder navigation. Owner-related unresolved work remains on Home; Owners remains reachable under More and through contextual links. Restore defaults restores navigation without modifying domain records.
+1. Hide Owners and reorder navigation. Owners remains reachable under More and through contextual links. Restore defaults restores navigation without modifying domain records.
+
 2. Open an owner, then a related property, then Money through main navigation. Contextual tabs retain scope; main navigation returns to the full portfolio. Explicit cross-module drill-down filters are visible and removable.
+
 3. Defer an urgent repair reminder. The reminder changes, but urgency, original deadlines, and unresolved source state remain visible.
-4. A repair has an appointment, owner conversation, and follow-up task. Group only explicitly related records. Completing one leaves the others intact and explains unresolved work.
-5. No actions are due, but information is missing and future work exists. Home gives qualified reassurance and retains both categories; it never asserts complete property health.
+
 6. A lease is executed but rent synchronization is unfinished. Occupancy follows valid lease rules; rent setup remains visibly outstanding with a resumable next action.
+
 7. Rent is recorded, but evidence upload fails. The payment remains recorded once, with a targeted attachment retry and no invitation to duplicate it.
+
 8. An owner report matches an existing receipt. Verification adopts the compatible receipt or requires correction; it never counts the report as additional income.
+
 9. Close a substantial draft and reopen it. Restore saved input, show draft status, and exclude it from official counts and balances.
+
 10. Maintenance or finance data fails to load. Present unavailable/outdated information and recovery, never an empty successful result or zero balance.
+
 11. Record move-out, finalize inspection, and prepare settlement. Findings do not become deductions automatically; approval and actual refund recording remain separate.
+
 12. Search for a record in a hidden destination and return from detail to results. Retain query/context and respect archived-record filtering.
+
 13. Correct a financial record. Preserve original history, reason, lineage, and current effective amounts.
+
 14. Use keyboard navigation and narrow desktop/tablet widths. Preserve labeled actions, visible focus, readable tables, and accessible evidence comparison without overlapping controls.
-15. Click the text, status, chevron, or unused space within an item's top summary bar in each Home queue, the calendar strip, and record tabs. Each toggles the same section immediately beneath the item; a second click collapses it. Enter and Space work on the focused bar. Verify no inputs, nested links, or separate action buttons occur inside the bar. Editing fields or invoking actions in the expanded section does not toggle the bar, alter neighboring expansions, or discard unfinished input.
+
+15. Using the shared Home queue/calendar components with contract fixtures and live core record tabs, click the text, status, chevron, or unused space within an item's top summary bar. Each toggles the same section immediately beneath the item; a second click collapses it. Enter and Space work on the focused bar. Verify no inputs, nested links, or separate action buttons occur inside the bar. Editing fields or invoking actions in the expanded section does not toggle the bar, alter neighboring expansions, or discard unfinished input.
+
 16. Browse multiple properties/owners, filter/search, open an individual workspace, switch to another record, and return to the directory. Preserve directory criteria and show the correct selected record's context throughout.
-17. Open an attorney through Providers and link their engagement to a legal matter. Preserve shared identity without creating a maintenance assignment. Hide Providers from navigation without losing the engagement link or related Home actions.
-18. Record milestones out of a default sequence, put a legal matter on hold, then close with a recorded outcome. Preserve milestone history, next-action/deadline facts, and unchanged lease/occupancy/financial records unless separately acted upon.
-19. Complete an HOA-linked repair and submit evidence. Keep the notice open until an explicit closure outcome; distinguish association-confirmed closure from operator closure without confirmation. Preserve claimed fines independently of actual paid expenses.
+
 20. Switch Light/Dark in Settings while a form/inline section is open. Preserve input, focus, expansion, and record state; retain the appearance preference across restarts.
+
 21. Explain inline toggling visibly in every relevant view and keep the chevron, aria-expanded, and actual section visibility consistent on repeated clicks and keyboard use.
-22. Preview a spreadsheet containing new records, likely duplicate shared identities, and properties referring to owners. Require explicit relationship/duplicate resolution, report invalid rows accurately, and verify retries do not duplicate imported records. Link/skip leaves existing fields unchanged.
-23. Record a shared water-regulator failure affecting multiple condo units and covered by the HOA. Show one case on Home and in every affected managed-property workspace. Record multiple unanswered and answered contacts, each with its own date and source, and reschedule follow-up without rewriting prior attempts. HOA acknowledgement, contractor assignment, and a promised replacement date leave the case open. Close only after explicit replacement/service verification; keep any unit-specific residual damage open separately.
-24. Preview a read-only Google Sheets snapshot, then change the source externally before confirming the import. Import only the reviewed snapshot or require a refreshed preview; never silently substitute changed values. No source-sheet writes or ongoing synchronization occur.
 
 ## Screen review
 
-The [operator experience visual reference](../demo/operator-experience.html) is a local, fictional-data prototype for reviewing Home, owner/property directories and workspaces, inline actions, navigation customization, and the overall visual direction. Its AI Settings demonstrates D46 with simulated provider/assistant states and full-bar disclosures. The prototype does not write application records and is supplementary only: it does not define API contracts, domain behavior, feature readiness, or acceptance criteria. It predates some final Providers, legal, HOA, and import screens; this document governs every workflow, including those not shown in the prototype.
+The [operator experience visual reference](../demo/operator-experience.html) is a local, fictional-data prototype for reviewing directories, workspaces, inline actions, navigation customization, and visual direction. It also illustrates future Home and integration experiences outside UI-001. The prototype does not write application records, prove integration readiness, or define API/domain contracts or acceptance criteria. This document governs UI-001 delivery.
 
 ## Sources
 
@@ -790,7 +666,3 @@ The [operator experience visual reference](../demo/operator-experience.html) is 
 - [Architecture](ARCHITECTURE.md)
 - [Product decisions](DECISIONS.md)
 - [README](../README.md)
-- [California Courts eviction overview](https://selfhelp.courts.ca.gov/eviction), used to distinguish notices from court cases when structuring manual legal matters.
-- [California DRE common-interest-development guidance](https://www.dre.ca.gov/Newsroom/DRE_Updates/2026_08_21_Common_Interest_Dev.html), used to distinguish governing instruments, assessments, restrictions, and unresolved violation notices when bounding HOA scope.
-
-The California sources are jurisdiction-specific examples informing record structure, not universal procedural templates or legal rules for the app.

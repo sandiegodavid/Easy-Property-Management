@@ -32,7 +32,7 @@ INGEST-002 provides:
 - atomic coordination across Maintenance, AI Governance, Intake, and Audit;
 - bounded issue lookup for manual target selection when optional matching is unavailable;
 - retained-data, exact-schema, backup/restore, and audit validation; and
-- the feature-specific contract consumed later by UI-001, MCP-001, ISSUE-AI-001/002, VOICE-AI-001, and DASH-003.
+- the feature-specific contract consumed later by UI-002, MCP-001, ISSUE-AI-001/002, VOICE-AI-001, and DASH-003.
 
 INGEST-002 does not provide:
 
@@ -59,7 +59,7 @@ An operator may still record an issue directly through Maintenance when no retai
 | ISSUE-AI-001 | Optional producer of the issue proposal payload from retained evidence. It is not required for operator review of an external proposal. |
 | ISSUE-AI-002 | Optional provider of property, space, party, and possible-existing-issue candidates. Its absence must leave manual lookup usable. |
 | MCP-001 | Later authenticates and admits external proposals through the same registered payload and review contract. It never approves its own proposal. |
-| UI-001 | Delivers the comparison and decision workflow after the backend contracts are complete. |
+| UI-002 | Delivers the comparison and decision workflow after the backend contracts are complete. |
 | DASH-003 | Later composes unprocessed sources, live reviews, stale proposals, and ingestion failures through bounded read contracts. |
 
 This follows the modular-monolith rules in `ARCHITECTURE.md`: source modules expose neutral application protocols, the consuming domain owns policy, coordinated writes use one caller-owned immediate transaction, and no module imports another module's SQLAlchemy models or concrete repository.
@@ -271,9 +271,9 @@ Typed conflicts include:
 - `issue_intake_idempotency_conflict`; and
 - the existing Maintenance validation, reporter-eligibility, and context errors.
 
-## UI-001 handoff
+## UI-002 handoff
 
-UI-001 renders INGEST-002 as a substantial review page, not a compact inline commit form. The page should:
+UI-002 renders INGEST-002 as a substantial review page, not a compact inline commit form. The page should:
 
 - show source evidence beside the editable proposal, with attachments and transcript/body clearly identified;
 - show provider/model or assistant-connection provenance accurately;
@@ -335,7 +335,7 @@ Implementation starts only after the INGEST-001 readiness gate above is complete
 6. Refactor Maintenance policy behind an internal transaction-aware issue-review approval handler; keep the existing public Maintenance API behavior unchanged.
 7. Add domain-specific begin/edit/approve/dismiss endpoints, typed errors, idempotent response replay, and safe target lookup.
 8. Test create, link, selected update, no-issue dismissal, rework, stale source, integrity failure, stale target, two-tab edits, sibling drafts, lost responses, rollback at each write boundary, audit correlation, exact-schema tampering, and backup/restore.
-9. Run the full backend suite. React work remains deferred to UI-001.
+9. Run the full backend suite. This feature’s React workflow remains deferred to UI-002, reusing the UI-001 shell.
 
 ## Validation test matrix
 
@@ -368,7 +368,7 @@ INGEST-002 backend/API scope is complete when:
 11. Review queues and issue provenance use bounded, set-based reads with fixed query budgets.
 12. Exact-schema/data validation and encrypted backup/restore preserve complete review and source-to-issue history with stable IDs.
 
-The overall operator workflow remains pending until UI-001 delivers the comparison and decision page. MCP-001 and ISSUE-AI-001 may then submit compatible proposals without changing approval semantics.
+The overall operator workflow remains pending until UI-002 delivers the comparison and decision page. MCP-001 and ISSUE-AI-001 may then submit compatible proposals without changing approval semantics.
 
 ## Resolved contradictions and decisions
 
@@ -382,7 +382,7 @@ One issue proposal cannot currently be registered honestly as create, update, an
 
 AI-GOV-001 intentionally registers no production action. ISSUE-AI-001 is optional and MCP-001 follows INGEST-002. Therefore INGEST-002 can register and review the schema but cannot receive a production proposal until a later producer is enabled.
 
-**Decision:** keep direct MAINT-001 operator entry as the no-AI path; a manually authored source-backed draft is not part of INGEST-002 and must not be represented as an AI run. Implement INGEST-002 with deterministic contract tests and enable its queue only when a registered producer exists. UI-001 must show a truthful unavailable or empty state rather than implying extraction is active. If a neutral source-backed manual-draft workflow is needed later, it requires its own domain owner and design.
+**Decision:** keep direct MAINT-001 operator entry as the no-AI path; a manually authored source-backed draft is not part of INGEST-002 and must not be represented as an AI run. Implement INGEST-002 with deterministic contract tests and enable its queue only when a registered producer exists. UI-002 must show a truthful unavailable or empty state rather than implying extraction is active; UI-001 does not expose this review workflow. If a neutral source-backed manual-draft workflow is needed later, it requires its own domain owner and design.
 
 ### 3. Link and update semantics are undefined
 

@@ -33,7 +33,7 @@ Each created/link decision and batch transition produces AUDIT-001 events. The b
 
 ## APIs and UI handoff
 
-Provide typed endpoints for source upload/select, snapshot preview, mapping/validation, decisions, confirmation, status, and result download/read. Responses include `asOf`, snapshot revision/digest, complete counts by outcome, bounded row cursors, and availability/error status. The UI entry points are the Properties, Owners, and Providers directories plus Settings → Import data; UI-001 renders the shared flow but owns no import policy.
+Provide typed endpoints for source upload/select, snapshot preview, mapping/validation, decisions, confirmation, status, and result download/read. Responses include `asOf`, snapshot revision/digest, complete counts by outcome, bounded row cursors, and availability/error status. The UI entry points are the Properties, Owners, and Providers directories plus Settings → Import data; UI-002 renders the shared Excel/Google Sheets import flow but owns no import policy.
 
 ## Security and verification
 

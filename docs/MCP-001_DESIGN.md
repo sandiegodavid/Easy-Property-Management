@@ -125,7 +125,7 @@ Already admitted drafts remain reviewable, editable, and dismissible. Approval r
 
 ## Operator and management APIs
 
-UI-001 owns setup, scope/disclosure review, enable/pause/revoke, synthetic tests, health details, and per-connection limits. Show transport names in advanced details, with a plain label such as “Local connection” for MCP. Do not show a universal API-key field for assistants.
+UI-002 owns setup, scope/disclosure review, enable/pause/revoke, synthetic tests, health details, and per-connection limits. Show transport names in advanced details, with a plain label such as “Local connection” for MCP. Do not show a universal API-key field for assistants.
 
 Proposed operator-only APIs: `GET/POST /api/assistants/connections`, `PATCH .../{id}`, `POST .../{id}/test`, `POST .../{id}/grants`, and `POST .../{id}/pause` or `/revoke`. Read responses omit secrets. Model connections use `/api/ai/connections` separately. MCP tools call internal admission services; no unauthenticated `/api/agents/proposals` workaround is required. An HTTP transport exposes only its authenticated protocol boundary.
 
