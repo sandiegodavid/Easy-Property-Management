@@ -1106,16 +1106,71 @@ Reuse those commands when they apply to the remaining work.
 
 ### Remaining consequential workflow gates — ordered slices
 
-All approved backend readiness slices through Slice 29 are delivered. Credential
-changes and connection probes remain explicit exceptions in the inventory;
-their external-effect recovery design needs separate approval. New AI action
-modes and domain dismissal remain governed by their owning feature designs.
-Read-only directories and details may use delivered contracts.
+All approved source-owned readiness slices through Slice 29 are delivered.
+The following ordered list separates remaining OPS integration from workflows
+that still require an approved design. These are planned slices, not delivered
+capabilities or authorization to implement every item. Read-only directories
+and details may already use delivered contracts.
 
-For the delivered command families in Slices 7–29, the remaining work is OPS
-registration where absent and browser transport integration. Preserve each
-source's revision/key/fingerprint and original receipt. Only Slice 19's 46 forms
-currently have OPS registration.
+For Slices 30–38, first enumerate the exact missing form keys and obtain approval
+for that bounded registration batch. Reuse the owning commands, revisions,
+fingerprints and immutable original receipts; do not add another mutation ledger
+or reconstruct results from current state. Preserve Slice 19's existing 46 forms.
+Each registration must connect typed request/result/conflict contracts, command
+dispatch and source-owned ID/key recovery to OPS and prove interrupted-attempt
+recovery. No slice below enables browser controls.
+
+1. **Slice 30: Lease OPS recovery registration (planned).** Register the delivered
+   Lease draft, participant, renewal, termination-negotiation and timeline commands
+   from Slice 13. Preserve the distinction between Lease revisions and Space status
+   revisions and recover the complete original lease-action response.
+2. **Slice 31: Finance OPS recovery registration (planned).** Register the delivered
+   financial command families from Slices 14–15, including the applicable receipt,
+   expectation, prepaid-check, deposit, expense and owner-accounting workflows.
+   Split the enumerated forms into bounded sub-batches when needed; preserve each
+   source's correction lineage, allocation rules and atomic financial receipts.
+3. **Slice 32: Intake OPS recovery registration (planned).** Register the delivered
+   source admission, correction and lifecycle commands from Slice 16. Preserve
+   exact-revision evidence identity, attention-state guards and attachment replay
+   without publishing content again. Do not introduce INGEST-002 consequences.
+4. **Slice 33: Files OPS recovery registration (planned).** Register public upload
+   and link archival from Slice 17, preserving byte/metadata fingerprints,
+   association revisions and publication rollback. Inventory internal file reuse
+   and storage verification separately: neither has a standalone OPS recovery
+   form, so do not expose either as safely retryable without an approved contract.
+5. **Slice 34: Inspection OPS recovery registration (planned).** Register the
+   report, observation/area, acknowledgment, evidence, finalization, supersession,
+   comparison and template commands delivered in Slice 18. Preserve the separate
+   lease Inspection and template revision scopes and owning-workflow file batches.
+6. **Slice 35: Party and Tenant OPS recovery registration (planned).** Register
+   identity/contact commands from Slices 21–22 and Tenant commands from Slice 23.
+   Preserve shared Party revisions, independent Tenant revisions and atomic
+   preference/reference coordination when one command affects both modules.
+7. **Slice 36: Provider and category OPS recovery registration (planned).** Register
+   Provider profile/lifecycle, child and category/assignment commands from Slices
+   24–26. Preserve shared Provider revisions and the additional category revision
+   checks required by assignment and restoration.
+8. **Slice 37: Owner-concern and Expense-category OPS recovery registration
+   (planned).** Register concern/follow-up commands from Slice 27 and Expense
+   category administration from Slice 28. Reuse atomic Task and Communications
+   consequences. Maintenance's fixed category vocabulary remains unchanged; do
+   not duplicate its already registered issue-edit form.
+9. **Slice 38: AI configuration and draft-review OPS recovery registration
+   (planned).** Register the configuration and currently supported draft-review
+   commands delivered in Slice 29. Recover original approval results from the
+   owning transaction's receipt; exclude credentials, probes and new approval modes.
+10. **Slice 39: AI external-effect recovery design and implementation (decision
+    required).** Agree on the recovery authority, failure states and reconciliation
+    behavior for keyring credential changes and provider connection probes before
+    implementing recoverable attempts. Their external effects cannot commit
+    atomically with SQLite. Keep controls gated until the approved contract and
+    focused failure/retry proofs are delivered; do not automatically repeat probes.
+11. **Slice 40: Feature-owned AI approval and domain-dismissal extensions
+    (feature-design dependent).** Resolve the applicable AI-GOV-001/INGEST-002
+    contracts for additional approval modes and consumer-owned dismissal effects.
+    Deliver source freshness, atomic domain/review outcomes and original-result
+    recovery before registering their OPS forms. This is not a prerequisite for
+    exposing independently ready workflows and does not expand Slice 29's scope.
 
 ### Completion criteria and sequencing
 
@@ -1141,10 +1196,11 @@ tests and integration for their selected workflows. Reuse their delivered
 contracts. Any future backend slice follows the same sequence and records its
 proofs in the delivered sequence and command-safety inventory.
 
-Slice 19's 46 OPS forms are already registered. Additional registrations follow
-their proven source contracts and require a separately approved batch; browser
-transport integration follows backend readiness. Pause for any new product or
-lifecycle decision needed to complete a remaining slice.
+Work through planned Slices 30–38 in order, approving and proving each bounded
+OPS batch against its delivered source contract. Slices 39–40 require separate
+design decisions and may remain gated while ready workflows proceed. Slice 19's
+46 forms stay registered; browser transport integration follows readiness for
+each selected workflow. Pause for any new product or lifecycle decision.
 
 No consequential browser controls are enabled by this backend checklist. A
 workflow can remain gated while independently ready workflows proceed to UI
