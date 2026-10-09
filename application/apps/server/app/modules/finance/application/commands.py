@@ -71,6 +71,20 @@ def fingerprint(value: str) -> str:
     return sha256(value.encode("utf-8")).hexdigest()
 
 
+def recovery_request_fingerprint(request_json: str, key: str) -> str:
+    """Normalize only server-generated creation identities for pre-dispatch OPS.
+
+    The persisted financial identity remains unchanged. All semantic fields,
+    including revision, key in the payload and selected Lease, remain bound.
+    """
+    request = loads(request_json)
+    if request["scopeKind"] == "expense" and request["action"] == "record_expense":
+        request.update(scopeId=key, targetId=key)
+    elif request["scopeKind"] == "deposit_account" and request["action"] == "create_account":
+        request["scopeId"] = key
+    return fingerprint(canonical_json(request))
+
+
 def canonical_uuid(value: str) -> str:
     try:
         if not isinstance(value, str) or str(UUID(value)) != value:

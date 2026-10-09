@@ -27,6 +27,7 @@ from app.modules.leases.domain.models import (
     LeaseTerm,
     LeaseTerminationCase,
     LeaseTerminationProposal,
+    termination_end_reason,
 )
 from app.modules.portfolio.application.source_timeline import SourceTimelineChangeSet
 from app.modules.portfolio.domain.models import SpaceOccupancyPeriod
@@ -45,6 +46,11 @@ class LeaseError(ValueError):
 
 class LeaseNotFoundError(LeaseError):
     """Requested lease record does not exist."""
+
+
+def normalize_renewal_decision_notes(notes: str | None) -> str | None:
+    """Normalize decision notes identically for command execution and recovery."""
+    return _optional(notes, "Renewal notes", 2000)
 
 
 @dataclass(frozen=True)
@@ -1206,7 +1212,7 @@ class LeaseService:
         return self._close(
             case.lease_id,
             "terminated",
-            _termination_end_reason(case),
+            termination_end_reason(case.reason),
             actual_move_out_on,
             confirmed,
             termination_case_id=case_id,
@@ -1393,7 +1399,7 @@ class LeaseService:
         if status not in RENEWAL_STATUSES - {"open"}:
             raise LeaseError("A supported renewal decision is required.")
         decision_date = _date(decided_on, "Renewal decision date")
-        normalized_notes = _optional(notes, "Renewal notes", 2000)
+        normalized_notes = normalize_renewal_decision_notes(notes)
         correlation, now = str(uuid4()), _now()
 
         def write(tx: LeaseTransaction) -> str:
@@ -1553,7 +1559,7 @@ class LeaseService:
                 )
                 if accepted_case is None:
                     raise LeaseConflictError("The accepted termination case is missing.")
-                expected_reason = _termination_end_reason(accepted_case)
+                expected_reason = termination_end_reason(accepted_case.reason)
                 if reason != expected_reason:
                     raise LeaseConflictError(
                         "Lease termination reason must match the accepted termination case."
@@ -2084,14 +2090,6 @@ def _participant_range(lease: Lease, starts_on: str, ends_on: str | None) -> Non
 
 def _active_on(starts_on: str, ends_on: str | None, when: str) -> bool:
     return starts_on <= when and (ends_on is None or ends_on > when)
-
-
-def _termination_end_reason(case: LeaseTerminationCase) -> str:
-    if case.reason == "mutual":
-        return "mutual_termination"
-    if case.reason == "other":
-        return "other"
-    return "early_termination"
 
 
 def _view(

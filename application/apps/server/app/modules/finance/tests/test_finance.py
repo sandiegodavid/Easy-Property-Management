@@ -67,6 +67,7 @@ from app.modules.finance.infrastructure.expense_unit_of_work import SQLiteExpens
 from app.modules.finance.infrastructure.deposit_unit_of_work import SQLiteDepositUnitOfWork
 from app.modules.finance.infrastructure.file_link_facts import SQLiteDepositFileLinkFacts
 from app.modules.finance.infrastructure.unit_of_work import SQLiteFinanceUnitOfWork
+from app.modules.finance.infrastructure.recovery_reader import SQLiteFinanceRecoveryReader
 from app.modules.inspections.infrastructure.context_reader import SQLiteInspectionContextReader
 from app.modules.leases.tests.commands import lease_command
 from app.modules.leases.application.service import (
@@ -80,6 +81,7 @@ from app.modules.leases.infrastructure.unit_of_work import (
     SQLiteLeaseParticipationGuard,
     SQLiteLeaseUnitOfWork,
 )
+from app.modules.leases.infrastructure.recovery_reader import SQLiteLeaseRecoveryReader
 from app.modules.parties.application.service import SharedPartyFactory
 from app.modules.parties.infrastructure.unit_of_work import (
     SQLitePartyOperations,
@@ -1558,6 +1560,47 @@ class FinanceWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(voided["allocationCount"], 1)
         self.assertEqual(voided["allocationSummaries"][0]["receiptLifecycleStatus"], "voided")
+
+    def test_ops_recovery_reader_returns_finance_owned_rent_receipt(self):
+        term = self.lease["terms"][0]
+        expectation = rent_command(
+            self.finance,
+            "synchronize",
+            self.lease["id"],
+            SynchronizeExpectationsCommand(
+                term["id"],
+                (date.today() + timedelta(days=60)).isoformat(),
+                date.today().replace(day=1).isoformat(),
+            ),
+        )[0]
+        command = RecordReceiptCommand(
+            self.lease["id"],
+            str(uuid4()),
+            date.today().isoformat(),
+            expectation["expectedAmountMinor"],
+            "USD",
+            (ReceiptAllocationCommand(expectation["id"], expectation["expectedAmountMinor"]),),
+            "cash",
+        )
+        result = self.finance.record_receipt(
+            command,
+            expected_revision=self.finance.rent_ledger_revision(self.lease["id"])[
+                "rentLedgerRevision"
+            ],
+        )
+        reader = SQLiteFinanceRecoveryReader(SQLiteLeaseRecoveryReader())
+        with self.finance.unit_of_work.engine.connect() as connection:
+            outcome = reader.outcome(connection, command.idempotency_key, family="finance")
+            state = reader.state(connection, self.lease["id"])
+            active_expectations = reader.active_expectation_ids(
+                connection, self.lease["id"], [expectation["id"]]
+            )
+        self.assertEqual(outcome.action, "record_receipt")
+        self.assertEqual(outcome.source_id, self.lease["id"])
+        self.assertEqual(outcome.result.target_id, result["id"])
+        self.assertEqual(outcome.result.revision, result["rentLedgerRevision"])
+        self.assertEqual(state["revision"], result["rentLedgerRevision"])
+        self.assertEqual(active_expectations, {expectation["id"]})
 
     def test_receipt_payment_method_is_immutable_and_idempotency_sensitive(self):
         term = self.lease["terms"][0]

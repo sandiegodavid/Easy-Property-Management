@@ -15,6 +15,7 @@ from app.modules.operator.domain.models import (
     canonical,
     fingerprint,
     identifier,
+    source_identifier,
     utc,
     MAX_ACTIVE_RECOVERY,
     audit_metadata,
@@ -129,6 +130,8 @@ def validate_command_recovery(connection, bindings: Mapping[str, RecoveryBinding
             ):
                 raise ValueError("Recovery source revision is invalid.")
             if row["attempt_key"] is not None:
+                if binding.fingerprint_payload is not None:
+                    payload = binding.fingerprint_payload(connection, row["source_id"], payload)
                 calculated = binding.fingerprint(row["source_id"], payload, row["attempt_key"])
                 if calculated != row["request_fingerprint"]:
                     raise ValueError("Recovery attempt no longer matches its saved command.")
@@ -140,7 +143,7 @@ def validate_command_recovery(connection, bindings: Mapping[str, RecoveryBinding
                 if (
                     outcome is None
                     or receipt
-                    != receipt_projection(outcome, binding.source_kind, row["attempt_key"])
+                    != receipt_projection(outcome, binding.result_kind, row["attempt_key"])
                     or outcome.action != binding.receipt_action
                     or outcome.request_fingerprint != row["request_fingerprint"]
                     or (binding.source_kind is not None and outcome.source_id != row["source_id"])
@@ -205,7 +208,7 @@ def validate_operator_data(connection):
             if validate_payload(row["form_key"], row["schema_version"], payload) != payload:
                 raise ValueError("Recovery payload is not normalized.")
             if row["source_id"] is not None:
-                identifier(row["source_id"])
+                source_identifier(row["source_kind"], row["source_id"])
             if row["attempt_key"] is not None:
                 identifier(row["attempt_key"])
                 if len(row["request_fingerprint"]) != 64 or any(

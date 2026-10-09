@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.platform.sqlalchemy_models import LocalBase
@@ -98,6 +98,54 @@ class AiCommandOperationModel(LocalBase):
         CheckConstraint("json_valid(request_json) AND json_valid(result_json)"),
         Index("ai_commands_target", "target_id", "created_at"),
     )
+
+
+class AiExternalOperationModel(LocalBase):
+    __tablename__ = "ai_external_operations"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    connection_id: Mapped[str] = mapped_column(
+        ForeignKey("ai_model_connections.id"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    expected_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    request_json: Mapped[str] = mapped_column(Text, nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
+    correlation_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    result_json: Mapped[str | None] = mapped_column(Text)
+    completed_at: Mapped[str | None] = mapped_column(String)
+    __table_args__ = (
+        CheckConstraint(
+            "length(id)=36 AND length(idempotency_key)=36 AND length(correlation_id)=36"
+        ),
+        CheckConstraint("action IN ('credential_set','credential_delete','connection_probe')"),
+        CheckConstraint("typeof(expected_revision)='integer' AND expected_revision>=1"),
+        CheckConstraint("typeof(revision)='integer' AND revision=expected_revision+1"),
+        CheckConstraint(
+            "length(request_fingerprint)=64 AND request_fingerprint NOT GLOB '*[^0-9a-f]*'"
+        ),
+        CheckConstraint("json_valid(request_json)"),
+        CheckConstraint("(result_json IS NULL) = (completed_at IS NULL)"),
+        CheckConstraint(
+            "result_json IS NULL OR (json_valid(result_json) AND json_extract(result_json,'$.status') IN ('completed','abandoned'))"
+        ),
+        Index("ai_external_connection", "connection_id", "created_at"),
+        Index(
+            "ai_external_pending_connection",
+            "connection_id",
+            unique=True,
+            sqlite_where=text("result_json IS NULL"),
+        ),
+    )
+
+
+EXTERNAL_TRIGGERS = {
+    "ai_external_no_delete": "CREATE TRIGGER ai_external_no_delete BEFORE DELETE ON ai_external_operations BEGIN SELECT RAISE(ABORT, 'AI external intents are retained'); END",
+    "ai_external_no_replace": "CREATE TRIGGER ai_external_no_replace BEFORE INSERT ON ai_external_operations WHEN EXISTS (SELECT 1 FROM ai_external_operations WHERE id=NEW.id OR idempotency_key=NEW.idempotency_key) BEGIN SELECT RAISE(ABORT, 'AI external intents are retained'); END",
+    "ai_external_finish_only": "CREATE TRIGGER ai_external_finish_only BEFORE UPDATE ON ai_external_operations WHEN OLD.result_json IS NOT NULL OR NEW.result_json IS NULL OR NEW.completed_at IS NULL OR NEW.id IS NOT OLD.id OR NEW.idempotency_key IS NOT OLD.idempotency_key OR NEW.connection_id IS NOT OLD.connection_id OR NEW.action IS NOT OLD.action OR NEW.revision IS NOT OLD.revision OR NEW.expected_revision IS NOT OLD.expected_revision OR NEW.request_json IS NOT OLD.request_json OR NEW.request_fingerprint IS NOT OLD.request_fingerprint OR NEW.correlation_id IS NOT OLD.correlation_id OR NEW.created_at IS NOT OLD.created_at BEGIN SELECT RAISE(ABORT, 'AI external intent and completed result are immutable'); END",
+}
 
 
 class AiRunModel(LocalBase):

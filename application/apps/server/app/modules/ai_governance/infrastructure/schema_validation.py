@@ -20,6 +20,8 @@ from app.modules.ai_governance.domain.models import (
 from app.modules.ai_governance.infrastructure.sqlalchemy_models import (
     AiActionLimitModel,
     AiCommandOperationModel,
+    AiExternalOperationModel,
+    EXTERNAL_TRIGGERS,
     AiDraftModel,
     AiModelConnectionModel,
     AiReviewDecisionModel,
@@ -52,6 +54,7 @@ def validate_ai_governance_schema(
     required = {
         "ai_settings",
         "ai_command_operations",
+        "ai_external_operations",
         "ai_model_connections",
         "ai_action_limits",
         "ai_runs",
@@ -474,6 +477,7 @@ def _validate_exact_schema(connection) -> None:
     models = (
         AiSettingsModel,
         AiCommandOperationModel,
+        AiExternalOperationModel,
         AiModelConnectionModel,
         AiActionLimitModel,
         AiRunModel,
@@ -526,6 +530,16 @@ def _validate_exact_schema(connection) -> None:
             expected_indexes.append(
                 (bool(index.unique), tuple(column.name for column in index.columns), True)
             )
+            predicate = index.dialect_options["sqlite"].get("where")
+            if predicate is not None:
+                actual_sql = connection.execute(
+                    text("SELECT sql FROM sqlite_master WHERE type='index' AND name=:name"),
+                    {"name": index.name},
+                ).scalar_one_or_none()
+                if actual_sql is None or _normalized_sql(actual_sql).split("WHERE", 1)[
+                    -1
+                ] != _normalized_sql(str(predicate)):
+                    raise MigrationSchemaError("AI partial index predicate is unsupported.")
         for column in expected.columns:
             if column.unique:
                 expected_indexes.append((True, (column.name,), False))
@@ -567,6 +581,7 @@ def _validate_exact_schema(connection) -> None:
         "ai_command_operations_no_delete": "CREATE TRIGGER AI_COMMAND_OPERATIONS_NO_DELETE BEFORE DELETE ON AI_COMMAND_OPERATIONS BEGIN SELECT RAISE(ABORT, 'AI COMMAND OPERATIONS ARE IMMUTABLE'); END",
         "ai_command_operations_no_replace": "CREATE TRIGGER AI_COMMAND_OPERATIONS_NO_REPLACE BEFORE INSERT ON AI_COMMAND_OPERATIONS WHEN EXISTS (SELECT 1 FROM AI_COMMAND_OPERATIONS WHERE ID=NEW.ID OR IDEMPOTENCY_KEY=NEW.IDEMPOTENCY_KEY) BEGIN SELECT RAISE(ABORT, 'AI COMMAND OPERATIONS ARE IMMUTABLE'); END",
     }
+    expected_triggers.update(EXTERNAL_TRIGGERS)
     if not set(expected_triggers) <= set(triggers):
         raise MigrationSchemaError("AI settings operations are not immutable.")
     for name, expected in expected_triggers.items():
@@ -738,6 +753,12 @@ def _validate_command_operations(connection):
     )
     if expected_effects != matched_effects:
         raise MigrationSchemaError("AI command receipts do not cover their mutation history.")
+    from app.modules.ai_governance.infrastructure.external_validation import (
+        validate_external_operations,
+    )
+
+    for key, history in validate_external_operations(connection).items():
+        streams.setdefault(key, []).extend(history)
     _validate_command_streams(connection, streams)
 
 

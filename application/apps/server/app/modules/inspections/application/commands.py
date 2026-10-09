@@ -4,6 +4,14 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass, is_dataclass
 from uuid import UUID
+from typing import Protocol
+from collections.abc import Mapping
+
+from app.platform.command_recovery import CommandRecoveryReader
+
+
+class InspectionRecoveryReader(CommandRecoveryReader, Protocol):
+    def correction_payload(self, connection, source_id: str, payload: dict) -> Mapping: ...
 
 
 class InspectionError(ValueError):

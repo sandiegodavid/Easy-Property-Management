@@ -26,10 +26,18 @@ class RecoveryBinding:
     family: str
     reader: CommandRecoveryReader
     fingerprint: Callable[[str | None, dict, str], str]
+    result_kind: str
     related_state: Callable[[object, str, str], Mapping | None] | None = None
+    fingerprint_payload: Callable[[object, str, dict], dict] | None = None
 
     @property
     def receipt_action(self):
+        if self.family == "intake":
+            return {
+                "import": "admit",
+                "dismiss": "attention_transition",
+                "reopen": "attention_transition",
+            }.get(self.action, self.action)
         if self.family == "issue" and self.action in {
             "start",
             "return_to_open",
@@ -62,7 +70,7 @@ class RuntimeIdentity:
 
 class RecoveryReferences(Protocol):
     def validate(self, connection, value: Mapping) -> str: ...
-    def attempt_fingerprint(self, value: Mapping, key: str) -> str: ...
+    def attempt_fingerprint(self, value: Mapping, key: str, *, connection=None) -> str: ...
     def resolve_attempt(
         self,
         connection,

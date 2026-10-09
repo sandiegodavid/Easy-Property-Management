@@ -201,6 +201,7 @@ def validate_latest_schema(database_path: Path) -> None:
                 "owner_concern_command_operations",
                 "ai_settings",
                 "ai_command_operations",
+                "ai_external_operations",
                 "ai_model_connections",
                 "ai_action_limits",
                 "ai_runs",

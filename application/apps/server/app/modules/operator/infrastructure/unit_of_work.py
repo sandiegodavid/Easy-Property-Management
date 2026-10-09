@@ -427,7 +427,7 @@ class SQLiteOperatorTransaction:
         return self.references.validate(self.connection, value)
 
     def attempt_fingerprint(self, value, key):
-        return self.references.attempt_fingerprint(value, key)
+        return self.references.attempt_fingerprint(value, key, connection=self.connection)
 
     def resolve_attempt(self, value):
         from app.modules.operator.application.command_forms import COMMAND_SCHEMAS

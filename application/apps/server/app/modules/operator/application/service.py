@@ -22,6 +22,7 @@ from app.modules.operator.domain.models import (
     concurrency,
     fingerprint,
     identifier,
+    source_identifier,
     audit_metadata,
 )
 
@@ -171,7 +172,7 @@ class OperatorService:
         ):
             raise OperatorError("Related source kind and ID must be supplied together.")
         if source_id is not None:
-            identifier(source_id)
+            source_identifier(source_kind, source_id)
         if base_source_revision is not None and (
             not isinstance(base_source_revision, str) or not 1 <= len(base_source_revision) <= 100
         ):

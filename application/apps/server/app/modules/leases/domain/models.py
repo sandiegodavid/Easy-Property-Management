@@ -5,6 +5,15 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 
+def termination_end_reason(reason: str) -> str:
+    """Translate the negotiated termination reason to its lease lifecycle reason."""
+    if reason == "mutual":
+        return "mutual_termination"
+    if reason == "other":
+        return "other"
+    return "early_termination"
+
+
 def _camel(values: dict[str, object]) -> dict[str, object]:
     return {
         "".join([parts[0], *(part.title() for part in parts[1:])]): value

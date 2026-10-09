@@ -55,6 +55,7 @@ from app.modules.workspace.application.service import WorkspacePaths
 from app.modules.workspace.tests.fast_encryption import fast_backup_encryption
 from app.platform.migration_errors import MigrationSchemaError
 from app.platform.product_migrations import validate_latest_schema
+from app.platform.api_errors import register_api_error_handlers
 
 
 @pytest.fixture
@@ -95,6 +96,75 @@ def ready():
     tasks.unit_of_work.engine.dispose()
     communications.unit_of_work.engine.dispose()
     next(fixture, None)
+
+
+@pytest.mark.parametrize("participants_case", ["omitted", "null", "empty"])
+def test_incomplete_lease_participants_can_be_saved_but_not_attempted(ready, participants_case):
+    context, support, _, _, _, _ = ready
+    instant = datetime.now(UTC)
+    support = OperatorService(support.unit_of_work, runtime=support.runtime, now=lambda: instant)
+    start = instant.date().isoformat()
+    payload = {
+        "expectedRevision": 0,
+        "spaceId": context.space_id,
+        "leaseKind": "residential",
+        "contractStartsOn": start,
+        "occupancyStartsOn": start,
+        "initialTerm": {
+            "baseRentMinor": 10000,
+            "currencyCode": "USD",
+            "paymentFrequency": "monthly",
+            "paymentDueDay": 1,
+            "agreedSecurityDepositMinor": 0,
+        },
+    }
+    if participants_case != "omitted":
+        payload["participants"] = None if participants_case == "null" else []
+    record_id = str(uuid4())
+    request = {
+        "formKey": "lease.create",
+        "schemaVersion": 1,
+        "payload": payload,
+        "expectedRevision": 0,
+        "idempotencyKey": str(uuid4()),
+    }
+    app = FastAPI()
+    register_api_error_handlers(app)
+    app.include_router(build_router(support))
+    with TestClient(app) as client:
+        saved = client.put("/api/operator/recovery/" + record_id, json=request)
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["payload"] == payload
+        assert saved.json()["status"] == "active"
+        assert saved.json()["reuseState"] == "available"
+        assert (
+            client.put("/api/operator/recovery/" + record_id, json=request).json() == saved.json()
+        )
+        detail = client.get("/api/operator/recovery/" + record_id)
+        assert detail.status_code == 200, detail.text
+        assert detail.json() == {**saved.json(), "operationId": None}
+        with support.unit_of_work.engine.connect() as connection:
+            before = {
+                table: connection.exec_driver_sql(f"SELECT count(*) FROM {table}").scalar_one()
+                for table in ("operator_operations", "audit_events", "leases")
+            }
+        attempt = client.post(
+            "/api/operator/recovery/" + record_id + "/attempt",
+            json={
+                "expectedRevision": saved.json()["revision"],
+                "idempotencyKey": str(uuid4()),
+                "attemptKey": str(uuid4()),
+            },
+        )
+        assert attempt.status_code == 422, attempt.text
+        assert client.get("/api/operator/recovery/" + record_id).json() == detail.json()
+        with support.unit_of_work.engine.connect() as connection:
+            for table, count in before.items():
+                assert (
+                    connection.exec_driver_sql(f"SELECT count(*) FROM {table}").scalar_one()
+                    == count
+                )
+    validate_latest_schema(context.workspace.paths.database)
 
 
 def prepare(support, form_key, source_id, payload, *, key=None):
@@ -320,7 +390,14 @@ def test_communication_receipts_return_original_domain_result(ready, action):
         original = communications.correct(
             source["id"], command, payload["correctionReason"], key, 1
         )
-    reconcile(support, attempt, original)
+    reconciled = reconcile(support, attempt, original)
+    assert reconciled["receipt"] == {
+        "sourceKind": "communication",
+        "sourceId": source["id"] if source else original["id"],
+        "receiptId": original["operationId"],
+        "attemptKey": key,
+        "result": expected_projection(original),
+    }
     validate_latest_schema(context.workspace.paths.database)
 
 

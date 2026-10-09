@@ -125,6 +125,8 @@ def upgrade() -> None:
     from app.modules.ai_governance.infrastructure.sqlalchemy_models import (
         AiSettingsModel,
         AiCommandOperationModel,
+        AiExternalOperationModel,
+        EXTERNAL_TRIGGERS,
         AiModelConnectionModel,
         AiActionLimitModel,
         AiRunModel,
@@ -809,6 +811,8 @@ def upgrade() -> None:
         # exact schema validation share this current greenfield definition.
         table.create(op.get_bind())
     AiCommandOperationModel.__table__.create(op.get_bind())
+    AiExternalOperationModel.__table__.create(op.get_bind())
+    _create_triggers(EXTERNAL_TRIGGERS)
     _create_triggers(INSPECTION_COMMAND_TRIGGERS)
     _create_triggers(PROVIDER_COMMAND_TRIGGERS)
     _create_triggers(CATEGORY_COMMAND_TRIGGERS)
@@ -929,6 +933,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    from app.modules.ai_governance.infrastructure.sqlalchemy_models import EXTERNAL_TRIGGERS
+
+    _drop_triggers(EXTERNAL_TRIGGERS)
+    op.drop_table("ai_external_operations")
     from app.modules.vendors.infrastructure.sqlalchemy_models import CATEGORY_COMMAND_TRIGGERS
 
     for name in CATEGORY_COMMAND_TRIGGERS:

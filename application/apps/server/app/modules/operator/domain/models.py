@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
@@ -115,6 +116,19 @@ def identifier(value):
     except (ValueError, TypeError, AttributeError) as error:
         raise OperatorError("A canonical UUID is required.") from error
     return value
+
+
+def source_identifier(kind, value):
+    """Preserve source-owned singleton/action identities; all other IDs are UUIDs."""
+    if kind == "ai_settings":
+        if value != "1":
+            raise OperatorError("AI settings uses singleton identity 1.")
+        return value
+    if kind == "ai_action_limit":
+        if not isinstance(value, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", value):
+            raise OperatorError("A canonical AI action identity is required.")
+        return value
+    return identifier(value)
 
 
 def utc(value):

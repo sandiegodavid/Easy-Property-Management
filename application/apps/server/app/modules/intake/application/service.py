@@ -7,6 +7,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import uuid4
 
+from app.modules.intake.application.command_identity import (
+    admission_request as _admission_request,
+    correction_request,
+)
+
 from app.modules.intake.application.ports import (
     IntakeAttentionOperations,
     IntakeEvidenceDetailRequest,
@@ -569,13 +574,9 @@ class IntakeService:
                     "intake_supersession_required",
                 )
             payload = envelope.canonical(tuple(old_envelope["attachments"]))
-            request_payload = {
-                "correct": source_id,
-                "envelope": payload,
-                "reason": reason,
-                "expectedSourceRevision": expected_source_revision,
-                "expectedEvidenceRevisionId": expected_evidence_revision_id,
-            }
+            request_payload = correction_request(
+                source_id, payload, reason, expected_source_revision, expected_evidence_revision_id
+            )
             request = fingerprint(request_payload)
             prior = tx.operation(idempotency_key)
             if prior:
@@ -872,10 +873,6 @@ class TrustedIntakeAdmission:
         return self._service._admit(command, context)
 
 
-def _submitter_fingerprint(context: IntakeAdmissionContext) -> dict[str, str | None]:
-    return {"kind": context.submitter_kind, "reference": context.submitter_reference}
-
-
 def _audit_actor(context: IntakeAdmissionContext) -> tuple[str, str | None]:
     return {
         "local_operator": ("local_operator", None),
@@ -906,23 +903,6 @@ def _digest(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
-
-
-def _admission_request(
-    command: IntakeAdmissionCommand, context: IntakeAdmissionContext, envelope: dict[str, object]
-) -> dict[str, object]:
-    result = {
-        "admit": envelope,
-        "origin": command.origin_system,
-        "scope": context.account_scope_hash,
-        "identity": context.account_identity_state,
-        "submitter": _submitter_fingerprint(context),
-        "supersedes": command.supersedes_source_id,
-    }
-    if command.supersedes_source_id is not None:
-        result["expectedSourceRevision"] = command.expected_source_revision
-        result["expectedEvidenceRevisionId"] = command.expected_evidence_revision_id
-    return result
 
 
 def _check_revision(

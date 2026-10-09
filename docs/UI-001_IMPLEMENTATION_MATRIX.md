@@ -1,6 +1,13 @@
 # UI-001 implementation slices
 
-Status: backend readiness in progress — October 8, 2026. UI-001 is not complete.
+Status: backend readiness in progress — October 9, 2026. Slices 41–43 below remain planned; UI-001 is not complete.
+
+Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
+feature-specific AI approval modes, Intake attention consequences, coordinated
+Maintenance writes and OPS recovery registration belong to UI-002. The former
+planned Slice 40 is tracked in [UI-002's preliminary design](UI-002_DESIGN_preliminary.md#ingest-002--issue-review-readiness-and-recovery-former-slice-40).
+None of that work gates UI-001. Delivered generic AI-governance and local-operator
+Intake contracts remain in this matrix; their delivery does not enable INGEST-002.
 No React implementation is enabled before the backend readiness gate.
 
 ## Slice 1: Typed built-in AI configuration and review contracts
@@ -525,7 +532,7 @@ is claimed.
 ## Slice 16: Intake command recovery
 
 Delivered October 8, 2026: source-owned command contracts for the existing Intake
-workflows. OPS form registration remains Slice 19; browser transport and controls
+workflows. OPS form registration is delivered in Slice 32; browser transport and controls
 remain subsequent UI work.
 
 | Workflow | Delivered contract | Gate |
@@ -580,7 +587,7 @@ path include those receipts. No compatibility migration is added. Public upload
 publishes outside the write transaction and rechecks the key inside it. Commit
 failures roll back publication; post-commit release failures leave the committed
 receipt recoverable. Neither ID/key lookup republishes or reloads current results.
-No new OPS form or consequential browser control is enabled.
+OPS registration is delivered in Slice 33. No consequential browser control is enabled.
 
 Validation matrix:
 
@@ -1057,6 +1064,672 @@ Focused validation: `ai_governance/tests/test_command_readiness.py`,
 | Backup/restore | Encrypted LOCAL-002 round trip compares stable receipt rows and audits plus settings, limits, run/draft/review history; credentials remain excluded |
 | Query budget | One indexed SELECT for ID/key recovery, no current-result reconstruction, deterministic no-workspace OpenAPI contracts and bounded existing draft projections |
 
+### Slice 30: Lease OPS recovery registration (delivered)
+
+Registered the delivered LEASE-001 commands with OPS forms and Lease-owned
+receipt recovery. This includes creation and draft edits, terms and participants,
+renewal options, termination cases and proposals, and execute/end/terminate/void
+timeline actions. OPS validates against `lease_command_operations`; it does not
+dispatch the command or reconstruct its result from the current Lease.
+
+Timeline forms carry the parent `expectedRevision` for the Lease and a separate
+`expectedSpaceRevision` for the Space status change. The bound request fingerprint
+uses the same canonical Lease command identity and preserves the complete
+original response, including its resulting Lease revision and operation ID.
+Lease creation uses revision zero and its official command validates the target
+space. No browser controls are enabled by this slice.
+
+Registered forms: `lease.create`, `lease.patch`, `lease.term.replace`,
+`lease.participant.add`, `lease.participant.update`,
+`lease.participant.remove`, `lease.execute`, `lease.end`, `lease.terminate`,
+`lease.void`, `lease.renewal.add`, `lease.renewal.update`,
+`lease.renewal.decide`, `lease.termination.create`,
+`lease.termination.proposal.add`, `lease.termination.proposal.accept`,
+`lease.termination.transition`, and `lease.termination.complete`.
+
+Focused proofs cover registration completeness, form validation, Lease-owned
+fingerprint parity, source-revision freshness, immutable receipt lookup, and
+original operation identity. The existing Lease persistence validator continues
+to validate append-only receipts and correlated audit history.
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Lease forms are registered with their source-owned reader and typed payload schemas |
+| Invalid combinations | Incomplete forms are rejected; Lease revision and Space status revision remain separate |
+| Idempotency/retry | Form fingerprint matches the stored Lease request and key lookup returns its original receipt after commit |
+| Rollback | Existing Lease transaction tests prove audit and commit failures roll back Lease and timeline writes |
+| Persistence/schema | Existing command validator checks exact schema, immutable receipts, request/result fingerprints and audit evidence |
+| Backup/restore | Existing Lease and workspace tests validate retained receipts through current-schema and archive validation |
+| Query budget | Recovery reads the indexed Lease command receipt without hydrating current Lease state |
+
+### Slice 31A: Rent expectation/receipt and prepaid-check OPS recovery (delivered)
+
+Registered this explicitly approved bounded Finance batch against the existing
+rent-ledger command receipts. The nine forms are:
+
+- `finance.rent_expectation.void`
+- `finance.rent_expectation.timeliness_review`
+- `finance.rent_receipt.create`
+- `finance.rent_receipt.void`
+- `finance.prepaid_check.create`
+- `finance.prepaid_check.deposit`
+- `finance.prepaid_check.return`
+- `finance.prepaid_check.void`
+- `finance.prepaid_check.replace`
+
+These forms use the owning Lease as their source and carry the rent-ledger
+revision as `expectedRevision`. They reconstruct `FinanceCommandIdentity` using
+the official command payload, including allocation ordering, defaults and
+replacement lineage. Finance's read-only recovery reader combines Lease status
+with the rent-ledger revision and reads the original `finance_command_operations`
+result on the caller's connection. It does not dispatch financial mutations,
+rebuild results from current records, or enable browser controls.
+
+Slice 31A excludes generated expectation synchronization, delivered separately
+in 31B. Expense, deposit-account and Owner-rent-report mutations remain in Slice
+31's proposed, unapproved batches below.
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Exact nine-form/schema/binding registration; Finance reader returns the original rent-receipt operation and ledger revision |
+| Invalid combinations | Incomplete forms and malformed commands are rejected; Lease lifecycle is checked before attempt admission |
+| Idempotency/retry | Fingerprints match `FinanceCommandIdentity`; receipt lookup validates action, source, and request fingerprint |
+| Rollback | Existing FIN-001/FIN-007 persistence tests prove financial effects, receipts and audit events share one transaction; OPS is read-only |
+| Persistence/schema | Existing Finance validators enforce immutable command receipts, revision and audit history; no schema changes |
+| Backup/restore | Existing Finance encrypted archive tests retain command receipts; no new persistence added |
+| Query budget | Finance receipt lookup and rent-ledger revision are indexed bounded reads; Lease status comes from its source reader on the same connection |
+
+### Slice 31B: Generated rent-expectation synchronization (delivered)
+
+The approved bounded batch is `finance.rent_expectation.synchronize`. Reuse the
+owning Lease, rent-ledger revision, `SynchronizeExpectationsCommand`, and immutable
+Finance receipt. Recovery identifies the ledger command rather than selecting a
+generated expectation or regenerating its result. No browser controls are enabled.
+
+The typed OPS form preserves Finance's canonical defaults and override semantics.
+Attempt admission checks the selected term's Lease membership and the ledger
+revision using source-owned readers. Recovery reads the retained command's Lease
+target and original result, including empty/no-op results, on the caller's
+connection. No new persistence or mutation ledger is introduced.
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | API discovery, save, preparation and reconciliation for generated and empty synchronization results; deterministic no-workspace OpenAPI contract |
+| Invalid combinations | Strict revision/UUID/date/confirmation fields; missing or foreign term, stale ledger and unconfirmed responsibility override rejected |
+| Idempotency/retry | Canonical Finance fingerprint parity, including defaults and normalized override reasons; original replay after later synchronization; OPS retries and changed-payload conflicts |
+| Rollback | Injected audit failure rolls back expectations, ledger revision, command receipt and correlated audit rows; retry then succeeds |
+| Persistence/schema | Current-schema validation checks retained Finance and OPS records; existing immutable source receipts are reused |
+| Backup/restore | Encrypted LOCAL-002 round trip preserves expectations, revisions, original outcomes, OPS attempts and correlated financial/OPS audit history |
+| Query budget | Outcome recovery performs one indexed SELECT independent of generated result count; source reads use the caller-owned connection without opening another connection |
+
+Focused validation: 93 tests passed across synchronization recovery, Finance form
+contracts, recovery composition and Finance command tests.
+
+### Slice 31C: Expense and category OPS recovery (delivered)
+
+The approved nine-form batch reuses Expense aggregate revisions and category
+revisions, source command normalization, and immutable Finance/category receipts:
+
+- **31C — Expense and category commands:** `finance.expense.{create,patch,void}`,
+  `finance.expense_refund.{create,void}`, and
+  `finance.expense_category.{create,patch,archive,restore}`.
+Creation forms have no pre-existing source. Expense creation recovery normalizes
+only the server-generated aggregate ID to the attempt key for pre-dispatch
+comparison; the source receipt and financial fingerprint remain unchanged.
+Patch forms preserve field presence, including explicit nulls. Refunds use their
+parent Expense revision and verify child membership. Category archival and
+restoration respect the current category lifecycle.
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Typed discovery, preparation and original receipt reconciliation for Expense create/patch/refund and category create/patch/archive/restore |
+| Invalid combinations | Strict revisions, identifiers, decimal amounts, confirmations and extra-field rejection; stale aggregate/category state rejected |
+| Idempotency/retry | Canonical source-request parity, patch no-op and explicit-null semantics; original recovery after later refunds or category lifecycle changes; HTTP reconciliation replay |
+| Rollback | Finance consumer/category tests prove source effects, revisions, immutable receipts and correlated audit rollback |
+| Persistence/schema | Runtime and current-schema validation share the complete binding registry; no schema or mutation ledger added |
+| Backup/restore | Encrypted round trip compares Expense/refund records, financial revisions/receipts and OPS attempts/operations; source category tests preserve category receipts |
+| Query budget | Each source-owned outcome lookup is one indexed SELECT on the caller connection; no current-result reconstruction |
+
+### Slice 31D: Security-deposit OPS recovery (delivered)
+
+The approved eighteen-form batch reuses the account-scoped financial revision
+and immutable source results:
+
+- **Security deposits:** `finance.deposit_account.create`,
+  `finance.deposit_receipt.{create,void}`,
+  `finance.deposit_settlement.{create,patch,approve,complete,void}`,
+  `finance.deposit_deduction.{create,update,delete}`,
+  `finance.deposit_credit.{create,update,delete}`,
+  `finance.deposit_deduction_source.{add,delete}`, and
+  `finance.deposit_refund.{create,void}`.
+Every child form selects its parent account and a typed target. Preparation
+verifies account membership and the applicable settlement/receipt lifecycle.
+Account creation binds the selected Lease and term while normalizing only the
+server-generated account scope for pre-dispatch recovery comparison. Deleted
+children recover from their immutable receipts without reloading deleted rows.
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | All eighteen exact bindings; real account/receipt/settlement/refund lifecycles, child edits/deletions and draft settlement patches |
+| Invalid combinations | Strict fields, required targets, stale parent revision, missing child and settlement lifecycle guards |
+| Idempotency/retry | Canonical source-request parity; recovery after child deletion, completion and settlement replacement retains original revision and target |
+| Rollback | Source consumer tests prove child, account revision, receipt and audit writes roll back together |
+| Persistence/schema | Existing Finance schema and immutable receipts reused; current-schema validation checks reconciled deleted-child evidence |
+| Backup/restore | Encrypted round trip validates reconciled deleted-child attempts and original Deposit outcomes, comparing OPS records and source/financial/OPS audit history |
+| Query budget | One indexed outcome query; bounded source/child checks use the same caller-owned connection |
+
+### Slice 31E: Owner rent-report OPS recovery (delivered)
+
+The approved four-form batch is `owner_rent_report.{create,patch,verify,reject}`.
+It preserves the report revision and Finance receipt handoff in the owning
+transaction. Verification includes the selected rent-ledger revision and exact
+adoption/creation mode, allocation identities and replacement receipt. Preparation
+checks both report state and ledger revision; recovery reads only the original
+Owner receipt and never creates or adopts a Finance receipt itself.
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | All four exact bindings; real creation/patch/rejection receipts and OPS verification recovery for both adoption and receipt creation |
+| Invalid combinations | Strict claim/confirmation/allocation fields and bounded allocations; stale rent-ledger preparation rejected |
+| Idempotency/retry | Source fingerprint parity; both verification modes replay their original results without repeating financial effects |
+| Rollback | Owner source tests prove failed verification rolls back report, Finance receipt/allocation, ledger revision and correlated audit effects |
+| Persistence/schema | Source Owner receipts remain authoritative; current-schema validation verifies retained OPS reconciliation |
+| Backup/restore | Encrypted round trip validates OPS verification recovery and original Owner outcomes, comparing OPS records and source/financial/OPS audit history; source tests preserve receipt creation history |
+| Query budget | Original Owner outcome is one indexed SELECT on the caller-owned connection; ledger checking uses source-owned readers |
+
+Brace notation enumerates separate form keys, not wildcard registrations.
+Expense-category registration is allocated to 31C and must not be duplicated in
+Slice 37. No consequential browser controls are enabled by these batches.
+
+Focused validation for 31C–31E: the related regression set covers 184 tests,
+including 48 in `operator/tests/test_financial_batches.py`, plus the existing
+Finance forms/recovery composition/synchronization, consumer/category commands
+and Owner-accounting tests. Changed-file Ruff lint/format and diff checks pass.
+
+## Slice 32: Intake OPS recovery registration (delivered)
+
+Delivered October 9, 2026, for the six explicitly approved local-operator forms:
+`intake.source.admit`, `intake.source.import`, `intake.source.correct`,
+`intake.source.supersede`, `intake.source.dismiss`, and `intake.source.reopen`.
+Contracts/ports, implementation, existing persistence integration, focused tests,
+and runtime/retained-validation composition are delivered. No new mutation ledger
+or schema format is introduced.
+
+- Admission and import are unbound creation forms requiring revision zero at
+  attempt preparation. Import retains only an ordered, bounded manifest of roles
+  and SHA-256 hashes: never attachment bytes, temporary paths, or provider locators.
+  An incomplete saved manifest is not authorization to dispatch a command.
+- Correction, supersession, dismissal and reopening bind the source revision and
+  exact evidence-revision UUID. Attention forms also retain expected attention
+  state; their reuse gate follows Intake's existing legal transitions. Correction
+  preparation reads the retained manifest from the specified evidence revision
+  on the caller's transaction, not from the current revision after later changes.
+- Fingerprints use the same source-owned semantic request helpers as Intake
+  mutations, including original occurrence-offset context and local-operator
+  attribution. OPS derives the fingerprint; it does not execute Intake commands.
+- Recovery reads only the original operation's non-sensitive result metadata:
+  operation ID, target source ID, source revision, technical status, and evidence
+  revision ID. Supersession remains bound to the predecessor while returning the
+  replacement target. No evidence body is disclosed and no attachment is published
+  again. Full evidence and detailed receipt disclosure retain their existing
+  fail-closed Intake read audits.
+- Runtime and current-schema validation use the same explicit binding registry.
+  System integrity transitions, trusted-transport admission, consumer-owned review
+  consequences, INGEST-002 and consequential browser controls remain unregistered
+  or gated; this slice does not add automatic retries.
+
+Validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | All six forms save/prepare, execute through real Intake, and reconcile original source/evidence identities |
+| Invalid combinations | Strict revision and aware occurrence validation; malformed/oversized manifests, duplicate hashes, paths, and stale source/evidence/attention guards reject; incomplete forms cannot prepare |
+| Idempotency/retry | Unknown outcomes stay unresolved; original results recover after later corrections; different source payload under the attempt key cannot reconcile; attachment recovery never publishes |
+| Rollback | Source audit failure rolls back admission and its operation; the OPS attempt remains unknown; existing Intake import commit-failure tests cover publication cleanup |
+| Persistence/schema | Shared binding composition and canonical fingerprints pass full current-schema validation; rewritten prepared identity is rejected; original evidence revisions remain retained |
+| Backup/restore | Encrypted LOCAL-002 round trip preserves Intake operations/revisions/attachment links and Files plus OPS recovery rows; restored receipt lookup and current-schema validation pass |
+| Query budget | Original outcome lookup is one indexed SELECT using the caller's existing connection; only metadata is selected; correction preparation adds one exact-revision manifest read |
+
+Focused validation: 22 Slice 32 tests in
+`operator/tests/test_intake_recovery.py` pass, including the final HTTP
+fingerprint and encrypted restore checks. The broader focused Intake/OPS
+regression run passes 205 tests across Intake, command recovery, Finance forms,
+recovery composition and endpoint contracts. Changed-file Ruff lint/format and
+diff checks pass. The complete server suite was not run.
+
+## Slice 33: Files OPS recovery registration (delivered)
+
+Delivered October 9, 2026, for the two explicitly approved forms: `file.upload`
+and `file.link.archive`. Contracts/ports, implementation, existing persistence
+integration, focused tests and shared runtime/retained-validation composition
+are delivered. The existing `file_command_operations` remains the sole Files
+mutation receipt ledger; no schema format or compatibility migration is added.
+
+- Upload is an unbound creation form requiring revision zero at preparation. It
+  retains declared metadata, SHA-256 and target/purpose only, never content bytes,
+  temporary paths or client-selected storage providers. Files' shared normalizers
+  and semantic request helpers derive the same fingerprint as the public command.
+- Link archival binds the association ID and its active revision, confirmation
+  and bounded reason. OPS checks the current association and invokes the same
+  owning-domain archive policy on its existing connection before preparation.
+  Stale or already archived associations cannot begin a new attempt.
+- Upload target/purpose and generic-upload capability are checked through the
+  composed Files policy registry. Unknown targets/purposes and owning-workflow-only
+  Intake/Inspection evidence fail closed. The owning Files command still rechecks
+  policy and idempotency atomically; an OPS form does not authorize publication.
+- An indexed metadata-only receipt projection returns the original operation ID,
+  file ID, link ID, result revision and recorded status. Upload recovery still
+  reports its original available/active result after archival; archive recovery
+  reports its original revision 2. No content is opened or republished, no provider
+  locators or archive reasons are returned by OPS reconciliation, and no result is
+  reconstructed from current file storage state.
+- Publication remains outside SQLite's write lock. Pre-commit failure rolls back
+  publication and leaves the OPS attempt unresolved. A post-commit lease-release
+  failure retains the committed receipt and can reconcile without another upload.
+  Original ID/key recovery and Files' privacy-safe cleanup attention remain intact.
+- Internal `link_existing_file`, system-owned storage verification and caller-owned
+  Intake/Inspection attachments are not standalone Files OPS forms. Their owning
+  workflows must supply recovery where applicable. Browser controls, automatic
+  retries and new administrative file workflows remain gated.
+
+Validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Real multipart upload and link archival through typed APIs; OPS preparation/reconciliation returns original file/link IDs, status and revisions |
+| Invalid combinations | Strict revision/hash validation; provider/path/byte fields reject; missing/unknown targets, invalid purposes and owning-only uploads fail policy; archived/stale associations reject |
+| Idempotency/retry | Same-key attempt and owning-command retries preserve original results; changed content cannot reconcile; unknown outcomes stay unresolved; recovery never republishes |
+| Rollback | Real commit failure removes published content and metadata; source audit/commit rollback regression tests pass; post-commit release failure reconciles the committed result |
+| Persistence/schema | Shared registry and canonical source requests pass current-schema validation; rewritten prepared fingerprints and source receipt/audit tampering reject |
+| Backup/restore | Encrypted LOCAL-002 round trip preserves file/link/location history, original upload/archive receipts and both OPS recovery records; restored current-schema validation passes |
+| Query budget | Original outcome is one indexed SELECT on the caller-owned connection; only receipt metadata is selected, without content access or new sessions |
+
+Focused validation: 21 tests in `operator/tests/test_file_recovery.py` pass.
+The related Files, Intake OPS recovery, shared recovery-composition and endpoint
+contract regression run passes 193 tests. Changed-file Ruff lint/format and diff
+checks pass. The complete server suite was not run.
+
+## Slice 34: Inspection OPS recovery registration (delivered)
+
+Delivered October 9, 2026, for the explicitly approved ten-form batch:
+
+- `inspection.report.create`
+- `inspection.report.patch`
+- `inspection.report.areas.replace`
+- `inspection.report.acknowledge`
+- `inspection.report.finalize`
+- `inspection.report.correct`
+- `inspection.evidence.attach`
+- `inspection.comparison.review`
+- `inspection.template.create`
+- `inspection.template.patch`
+
+Contracts/ports: bounded, extra-forbidden incomplete forms preserve field presence
+for patches and accept exact integer revisions. Attachment preparation retains
+normalized metadata, size and SHA-256, never content bytes, paths or provider selection.
+Lease Inspection, report, observation and template references have explicit source
+kinds; their revisions are not the Lease or Space revision.
+
+Implementation: OPS derives the owning Inspection command fingerprint and reads
+the original immutable receipt. Correction binds to its finalized predecessor,
+resolves immutable lease/report-kind facts and reuses `report.create`; finalization
+continues to own atomic supersession. Areas include observation editing rather than
+introducing a separate observation command. Draft-only editing/attachment and
+independent template scopes remain enforced. OPS does not dispatch mutations.
+
+Persistence/integration: source-owned state and receipt readers use OPS's caller
+connection. One indexed metadata-only query resolves the original target,
+revision, status and operation ID, with file/link IDs for evidence. No additional
+ledger, schema migration, nested transaction or result reconstruction is introduced.
+Existing Inspection APIs, immutable receipts and FILE-001 batches remain authoritative.
+Unknown attempts stay unknown until a matching source receipt exists. No browser
+control, generic retry or new Inspection lifecycle is enabled.
+
+Validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Real HTTP commands and SQLite receipts for all ten forms, including normalized checklist/evidence metadata and explicit-null patches |
+| Invalid combinations | Extra fields, paths/bytes, boolean/negative revisions; incomplete attempts, stale aggregate revisions and finalized report/observation gates |
+| Idempotency/retry | Original source replay and OPS receipt matching; changed request under the attempt key stays unknown; original draft/comparison result survives later changes |
+| Rollback | Required attachment audit and database commit failures roll back physical publication, metadata and Inspection receipt; OPS cannot reconcile an absent receipt; a same-key retry subsequently recovers without re-publication |
+| Persistence/schema | Complete product validation accepts composed Inspection recovery records; tampered OPS fingerprint is rejected |
+| Backup/restore | Encrypted LOCAL-002 round trip preserves exact Inspection command and OPS recovery/operation rows |
+| Query budget | One indexed outcome SELECT on the caller connection; no nested connection or complete report/evidence reload |
+
+Focused validation: 23 tests in `operator/tests/test_inspection_recovery.py` pass.
+The related Inspection, Files OPS recovery, shared recovery-composition and endpoint
+contract regression run passes 197 tests. Changed-file Ruff lint/format and diff
+checks pass. The complete server suite was not run.
+
+## Slice 35: Party and Tenant OPS recovery registration (delivered)
+
+Delivered October 9, 2026, for the explicitly approved thirteen-form batch:
+
+- `party.create`
+- `party.patch`
+- `party.archive`
+- `party.restore`
+- `party.contact.add`
+- `party.contact.update`
+- `party.contact.archive`
+- `party.contact.restore`
+- `tenant.create`
+- `tenant.designate`
+- `tenant.profile.patch`
+- `tenant.archive`
+- `tenant.restore`
+
+Contracts/ports: extra-forbidden, bounded incomplete forms use strict revision and
+confirmation fields, typed contact identities and at most twenty reference resolutions.
+Tenant designation uses the prospective Tenant revision zero, not the Party revision.
+Tenant patches preserve omitted-versus-null fields. Contact and identity normalization
+reuse owning application commands before fingerprinting.
+
+Implementation: OPS computes the existing Party/Tenant semantic fingerprint,
+checks current aggregate and selected-contact ownership/lifecycle, and reads the
+original immutable receipt by attempt key. Contact archival checks the declared
+Tenant revision and replacement selection; the owning Party command performs
+preference resolution and records the correlated Tenant consequence atomically.
+Internal `resolve_contact` is not registered as a separate form.
+
+Persistence/integration: stateless source-owned readers use the caller's existing
+connection; Tenant recovery consumes the Party read contract without importing
+Party persistence. Each outcome requires one indexed metadata-only query, returning
+the original target, scope revision, status and operation identity without reloading
+current representations. No new ledger, schema, nested transaction or mutation
+dispatcher is introduced. Existing typed source commands and conflict/ID/key lookup
+contracts remain authoritative; unresolved or mismatched attempts remain unknown.
+Party and Tenant revisions stay independent. No consequential browser control is enabled.
+
+Validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Actual HTTP/SQLite receipt recovery for all thirteen forms, normalized contacts/identity, designation and explicit-null profile edits |
+| Invalid combinations | Extra fields, boolean/negative revisions, contact/reference bounds, mutually exclusive resolutions, stale Tenant resolution revisions and cross-Party contact selection |
+| Idempotency/retry | Same-key original HTTP replay, original OPS result after later identity/profile changes, changed-request receipts rejected; incomplete attempts cannot start |
+| Rollback | A Party receipt-audit failure rolls back contact archival, Tenant preference/revision and both receipts; same-key retry commits one correlated Tenant consequence |
+| Persistence/schema | Full product retained validation accepts real composed records; tampered OPS fingerprint is rejected |
+| Backup/restore | Encrypted LOCAL-002 round trip preserves exact Party/Tenant records, command receipts and OPS recovery/operation rows |
+| Query budget | One indexed SELECT per Party/Tenant outcome on the caller connection; no nested connection or current identity/contact/profile reload |
+
+Focused validation: 25 tests in `operator/tests/test_identity_recovery.py` pass.
+The related Party, Tenant command-readiness, Inspection OPS recovery, shared
+recovery-composition and endpoint contract regression run passes 225 tests.
+Changed-file Ruff lint/format and diff checks pass. The complete server suite
+was not run.
+
+## Slice 36: Provider and category OPS recovery registration (delivered)
+
+Delivered October 9, 2026, for the explicitly approved 32-form batch:
+
+- `provider.{create,designate,profile.patch,archive,restore}` — five forms.
+- `provider.{service,area,work_history,reference,reputation_link}.{add,update,archive,restore}` — twenty forms.
+- `provider.category.{create,patch,archive,restore}` — four forms.
+- `provider.category_assignment.{assign,archive,restore}` — three forms.
+
+Contracts/ports: extra-forbidden incomplete forms retain strict revisions and
+confirmations, typed identifiers/dates and bounded text/collections. Complete
+attempts reuse the owning Provider/category command constructors and canonical
+request fingerprints, preserving omitted-versus-null patch fields, normalized
+initial children and sorted category identities. Provider creation is unbound;
+designation uses prospective Provider revision zero. Category creation is
+unbound and later category commands use the independent category revision.
+
+Implementation: OPS checks the shared Provider revision, profile/Party lifecycle
+and selected child ownership/lifecycle. Assignment creation and restoration also
+check the current category revision and active category. Existing source APIs
+remain the mutation dispatch boundary; OPS does not dispatch or automatically
+retry them. Unknown or mismatched receipts remain unresolved.
+
+Persistence/integration: source-owned stateless readers consume the caller's
+connection and the Party read contract. One indexed metadata-only query per
+outcome returns the original aggregate, child/category target, resulting revision,
+status and operation ID. No current representation reload, new ledger, schema,
+nested transaction or browser control is introduced. Runtime and retained OPS
+validation use the same binding composition.
+
+Validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Actual HTTP/SQLite execution and recovery for all 32 forms, including designation and normalized child/category patches |
+| Invalid combinations | Strict revision/category-revision types, extra fields, bounded collections/text, invalid URLs, stale revisions and cross-Provider child selection |
+| Idempotency/retry | Same-key original HTTP replay; original metadata after later mutations; changed-payload receipts remain unknown; incomplete forms cannot begin attempts |
+| Rollback | Receipt-audit failure rolls back assignment/profile revision and receipt; the original attempt remains unknown and same-key retry recovers |
+| Persistence/schema | Full product validation accepts composed records and rejects a tampered OPS fingerprint |
+| Backup/restore | Encrypted LOCAL-002 round trip preserves exact Provider/category/assignment records, immutable receipts, OPS rows and correlated audit history |
+| Query budget | One indexed SELECT per outcome on the caller connection, without nested connections or current-record hydration |
+
+Focused validation: 24 tests in `operator/tests/test_provider_recovery.py` pass.
+The final Provider/category/child/router focused run passes 94 tests, including
+those 24. The combined recovery-composition, endpoint, Party/Tenant and Provider
+command regression run passes 202 tests. Changed-file Ruff lint/format and diff
+checks pass. The complete server suite was not run. Consequential browser controls
+remain gated.
+
+## Slice 37: Owner-concern OPS recovery registration (delivered)
+
+Delivered October 9, 2026, for the explicitly approved seven-form batch:
+`owner_concern.{create,patch,in_progress,open,resolved,dismissed,follow_up}`.
+`open` covers returning in-progress work to open and reopening terminal work.
+Expense categories and Maintenance issue editing are already registered and are
+not registered again here.
+
+Contracts/ports: extra-forbidden incomplete forms use strict concern revisions,
+confirmations, UUID references, aware timestamps and bounded narratives. Creation
+uses revision zero and no bound source; other commands use the shared concern
+revision. Complete requests reuse the owning concern/FollowUpInput constructors
+and canonical command fingerprint. Patch field presence and transition narrative
+semantics match the existing HTTP dispatch boundary, including start ignoring its
+optional summary. Context-dependent ownership, historical selection, duplicate
+and reopen-reason policy remains with the source command.
+
+Implementation: OPS checks the concern revision and action-specific lifecycle;
+follow-ups remain available in terminal states, as the source contract permits.
+Preparation never dispatches a command. Unknown or mismatched receipts stay
+unknown; reconcile never repeats the concern or Task write. Existing owning APIs
+provide typed results/conflicts and operation-ID/key recovery.
+
+Persistence/integration: a source-owned stateless reader uses the caller's
+connection for one indexed metadata-only receipt query. It returns the original
+concern ID, revision, status and operation ID, not current concern or Task state.
+The source receipt retains the full original concern and optional Task result.
+Existing atomic concern/Task/link/audit writes are reused; Communications keeps
+its separately registered command authority. No ledger, schema, nested transaction
+or browser control is added. Runtime and retained OPS validation share composition.
+
+Validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Real HTTP/SQLite dispatch and OPS recovery for all seven forms, creation with a Task, subsequent follow-up, return-to-open/reopen and patch no-op |
+| Invalid combinations | Strict revisions/confirmations, typed UUID/timestamps, bounded text, extra fields, incomplete requests, stale revisions, terminal patch and source-owned reopen-reason rejection |
+| Idempotency/retry | Original concern/Task HTTP replay and ID/key recovery after later changes; mismatched payload receipts remain unknown |
+| Transaction rollback | Receipt failure after Task insertion rolls back creation/follow-up, concern revision, Task/link and audits; same-key retry recovers |
+| Persistence/schema | Full product validation accepts composed records and rejects a tampered OPS fingerprint |
+| Backup/restore | Encrypted LOCAL-002 round trip preserves exact concern/Task/link/receipt/OPS rows and correlated audit history |
+| Query budget | One indexed receipt SELECT on the caller connection; no nested connection or current-detail reload |
+
+Focused validation: 17 tests in `operator/tests/test_concern_recovery.py` pass.
+The related regression run passes 235 tests across
+`owner_management/tests/test_command_readiness.py`,
+`owner_management/tests/test_owner_concerns.py`,
+`operator/tests/test_recovery_composition.py`,
+`operator/tests/test_endpoint_contracts.py` and
+`operator/tests/test_provider_recovery.py`. Changed-file Ruff lint/format and
+diff checks pass. No complete server suite or browser controls are included in
+this slice.
+
+## Slice 38: AI configuration and draft-review OPS recovery registration (delivered)
+
+Delivered October 9, 2026, for the explicitly approved eight-form batch:
+`ai.settings.update`, `ai.connection.{create,update,disclosure}`,
+`ai.action_limit.update` and `ai.draft.{edit,approve,dismiss}`.
+Credentials, transport probes, generation, new approval modes and browser controls
+remain excluded. This registration does not add production adapters/actions or
+owning-domain approval handlers to the release registries.
+
+Contracts/ports: extra-forbidden incomplete forms use strict configuration
+revisions or draft versions, bounded model/disclosure collections, bounded notes
+and JSON payloads within the existing 64 KiB OPS envelope. Requests reuse
+`AiCommand` fingerprints with the exact owning HTTP field-presence/default rules:
+settings distinguish an omitted default connection from explicit null; disclosure
+classes are deduplicated/sorted; connection creation normalizes its label while
+patch requests preserve their raw supplied fields. Connection creation is unbound
+at revision zero; action-limit creation uses the registered action at revision
+zero. Draft commands use `version`, not an invented configuration revision.
+
+Source identity: OPS retains the AI settings singleton `1` and canonical
+registered action names for action limits. Connection/draft references and all
+other existing sources remain canonical UUIDs. Typed input/result contracts and
+retained validation share these explicit identity rules; no synthetic UUID or new
+source-identity ledger is introduced.
+
+Implementation: OPS checks current revisions/versions, active review status and
+cloud-only disclosure. The source APIs remain the dispatch boundary and enforce
+registered model/action policy and source freshness. Approval still runs through
+the registered owning-domain handler with domain effects, review and original
+receipt committed atomically. OPS reconciliation never calls a provider or repeats
+an approval; unknown/mismatched results remain unresolved.
+
+Persistence/integration: the AI-owned stateless reader uses the caller connection
+for narrow state queries and one indexed metadata-only original-receipt query.
+Result targets, revisions/versions, statuses and operation IDs come from the
+recorded result, never current settings/connections/drafts. Runtime and retained
+OPS validation share binding composition. Existing AI receipt-ID/key endpoints
+provide the original full typed result. No schema, mutation ledger, nested
+transaction, external-effect recovery or browser control is added.
+
+Validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Actual HTTP/SQLite dispatch and recovery for all eight forms; settings singleton/action-name identities, cloud disclosure, accepted connection no-op, draft editing, dismissal and owning Task approval |
+| Invalid combinations | Strict revisions/versions, typed source identities, bounded text/collections, extra fields, incomplete requests, stale versions, terminal drafts and transaction-visible stale-source rejection |
+| Idempotency/retry | Original HTTP results after later changes; omitted/null settings mismatch stays unknown; original approval replay does not repeat its Task write |
+| Transaction rollback | Failure recording an approval receipt after the owning Task write rolls back Task, review, receipt and correlated audits; same-key retry recovers |
+| Persistence/schema | Full product validation accepts composed AI/OPS records and rejects a tampered recovery fingerprint |
+| Backup/restore | Product-valid encrypted LOCAL-002 round trip preserves settings, connections, limits, runs, drafts, reviews, all eight command receipt types, Task effects, OPS records and correlated history |
+| Query budget | One indexed metadata-only original approval receipt SELECT on the caller connection; no nested connection or current-state/credential/provider reads |
+
+Focused validation: 19 tests in `operator/tests/test_ai_recovery.py` pass.
+The related regression run passes 207 tests across
+`ai_governance/tests/test_command_readiness.py`,
+`ai_governance/tests/test_governance.py`,
+`operator/tests/test_recovery_composition.py`,
+`operator/tests/test_endpoint_contracts.py` and
+`operator/tests/test_concern_recovery.py`. Changed-file Ruff lint/format and diff
+checks pass. Only focused tests are run; no browser controls are enabled.
+
+## Slice 39: AI external-effect recovery (delivered)
+
+Delivered October 9, 2026, following approval of the separate device-effect
+recovery authority. The bounded batch is
+`ai.connection.credential.{set,delete}` and `ai.connection.probe`.
+No browser controls, automatic probes, generation forms or additional approval
+modes are enabled.
+
+Contracts/ports: credential PUT/DELETE and synthetic connection-test POST require
+an exact positive connection revision and UUID attempt key. Typed responses carry
+operation/key/connection identities, the committed reservation revision and
+`updatedAt`, completion state/time and an immutable sanitized result. Secret-free
+OPS forms retain only the expected revision; credential values belong exclusively
+to the live write-only owning request, never OPS, SQLite, fingerprints or audits.
+The key identifies the set intent, not the secret: replay cannot apply another
+credential value. A replacement requires a new key.
+
+Implementation: a short AI-owned intent transaction checks replay first, then
+revision and any unknown attempt, advances the connection revision once, and
+records correlated reservation/intent audits. Keyring and provider calls occur
+outside transactions. A second transaction records the result and presence-only
+credential audit together. Ambiguous failure/interruption or result-commit failure
+leaves `outcome_unknown`; recovery never repeats the effect or infers replacement
+success from presence. Explicit acknowledgement closes uncertainty as `abandoned`
+without claiming success/failure. It cannot close an in-process operation; repair
+or another probe requires a fresh key and current revision.
+
+Persistence/integration: the current greenfield baseline adds
+`ai_external_operations`, with immutable intents and one guarded result
+completion. Exact schema/retained validation check its constraints, indexes,
+trigger bodies, canonical request/result, timestamps, complete correlated history
+and connection-revision lineage. Typed read-only ID/key endpoints and the narrow
+source-owned OPS reader use original results, not current device state. Every
+receipt requires device-local revalidation; Settings reads no longer initiate a
+probe. Unknown OPS attempts stay unresolved until explicit acknowledgement or a
+recorded completion. Encrypted restore preserves history and unknown attempts,
+not secrets or current readiness.
+
+Validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Real SQLite credential set/delete, bounded synthetic probe and owning HTTP/OPS recovery; one reservation revision increment |
+| Invalid combinations | Exact revision/UUID validation, stale conflicts, extra/secret OPS fields, unknown and in-process acknowledgement guards |
+| Idempotency/retry | Original result after later configuration changes; changed metadata conflicts; duplicate submissions never repeat the external call; explicit acknowledgement and fresh-key repair |
+| Transaction rollback | Intent/audit failure prevents dispatch; result-write failure rolls back completion/audits and preserves the unknown intent without compensating/repeating the external effect |
+| Persistence/schema | Guarded immutable intent/result, canonical sanitized payloads, correlated audit/revision reconstruction and tampered-result rejection |
+| Backup/restore | Product-valid encrypted round trip preserves original external intents/results, OPS records and correlated history; recovered receipts require device-local validation |
+| Query budget | One indexed original-result metadata query on the caller connection; no secret/provider reads or nested connection during recovery |
+
+Focused tests are in `ai_governance/tests/test_external_effects.py`,
+`ai_governance/tests/test_api_contracts.py` and
+`operator/tests/test_ai_recovery.py`. The final focused run passes 104 tests across
+all AI-governance tests and the AI OPS recovery tests. The related regression run
+passes 234 tests including OPS recovery composition and endpoint contracts.
+Changed-file Ruff lint/format checks and `git diff --check` pass. Only focused
+tests are run; no consequential browser controls are enabled.
+
+## Slice 41: Property/Space inventory and ownership OPS recovery registration (delivered)
+
+Delivered October 9, 2026, for the confirmed nine forms:
+`portfolio.property.{create,patch,archive,restore}`, `portfolio.ownerships.replace`
+and `portfolio.space.{create,patch,archive,restore}`. The existing seven manual
+status forms are unchanged. No browser controls or automatic dispatch are enabled.
+
+Contracts/ports: explicit incomplete forms retain `expectedPropertyRevision`;
+creation requires zero at preparation. Nested spaces and ownerships are bounded
+to 100 entries each, with strict revision/confirmation types, bounded text and
+extra-field rejection, plus the existing OPS 64 KiB payload ceiling. Initial
+occupancy/availability and inline Party creation retain the owning command shapes.
+Space edits/archive/restore require `spaceId` and bind to the parent Property.
+
+Implementation: bootstrap constructs the owning Portfolio commands to obtain
+their normalized canonical fingerprints. Patch fingerprints preserve supplied
+field presence, including explicit nulls. Preparation checks the shared Property
+revision, parent lifecycle, office-suite creation eligibility and child membership
+and lifecycle. Recovery never invokes a mutation. All nine forms use the existing
+Portfolio inventory ledger; no schema or additional ledger is introduced.
+
+Persistence/integration: a source-owned reader projects original operation ID,
+action, fingerprint, target ID, status and committed Property revision with one
+indexed key query on the caller's connection. OPS receipt `sourceKind/sourceId`
+identify the revision-owning Property; `result.targetId` identifies the original
+Property or Space, including server-assigned creation IDs. Runtime and retained
+OPS validation share the same nine bindings. Source effects, receipt and correlated
+audits retain Slice 14's atomic transaction and immutable original-result replay.
+
+Focused validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | All nine forms save, prepare, dispatch through real HTTP/SQLite and reconcile; nested initial status and inline owner inputs |
+| Invalid combinations | Incomplete preparation, foreign child and stale revision rejected; strict types, nested limits and undeclared fields |
+| Idempotency/retry | Canonical fingerprint parity through reconciliation; all nine original responses replay after later mutations; changed creation payload conflicts |
+| Rollback | Required operation-audit failure rolls back Property edit/revision/receipt; unresolved OPS attempt remains recoverable and succeeds on explicit retry |
+| Persistence/schema | Full current-schema validation of reconciled records; rewritten saved payload rejected; existing Slice 14 receipt/audit/trigger tampering proofs retained |
+| Backup/restore | Encrypted LOCAL-002 round trip preserves complete inventory receipt, OPS record/operation rows and correlated Portfolio audits and passes full product validation |
+| Query budget | One indexed receipt SELECT on the caller-owned connection, without nested connections or loading the complete stored response |
+
+Focused tests: `operator/tests/test_inventory_recovery.py`,
+`operator/tests/test_command_recovery.py`, `operator/tests/test_recovery_composition.py`,
+`operator/tests/test_endpoint_contracts.py` and `portfolio/tests/test_inventory_readiness.py`.
+Validation: 16 Slice 41 tests pass; 236 related focused Portfolio, OPS composition,
+endpoint-contract and AI recovery tests pass. The focused command-recovery and
+Slice 14 inventory checks also pass. Changed-file Ruff lint/format and diff checks
+pass. No full-suite run or frontend change is included.
+
 ## Command-safety readiness inventory
 
 This inventory is deliberately not a claim that consequential commands are all ready.
@@ -1072,105 +1745,129 @@ UI controls and automatic retries remain gated until their owning contracts are 
 | Task start/complete/cancel/reopen and reminder add/acknowledge/dismiss | Required parent revision and UUID key; atomic immutable receipt, typed response and lookup, same-key replay; explicit OPS forms | Slices 8 and 19 delivered; browser transport/controls remain gated |
 | Task editing/deletion | Required shared revision/key, immutable edit/no-op/delete receipts and retained tombstones; explicit OPS forms | Slices 9 and 19 delivered; browser transport remains gated |
 | Portfolio manual status | Required revision/key, complete typed snapshots/conflicts and immutable operation/key lookup; explicit OPS forms | Slices 12 and 19 delivered; browser transport/controls remain gated |
-| Lease draft/child and timeline actions | Required shared Lease revision/key, immutable original receipts and public read-only ID/key lookup; timeline actions also require the independent Space revision | Slice 13 delivered; no additional OPS attempt registration or browser controls |
-| Property/Space lifecycle and ownership changes | Required shared Property revision/key, atomic immutable original receipts, typed conflicts and read-only ID/global/scoped key lookup | Slice 14 delivered; additional OPS registration/browser transport remains gated |
-| Rent and prepaid-check commands | Shared ledger revision/key, immutable original receipts, atomic check/receipt/reminder effects and read-only key recovery; Owner receipt creation uses the same ledger contract | Slice 15 source-owned backend contract delivered; additional OPS registration/browser transport remains gated |
-| Expense, Deposit and Owner-report commands | Required aggregate revision/key, original-result recovery, atomic child effects; Owner verification checks both report and ledger revisions | Slice 15 source-owned backend contract delivered; Expense categories delivered in Slice 28; new OPS forms and browser controls remain gated |
-| Intake commands | Required source/evidence revisions, immutable original operator results and indexed recovery; consumer attention remains transaction-aware | Slice 16 source-owned backend contract delivered; OPS forms and browser controls remain gated |
-| Files upload / link archival | Required UUID key; immutable original result and bounded recovery; archival requires association revision and returns a current-link conflict snapshot | Slice 17 source contract delivered; OPS registration and browser controls remain gated |
-| Owning attachments / inspection lifecycle | Intake and Inspection own immutable receipts and Files batches; Inspection uses a lease-scoped revision and separate template revisions | Intake delivered in Slice 16; Inspection delivered in Slice 18; new OPS forms remain gated; internal reuse and storage verification have no standalone OPS recovery form |
-| Party identity | Required Party revision/UUID key, immutable identity receipts, detailed stale conflicts and indexed ID/global-key recovery | Slice 21 delivered; contact contracts delivered in Slice 22; new OPS forms and browser controls remain gated |
-| Party contact methods | Required shared Party revision/UUID key, immutable contact results, atomic owning-reference coordination and shared indexed recovery; Tenant resolutions additionally require their current Tenant revision | Slices 22–23 delivered; Provider children delivered in Slice 25; categories delivered in Slice 26; OPS forms and browser controls remain gated |
-| Tenant creation/designation, profile/preferences, archive/restore | Required Tenant revision/UUID key, immutable original Tenant results, detailed stale conflicts and indexed ID/global-key recovery; Party identity/contact effects and preference-resolution receipts commit atomically | Slice 23 delivered; new OPS forms and consequential browser controls remain gated |
-| Provider creation/designation, profile, archive/restore | Required Provider revision/UUID key, immutable identity/profile results, current-profile stale conflicts and indexed ID/global-key recovery; initial Party/contact/child/category effects and audits commit atomically | Slice 24 delivered; independent children delivered in Slice 25; categories delivered in Slice 26; OPS forms and browser controls remain gated |
-| Provider services, areas, work history, references and reputation | Required shared Provider revision/UUID key, immutable original child results, atomic child/profile/audit effects and indexed ID/global-key recovery | Slice 25 delivered; category/assignment commands delivered in Slice 26; OPS forms and browser controls remain gated |
-| Provider categories and assignments | Required category revision/key or shared Provider revision/key; assign/restore also checks category revision; immutable typed original results and indexed recovery | Slice 26 delivered; OPS forms and browser controls remain gated |
-| Owner concerns and follow-ups | Required shared concern revision/UUID key; immutable original concern and Task results, atomic correlated effects, detailed stale conflicts and indexed recovery; links use COM-owned receipts | Slice 27 delivered; OPS forms and browser controls remain gated |
-| Expense categories / Maintenance taxonomy | Required category revision/UUID key, immutable original results and indexed recovery; Maintenance has a fixed vocabulary and issue-owned category-edit receipts | Slice 28 delivered; editable Maintenance categories are outside the approved design; new OPS forms and browser controls remain gated |
-| AI configuration and draft review | Required configuration revision or draft version and UUID key; immutable original results, detailed stale conflicts, indexed ID/key recovery; approval receipt and official effects commit in the owning transaction | Slice 29 delivered for currently registered commands; new OPS forms, approval-mode extensions and browser controls remain gated |
-| AI credentials and connection probes | Existing explicit device/provider operations, without an atomic SQLite recovery receipt | Recoverable UI attempts remain gated pending a separately approved external-effect recovery contract |
+| Lease draft/child and timeline actions | Required shared Lease revision/key, immutable original receipts and public read-only ID/key lookup; timeline actions also require the independent Space revision | Slice 13 source contracts and Slice 30 OPS recovery registration delivered; browser controls remain gated |
+| Property/Space lifecycle and ownership changes | Required shared Property revision/key, atomic immutable original receipts, typed conflicts and read-only ID/global/scoped key lookup | Slice 14 source contracts and Slice 41's nine inventory OPS forms delivered; browser transport follows |
+| Rent and prepaid-check commands | Shared ledger revision/key, immutable original receipts, atomic check/receipt/reminder effects and read-only key recovery; Owner receipt creation uses the same ledger contract | Slice 15 source contracts and all approved Finance OPS batches in Slices 31A–31E delivered; browser transport remains gated |
+| Expense, Deposit and Owner-report commands | Required aggregate revision/key, original-result recovery, atomic child effects; Owner verification checks both report and ledger revisions | Slice 15 source contracts, Slice 28 category contracts and Slices 31C–31E OPS registration delivered; browser controls remain gated |
+| Intake commands | Required source/evidence revisions, immutable original operator results and indexed recovery; consumer attention remains transaction-aware | Slice 16 source contract and Slice 32's six local-operator OPS forms delivered; system integrity remains source-owned, INGEST-002 consumer consequences belong to UI-002; browser transport follows |
+| Files upload / link archival | Required UUID key; immutable original result and bounded recovery; archival requires association revision and returns a current-link conflict snapshot | Slice 17 source contract and Slice 33's two OPS forms delivered; internal reuse and system storage verification are not standalone OPS forms; browser transport follows |
+| Owning attachments / inspection lifecycle | Intake and Inspection own immutable receipts and Files batches; Inspection uses a lease-scoped revision and separate template revisions | Intake source contract and import OPS recovery delivered in Slices 16 and 32; Inspection source contract and ten OPS forms delivered in Slices 18 and 34; internal attachment consequences remain owning-workflow operations, not extra Files forms; browser transport follows |
+| Party identity | Required Party revision/UUID key, immutable identity receipts, detailed stale conflicts and indexed ID/global-key recovery | Slice 21 source contracts and Slice 35 OPS registration delivered; browser controls remain gated |
+| Party contact methods | Required shared Party revision/UUID key, immutable contact results, atomic owning-reference coordination and shared indexed recovery; Tenant resolutions additionally require their current Tenant revision | Slice 22 source contracts and Slice 35 OPS registration delivered; internal role-reference resolution remains an atomic owning consequence; browser controls remain gated |
+| Tenant creation/designation, profile/preferences, archive/restore | Required Tenant revision/UUID key, immutable original Tenant results, detailed stale conflicts and indexed ID/global-key recovery; Party identity/contact effects and preference-resolution receipts commit atomically | Slice 23 source contracts and Slice 35 OPS registration delivered; consequential browser controls remain gated |
+| Provider creation/designation, profile, archive/restore | Required Provider revision/UUID key, immutable identity/profile results, current-profile stale conflicts and indexed ID/global-key recovery; initial Party/contact/child/category effects and audits commit atomically | Slice 24 source contracts and Slice 36 OPS registration delivered; browser controls remain gated |
+| Provider services, areas, work history, references and reputation | Required shared Provider revision/UUID key, immutable original child results, atomic child/profile/audit effects and indexed ID/global-key recovery | Slice 25 source contracts and Slice 36 OPS registration delivered; browser controls remain gated |
+| Provider categories and assignments | Required category revision/key or shared Provider revision/key; assign/restore also checks category revision; immutable typed original results and indexed recovery | Slice 26 source contracts and Slice 36 OPS registration delivered; browser controls remain gated |
+| Owner concerns and follow-ups | Required shared concern revision/UUID key; immutable original concern and Task results, atomic correlated effects, detailed stale conflicts and indexed recovery; links use COM-owned receipts | Slice 27 source contracts and Slice 37 OPS registration delivered; browser controls remain gated |
+| Expense categories / Maintenance taxonomy | Required category revision/UUID key, immutable original results and indexed recovery; Maintenance has a fixed vocabulary and issue-owned category-edit receipts | Slice 28 source contracts and Slice 31C Expense-category OPS forms delivered; Maintenance category editing uses the existing issue-owned form; editable Maintenance category administration is outside scope; browser transport follows |
+| AI configuration and draft review | Required configuration revision or draft version and UUID key; immutable original results, detailed stale conflicts, indexed ID/key recovery; approval receipt and official effects commit in the owning transaction | Slice 29 source contracts and Slice 38 OPS registration delivered for currently registered commands; INGEST-002 approval/dismissal extensions move to UI-002; core browser controls remain gated pending transport integration |
+| AI credentials and connection probes | Required connection revision/key; durable sanitized intent/result, explicit uncertainty acknowledgement, original ID/key/OPS recovery; no automatic external retries | Slice 39 delivered under its approved non-atomic recovery contract; device-local readiness and consequential browser controls remain gated |
 
-Only the 46 explicitly registered OPS forms described in Slice 19 can begin
-recoverable attempts. An idempotency field alone does not prove readiness.
+The registry now contains 192 explicit command-form keys, including all 41
+Slice 31A–31E forms, six Slice 32 forms, two Slice 33 forms, ten Slice 34 forms,
+thirteen Slice 35 forms, 32 Slice 36 forms, seven Slice 37 forms, eight Slice 38 forms
+and three Slice 39 forms and nine Slice 41 forms,
+plus the three existing task-create, maintenance-issue-create and communication-record
+schemas (195 total). Only these registered schemas can
+begin recoverable attempts. An idempotency field alone does not prove readiness.
 Other source-owned APIs remain available but are not thereby registered for
 OPS recovery. This inventory does not authorize generic UI retries.
 
 ## Remaining backend readiness slices
 
-Updated October 9, 2026. The approved four-family Slice 19 registration is delivered.
-Additional module registrations require a separately approved batch. Consuming
-delivered contracts in browser transport remains subsequent UI work.
+Updated October 9, 2026. Slices 31A–31E are delivered for their 41 approved
+rent-ledger, prepaid-check, synchronization, Expense/category, deposit and
+Owner-report forms.
+Slice 32 is delivered for its six approved local-operator Intake forms.
+Slice 33 is delivered for public upload and link archival.
+Slice 34 is delivered for its ten approved Inspection forms.
+Slice 35 is delivered for its thirteen approved Party/Tenant forms.
+Slice 36 is delivered for its 32 approved Provider/category forms.
+Slice 37 is delivered for its seven approved Owner-concern forms.
+Slice 38 is delivered for its eight approved AI configuration/review forms.
+Slice 39 is delivered for its three approved secret-free AI external-effect forms.
+Slice 41 is delivered for its nine approved Portfolio inventory/ownership forms.
+Consuming delivered contracts in browser transport remains subsequent UI work.
 
-Slices 9–29 delivered their selected source-owned backend and recovery contracts.
+Slices 9–30 delivered their selected source-owned backend and recovery contracts.
 Reuse those commands when they apply to the remaining work.
 
 ### Remaining consequential workflow gates — ordered slices
 
-All approved source-owned readiness slices through Slice 29 are delivered.
-The following ordered list separates remaining OPS integration from workflows
-that still require an approved design. These are planned slices, not delivered
-capabilities or authorization to implement every item. Read-only directories
-and details may already use delivered contracts.
+All approved source-owned readiness slices through Slice 30 are delivered.
+Core browser integration consumes the delivered OPS batches below. Feature-specific
+INGEST-002 readiness is tracked separately under UI-002, rather than as another
+UI-001 slice. Read-only directories and details may already use delivered contracts;
+this inventory does not authorize additional command registrations.
 
-For Slices 30–38, first enumerate the exact missing form keys and obtain approval
-for that bounded registration batch. Reuse the owning commands, revisions,
-fingerprints and immutable original receipts; do not add another mutation ledger
-or reconstruct results from current state. Preserve Slice 19's existing 46 forms.
+Slices 37–39 completed their approved bounded OPS registration batches. Future
+registrations still require exact batch approval and must reuse the owning
+commands, revisions, fingerprints and immutable original receipts; do not add
+another mutation ledger or reconstruct results from current state. Preserve the 64
+original forms delivered in Slices 19 and 30, all 41 Slice 31A–31E forms,
+the six Slice 32 forms, the two Slice 33 forms, the ten Slice 34 forms,
+the thirteen Slice 35 forms, the 32 Slice 36 forms, the seven Slice 37 forms and
+the eight Slice 38 forms, three Slice 39 forms and nine Slice 41 forms.
 Each registration must connect typed request/result/conflict contracts, command
 dispatch and source-owned ID/key recovery to OPS and prove interrupted-attempt
 recovery. No slice below enables browser controls.
 
-1. **Slice 30: Lease OPS recovery registration (planned).** Register the delivered
-   Lease draft, participant, renewal, termination-negotiation and timeline commands
-   from Slice 13. Preserve the distinction between Lease revisions and Space status
-   revisions and recover the complete original lease-action response.
-2. **Slice 31: Finance OPS recovery registration (planned).** Register the delivered
-   financial command families from Slices 14–15, including the applicable receipt,
-   expectation, prepaid-check, deposit, expense and owner-accounting workflows.
-   Split the enumerated forms into bounded sub-batches when needed; preserve each
-   source's correction lineage, allocation rules and atomic financial receipts.
-3. **Slice 32: Intake OPS recovery registration (planned).** Register the delivered
-   source admission, correction and lifecycle commands from Slice 16. Preserve
-   exact-revision evidence identity, attention-state guards and attachment replay
-   without publishing content again. Do not introduce INGEST-002 consequences.
-4. **Slice 33: Files OPS recovery registration (planned).** Register public upload
-   and link archival from Slice 17, preserving byte/metadata fingerprints,
-   association revisions and publication rollback. Inventory internal file reuse
-   and storage verification separately: neither has a standalone OPS recovery
-   form, so do not expose either as safely retryable without an approved contract.
-5. **Slice 34: Inspection OPS recovery registration (planned).** Register the
-   report, observation/area, acknowledgment, evidence, finalization, supersession,
-   comparison and template commands delivered in Slice 18. Preserve the separate
-   lease Inspection and template revision scopes and owning-workflow file batches.
-6. **Slice 35: Party and Tenant OPS recovery registration (planned).** Register
-   identity/contact commands from Slices 21–22 and Tenant commands from Slice 23.
-   Preserve shared Party revisions, independent Tenant revisions and atomic
-   preference/reference coordination when one command affects both modules.
-7. **Slice 36: Provider and category OPS recovery registration (planned).** Register
-   Provider profile/lifecycle, child and category/assignment commands from Slices
-   24–26. Preserve shared Provider revisions and the additional category revision
-   checks required by assignment and restoration.
-8. **Slice 37: Owner-concern and Expense-category OPS recovery registration
-   (planned).** Register concern/follow-up commands from Slice 27 and Expense
-   category administration from Slice 28. Reuse atomic Task and Communications
-   consequences. Maintenance's fixed category vocabulary remains unchanged; do
-   not duplicate its already registered issue-edit form.
-9. **Slice 38: AI configuration and draft-review OPS recovery registration
-   (planned).** Register the configuration and currently supported draft-review
-   commands delivered in Slice 29. Recover original approval results from the
-   owning transaction's receipt; exclude credentials, probes and new approval modes.
-10. **Slice 39: AI external-effect recovery design and implementation (decision
-    required).** Agree on the recovery authority, failure states and reconciliation
-    behavior for keyring credential changes and provider connection probes before
-    implementing recoverable attempts. Their external effects cannot commit
-    atomically with SQLite. Keep controls gated until the approved contract and
-    focused failure/retry proofs are delivered; do not automatically repeat probes.
-11. **Slice 40: Feature-owned AI approval and domain-dismissal extensions
-    (feature-design dependent).** Resolve the applicable AI-GOV-001/INGEST-002
-    contracts for additional approval modes and consumer-owned dismissal effects.
-    Deliver source freshness, atomic domain/review outcomes and original-result
-    recovery before registering their OPS forms. This is not a prerequisite for
-    exposing independently ready workflows and does not expand Slice 29's scope.
+The former planned Slice 40 (INGEST-002 approval and domain-dismissal extensions)
+is moved to [UI-002 readiness work](UI-002_DESIGN_preliminary.md#ingest-002--issue-review-readiness-and-recovery-former-slice-40).
+It is not a remaining UI-001 slice. Slices 29 and 38 retain their delivered
+generic AI configuration/review contracts; Slice 32 retains its six local-operator
+Intake forms. Additional issue-review handlers, modes and OPS forms require
+INGEST-002 readiness and UI-002 delivery registration.
+
+### Ordered remaining UI-001 backend slices
+
+Implement in the following order. Slice 40 remains assigned to UI-002; do not
+reuse its number. Slice 41 is delivered; Slices 42–43 remain planned work.
+Slice 41 closes domain/OPS readiness before React work. Slices 42–43 implement
+the server portion of the UI-001 foundation; they can use HTTP/static fixtures
+before a real web build exists, and require final packaged-browser validation
+once the frontend is available.
+
+1. **Slice 42: Local browser transport security.**
+   Implement architecture-compliant loopback startup, allowed Host validation,
+   explicit development/production Origin policy and cross-origin mutation
+   protection across all mutation routes, including multipart uploads and AI
+   credential/probe operations. Define and document handling of absent/null
+   Origin, non-browser CLI/setup callers and preflight requests without weakening
+   browser-origin checks. Keep relative API requests and the same-origin production
+   contract; no application login or permissive CORS. Reject disallowed requests
+   before any domain write, file publication, credential change or external call.
+   Verify valid production/development requests, hostile Host/Origin combinations,
+   unrelated-origin simple/multipart requests, accepted CLI/setup behavior,
+   workspace-unavailable bootstrap and unchanged revision/idempotency recovery.
+   Security failures must cause no domain-state, command-receipt, correlated domain-audit or external-effect mutation. No schema
+   or backup format change; security configuration remains device/deployment local.
+   Request checks must not add per-record queries or open extra domain snapshots.
+
+2. **Slice 43: Packaged static serving and restricted SPA fallback.**
+   After Slice 42, serve the compiled web assets on the same local FastAPI origin.
+   Preserve `/api`, `/health`, `/docs`, `/redoc` and `/openapi.json`; return the SPA
+   entry only for registered UI-001 browser routes with GET/HEAD and an HTML Accept
+   header. Unknown API routes, missing assets, other methods and unregistered UI-002
+   routes retain truthful errors. Prevent path traversal and keep workspace files
+   outside static roots; FILE-001 remains their access boundary. Define safe cache
+   behavior for the entry document and versioned assets, restrictive production
+   CSP/security headers and explicit missing-build handling. Packaging must include
+   the web build without incorporating workspace data or secrets. Use fixture
+   assets for server tests; finish with an actual packaged-build smoke test when
+   the web scaffold exists. Validate direct/deep-link loads, HEAD/Accept/method
+   combinations, missing API/assets, traversal, security headers and a gated
+   workspace bootstrap. Static fallback must not open the workspace or query its
+   database. No persistence/schema or backup format change; restored workspaces
+   retain the ordinary runtime readiness gate.
+
+Internal file reuse, storage verification and system Intake transitions remain
+owned by their source/consumer contracts. Their omission from standalone OPS
+forms is intentional, not another UI-001 slice. If a new operator workflow is
+proposed for them, define its scope separately before registration. Production
+model/action availability remains capability-gated; optional AI adapters do not
+block manual UI-001 workflows. DASH-001 aggregation and UI-002 issue review remain
+outside these three slices.
 
 ### Completion criteria and sequencing
 
@@ -1191,16 +1888,18 @@ Validation matrix:
 | Backup/restore | Encrypted LOCAL-002 round trip preserves stable IDs, original results, revisions, lineage and correlated audit history |
 | Query budget | Bounded projections and indexed recovery; no per-record recovery reads, N+1 queries or post-commit reconstruction of original mutation results |
 
-Slices 21–29 completed contracts/ports, implementation, persistence, focused
+Slices 21–30 completed contracts/ports, implementation, persistence, focused
 tests and integration for their selected workflows. Reuse their delivered
 contracts. Any future backend slice follows the same sequence and records its
 proofs in the delivered sequence and command-safety inventory.
 
-Work through planned Slices 30–38 in order, approving and proving each bounded
-OPS batch against its delivered source contract. Slices 39–40 require separate
-design decisions and may remain gated while ready workflows proceed. Slice 19's
-46 forms stay registered; browser transport integration follows readiness for
-each selected workflow. Pause for any new product or lifecycle decision.
+Slices 37–39 have proved their approved OPS batches against the delivered source
+contracts, including Slice 39's explicitly approved external-effect uncertainty
+contract. INGEST-002 readiness work formerly labeled Slice 40 is tracked under
+UI-002 and does not block core UI implementation. Slice 41 completes the nine
+Portfolio inventory registrations. The 195
+registered OPS schemas stay available; browser transport integration follows
+readiness for each selected workflow. Pause for any new product or lifecycle decision.
 
 No consequential browser controls are enabled by this backend checklist. A
 workflow can remain gated while independently ready workflows proceed to UI
@@ -1208,8 +1907,10 @@ implementation; unfinished features must not be presented as safely retryable.
 
 ## Subsequent UI slices
 
-Once backend readiness passes: React/Vite and reproducible generated contracts;
-local transport and packaged SPA security; bootstrap/workspace gate; appearance and
+After Slice 41, begin React/Vite and reproducible generated contracts while
+completing the server foundation in Slices 42–43. Before enabling consequential
+browser workflows, verify transport security and actual packaged serving; then
+complete bootstrap/workspace gate; appearance and
 navigation; accessible disclosures and async states; directories/workspaces and actual
 domain actions; recovery/search/coverage/waiting; AI controls; shared Home primitives;
 focused browser/accessibility/packaging verification. DASH-001 aggregation stays separate.

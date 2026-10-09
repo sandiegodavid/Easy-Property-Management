@@ -24,6 +24,7 @@ from app.modules.ai_governance.infrastructure.sqlalchemy_models import (
     AiActionLimitModel,
     AiCommandOperationModel,
     AiDraftModel,
+    AiExternalOperationModel,
     AiModelConnectionModel,
     AiReviewDecisionModel,
     AiRunModel,
@@ -83,6 +84,18 @@ class SQLiteAiGovernanceUnitOfWork:
                         AiModelConnectionModel.id == connection_id
                     )
                 )
+            )
+        )
+
+    def external_row(self, *, operation_id=None, key=None):
+        predicate = (
+            AiExternalOperationModel.id == operation_id
+            if operation_id is not None
+            else AiExternalOperationModel.idempotency_key == key
+        )
+        return self.read(
+            lambda c: _mapping(
+                c.execute(AiExternalOperationModel.__table__.select().where(predicate))
             )
         )
 
@@ -215,6 +228,47 @@ class AiGovernanceTransaction:
         self.connection = connection
         self.recorder = recorder
         self.source_validators = dict(source_validators or {})
+
+    def external_by_key(self, key):
+        return _mapping(
+            self.connection.execute(
+                AiExternalOperationModel.__table__.select().where(
+                    AiExternalOperationModel.idempotency_key == key
+                )
+            )
+        )
+
+    def external_operation(self, operation_id):
+        return _mapping(
+            self.connection.execute(
+                AiExternalOperationModel.__table__.select().where(
+                    AiExternalOperationModel.id == operation_id
+                )
+            )
+        )
+
+    def pending_external(self, connection_id):
+        return (
+            self.connection.execute(
+                select(AiExternalOperationModel.id)
+                .where(
+                    AiExternalOperationModel.connection_id == connection_id,
+                    AiExternalOperationModel.result_json.is_(None),
+                )
+                .limit(1)
+            ).first()
+            is not None
+        )
+
+    def insert_external(self, row):
+        self.connection.execute(AiExternalOperationModel.__table__.insert().values(**row))
+
+    def complete_external(self, operation_id, result_json, stamp):
+        self.connection.execute(
+            AiExternalOperationModel.__table__.update()
+            .where(AiExternalOperationModel.id == operation_id)
+            .values(result_json=result_json, completed_at=stamp)
+        )
 
     def settings(self) -> dict[str, Any]:
         row = self.connection.execute(select(AiSettingsModel)).mappings().first()

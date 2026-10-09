@@ -33,7 +33,6 @@ from app.modules.ai_governance.domain.models import (
     AiActionDefinition,
     AiActionRegistry,
     AiConflictError,
-    AiCredentialConsistencyError,
     AiNotFoundError,
     AiValidationError,
     RedactionProfileRegistry,
@@ -1068,7 +1067,10 @@ class AiConfigurationService:
         readiness = (
             {"ready": False, "reason": "no_default_connection"}
             if connection_id is None
-            else self.test_connection(connection_id)
+            # Settings reads never initiate a provider probe. A portable
+            # configuration (or an old successful probe) is not current
+            # device-local transport readiness.
+            else {"ready": False, "reason": "explicit_probe_required"}
         )
         return {
             **value,
@@ -1386,118 +1388,6 @@ class AiConfigurationService:
         return self.unit_of_work.write(
             lambda tx: execute_command(tx, command, lambda: operation(tx), stamp)
         )
-
-    def set_credential(self, connection_id, credential):
-        if self.credentials is None:
-            raise AiValidationError("AI credential storage is unavailable.")
-        if self.unit_of_work.connection_row(connection_id) is None:
-            raise AiNotFoundError("AI model connection was not found.")
-        try:
-            previous = self.credentials.get_credential(self.workspace_id, connection_id)
-        except Exception as error:
-            raise AiValidationError("AI credential storage is unavailable.") from error
-        self.credentials.set_credential(self.workspace_id, connection_id, credential)
-        try:
-            self._record_credential_audit(
-                connection_id,
-                "credential_replaced" if previous is not None else "credential_set",
-                previous is not None,
-                True,
-            )
-        except Exception:
-            try:
-                if previous is None:
-                    self.credentials.delete_credential(self.workspace_id, connection_id)
-                else:
-                    self.credentials.set_credential(self.workspace_id, connection_id, previous)
-            except Exception as compensation_error:
-                raise AiCredentialConsistencyError(
-                    "AI credential audit failed and credential repair is required."
-                ) from compensation_error
-            raise
-
-    def delete_credential(self, connection_id):
-        if self.credentials is None:
-            raise AiValidationError("AI credential storage is unavailable.")
-        if self.unit_of_work.connection_row(connection_id) is None:
-            raise AiNotFoundError("AI model connection was not found.")
-        try:
-            previous = self.credentials.get_credential(self.workspace_id, connection_id)
-        except Exception as error:
-            raise AiValidationError("AI credential storage is unavailable.") from error
-        self.credentials.delete_credential(self.workspace_id, connection_id)
-        try:
-            self._record_credential_audit(
-                connection_id, "credential_deleted", previous is not None, False
-            )
-        except Exception:
-            try:
-                if previous is not None:
-                    self.credentials.set_credential(self.workspace_id, connection_id, previous)
-            except Exception as compensation_error:
-                raise AiCredentialConsistencyError(
-                    "AI credential audit failed and credential repair is required."
-                ) from compensation_error
-            raise
-
-    def _record_credential_audit(self, connection_id, action, before_present, after_present):
-        def operation(tx):
-            if tx.model_connection(connection_id) is None:
-                raise AiNotFoundError("AI model connection was not found.")
-            _record_audit(
-                tx,
-                "ai_model_connection",
-                connection_id,
-                action,
-                {"id": connection_id, "credentialPresent": before_present},
-                {"id": connection_id, "credentialPresent": after_present},
-                str(uuid4()),
-                "local_operator",
-            )
-
-        self.unit_of_work.write(operation)
-
-    def test_connection(self, connection_id):
-        row = self.unit_of_work.connection_row(connection_id)
-        if row is None:
-            raise AiNotFoundError("AI model connection was not found.")
-        try:
-            adapter = self.adapters.require(row["adapter_id"], row["adapter_version"])
-        except AiValidationError:
-            return {"ready": False, "reason": "adapter_unregistered"}
-        if not row["enabled"]:
-            return {"ready": False, "reason": "connection_disabled"}
-        try:
-            present = (
-                self.credentials is not None
-                and self.credentials.get_credential(self.workspace_id, connection_id) is not None
-            )
-        except Exception:
-            present = False
-        if adapter.requires_credential and not present:
-            return {"ready": False, "reason": "credential_unavailable"}
-        provider = self.providers.get(row["adapter_id"])
-        if provider is None:
-            return {"ready": False, "reason": "provider_unavailable"}
-        try:
-            # Probe is an explicit transport check; estimating a local JSON
-            # shape is not evidence that the configured provider is reachable.
-            probe = provider.probe(
-                {"kind": "connection_probe", "input": "health check"},
-                row["model_identifier"],
-                adapter.timeout_seconds,
-            )
-            if not isinstance(probe.payload, Mapping) or probe.payload.get("status") != "ok":
-                raise ValueError("Probe did not return a structured response.")
-            canonical_json(probe.payload, maximum_bytes=1_024)
-            validate_provider_metadata(
-                probe.prompt_tokens,
-                probe.completion_tokens,
-                probe.provider_request_id,
-            )
-        except Exception:
-            return {"ready": False, "reason": "provider_check_failed"}
-        return {"ready": True, "reason": None}
 
     def limits(self):
         overrides = {row["action_type"]: row for row in self.unit_of_work.action_limit_rows()}

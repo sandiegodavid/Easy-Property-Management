@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.intake.application.ports import IntakeSourceReader
+from app.modules.intake.application.command_identity import attention_request
 from app.modules.intake.domain.models import (
     AttentionTransition,
     IntakeConflictError,
@@ -37,19 +38,7 @@ class SQLiteIntakeAttentionOperations:
         connection: Any,
         transition: AttentionTransition,
     ) -> dict[str, object]:
-        request_payload = {
-            "attention": transition.source_id,
-            "target": transition.target,
-            "reason": transition.reason,
-            "expectedRevision": transition.expected_revision,
-            "expectedSourceRevision": transition.expected_source_revision,
-            "expectedStatus": transition.expected_status,
-            # These values are normalized by AttentionTransition before the
-            # idempotency check.  The retry correlation is intentionally not
-            # part of request identity, but actor attribution is.
-            "actorKind": transition.actor_kind,
-            "actorReference": transition.actor_reference,
-        }
+        request_payload = attention_request(transition)
         request_fingerprint = fingerprint(request_payload)
         prior = (
             connection.execute(

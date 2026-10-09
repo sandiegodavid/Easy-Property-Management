@@ -3,9 +3,9 @@
 from app.platform.command_recovery import CommandOutcome
 
 
-def receipt_projection(outcome: CommandOutcome, source_kind: str | None, key: str):
+def receipt_projection(outcome: CommandOutcome, result_kind: str, key: str):
     return {
-        "sourceKind": source_kind or "communication",
+        "sourceKind": result_kind,
         "sourceId": outcome.source_id,
         "receiptId": outcome.operation_id,
         "attemptKey": key,
@@ -14,5 +14,15 @@ def receipt_projection(outcome: CommandOutcome, source_kind: str | None, key: st
             "revision": outcome.result.revision,
             "status": outcome.result.status,
             "operationId": outcome.operation_id,
+            **(
+                {"fileId": outcome.result.file_id, "linkId": outcome.result.link_id}
+                if outcome.result.file_id is not None
+                else {}
+            ),
+            **(
+                {"evidenceRevisionId": outcome.result.evidence_revision_id}
+                if outcome.result.evidence_revision_id is not None
+                else {}
+            ),
         },
     }

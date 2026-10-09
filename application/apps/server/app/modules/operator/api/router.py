@@ -1,12 +1,12 @@
 """Strict OPS API contracts; readiness is enforced by the application boundary."""
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query
-from pydantic import AwareDatetime, Field, StrictBool, StrictInt
+from pydantic import AwareDatetime, Field, StrictBool, StrictInt, model_validator
 
-from app.modules.operator.domain.models import Contract, OperatorError
+from app.modules.operator.domain.models import Contract, OperatorError, source_identifier
 from app.platform.api_errors import domain_problem
 from app.modules.operator.application.directory_service import OperatorDirectoryService
 from app.modules.operator.api.directory_router import register_directory
@@ -20,6 +20,7 @@ from app.modules.operator.application.recovery_schemas import registered_schemas
 from app.modules.operator.application.command_forms import COMMAND_SCHEMAS, command_source_kind
 
 FormKey = Literal[tuple(registered_schemas())]
+SourceId = UUID | Literal["1"] | Annotated[str, Field(pattern="^[a-z][a-z0-9_]{0,63}$")]
 
 
 class PreferenceResponse(Contract):
@@ -67,10 +68,43 @@ class RecoveryInput(MutationInput):
     schemaVersion: StrictInt = Field(ge=1)
     payload: dict[str, Any]
     sourceKind: (
-        Literal["property", "space", "party", "task", "communication", "maintenance_issue"] | None
+        Literal[
+            "property",
+            "space",
+            "party",
+            "task",
+            "communication",
+            "maintenance_issue",
+            "lease",
+            "expense",
+            "expense_category",
+            "security_deposit_account",
+            "owner_rent_report",
+            "intake_source",
+            "file_link",
+            "inspection_lease",
+            "condition_report",
+            "condition_observation",
+            "condition_template",
+            "tenant",
+            "provider",
+            "provider_category",
+            "owner_concern",
+            "ai_settings",
+            "ai_connection",
+            "ai_action_limit",
+            "ai_draft",
+        ]
+        | None
     ) = None
-    sourceId: UUID | None = None
+    sourceId: SourceId | None = None
     baseSourceRevision: str | None = Field(None, max_length=100)
+
+    @model_validator(mode="after")
+    def valid_source_identity(self):
+        if self.sourceId is not None:
+            source_identifier(self.sourceKind, str(self.sourceId))
+        return self
 
 
 class AttemptInput(MutationInput):
@@ -87,23 +121,41 @@ class RecoveryMetadata(Contract):
     savedAt: AwareDatetime
     expiresAt: AwareDatetime
     sourceKind: str | None
-    sourceId: UUID | None
+    sourceId: SourceId | None
     baseSourceRevision: str | None
 
 
 class RecoveredCommandResult(Contract):
-    targetId: UUID
+    targetId: SourceId
     revision: StrictInt = Field(ge=0)
     status: str | None = Field(max_length=100)
     operationId: UUID
 
 
+class IntakeRecoveredCommandResult(RecoveredCommandResult):
+    evidenceRevisionId: UUID
+
+
+class FileRecoveredCommandResult(RecoveredCommandResult):
+    fileId: UUID
+    linkId: UUID
+
+
 class RecoveryReceipt(Contract):
     sourceKind: str
-    sourceId: UUID
+    sourceId: SourceId
     receiptId: UUID
     attemptKey: UUID
-    result: RecoveredCommandResult | None = None
+    result: (
+        FileRecoveredCommandResult | IntakeRecoveredCommandResult | RecoveredCommandResult | None
+    ) = None
+
+    @model_validator(mode="after")
+    def valid_receipt_identity(self):
+        source_identifier(self.sourceKind, str(self.sourceId))
+        if self.result is not None:
+            source_identifier(self.sourceKind, str(self.result.targetId))
+        return self
 
 
 class RecoveryFormDescriptor(Contract):

@@ -7,7 +7,16 @@ objects; the surrounding governance envelope is a fixed, typed contract.
 from typing import Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, JsonValue, StrictBool, StrictInt
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    StrictBool,
+    StrictInt,
+    model_validator,
+)
 
 ExecutionLocation = Literal["on_device", "cloud"]
 DraftStatus = Literal["proposed", "edited", "approved", "dismissed", "superseded"]
@@ -218,3 +227,46 @@ class AiCommandReceiptResponse(ResponseContract):
     )
     correlationId: UUID
     createdAt: AwareDatetime
+
+
+class ExternalCredentialResult(ResponseContract):
+    status: Literal["completed"]
+    beforePresent: StrictBool
+    afterPresent: StrictBool
+    credentialAction: Literal["credential_set", "credential_replaced", "credential_deleted"]
+
+
+class ExternalProbeResult(ResponseContract):
+    status: Literal["completed"]
+    ready: StrictBool
+    reason: Literal["connection_disabled", "credential_unavailable", "provider_unavailable"] | None
+
+
+class ExternalAbandonedResult(ResponseContract):
+    status: Literal["abandoned"]
+
+
+class ExternalEffectResponse(ResponseContract):
+    operationId: UUID
+    idempotencyKey: UUID
+    connectionId: UUID
+    action: Literal["credential_set", "credential_delete", "connection_probe"]
+    revision: StrictInt = Field(ge=1)
+    updatedAt: AwareDatetime
+    status: Literal["outcome_unknown", "completed", "abandoned"]
+    result: ExternalCredentialResult | ExternalProbeResult | ExternalAbandonedResult | None
+    createdAt: AwareDatetime
+    completedAt: AwareDatetime | None
+    requiresDeviceValidation: Literal[True]
+
+    @model_validator(mode="after")
+    def validate_state(self):
+        if self.status == "outcome_unknown":
+            if self.result is not None or self.completedAt is not None:
+                raise ValueError("Unknown external effects cannot have a result.")
+        elif self.result is None or self.result.status != self.status or self.completedAt is None:
+            raise ValueError("External outcome does not match its result.")
+        if self.status == "completed":
+            if (self.action == "connection_probe") != isinstance(self.result, ExternalProbeResult):
+                raise ValueError("External action does not match its result.")
+        return self

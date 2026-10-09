@@ -8,6 +8,7 @@ import re
 from typing import get_args, get_type_hints
 
 from app.modules.operator.application.ports import RecoveryBinding
+from app.modules.operator.application.command_forms import MAX_FINANCE_RECEIPT_ALLOCATIONS
 from app.modules.operator.domain.models import OperatorError
 from app.modules.tasks.application.mutations import TaskMutationCommand
 from app.modules.tasks.application.waiting import WaitingCommand
@@ -35,6 +36,26 @@ from app.modules.portfolio.application.service import (
     AvailabilityCommand,
     SpaceClassificationCommand,
 )
+from app.modules.leases.infrastructure.recovery_reader import SQLiteLeaseRecoveryReader
+from app.bootstrap.operator_lease_commands import lease_request, termination_completion_payload
+from app.bootstrap.operator_finance_commands import finance_request
+from app.modules.finance.infrastructure.recovery_reader import SQLiteFinanceRecoveryReader
+from app.modules.finance.infrastructure.aggregate_recovery_reader import (
+    SQLiteFinancialAggregateRecoveryReader,
+    SQLiteExpenseCategoryRecoveryReader,
+)
+from app.modules.owner_accounting.infrastructure.recovery_reader import (
+    SQLiteOwnerReportRecoveryReader,
+)
+from app.bootstrap.operator_financial_batches import compose_financial_batches
+from app.bootstrap.operator_intake_commands import compose_intake_forms
+from app.bootstrap.operator_file_commands import compose_file_forms
+from app.bootstrap.operator_inspection_commands import compose_inspection_forms
+from app.bootstrap.operator_identity_commands import compose_identity_forms
+from app.bootstrap.operator_provider_commands import compose_provider_forms
+from app.bootstrap.operator_concern_commands import compose_concern_forms
+from app.bootstrap.operator_ai_commands import compose_ai_forms
+from app.bootstrap.operator_inventory_commands import compose_inventory_forms
 
 
 def snake_values(payload):
@@ -248,7 +269,7 @@ def portfolio_request(action, source_id, payload, key):
     return sha256(dumps(request, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
-def bind(reader, source_kind, family, actions, calculate):
+def bind(reader, source_kind: str, family, actions, calculate):
     return {
         key: RecoveryBinding(
             source_kind,
@@ -256,6 +277,7 @@ def bind(reader, source_kind, family, actions, calculate):
             family,
             reader,
             lambda source, payload, key, action=action: calculate(action, source, payload, key),
+            result_kind=source_kind,
         )
         for key, action in actions.items()
     }
@@ -288,6 +310,84 @@ def require_complete_form(form_key, payload):
         "maintenance.assignment.end": ("targetId", "reason", "confirmed"),
         "maintenance.expense.link": ("expenseId",),
         "maintenance.follow_up.create": ("title",),
+        "lease.create": (
+            "spaceId",
+            "leaseKind",
+            "contractStartsOn",
+            "occupancyStartsOn",
+            "initialTerm",
+            "participants",
+        ),
+        "lease.term.replace": (
+            "baseRentMinor",
+            "currencyCode",
+            "paymentFrequency",
+            "agreedSecurityDepositMinor",
+        ),
+        "lease.participant.add": ("tenantPartyId", "participantRole"),
+        "lease.participant.update": ("participantId", "tenantPartyId", "participantRole"),
+        "lease.participant.remove": ("participantId",),
+        "lease.execute": ("executedOn", "confirmed", "expectedSpaceRevision"),
+        "lease.end": ("actualMoveOutOn", "confirmed", "expectedSpaceRevision"),
+        "lease.terminate": ("actualMoveOutOn", "endReason", "confirmed", "expectedSpaceRevision"),
+        "lease.void": ("confirmed", "expectedSpaceRevision"),
+        "lease.renewal.add": ("proposedStartsOn",),
+        "lease.renewal.update": ("optionId",),
+        "lease.renewal.decide": ("optionId", "status", "decidedOn"),
+        "lease.termination.create": (
+            "reason",
+            "noticeReceivedOn",
+            "requestedTerminationOn",
+            "expectedMoveOutOn",
+        ),
+        "lease.termination.proposal.add": ("caseId", "proposedTerminationOn", "expectedMoveOutOn"),
+        "lease.termination.proposal.accept": ("caseId", "proposalId", "acceptedOn", "confirmed"),
+        "lease.termination.transition": ("caseId", "status"),
+        "lease.termination.complete": (
+            "caseId",
+            "actualMoveOutOn",
+            "confirmed",
+            "expectedSpaceRevision",
+        ),
+        "finance.rent_expectation.synchronize": ("leaseTermId", "throughOn"),
+        "finance.rent_expectation.void": ("expectationId", "confirmed", "voidReason"),
+        "finance.rent_expectation.timeliness_review": (
+            "expectationId",
+            "decision",
+            "reason",
+            "confirmed",
+        ),
+        "finance.rent_receipt.create": (
+            "receivedOn",
+            "amountMinor",
+            "currencyCode",
+            "allocations",
+            "paymentMethodKind",
+        ),
+        "finance.rent_receipt.void": ("receiptId", "confirmed", "voidReason"),
+        "finance.prepaid_check.create": (
+            "expectationId",
+            "payerPartyId",
+            "receivedOn",
+            "checkDatedOn",
+        ),
+        "finance.prepaid_check.deposit": ("prepaidCheckId", "confirmed"),
+        "finance.prepaid_check.return": (
+            "prepaidCheckId",
+            "confirmed",
+            "reason",
+            "returnedOn",
+        ),
+        "finance.prepaid_check.void": ("prepaidCheckId", "confirmed", "reason"),
+        "finance.prepaid_check.replace": (
+            "prepaidCheckId",
+            "expectationId",
+            "payerPartyId",
+            "receivedOn",
+            "checkDatedOn",
+            "confirmed",
+            "reason",
+        ),
     }
     for field in required.get(form_key, ()):
         value = payload.get(field)
@@ -297,12 +397,39 @@ def require_complete_form(form_key, payload):
             or (isinstance(value, str) and not value.strip())
         ):
             raise OperatorError("Complete and confirm the command before starting an attempt.")
+    if form_key == "finance.rent_receipt.create":
+        allocations = payload.get("allocations") or ()
+        if not 1 <= len(allocations) <= MAX_FINANCE_RECEIPT_ALLOCATIONS or any(
+            not item.get("expectationId") or type(item.get("amountMinor")) is not int
+            for item in allocations
+        ):
+            raise OperatorError("Complete each receipt allocation before starting an attempt.")
+        if payload.get("duplicateConfirmed") and not (payload.get("duplicateReason") or "").strip():
+            raise OperatorError("Provide a reason for confirming a possible duplicate.")
+    if form_key == "lease.create" and payload.get("expectedRevision") != 0:
+        raise OperatorError("Lease creation requires revision zero.")
     if form_key == "communication.create" and revision(payload) != 0:
         raise OperatorError("Communication creation requires source revision zero.")
 
 
 def compose_command_forms(tasks, communications, issues, portfolio):
+    lease_reader = SQLiteLeaseRecoveryReader()
+    finance_reader = SQLiteFinanceRecoveryReader(lease_reader)
     return {
+        **compose_inventory_forms(),
+        **compose_file_forms(),
+        **compose_inspection_forms(),
+        **compose_identity_forms(),
+        **compose_provider_forms(),
+        **compose_concern_forms(),
+        **compose_ai_forms(),
+        **compose_intake_forms(),
+        **compose_financial_batches(
+            SQLiteFinancialAggregateRecoveryReader("expense", lease_reader),
+            SQLiteFinancialAggregateRecoveryReader("deposit", lease_reader),
+            SQLiteExpenseCategoryRecoveryReader(),
+            SQLiteOwnerReportRecoveryReader(lease_reader, finance_reader),
+        ),
         **bind_related(
             tasks,
             "task",
@@ -342,12 +469,13 @@ def compose_command_forms(tasks, communications, issues, portfolio):
             },
             communication_request,
         ),
-        **bind(
-            communications,
+        "communication.create": RecoveryBinding(
             None,
+            "created",
             "communication",
-            {"communication.create": "created"},
-            communication_request,
+            communications,
+            lambda source, payload, key: communication_request("created", source, payload, key),
+            result_kind="communication",
         ),
         **bind_related(
             issues,
@@ -391,5 +519,68 @@ def compose_command_forms(tasks, communications, issues, portfolio):
                 "portfolio.space.classify": "space_classified",
             },
             portfolio_request,
+        ),
+        **bind(
+            lease_reader,
+            "lease",
+            "lease",
+            {
+                "lease.patch": "patch",
+                "lease.term.replace": "replace_initial_term",
+                "lease.participant.add": "add_participant",
+                "lease.participant.update": "update_participant",
+                "lease.participant.remove": "remove_participant",
+                "lease.execute": "execute",
+                "lease.end": "ended",
+                "lease.terminate": "terminated",
+                "lease.void": "void",
+                "lease.renewal.add": "add_renewal_option",
+                "lease.renewal.update": "update_renewal_option",
+                "lease.renewal.decide": "decide_renewal_option",
+                "lease.termination.create": "create_termination_case",
+                "lease.termination.proposal.add": "add_termination_proposal",
+                "lease.termination.proposal.accept": "accept_termination_proposal",
+                "lease.termination.transition": "transition_termination_case",
+            },
+            lease_request,
+        ),
+        "lease.termination.complete": RecoveryBinding(
+            "lease",
+            "complete_termination_case",
+            "lease",
+            lease_reader,
+            lambda source, payload, key: lease_request(
+                "complete_termination_case", source, payload, key
+            ),
+            result_kind="lease",
+            fingerprint_payload=lambda connection, source, payload: termination_completion_payload(
+                lease_reader, connection, source, payload
+            ),
+        ),
+        "lease.create": RecoveryBinding(
+            None,
+            "create",
+            "lease",
+            lease_reader,
+            lambda source, payload, key: lease_request("create", source, payload, key),
+            result_kind="lease",
+        ),
+        **bind(
+            finance_reader,
+            "lease",
+            "finance",
+            {
+                "finance.rent_expectation.synchronize": "synchronize_expectations",
+                "finance.rent_expectation.void": "void_expectation",
+                "finance.rent_expectation.timeliness_review": "review_timeliness",
+                "finance.rent_receipt.create": "record_receipt",
+                "finance.rent_receipt.void": "void_receipt",
+                "finance.prepaid_check.create": "create_prepaid_check",
+                "finance.prepaid_check.deposit": "deposit_prepaid_check",
+                "finance.prepaid_check.return": "return_prepaid_check",
+                "finance.prepaid_check.void": "void_prepaid_check",
+                "finance.prepaid_check.replace": "replace_prepaid_check",
+            },
+            finance_request,
         ),
     }

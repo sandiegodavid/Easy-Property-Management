@@ -26,6 +26,7 @@ def ai_http():
             fixture.generation,
             fixture.drafts,
             SimpleNamespace(ready=True, can_write=True, error=None),
+            fixture.service.external,
         )
     )
     with TestClient(app) as client:
@@ -75,13 +76,18 @@ def test_configuration_contracts_use_persisted_results(ai_http):
     settings = client.get("/api/ai/settings")
     assert settings.status_code == 200
     parsed = SettingsResponse.model_validate(settings.json())
-    assert parsed.readiness.ready
+    assert not parsed.readiness.ready
+    assert parsed.readiness.reason == "explicit_probe_required"
     assert parsed.registeredAdapters[0].executionLocation == "on_device"
     connection = client.get("/api/ai/connections").json()[0]
     assert connection["runtimeId"] == "runtime"
     assert connection["modelArtifactDigest"] == "digest"
     assert "credential" not in connection
-    assert client.post(f"/api/ai/connections/{connection['id']}/test").json() == {
+    assert client.post(
+        f"/api/ai/connections/{connection['id']}/test",
+        json={"expectedRevision": connection["revision"], "idempotencyKey": str(uuid4())},
+    ).json()["result"] == {
+        "status": "completed",
         "ready": True,
         "reason": None,
     }

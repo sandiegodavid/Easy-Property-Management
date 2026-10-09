@@ -277,6 +277,15 @@ class _Services:
             providers=self.generation.providers,
             credentials=self.generation.credentials,
         )
+        from app.modules.ai_governance.application.external_effects import AiExternalEffectService
+
+        self.external = AiExternalEffectService(
+            unit_of_work,
+            workspace_id=self.generation.workspace_id,
+            adapters=self.generation.adapters,
+            providers=self.generation.providers,
+            credentials=self.generation.credentials,
+        )
         self.drafts = AiDraftReviewService(
             self.generation.unit_of_work,
             actions=self.generation.actions,
@@ -726,9 +735,28 @@ class AiGovernanceTests(TestCase):
     def test_credential_changes_are_audited_without_secret_content(self):
         connection_id = self.configuration.connections()[0]["id"]
         self.configuration.credentials = _Credentials()
-        self.configuration.set_credential(connection_id, "very-secret-value")
-        self.configuration.set_credential(connection_id, "another-secret-value")
-        self.configuration.delete_credential(connection_id)
+        self.service.external.credentials = self.configuration.credentials
+        revision = self.configuration.connections()[0]["revision"]
+        self.service.external.execute(
+            "credential_set",
+            connection_id,
+            credential="very-secret-value",
+            expected_revision=revision,
+            idempotency_key=str(uuid4()),
+        )
+        self.service.external.execute(
+            "credential_set",
+            connection_id,
+            credential="another-secret-value",
+            expected_revision=revision + 1,
+            idempotency_key=str(uuid4()),
+        )
+        self.service.external.execute(
+            "credential_delete",
+            connection_id,
+            expected_revision=revision + 2,
+            idempotency_key=str(uuid4()),
+        )
         with create_sqlite_engine(self.database).connect() as connection:
             rows = list(
                 connection.execute(
@@ -1462,7 +1490,21 @@ class AiGovernanceTests(TestCase):
             expected_revision=0,
         )
         connection_id = connection["id"]
-        backup_configuration.set_credential(connection_id, "not-in-the-workspace")
+        from app.modules.ai_governance.application.external_effects import AiExternalEffectService
+
+        AiExternalEffectService(
+            backup_configuration.unit_of_work,
+            workspace_id=backup_configuration.workspace_id,
+            adapters=adapters,
+            providers={"backup": self.provider},
+            credentials=credentials,
+        ).execute(
+            "credential_set",
+            connection_id,
+            credential="not-in-the-workspace",
+            expected_revision=connection["revision"],
+            idempotency_key=str(uuid4()),
+        )
         backup_configuration.update_settings(
             built_in_enabled=True,
             default_connection_id=connection_id,
@@ -1697,6 +1739,11 @@ class AiGovernanceTests(TestCase):
             source_projections={"party": _PartySource()},
         )
         self.assertEqual(
-            {"ready": False, "reason": "credential_unavailable"},
-            restored_service.configuration.test_connection(connection_id),
+            {"status": "completed", "ready": False, "reason": "credential_unavailable"},
+            restored_service.external.execute(
+                "connection_probe",
+                connection_id,
+                expected_revision=restored_service.configuration.connections()[0]["revision"],
+                idempotency_key=str(uuid4()),
+            )["result"],
         )

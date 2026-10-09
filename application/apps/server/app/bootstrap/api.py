@@ -16,6 +16,7 @@ from app.bootstrap.operator_recovery import RecoverySourcePorts
 from app.modules.operator.api.router import build_router as build_operator_router
 from app.bootstrap.owner_concern_context import SQLiteOwnerConcernContext
 from app.modules.ai_governance.api.router import build_router as build_ai_governance_router
+from app.modules.ai_governance.application.external_effects import AiExternalEffectService
 from app.modules.ai_governance.application.registry import (
     ACTION_REGISTRY,
     ADAPTER_REGISTRY,
@@ -256,6 +257,13 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
         actions=ai_generation.actions,
         approval_handlers={},
         source_projections={},
+    )
+    ai_external = AiExternalEffectService(
+        ai_generation.unit_of_work,
+        workspace_id=ai_generation.workspace_id,
+        adapters=ai_generation.adapters,
+        providers=ai_generation.providers,
+        credentials=ai_generation.credentials,
     )
     lease_context_reader = SQLiteLeaseContextReader()
     party_reads = SQLitePartyReadOperations(party_operations)
@@ -646,6 +654,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
             ("ai_review_decision", 1): DEFAULT_SNAPSHOT_POLICY,
             ("ai_settings", 1): DEFAULT_SNAPSHOT_POLICY,
             ("ai_command_operation", 1): DEFAULT_SNAPSHOT_POLICY,
+            ("ai_external_operation", 1): DEFAULT_SNAPSHOT_POLICY,
             ("ai_action_limit", 1): DEFAULT_SNAPSHOT_POLICY,
             ("ai_model_connection", 1): DEFAULT_SNAPSHOT_POLICY,
         },
@@ -708,6 +717,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
             ("ai_review_decision", 1): AI_ACTIVITY_POLICY,
             ("ai_settings", 1): AI_ACTIVITY_POLICY,
             ("ai_command_operation", 1): AI_ACTIVITY_POLICY,
+            ("ai_external_operation", 1): AI_ACTIVITY_POLICY,
             ("ai_action_limit", 1): AI_ACTIVITY_POLICY,
             ("ai_model_connection", 1): AI_ACTIVITY_POLICY,
         },
@@ -737,7 +747,7 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
     app.include_router(build_owner_rent_report_router(owner_rent_reports, runtime))
     app.include_router(build_owner_concern_router(owner_concerns, runtime))
     app.include_router(
-        build_ai_governance_router(ai_configuration, ai_generation, ai_drafts, runtime)
+        build_ai_governance_router(ai_configuration, ai_generation, ai_drafts, runtime, ai_external)
     )
     return app
 

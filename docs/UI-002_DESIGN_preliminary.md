@@ -143,6 +143,45 @@ Dedicated contracts take precedence over product descriptions where they provide
 
 CONN-001 authorization is required through DATA-003 for read-only Sheets intake. DATA-001 retains broader later import/update scope. HOA-002 retains broader association management after MVP. Moving a UI workflow does not mark a backend feature implemented.
 
+### INGEST-002 — issue-review readiness and recovery (former Slice 40)
+
+Moved from the UI-001 implementation matrix on October 9, 2026. This handoff
+preserves the former planned Slice 40 identifier for traceability; it is UI-002
+work, not an outstanding UI-001 readiness gate. INGEST-002 and AI-GOV-001 own
+the backend contracts; UI-002 owns their operator workflow and OPS registration
+integration. Existing domain scope and prerequisite order remain unchanged.
+
+- Implement and verify the INGEST-002 decision modes: create an issue, link
+  without mutation, update only explicitly selected mutable fields, dismiss as
+  no issue, and discard for rework. Follow the dedicated design's reporter,
+  target eligibility, reason and revision requirements.
+- Complete the feature-specific AI-GOV-001 approval modes and owning handlers,
+  Intake attention transitions and durable source-to-issue outcome. Validate
+  exact source/evidence and draft freshness, plus target issue revision where
+  applicable, on the caller-owned transaction. Maintenance effects, Intake
+  attention, AI review, outcome and correlated audits commit or roll back together.
+- Before registering issue-review OPS forms, deliver typed request/result/conflict
+  contracts, canonical fingerprints and immutable original-result ID/key recovery.
+  Reconciliation must return the original correlated outcome without re-running
+  approval, disclosing evidence through a metadata-only reader, or reconstructing
+  a receipt from current state. Preserve unresolved attempts until reconciled.
+- Reuse the delivered generic AI review and local-operator Intake contracts from
+  UI-001 Slices 29, 32 and 38. Those registrations do not establish readiness for
+  issue-specific approval or consumer-owned dismissal. Approve the exact new
+  OPS form batch before registration; no new mutation ledger or browser-owned
+  domain policy is introduced.
+- Enable retained-evidence comparison, operator edits, explicit decision controls
+  and correlated outcome presentation only after backend readiness and UI-002
+  route/action registration pass. Broader ingestion/voice/assistant attention
+  aggregation remains DASH-003.
+
+Validate all five decisions against real temporary workspaces, invalid/stale
+combinations, same-key replay and changed-payload conflicts, lost-response
+reconciliation, cross-module rollback, retained-schema integrity, encrypted
+backup/restore and bounded evidence/outcome reads. Evidence disclosure retains
+Intake's fail-closed read audit. Include keyboard/focus and UI-001 regression
+checks before enabling the workflow; backend receipts alone do not deliver its UI.
+
 #### HOA-001 — HOA coordination
 
 - Maintenance currently supports a property-level issue without a space, while Communications and Tasks support repeated contact and follow-up. Those records can remain authoritative for repair work, contact history, and reminders.

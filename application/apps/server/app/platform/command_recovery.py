@@ -10,6 +10,9 @@ class CommandResult:
     target_id: str
     revision: int
     status: str | None
+    evidence_revision_id: str | None = None
+    file_id: str | None = None
+    link_id: str | None = None
 
 
 @dataclass(frozen=True)

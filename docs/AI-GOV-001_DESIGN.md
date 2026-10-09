@@ -24,7 +24,7 @@ AI-GOV-001 is infrastructure and governance, not an AI feature. It does not extr
 
 ## Current implementation baseline
 
-The repository implements the AI Governance module, seven-table persistence model, exact-schema and retained-data validation, provider/credential ports, synchronous coordinator, settings and disclosure controls, run/draft/review APIs, transaction-aware approval completion, audit policies, and LOCAL-002 backup/restore coverage. Its static production action, approval-handler, source-validator, and source-projection registries remain empty by design; tests use a synthetic action.
+The repository implements the AI Governance module, eight-table persistence model, exact-schema and retained-data validation, provider/credential ports, synchronous coordinator, settings and disclosure controls, run/draft/review APIs, transaction-aware approval completion, audit policies, and LOCAL-002 backup/restore coverage. Its static production action, approval-handler, source-validator, and source-projection registries remain empty by design; tests use a synthetic action.
 
 The implemented action contract still permits only one `approval_effect` (`create`, `update`, or `advisory_only`) and one result-reference rule. Review decisions do not persist a selected mode and the generic dismiss route has no domain-handler dispatch. UI-001 Slice 29 adds immutable command receipts and original-result recovery for the currently registered configuration and review commands. INGEST-002 still extends the action/mode and domain-dismissal contracts rather than working around them.
 
@@ -125,17 +125,38 @@ The current greenfield baseline uses one append-only command ledger for settings
 | `result_json` | Canonical original typed response, including `operationId` and the resulting owning revision/version. Recovery never reconstructs it from current state or device credential presence. |
 | `correlation_id`, `created_at` | Canonical correlation UUID and UTC time; effects, receipt and its `recorded` audit commit together. Review commands share the run correlation. |
 
-Update, delete and replacement writes are prohibited by baseline triggers. Exact schema and retained validation check fingerprints, response fields, revision lineage, current tips and correlated business/receipt audits. All seven governance tables remain portable under LOCAL-002.
+Update, delete and replacement writes are prohibited by baseline triggers. Exact schema and retained validation check fingerprints, response fields, revision lineage, current tips and correlated business/receipt audits. All eight governance tables remain portable under LOCAL-002.
 
 Every covered command requires an exact revision/version and UUID key at both HTTP and application boundaries. New connections and absent limit overrides require revision zero. Settings and connections start at one; absent overrides expose revision zero. Effective configuration changes advance their revision once. Configuration no-ops retain revision/time and record their own receipt; same-key replay is audit-free. Draft edits advance the version by one; terminal decisions preserve the existing draft version and reject any new terminal command. Changed key reuse returns `409 ai_idempotency_conflict`; stale revisions return `409 ai_revision_conflict` with current state and revision.
 
 Read-only `GET /api/ai/command-operations/{operationId}` and `GET /api/ai/command-operations/by-key/{key}` return the immutable receipt through one indexed lookup. Approval handlers must call transaction-bound `AiReviewOperations.approval_replay(context)` before checking source freshness or performing official writes. `complete_approval(..., command=context.command)` records the complete original approval result and correlated receipt before the owning transaction commits. A retry after source changes returns that recorded result.
 
-Credential set/delete and connection probes retain their existing explicit device operations. They have no atomic SQLite receipt/recovery contract and remain gated for recoverable UI attempts. No additional OPS forms or automatic provider retries are enabled by Slice 29.
+Credential set/delete and explicit synthetic connection probes use the separate external-effect authority below, approved in UI-001 Slice 39. They do not use `ai_command_operations` to pretend external effects are transactional.
+
+### `ai_external_operations` — device effects and uncertainty (Slice 39)
+
+| Field | Rule |
+| --- | --- |
+| `id`, `idempotency_key`, `correlation_id` | Canonical UUIDs; unique intent key and stable operation identity. |
+| `connection_id`, `action` | Retained connection and one of `credential_set`, `credential_delete`, `connection_probe`. |
+| `expected_revision`, `revision` | Exact positive configuration revision and committed reservation revision (`expected_revision + 1`). Intent, connection revision/updated time and correlated audits commit together before any external call. |
+| `request_json`, `request_fingerprint` | Canonical action, connection ID and expected revision only; lowercase SHA-256 of those metadata. Never credential values or secret-derived hashes. A set-attempt key identifies the intent, not a secret: reuse returns its recorded outcome and never applies another value; a different credential requires a fresh key. Changed action/target/revision reuse conflicts. |
+| `created_at` | UTC reservation time, also the returned connection `updatedAt`. |
+| `result_json`, `completed_at` | Initially both null (`outcome_unknown`). One atomic completion records either `completed` with bounded presence-only credential facts/synthetic probe readiness, or explicit `abandoned`. The completion/result cannot subsequently change. |
+
+Baseline triggers prevent intent mutation, replacement and deletion and permit only a single result completion. A unique partial connection index enforces at most one unresolved intent and supports bounded pending-state checks. Retained validation binds the complete intent/result audit sequence, reservation revision lineage, credential audit, canonical request/result and timestamps. No compatibility migration is supported.
+
+Keyring access and synthetic provider inference occur outside SQLite transactions, strictly after intent commit. An interrupted call, ambiguous transport failure, changed configuration before dispatch, or failed result commit leaves the durable intent unknown. Same-key submission never dispatches an unknown operation again. Presence alone cannot establish whether a credential replacement succeeded. No automatic retry or compensating credential write is attempted.
+
+An operator explicitly acknowledges unknown outcome through `POST /api/ai/external-operations/{operationId}/acknowledge-unknown` with `acknowledgeUnknownOutcome: true`. This closes the attempt as `abandoned`, without asserting the effect failed or succeeded. Acknowledgement cannot close an in-process operation; unknown attempts block new device effects for the same connection until acknowledgement. Repair/retest then requires a fresh key and current revision. This is an explicit new operation, not replay of the abandoned one.
+
+Credential PUT/DELETE and connection-test POST require `expectedRevision` and `idempotencyKey` and return the typed external-operation snapshot. Read-only ID/key endpoints return original receipts without keyring/provider calls. All snapshots include `requiresDeviceValidation: true`: even a completed historical probe is not present-device readiness. Settings reads return `explicit_probe_required` rather than running an implicit probe. Encrypted restore preserves all intents/results/audits, including unknown attempts, but never credentials; recovery must not replay external effects on the restored device.
+
+OPS registers only secret-free metadata forms `ai.connection.credential.{set,delete}` and `ai.connection.probe`. The credential value is supplied only to the owning live write-only request. Unknown outcomes do not resolve an OPS attempt; completed or explicitly abandoned original results can be reconciled through indexed metadata-only reads. Browser controls remain gated.
 
 ### `ai_model_connections`
 
-One row per configured model connection, independent of MCP-001 assistant delegations. This is a seventh governance table.
+One row per configured model connection, independent of MCP-001 assistant delegations.
 
 | Field | Rule |
 | --- | --- |
@@ -333,7 +354,7 @@ AI-GOV-001 stores token usage when the provider reports it. It stores no cost es
 
 ## Backup, export, and restore
 
-All seven tables participate in the encrypted LOCAL-002 database snapshot and exact archive validation. Stable IDs, versions, source/result references, lineage, review history, and correlation IDs survive restore. Static action/profile definitions are application code; historical rows carry their identifiers and versions so the current application can validate them. Supported application releases must retain validators and presentation policies for every historical version they claim to restore.
+All eight tables participate in the encrypted LOCAL-002 database snapshot and exact archive validation. Stable IDs, versions, source/result references, lineage, review history, and correlation IDs survive restore. Static action/profile definitions are application code; historical rows carry their identifiers and versions so the current application can validate them. Supported application releases must retain validators and presentation policies for every historical version they claim to restore.
 
 Provider credentials are not workspace content and never enter the archive. After restore, configured connections remain visible but unavailable until credentials or local runtime readiness and disclosure settings are revalidated on the new device. Model weights, runtime endpoints, and secrets are excluded. If the restored application does not recognize a retained action/profile/schema version, restore validation fails before activation.
 
@@ -358,7 +379,7 @@ AI-GOV-001 remains in progress until the selected-mode/domain-dismissal extensio
 
 ## Acceptance criteria
 
-- Exact-schema and retained-data validation cover all seven tables and their lifecycle/correlation invariants.
+- Exact-schema and retained-data validation cover all eight tables and their lifecycle/correlation invariants.
 - Synthetic registered actions prove redaction, exact provider-input retention, output validation, draft creation, editing, generic dismissal, domain-owned dismissal, single-mode and multi-mode approval handoff, audit history, and backup/restore without creating a production AI feature.
 - Unknown actions, provider/model/profile versions, extra fields, secrets, oversized context, and malformed outputs fail closed.
 - Kill switch, destination-bound disclosure permission, disabled action, UTC-day cap, prompt cap, completion cap, registered adapter, and action/model capability allowlist are enforced atomically before provider access.
@@ -373,7 +394,7 @@ AI-GOV-001 remains in progress until the selected-mode/domain-dismissal extensio
 
 1. Define the neutral adapter registry and connection/disclosure schema. Qualify one hosted candidate with synthetic data before production enablement; Meta and OpenAI are candidates, not mandatory defaults. AI-LOCAL-001 qualifies local inference separately.
 2. Add AI domain values, action/profile registries, pure redaction, lifecycle, and limit policies with unit tests.
-3. Add the seven tables to the current baseline, exact schema/data validation, audit policies, and LOCAL-002 coverage.
+3. Add the eight tables to the current baseline, exact schema/data validation, audit policies, and LOCAL-002 coverage.
 4. Add provider and credential ports plus a deterministic fake adapter; do not claim a production provider until its official protocol is selected.
 5. Add the coordinator with short transaction phases, idempotency, concurrency, limit reservation, and interruption recovery.
 6. Extend draft terminal-decision contracts with selected approval modes, optional domain dismissal dispatch, and transaction-aware completion; keep synthetic handlers proving generic and domain-owned atomicity.
@@ -439,7 +460,7 @@ These decisions summarize the implementation boundaries established above. They 
 ## Definition of Done
 
 - [ ] Built-in model connections and assistant grants are independent; at least two fake adapters prove provider switching, truthful provenance, destination-specific permission, and no implicit fallback.
-- [ ] The static action/profile registries and all seven persistence tables have exact current-schema and retained-data validation.
+- [ ] The static action/profile registries and all eight persistence tables have exact current-schema and retained-data validation.
 - [ ] Redaction is deterministic, versioned, bounded, secret-rejecting, and retains the exact redacted request.
 - [ ] Tenant/owner message content is never sent to a cloud model unless the destination-specific permission and disclosure version are recorded; the permission cannot disable mandatory redaction or minimization.
 - [ ] Limits, kill switch, registered connection selection, transport-qualified model allowlists, idempotency, transaction phases, and interruption recovery behave as specified.

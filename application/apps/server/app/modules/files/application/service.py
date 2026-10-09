@@ -24,6 +24,9 @@ from app.modules.files.application.commands import (
     command_key,
     command_json,
     command_fingerprint,
+    upload_request,
+    archive_request,
+    link_fields as _link_fields,
 )
 from app.modules.files.application.ports import (
     FileAuditChange,
@@ -202,14 +205,9 @@ class FileService:
         key = command_key(idempotency_key)
         name, mime = normalize_filename(original_name), normalize_media_type(media_type)
         entity_type, entity_id, purpose = _link_fields(entity_type, entity_id, purpose)
-        request = {
-            "originalName": name,
-            "mediaType": mime,
-            "contentSha256": _source_digest(source),
-            "entityType": entity_type,
-            "entityId": entity_id,
-            "purpose": purpose,
-        }
+        request = upload_request(
+            name, mime, _source_digest(source), entity_type, entity_id, purpose
+        )
         prior = self.unit_of_work.command_receipt(key=key)
         if prior is not None:
             return prior.replay("upload", request)
@@ -285,21 +283,8 @@ class FileService:
         idempotency_key: str,
     ) -> dict[str, object]:
         key = command_key(idempotency_key)
-        if type(expected_revision) is not int or expected_revision < 1:
-            raise FileError("Expected revision must be a positive integer.")
-        if (
-            confirmed is not True
-            or not isinstance(reason, str)
-            or not (reason := reason.strip())
-            or len(reason) > 1000
-        ):
-            raise FileError("Archive requires confirmation and a bounded reason.")
-        request = {
-            "linkId": link_id,
-            "confirmed": True,
-            "reason": reason,
-            "expectedRevision": expected_revision,
-        }
+        request = archive_request(link_id, confirmed, reason, expected_revision)
+        reason = request["reason"]
 
         def persist(tx: FileCommandTransaction):
             prior = tx.operation_by_key(key)
@@ -668,16 +653,6 @@ def _source_digest(source: Path) -> str:
     except OSError as error:
         raise FileError("Unable to read upload content.", "file_provider_unavailable") from error
     return digest.hexdigest()
-
-
-def _link_fields(entity_type: str, entity_id: str, purpose: str) -> tuple[str, str, str]:
-    if not isinstance(entity_type, str) or not (entity_type := entity_type.strip()):
-        raise FileError("A file link requires a nonblank entity type.")
-    if not isinstance(entity_id, str) or not (entity_id := entity_id.strip()):
-        raise FileError("A file link requires a nonblank entity ID.")
-    if not isinstance(purpose, str) or not (purpose := purpose.strip()):
-        raise FileError("File link purpose must be nonblank text.")
-    return entity_type, entity_id, purpose
 
 
 def _link_snapshot(link: FileLink) -> dict[str, object]:

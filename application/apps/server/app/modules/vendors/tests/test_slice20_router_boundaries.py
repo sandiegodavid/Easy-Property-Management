@@ -166,6 +166,7 @@ def test_tenant_contact_patch_preserves_omission_and_explicit_null():
 @pytest.mark.parametrize("instant", ["2026-09-01T10:00:00Z", "2026-09-01T10:00:00-07:00"])
 def test_owner_concern_aware_instants_preserve_offset_and_reject_naive(instant):
     request = {
+        "expectedRevision": 0,
         "ownerPartyId": RAW_ID,
         "propertyId": RAW_ID,
         "concernType": "general_rental",
@@ -181,7 +182,9 @@ def test_owner_concern_aware_instants_preserve_offset_and_reject_naive(instant):
     )
     assert concerns.FollowUpRequest(title="Follow up", dueAtUtc=None).dueAtUtc is None
     request["raisedAtUtc"] = "2026-09-01T10:00:00"
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as create_error:
         concerns.ConcernCreateRequest(**request)
-    with pytest.raises(ValidationError):
+    assert [error["loc"] for error in create_error.value.errors()] == [("raisedAtUtc",)]
+    with pytest.raises(ValidationError) as follow_up_error:
         concerns.FollowUpRequest(title="Follow up", dueAtUtc="2026-09-01T10:00:00")
+    assert [error["loc"] for error in follow_up_error.value.errors()] == [("dueAtUtc",)]

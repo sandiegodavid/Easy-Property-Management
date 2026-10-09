@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query, status
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
 from app.platform.api_errors import api_problem, domain_problem, workspace_unavailable
+from app.modules.ai_governance.application.external_effects import AiExternalEffectService
 
 from app.modules.ai_governance.application.service import (
     AiConfigurationService,
@@ -23,7 +24,6 @@ from app.modules.ai_governance.domain.models import (
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 from app.modules.ai_governance.api.responses import (
     ActionLimitResponse,
-    ConnectionTestResponse,
     DraftApprovalResponse,
     DraftDetailResponse,
     DraftPageResponse,
@@ -39,6 +39,7 @@ from app.modules.ai_governance.api.responses import (
     LimitCommandResponse,
     DraftCommandResponse,
     AiCommandReceiptResponse,
+    ExternalEffectResponse,
 )
 
 
@@ -52,6 +53,11 @@ class DraftConflictState(Contract):
     version: StrictInt = Field(ge=1)
 
 
+class ExternalConnectionConflictState(Contract):
+    id: UUID
+    revision: StrictInt = Field(ge=1)
+
+
 class AiConflictDetail(Contract):
     code: str
     message: str
@@ -61,6 +67,7 @@ class AiConflictDetail(Contract):
         | ActionLimitResponse
         | DraftSummaryResponse
         | DraftConflictState
+        | ExternalConnectionConflictState
         | None
     ) = None
     revision: StrictInt | None = None
@@ -111,8 +118,17 @@ class DisclosureInput(Contract):
     dataClasses: list[str] = Field(max_length=40)
 
 
-class CredentialInput(Contract):
+class ExternalEffectInput(Contract):
+    expectedRevision: StrictInt = Field(ge=1)
+    idempotencyKey: UUID
+
+
+class CredentialInput(ExternalEffectInput):
     credential: str = Field(min_length=1, max_length=8192)
+
+
+class ExternalUncertaintyAcknowledgement(Contract):
+    acknowledgeUnknownOutcome: StrictBool
 
 
 class LimitInput(Contract):
@@ -144,6 +160,7 @@ def build_router(
     generation: AiGenerationCoordinator,
     drafts_service: AiDraftReviewService,
     runtime: WorkspaceRuntime,
+    external: AiExternalEffectService,
 ) -> APIRouter:
     router = APIRouter(
         prefix="/api/ai",
@@ -276,29 +293,90 @@ def build_router(
         )
 
     @router.put(
-        "/connections/{connection_id}/credential", status_code=204, operation_id="setAiCredential"
+        "/connections/{connection_id}/credential",
+        response_model=ExternalEffectResponse,
+        operation_id="setAiCredential",
+        response_model_exclude_unset=True,
     )
     def credential(connection_id: UUID, data: CredentialInput):
         ready(True)
-        invoke(lambda: configuration.set_credential(str(connection_id), data.credential))
+        return invoke(
+            lambda: external.execute(
+                "credential_set",
+                str(connection_id),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+                credential=data.credential,
+            )
+        )
 
     @router.delete(
         "/connections/{connection_id}/credential",
-        status_code=204,
+        response_model=ExternalEffectResponse,
+        response_model_exclude_unset=True,
         operation_id="deleteAiCredential",
     )
-    def delete_credential(connection_id: UUID):
+    def delete_credential(connection_id: UUID, data: ExternalEffectInput):
         ready(True)
-        invoke(lambda: configuration.delete_credential(str(connection_id)))
+        return invoke(
+            lambda: external.execute(
+                "credential_delete",
+                str(connection_id),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
 
     @router.post(
         "/connections/{connection_id}/test",
-        response_model=ConnectionTestResponse,
+        response_model=ExternalEffectResponse,
+        response_model_exclude_unset=True,
         operation_id="testAiConnection",
     )
-    def test_connection(connection_id: UUID):
+    def test_connection(connection_id: UUID, data: ExternalEffectInput):
+        ready(True)
+        return invoke(
+            lambda: external.execute(
+                "connection_probe",
+                str(connection_id),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
+
+    @router.get(
+        "/external-operations/{operation_id}",
+        response_model=ExternalEffectResponse,
+        response_model_exclude_unset=True,
+        operation_id="getAiExternalOperation",
+    )
+    def external_operation(operation_id: UUID):
         ready()
-        return invoke(lambda: configuration.test_connection(str(connection_id)))
+        return invoke(lambda: external.receipt(operation_id=str(operation_id)))
+
+    @router.get(
+        "/external-operations/by-key/{key}",
+        response_model=ExternalEffectResponse,
+        response_model_exclude_unset=True,
+        operation_id="getAiExternalOperationByKey",
+    )
+    def external_operation_key(key: UUID):
+        ready()
+        return invoke(lambda: external.receipt(key=str(key)))
+
+    @router.post(
+        "/external-operations/{operation_id}/acknowledge-unknown",
+        response_model=ExternalEffectResponse,
+        response_model_exclude_unset=True,
+        operation_id="acknowledgeAiExternalUncertainty",
+    )
+    def acknowledge_external(operation_id: UUID, data: ExternalUncertaintyAcknowledgement):
+        ready(True)
+        if data.acknowledgeUnknownOutcome is not True:
+            raise api_problem(
+                422, "ai_validation", "Explicit uncertainty acknowledgement is required."
+            )
+        return invoke(lambda: external.acknowledge_unknown(str(operation_id)))
 
     @router.get(
         "/limits", response_model=list[ActionLimitResponse], operation_id="listAiActionLimits"
