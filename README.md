@@ -88,6 +88,16 @@ hidden destinations remain under More. Other workflow pages explain their pendin
 delivery and do not present unloaded records as empty collections. Preference
 conflicts preserve choices for explicit review; uncertain saves retry the same key.
 
+Slice 47 adds shared disclosures, independent async regions, bounded directory
+presentation, semantic tables, labeled fields, error summaries and confirmation
+dialogs in `@epm/ui`. Import its `tokens.css` and `components.css` alongside the
+application styles. Disclosures preserve input while hidden and pass visibility
+to feature renderers, which own fetching and must pause hidden polling. Async
+regions receive source availability and original timestamps; directory totals and
+opaque continuation cursors come from the server. No component calculates domain
+state or submits commands. Run `npm run test:components` from `application/` for
+the isolated browser fixture; it is excluded from the production build.
+
 ## Frontend development checks
 
 The React/Vite app, generated contracts and shared UI package use one npm workspace

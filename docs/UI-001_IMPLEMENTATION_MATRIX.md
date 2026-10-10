@@ -1,6 +1,6 @@
 # UI-001 implementation slices
 
-Status: backend readiness Slices 41–43 and frontend Slices 44–46 delivered — October 10, 2026. Browser workflows in Slices 47–57 remain open; UI-001 is not complete.
+Status: backend readiness Slices 41–43 and frontend Slices 44–47 delivered — October 10, 2026. Browser workflows in Slices 48–57 remain open; UI-001 is not complete.
 
 Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
 feature-specific AI approval modes, Intake attention consequences, coordinated
@@ -13,9 +13,9 @@ The recorded backend readiness gate and React scaffold are complete; browser wor
 ## Subsequent UI slices — ordered implementation plan
 
 Updated October 9, 2026. Backend Slices 41–43 are recorded as delivered;
-Slices 44–46's React build, workspace gate, navigation and packaged-asset browser proofs are delivered. Implement the
+Slices 44–47's React build, workspace gate, navigation, shared components and focused browser proofs are delivered. Implement the
 following slices sequentially. Slice numbers continue after the backend sequence;
-Slice 40 stays assigned to UI-002. Slices 44–46 are delivered; Slices 47–57 remain planned.
+Slice 40 stays assigned to UI-002. Slices 44–47 are delivered; Slices 48–57 remain planned.
 The [UI-001 design](UI-001_DESIGN.md#technical-implementation-design) owns the
 interaction and technical requirements.
 
@@ -53,7 +53,7 @@ support visual development but do not establish backend or workflow readiness.
    both themes, keyboard use and supported narrow layouts. Unsupported UI-002
    routes/actions remain gated with an accurate explanation.
 
-4. **Slice 47: Shared presentation, disclosure and async components.**
+4. **Slice 47: Shared presentation, disclosure and async components (delivered).**
    Build domain-neutral components, tables/directories, section availability,
    loading/empty/stale/error states, confirmations and accessible form primitives.
    Implement D35: clicking or keyboard-activating the entire non-editable summary
@@ -160,7 +160,7 @@ support visual development but do not establish backend or workflow readiness.
 ## Command-safety readiness inventory
 
 The approved backend contracts and OPS registrations are delivered. This inventory
-separates that delivery from pending browser workflow acceptance in UI Slices 47–57.
+separates that delivery from pending browser workflow acceptance in UI Slices 48–57.
 A delivered receipt does not enable a browser control or authorize automatic retries.
 
 | Workflow | Delivered backend boundary | UI handoff or scope boundary |
@@ -238,7 +238,9 @@ that a browser control is ready.
 - **Slice 46 delivered:** shared navigation registry, explicit nested property/owner
   sections, responsive navigation and revision-safe appearance/navigation Settings.
   Domain routes explain pending UI delivery without claiming empty results.
-- **Slices 47–56:** consume the delivered bootstrap, source and OPS contracts;
+- **Slice 47 delivered:** reusable D35 disclosures, async availability states,
+  directories/tables, form and confirmation primitives with focused browser proofs.
+- **Slices 48–56:** consume the delivered bootstrap, source and OPS contracts;
   implement route states, contextual workflows, recovery and accessibility. Each
   enabled workflow needs a real critical read/write integration path and truthful
   capability registration. Do not reconstruct domain rules or receipts in the browser.
@@ -2299,3 +2301,55 @@ Validation: 18 focused packaged browser tests pass, including real-backend stale
 revision and committed-but-lost-response replay. Production build/wheel packaging,
 generated-contract reproducibility, frontend lint, format and type checks pass. Full
 server-suite execution is unnecessary because this slice changes no server code.
+
+## Slice 47: Shared presentation, disclosure and async components (delivered)
+
+Delivered October 10, 2026. `@epm/ui` now exports D35 disclosure lists/rows,
+async regions, directory and table presentation, notices, empty states, draft
+status, history links, labeled inputs, field-error summaries, confirmation dialogs
+and supplemental status announcements. Shared tokens cover both themes, semantic
+status colors, spacing, type, borders, elevation and motion. The shell uses the
+shared unavailable-region presentation for pending workflow pages.
+
+The complete summary bar is a native button with display-only string fields,
+unique IDs and an immediately following labeled panel. Details mount on first
+expansion and stay mounted while hidden, preserving unfinished inputs. Each row
+is independently controlled; its render callback receives visibility so feature
+code can stop hidden polling. The visible D35 hint, local Collapse action and
+focus restoration are shared behavior. Theme changes do not remount inputs.
+
+Async regions distinguish loading, refresh, empty, unavailable, error, stale,
+partial and success. Retained states show their supplied original `asOf` value;
+independent sections keep their successful data. Directories accept server totals
+and opaque cursors, including sparse pages with continuation. Tables preserve
+headers, row labels, numeric alignment and explicit unavailable cells, with named
+scroll regions and keyboard scroll controls. Confirmations name the action and
+consequence, start on Cancel, contain focus, block repeat actions while pending,
+support safe Escape and restore the invoking control. Source workflows remain
+responsible for commands, acknowledged results and durable recovery in Slice 48.
+
+The component browser fixture lives outside the production entry graph and makes
+no domain requests. These tests prove shared interaction behavior; later workflow
+slices must still demonstrate their real reads, writes and recovery contracts.
+No persistence, API or archive format changes are introduced.
+
+Focused validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Whole-bar pointer/Enter/Space disclosure; input retention and theme switching; semantic table and labeled fields |
+| Invalid combinations | Unavailable/error never appears as empty or zero; sparse pages retain continuation; error-summary links focus invalid controls |
+| Idempotency/retry | Presentation performs no automatic requests or retries; pending confirmation disables repeat submission |
+| Rollback/no effects | Cancel/Escape does not confirm; pending Escape cannot dismiss an unresolved action; success waits for caller acknowledgement |
+| Persistence/schema | Hidden input remains mounted; no persisted schema changes or draft-durability claim |
+| Backup/restore | No archive changes; durable recovery and archive browser proofs stay with their owning slices |
+| Query budget | Components issue no queries; directory consumes a supplied bounded page, total and cursor; visibility is exposed to feature fetch owners |
+| Accessibility | Both themes, unique disclosure IDs, focus restoration/containment, live messages, reduced motion and 320px layout |
+
+Validation commands: `npm run test:components`, focused packaged shell browser
+tests, `npm run package:web`, `npm run lint`, `npm run format:check` and
+`npm run typecheck`. Generated contracts are checked by the production build.
+
+Validation results: 5 component browser tests and 5 packaged shell integration
+tests passed. Production build/wheel packaging, contract reproducibility, lint,
+formatting, type checking and `git diff --check` passed. Only focused tests ran.

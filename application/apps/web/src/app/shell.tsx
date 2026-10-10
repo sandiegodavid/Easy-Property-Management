@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { AsyncRegion } from "@epm/ui";
 import {
   BrowserRouter,
   Link,
@@ -44,7 +45,13 @@ function PendingPage({ title }: { title: string }) {
             </p>
           ),
       )}
-      <p>This workflow is scheduled for a later UI slice. No records have been loaded.</p>
+      <AsyncRegion
+        title={`${title} availability`}
+        state={{
+          kind: "unavailable",
+          message: "This workflow is scheduled for a later UI slice. No records have been loaded.",
+        }}
+      />
       {title === "Home" && (
         <>
           <p>

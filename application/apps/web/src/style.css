@@ -1,4 +1,5 @@
 @import "@epm/ui/tokens.css";
+@import "@epm/ui/components.css";
 
 :root {
   font-family: system-ui, sans-serif;
