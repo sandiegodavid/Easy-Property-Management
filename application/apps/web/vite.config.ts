@@ -8,7 +8,12 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5173,
     strictPort: true,
-    proxy: { "/api": { target: "http://127.0.0.1:8000", changeOrigin: false } },
+    proxy: {
+      "/api": {
+        target: process.env.EPM_API_TARGET ?? "http://127.0.0.1:8000",
+        changeOrigin: false,
+      },
+    },
   },
   build: {
     sourcemap: false,

@@ -1,13 +1,14 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AsyncRegion } from "@epm/ui";
 import {
-  BrowserRouter,
+  createBrowserRouter,
+  createRoutesFromElements,
+  RouterProvider,
   Link,
   NavLink,
   Navigate,
   Outlet,
   Route,
-  Routes,
   useLocation,
   useParams,
   useSearchParams,
@@ -21,6 +22,7 @@ import {
   contextPath,
 } from "./destinations";
 import { PreferencesProvider, PreferenceSettings, usePreferences } from "./preferences";
+import { RecoveryPage } from "../shared/recovery-page";
 
 function PendingPage({ title }: { title: string }) {
   const [params, setParams] = useSearchParams();
@@ -181,6 +183,7 @@ function Layout() {
           <Link id="search-entry" to="/search">
             Search (Ctrl/⌘ K)
           </Link>
+          <Link to="/settings/recovery">Unfinished forms</Link>
         </header>
         {!scope.canWrite && <p>Workspace writes are unavailable.</p>}
         {(bootstrap.preferencesState !== "available" || !bootstrap.preferences) && (
@@ -195,67 +198,71 @@ function Layout() {
 }
 
 export function ApplicationShell() {
+  const [router] = useState(() =>
+    createBrowserRouter(
+      createRoutesFromElements(
+        <Route element={<Layout />}>
+          <Route index element={<Navigate to="/home" replace />} />
+          {destinations.map((item) => (
+            <Route key={item.id} element={<DestinationGuard id={item.id} />}>
+              <Route
+                path={item.route}
+                element={item.id === "settings" ? <Outlet /> : <PendingPage title={item.label} />}
+              >
+                {item.id === "settings" && (
+                  <>
+                    <Route index element={<PreferenceSettings />} />
+                    <Route path="recovery" element={<RecoveryPage />} />
+                    {["appearance", "navigation"].map((section) => (
+                      <Route key={section} path={section} element={<PreferenceSettings />} />
+                    ))}
+                    {["workspace", "ai"].map((section) => (
+                      <Route
+                        key={section}
+                        path={section}
+                        element={
+                          <PendingPage
+                            title={section === "ai" ? "AI assistance" : "Workspace settings"}
+                          />
+                        }
+                      />
+                    ))}
+                  </>
+                )}
+              </Route>
+            </Route>
+          ))}
+          {(["property", "owner"] as const).map((kind) => (
+            <Route
+              key={kind}
+              element={<DestinationGuard id={kind === "property" ? "properties" : "owners"} />}
+            >
+              <Route
+                path={`${kind === "property" ? "/properties" : "/owners"}/:id`}
+                element={<ContextWorkspace kind={kind} />}
+              >
+                <Route index element={<Navigate to="overview" replace />} />
+                {(kind === "property" ? propertySections : ownerSections).map((section) => (
+                  <Route key={section} path={section} element={<PendingPage title={section} />} />
+                ))}
+              </Route>
+            </Route>
+          ))}
+          {["tasks", "search"].map((path) => (
+            <Route
+              key={path}
+              path={path}
+              element={<PendingPage title={path === "tasks" ? "Tasks" : "Search"} />}
+            />
+          ))}
+          <Route path="*" element={<Unavailable />} />
+        </Route>,
+      ),
+    ),
+  );
   return (
     <PreferencesProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route index element={<Navigate to="/home" replace />} />
-            {destinations.map((item) => (
-              <Route key={item.id} element={<DestinationGuard id={item.id} />}>
-                <Route
-                  path={item.route}
-                  element={item.id === "settings" ? <Outlet /> : <PendingPage title={item.label} />}
-                >
-                  {item.id === "settings" && (
-                    <>
-                      <Route index element={<PreferenceSettings />} />
-                      {["appearance", "navigation"].map((section) => (
-                        <Route key={section} path={section} element={<PreferenceSettings />} />
-                      ))}
-                      {["workspace", "ai"].map((section) => (
-                        <Route
-                          key={section}
-                          path={section}
-                          element={
-                            <PendingPage
-                              title={section === "ai" ? "AI assistance" : "Workspace settings"}
-                            />
-                          }
-                        />
-                      ))}
-                    </>
-                  )}
-                </Route>
-              </Route>
-            ))}
-            {(["property", "owner"] as const).map((kind) => (
-              <Route
-                key={kind}
-                element={<DestinationGuard id={kind === "property" ? "properties" : "owners"} />}
-              >
-                <Route
-                  path={`${kind === "property" ? "/properties" : "/owners"}/:id`}
-                  element={<ContextWorkspace kind={kind} />}
-                >
-                  <Route index element={<Navigate to="overview" replace />} />
-                  {(kind === "property" ? propertySections : ownerSections).map((section) => (
-                    <Route key={section} path={section} element={<PendingPage title={section} />} />
-                  ))}
-                </Route>
-              </Route>
-            ))}
-            {["tasks", "search"].map((path) => (
-              <Route
-                key={path}
-                path={path}
-                element={<PendingPage title={path === "tasks" ? "Tasks" : "Search"} />}
-              />
-            ))}
-            <Route path="*" element={<Unavailable />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <RouterProvider router={router} />
     </PreferencesProvider>
   );
 }

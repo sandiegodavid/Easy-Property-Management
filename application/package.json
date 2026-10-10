@@ -23,6 +23,7 @@
     "build": "npm run contracts:check && npm run build --workspace @epm/web",
     "test:web": "playwright test",
     "test:components": "playwright test --config playwright.components.config.ts",
+    "test:recovery": "playwright test --config playwright.recovery.config.ts",
     "package:web": "npm run build && node scripts/python.mjs scripts/package_web.py",
     "check": "npm run lint && npm run format:check && npm run typecheck"
   },

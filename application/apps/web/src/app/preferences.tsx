@@ -3,6 +3,7 @@ import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "./workspace-gate";
 import { defaultOrder, destination } from "./destinations";
+import { mutation, MutationFailure } from "../shared/mutations";
 
 type Preferences = components["schemas"]["PreferenceResponse"];
 type Command = components["schemas"]["PreferenceInput"];
@@ -46,23 +47,25 @@ function usePreferenceState() {
     setPending(true);
     setMessage("");
     try {
-      const result = await api.PUT("/api/operator/preferences", { body: command });
-      if (result.response.status === 409) {
+      const result = await mutation(() => api.PUT("/api/operator/preferences", { body: command }));
+      scope.requireWrite();
+      setSaved(result);
+      setDraft(result);
+      setAttempt(null);
+      setMessage("Preferences saved.");
+    } catch (error) {
+      if (error instanceof MutationFailure && error.status === 409) {
         setConflict(true);
         setAttempt(null);
         setMessage(
           "Preferences changed in another window. Your choices are preserved. Load current preferences before applying them again.",
         );
-      } else if (result.data) {
-        setSaved(result.data);
-        setDraft(result.data);
+      } else if (error instanceof MutationFailure && !error.outcomeUnknown) {
         setAttempt(null);
-        setMessage("Preferences saved.");
+        setMessage(error.problem.message);
       } else {
-        setMessage("Preferences could not be saved. Retry the same request.");
+        setMessage("Save outcome unknown. Retry the same request before making more changes.");
       }
-    } catch {
-      setMessage("Save outcome unknown. Retry the same request before making more changes.");
     } finally {
       setPending(false);
     }

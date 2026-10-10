@@ -1,6 +1,6 @@
 # UI-001 implementation slices
 
-Status: backend readiness Slices 41–43 and frontend Slices 44–47 delivered — October 10, 2026. Browser workflows in Slices 48–57 remain open; UI-001 is not complete.
+Status: backend readiness Slices 41–43 and frontend Slices 44–48 delivered — October 10, 2026. Browser workflows in Slices 49–57 remain open; UI-001 is not complete.
 
 Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
 feature-specific AI approval modes, Intake attention consequences, coordinated
@@ -13,9 +13,9 @@ The recorded backend readiness gate and React scaffold are complete; browser wor
 ## Subsequent UI slices — ordered implementation plan
 
 Updated October 9, 2026. Backend Slices 41–43 are recorded as delivered;
-Slices 44–47's React build, workspace gate, navigation, shared components and focused browser proofs are delivered. Implement the
+Slices 44–48's React build, workspace gate, navigation, shared components, recovery transport and focused browser proofs are delivered. Implement the
 following slices sequentially. Slice numbers continue after the backend sequence;
-Slice 40 stays assigned to UI-002. Slices 44–47 are delivered; Slices 48–57 remain planned.
+Slice 40 stays assigned to UI-002. Slices 44–48 are delivered; Slices 49–57 remain planned.
 The [UI-001 design](UI-001_DESIGN.md#technical-implementation-design) owns the
 interaction and technical requirements.
 
@@ -62,7 +62,7 @@ support visual development but do not establish backend or workflow readiness.
    reduced-motion support. Verify unavailable versus empty sections, partial
    failures, keyboard/focus behavior and both themes.
 
-5. **Slice 48: Mutation transport, autosave and incomplete-form recovery.**
+5. **Slice 48: Mutation transport, autosave and incomplete-form recovery (delivered).**
    Connect Query/Form state ownership, error normalization, source revision checks,
    canonical request identity and registered OPS form save/prepare/reconcile APIs.
    Do not automatically retry mutations. Preserve edits on conflicts and reconcile
@@ -160,7 +160,7 @@ support visual development but do not establish backend or workflow readiness.
 ## Command-safety readiness inventory
 
 The approved backend contracts and OPS registrations are delivered. This inventory
-separates that delivery from pending browser workflow acceptance in UI Slices 48–57.
+separates that delivery from pending browser workflow acceptance in UI Slices 49–57.
 A delivered receipt does not enable a browser control or authorize automatic retries.
 
 | Workflow | Delivered backend boundary | UI handoff or scope boundary |
@@ -240,7 +240,10 @@ that a browser control is ready.
   Domain routes explain pending UI delivery without claiming empty results.
 - **Slice 47 delivered:** reusable D35 disclosures, async availability states,
   directories/tables, form and confirmation primitives with focused browser proofs.
-- **Slices 48–56:** consume the delivered bootstrap, source and OPS contracts;
+- **Slice 48 delivered:** mutation error normalization, serialized autosave,
+  durable OPS attempts, receipt reconciliation, RHF form ownership and guarded
+  navigation; real Task commands exercise the shared recovery contracts.
+- **Slices 49–56:** consume the delivered bootstrap, source and OPS contracts;
   implement route states, contextual workflows, recovery and accessibility. Each
   enabled workflow needs a real critical read/write integration path and truthful
   capability registration. Do not reconstruct domain rules or receipts in the browser.
@@ -2353,3 +2356,71 @@ tests, `npm run package:web`, `npm run lint`, `npm run format:check` and
 Validation results: 5 component browser tests and 5 packaged shell integration
 tests passed. Production build/wheel packaging, contract reproducibility, lint,
 formatting, type checking and `git diff --check` passed. Only focused tests ran.
+
+## Slice 48: Mutation transport, autosave and incomplete-form recovery (delivered)
+
+Delivered October 10, 2026. Shared mutation transport normalizes structured,
+plain-text and field-validation errors without automatic mutation retries.
+Transport interruption, cancellation and server failures preserve an uncertain
+outcome. Conflict codes remain distinct; provider unavailability does not move
+the entire workspace into its readiness gate. Preferences uses this transport.
+
+React Hook Form owns mounted input; the workspace-scoped Query cache owns
+acknowledged recovery representations. A per-form controller serializes idle and
+explicit saves, uses the acknowledged OPS revision, and drains edits made during
+an in-flight save. Dirty, saving, saved, failed and conflicted states are distinct.
+Background queries never reset form inputs. Explicit review of the current
+recovery revision preserves local edits. Owning editors supply registered field
+projections and verified source revisions; OPS revalidates source freshness when
+preparing an attempt. No client-side source fingerprint substitutes for the
+registered source-owned fingerprint.
+
+Before dispatch, OPS persists the original attempt key, canonical source request
+fingerprint and saved payload. Submission is serialized and waits for autosave.
+Interrupted commands remain outcome-unknown; reconciliation reads the owning
+receipt and explicit replay uses the original saved payload and attempt key.
+Unknown save/prepare/reconcile/discard responses retain their operation identity
+for an explicit retry. New attempts and edits are blocked while outcome is
+unknown. After restart, load the server recovery record rather than generating
+a new attempt. Recovered receipts are summaries; owning workflows load their
+authoritative result as required by their contract.
+
+The data router supports blocked navigation. Shared form navigation offers Save
+and leave, Discard and leave, and Keep editing, waits for acknowledgement and
+retains input on failure. Browser unload prompts remain best-effort. OPS is the
+durable store: there is no browser storage of credentials, file bytes or generic
+form snapshots. JSON-only canonicalization rejects File objects; the server's
+registered field allowlists reject undeclared secret fields. Owning upload editors
+must project only registered metadata and request file reselection after restart.
+
+The shell now exposes `/settings/recovery`: a bounded, metadata-only list of
+unfinished forms and explicit reconciliation for unresolved attempts. Active
+forms identify their owning workflow; its editor/resume route is delivered in
+the subsequent workflow slice. The integration fixture exercises real Task edit
+commands without exposing Task editing in the production browser prematurely.
+No persistence or API schema changes are introduced; the server's SPA allowlist
+adds the recovery route.
+
+Focused validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Real OPS autosave and Task edit receipts; navigation waits for saved input; explicit discard |
+| Invalid combinations | Stale source blocks dispatch; two-tab draft conflict retains edits; JSON file rejection and server secret-field rejection |
+| Idempotency/retry | Lost committed response, reload, same-key replay, changed-payload conflict, original-key retry after uncertain autosave |
+| Rollback/no effects | Cancellation remains unknown; no fresh attempt or automatic dispatch; source conflict prevents the official Task write |
+| Persistence/schema | Prepared attempt survives reload with original identity; existing current-schema recovery contracts reused |
+| Backup/restore | Focused existing encrypted OPS backup/restore proof preserves recovery records and replay; complete browser archive flow remains Slice 57 |
+| Query budget | Metadata list is limited to 50 with opaque continuation; no per-row evidence reads; reconciliation reads only the selected record |
+| Accessibility | Named navigation guard actions, labeled RHF input, visible draft status, retained input after Keep editing |
+
+Validation commands: `npm run test:recovery`, focused packaged shell browser
+tests, the registered deep-link and encrypted OPS backup/restore Python tests,
+`npm run package:web`, frontend lint/format/type checks, changed Python Ruff
+checks and `git diff --check`.
+
+Validation results: 6 recovery browser tests, 5 packaged shell tests and 1 packaged
+recovery-page test passed. All 14 registered deep-link cases and the focused
+encrypted OPS backup/restore test passed. Contract reproducibility, production
+build/wheel packaging, frontend lint/format/type checks, changed Python Ruff
+checks and diff whitespace validation passed. Only focused tests ran.

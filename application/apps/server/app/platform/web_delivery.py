@@ -69,7 +69,7 @@ SECTIONS = {
     "providers": {"overview", "details", "work-history", "documents"},
 }
 MONEY_VIEWS = {"rent", "expenses", "deposits", "scheduled-checks", "owner-reports"}
-SETTINGS_SECTIONS = {"appearance", "navigation", "workspace", "ai"}
+SETTINGS_SECTIONS = {"appearance", "navigation", "workspace", "ai", "recovery"}
 ISSUE_SECTIONS = {
     "overview",
     "details",

@@ -53,6 +53,7 @@ def client(tmp_path, build):
         f"/money/deposit-settlements/{ID}",
         "/money/expenses",
         "/settings/workspace",
+        "/settings/recovery",
         "/search",
     ],
 )
