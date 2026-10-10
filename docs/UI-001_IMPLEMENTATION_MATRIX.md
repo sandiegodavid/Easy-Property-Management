@@ -1,6 +1,6 @@
 # UI-001 implementation slices
 
-Status: backend readiness in progress — October 9, 2026. Slices 41–43 below remain planned; UI-001 is not complete.
+Status: backend readiness Slices 41–43 delivered — October 9, 2026. React delivery and actual packaged-browser validation remain open; UI-001 is not complete.
 
 Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
 feature-specific AI approval modes, Intake attention consequences, coordinated
@@ -1792,6 +1792,64 @@ pass for all 61 changed Python files; diff whitespace validation passes.
 Only focused tests were run; no frontend or persistence changes are included.
 Actual packaged-browser validation remains required after the frontend exists.
 
+## Slice 43: Packaged static serving and restricted SPA fallback (delivered)
+
+Delivered October 9, 2026. This closes the fixture-testable server delivery
+boundary, not the React scaffold or consequential browser-control gates.
+
+Contracts/implementation: `platform/web_delivery.py` explicitly allowlists the
+UI-001 routes and child sections, with canonical UUID record identities; unknown
+sections and UI-002 paths are not fallback destinations. Only GET/HEAD with an
+explicit positive-quality `text/html` Accept receives `index.html`; `/` redirects
+to `/home`. Known UI paths requested with other methods return 405; non-HTML
+requests and unknown paths return 404. `/api`, `/health`, `/docs`, `/redoc` and
+`/openapi.json` continue through FastAPI unchanged. Missing builds return a
+path-free 503 `web_build_unavailable` for eligible browser requests, without
+preventing bootstrap or API access.
+
+Assets/security: serve only the declared JS/CSS/image/font extensions under
+`/assets`; never serve source maps, environment files or arbitrary build-root
+files. Reject traversal, control characters, symlinks and workspace/static-root
+overlap. Entry responses are `no-store`; assets named with an 8–64-character
+lowercase hexadecimal fingerprint are immutable for one year; other assets
+revalidate with `no-cache`. UI/assets receive restrictive same-origin CSP,
+nosniff, no-referrer, frame denial and disabled camera/microphone/geolocation.
+The Slice 42 transport middleware remains outermost and rejects hostile Hosts
+and Origins before static handling. API documentation retains its existing
+FastAPI behavior rather than receiving the SPA's CSP.
+
+Packaging/integration: production resolves `app/web_build` alongside the installed
+Python package, never a workspace/config-selected path. The Python package-data
+allowlist includes `index.html` and supported top-level compiled assets only;
+automatic incidental package-data inclusion is disabled. Future Vite packaging
+must stage its public build there (flat `assets/`, no secrets or workspace input).
+A fixture wheel is built, extracted and served in a fresh interpreter. The real
+Vite build and browser smoke proof remain required once frontend sources exist.
+No persistence, command receipt or backup format changes; static delivery never
+opens a database or implicitly initializes a workspace.
+
+Focused validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Registered direct/deep links, root redirect, GET/HEAD, assets and extracted fixture-wheel delivery |
+| Invalid combinations | Non-HTML Accept, forbidden methods, unknown API/asset/UI-002 paths, malformed IDs/sections, traversal, symlinks and workspace/static-root overlap |
+| Idempotency/retry | Static reads have no mutation or receipt; existing transport retry/replay regression remains passing |
+| Rollback/no effects | Database connection forced to fail during static/missing-build requests; workspace remains absent; hostile transport still rejects before delivery |
+| Persistence/schema | No schema changes; fixture wheel excludes database, local configuration, environment files and source maps |
+| Backup/restore | No archive-format change; restored-workspace API readiness remains source-owned; static assets remain outside workspace archives |
+| Query budget | Static/entry handling performs zero database reads; API bootstrap remains reachable when no build/workspace exists |
+
+Focused tests: `platform/tests/test_web_delivery.py`,
+`platform/tests/test_web_packaging.py` and existing platform/transport tests.
+Validation: 129 focused platform/Files/workspace/inventory/AI API tests pass,
+including 37 static-delivery cases and the isolated fixture-wheel smoke test.
+Ruff lint/format checks pass for all four changed Python files; diff whitespace
+validation passes. Packaging uses the local cached setuptools build dependencies
+through `uv build --offline`; test environments need `uv` and those dependencies.
+Only focused tests run; no frontend sources, browser controls or real Vite build
+are included in this backend slice.
+
 ## Command-safety readiness inventory
 
 This inventory is deliberately not a claim that consequential commands are all ready.
@@ -1849,8 +1907,8 @@ Slice 37 is delivered for its seven approved Owner-concern forms.
 Slice 38 is delivered for its eight approved AI configuration/review forms.
 Slice 39 is delivered for its three approved secret-free AI external-effect forms.
 Slice 41 is delivered for its nine approved Portfolio inventory/ownership forms.
-Slice 42 delivers the server-side local browser transport boundary; packaged
-serving and browser validation remain open in Slice 43 and subsequent UI work.
+Slices 42–43 deliver the server-side browser transport and packaged static
+boundary. Actual frontend/packaged-browser validation remains subsequent UI work.
 Consuming delivered contracts in browser transport remains subsequent UI work.
 
 Slices 9–30 delivered their selected source-owned backend and recovery contracts.
@@ -1885,29 +1943,18 @@ INGEST-002 readiness and UI-002 delivery registration.
 
 ### Ordered remaining UI-001 backend slices
 
-Implement in the following order. Slice 40 remains assigned to UI-002; do not
-reuse its number. Slices 41–42 are delivered; Slice 43 remains planned work.
-Slice 41 closes domain/OPS readiness before React work. Slices 42–43 implement
-the server portion of the UI-001 foundation; they can use HTTP/static fixtures
+Slice 40 remains assigned to UI-002; do not
+reuse its number. Slices 41–43 are delivered; no numbered backend readiness slice
+remains planned in this inventory.
+Slice 41 closes domain/OPS readiness before React work. Slices 42–43 deliver
+the server portion of the UI-001 foundation using HTTP/static fixtures
 before a real web build exists, and require final packaged-browser validation
 once the frontend is available.
 
-1. **Slice 43: Packaged static serving and restricted SPA fallback.**
-   After Slice 42, serve the compiled web assets on the same local FastAPI origin.
-   Preserve `/api`, `/health`, `/docs`, `/redoc` and `/openapi.json`; return the SPA
-   entry only for registered UI-001 browser routes with GET/HEAD and an HTML Accept
-   header. Unknown API routes, missing assets, other methods and unregistered UI-002
-   routes retain truthful errors. Prevent path traversal and keep workspace files
-   outside static roots; FILE-001 remains their access boundary. Define safe cache
-   behavior for the entry document and versioned assets, restrictive production
-   CSP/security headers and explicit missing-build handling. Packaging must include
-   the web build without incorporating workspace data or secrets. Use fixture
-   assets for server tests; finish with an actual packaged-build smoke test when
-   the web scaffold exists. Validate direct/deep-link loads, HEAD/Accept/method
-   combinations, missing API/assets, traversal, security headers and a gated
-   workspace bootstrap. Static fallback must not open the workspace or query its
-   database. No persistence/schema or backup format change; restored workspaces
-   retain the ordinary runtime readiness gate.
+The remaining serving proof belongs to frontend delivery: stage the real Vite
+build into the packaged asset inventory and run a packaged-browser smoke test
+against a temporary workspace. Fixture-wheel proof does not satisfy that final
+browser acceptance gate.
 
 Internal file reuse, storage verification and system Intake transitions remain
 owned by their source/consumer contracts. Their omission from standalone OPS
@@ -1955,9 +2002,8 @@ implementation; unfinished features must not be presented as safely retryable.
 
 ## Subsequent UI slices
 
-After Slice 41, begin React/Vite and reproducible generated contracts while
-completing packaged serving in Slice 43; Slice 42's server transport protection
-is delivered. Before enabling consequential
+After the delivered backend Slices 41–43, begin React/Vite and reproducible
+generated contracts. Before enabling consequential
 browser workflows, verify transport security and actual packaged serving; then
 complete bootstrap/workspace gate; appearance and
 navigation; accessible disclosures and async states; directories/workspaces and actual

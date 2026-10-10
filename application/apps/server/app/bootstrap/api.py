@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from app.platform.api_errors import register_api_error_handlers
+from app.platform.web_delivery import PACKAGED_WEB_ROOT, PackagedWebMiddleware
 from app.platform.browser_transport import (
     BrowserTransportMiddleware,
     BrowserTransportPolicy,
@@ -199,7 +200,10 @@ logger = logging.getLogger(__name__)
 
 # Keep dependency wiring visible in one composition root; service behavior remains in modules.
 def create_app(  # noqa: C901, PLR0915
-    config_path: Path | None = None, *, transport_policy: BrowserTransportPolicy | None = None
+    config_path: Path | None = None,
+    *,
+    transport_policy: BrowserTransportPolicy | None = None,
+    web_build_path: Path | None = None,
 ) -> FastAPI:
     """Create the local API without implicitly initializing a workspace."""
     service = WorkspaceService.from_local_config(config_path)
@@ -516,6 +520,12 @@ def create_app(  # noqa: C901, PLR0915
             403: {"model": TransportErrorResponse, "description": "Local transport rejected."}
         },
     )
+    web_root = web_build_path or PACKAGED_WEB_ROOT
+    if web_root.resolve().is_relative_to(service.paths.root.resolve()) or (
+        service.paths.root.resolve().is_relative_to(web_root.resolve())
+    ):
+        raise ValueError("Packaged web assets must be separate from the workspace.")
+    app.add_middleware(PackagedWebMiddleware, root=web_root)
     app.add_middleware(
         BrowserTransportMiddleware, policy=transport_policy or BrowserTransportPolicy()
     )

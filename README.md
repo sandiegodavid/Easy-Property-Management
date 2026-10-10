@@ -59,7 +59,26 @@ is public intent, not authentication, and never overrides an invalid Origin.
 Ordinary CLI reads need no marker. Browser clients use relative API paths and
 must not add it; cross-origin browser preflight cannot request this header.
 Direct application CLI commands are unchanged. This device-local policy is not
-stored in workspace backups and does not enable browser controls or static serving.
+stored in workspace backups and does not enable browser controls.
+
+## Packaged web delivery
+
+The server serves a trusted compiled build from `app/web_build` in the installed
+Python package. Until the React/Vite build exists, eligible HTML routes return
+503 `web_build_unavailable`; the API, bootstrap and documentation remain usable.
+SPA fallback is restricted to registered UI-001 routes, canonical record IDs,
+explicit child sections, GET/HEAD and a positive `text/html` Accept header.
+Unknown API routes, missing assets and UI-002 routes never return the entry page.
+
+For future packaging, stage the Vite `index.html` and flat public `assets/` output
+under `application/apps/server/app/web_build` before building the wheel. Package
+data includes only declared JS/CSS/image/font extensions; do not stage workspace
+files, credentials, environment files or source maps. The build must use relative
+same-origin API paths, external scripts/styles and the restrictive production CSP
+(no inline/eval scripts or styles). Entry pages are not stored; fingerprinted
+hex-name assets are immutable and other assets revalidate. Actual Vite and
+packaged-browser verification remain follow-up UI acceptance work; fixture wheel
+tests do not claim a delivered frontend.
 
 ## Frontend development checks
 

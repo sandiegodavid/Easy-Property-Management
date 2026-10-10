@@ -29,9 +29,17 @@ dev = [
 
 [tool.setuptools]
 package-dir = {"" = "apps/server"}
+include-package-data = false
 
 [tool.setuptools.packages.find]
 where = ["apps/server"]
+
+# Only compiled public web files belong in the wheel, never workspace content,
+# source maps, environment files, or arbitrary contents of the build directory.
+[tool.setuptools.package-data]
+app = ["web_build/index.html", "web_build/assets/*.js", "web_build/assets/*.css",
+       "web_build/assets/*.svg", "web_build/assets/*.png", "web_build/assets/*.jpg",
+       "web_build/assets/*.webp", "web_build/assets/*.ico", "web_build/assets/*.woff2"]
 
 [tool.pytest.ini_options]
 testpaths = ["apps/server/app"]
