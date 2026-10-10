@@ -18,11 +18,9 @@ const config = ts.readConfigFile(configPath, ts.sys.readFile);
 if (config.error) fail([config.error]);
 const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root, undefined, configPath);
 
-// TS18003 is expected only before UI-001 supplies the first TypeScript source.
-const errors = parsed.errors.filter((error) => error.code !== 18003);
-if (errors.length) fail(errors);
+if (parsed.errors.length) fail(parsed.errors);
 if (parsed.fileNames.length === 0) {
-  console.log("Type checking skipped: no TypeScript sources yet (UI-001 is deferred).");
+  throw new Error("Frontend type checking requires actual sources.");
 } else {
   const program = ts.createProgram({
     rootNames: parsed.fileNames,

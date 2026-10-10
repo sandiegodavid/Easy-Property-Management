@@ -64,33 +64,64 @@ stored in workspace backups and does not enable browser controls.
 ## Packaged web delivery
 
 The server serves a trusted compiled build from `app/web_build` in the installed
-Python package. Until the React/Vite build exists, eligible HTML routes return
+Python package. When no compiled build is installed, eligible HTML routes return
 503 `web_build_unavailable`; the API, bootstrap and documentation remain usable.
 SPA fallback is restricted to registered UI-001 routes, canonical record IDs,
 explicit child sections, GET/HEAD and a positive `text/html` Accept header.
 Unknown API routes, missing assets and UI-002 routes never return the entry page.
 
-For future packaging, stage the Vite `index.html` and flat public `assets/` output
-under `application/apps/server/app/web_build` before building the wheel. Package
-data includes only declared JS/CSS/image/font extensions; do not stage workspace
-files, credentials, environment files or source maps. The build must use relative
-same-origin API paths, external scripts/styles and the restrictive production CSP
-(no inline/eval scripts or styles). Entry pages are not stored; fingerprinted
-hex-name assets are immutable and other assets revalidate. Actual Vite and
-packaged-browser verification remain follow-up UI acceptance work; fixture wheel
-tests do not claim a delivered frontend.
+`npm run package:web` builds React and stages the public Vite output into an
+isolated Python build tree, then creates a wheel in `application/dist`. It rejects
+unexpected files and symlinks. Only `index.html` and declared flat JS/CSS/image/font
+assets ship; source maps, environment files and workspace content are excluded.
+Packaging requires `uv` and cached Python build dependencies (`uv build --offline`).
+Entry pages are not stored; hexadecimal fingerprint assets are immutable.
+External scripts/styles and relative `/api` calls work under the production CSP.
+
+Slice 44 delivers a read-only connection screen. Workspace gates, navigation and
+domain workflows follow in later slices; the scaffold does not offer mutation controls.
 
 ## Frontend development checks
 
-The frontend lint/format/type-check tooling is configured under `application/`. React interface implementation remains deferred until UI-001. On a current Node.js LTS release, run:
+The React/Vite app, generated contracts and shared UI package use one npm workspace
+and lockfile under `application/`. On a current Node.js LTS release, run:
 
 ```bash
 cd application
 npm ci
+npm run contracts:check
 npm run check
+npm run build
 ```
 
-The combined check runs ESLint, Prettier, and strict TypeScript validation. Before TypeScript sources exist, type checking explicitly reports a skip; that does not validate a frontend feature. See [implementation quality checks](docs/CODE_QUALITY.md) for source scopes and generated-contract handling.
+`npm run check` checks actual handwritten sources and type-checks the generated
+contract too. `npm run contracts:generate` replaces the committed OpenAPI snapshot
+and generated types; `contracts:check` fails on any difference. Export uses an
+isolated configuration, forbids SQLite connections and never opens the live
+workspace. Scripts use the repository Python environment by default; set
+`EPM_PYTHON` to another installed project interpreter when needed.
+
+For development, start FastAPI on port 8000 with
+`python -m app serve --development-origin http://127.0.0.1:5173`, then run
+`npm run dev`. Vite binds to loopback port 5173 and proxies relative `/api` requests
+without changing the browser origin. Development explicitly allows that origin;
+production remains same-origin.
+
+For the focused packaged-asset browser smoke test:
+
+```bash
+npx playwright install chromium
+npm run package:web
+npm run test:web
+```
+
+Playwright starts production FastAPI on ports 18744/18745 using disposable ready
+and unavailable workspaces and the actual wheel's extracted assets. It checks
+React execution, generated-client bootstrap, deep links, CSP, cache headers and
+reserved API/missing-asset behavior. This proves the web asset packaging boundary
+using the repository backend; full installed-runtime distribution and the later
+domain/browser acceptance gates are separate. See
+[implementation quality checks](docs/CODE_QUALITY.md) for check policies.
 
 ## Local workspace foundation
 

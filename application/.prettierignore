@@ -11,6 +11,8 @@ config*.json
 **/node_modules/
 **/dist/
 **/coverage/
+test-results/
+playwright-report/
 packages/contracts/src/generated/
 packages/contracts/openapi.json
 package-lock.json

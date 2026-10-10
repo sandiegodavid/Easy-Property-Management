@@ -1,6 +1,6 @@
 # UI-001 implementation slices
 
-Status: backend readiness Slices 41–43 delivered — October 9, 2026. React delivery and actual packaged-browser validation remain open; UI-001 is not complete.
+Status: backend readiness Slices 41–43 and React scaffold Slice 44 delivered — October 9, 2026. Workspace gates and browser workflows in Slices 45–57 remain open; UI-001 is not complete.
 
 Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
 feature-specific AI approval modes, Intake attention consequences, coordinated
@@ -8,14 +8,14 @@ Maintenance writes and OPS recovery registration belong to UI-002. The former
 planned Slice 40 is tracked in [UI-002's preliminary design](UI-002_DESIGN_preliminary.md#ingest-002--issue-review-readiness-and-recovery-former-slice-40).
 None of that work gates UI-001. Delivered generic AI-governance and local-operator
 Intake contracts remain in this matrix; their delivery does not enable INGEST-002.
-The recorded backend readiness gate is complete; React delivery follows the ordered UI slices below.
+The recorded backend readiness gate and React scaffold are complete; browser workflow delivery follows the ordered UI slices below.
 
 ## Subsequent UI slices — ordered implementation plan
 
 Updated October 9, 2026. Backend Slices 41–43 are recorded as delivered;
-actual React delivery and packaged-browser proof remain open. Implement the
+Slice 44's React build and packaged-asset browser proof are delivered. Implement the
 following slices sequentially. Slice numbers continue after the backend sequence;
-Slice 40 stays assigned to UI-002. All slices below are planned, not delivered.
+Slice 40 stays assigned to UI-002. Slice 44 is delivered; Slices 45–57 remain planned.
 The [UI-001 design](UI-001_DESIGN.md#technical-implementation-design) owns the
 interaction and technical requirements.
 
@@ -26,7 +26,7 @@ from `application/`, and verify generated-contract reproducibility when contract
 change. Use real temporary workspaces for critical integration paths. Fixtures
 support visual development but do not establish backend or workflow readiness.
 
-1. **Slice 44: React/Vite scaffold, generated contracts and packaged smoke test.**
+1. **Slice 44: React/Vite scaffold, generated contracts and packaged smoke test (delivered).**
    Extend the existing Node workspace with `apps/web`, `packages/contracts` and
    `packages/ui`, one lockfile and reproducible pinned OpenAPI generation. Establish
    relative `/api` transport, the development proxy and an actual production build.
@@ -160,7 +160,7 @@ support visual development but do not establish backend or workflow readiness.
 ## Command-safety readiness inventory
 
 The approved backend contracts and OPS registrations are delivered. This inventory
-separates that delivery from pending browser workflow acceptance in UI Slices 44–57.
+separates that delivery from pending browser workflow acceptance in UI Slices 45–57.
 A delivered receipt does not enable a browser control or authorize automatic retries.
 
 | Workflow | Delivered backend boundary | UI handoff or scope boundary |
@@ -230,10 +230,9 @@ that a browser control is ready.
 
 ### Remaining acceptance belongs to UI delivery
 
-- **Slice 44:** generate actual client contracts, build the real React/Vite assets,
-  stage them in the packaged asset inventory and prove direct/deep-link and
-  temporary-workspace browser delivery. Slice 43's fixture-wheel proof does not
-  satisfy this actual-build gate.
+- **Slice 44 delivered:** actual generated client contracts, React/Vite assets,
+  wheel asset inventory and temporary-workspace browser delivery now pass their
+  focused gate. This read-only scaffold does not establish domain workflow readiness.
 - **Slices 45–56:** consume the delivered bootstrap, source and OPS contracts;
   implement route states, contextual workflows, recovery and accessibility. Each
   enabled workflow needs a real critical read/write integration path and truthful
@@ -2128,3 +2127,59 @@ validation passes. Packaging uses the local cached setuptools build dependencies
 through `uv build --offline`; test environments need `uv` and those dependencies.
 Only focused tests run; no frontend sources, browser controls or real Vite build
 are included in this backend slice.
+
+## Slice 44: React/Vite scaffold, generated contracts and packaged smoke test (delivered)
+
+Delivered October 9, 2026. `apps/web`, `packages/contracts` and `packages/ui`
+share the existing npm workspace and lockfile. React/Vite, the OpenAPI generator,
+typed transport and browser-test dependencies are pinned. The initial screen
+performs one generated-contract bootstrap read and states that workflows are
+not yet available; full workspace gates, navigation, forms and mutation controls
+remain assigned to Slices 45 onward.
+
+Contracts/ports: `contracts:generate` exports the production FastAPI OpenAPI
+document with an isolated temporary configuration and SQLite connections blocked.
+It checks unique operation IDs and leaves the workspace absent. The canonical
+snapshot and generated TypeScript paths/operations are committed artifacts;
+`contracts:check` regenerates both in memory and rejects differences. The
+`openapi-fetch` client is parameterized by generated paths, uses relative `/api`
+requests with same-origin credentials and adds no retries. Strict type checking
+includes generated contracts and cannot succeed through the former no-source skip.
+
+Implementation: Vite binds to loopback with a fixed development port and `/api`
+proxy. Production emits external scripts/styles with flat hexadecimal asset names,
+no source maps or public-directory copying. The minimal shared `Page` component
+contains no domain policy. The screen distinguishes connection failure from an
+unavailable workspace without offering unsupported actions. Later slices will
+introduce the full bootstrap state machine, router and server-state providers.
+
+Persistence/packaging: no database, receipt or archive format changes.
+`package:web` checks contracts, builds Vite and stages only public output into a
+temporary Python source tree before building a wheel. Unexpected file types,
+nested asset directories and symlinks fail packaging. The live workspace is never
+an input. Build/test outputs are ignored; one repository lockfile is retained.
+
+Integration: Playwright starts production FastAPI with disposable external ready
+and unavailable workspaces, extracts real assets from the wheel and compares their
+bytes with the current build. Chromium executes the compiled React application
+under the production CSP. This tests wheel **assets** with the repository backend,
+not a fresh installation of the entire Python runtime. The final cross-workflow
+distribution, restart/restore and browser security acceptance remains Slice 57.
+
+Focused validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Compiled React mounts on Home and direct property/Settings deep links; generated-client bootstrap reaches a real ready workspace |
+| Invalid combinations | Unavailable workspace remains reachable; missing API/assets/maps and unsupported UI routes remain 404; OpenAPI/docs/health remain reserved |
+| Idempotency/retry | Scaffold exposes no mutations or retry middleware; generated requests use the same local origin |
+| Transaction rollback/no effects | Contract discovery forbids database connections and leaves its workspace absent; browser missing-workspace startup never initializes it |
+| Persistence/schema | No schema change; actual public build is copied into a wheel, with extracted bytes checked against the build |
+| Backup/restore | No backup format change; temporary fixtures and compiled assets remain separate from workspace content; workflow restore proof remains Slice 57 |
+| Query budget | No per-record reads or domain queries; page mount calls only the bounded OPS bootstrap |
+
+Validation: three Chromium browser tests and 70 focused Python static/transport
+tests pass. `contracts:check`, production build, wheel packaging, `npm run lint`,
+`npm run format:check`, `npm run typecheck`, changed-file Ruff checks and diff
+whitespace checks pass. Browser setup requires Playwright Chromium; offline wheel
+packaging requires `uv` and cached Python build dependencies. Only focused tests run.

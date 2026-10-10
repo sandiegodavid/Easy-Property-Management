@@ -11,6 +11,8 @@ export default defineConfig([
     "**/node_modules/**",
     "**/dist/**",
     "**/coverage/**",
+    "test-results/**",
+    "playwright-report/**",
     "**/.venv/**",
     "packages/contracts/src/generated/**",
   ]),

@@ -28,3 +28,6 @@ application/apps/web/dist/
 application/packages/*/dist/
 coverage/
 *.tsbuildinfo
+application/dist/
+application/test-results/
+application/playwright-report/

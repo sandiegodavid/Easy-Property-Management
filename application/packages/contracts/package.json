@@ -1,0 +1,13 @@
+{
+  "name": "@epm/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/client.ts",
+    "./generated": "./src/generated/schema.ts"
+  },
+  "dependencies": {
+    "openapi-fetch": "0.17.0"
+  }
+}

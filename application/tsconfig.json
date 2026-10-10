@@ -1,6 +1,7 @@
 {
   "extends": "./tsconfig.base.json",
   "include": [
+    "*.ts",
     "apps/web/**/*.ts",
     "apps/web/**/*.tsx",
     "apps/web/**/*.mts",
