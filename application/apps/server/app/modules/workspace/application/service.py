@@ -32,6 +32,10 @@ class WorkspaceNotInitializedError(WorkspaceError):
     """Raised instead of silently creating a workspace during ordinary startup."""
 
 
+class WorkspaceFormatError(WorkspaceError):
+    """The retained workspace requires a different supported application format."""
+
+
 @dataclass(frozen=True)
 class WorkspacePaths:
     root: Path
@@ -117,7 +121,7 @@ class WorkspaceService:
             raise WorkspaceError(f"Workspace manifest is invalid: {error}") from error
 
         if manifest.format_version != WORKSPACE_FORMAT_VERSION:
-            raise WorkspaceError(
+            raise WorkspaceFormatError(
                 f"Unsupported workspace format {manifest.format_version}; "
                 f"this version supports {WORKSPACE_FORMAT_VERSION}."
             )

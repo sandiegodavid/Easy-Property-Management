@@ -1,6 +1,6 @@
 # UI-001 implementation slices
 
-Status: backend readiness Slices 41–43 and React scaffold Slice 44 delivered — October 9, 2026. Workspace gates and browser workflows in Slices 45–57 remain open; UI-001 is not complete.
+Status: backend readiness Slices 41–43 and frontend Slices 44–45 delivered — October 10, 2026. Navigation and browser workflows in Slices 46–57 remain open; UI-001 is not complete.
 
 Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
 feature-specific AI approval modes, Intake attention consequences, coordinated
@@ -13,9 +13,9 @@ The recorded backend readiness gate and React scaffold are complete; browser wor
 ## Subsequent UI slices — ordered implementation plan
 
 Updated October 9, 2026. Backend Slices 41–43 are recorded as delivered;
-Slice 44's React build and packaged-asset browser proof are delivered. Implement the
+Slices 44–45's React build, workspace gate and packaged-asset browser proofs are delivered. Implement the
 following slices sequentially. Slice numbers continue after the backend sequence;
-Slice 40 stays assigned to UI-002. Slice 44 is delivered; Slices 45–57 remain planned.
+Slice 40 stays assigned to UI-002. Slices 44–45 are delivered; Slices 46–57 remain planned.
 The [UI-001 design](UI-001_DESIGN.md#technical-implementation-design) owns the
 interaction and technical requirements.
 
@@ -36,7 +36,7 @@ support visual development but do not establish backend or workflow readiness.
    actual-source frontend quality checks and a temporary-workspace browser smoke
    test; fixture-only static tests do not complete packaged-browser validation.
 
-2. **Slice 45: Bootstrap and workspace gate.**
+2. **Slice 45: Bootstrap and workspace gate (delivered).**
    Consume the typed OPS bootstrap before domain reads. Implement ready, missing,
    busy, invalid and migration-required states, separate network failure, nullable
    preferences and truthful write capability. Show only supported retry, locate
@@ -160,7 +160,7 @@ support visual development but do not establish backend or workflow readiness.
 ## Command-safety readiness inventory
 
 The approved backend contracts and OPS registrations are delivered. This inventory
-separates that delivery from pending browser workflow acceptance in UI Slices 45–57.
+separates that delivery from pending browser workflow acceptance in UI Slices 46–57.
 A delivered receipt does not enable a browser control or authorize automatic retries.
 
 | Workflow | Delivered backend boundary | UI handoff or scope boundary |
@@ -233,7 +233,9 @@ that a browser control is ready.
 - **Slice 44 delivered:** actual generated client contracts, React/Vite assets,
   wheel asset inventory and temporary-workspace browser delivery now pass their
   focused gate. This read-only scaffold does not establish domain workflow readiness.
-- **Slices 45–56:** consume the delivered bootstrap, source and OPS contracts;
+- **Slice 45 delivered:** bootstrap gates domain children, distinguishes safe
+  workspace reasons from connection failure, and isolates workspace query scopes.
+- **Slices 46–56:** consume the delivered bootstrap, source and OPS contracts;
   implement route states, contextual workflows, recovery and accessibility. Each
   enabled workflow needs a real critical read/write integration path and truthful
   capability registration. Do not reconstruct domain rules or receipts in the browser.
@@ -2183,3 +2185,60 @@ tests pass. `contracts:check`, production build, wheel packaging, `npm run lint`
 `npm run format:check`, `npm run typecheck`, changed-file Ruff checks and diff
 whitespace checks pass. Browser setup requires Playwright Chromium; offline wheel
 packaging requires `uv` and cached Python build dependencies. Only focused tests run.
+
+## Slice 45: Bootstrap and workspace gate (delivered)
+
+Delivered October 10, 2026. Domain children mount only after the generated OPS
+bootstrap reports ready with a workspace identity. Pending/revalidating, failed
+and unavailable bootstrap states close the gate; unavailable data never renders
+an empty directory. Missing, busy, invalid and unsupported-format states have
+distinct safe messages. Transport failures have their own alert and explicit
+connection retry; structured errors do not automatically retry.
+
+Contracts/ports: the existing `ready`/`busy`/`unavailable` bootstrap envelope is
+preserved. `reasonCode` is now an OpenAPI enum including missing, invalid and
+migration-required reasons. Workspace runtime classifies typed failures without
+exposing raw paths or exception text. Migration-required means an unsupported
+retained format requiring compatible software or backup; no migration machinery
+is added. Nullable preferences remain nullable and trigger display-default guidance.
+The admitted context exposes backend write permission without deriving it from
+available data or inventing a writer lock.
+
+Implementation: TanStack Query reads bootstrap before domain children. Network
+read failures retry at most once; mutation retries are disabled. Focus and
+reconnect revalidate readiness. Each admitted query scope prefixes keys with
+workspace ID and runtime epoch; removing the gate's child scope cancels reads,
+clears cached pages/continuations and invalidates its write guard. Remounting on
+identity, epoch or write-permission changes cannot reuse the old scope. During
+readiness rechecks the current scaffold conservatively unmounts domain children;
+later form integration must preserve recoverable edits through OPS before that
+boundary. Old requests cannot populate the new scope.
+
+Recovery: only the registered `getOperatorBootstrap` recovery action becomes a
+workspace-retry button. Network failure exposes connection retry. Locate and
+restore remain explicit local configuration/CLI guidance because no browser-safe
+platform commands exist for them. The UI does not submit initialization, relocation
+or restore mutations. Setup instructions explicitly require restarting after
+changing the configured workspace.
+
+Persistence/integration: no schema or archive format changes. The real bootstrap
+tests use external temporary workspaces and writer locks. Browser tests use the
+packaged production build, real ready/missing servers and intercepted typed
+responses for additional gate/error states. No domain mutation controls are enabled.
+
+Focused validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Real ready workspace, generated bootstrap, nullable preferences and explicit write capability |
+| Invalid combinations | Missing, busy, invalid and unsupported format gates; structured server failure separate from network failure |
+| Idempotency/retry | One automatic network retry, explicit retry recovery, no automatic structured-error or mutation retry |
+| Rollback/no effects | Gated children make no domain requests; missing workspace is not initialized; stale/read-only scopes reject writes |
+| Persistence/schema | Real manifest failures and writer-lock contention produce safe typed bootstrap reasons; no schema change |
+| Backup/restore | Identity/runtime scope changes discard old pages and late results; backup formats unchanged; end-to-end restore remains Slice 57 |
+| Query budget | Only bounded OPS bootstrap runs before admission; no domain fan-out; disposed query caches remain empty after late completion |
+
+Validation: 13 focused web tests (including query-scope disposal) and 87 focused
+workspace/OPS Python tests pass. Generated-contract reproducibility, production
+build/wheel packaging, frontend lint/format/type checks, all five changed Python
+files' Ruff checks and diff whitespace checks pass. Only focused tests run.

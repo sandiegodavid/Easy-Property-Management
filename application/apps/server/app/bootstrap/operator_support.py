@@ -51,7 +51,7 @@ def compose_operator(workspace, runtime, recorder, sources):
             runtime.workspace_id if runtime.ready else None,
             runtime.read_epoch,
             runtime.ready and runtime.can_write,
-            None if runtime.ready else "workspace_" + state,
+            runtime.reason_code,
         )
 
     references = OperatorRecoveryReferences(

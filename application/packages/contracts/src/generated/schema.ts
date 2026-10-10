@@ -5618,7 +5618,7 @@ export interface components {
              */
             preferencesState: "available" | "unavailable";
             /** Reasoncode */
-            reasonCode: string | null;
+            reasonCode: ("workspace_busy" | "workspace_missing" | "workspace_invalid" | "workspace_migration_required" | "workspace_unavailable" | "operator_storage_failure") | null;
             /** Recoveryactions */
             recoveryActions: components["schemas"]["RecoveryAction"][];
             /**

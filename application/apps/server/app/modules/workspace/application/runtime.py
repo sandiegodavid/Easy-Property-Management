@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from app.modules.workspace.application.service import WorkspaceError, WorkspaceService
+from app.modules.workspace.application.service import (
+    WorkspaceError,
+    WorkspaceFormatError,
+    WorkspaceNotInitializedError,
+    WorkspaceService,
+)
 from app.platform.locking import WorkspaceOperationInProgressError, WorkspaceOperationLock
 
 
@@ -29,6 +34,18 @@ class WorkspaceRuntime:
     @property
     def can_write(self) -> bool:
         return self.writer_lock_acquired
+
+    @property
+    def reason_code(self) -> str | None:
+        if self.ready:
+            return None
+        if self.startup_attempted and not self.writer_lock_acquired:
+            return "workspace_busy"
+        if isinstance(self.error, WorkspaceNotInitializedError):
+            return "workspace_missing"
+        if isinstance(self.error, WorkspaceFormatError):
+            return "workspace_migration_required"
+        return "workspace_invalid" if self.error else "workspace_unavailable"
 
     def start(self) -> None:
         self.startup_attempted = True

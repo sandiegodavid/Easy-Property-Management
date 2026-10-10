@@ -78,8 +78,11 @@ Packaging requires `uv` and cached Python build dependencies (`uv build --offlin
 Entry pages are not stored; hexadecimal fingerprint assets are immutable.
 External scripts/styles and relative `/api` calls work under the production CSP.
 
-Slice 44 delivers a read-only connection screen. Workspace gates, navigation and
-domain workflows follow in later slices; the scaffold does not offer mutation controls.
+Slices 44–45 deliver the compiled scaffold and workspace readiness gate. Missing,
+busy, invalid and unsupported workspaces show safe guidance; connection failures
+are separate. Domain children wait for bootstrap, and workspace/runtime changes
+discard the old query scope. Locate/restore use explicit local setup guidance.
+Navigation and domain workflows follow in later slices; no mutation controls are enabled.
 
 ## Frontend development checks
 

@@ -37,7 +37,7 @@ test("unavailable workspace still loads real compiled assets and reports readine
   page,
 }) => {
   await page.goto("http://127.0.0.1:18745/home");
-  await expect(page.getByRole("status")).toHaveText("Local workspace unavailable.");
+  await expect(page.getByRole("status")).toContainText("Workspace not found.");
   await expect(page.getByRole("button")).toHaveCount(0);
 });
 

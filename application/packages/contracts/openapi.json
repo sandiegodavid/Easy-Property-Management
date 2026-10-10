@@ -2249,6 +2249,14 @@
           "reasonCode": {
             "anyOf": [
               {
+                "enum": [
+                  "workspace_busy",
+                  "workspace_missing",
+                  "workspace_invalid",
+                  "workspace_migration_required",
+                  "workspace_unavailable",
+                  "operator_storage_failure"
+                ],
                 "type": "string"
               },
               {

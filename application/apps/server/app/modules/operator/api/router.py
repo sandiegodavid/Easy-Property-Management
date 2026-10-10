@@ -44,7 +44,17 @@ class BootstrapResponse(Contract):
     workspaceId: UUID | None
     runtimeEpoch: UUID
     canWrite: StrictBool
-    reasonCode: str | None
+    reasonCode: (
+        Literal[
+            "workspace_busy",
+            "workspace_missing",
+            "workspace_invalid",
+            "workspace_migration_required",
+            "workspace_unavailable",
+            "operator_storage_failure",
+        ]
+        | None
+    )
     capabilities: list[str]
     capabilityVersion: StrictInt
     preferencesState: Literal["available", "unavailable"]
