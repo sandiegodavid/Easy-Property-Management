@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 
 from app.bootstrap.api import _automatic_backup_scheduler, create_app
 

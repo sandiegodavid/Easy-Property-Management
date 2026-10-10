@@ -10,7 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 
 from app.modules.audit.api.router import build_router
 from app.modules.audit.application.recorder import AuditRecorder

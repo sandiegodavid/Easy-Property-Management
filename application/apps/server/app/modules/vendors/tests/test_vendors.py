@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from sqlalchemy import event
 
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 
 from app.bootstrap.api import create_app
 from app.modules.audit.application.recorder import AuditRecorder

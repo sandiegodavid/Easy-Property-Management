@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 from pydantic import ValidationError
 from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError

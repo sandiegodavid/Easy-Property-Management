@@ -16,7 +16,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 from sqlalchemy import event, text
 from sqlalchemy.exc import OperationalError
 

@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from alembic import command as alembic_command
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 
 from app.bootstrap.api import create_app
 from app.modules.audit.application.recorder import AuditRecorder

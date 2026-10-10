@@ -12,6 +12,7 @@ from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditReposi
 from app.modules.files.infrastructure.content_store import S3ContentStore
 from app.modules.workspace.application.backup_service import BackupError, BackupService
 from app.modules.workspace.application.service import WorkspaceService
+from app.platform.browser_transport import BrowserTransportPolicy, MAX_PORT
 
 
 def _config_path(value: str | None) -> Path | None:
@@ -61,6 +62,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     serve = commands.add_parser("serve", help="Run the local FastAPI server.")
     serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument(
+        "--development-origin",
+        action="append",
+        default=[],
+        help="Explicit loopback frontend origin (repeatable); omitted in production.",
+    )
     return parser
 
 
@@ -165,6 +172,8 @@ def _run_due_backup(parser: argparse.ArgumentParser, backups: BackupService) -> 
 def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
+    if args.command == "serve" and not 1 <= args.port <= MAX_PORT:
+        parser.error("Server port must be between 1 and 65535.")
     config_path = _config_path(args.config)
     service = WorkspaceService.from_local_config(config_path)
     if _run_workspace_command(args.command, service):
@@ -174,7 +183,16 @@ def main() -> None:
         return
     uvicorn = import_module("uvicorn")
     create_app = import_module("app.bootstrap.api").create_app
-    uvicorn.run(create_app(config_path), host="127.0.0.1", port=args.port)
+    try:
+        policy = BrowserTransportPolicy(tuple(args.development_origin))
+    except ValueError as error:
+        parser.error(str(error))
+    uvicorn.run(
+        create_app(config_path, transport_policy=policy),
+        host="127.0.0.1",
+        port=args.port,
+        proxy_headers=False,
+    )
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 from http import HTTPStatus
 from sqlalchemy import event
 from sqlalchemy.exc import DBAPIError

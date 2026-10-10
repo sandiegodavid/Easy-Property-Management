@@ -9,6 +9,11 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from app.platform.api_errors import register_api_error_handlers
+from app.platform.browser_transport import (
+    BrowserTransportMiddleware,
+    BrowserTransportPolicy,
+    TransportErrorResponse,
+)
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.bootstrap.file_link_policies import build_file_link_policy_registry
 from app.bootstrap.operator_support import compose_operator
@@ -193,7 +198,9 @@ logger = logging.getLogger(__name__)
 
 
 # Keep dependency wiring visible in one composition root; service behavior remains in modules.
-def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR0915
+def create_app(  # noqa: C901, PLR0915
+    config_path: Path | None = None, *, transport_policy: BrowserTransportPolicy | None = None
+) -> FastAPI:
     """Create the local API without implicitly initializing a workspace."""
     service = WorkspaceService.from_local_config(config_path)
     audit_repository = SQLiteAuditRepository(service.paths.database)
@@ -502,7 +509,15 @@ def create_app(config_path: Path | None = None) -> FastAPI:  # noqa: C901, PLR09
                 runtime.stop()
 
     app = FastAPI(
-        title="Easy Property Management", version=application_version(), lifespan=lifespan
+        title="Easy Property Management",
+        version=application_version(),
+        lifespan=lifespan,
+        responses={
+            403: {"model": TransportErrorResponse, "description": "Local transport rejected."}
+        },
+    )
+    app.add_middleware(
+        BrowserTransportMiddleware, policy=transport_policy or BrowserTransportPolicy()
     )
     register_api_error_handlers(app)
     app.state.backup_service = backups

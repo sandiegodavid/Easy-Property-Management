@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 from sqlalchemy import event
 
 from app.modules.audit.application.recorder import AuditRecorder

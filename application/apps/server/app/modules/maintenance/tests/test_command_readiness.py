@@ -10,7 +10,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import pytest
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 

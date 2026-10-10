@@ -1,7 +1,7 @@
 from http import HTTPStatus
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 from pydantic import BaseModel, Field
 
 from app.platform.api_errors import register_api_error_handlers

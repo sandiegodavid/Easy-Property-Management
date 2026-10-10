@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 from sqlalchemy import event, text
 
 from app.bootstrap.api import create_app

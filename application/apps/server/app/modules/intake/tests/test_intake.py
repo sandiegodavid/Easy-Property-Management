@@ -9,7 +9,7 @@ from unittest import TestCase
 from uuid import uuid4
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 from sqlalchemy import event
 
 from app.modules.audit.api.router import build_router as build_audit_router

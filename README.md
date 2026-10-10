@@ -44,6 +44,23 @@ The React interface and shared web packages are planned follow-on work. `UI-001`
 
 The confirmed UI design includes configurable Owners and Providers destinations, Light/Dark appearance, full-summary-bar inline expansion, manual legal matters, HOA violation notices, and reviewed Excel/read-only Google Sheets intake for properties, owners, and providers. The backlog names their supporting prerequisites; design approval does not indicate those new capabilities are implemented. Broader HOA administration and historical/update imports remain post-MVP.
 
+## Local HTTP transport
+
+From `application/`, `python -m app serve` binds only to `127.0.0.1:8000`
+(`--port` selects another port). Production browser requests must use the same
+origin; null/foreign origins and non-loopback Host headers are rejected before
+route handling. Development may explicitly opt into an exact loopback frontend
+origin with `--development-origin http://localhost:5173` (repeatable). Do not use
+this flag in production. Forwarded headers are not trusted.
+
+CLI/setup HTTP mutations without an Origin header must include
+`X-EPM-Local-Client: 1` and no browser Fetch Metadata/Referer headers. The marker
+is public intent, not authentication, and never overrides an invalid Origin.
+Ordinary CLI reads need no marker. Browser clients use relative API paths and
+must not add it; cross-origin browser preflight cannot request this header.
+Direct application CLI commands are unchanged. This device-local policy is not
+stored in workspace backups and does not enable browser controls or static serving.
+
 ## Frontend development checks
 
 The frontend lint/format/type-check tooling is configured under `application/`. React interface implementation remains deferred until UI-001. On a current Node.js LTS release, run:

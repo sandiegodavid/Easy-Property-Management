@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 from sqlalchemy import event, text
 
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations

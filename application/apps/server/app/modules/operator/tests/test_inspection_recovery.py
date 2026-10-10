@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 from sqlalchemy import event
 
 from app.bootstrap.operator_recovery import OperatorRecoveryReferences, RecoverySourcePorts

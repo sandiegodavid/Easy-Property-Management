@@ -1730,6 +1730,68 @@ endpoint-contract and AI recovery tests pass. The focused command-recovery and
 Slice 14 inventory checks also pass. Changed-file Ruff lint/format and diff checks
 pass. No full-suite run or frontend change is included.
 
+## Slice 42: Local browser transport security (delivered)
+
+Delivered October 9, 2026, under the confirmed production/development and CLI
+policy. This is a device-local HTTP boundary, not an application account, secret,
+or authorization to enable consequential browser controls.
+
+Contracts/ports: production permits only literal `127.0.0.1`, `localhost` and
+`[::1]` Host authorities with valid ports. A browser Origin must match the exact
+request scheme/host/port; aliases and other ports are not equivalent. Reject
+`Origin: null`, malformed origins, duplicate security headers, non-loopback hosts
+and wildcard/subdomain matches. Rejections use the shared 403 problem envelope
+with typed `transport_host_rejected`, `transport_origin_rejected`,
+`transport_origin_required` or `transport_preflight_rejected` codes, documented
+in OpenAPI without exposing request headers, bodies or workspace paths.
+
+Implementation: pure ASGI middleware rejects before routing, body consumption,
+domain transactions, publication or external effects. No-Origin mutations require
+`X-EPM-Local-Client: 1` and must not carry browser Fetch Metadata or Referer headers.
+This public intent marker is not a credential: cross-origin browser scripts cannot
+send it without preflight, and it never overrides Origin validation. Browser
+mutations without Origin are rejected even when they include the marker. Reads
+without Origin permit CLI requests and same-origin/top-level Fetch Metadata;
+cross-site/same-site metadata and unmatched Referer-only reads are rejected.
+
+Development: `python -m app serve --development-origin http://localhost:5173`
+explicitly opts into that exact HTTP(S) loopback frontend Origin; the flag is
+repeatable and absent in production. Only accepted origins receive CORS headers;
+there is no wildcard or credentials allowance. Preflight allows registered HTTP
+methods and only Content-Type, Idempotency-Key and X-Correlation-ID headers;
+the CLI marker is not allowed through browser preflight. Every actual request is
+rechecked after preflight. Browser API paths remain relative; this slice does not
+introduce a frontend proxy or generated client.
+
+Persistence/integration: startup remains bound to `127.0.0.1`, validates the port
+and disables forwarded-header trust. Policy is composed before serving and remains
+device/deployment-local. No schema, command receipt, backup format or source
+revision changes. Domain API tests explicitly use a shared loopback CLI client;
+raw transport tests do not use that helper or bypass middleware.
+
+Focused validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Exact same-origin production mutations, explicit CLI requests, loopback aliases and opted-in development multipart/preflight |
+| Invalid combinations | Host spoofing, alias/port mismatch, null/malformed Origin, duplicate headers, disallowed development origins/headers, missing CLI marker and browser attempts to use it |
+| Idempotency/retry | Real Property create retries return the immutable original result across browser and CLI modes; existing inventory OPS recovery remains unchanged |
+| Rollback/no effects | Every registered mutation rejects a hostile Origin before database access; complete persisted SQLite rows remain identical, including receipts and audits; generic route/body sentinel is not entered |
+| Persistence/schema | No persistence change; deterministic no-workspace OpenAPI includes the shared transport error contract |
+| Backup/restore | No archive-format/configuration change; transport policy is composed locally, not restored from workspace data |
+| Query budget | Request-policy checks use only request metadata and immutable configuration; blocked requests and unavailable-workspace bootstrap need no database connection |
+
+Focused tests: `platform/tests/test_browser_transport.py`,
+`platform/tests/test_api_errors.py`, `operator/tests/test_endpoint_contracts.py`,
+`operator/tests/test_inventory_recovery.py`, `files/tests/test_files.py`,
+`workspace/tests/test_api.py` and `ai_governance/tests/test_api_contracts.py`.
+Validation: 33 transport tests pass; 91 focused platform/Files/workspace/inventory/
+AI integration tests pass. The endpoint-contract/transport run also passes
+(107 tests before the final extra transport cases). Ruff lint and format checks
+pass for all 61 changed Python files; diff whitespace validation passes.
+Only focused tests were run; no frontend or persistence changes are included.
+Actual packaged-browser validation remains required after the frontend exists.
+
 ## Command-safety readiness inventory
 
 This inventory is deliberately not a claim that consequential commands are all ready.
@@ -1787,6 +1849,8 @@ Slice 37 is delivered for its seven approved Owner-concern forms.
 Slice 38 is delivered for its eight approved AI configuration/review forms.
 Slice 39 is delivered for its three approved secret-free AI external-effect forms.
 Slice 41 is delivered for its nine approved Portfolio inventory/ownership forms.
+Slice 42 delivers the server-side local browser transport boundary; packaged
+serving and browser validation remain open in Slice 43 and subsequent UI work.
 Consuming delivered contracts in browser transport remains subsequent UI work.
 
 Slices 9–30 delivered their selected source-owned backend and recovery contracts.
@@ -1822,29 +1886,13 @@ INGEST-002 readiness and UI-002 delivery registration.
 ### Ordered remaining UI-001 backend slices
 
 Implement in the following order. Slice 40 remains assigned to UI-002; do not
-reuse its number. Slice 41 is delivered; Slices 42–43 remain planned work.
+reuse its number. Slices 41–42 are delivered; Slice 43 remains planned work.
 Slice 41 closes domain/OPS readiness before React work. Slices 42–43 implement
 the server portion of the UI-001 foundation; they can use HTTP/static fixtures
 before a real web build exists, and require final packaged-browser validation
 once the frontend is available.
 
-1. **Slice 42: Local browser transport security.**
-   Implement architecture-compliant loopback startup, allowed Host validation,
-   explicit development/production Origin policy and cross-origin mutation
-   protection across all mutation routes, including multipart uploads and AI
-   credential/probe operations. Define and document handling of absent/null
-   Origin, non-browser CLI/setup callers and preflight requests without weakening
-   browser-origin checks. Keep relative API requests and the same-origin production
-   contract; no application login or permissive CORS. Reject disallowed requests
-   before any domain write, file publication, credential change or external call.
-   Verify valid production/development requests, hostile Host/Origin combinations,
-   unrelated-origin simple/multipart requests, accepted CLI/setup behavior,
-   workspace-unavailable bootstrap and unchanged revision/idempotency recovery.
-   Security failures must cause no domain-state, command-receipt, correlated domain-audit or external-effect mutation. No schema
-   or backup format change; security configuration remains device/deployment local.
-   Request checks must not add per-record queries or open extra domain snapshots.
-
-2. **Slice 43: Packaged static serving and restricted SPA fallback.**
+1. **Slice 43: Packaged static serving and restricted SPA fallback.**
    After Slice 42, serve the compiled web assets on the same local FastAPI origin.
    Preserve `/api`, `/health`, `/docs`, `/redoc` and `/openapi.json`; return the SPA
    entry only for registered UI-001 browser routes with GET/HEAD and an HTML Accept
@@ -1867,7 +1915,7 @@ forms is intentional, not another UI-001 slice. If a new operator workflow is
 proposed for them, define its scope separately before registration. Production
 model/action availability remains capability-gated; optional AI adapters do not
 block manual UI-001 workflows. DASH-001 aggregation and UI-002 issue review remain
-outside these three slices.
+outside these transport/inventory slices.
 
 ### Completion criteria and sequencing
 
@@ -1908,7 +1956,8 @@ implementation; unfinished features must not be presented as safely retryable.
 ## Subsequent UI slices
 
 After Slice 41, begin React/Vite and reproducible generated contracts while
-completing the server foundation in Slices 42–43. Before enabling consequential
+completing packaged serving in Slice 43; Slice 42's server transport protection
+is delivered. Before enabling consequential
 browser workflows, verify transport security and actual packaged serving; then
 complete bootstrap/workspace gate; appearance and
 navigation; accessible disclosures and async states; directories/workspaces and actual

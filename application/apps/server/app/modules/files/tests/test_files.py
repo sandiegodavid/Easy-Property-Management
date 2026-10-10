@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 from sqlalchemy import event, func, select, text
 from sqlalchemy.exc import IntegrityError
 

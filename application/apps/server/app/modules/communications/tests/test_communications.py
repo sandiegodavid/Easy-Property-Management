@@ -11,7 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
-from fastapi.testclient import TestClient
+from app.platform.testing_client import LocalApiClient as TestClient
 from fastapi import FastAPI
 from sqlalchemy import event, text
 
