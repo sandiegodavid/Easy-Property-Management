@@ -1,0 +1,20 @@
+:root {
+  color-scheme: light;
+  --canvas: #f6f7f4;
+  --surface: #ffffff;
+  --text: #20302a;
+  --muted: #53625c;
+  --border: #bcc8c1;
+  --accent: #11675e;
+  --focus: #8b4400;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas: #141d1a;
+  --surface: #202d27;
+  --text: #eef5f0;
+  --muted: #bfcdc5;
+  --border: #65776d;
+  --accent: #84ddc8;
+  --focus: #ffc783;
+}

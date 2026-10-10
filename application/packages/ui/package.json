@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/page.tsx"
+    ".": "./src/page.tsx",
+    "./tokens.css": "./src/tokens.css"
   },
   "peerDependencies": {
     "react": "^19.3.0"

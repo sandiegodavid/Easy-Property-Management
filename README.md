@@ -40,7 +40,7 @@ Set `localWorkspacePath` in the live file to the chosen external data folder. Th
 - `database` — current SQLite Alembic baseline and future migration location
 - `config.example.json` — safe, Git-tracked local-workspace configuration template
 
-The React interface and shared web packages are planned follow-on work. `UI-001`, immediately before `DASH-001`, delivers the deferred operator workflows; before then, work is limited to backend capabilities, APIs, CLI/setup tooling, tests, and documentation. Follow the feature backlog sequence and preserve the local workspace, approval, audit, and migration requirements documented in `docs/`.
+The React interface and shared web packages are being delivered through the UI-001 slices. The workspace gate, shell and preference controls are available; domain browser workflows follow the implementation matrix. `UI-001`, immediately before `DASH-001`, delivers the deferred operator workflows. Follow the feature backlog sequence and preserve the local workspace, approval, audit, and greenfield schema requirements documented in `docs/`.
 
 The confirmed UI design includes configurable Owners and Providers destinations, Light/Dark appearance, full-summary-bar inline expansion, manual legal matters, HOA violation notices, and reviewed Excel/read-only Google Sheets intake for properties, owners, and providers. The backlog names their supporting prerequisites; design approval does not indicate those new capabilities are implemented. Broader HOA administration and historical/update imports remain post-MVP.
 
@@ -82,7 +82,11 @@ Slices 44–45 deliver the compiled scaffold and workspace readiness gate. Missi
 busy, invalid and unsupported workspaces show safe guidance; connection failures
 are separate. Domain children wait for bootstrap, and workspace/runtime changes
 discard the old query scope. Locate/restore use explicit local setup guidance.
-Navigation and domain workflows follow in later slices; no mutation controls are enabled.
+Slice 46 adds navigation, nested property/owner context routes and Light/Dark
+Settings. Appearance and navigation save through revision-checked OPS preferences;
+hidden destinations remain under More. Other workflow pages explain their pending
+delivery and do not present unloaded records as empty collections. Preference
+conflicts preserve choices for explicit review; uncertain saves retry the same key.
 
 ## Frontend development checks
 

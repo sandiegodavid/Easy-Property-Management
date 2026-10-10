@@ -1,6 +1,6 @@
 # UI-001 implementation slices
 
-Status: backend readiness Slices 41–43 and frontend Slices 44–45 delivered — October 10, 2026. Navigation and browser workflows in Slices 46–57 remain open; UI-001 is not complete.
+Status: backend readiness Slices 41–43 and frontend Slices 44–46 delivered — October 10, 2026. Browser workflows in Slices 47–57 remain open; UI-001 is not complete.
 
 Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
 feature-specific AI approval modes, Intake attention consequences, coordinated
@@ -13,9 +13,9 @@ The recorded backend readiness gate and React scaffold are complete; browser wor
 ## Subsequent UI slices — ordered implementation plan
 
 Updated October 9, 2026. Backend Slices 41–43 are recorded as delivered;
-Slices 44–45's React build, workspace gate and packaged-asset browser proofs are delivered. Implement the
+Slices 44–46's React build, workspace gate, navigation and packaged-asset browser proofs are delivered. Implement the
 following slices sequentially. Slice numbers continue after the backend sequence;
-Slice 40 stays assigned to UI-002. Slices 44–45 are delivered; Slices 46–57 remain planned.
+Slice 40 stays assigned to UI-002. Slices 44–46 are delivered; Slices 47–57 remain planned.
 The [UI-001 design](UI-001_DESIGN.md#technical-implementation-design) owns the
 interaction and technical requirements.
 
@@ -44,7 +44,7 @@ support visual development but do not establish backend or workflow readiness.
    and continuations on identity/runtime changes. Verify that unavailable data
    never appears as an empty portfolio and that gated states cannot submit writes.
 
-3. **Slice 46: Application shell, routes, appearance and navigation settings.**
+3. **Slice 46: Application shell, routes, appearance and navigation settings (delivered).**
    Deliver configurable Home/Properties/Owners/Leasing/Money/Maintenance/Providers
    destinations, contextual navigation, typed deep links and Light/Dark Settings.
    Persist preferences through their revision-safe OPS contract. Hidden destinations
@@ -160,7 +160,7 @@ support visual development but do not establish backend or workflow readiness.
 ## Command-safety readiness inventory
 
 The approved backend contracts and OPS registrations are delivered. This inventory
-separates that delivery from pending browser workflow acceptance in UI Slices 46–57.
+separates that delivery from pending browser workflow acceptance in UI Slices 47–57.
 A delivered receipt does not enable a browser control or authorize automatic retries.
 
 | Workflow | Delivered backend boundary | UI handoff or scope boundary |
@@ -235,7 +235,10 @@ that a browser control is ready.
   focused gate. This read-only scaffold does not establish domain workflow readiness.
 - **Slice 45 delivered:** bootstrap gates domain children, distinguishes safe
   workspace reasons from connection failure, and isolates workspace query scopes.
-- **Slices 46–56:** consume the delivered bootstrap, source and OPS contracts;
+- **Slice 46 delivered:** shared navigation registry, explicit nested property/owner
+  sections, responsive navigation and revision-safe appearance/navigation Settings.
+  Domain routes explain pending UI delivery without claiming empty results.
+- **Slices 47–56:** consume the delivered bootstrap, source and OPS contracts;
   implement route states, contextual workflows, recovery and accessibility. Each
   enabled workflow needs a real critical read/write integration path and truthful
   capability registration. Do not reconstruct domain rules or receipts in the browser.
@@ -2242,3 +2245,57 @@ Validation: 13 focused web tests (including query-scope disposal) and 87 focused
 workspace/OPS Python tests pass. Generated-contract reproducibility, production
 build/wheel packaging, frontend lint/format/type checks, all five changed Python
 files' Ruff checks and diff whitespace checks pass. Only focused tests run.
+
+## Slice 46: Application shell, routes, appearance and navigation settings (delivered)
+
+Delivered October 10, 2026. One typed destination registry supplies primary
+navigation, More, preference ordering and capability guards. Home and Settings
+remain fixed; the other six destinations support visibility and ordering. Hidden
+destinations remain accessible through More and contextual links. Home explicitly
+identifies the pending work queue, so hiding a destination never implies its
+obligations have been completed.
+
+Implementation: React Router owns nested property/owner section routes, history
+and direct links with canonical IDs and explicit child sections. Contextual Money
+links carry a visible, removable property/owner filter. Primary navigation uses
+portfolio routes without carrying those filters. Known unavailable routes explain
+their capability/UI delivery gate; unknown direct routes retain the server's 404.
+Domain pages are explicit delivery placeholders, not empty collections. No UI-002
+workflows or domain mutations are enabled. The search entry and shortcut are
+available; search results remain assigned to their later UI slice.
+
+Settings previews Light/Dark semantic tokens without remounting the router or
+query scope. Save uses the generated OPS request with the displayed base revision
+and a fresh idempotency key. A stale conflict preserves choices and requires an
+explicit current-revision read before resubmission. An uncertain save locks edits
+and allows only an explicit retry of the original payload/key. Nullable preferences
+and missing write capability disable editing. Restore defaults changes the preview;
+Save acknowledges persistence. Preferences stay mounted across contextual navigation.
+Unsaved choices do not survive a full reload or readiness-gate unmount; general
+durable form recovery remains Slice 48.
+
+Accessibility: skip link, named navigation, native keyboard controls, route focus,
+visible focus tokens, reduced-motion support and a native narrow-screen navigation
+disclosure. Sidebar layouts cover wide and intermediate widths; narrow screens use
+one content column. Workspace preference wins after initial system-theme selection.
+
+Persistence/integration: reuse the existing OPS preferences and operation receipts;
+no schema, backup or API contract changes. Tests submit real preference writes to
+the packaged temporary workspace and use bounded response interception for errors.
+
+Focused validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Save/reload both themes, navigation ordering, hidden Owners via More, nested context/history, restore defaults |
+| Invalid combinations | Missing capability hides entry and guards direct access; unknown section stays 404; unavailable UI route explains its gate |
+| Idempotency/retry | No automatic mutation retry; unknown outcome repeats the identical payload/key; stale conflicts preserve choices and require revision refresh |
+| Rollback/no effects | Unacknowledged save never reports success; read-only/unavailable preferences disable writes; domain placeholders make no domain mutations |
+| Persistence/schema | Real OPS preference round trip and reload; existing revision/receipt contract reused without schema changes |
+| Backup/restore | Restored bootstrap preferences use the same preference contract; archive format unchanged; complete browser archive round trip remains Slice 57 |
+| Query budget | Bootstrap supplies preferences without another initial read; only explicit saves/conflict refreshes issue preference requests; no domain fan-out |
+
+Validation: 18 focused packaged browser tests pass, including real-backend stale
+revision and committed-but-lost-response replay. Production build/wheel packaging,
+generated-contract reproducibility, frontend lint, format and type checks pass. Full
+server-suite execution is unnecessary because this slice changes no server code.
