@@ -449,14 +449,13 @@ def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
             None, alias="status"
         ),
         property_id: UUID | None = Query(None, alias="propertyId"),
-        cursor: str | None = Query(
-            None, max_length=47, pattern=r"^\d{4}-\d{2}-\d{2}\|[0-9a-f-]{36}$"
-        ),
+        cursor: str | None = Query(None, max_length=4096),
         limit: int = Query(25, ge=1, le=100),
     ):
         ready()
         return invoke(
             lambda: service.directory_page(
+                identity=(runtime.workspace_id or "", runtime.read_epoch),
                 status=lease_status,
                 property_id=None if property_id is None else str(property_id),
                 cursor=cursor,

@@ -5,9 +5,14 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from json import loads
 from datetime import UTC, date, datetime
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from app.modules.inspections.application.attention import inspection_attention
+from app.modules.leases.application.directory_cursor import (
+    cursor_scope,
+    decode_cursor,
+    encode_cursor,
+)
 from app.modules.leases.application.commands import (
     LeaseCommandIdentity,
     LeaseCommandReceipt,
@@ -386,28 +391,36 @@ class LeaseService:
             else None,
         )
 
-    def directory_page(self, *, status=None, property_id=None, cursor=None, limit=25):
+    def directory_page(self, *, identity, status=None, property_id=None, cursor=None, limit=25):
         if type(limit) is not int or not 1 <= limit <= MAX_DIRECTORY_PAGE_SIZE:
             raise LeaseError("Lease page size must be between 1 and 100.")
         if status is not None and status not in LEASE_STATUSES:
             raise LeaseError("Unsupported lease status filter.")
-        parsed = None
-        if cursor is not None:
+        scope = {}
+        instant = datetime.fromisoformat(_now())
+
+        def resolve(marker):
+            scope.update(
+                cursor_scope(
+                    identity=identity,
+                    filters={"status": status, "propertyId": property_id, "limit": limit},
+                    marker=marker,
+                    instant=instant,
+                )
+            )
+            if cursor is None:
+                return None
             try:
-                starts_on, identity = cursor.split("|")
-                if (
-                    date.fromisoformat(starts_on).isoformat() != starts_on
-                    or str(UUID(identity)) != identity
-                ):
-                    raise ValueError
-                parsed = (starts_on, identity)
-            except (ValueError, AttributeError) as error:
-                raise LeaseError("Invalid lease page cursor.") from error
-        as_of = _now()
+                last, captured = decode_cursor(cursor, scope)
+            except ValueError as error:
+                raise LeaseError(str(error)) from error
+            scope["asOf"] = captured
+            return last
+
         rows, total = self.unit_of_work.lease_directory_page(
             status=status,
             property_id=property_id,
-            cursor=parsed,
+            resolve_cursor=resolve,
             limit=limit,
         )
         items = [
@@ -425,8 +438,10 @@ class LeaseService:
         return {
             "items": items,
             "matchingTotal": total,
-            "asOf": as_of,
-            "nextCursor": f"{rows[limit - 1]['contract_starts_on']}|{rows[limit - 1]['id']}"
+            "asOf": scope["asOf"],
+            "nextCursor": encode_cursor(
+                scope, (rows[limit - 1]["contract_starts_on"], rows[limit - 1]["id"])
+            )
             if len(rows) > limit
             else None,
         }

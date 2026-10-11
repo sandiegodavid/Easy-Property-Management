@@ -48095,8 +48095,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "maxLength": 47,
-                  "pattern": "^\\d{4}-\\d{2}-\\d{2}\\|[0-9a-f-]{36}$",
+                  "maxLength": 4096,
                   "type": "string"
                 },
                 {

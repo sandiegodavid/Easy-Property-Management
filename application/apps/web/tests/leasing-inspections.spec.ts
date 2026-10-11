@@ -75,14 +75,18 @@ async function execute(request: APIRequestContext, f: Awaited<ReturnType<typeof 
   expect(response.status(), await response.text()).toBe(200);
   return (await response.json()) as Schemas["TimelineLeaseResponse"];
 }
-async function report(request: APIRequestContext, f: Awaited<ReturnType<typeof fixture>>) {
+async function report(
+  request: APIRequestContext,
+  f: Awaited<ReturnType<typeof fixture>>,
+  walkthroughOn = f.today,
+) {
   await execute(request, f);
   const response = await request.post(`/api/leases/${f.lease.id}/condition-reports`, {
     data: {
       expectedRevision: 0,
       idempotencyKey: crypto.randomUUID(),
       reportKind: "pre_move_in",
-      walkthroughOn: f.today,
+      walkthroughOn,
       conductedBy: "Operator",
       areas: [
         {
@@ -224,6 +228,146 @@ test("draft participants and rent terms retain child membership and explicit rem
   expect(lease.participants).toHaveLength(1);
   expect(lease.terms[0].baseRentMinor).toBe(234567);
   expect(lease.leaseRevision).toBe(5);
+});
+
+test("removed participants resume original-result recovery without another removal", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request),
+    other = await fixture(request);
+  const added = await request.post(`/api/leases/${f.lease.id}/participants`, {
+    data: {
+      tenantPartyId: other.tenant.id,
+      participantRole: "co_tenant",
+      expectedLeaseRevision: 1,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(added.ok(), await added.text()).toBe(true);
+  const child = ((await added.json()) as Schemas["LeaseMutationResponse"]).participants.find(
+    (p) => p.tenantPartyId === other.tenant.id,
+  )!;
+  let calls = 0;
+  let receipt: Schemas["LeaseMutationResponse"] | undefined;
+  await page.route(`**/api/leases/${f.lease.id}/participants/${child.id}`, async (route) => {
+    if (route.request().method() !== "DELETE") return route.continue();
+    calls++;
+    const response = await route.fetch();
+    expect(response.ok(), await response.text()).toBe(true);
+    receipt = (await response.json()) as Schemas["LeaseMutationResponse"];
+    await route.abort("failed");
+  });
+  await page.goto(
+    `/leasing?workflow=lease.participant.remove&target=${f.lease.id}&child=${child.id}`,
+  );
+  await page.getByLabel("I confirm removal of this Lease participant").check();
+  await page.getByRole("button", { name: "Save remove lease participant", exact: true }).click();
+  await expect(
+    page.getByText("Draft saved · Command outcome_unknown", { exact: true }),
+  ).toBeVisible();
+  await page.goto("/settings/recovery");
+  await page.getByRole("link", { name: "Resume lease.participant.remove", exact: true }).click();
+  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Committed result" })).toContainText(
+    receipt!.operationId,
+  );
+  await expect(
+    page.getByRole("link", { name: "Open committed Lease and related setup" }),
+  ).toBeVisible();
+  expect(calls).toBe(1);
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Committed result" })).toContainText(
+    receipt!.operationId,
+  );
+  expect(calls).toBe(1);
+  await page.goto(
+    `/leasing?workflow=lease.participant.remove&target=${f.lease.id}&child=${child.id}`,
+  );
+  await expect(page.getByRole("alert")).toContainText("does not belong");
+});
+
+test("acknowledgments require only walkthrough-active participants at exclusive boundaries", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request),
+    former = await fixture(request),
+    future = await fixture(request);
+  const shift = (days: number) =>
+    new Date(Date.parse(`${f.today}T12:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
+  for (const [party, startsOn, endsOn] of [
+    [former.tenant.id, f.today, shift(1)],
+    [future.tenant.id, shift(2), null],
+  ] as const) {
+    const added = await request.post(`/api/leases/${f.lease.id}/participants`, {
+      data: {
+        tenantPartyId: party,
+        participantRole: "co_tenant",
+        startsOn,
+        endsOn,
+        expectedLeaseRevision: f.lease.leaseRevision,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    });
+    expect(added.ok(), await added.text()).toBe(true);
+    f.lease = (await added.json()) as Schemas["LeaseMutationResponse"];
+  }
+  const draft = await report(request, f, shift(1));
+  await page.goto(`/leasing?workflow=inspection.report.acknowledge&target=${draft.id}`);
+  await expect(page.getByLabel("Status (required)")).toHaveCount(1);
+  await expect(page.getByRole("group", { name: new RegExp(f.tenant.id) })).toBeVisible();
+  await expect(page.getByText(new RegExp(former.tenant.id))).toHaveCount(0);
+  await expect(page.getByText(new RegExp(future.tenant.id))).toHaveCount(0);
+  await page.getByLabel("Status (required)").selectOption("not_requested");
+  await save(page, "Record inspection acknowledgments");
+  const current = await request.get(`/api/condition-reports/${draft.id}`);
+  const acknowledgments = ((await current.json()) as Schemas["ReportResponse"]).acknowledgments;
+  expect(acknowledgments.map((a) => a.leaseParticipantId)).toEqual([f.lease.participants[0].id]);
+});
+
+test("changed Lease directory continuation restarts with its filters retained", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  for (let index = 0; index < 25; index++) {
+    const added = await request.post("/api/leases", {
+      data: {
+        spaceId: f.lease.spaceId,
+        leaseKind: "residential",
+        contractStartsOn: f.today,
+        occupancyStartsOn: f.today,
+        initialTerm: {
+          baseRentMinor: 100000,
+          currencyCode: "USD",
+          paymentFrequency: "monthly",
+          paymentDueDay: 1,
+          agreedSecurityDepositMinor: 0,
+        },
+        participants: [{ tenantPartyId: f.tenant.id, participantRole: "primary_tenant" }],
+        expectedLeaseRevision: 0,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    });
+    expect(added.ok(), await added.text()).toBe(true);
+  }
+  await page.goto(`/leasing?status=draft&propertyId=${f.property.id}`);
+  await expect(page.getByText(/26 matching leases/)).toBeVisible();
+  await request.patch(`/api/leases/${f.lease.id}`, {
+    data: {
+      notes: "Directory changed",
+      expectedLeaseRevision: 1,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  await page.getByRole("button", { name: "Next lease page", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("changed or expired");
+  await page.getByRole("button", { name: "Restart Lease directory with these filters" }).click();
+  await expect(page).not.toHaveURL(/cursor=/);
+  await expect(page).toHaveURL(/status=draft/);
+  await expect(page).toHaveURL(new RegExp(`propertyId=${f.property.id}`));
+  await expect(page.getByText(/26 matching leases/)).toBeVisible();
 });
 
 test("termination negotiation and completion preserve the Lease and Space contracts", async ({

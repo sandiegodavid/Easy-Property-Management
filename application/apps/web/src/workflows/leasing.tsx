@@ -26,13 +26,18 @@ function LeaseDirectory() {
   const cursor = params.get("cursor") ?? undefined;
   const leases = useQuery({
     queryKey: scope.key("lease-directory", status, propertyId, cursor),
-    queryFn: async ({ signal }) =>
-      readResult(
-        await api.GET("/api/leases/directory", {
-          signal,
-          params: { query: { status: status ?? undefined, propertyId, cursor, limit: 25 } },
-        }),
-      ),
+    retry: false,
+    queryFn: async ({ signal }) => {
+      const response = await api.GET("/api/leases/directory", {
+        signal,
+        params: { query: { status: status ?? undefined, propertyId, cursor, limit: 25 } },
+      });
+      if (response.response.status === 409)
+        throw new DirectoryContinuationConflict(
+          "This Lease directory continuation changed or expired. Restart with the selected filters.",
+        );
+      return readResult(response);
+    },
   });
   return (
     <section aria-label="Leasing">
@@ -77,6 +82,18 @@ function LeaseDirectory() {
       )}
       {leases.isPending && <p role="status">Loading leases…</p>}
       {leases.error && <p role="alert">{leases.error.message}</p>}
+      {leases.error instanceof DirectoryContinuationConflict && (
+        <button
+          onClick={() => {
+            const next = new URLSearchParams(params);
+            next.delete("cursor");
+            setParams(next);
+            if (!cursor) void leases.refetch();
+          }}
+        >
+          Restart Lease directory with these filters
+        </button>
+      )}
       {leases.data && (
         <p>
           {leases.data.matchingTotal} matching leases · As of {leases.data.asOf}
@@ -117,6 +134,8 @@ function LeaseDirectory() {
     </section>
   );
 }
+
+class DirectoryContinuationConflict extends Error {}
 
 export function LeaseRecord({ id }: { id: string }) {
   const { scope } = useWorkspace();
@@ -403,7 +422,16 @@ function LeaseCommand() {
       : definition.childKey === "optionId"
         ? lease?.renewalOptions.find((o) => o.id === child)
         : source.data?.cases.find((c) => c.id === child);
-  if (definition.childKey && !selected)
+  const savedAttempt = recovery.data;
+  const canRecoverMissingChild = !!(
+    savedAttempt &&
+    savedAttempt.formKey === definition.formKey &&
+    savedAttempt.sourceId === target &&
+    definition.childKey &&
+    savedAttempt.payload[definition.childKey] === child &&
+    ((savedAttempt.status === "outcome_unknown" && savedAttempt.attemptKey) || savedAttempt.receipt)
+  );
+  if (definition.childKey && !selected && !canRecoverMissingChild)
     return <p role="alert">This child record does not belong to the selected Lease.</p>;
   const initial: Record<string, unknown> = {
     ...(source.data?.space ? { expectedRevision: source.data.space.revision } : {}),

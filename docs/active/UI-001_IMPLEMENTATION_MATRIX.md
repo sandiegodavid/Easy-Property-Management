@@ -140,19 +140,22 @@ quality checks above and report blockers without marking unrun checks passed.
 
    | Scenario | Evidence | Result / gap |
    | --- | --- | --- |
-   | Draft create/edit, participants, terms and renewal | Complete draft creation; saved edit resumption; child add/update/remove; distinct renewal edit/decision requests | Passed against real workspaces; incomplete/foreign-child inputs prevent dispatch |
+   | Draft create/edit, participants, terms and renewal | Complete draft creation; saved edit resumption; child add/update/remove; distinct renewal edit/decision requests; `removed participants resume original-result recovery without another removal` | Passed against real workspaces; prepared removal resumes its original receipt after the child disappears; fresh missing-child mutations still fail closed |
    | Execution, move-out and termination | Independent Lease/Space checks; stale Space preserves edits; end/terminate/void; termination request/proposal/accept/complete | Passed; isolated smoke-server clock advances lifecycle fixtures without changing production policy |
-   | Inspection lifecycle and comparison | Template create/edit; draft/checklist setup; acknowledgments/finalization; correction remains a draft; explicit post-move-out comparison | Passed; Inspection actions do not change the committed Lease lifecycle |
+   | Inspection lifecycle and comparison | Template create/edit; draft/checklist setup; acknowledgments/finalization; correction remains a draft; explicit post-move-out comparison; `acknowledgments require only walkthrough-active participants at exclusive boundaries` | Passed; acknowledgment controls require exactly the active set, with participation dates shown; Inspection actions do not change the committed Lease lifecycle |
    | Evidence and interrupted writes | Matching-file reselection after restart; changed bytes rejected; lost-response original-key reconciliation; draft archival/history; unavailable download disabled | Passed; bytes never enter persisted OPS recovery; unavailable-state presentation uses a targeted read mock |
-   | Partial failure and bounded reads | Inspection section failure leaves Lease visible; Lease directory no-gap paging and fixed query count in `leases/tests/test_command_readiness.py`; observation ownership read in `inspections/tests/test_command_readiness.py` | Passed; no directory detail hydration or per-row browser reads |
+   | Partial failure and bounded reads | Inspection section failure leaves Lease visible; Lease directory no-gap paging, scoped-cursor/date-edit/runtime/expiry rejection and fixed three-query budget in `leases/tests/test_command_readiness.py`; `changed Lease directory continuation restarts with its filters retained`; observation ownership read in `inspections/tests/test_command_readiness.py` | Passed; marker validation, count and page share one snapshot; stale continuations return typed 409 and restart without dropping filters; no directory detail hydration or per-row browser reads |
    | Shared transport and final acceptance | Existing `workflows.spec.ts` and shared recovery tests; reproducible contracts and wheel packaging | Passed; full cross-workflow/theme/narrow-layout and encrypted restart/restore acceptance remains Slice 57 |
 
-   Validation: 28 packaged browser tests (16 Slice 51 and 12 shared workflow
+   Initial delivery validation: 28 packaged browser tests (16 Slice 51 and 12 shared workflow
    regressions), 6 shared recovery tests and 71 focused backend Lease, Inspection
    and File readiness/workflow tests passed.
-   Frontend lint, formatting, type checking and Python formatting passed. Whole-file
-   Python lint remains blocked by 94 pre-existing violations in the touched modules;
-   comparison with HEAD found no newly introduced diagnostics. No lint rules were relaxed.
+   Review fixes (October 11, 2026): 19 Slice 51 browser tests and 56 focused Lease/Inspection
+   readiness tests passed. Frontend lint, formatting, type checking, contract reproducibility,
+   wheel packaging and changed-file Python checks passed using the current configuration
+   from `application/`. No lint rules were changed. Schema, mutation rollback and encrypted
+   backup/restore behavior are unchanged by these read/form fixes; final browser restore
+   acceptance remains Slice 57.
 
 9. **Slice 52: Money workflows and reporting drill-down.**
    Deliver Rent, Expenses, Deposits, Scheduled checks and Owner reports using the

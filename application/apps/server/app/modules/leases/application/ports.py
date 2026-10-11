@@ -133,7 +133,7 @@ class LeaseUnitOfWork(Protocol):
         *,
         status: str | None,
         property_id: str | None,
-        cursor: tuple[str, str] | None,
+        resolve_cursor: Callable[[str], tuple[str, str] | None],
         limit: int,
     ) -> tuple[list[dict[str, object]], int]: ...
     def command_operation(

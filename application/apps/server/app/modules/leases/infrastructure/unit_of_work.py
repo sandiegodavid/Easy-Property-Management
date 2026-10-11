@@ -103,7 +103,7 @@ class SQLiteLeaseUnitOfWork:
                 return None
             return _view_record(session, lease)
 
-    def lease_directory_page(self, *, status, property_id, cursor, limit):
+    def lease_directory_page(self, *, status, property_id, resolve_cursor, limit):
         model = LeaseModel
         filters = []
         if status is not None:
@@ -113,6 +113,14 @@ class SQLiteLeaseUnitOfWork:
                 model.space_id.in_(self.portfolio_operations.space_ids_for_property(property_id))
             )
         with self.engine.begin() as connection:
+            marker = connection.execute(
+                select(
+                    func.count(),
+                    func.coalesce(func.sum(model.lease_revision), 0),
+                    func.max(model.updated_at),
+                ).select_from(model)
+            ).one()
+            cursor = resolve_cursor(str(tuple(marker)))
             total = connection.execute(
                 select(func.count()).select_from(model).where(*filters)
             ).scalar_one()

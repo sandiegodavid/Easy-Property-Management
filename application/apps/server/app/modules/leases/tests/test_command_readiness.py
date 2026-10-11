@@ -6,7 +6,7 @@ import inspect
 import json
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -63,7 +63,8 @@ def _patch(notes):
 
 
 def test_lease_directory_pages_are_bounded_without_hydrating_details(fixture):
-    expected_total, expected_selects = 3, 2
+    identity = ("test-workspace", "test-runtime")
+    expected_total, expected_selects = 3, 3
     for _ in range(expected_total):
         _vacant_draft(fixture)
     statements = []
@@ -75,7 +76,7 @@ def test_lease_directory_pages_are_bounded_without_hydrating_details(fixture):
     engine = fixture.service.unit_of_work.engine
     event.listen(engine, "before_cursor_execute", capture)
     try:
-        page = fixture.service.directory_page(limit=1, status="draft")
+        page = fixture.service.directory_page(identity=identity, limit=1, status="draft")
         assert len(page["items"]) == 1
         assert page["matchingTotal"] == expected_total
         assert page["nextCursor"] is not None
@@ -84,21 +85,83 @@ def test_lease_directory_pages_are_bounded_without_hydrating_details(fixture):
         seen = [page["items"][0]["id"]]
         while page["nextCursor"] is not None:
             page = fixture.service.directory_page(
-                limit=1, status="draft", cursor=page["nextCursor"]
+                identity=identity, limit=1, status="draft", cursor=page["nextCursor"]
             )
             assert page["matchingTotal"] == expected_total
             seen.extend(item["id"] for item in page["items"])
         assert len(seen) == len(set(seen)) == expected_total
         statements.clear()
         assert (
-            len(fixture.service.directory_page(limit=100, status="draft")["items"])
+            len(
+                fixture.service.directory_page(identity=identity, limit=100, status="draft")[
+                    "items"
+                ]
+            )
             == expected_total
         )
         assert len(statements) == expected_selects
     finally:
         event.remove(engine, "before_cursor_execute", capture)
     with pytest.raises(LeaseError, match="cursor"):
-        fixture.service.directory_page(cursor="2026-02-30|" + str(uuid4()))
+        fixture.service.directory_page(identity=identity, cursor="2026-02-30|" + str(uuid4()))
+
+
+def test_directory_continuation_rejects_changed_scope_time_and_date_edits(fixture):
+    identity = ("test-workspace", "test-runtime")
+    for _ in range(2):
+        _vacant_draft(fixture)
+    page = fixture.service.directory_page(identity=identity, limit=1, status="draft")
+    request = {"identity": identity, "limit": 1, "status": "draft", "cursor": page["nextCursor"]}
+    for scope in (
+        {"status": None},
+        {"identity": ("other-workspace", identity[1])},
+        {"identity": (identity[0], "restarted-runtime")},
+        {"limit": 100},
+    ):
+        with pytest.raises(LeaseConflictError, match="Restart"):
+            fixture.service.directory_page(**(request | scope))
+    expired = datetime.fromisoformat(page["asOf"]) + timedelta(minutes=16)
+    with patch("app.modules.leases.application.service._now", return_value=expired.isoformat()):
+        with pytest.raises(LeaseConflictError, match="expired"):
+            fixture.service.directory_page(**request)
+    next_page = fixture.service.directory_page(**request)
+    assert next_page["asOf"] == page["asOf"]
+    moved = next_page["items"][0]
+    fixture.service.patch(
+        moved["id"],
+        LeasePatchCommand(
+            contract_starts_on=date.today().isoformat(),
+            supplied_fields=frozenset({"contract_starts_on"}),
+        ),
+        expected_revision=moved["leaseRevision"],
+        idempotency_key=str(uuid4()),
+    )
+    with pytest.raises(LeaseConflictError, match="changed"):
+        fixture.service.directory_page(**request)
+    restarted = fixture.service.directory_page(identity=identity, limit=1, status="draft")
+    assert restarted["items"][0]["id"] == moved["id"]
+
+
+def test_directory_http_conflicts_are_typed_and_runtime_restart_invalidates_cursor(fixture):
+    for _ in range(2):
+        _vacant_draft(fixture)
+    query = {"limit": 1, "status": "draft"}
+    with TestClient(create_app(fixture.workspace.config.config_path)) as client:
+        first = client.get("/api/leases/directory", params=query)
+        assert first.is_success, first.text
+        cursor = first.json()["nextCursor"]
+        assert cursor is not None
+        continued = client.get("/api/leases/directory", params=query | {"cursor": cursor})
+        assert continued.is_success, continued.text
+        assert continued.json()["asOf"] == first.json()["asOf"]
+        changed = client.get("/api/leases/directory", params={"limit": 1, "cursor": cursor})
+        conflict_status = 409
+        assert changed.status_code == conflict_status
+        assert changed.json()["detail"]["code"] == "lease_conflict"
+    with TestClient(create_app(fixture.workspace.config.config_path)) as client:
+        restarted = client.get("/api/leases/directory", params=query | {"cursor": cursor})
+        assert restarted.status_code == conflict_status
+        assert restarted.json()["detail"]["code"] == "lease_conflict"
 
 
 def _vacant_draft(fixture):

@@ -342,6 +342,10 @@ async function inspectionSource(definition: Workflow, target?: string, signal?: 
       );
       const ack = definition.schema.properties!.acknowledgments;
       const item = typeof ack.additionalProperties === "object" ? ack.additionalProperties : {};
+      const participants = leases.participants.filter(
+        (p) => p.startsOn <= report.walkthroughOn && (!p.endsOn || p.endsOn > report.walkthroughOn),
+      );
+      const activeIds = new Set(participants.map((p) => p.id));
       schema = {
         ...schema,
         properties: {
@@ -349,20 +353,23 @@ async function inspectionSource(definition: Workflow, target?: string, signal?: 
           acknowledgments: {
             type: "object",
             additionalProperties: false,
+            required: participants.map((p) => p.id),
             properties: Object.fromEntries(
-              leases.participants.map((p) => [
+              participants.map((p) => [
                 p.id,
-                { ...item, title: `${p.participantRole.replaceAll("_", " ")}: ${p.tenantPartyId}` },
+                {
+                  ...item,
+                  title: `${p.participantRole.replaceAll("_", " ")}: ${p.tenantPartyId} (${p.startsOn} – ${p.endsOn ?? "open"})`,
+                },
               ]),
             ),
           },
         },
       };
       initial.acknowledgments = Object.fromEntries(
-        report.acknowledgments.map((a) => [
-          a.leaseParticipantId,
-          { status: a.status, notes: a.notes },
-        ]),
+        report.acknowledgments
+          .filter((a) => activeIds.has(a.leaseParticipantId))
+          .map((a) => [a.leaseParticipantId, { status: a.status, notes: a.notes }]),
       );
     }
     return {
