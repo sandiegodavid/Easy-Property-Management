@@ -1,0 +1,282 @@
+# MVP Architecture and Technology Plan
+
+## Status and scope
+
+This is the agreed implementation direction for the local, single-operator MVP. It records architecture decisions and options only; it does not authorize or include application code. Detailed product outcomes and dependencies remain in [FEATURE_BACKLOG.md](../../FEATURE_BACKLOG.md), and the product scope remains in [PRODUCT_BRIEF.md](../../PRODUCT_BRIEF.md).
+
+UI development is deferred until `UI-001`, the dedicated operator-interface slice immediately before `DASH-001`. Until `UI-001` begins, build only backend domain logic, persistence, migrations, APIs, CLI/setup capabilities, tests, and documentation; React screens, shared web packages, and other operator-interface surfaces are out of scope.
+
+## Architecture in one view
+
+Use a **modular monolith**: one locally run application with a React/TypeScript user interface, a Python API, a SQLite workspace database, and a workspace file store. Modules are independently organized and tested but deploy together. This is the right fit for one operator and roughly 1–50 rentable spaces: it keeps installation, data ownership, backup, and support understandable while leaving clean seams for a future hosted product.
+
+```text
+Local browser or optional desktop shell
+                │
+                ▼
+React + TypeScript user interface
+                │  REST / OpenAPI on the local machine
+                ▼
+FastAPI application (Python)
+  domain modules · jobs/outbox · connector and AI adapters
+                │
+       ┌────────┴────────┐
+       ▼                 ▼
+SQLite workspace      Workspace files
+financial records     leases, receipts, photos, imports, exports
+```
+
+Do not begin with microservices, a cloud database, Redis, RabbitMQ, or a separate search service. They add operating complexity without solving an MVP problem. The application may initially run in the user's browser against a local server; packaging it as a desktop application is a later distribution decision and must not change its workspace model.
+
+## User-facing modules
+
+The navigation should use familiar, task-oriented language. Each module has one primary job, while related history and drill-down remain linked rather than duplicated.
+
+| Navigation module | Main responsibility | MVP capabilities |
+| --- | --- | --- |
+| Home & Inbox | Answer “what needs attention now?” | Action dashboard, overdue rent, expiring leases, owner actions, showings, urgent repairs, source-message and AI-review queues, plus a simple value snapshot. The snapshot surfaces tracked income, estimated cost avoided and time saved, retention, and issue-resolution speed; every value identifies its period, calculation, source records, and any operator-configured baseline. |
+| Portfolio | Represent the physical portfolio and its ownership context | Properties, spaces, self-owned versus managed relationships, occupancy, contacts, and property history. |
+| Leasing | Move a vacancy from listing to approved lease and documented turnover | Listings, leads, showings, offers/counteroffers, applications, applicant evidence, human approval decisions, leases, condition reports, and rent adjustments. |
+| Money | Make expected, received, spent, and due money understandable | Rent expectations and receipts, security-deposit receipt and settlement, payment methods, prepaid checks, expenses, owner-reported rent, owner balances, and recorded owner disbursements. |
+| Owner management | Preserve client-owner requests and operating context | General rental, lease, tenant, and vacancy concerns with communication history, follow-up actions, explicit resolution, and links to authoritative source records. |
+| Maintenance | Move a reported issue to a documented outcome | Owner/tenant/manager/staff-reported issues, triage, quotes, assignments, work journals, costs, and provider recommendations. |
+| Service providers | Retain local provider knowledge | Categories, coverage, past work, references, preferred/avoid status, and manually recorded external-review links. |
+| Communications | Preserve follow-up context | Tenant and owner communication history, reminders, task completion, and source attribution. |
+| Documents | Produce and review controlled documents | Approved templates; AI-assisted drafting, summary, and comparison with human review. |
+| AI assistance | Improve a workflow without becoming a separate destination | Embedded, reviewable drafts for issue intake and diagnosis, provider selection, document work, and listing copy; never autonomous action. |
+| Reports | Explain performance and allow verification | Occupancy, rent roll, delinquency, income/expense, owner, leasing, and repair reports with source-record drill-down. |
+| Settings | Manage the local product safely | Workspace and backup location, connections, provider categories, jurisdiction rules, document templates, AI controls, and data export/restore. |
+
+The confirmed [operator design](../designs/UI-001_DESIGN.md) uses Home, Properties, Owners, Leasing, Money, Maintenance, and Providers as default destinations. Settings supports show/hide/reorder and Light/Dark appearance; Home and Settings remain accessible and hidden destinations remain under More. Hiding a destination never suppresses its outstanding work. Properties and Owners open directories, then contextual workspaces. Legal matters sit within Leasing and related lease/property records; HOA violation notices sit within properties. Both project into relevant owner views and Home. Documents and Communications remain contextual rather than requiring permanent destinations.
+
+Expandable items use the entire non-editable summary bar as one disclosure control; inputs and actions belong below it. Home separates Needs action, Waiting, Upcoming, appointments, and information review. Missing/unavailable information never becomes a reassuring zero. UI-001 delivers the core operator workflows; DASH-001 composes initial Home aggregates from core authoritative sources. UI-002 adds LEGAL-001 and HOA-001 workflows and Home extensions, DATA-002 Excel and DATA-003 Google Sheets intake, INGEST-002 issue-proposal review, and MCP-001 connected-assistant setup after their domain contracts exist. These six capabilities do not gate UI-001 or the initial dashboard; the delivery split in the backlog and operator design governs their UI registration.
+
+The additional backend prerequisites are planned capabilities, not existing implementations: TASK-002 adds waiting/follow-up semantics; OPS-001 adds coverage/review provenance, draft recovery, preferences, and bounded search; LEGAL-001 owns legal matters; HOA-001 owns violation notices and the association-responsibility/affected-unit links for narrow HOA-covered repairs. The physical issue and its verified outcome remain Maintenance-owned, while Communications and Tasks retain every coordination attempt and follow-up. An HOA is a shared organization/contact rather than an automatic provider assignment. Finance remains authoritative for paid amounts, Providers for reusable contractor identity, and source domains for lifecycle. Case closure cannot silently alter occupancy, financial records, or repair state.
+
+DATA-002 supplies staged Excel intake for properties, owners, and providers; DATA-003 adds read-only Google Sheets snapshot selection using CONN-001 authorization. Import reviews explicit create/link/skip operations and property-owner relationships, retains row-level outcomes, and prevents retry duplicates. Existing records are not silently overwritten or merged. Broader historical/update imports remain DATA-001. Source credentials use the OS credential store and remain excluded from portable archives.
+
+## Backend domain modules
+
+The server separates domain responsibilities from user-interface screens. This supports consistent rules and lets a later SaaS product retain the important business logic.
+
+| Server module | Responsibility |
+| --- | --- |
+| `workspace` | Open, validate, migrate, back up, restore, relocate, and export a local workspace. |
+| `parties` | Owners, tenants, prospects, vendors, companies, contacts, and their roles. |
+| `portfolio` | Property, space, ownership/management relationships, availability, and occupancy. |
+| `leasing` | Listings, leads, showings, offers, applications, approvals, leases, renewals, and rent changes. |
+| `inspections` | Lease-linked move-in/move-out condition reports, observations, evidence links, acknowledgment state, and reviewed comparisons. |
+| `finance` | Rent expectations, receipts with immutable actual-method snapshots, prepaid checks, confirmed actual expenses and refunds, finance-owned expense categories, and financial allocations. |
+| `owner-accounting` | Owner-reported receipts, balances, disbursement approvals, and disbursement history. |
+| `owner-management` | Client-owner rental, lease, tenant, and vacancy concerns, including provenance, context, lifecycle, communication projections, and task follow-up coordination. |
+| `maintenance` | Issue intake, reporter attribution, appointments, quotes, assignments, status, estimates and work-reported cost context, and append-only issue-backed work journals and outcomes. |
+| `providers` | Provider profiles, categories, service areas, references, reputation notes, and manually entered prior-work context outside the issue workflow. |
+| `tasks` | Local Task deadlines, priority, lifecycle, reminders, and TASK-002 waiting labels/timed follow-ups, revisions, replay results, and bounded source facts. Actual source-domain deadlines and urgency remain with their owning modules. |
+| `communications` | Manual local interaction timeline for any saved party, typed context links, immutable corrections, and TASK-001 follow-up projection. It neither sends nor ingests messages. |
+| `intake` | Retained evidence submitted by authorized assistants or the operator, voice transcripts, source normalization, account-scoped deduplication, and source-linked review. No native mailbox fetching. |
+| `documents` | Templates, versions, generated drafts, attachments, and document review metadata. |
+| `jurisdictions` | Effective-dated notice rules, sources, verification dates, and alert calculations. |
+| `operator` | OPS-001 workspace readiness/capability bootstrap, preferences, bounded property/owner compositions and search, coverage review decisions, and incomplete-form recovery. Source domains retain all official facts and lifecycle authority. |
+| `reporting` | Read models, filters, aggregate reports, and source-record drill-down. |
+| `ai-governance` | Source separation, prompt/input controls, retained AI output, confidence, approval decisions, and action limits. |
+| `connectors` | External provider authorization, OS credential-store access, adapter lifecycle, and connection health. |
+
+`platform` code supplies cross-cutting capabilities such as database access, file storage, auditing, logging, error handling, background job execution, and configuration. It must not become a substitute for domain rules.
+
+### Entity ownership, persistence, and APIs
+
+An abstract or reusable domain concept is not, by itself, a reason to omit persistence or an API. The application keeps a stable table whenever the concept has an independent identity, lifecycle, integrity rules, audit history, or references from more than one workflow. It does not use ORM inheritance merely because a record can be specialized later.
+
+| Concept | Persistence boundary | API boundary |
+| --- | --- | --- |
+| `files` | `file_records`, provider-specific content locations, and `file_links` own immutable file metadata, integrity identity, storage state, and cross-domain references. Business records do not duplicate these fields. | The generic file API is technical plumbing for upload, metadata retrieval, and safe byte retrieval. User-facing screens present files inside their owning workflow, such as a lease, inspection, or expense; there is no general-purpose operator file cabinet. |
+| `parties` | `parties` owns the shared person or organization identity and multi-valued `party_contact_methods`. Tenant, provider, owner, and future roles add their own profile or relationship records rather than copying identity or contact fields. Scalar email and phone fields do not exist on `parties`. | The dedicated `parties` API owns reusable identity and contact-method operations. Role-specific APIs own their profile, exact contact preference, and workflow rules. TEN-001 establishes party-contact and guard protocols; VEND-001 moved the former Portfolio party routes into this shared boundary. |
+| `portfolio.properties` | `properties` is a top-level portfolio aggregate with a US address, address-derived canonical US IANA time zone, lifecycle, ownership, and reporting scope. Residential and office classifications remain fields while their core rules are shared. | The Portfolio API owns property lifecycle, local US address-to-time-zone resolution, and ownership operations. Other modules consume the stored zone through application protocols rather than infer it independently. International address/time-zone support is deferred. Add category-specific tables only when a future category has substantial independent fields and rules. |
+| `portfolio.spaces` | `spaces` is a child record, not a property subtype. It has a stable ID, independent lifecycle, occupancy/availability history, lease references, and inspection references. | Property creation and detail nest spaces for usability; direct space endpoints handle operational lifecycle and status changes. |
+
+This division prevents duplicated storage metadata and identity data, keeps backup and audit behavior consistent, and permits future modules to reference stable IDs without coupling to a particular UI screen.
+
+Cross-module rules use application-level protocols composed at bootstrap. Party-role activity guards prevent a shared identity from being archived while an active role requires it, and party-contact reference guards prevent a method from being archived while an active role preference references it. Guards and coordinated writes execute inside the caller's existing immediate database transaction; a module must not import another module's SQLAlchemy model or concrete repository to enforce the rule.
+
+OPS-001 owns its compositions in the `operator` module. Each composed response uses one deferred SQLite snapshot and one captured UTC instant through transaction-aware, consumer-neutral source read ports; it does not join independently transactional service results and claim a consistent snapshot. Finance supplies reusable summary access preserving FIN-003 semantics. OPS mutations commit their state, revision, idempotent operation result, and audit in one immediate transaction. Bootstrap may return an unavailable/busy readiness envelope without opening domain data; all ordinary OPS operations require validated runtime readiness, and write capability requires both readiness and writer-lock ownership. Recovery actions advertise implemented operations or explicit setup guidance. OPS retains workspace preferences, review history, bounded recovery records, and operation results in portable storage; runtime epochs invalidate old continuations after reopen/restore. See [OPS-001 design](../designs/OPS-001_DESIGN.md) for the 13 accepted decisions, search/privacy limits, owner money scope, and query budgets.
+
+To preserve the Single Responsibility Principle, a source module's cross-module adapter exposes consumer-neutral facts through a small application protocol; the consuming module owns its workflow policy, eligibility decisions, response shaping, and consumer-specific names. Do not place per-consumer operations or projections in the source module when one reusable context reader is sufficient, and do not add layers, DTOs, or adapter classes that provide no clear boundary or reuse.
+
+Refactoring this boundary must preserve transaction scope and bounded, set-based query behavior. If the clean separation would add database queries, allocations, meaningful runtime overhead, or disproportionate abstraction, discuss and document the alternatives and query budgets in design before implementation rather than applying SRP mechanically.
+
+The lease, inspection, maintenance, and finance boundaries are deliberate. `leasing` owns contractual dates and participants; `inspections` owns condition evidence; `maintenance` owns repair work, quotes, estimates, and work-reported cost context; `finance` owns immutable rent expectations, recorded rent receipts/allocation history, receipt-owned actual-payment-method snapshots, prepaid checks, confirmed actual expenses and refunds, and security-deposit receipt, approved deduction, refund, and settlement history. FIN-001 reads lease terms through a transaction-aware port composed at bootstrap; FIN-002 reads property, provider, and payer context through transaction-aware ports; FIN-008 has a separate `DepositService` and reads lease, inspection, rent-expectation, expense, party, and file context through transaction-aware ports. FIN-007 reads the expectation, lease participant, and property-local time-zone context through the same kind of ports, coordinates its one-check deposit handoff with FIN-001 and TASK-001 in one immediate transaction, and never stores raw check data. These services do not import or mutate another module's persistence. FIN-006 does not create reusable payment-account state or invoke providers: it extends immutable rent-receipt facts with safe masked method snapshots. A deposit receipt represents held funds and is not FIN-001 rent income. A deposit deduction is not a FIN-002 expense, even when both cite the same evidence. Inspection classifications may be selected as context but never create a deduction automatically. FIN-008 records an operator-reviewed deadline and rule reference without inferring statutory requirements; a later jurisdiction module may provide sourced suggestions. FIN-003 consumes deposit activity separately from income and operating expenses.
+
+Maintenance is authoritative for issue- and assignment-backed work-journal entries, actual work timing, completion outcomes, and completion evidence. Providers may retain mutable, audited notes about manually entered prior experience that did not originate in the application's Maintenance workflow. Provider-facing screens, reports, and AI consumers compose these sources with explicit provenance through bounded read projections; neither module copies or synchronizes the other's records. Appointment completion records a visit, not repair completion, and journal narratives never become financial entries.
+
+Owner-management is authoritative for a client owner's operational concern, its validated historical context, priority, lifecycle, and resolution. Communications owns the interaction ledger and Tasks owns follow-up actions; neither lifecycle changes the concern implicitly. Portfolio, Leasing, Tenants, and Maintenance remain authoritative for ownership, property/space status, leases and participants, tenant profiles, and repair issues. An owner concern records and links context but does not mutate those sources. PORT-001's `local_operator` ownership has no Party ID and is not converted into an OWNER-004 raising owner; OWNER-004 applies only to a specifically selected client-owner Party, including on mixed properties.
+
+Task lifecycle rules live in the task application/domain layer. A task unit of work provides one immediate SQLite write transaction for the application service to load state, apply a transition, persist task and reminder changes, and append the corresponding audit events atomically; it contains persistence mechanics rather than task policy. TASK-002 waiting commands add expected Task revision and Task-owned immutable operation results; replay precedes current-state checks, and a successful change advances the revision once with required audit. Completion/cancellation clears waiting atomically while retaining audit episodes; reopening restores neither waiting nor dismissed reminders. Follow-up instants are independent of due dates and TaskReminder records and become actionable at their exact time. Consumer-neutral Task readers accept caller-owned snapshots/captured instants with bounded previews and counts. Tasks supplies `taskDeadlineState`, never inferred source deadlines. The [TASK-002 design](../designs/TASK-002_DESIGN.md#resolved-design-decisions) specifies the 13 accepted decisions, limits, latest-schema validation, and portable receipt/history contracts.
+
+Backup status is represented by typed state, operation history, failure records, and a separate active validated-backup retention inventory before it is serialized to `backup-state.json`. Retention uses only an inventory record whose digest still matches the archive in its recorded destination; it never removes the bounded operational history itself, and removes terminal inventory records once an archive is deleted or unavailable.
+
+## Recommended stack
+
+| Layer | Recommendation | Why |
+| --- | --- | --- |
+| User-interface language/runtime | TypeScript on the current Node.js LTS release | A mature, type-safe ecosystem for the React interface, UI components, and browser tooling. |
+| User interface | React with Vite | Mature component ecosystem, rapid local development, and a clean boundary from backend rules. |
+| Frontend quality checks | ESLint flat config with TypeScript-aware recommended rules, React hooks and JSX accessibility plugins; Prettier; strict TypeScript compiler checks | Enforces correctness, consistent formatting, and typed API consumption before implementation is complete. See [implementation quality checks](../../CODE_QUALITY.md). |
+| Server language/runtime | Python on a supported release | Best-fit ecosystem for the product's expanding AI, document, transcription, evaluation, analysis, and potential model-serving work. |
+| API application | FastAPI | Typed validation, OpenAPI support, asynchronous integrations, and a clear, testable Python application structure. |
+| API contract | REST with OpenAPI | Clear contracts for the web UI, local scripts, testing, and later SaaS migration; avoids premature GraphQL complexity. |
+| Local database | SQLite in WAL mode | Embedded, portable, reliable single-operator data store with no database server to administer. |
+| Database access and migrations | SQLAlchemy with Alembic | Alembic is the sole schema authority. The greenfield baseline creates the complete current workspace schema; later revisions begin only after customer data exists. |
+| API/data validation | Pydantic | Shared validation approach for API requests, AI-structured output, and configuration. |
+| Attachments | Storage-neutral FILE-001 records and links; local workspace filesystem by default, with optional AWS S3 adapter | Keeps domain associations stable across storage backends. Local files remain portable with the workspace; S3 objects use durable locators and application-owned hashes, never persisted presigned URLs. Portable backups embed verified referenced content. |
+| Background work | SQLite-backed jobs/outbox table run by the application | Handles ingestion, transcription, AI review preparation, reminders, and backup jobs without Redis or a message broker. |
+| Secrets | Operating-system credential store | Keeps external connection credentials out of Git, the workspace database, exports, and backups. |
+| Testing | Pytest unit/integration tests against a temporary SQLite workspace; browser end-to-end tests for critical operator workflows | Financial totals, records, approvals, migrations, and intake review are higher risk than screen styling. |
+| Future cloud database | PostgreSQL | Suitable future destination for tenant-isolated SaaS workspaces, concurrent users, and central operations. |
+
+TASK-001 initially exposes reminders through the in-app action summary while the application is running. Durable outbox delivery and background execution are deferred until a connected notification or background-runner feature requires them.
+
+Frontend lint and type-check configuration is available under `application/` as development tooling before UI-001. This does not mark the React interface or shared web packages implemented. UI-001 must make `npm run lint`, `npm run format:check`, and `npm run typecheck` pass against its actual sources, with generated contracts included in compiler validation.
+
+## Viable alternatives
+
+The backend recommendation is Python because AI is the product's largest planned growth surface—not because Python is required to call a model API. TypeScript can call the same services effectively. Python is preferred because document extraction, transcription pipelines, evaluation, retrieval, ranking, data analysis, and potential future model work can remain in the primary backend rather than becoming a second AI service later.
+
+| Option | When it is a good fit | Trade-off |
+| --- | --- | --- |
+| React + FastAPI + SQLAlchemy | Recommended default; AI-intensive backend work stays in the primary application. | The interface and server use different languages, so the OpenAPI contract and browser client must be maintained deliberately. |
+| React + NestJS/Fastify + TypeScript | Good choice for a strongly Node-oriented team with limited planned AI/data-processing complexity. | A growing Python AI service may become necessary later, creating two backend stacks and a more complex deployment model. |
+| Rails + Hotwire + Active Job | Strong choice for a Rails-experienced team wanting a cohesive, convention-led product. | Less natural if the team expects a separate rich React interface. |
+
+The stack choice should not change the core design: modular monolith, external workspace, SQLite for the MVP, filesystem attachments, OS-managed secrets, and a portable migration path.
+
+## Repository structure
+
+Use a feature-first monorepo. Source code, migrations, test fixtures, and operational scripts are Git-tracked. Real workspaces are outside this tree.
+
+```text
+easy-property-management/                 # Git repository; no user data
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── DECISIONS.md
+│   ├── FEATURE_BACKLOG.md
+│   ├── PRODUCT_BRIEF.md
+│   └── ROADMAP.md
+└── application/                           # active application source root
+    ├── apps/
+    │   ├── web/
+    │   │   └── src/
+    │   │       ├── app/                   # routing, application shell, providers
+    │   │       ├── features/              # home, portfolio, leasing, money, maintenance…
+    │   │       └── shared/                # reusable UI, API client, formatting, accessibility
+    │   └── server/
+    │       └── app/
+    │           ├── bootstrap/             # application startup and composition
+    │           ├── modules/               # domain modules listed above
+    │           └── platform/              # database, files, jobs, credentials, configuration
+    ├── packages/
+    │   ├── contracts/                     # OpenAPI contract, generated browser client, shared fixtures
+    │   ├── ui/                            # shared presentational components
+    │   └── test-support/                  # fixtures and workspace test helpers
+    ├── database/
+    │   ├── sqlite-migrations/
+    │   └── postgres-migrations/           # introduced when SaaS work begins
+    └── scripts/
+        ├── setup/                         # product-owner workspace initialization/restore
+        ├── backup/
+        ├── restore/
+        └── health-check/
+```
+
+Each server module follows the same internal shape where useful:
+
+```text
+modules/maintenance/
+├── domain/             # entities, value objects, domain policies
+├── application/        # use cases and transaction boundaries
+├── api/                # request validation and API handlers
+├── infrastructure/     # repository and external-adapter implementations
+├── jobs/               # scheduled or asynchronous work
+└── tests/
+```
+
+Do not create a single generic `services/` or `utils/` dumping ground for business logic. A rule about rent, approvals, notices, or repair assignment belongs in its owning domain module.
+
+## Local workspace and Git boundary
+
+The live user workspace is configurable and must be external to the repository. It contains the SQLite database, its `-wal` and `-shm` companions while active, attachments, exports, and backups. For the MVP, the application discovers it through a small local locator at `application/config.local.json`; that file is explicitly excluded from Git.
+
+The live locator sets `localWorkspacePath` to the chosen external data folder. It is not committed even though it sits under the application source root; only [application/config.example.json](../../../application/config.example.json), which deliberately uses a fake path, is tracked. A packaged future version may relocate this small locator to operating-system application settings without moving the workspace itself.
+
+```text
+chosen-workspace/
+├── workspace.json
+├── database/
+│   ├── property-management.sqlite
+│   ├── property-management.sqlite-wal     # present while WAL is active
+│   └── property-management.sqlite-shm     # present while WAL is active
+├── files/
+├── exports/
+└── backups/
+```
+
+Git tracks only application code, schema migrations, scripts, templates, documentation, and sanitized fixtures. `.gitignore` must defensively exclude databases and their WAL/SHM files, workspace folders, attachments, imports, exports, backups, logs, and environment files. Production paths are never inferred from the current Git checkout.
+
+On startup, the application resolves the locator and obtains the workspace's single-writer lock before validating the manifest, exact Alembic head, current module schemas, permissions, and integrity. A missing configured workspace presents **Retry**, **Locate workspace**, or **Restore backup**—never an unnoticed empty database.
+
+## SQLite suitability and operating limits
+
+SQLite is sufficient for the MVP target: a single local operator managing approximately 1–50 rentable spaces, their financial records, communication history, issue history, and metadata for attached files. The size-intensive evidence and media live in workspace files, not database blobs by default. SQLite's JSON and full-text-search capabilities can support flexible metadata and local search when actually needed.
+
+Use WAL mode for responsive reads while the application writes, but design around SQLite's single-writer model: short transactions, one local application writer, and a durable job/outbox queue. Do not attempt shared multi-machine editing, simultaneous network writers, or a cloud-sync folder as the live database. Those are future SaaS concerns.
+
+Backups of an active workspace use SQLite's backup facility or an equivalent consistent snapshot, then package the associated attachment files. Do not copy only the main `.sqlite` file while the application is running. Restore, relocation, and SaaS-export workflows verify both records and file references before they switch to the result.
+
+`LOCAL-002` uses one versioned portable archive format for both backups and exports. It includes a consistent database snapshot, workspace-relative files, a manifest, and cryptographic hashes; it excludes connection credentials, live SQLite journal files, and nested backups. Archive compatibility is determined by archive, workspace, and database-schema format markers; the producer application release version is traceability metadata only. Archives require passphrase-based authenticated encryption and are written atomically to a separately selected backup destination. Manual backups are always available. Automatic backups use a sensible default schedule once a destination exists, without requiring user scheduling, and run before risky workspace operations. A restore validates the archive into a new staging workspace and never overwrites the active workspace in place.
+
+## AI and connector architecture
+
+The app owns official records, deadlines, reminders, durable workflow state, review, and audit. AI is optional. Manual work remains available when every AI connection is absent, paused, or unavailable. This provider-neutral design adopts [AI integration research](../../research/AI_INTEGRATION_RESEARCH.md).
+
+### Independent model and assistant connections
+
+| Boundary | Application contract | Candidate adapters |
+| --- | --- | --- |
+| Built-in assistance | A domain prepares bounded context; AI Governance redacts and invokes `AiProviderPort`; output becomes a reviewable draft. | Registered hosted APIs such as OpenAI or Meta Model API, or an optional local runtime such as Ollama with a validated pinned model. |
+| Connected assistants | MCP-001 validates scoped reads, retained evidence, external proposals, receipts, and connection health through one application-owned service. | MCP for compatible desktop clients such as ChatGPT desktop/Codex or Claude; file exchange for Muse Agent if its reported capabilities pass verification. |
+| Computer use | Optional interaction through ordinary application workflows and permissions. | Capability of a particular assistant environment, not a model API entitlement or a required integration transport. |
+
+Selecting Meta Model API does not connect Muse Agent; selecting an OpenAI model does not connect ChatGPT or its mailbox. Local weights do not supply email access, schedules, or an MCP client. Settings keeps **Built-in AI** and **Connected assistants** separate. Operators select only registered, validated configurations, not arbitrary provider names or URLs. Supporting a common interface does not promise every adapter in the first release.
+
+### Governance and execution
+
+`ai_governance` owns run records, exact bounded governed inputs, draft shells, decisions, limits, disclosure permissions, and redaction bindings. Domain modules own context preparation, payload schemas, source revisions, and approval consequences. No provider is called inside a SQLite transaction. Approval writes the official record, review decision, and correlated audit events in the owning domain's transaction. No AI adapter sends messages, signs documents, initiates payments, or changes lease, occupancy, assignment, or money state autonomously.
+
+Record the actual provider/model, adapter version, execution location, configuration revision, and prompt/schema/profile versions on each generated run. Local runs additionally identify the model artifact/digest, quantization, and runtime/version. External proposals identify the authenticated connection and delegation; any unverified model identity or usage is labeled assistant-reported or unknown. Provider changes affect new runs only and do not relabel historical drafts.
+
+Cloud disclosure approval is bound to the selected connection and disclosure version/data classes. No silent fallback from local to cloud or between vendors. An explicit retry must pass the destination's disclosure, action, and capability checks. Global pause blocks new model calls, assistant reads/exports, and proposal admission; in-flight calls may already have disclosed data. Recheck pause/revocation before admission, retain a blocked outcome for late results, and preserve existing drafts for operator review. Pausing app access cannot retract prior exports or stop an assistant's independent schedules.
+
+### Local inference
+
+Begin with one optional bounded-text pilot, selected using [local model research](../../research/LOCAL_MODEL_RESEARCH.md). The backend alone invokes the registered runtime, with bounded context/output, one local inference at a time, finite timeouts, and no open database transaction. A local-only configuration rejects cloud model variants, remote destinations, and implicit network fallback. Validate offline inference after installation. Image/audio/document support is enabled per tested model/runtime/action combination; model-family claims alone are insufficient.
+
+Runtime processes, weights, endpoints, and secrets are machine configuration outside portable workspace backups. The workspace retains selection references and immutable run provenance; restore reports setup required until the device is checked again. Localhost alone is not authentication. Constrain runtime access and do not expose it to the browser or LAN by default.
+
+### Assistant transports and evidence
+
+MCP-001 retains its identifier but now covers the shared assistant contract and separate MCP/file adapters. The local MCP server exposes bounded read tools plus explicit source/proposal submission and receipt tools; it exposes no generic SQL, filesystem, approval, or domain-write tool. MCP is not ChatGPT-exclusive. Client compatibility, authentication, and local transport must be tested for the exact product. Hosted/web clients require a separately authorized remote path; no tunnel or public endpoint is enabled in MVP.
+
+The Muse candidate uses a per-connection file exchange, not assumed localhost HTTP or MCP access. It receives bounded exports only, publishes complete envelopes, and reads durable receipts. File paths and self-declared agent names do not prove identity. Automatic admission requires verified filesystem isolation and trustworthy writer attribution; otherwise use manual import. File watching is backed by startup/resume recovery scans. Both transports use the same source normalization, authorization, idempotency, review, and receipt state machine.
+
+Inbound messages arrive through authorized assistants or manual entry. The app holds no mail/SMS credentials and does not fetch or send messages. Intake retains bounded evidence separately from proposed fields and deduplicates by source account/message identity across assistant connections. INGEST-002 review does not depend on MCP-001 or optional matching. COM-002 drafts are sent manually and retain operator-reported sent outcomes. CONN-001 remains read-only Google Sheets authorization.
+
+Credentials live in the OS credential store keyed by workspace and connection, independently for model APIs and assistant grants. No usable secret or delegation survives export/restore. Scheduled assistant connections distinguish last contact, last successful poll, acknowledged configuration, and failed polls. Two missed acknowledged intervals raise a warning; an interactive MCP session with no schedule does not generate a fictitious polling alarm. No heartbeat proves complete mailbox coverage.
+
+### Delivery gates
+
+AI-GOV-001 establishes the neutral registry and review boundary with fake adapters; production inference needs a validated hosted adapter or the separate AI-LOCAL-001 pilot. INGEST-001/002 provide evidence and review independently. MCP-001 first validates one local MCP client and the common contract; the Muse file adapter is separately capability-gated. UI-001 shows only implemented capabilities and honest setup/unavailable states. Protocol tests and synthetic end-to-end scenarios precede enabling any provider on real records.
+
+## Future SaaS path
+
+The MVP's domain modules, stable IDs, versioned schema, workspace-relative attachments, and portable export format are deliberate preparation for SaaS. The future hosted product can replace the local SQLite repository with PostgreSQL-backed tenant-isolated workspaces and introduce authentication, authorization, portals, collaboration, and central background workers without rewriting the core business rules.
+
+Local-to-cloud migration must analyze and validate the workspace, run a dry run, preserve stable IDs and financial totals, import attachments and retained intake/AI history, provide retry/rollback safeguards, and then require external-account reauthorization. The local MVP must remain usable and recoverable if a migration is not completed.

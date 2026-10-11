@@ -1,25 +1,19 @@
 # Easy Property Management
 
-Easy Property Management is a local-first, AI-assisted property-management application for independent landlords and managers with roughly 1–50 rentable spaces. The MVP serves only the United States: property addresses and spaces are US-based, property-local dates use US IANA time zones, and monetary workflows use USD. Its implemented foundation supports a private local workspace, encrypted backup/restore, append-only audit history, managed files, and tasks/reminders; property-management workflows build on this foundation.
+Easy Property Management is a local-first, AI-assisted property-management application for independent landlords and managers with roughly 1–50 rentable spaces. The MVP serves only the United States: property addresses and spaces are US-based, property-local dates use US IANA time zones, and monetary workflows use USD. Its implemented backend covers portfolio, people, leases, inspections, maintenance, money, communications, tasks, retained evidence and optional AI governance. The browser interface is partially delivered; [the documentation index](docs/README.md) distinguishes current behavior from remaining work.
 
 ## Repository layout
 
 ```text
-docs/           Product brief, decisions, backlog, roadmap, and architecture
+docs/           Developer index, current module/platform guides, active work, research and archive
 application/    FastAPI application, Alembic baseline, tests, and local configuration template
 ```
 
-The planned stack is React/Vite/TypeScript for the interface, with Python/FastAPI, SQLAlchemy, Alembic, SQLite, and a future PostgreSQL SaaS path. A new workspace is initialized from one current Alembic baseline; this greenfield build accepts only the latest workspace and archive formats. See [the architecture plan](docs/ARCHITECTURE.md) for modules, folder structure, AI boundaries, workspace design, and stack rationale.
+The implemented stack is React/Vite/TypeScript for the interface, with Python/FastAPI, SQLAlchemy, Alembic, SQLite, and a future PostgreSQL SaaS path. A new workspace is initialized from one current Alembic baseline; this greenfield build accepts only the latest workspace and archive formats. See [the architecture plan](docs/ARCHITECTURE.md) for modules, folder structure, AI boundaries, workspace design, and stack rationale.
 
-## Planning documents
+## Developer reading path
 
-- [Product brief](docs/PRODUCT_BRIEF.md)
-- [Feature backlog](docs/FEATURE_BACKLOG.md)
-- [Product roadmap](docs/ROADMAP.md)
-- [Product decisions](docs/DECISIONS.md)
-- [Architecture and technology plan](docs/ARCHITECTURE.md)
-- [Confirmed operator experience and acceptance scenarios](docs/UI-001_DESIGN.md)
-- [Implementation quality checks](docs/CODE_QUALITY.md)
+Start with [docs/README.md](docs/README.md), then [architecture](docs/ARCHITECTURE.md) and the relevant module guide. Use [active designs](docs/active/README.md) and [the feature backlog](docs/FEATURE_BACKLOG.md) for remaining delivery. [The inventory](docs/DOCUMENT_INVENTORY.md) maps archived design sources to their current references.
 
 ## Local workspace configuration
 
@@ -32,17 +26,11 @@ application/config.example.json     # Git-tracked template with a fake path
 
 Set `localWorkspacePath` in the live file to the chosen external data folder. The live configuration file, SQLite database, attachments, backups, exports, and connection credentials must never be committed. The configuration template is safe to commit because it contains no live path or user data.
 
-## Implemented foundation
+## Application layout and delivery
 
-[application](application) contains the implemented local backend and schema baseline:
+`application/apps/server` contains the FastAPI modules, current schema validation and tests. `application/apps/web` contains React workflows; `packages/ui` supplies shared components and `packages/contracts` supplies generated API contracts. A new workspace uses one current greenfield baseline.
 
-- `apps/server` — FastAPI application, feature modules, API routes, and tests
-- `database` — current SQLite Alembic baseline and future migration location
-- `config.example.json` — safe, Git-tracked local-workspace configuration template
-
-The React interface and shared web packages are being delivered through the UI-001 slices. The workspace gate, shell and preference controls are available; domain browser workflows follow the implementation matrix. `UI-001`, immediately before `DASH-001`, delivers the deferred operator workflows. Follow the feature backlog sequence and preserve the local workspace, approval, audit, and greenfield schema requirements documented in `docs/`.
-
-The confirmed UI design includes configurable Owners and Providers destinations, Light/Dark appearance, full-summary-bar inline expansion, manual legal matters, HOA violation notices, and reviewed Excel/read-only Google Sheets intake for properties, owners, and providers. The backlog names their supporting prerequisites; design approval does not indicate those new capabilities are implemented. Broader HOA administration and historical/update imports remain post-MVP.
+The current browser shell, workspace gate, recovery, contextual reads and Portfolio/identity/Provider/Lease/Inspection workflows are delivered. Remaining Money, Maintenance/coordination, search/coverage, AI controls and final interface acceptance are tracked in [active UI delivery](docs/active/UI-001_IMPLEMENTATION_MATRIX.md). The [visual demo](demo/operator-experience.html) includes design/future states and is not a capability inventory.
 
 ## Local HTTP transport
 
@@ -78,25 +66,7 @@ Packaging requires `uv` and cached Python build dependencies (`uv build --offlin
 Entry pages are not stored; hexadecimal fingerprint assets are immutable.
 External scripts/styles and relative `/api` calls work under the production CSP.
 
-Slices 44–45 deliver the compiled scaffold and workspace readiness gate. Missing,
-busy, invalid and unsupported workspaces show safe guidance; connection failures
-are separate. Domain children wait for bootstrap, and workspace/runtime changes
-discard the old query scope. Locate/restore use explicit local setup guidance.
-Slice 46 adds navigation, nested property/owner context routes and Light/Dark
-Settings. Appearance and navigation save through revision-checked OPS preferences;
-hidden destinations remain under More. Other workflow pages explain their pending
-delivery and do not present unloaded records as empty collections. Preference
-conflicts preserve choices for explicit review; uncertain saves retry the same key.
-
-Slice 47 adds shared disclosures, independent async regions, bounded directory
-presentation, semantic tables, labeled fields, error summaries and confirmation
-dialogs in `@epm/ui`. Import its `tokens.css` and `components.css` alongside the
-application styles. Disclosures preserve input while hidden and pass visibility
-to feature renderers, which own fetching and must pause hidden polling. Async
-regions receive source availability and original timestamps; directory totals and
-opaque continuation cursors come from the server. No component calculates domain
-state or submits commands. Run `npm run test:components` from `application/` for
-the isolated browser fixture; it is excluded from the production build.
+Current frontend structure and shared-component behavior are documented in [frontend architecture](docs/ui/frontend-architecture.md). Run `npm run test:components` from `application/` for the isolated component fixture; it is excluded from the production build.
 
 ## Frontend development checks
 

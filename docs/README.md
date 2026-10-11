@@ -1,0 +1,57 @@
+# Developer documentation
+
+## Start here
+
+Read these in order for the whole project:
+
+1. [Repository README](../README.md): setup, local workspace and development commands.
+2. [Product brief](PRODUCT_BRIEF.md): intended users, operating vocabulary and product scope.
+3. [Architecture](ARCHITECTURE.md): current module/data boundaries and composition.
+4. [Current modules](#current-modules): implementation guides and code/test entry points.
+5. [Active work](active/README.md): remaining delivery and proposed changes.
+
+For a specific change, read its owning module, relevant shared platform contract and active feature design. Historical backlog designs are optional rationale, not the starting point.
+
+## Current modules
+
+| Area | Read first | Common deep dive |
+| --- | --- | --- |
+| Local data | [Workspace](modules/workspace.md) | Backup, restore, readiness and portable identity |
+| History | [Audit](modules/audit.md) | Fail-closed events, privacy policies and read markers |
+| Evidence | [Files](modules/files.md) | Publish/rollback, owning links, local/S3 integrity |
+| People | [Parties](modules/parties.md), [Tenants](modules/tenants.md) | Identity, contacts, role guards and participants |
+| Portfolio | [Portfolio](modules/portfolio.md) | Ownership, Property/Space revisions and occupancy timelines |
+| Leasing | [Leases](modules/leases.md), [Inspections](modules/inspections.md) | Contract/physical lifecycle, condition evidence and comparison |
+| Providers | [Providers](modules/providers.md) | Categories, services, prior work and reputation |
+| Money | [Finance](modules/finance.md), [Owner accounting](modules/owner-accounting.md) | Rent, actual expenses, deposits, reports and owner claims |
+| Owner operations | [Owner management](modules/owner-management.md) | Concern context, lifecycle and follow-up |
+| Coordination | [Tasks](modules/tasks.md), [Communications](modules/communications.md) | Deadlines, waiting, reminders and manual interaction history |
+| Source intake | [Intake](modules/intake.md) | Evidence envelope, provenance, deduplication and sensitive reads |
+| Optional AI | [AI governance](modules/ai-governance.md) | Configuration, registries, review and uncertain external effects |
+| Operator support | [Operator](modules/operator.md) | Composed reads, coverage, search, preferences and recovery |
+| Browser interface | [Operator experience](ui/operator-experience.md), [Frontend architecture](ui/frontend-architecture.md) | Implemented routes, shared behavior, state and dispatch |
+
+## Shared contracts
+
+- [Persistence, transactions and validation](platform/persistence.md).
+- [API errors, reads and original-result recovery](platform/api-contracts.md).
+- [Local transport, secrets and audit disclosure](platform/security-and-audit.md).
+- [Code quality and validation commands](CODE_QUALITY.md).
+
+## Delivery, decisions and research
+
+[Feature backlog](FEATURE_BACKLOG.md) owns feature status, outcome and dependencies. [Active designs](active/README.md) own remaining acceptance and proposed changes; [UI delivery](active/UI-001_IMPLEMENTATION_MATRIX.md) distinguishes delivered browser surfaces from planned ones. Completion requires its acceptance gate, not merely a guide or design approval.
+
+[Decisions](DECISIONS.md) preserves agreed rationale, including future product decisions. [Roadmap](ROADMAP.md) groups intended delivery. [Research](research/README.md) contains dated external investigations and experiments; findings need verification before implementing a changing provider/runtime capability.
+
+## Historical material and traceability
+
+[Archive](archive/README.md) retains completed designs, superseded partial-design snapshots and delivery/validation records. [Document inventory](DOCUMENT_INVENTORY.md) maps every relocated source to its current guide, active work and historical record. Partial snapshots are explicitly not completed features.
+
+[pending_code_review_comments](pending_code_review_comments) remains the review queue; this documentation reorganization does not close findings. [Agent notes](agents) are working guidance, not a second source of current architecture.
+
+## Documentation maintenance
+
+When implementing a feature, update its module guide for verified behavior and keep the active design focused on the remaining difference. Update API/model/baseline/validators/generated contracts together where applicable. Record acceptance evidence in the active plan, then update backlog status. When acceptance is complete, archive the active feature design and link its outcome from the backlog to the current module guide.
+
+Keep shared rules in platform guides, domain policy in the owning module and status/dependencies in the backlog. Link exact code/schema/test entry points instead of duplicating every field or full API schema. Preserve necessary rationale/history in the archive, and extract unfinished obligations before archiving a plan. An unverified design-versus-code discrepancy belongs in active work/review; it must not be described as current capability.

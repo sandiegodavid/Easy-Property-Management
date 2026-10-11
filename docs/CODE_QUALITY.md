@@ -8,7 +8,7 @@ Use Ruff with `application/pyproject.toml`. From `application/`, run `ruff check
 
 ## React, TypeScript, and JavaScript
 
-The frontend toolchain is established before UI-001 as development tooling only. React screens and shared UI implementation remain deferred until UI-001. Use npm, one workspace manifest, and one committed lockfile under `application/`; install dependencies with `npm ci` on a current Node.js LTS release.
+The React/Vite application, shared UI package and generated contracts are implemented; remaining browser workflows follow the active UI delivery plan. Use npm, one workspace manifest, and one committed lockfile under `application/`; install dependencies with `npm ci` on a current Node.js LTS release.
 
 From `application/`, run:
 
@@ -28,11 +28,11 @@ npm run typecheck
 - **Formatting:** Prettier owns formatting, with `eslint-config-prettier` disabling conflicting ESLint formatting rules. The shared configuration uses two-space indentation, semicolons, double quotes, LF endings, and a 100-column target. Python/backend files and local runtime configuration are excluded. See [Prettier integration](https://prettier.io/docs/integrating-with-linters).
 - **Type checking:** `tsconfig.base.json` sets strict checking and no emission. `tsconfig.json` includes all frontend workspace TypeScript and TypeScript tooling. `npm run typecheck` checks the entire included project, including generated API contracts, and fails on compiler errors. ESLint does not replace the compiler.
 
-Generated contract files under `packages/contracts/src/generated` are excluded from ESLint and Prettier because generation owns their content. They remain compiler inputs; UI-001 must also verify reproducible generation with no uncommitted generated diff. Dependencies, coverage, and build output are excluded from source checks.
+Generated contract files under `packages/contracts/src/generated` are excluded from ESLint and Prettier because generation owns their content. They remain compiler inputs; Frontend changes must also verify reproducible generation with no uncommitted generated diff. Dependencies, coverage, and build output are excluded from source checks.
 
 The initial lockfile uses ESLint 9 because `eslint-plugin-jsx-a11y` 6.10.2 declares compatibility only through ESLint 9. ESLint 9 is deprecated; upgrade ESLint and its accessibility integration together when a supported combination is available. Do not force incompatible peer dependencies. React hooks and TypeScript lint plugins already declare ESLint 10 compatibility.
 
-Before the first TypeScript source exists, `npm run typecheck` explicitly reports a no-source skip. This establishes tooling readiness only and cannot count as frontend feature validation. Once sources exist, type errors fail the command. UI-001 adds React/Vite and their type dependencies, verifies the three checks against real frontend code, and retains project-wide type coverage if package-specific TypeScript configurations are introduced.
+Type checking must cover the actual frontend and generated contracts. A no-source skip is incomplete validation.
 
 ## Completion gate
 
