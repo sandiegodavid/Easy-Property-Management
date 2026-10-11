@@ -1,6 +1,6 @@
 # UI-001 implementation slices
 
-Status: backend readiness Slices 41–43 and frontend Slices 44–51 delivered — October 11, 2026. Browser workflows in Slices 52–57 remain open; UI-001 is not complete.
+Status: backend readiness Slices 41–43 and frontend Slices 44–52 delivered — October 11, 2026. Browser workflows in Slices 53–57 remain open; UI-001 is not complete.
 
 Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
 feature-specific AI approval modes, Intake attention consequences, coordinated
@@ -13,9 +13,9 @@ The recorded backend readiness gate and React scaffold are complete; browser wor
 ## Subsequent UI slices — ordered implementation plan
 
 Updated October 11, 2026. Backend Slices 41–43 are recorded as delivered;
-Slices 44–51's React build, workspace gate, navigation, shared components, recovery transport, contextual reads and Portfolio/identity/Provider/Lease/Inspection workflows are delivered. Implement the
+Slices 44–52's React build, workspace gate, navigation, shared components, recovery transport, contextual reads and Portfolio/identity/Provider/Lease/Inspection/Money workflows are delivered. Implement the
 following slices sequentially. Slice numbers continue after the backend sequence;
-Slice 40 stays assigned to UI-002. Slices 44–51 are delivered; Slices 52–57 remain planned.
+Slice 40 stays assigned to UI-002. Slices 44–52 are delivered; Slices 53–57 remain planned.
 The [UI-001 design](UI-001_DESIGN.md#technical-implementation-design) owns the
 interaction and technical requirements.
 
@@ -157,15 +157,48 @@ quality checks above and report blockers without marking unrun checks passed.
    backup/restore behavior are unchanged by these read/form fixes; final browser restore
    acceptance remains Slice 57.
 
-9. **Slice 52: Money workflows and reporting drill-down.**
-   Deliver Rent, Expenses, Deposits, Scheduled checks and Owner reports using the
-   approved Finance/Owner forms in Slices 31A–31E. Include rent setup/synchronization,
-   allocations/corrections, prepaid-check handling, Expense categories, settlement
-   and owner-report verification. Format money exactly and use backend totals;
-   scheduled checks and pending reports are never received income. Verify partial
-   payments, stale ledger/aggregate conflicts, no-op replay, corrections/history,
-   explicit-period FIN-003 reporting and source-record drill-down. Later owner
-   statements/disbursements/fees remain outside this slice.
+9. **Slice 52: Money workflows and reporting drill-down (delivered).**
+   Added Rent, Received rent, Expenses, Deposits, Scheduled checks, Owner reports,
+   Expense categories and explicit-period Reporting views. All 41 approved
+   Finance/Owner forms from Slices 31A–31E use generated request contracts and
+   shared OPS preparation, source review and original-result recovery. Rent-ledger,
+   Expense, Deposit-account, category and report revisions retain their owning
+   scopes; Owner verification reviews both report and ledger revisions and requires
+   an explicit receipt-adoption or receipt-creation choice. Supporting uploads are
+   separate recoverable commands with byte reselection; an attachment failure does
+   not undo or duplicate recorded money.
+
+   Reporting consumes FIN-003 totals and bounded source/property continuations,
+   preserves period/scope on changed-view restart and formats USD cents with integer
+   arithmetic. Scheduled checks and pending claims remain separate from income.
+   Unsupported Lease/Property combinations do not silently become portfolio reads;
+   Owner reporting requires an explicit related Property and does not imply amounts
+   due to an owner. A typed account-detail GET exposes the existing Deposit read
+   projection; Expense detail uses retained link history while list projections keep
+   active links, and its typed evidence response includes storage availability and
+   verification time. Owner PATCH converts payment-method enums to application strings.
+   Persistence, financial policy, schema and transaction ownership are unchanged.
+
+   Evidence is in `apps/web/tests/money.spec.ts` unless noted.
+
+   | Scenario | Evidence | Result / gap |
+   | --- | --- | --- |
+   | Rent setup, partial allocations and corrections | `rent synchronization and a partial receipt keep allocations and remaining balance visible`; `rent receipt correction voids the predecessor and preserves one current received payment` | Passed against real workspaces; explicit anchor, remaining balance, void/replacement lineage and original receipts |
+   | Revision conflicts and retry | `stale rent-ledger input is retained for explicit current-source review`; `owner verification refreshes both revisions after a stale ledger without losing the review note`; `lost expense response reconciles once and evidence failure leaves spending committed` | Passed; edits survive, reviewed revisions are applied explicitly and lost responses recover the original operation without another write |
+   | Expense/category lifecycle | `expense no-op, refunds and explicit void/replacement retain original history`; `Expense category create, edit, archive and restore use the catalog receipts` | Passed; no-op preserves timestamp/revision, actual refunds and category receipts remain independent |
+   | Scheduled checks | Scheduling/deposit/return and replacement/void tests | Passed; scheduling creates no rent income; explicit deposit creates one receipt, return voids it, and replacement follows a returned/voided predecessor |
+   | Deposit settlement | Zero-dollar approval/completion and `settlement evidence, child deletion recovery and partial refunds preserve held-money arithmetic` | Passed; evidence-backed deductions, draft credit editing/deletion, recovery after deletion, approved arithmetic, partial refunds and completion |
+   | Owner reports | Creation/patch/rejection and separate existing/create verification tests | Passed; claims are not receipts, both verification modes retain one Finance receipt, and API enum translation is covered |
+   | Evidence history and reselection | `supporting evidence can be reselected after restart and metadata retains verified history`; independent upload-failure test | Passed; metadata includes verification/history, archived associations stay in contextual history, bytes stay outside saved OPS payloads, and payment recording remains committed after upload failure |
+   | Reporting and bounded reads | Explicit-period totals/source-drill-down test; reporting changed-view restart test; `finance/tests/test_money_summary.py` | Passed; one composed page request, no per-row detail requests, backend totals, source identity and explicit unavailable states |
+   | Persistence, rollback and portability | Focused Finance consumer commands, Owner reports and OPS financial-batch/Finance-form suites | Passed; source-owned rollback/schema/encrypted backup and original-receipt proofs reused; account GET has typed identity/revision and missing-record coverage |
+   | Shared UI acceptance | `leasing-inspections.spec.ts` and `workflows.spec.ts` | Passed; 31 shared browser regressions. Full cross-workflow theme/narrow-layout, accessibility and encrypted browser restore acceptance remains Slice 57 |
+
+   Validation: 17 Money browser tests, 31 shared browser regressions and 137 focused
+   backend tests passed. Frontend lint, formatting, type checking, reproducible
+   contracts, wheel packaging, changed-file Python checks and diff whitespace
+   validation passed. The existing Vite chunk-size warning remains non-fatal.
+   Owner statements, disbursements and fees remain outside this slice.
 
 10. **Slice 53: Maintenance, communications, Tasks and owner concerns.**
     Connect issue/reporting and child workflows, assignment/appointments/work
@@ -218,7 +251,7 @@ quality checks above and report blockers without marking unrun checks passed.
 ## Command-safety readiness inventory
 
 The approved backend contracts and OPS registrations are delivered. This inventory
-separates that delivery from pending browser workflow acceptance in UI Slices 52–57.
+separates that delivery from pending browser workflow acceptance in UI Slices 53–57.
 A delivered receipt does not enable a browser control or authorize automatic retries.
 
 | Workflow | Delivered backend boundary | UI handoff or scope boundary |
@@ -309,7 +342,9 @@ that a browser control is ready.
   source review, recovery and original-receipt reconciliation.
 - **Slice 51 delivered:** Lease/Inspection forms, independent timeline revisions,
   original receipts, byte-reselection recovery and bounded contextual reads.
-- **Slices 52–56:** consume the delivered bootstrap, source and OPS contracts;
+- **Slice 52 delivered:** Money records and Finance/Owner forms, original receipts,
+  explicit-period reporting, backend totals and bounded source drill-down.
+- **Slices 53–56:** consume the delivered bootstrap, source and OPS contracts;
   implement route states, contextual workflows, recovery and accessibility. Each
   enabled workflow needs a real critical read/write integration path and truthful
   capability registration. Do not reconstruct domain rules or receipts in the browser.

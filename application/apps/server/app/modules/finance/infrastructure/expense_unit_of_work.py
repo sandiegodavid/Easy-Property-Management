@@ -214,7 +214,7 @@ class _Transaction:
         )
         return [Expense(**dict(row)) for row in self.connection.execute(query).mappings()]
 
-    def expense_projection(self, expenses):
+    def expense_projection(self, expenses, *, include_archived_evidence=False):
         if not expenses:
             return {
                 "categories": {},
@@ -274,9 +274,11 @@ class _Transaction:
             "refunds": refunds,
             "evidence": {
                 expense_id: [_expense_evidence_view(link) for link in links]
-                for expense_id, links in self.files.active_links_for_entities(
-                    self.connection, "expense", expense_ids
-                ).items()
+                for expense_id, links in (
+                    self.files.links_for_entities
+                    if include_archived_evidence
+                    else self.files.active_links_for_entities
+                )(self.connection, "expense", expense_ids).items()
             },
             "correction_chains": {
                 expense_id: _correction_chain(correction_rows, expense_id, "replaces_expense_id")

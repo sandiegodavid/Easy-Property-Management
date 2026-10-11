@@ -456,6 +456,15 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
             )
         )
 
+    @router.get(
+        "/api/security-deposits/{account_id}",
+        response_model=DepositResponse,
+        operation_id="getSecurityDepositAccount",
+    )
+    def account(account_id: UUID):
+        ready()
+        return invoke(lambda: service.account(str(account_id)))
+
     @router.post(
         "/api/security-deposits/{account_id}/receipts",
         response_model=ReceiptMutationResponse,

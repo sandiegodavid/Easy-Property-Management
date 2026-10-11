@@ -4005,6 +4005,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/security-deposits/{account_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Account */
+        get: operations["getSecurityDepositAccount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/security-deposits/{account_id}/receipts": {
         parameters: {
             query?: never;
@@ -18317,6 +18334,8 @@ export interface components {
             archiveReason: string | null;
             /** Archivedat */
             archivedAt: string | null;
+            /** Available */
+            available: boolean;
             /** Contentsha256 */
             contentSha256: string;
             /**
@@ -18345,6 +18364,16 @@ export interface components {
             purpose: "receipt" | "invoice" | "proof_of_payment" | "supporting_document";
             /** Sizebytes */
             sizeBytes: number;
+            /**
+             * Storagestate
+             * @enum {string}
+             */
+            storageState: "available" | "missing" | "quarantined";
+            /**
+             * Verifiedat
+             * Format: date-time
+             */
+            verifiedAt: string;
         };
         /** RefundInput */
         app__modules__finance__api__expense_router__RefundInput: {
@@ -33230,6 +33259,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DepositPageResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepositConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getSecurityDepositAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepositResponse"];
                 };
             };
             /** @description Local transport rejected. */

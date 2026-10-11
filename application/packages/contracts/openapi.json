@@ -38666,6 +38666,10 @@
             ],
             "title": "Archivedat"
           },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
           "contentSha256": {
             "title": "Contentsha256",
             "type": "string"
@@ -38706,6 +38710,20 @@
           "sizeBytes": {
             "title": "Sizebytes",
             "type": "integer"
+          },
+          "storageState": {
+            "enum": [
+              "available",
+              "missing",
+              "quarantined"
+            ],
+            "title": "Storagestate",
+            "type": "string"
+          },
+          "verifiedAt": {
+            "format": "date-time",
+            "title": "Verifiedat",
+            "type": "string"
           }
         },
         "required": [
@@ -38718,7 +38736,10 @@
           "purpose",
           "createdAt",
           "archivedAt",
-          "archiveReason"
+          "archiveReason",
+          "storageState",
+          "available",
+          "verifiedAt"
         ],
         "title": "EvidenceResponse",
         "type": "object"
@@ -63852,6 +63873,69 @@
           }
         },
         "summary": "Accounts",
+        "tags": [
+          "security deposits"
+        ]
+      }
+    },
+    "/api/security-deposits/{account_id}": {
+      "get": {
+        "operationId": "getSecurityDepositAccount",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepositResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepositConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Account",
         "tags": [
           "security deposits"
         ]

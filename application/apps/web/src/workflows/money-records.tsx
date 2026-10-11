@@ -1,0 +1,565 @@
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
+import { api } from "@epm/contracts";
+import { record, scalar } from "@epm/contracts/workflows";
+import { useWorkspace } from "../app/workspace-gate";
+import { CommandLinks, workflowUrl } from "./command";
+import { label } from "./fields";
+import { History, readResult } from "./reads";
+export { MoneyFacts } from "./money-presentation";
+import { MoneyFacts } from "./money-presentation";
+
+export type MoneyKind =
+  | "expectation"
+  | "receipt"
+  | "expense"
+  | "check"
+  | "report"
+  | "deposit"
+  | "settlement"
+  | "category";
+export function moneyRecordUrl(kind: MoneyKind, id: string) {
+  return `/money?record=${kind}&id=${encodeURIComponent(id)}`;
+}
+
+export async function loadMoneyRecord(
+  kind: MoneyKind,
+  id: string,
+  signal?: AbortSignal,
+): Promise<Record<string, unknown>> {
+  switch (kind) {
+    case "expectation":
+      return record(
+        readResult(
+          await api.GET("/api/rent-expectations/{expectation_id}", {
+            signal,
+            params: { path: { expectation_id: id } },
+          }),
+        ),
+      );
+    case "receipt":
+      return record(
+        readResult(
+          await api.GET("/api/rent-receipts/{receipt_id}", {
+            signal,
+            params: { path: { receipt_id: id } },
+          }),
+        ),
+      );
+    case "expense":
+      return record(
+        readResult(
+          await api.GET("/api/expenses/{expense_id}", {
+            signal,
+            params: { path: { expense_id: id } },
+          }),
+        ),
+      );
+    case "check":
+      return record(
+        readResult(
+          await api.GET("/api/prepaid-checks/{check_id}", {
+            signal,
+            params: { path: { check_id: id } },
+          }),
+        ),
+      );
+    case "report":
+      return record(
+        readResult(
+          await api.GET("/api/owner-rent-reports/{report_id}", {
+            signal,
+            params: { path: { report_id: id } },
+          }),
+        ),
+      );
+    case "deposit":
+      return record(
+        readResult(
+          await api.GET("/api/security-deposits/{account_id}", {
+            signal,
+            params: { path: { account_id: id } },
+          }),
+        ),
+      );
+    case "settlement":
+      return record(
+        readResult(
+          await api.GET("/api/security-deposit-settlements/{settlement_id}", {
+            signal,
+            params: { path: { settlement_id: id } },
+          }),
+        ),
+      );
+    case "category": {
+      const items = readResult(
+        await api.GET("/api/expense-categories", {
+          signal,
+          params: { query: { includeArchived: true } },
+        }),
+      );
+      const item = items.find((item) => item.id === id);
+      if (!item) throw new Error("Expense category unavailable.");
+      return record(item);
+    }
+  }
+}
+
+const detailFields = [
+  "status",
+  "lifecycleStatus",
+  "leaseId",
+  "propertyId",
+  "spaceId",
+  "payeeName",
+  "ownerDisplayNameSnapshot",
+  "currentOwnerState",
+  "displayName",
+  "description",
+  "notes",
+  "sourceNote",
+  "reviewNote",
+  "dueOn",
+  "periodStartsOn",
+  "periodEndsOn",
+  "receivedOn",
+  "paidOn",
+  "checkDatedOn",
+  "paymentMethodKind",
+  "paymentMethodLabel",
+  "maskedReference",
+  "receivedByPartyId",
+  "amountMinor",
+  "expectedAmountMinor",
+  "receivedAmountMinor",
+  "outstandingAmountMinor",
+  "amount",
+  "activeRefundedAmount",
+  "netAmount",
+  "agreedAmount",
+  "activeReceivedAmount",
+  "varianceAmount",
+  "settlementStatus",
+  "receiptLifecycleStatus",
+  "financiallyEffective",
+  "depositEligibility",
+  "reminderStatus",
+  "voidReason",
+  "voidedAt",
+  "priorReportId",
+  "replacementReportId",
+  "replacementReceiptId",
+  "replacesReceiptId",
+  "replacesExpenseId",
+  "replacesPrepaidCheckId",
+  "replacedByPrepaidCheckId",
+  "settlementDueOn",
+  "refundDue",
+  "receiptTotal",
+  "deductionTotal",
+  "creditTotal",
+  "unsettledReceiptAmount",
+  "inspectionWarnings",
+  "sourceWarnings",
+  "createdAt",
+  "updatedAt",
+];
+export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
+  const { scope } = useWorkspace();
+  const query = useQuery({
+    queryKey: scope.key("money-record", kind, id),
+    queryFn: ({ signal }) => loadMoneyRecord(kind, id, signal),
+  });
+  if (query.isPending) return <p role="status">Loading money record…</p>;
+  if (query.error) return <p role="alert">{query.error.message}</p>;
+  const item = query.data,
+    leaseId = scalar(item.leaseId),
+    accountId = kind === "deposit" ? id : scalar(item.accountId);
+  const rentActions =
+    kind === "expectation"
+      ? [
+          "finance.rent_receipt.create",
+          "finance.prepaid_check.create",
+          "finance.rent_expectation.void",
+          "finance.rent_expectation.timeliness_review",
+        ]
+      : kind === "receipt"
+        ? ["finance.rent_receipt.void"]
+        : kind === "check"
+          ? item.status === "scheduled"
+            ? [
+                ...(item.depositEligibility === "eligible"
+                  ? ["finance.prepaid_check.deposit"]
+                  : []),
+                "finance.prepaid_check.void",
+              ]
+            : item.status === "deposited"
+              ? ["finance.prepaid_check.return"]
+              : (item.status === "returned" || item.status === "voided") &&
+                  !item.replacedByPrepaidCheckId
+                ? ["finance.prepaid_check.replace"]
+                : []
+          : [];
+  return (
+    <section aria-label="Money record">
+      <h2>{label(kind)} record</h2>
+      <Link to="/money">Return to Money</Link>
+      <MoneyFacts value={item} fields={detailFields} />
+      {leaseId && <Link to={`/leases/${leaseId}/details`}>Owning Lease</Link>}
+      {!!item.propertyId && (
+        <Link to={`/properties/${scalar(item.propertyId)}/money`}>Property money context</Link>
+      )}
+      {rentActions.length > 0 && !item.voidedAt && (
+        <CommandLinks keys={rentActions} target={leaseId} child={id} title="Rent ledger actions" />
+      )}
+      {kind === "expense" && !item.voidedAt && (
+        <CommandLinks
+          keys={["finance.expense.patch", "finance.expense.void", "finance.expense_refund.create"]}
+          target={id}
+        />
+      )}
+      {kind === "expense" && !!item.voidedAt && (
+        <Link
+          to={`${workflowUrl("finance.expense.create")}&replacesExpenseId=${id}&propertyId=${scalar(item.propertyId)}`}
+        >
+          Record replacement expense
+        </Link>
+      )}
+      {kind === "receipt" && !!item.voidedAt && (
+        <Link to={`${workflowUrl("finance.rent_receipt.create", leaseId)}&replacesReceiptId=${id}`}>
+          Record replacement rent receipt
+        </Link>
+      )}
+      {kind === "category" && (
+        <CommandLinks
+          keys={
+            item.archivedAt
+              ? ["finance.expense_category.restore"]
+              : ["finance.expense_category.patch", "finance.expense_category.archive"]
+          }
+          target={id}
+        />
+      )}
+      {kind === "report" && item.status === "pending" && (
+        <CommandLinks
+          keys={["owner_rent_report.patch", "owner_rent_report.verify", "owner_rent_report.reject"]}
+          target={id}
+        />
+      )}
+      {kind === "report" && item.status !== "pending" && (
+        <Link
+          to={`${workflowUrl("owner_rent_report.create")}&replacesReportId=${id}&leaseId=${leaseId}`}
+        >
+          Record correction report
+        </Link>
+      )}
+      {kind === "report" && !!item.verifiedReceiptId && (
+        <Link to={moneyRecordUrl("receipt", scalar(item.verifiedReceiptId))}>
+          Verified Finance receipt
+        </Link>
+      )}
+      {kind === "deposit" && (
+        <>
+          <CommandLinks
+            keys={["finance.deposit_receipt.create", "finance.deposit_settlement.create"]}
+            target={id}
+          />
+          <DepositHistory id={id} />
+          {item.settlementId && (
+            <Link to={moneyRecordUrl("settlement", scalar(item.settlementId))}>
+              Current settlement
+            </Link>
+          )}
+        </>
+      )}
+      {kind === "settlement" && (
+        <>
+          <Link to={moneyRecordUrl("deposit", accountId)}>Deposit account</Link>
+          <CommandLinks
+            target={accountId}
+            child={id}
+            keys={
+              item.status === "draft"
+                ? [
+                    "finance.deposit_settlement.patch",
+                    "finance.deposit_deduction.create",
+                    "finance.deposit_credit.create",
+                    "finance.deposit_settlement.approve",
+                    "finance.deposit_settlement.void",
+                  ]
+                : item.status === "approved"
+                  ? [
+                      "finance.deposit_refund.create",
+                      "finance.deposit_settlement.complete",
+                      "finance.deposit_settlement.void",
+                    ]
+                  : item.status === "completed"
+                    ? ["finance.deposit_settlement.void"]
+                    : []
+            }
+          />
+          {item.status === "voided" && (
+            <Link
+              to={`${workflowUrl("finance.deposit_settlement.create", accountId)}&replacesSettlementId=${id}`}
+            >
+              Prepare replacement settlement
+            </Link>
+          )}
+        </>
+      )}
+      {[
+        "allocations",
+        "allocationSummaries",
+        "receiptAllocations",
+        "refunds",
+        "deductions",
+        "credits",
+        "correctionChain",
+      ].map(
+        (name) =>
+          Array.isArray(item[name]) && (
+            <section key={name} aria-label={label(name)}>
+              <h3>{label(name)}</h3>
+              {(item[name] as unknown[]).map((entry) => {
+                const child = record(entry),
+                  childId = scalar(child.id ?? child.receiptId ?? child.allocationId);
+                return (
+                  <article key={childId}>
+                    <MoneyFacts
+                      value={child}
+                      fields={[
+                        ...detailFields,
+                        "rationale",
+                        "kind",
+                        "category",
+                        "expectationId",
+                        "receiptId",
+                        "recipientName",
+                        "receivedFromName",
+                        "authorizedBySettlementId",
+                        "reason",
+                      ]}
+                    />
+                    {!!child.expectationId && (
+                      <Link to={moneyRecordUrl("expectation", scalar(child.expectationId))}>
+                        Allocated expectation
+                      </Link>
+                    )}
+                    {kind === "expense" &&
+                      name === "refunds" &&
+                      !item.voidedAt &&
+                      !child.voidedAt && (
+                        <CommandLinks
+                          keys={["finance.expense_refund.void"]}
+                          target={id}
+                          child={childId}
+                        />
+                      )}
+                    {kind === "settlement" &&
+                      item.status === "draft" &&
+                      (name === "deductions" || name === "credits") && (
+                        <CommandLinks
+                          keys={
+                            name === "deductions"
+                              ? [
+                                  "finance.deposit_deduction.update",
+                                  "finance.deposit_deduction.delete",
+                                  "finance.deposit_deduction_source.add",
+                                ]
+                              : ["finance.deposit_credit.update", "finance.deposit_credit.delete"]
+                          }
+                          target={accountId}
+                          child={childId}
+                        />
+                      )}
+                    {kind === "settlement" && name === "refunds" && !child.voidedAt && (
+                      <CommandLinks
+                        keys={["finance.deposit_refund.void"]}
+                        target={accountId}
+                        child={childId}
+                      />
+                    )}
+                    {name === "deductions" && (
+                      <>
+                        <MoneyEvidence value={child.evidence} />
+                        {item.status === "draft" && (
+                          <Link
+                            to={`${workflowUrl("file.upload")}&entityType=security_deposit_deduction&entityId=${childId}&accountId=${accountId}`}
+                          >
+                            Attach deduction evidence
+                          </Link>
+                        )}
+                        {Array.isArray(child.sources) &&
+                          child.sources.map((source) => {
+                            const fact = record(source);
+                            return (
+                              <article key={scalar(fact.id)}>
+                                <MoneyFacts
+                                  value={fact}
+                                  fields={[
+                                    "sourceKind",
+                                    "sourceSummary",
+                                    "outstandingAmount",
+                                    "historicalConfirmed",
+                                  ]}
+                                />
+                                {item.status === "draft" && (
+                                  <CommandLinks
+                                    keys={["finance.deposit_deduction_source.delete"]}
+                                    target={accountId}
+                                    child={scalar(fact.id)}
+                                  />
+                                )}
+                              </article>
+                            );
+                          })}
+                      </>
+                    )}
+                  </article>
+                );
+              })}
+            </section>
+          ),
+      )}
+      <MoneyEvidence value={item.activeEvidence ?? item.files ?? item.evidence} />
+      {(Array.isArray(item.archivedEvidence) || Array.isArray(item.files)) && (
+        <details>
+          <summary>Archived evidence history</summary>
+          <MoneyEvidence value={item.archivedEvidence ?? item.files} history />
+        </details>
+      )}
+      {(kind === "expense" || kind === "report") && (
+        <Link
+          to={`${workflowUrl("file.upload")}&entityType=${kind === "expense" ? "expense" : "owner_rent_report"}&entityId=${id}`}
+        >
+          Attach supporting evidence to this record
+        </Link>
+      )}
+      <History
+        kind={
+          {
+            expectation: "rent_expectation",
+            receipt: "rent_receipt",
+            expense: "expense",
+            check: "prepaid_check",
+            report: "owner_rent_report",
+            deposit: "security_deposit_account",
+            settlement: "security_deposit_settlement",
+            category: "expense_category",
+          }[kind]
+        }
+        id={id}
+      />
+    </section>
+  );
+}
+function MoneyEvidence({ value, history = false }: { value: unknown; history?: boolean }) {
+  if (!Array.isArray(value)) return null;
+  return (
+    <section aria-label="Supporting evidence">
+      <h3>Supporting evidence</h3>
+      {value
+        .filter((entry) => !!(record(entry).archivedAt ?? record(entry).archived_at) === history)
+        .map((value) => {
+          const item = record(value),
+            fileId = scalar(item.fileId ?? item.file_id ?? item.id);
+          const available =
+            (item.available === true ||
+              item.storageState === "available" ||
+              item.storage_state === "available") &&
+            !item.archivedAt &&
+            !item.archived_at;
+          return (
+            <p key={scalar(item.linkId ?? item.id ?? fileId)}>
+              {scalar(item.originalName ?? item.original_name, "Retained evidence")} ·{" "}
+              {scalar(
+                item.storageState ?? item.storage_state,
+                "Open metadata to verify availability",
+              )}
+              {history && (
+                <>
+                  {" "}
+                  · Archived association:{" "}
+                  {scalar(item.archiveReason ?? item.archive_reason, "Retained history")}
+                </>
+              )}
+              {!history && !available && (
+                <span> · Content availability must be verified before opening.</span>
+              )}
+              {available && <a href={`/api/files/${fileId}/content`}>Download evidence</a>}{" "}
+              <Link to={`/money?file=${fileId}`}>Evidence metadata and history</Link>
+            </p>
+          );
+        })}
+    </section>
+  );
+}
+function DepositHistory({ id }: { id: string }) {
+  const { scope } = useWorkspace();
+  const receipts = useQuery({
+    queryKey: scope.key("deposit-receipt-history", id),
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/security-deposits/{account_id}/receipts", {
+          signal,
+          params: { path: { account_id: id } },
+        }),
+      ),
+  });
+  const refunds = useQuery({
+    queryKey: scope.key("deposit-refund-history", id),
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/security-deposits/{account_id}/refunds", {
+          signal,
+          params: { path: { account_id: id } },
+        }),
+      ),
+  });
+  return (
+    <>
+      {receipts.error && (
+        <p role="alert">Deposit receipt history unavailable: {receipts.error.message}</p>
+      )}
+      {refunds.error && (
+        <p role="alert">Deposit refund history unavailable: {refunds.error.message}</p>
+      )}
+      {receipts.isPending && <p role="status">Loading deposit receipts…</p>}
+      {receipts.data?.map((receipt) => (
+        <article key={receipt.id}>
+          <MoneyFacts
+            value={receipt}
+            fields={[
+              "receivedOn",
+              "amount",
+              "receivedFromName",
+              "receivedByName",
+              "lifecycleStatus",
+              "voidReason",
+              "replacesReceiptId",
+              "replacedByReceiptId",
+            ]}
+          />
+          {receipt.lifecycleStatus === "active" && (
+            <CommandLinks keys={["finance.deposit_receipt.void"]} target={id} child={receipt.id} />
+          )}
+        </article>
+      ))}
+      {refunds.data?.map((refund) => (
+        <MoneyFacts
+          key={refund.id}
+          value={refund}
+          fields={[
+            "paidOn",
+            "amount",
+            "recipientName",
+            "lifecycleStatus",
+            "voidReason",
+            "replacesRefundId",
+            "replacedByRefundId",
+          ]}
+        />
+      ))}
+    </>
+  );
+}

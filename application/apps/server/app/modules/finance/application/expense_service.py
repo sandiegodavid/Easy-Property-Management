@@ -675,7 +675,9 @@ class ExpenseService:
             item = tx.expense(expense_id)
             if item is None:
                 raise FinanceNotFoundError("Expense was not found.")
-            return self._view(tx, item)
+            return self._view(
+                tx, item, tx.expense_projection([item], include_archived_evidence=True)
+            )
 
         return self.unit_of_work.read(operation)
 

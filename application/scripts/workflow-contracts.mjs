@@ -1,6 +1,242 @@
 // Delivered browser command allowlist. Every request schema comes from OpenAPI;
 // the form key names the independently registered OPS recovery contract.
 export const workflowDefinitions = [
+  ["file.upload", "Attach supporting evidence", "post", "/api/files", null],
+  [
+    "finance.rent_expectation.synchronize",
+    "Synchronize rent schedule",
+    "post",
+    "/api/leases/{lease_id}/rent-expectations/synchronize",
+    "lease",
+  ],
+  [
+    "finance.rent_expectation.void",
+    "Void rent expectation",
+    "post",
+    "/api/rent-expectations/{expectation_id}/void",
+    "lease",
+    null,
+    "expectationId",
+  ],
+  [
+    "finance.rent_expectation.timeliness_review",
+    "Review rent timeliness",
+    "post",
+    "/api/rent-expectations/{expectation_id}/timeliness-reviews",
+    "lease",
+    null,
+    "expectationId",
+  ],
+  ["finance.rent_receipt.create", "Record rent receipt", "post", "/api/rent-receipts", "lease"],
+  [
+    "finance.rent_receipt.void",
+    "Void rent receipt",
+    "post",
+    "/api/rent-receipts/{receipt_id}/void",
+    "lease",
+    null,
+    "receiptId",
+  ],
+  [
+    "finance.prepaid_check.create",
+    "Schedule prepaid check",
+    "post",
+    "/api/prepaid-checks",
+    "lease",
+  ],
+  ...["deposit", "return", "void", "replace"].map((action) => [
+    `finance.prepaid_check.${action}`,
+    `${action[0].toUpperCase()}${action.slice(1)} prepaid check`,
+    "post",
+    `/api/prepaid-checks/{check_id}/${action}`,
+    "lease",
+    null,
+    "prepaidCheckId",
+  ]),
+  ["finance.expense.create", "Record paid expense", "post", "/api/expenses", null],
+  [
+    "finance.expense.patch",
+    "Edit expense context",
+    "patch",
+    "/api/expenses/{expense_id}",
+    "expense",
+    "financialChanges",
+  ],
+  ["finance.expense.void", "Void expense", "post", "/api/expenses/{expense_id}/void", "expense"],
+  [
+    "finance.expense_refund.create",
+    "Record expense refund",
+    "post",
+    "/api/expenses/{expense_id}/refunds",
+    "expense",
+  ],
+  [
+    "finance.expense_refund.void",
+    "Void expense refund",
+    "post",
+    "/api/expense-refunds/{refund_id}/void",
+    "expense",
+    null,
+    "targetId",
+  ],
+  [
+    "finance.expense_category.create",
+    "Create expense category",
+    "post",
+    "/api/expense-categories",
+    null,
+  ],
+  [
+    "finance.expense_category.patch",
+    "Edit expense category",
+    "patch",
+    "/api/expense-categories/{category_id}",
+    "expense_category",
+    "financialChanges",
+  ],
+  ...["archive", "restore"].map((action) => [
+    `finance.expense_category.${action}`,
+    `${action[0].toUpperCase()}${action.slice(1)} expense category`,
+    "post",
+    `/api/expense-categories/{category_id}/${action}`,
+    "expense_category",
+  ]),
+  [
+    "finance.deposit_account.create",
+    "Create deposit account",
+    "post",
+    "/api/leases/{lease_id}/security-deposit",
+    null,
+  ],
+  [
+    "finance.deposit_receipt.create",
+    "Record deposit receipt",
+    "post",
+    "/api/security-deposits/{account_id}/receipts",
+    "security_deposit_account",
+  ],
+  [
+    "finance.deposit_receipt.void",
+    "Void deposit receipt",
+    "post",
+    "/api/security-deposit-receipts/{receipt_id}/void",
+    "security_deposit_account",
+    null,
+    "targetId",
+  ],
+  [
+    "finance.deposit_settlement.create",
+    "Prepare deposit settlement",
+    "post",
+    "/api/security-deposits/{account_id}/settlements",
+    "security_deposit_account",
+  ],
+  [
+    "finance.deposit_settlement.patch",
+    "Edit deposit settlement",
+    "patch",
+    "/api/security-deposit-settlements/{settlement_id}",
+    "security_deposit_account",
+    "financialChanges",
+    "targetId",
+  ],
+  ...["approve", "complete", "void"].map((action) => [
+    `finance.deposit_settlement.${action}`,
+    `${action[0].toUpperCase()}${action.slice(1)} deposit settlement`,
+    "post",
+    `/api/security-deposit-settlements/{settlement_id}/${action}`,
+    "security_deposit_account",
+    null,
+    "targetId",
+  ]),
+  ...["deduction", "credit"].flatMap((kind) => [
+    [
+      `finance.deposit_${kind}.create`,
+      `Add settlement ${kind}`,
+      "post",
+      `/api/security-deposit-settlements/{settlement_id}/${kind}s`,
+      "security_deposit_account",
+      null,
+      "targetId",
+    ],
+    [
+      `finance.deposit_${kind}.update`,
+      `Edit settlement ${kind}`,
+      "patch",
+      `/api/security-deposit-${kind}s/{${kind}_id}`,
+      "security_deposit_account",
+      null,
+      "targetId",
+    ],
+    [
+      `finance.deposit_${kind}.delete`,
+      `Delete settlement ${kind}`,
+      "delete",
+      `/api/security-deposit-${kind}s/{${kind}_id}`,
+      "security_deposit_account",
+      null,
+      "targetId",
+    ],
+  ]),
+  [
+    "finance.deposit_deduction_source.add",
+    "Add deduction source",
+    "post",
+    "/api/security-deposit-deductions/{deduction_id}/sources",
+    "security_deposit_account",
+    null,
+    "targetId",
+  ],
+  [
+    "finance.deposit_deduction_source.delete",
+    "Delete deduction source",
+    "delete",
+    "/api/security-deposit-deduction-sources/{source_id}",
+    "security_deposit_account",
+    null,
+    "targetId",
+  ],
+  [
+    "finance.deposit_refund.create",
+    "Record deposit refund",
+    "post",
+    "/api/security-deposit-settlements/{settlement_id}/refunds",
+    "security_deposit_account",
+    null,
+    "targetId",
+  ],
+  [
+    "finance.deposit_refund.void",
+    "Void deposit refund",
+    "post",
+    "/api/security-deposit-refunds/{refund_id}/void",
+    "security_deposit_account",
+    null,
+    "targetId",
+  ],
+  ["owner_rent_report.create", "Record owner rent report", "post", "/api/owner-rent-reports", null],
+  [
+    "owner_rent_report.patch",
+    "Edit owner rent report",
+    "patch",
+    "/api/owner-rent-reports/{report_id}",
+    "owner_rent_report",
+    "financialChanges",
+  ],
+  [
+    "owner_rent_report.verify",
+    "Verify owner rent report",
+    "post",
+    "/api/owner-rent-reports/{report_id}/verify",
+    "owner_rent_report",
+  ],
+  [
+    "owner_rent_report.reject",
+    "Reject owner rent report",
+    "post",
+    "/api/owner-rent-reports/{report_id}/reject",
+    "owner_rent_report",
+  ],
   [
     "file.link.archive",
     "Archive evidence link",
@@ -487,6 +723,9 @@ export function workflowContracts(openapi) {
         .map(([formKey, title, method, path, sourceKind, nesting, childKey]) => {
           if (!openapi.components.schemas.RecoveryInput.properties.formKey.enum.includes(formKey))
             throw new Error(`Unregistered OPS form: ${formKey}`);
+          const sources = openapi.components.schemas.RecoveryInput.properties.sourceKind.anyOf;
+          if (sourceKind && !sources.some((entry) => entry.enum?.includes(sourceKind)))
+            throw new Error(`Unsupported recovery source for ${formKey}: ${sourceKind}`);
           const operation = openapi.paths[path][method];
           return {
             formKey,
@@ -498,7 +737,7 @@ export function workflowContracts(openapi) {
             childKey: childKey ?? null,
             operationId: operation.operationId,
             schema:
-              formKey === "inspection.evidence.attach"
+              formKey === "inspection.evidence.attach" || formKey === "file.upload"
                 ? {
                     type: "object",
                     additionalProperties: false,
@@ -510,10 +749,20 @@ export function workflowContracts(openapi) {
                       "mediaType",
                       "sizeBytes",
                       "contentSha256",
+                      ...(formKey === "file.upload" ? ["entityType", "entityId"] : []),
                     ],
                     properties: {
                       purpose: inline(operation.requestBody.content["multipart/form-data"].schema)
                         .properties.purpose,
+                      ...(formKey === "file.upload"
+                        ? {
+                            entityType: {
+                              type: "string",
+                              enum: ["expense", "owner_rent_report", "security_deposit_deduction"],
+                            },
+                            entityId: { type: "string", format: "uuid" },
+                          }
+                        : {}),
                       expectedRevision: { type: "integer", minimum: 0 },
                       idempotencyKey: { type: "string", format: "uuid" },
                       originalName: { type: "string", minLength: 1, maxLength: 255 },
@@ -526,6 +775,10 @@ export function workflowContracts(openapi) {
           };
         })
         .map((definition) => {
+          if (definition.formKey === "finance.deposit_account.create") {
+            definition.schema.properties.leaseId = { type: "string", format: "uuid" };
+            definition.schema.required.push("leaseId");
+          }
           if (definition.formKey === "lease.renewal.update")
             definition.schema.properties = Object.fromEntries(
               Object.entries(definition.schema.properties).filter(
@@ -562,7 +815,7 @@ export function workflowContracts(openapi) {
 export function workflowDispatch(openapi) {
   const cases = workflowDefinitions
     .map(([key, , method, path, , , childKey]) => {
-      if (key === "inspection.evidence.attach")
+      if (key === "inspection.evidence.attach" || key === "file.upload")
         return `    case ${JSON.stringify(key)}: throw new Error("Reselect verified evidence in the inspection editor.");`;
       const schema = openapi.paths[path][method].requestBody.content["application/json"].schema.$ref
         .split("/")
@@ -570,8 +823,10 @@ export function workflowDispatch(openapi) {
       const placeholders = [...path.matchAll(/\{([^}]+)\}/g)];
       const parameters = placeholders.map(
         (match, index) =>
-          `${match[1]}: ${index === 0 && !(childKey && placeholders.length === 1) ? "target" : "child"}`,
+          `${match[1]}: ${key === "finance.deposit_account.create" ? "String(body.leaseId)" : index === 0 && !(childKey && placeholders.length === 1) ? "target" : "child"}`,
       );
+      if (key === "finance.deposit_account.create")
+        return `    case ${JSON.stringify(key)}: { const { leaseId, ...request } = body; return api.POST(${JSON.stringify(path)}, { params: { path: { lease_id: String(leaseId) } }, body: request as components["schemas"][${JSON.stringify(schema)}] }); }`;
       return `    case ${JSON.stringify(key)}: return api.${method.toUpperCase()}(${JSON.stringify(path)}, { ${parameters.length ? `params: { path: { ${parameters.join(", ")} } }, ` : ""}body: body as components["schemas"][${JSON.stringify(schema)}] });`;
     })
     .join("\n");

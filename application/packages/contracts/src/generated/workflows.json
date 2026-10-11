@@ -1,5 +1,3128 @@
 [
   {
+    "formKey": "file.upload",
+    "title": "Attach supporting evidence",
+    "method": "post",
+    "path": "/api/files",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "uploadFile",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "purpose",
+        "expectedRevision",
+        "idempotencyKey",
+        "originalName",
+        "mediaType",
+        "sizeBytes",
+        "contentSha256",
+        "entityType",
+        "entityId"
+      ],
+      "properties": {
+        "purpose": {
+          "title": "Purpose",
+          "type": "string"
+        },
+        "entityType": {
+          "type": "string",
+          "enum": [
+            "expense",
+            "owner_rent_report",
+            "security_deposit_deduction"
+          ]
+        },
+        "entityId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "originalName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 52428800
+        },
+        "contentSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  },
+  {
+    "formKey": "finance.rent_expectation.synchronize",
+    "title": "Synchronize rent schedule",
+    "method": "post",
+    "path": "/api/leases/{lease_id}/rent-expectations/synchronize",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "synchronizeRentExpectations",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "leaseTermId": {
+          "format": "uuid",
+          "title": "Leasetermid",
+          "type": "string"
+        },
+        "overrideConfirmed": {
+          "default": false,
+          "title": "Overrideconfirmed",
+          "type": "boolean"
+        },
+        "overrideReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Overridereason"
+        },
+        "responsibilityEndsOnOverride": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Responsibilityendsonoverride"
+        },
+        "scheduleAnchorOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scheduleanchoron"
+        },
+        "throughOn": {
+          "format": "date",
+          "title": "Throughon",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "leaseTermId",
+        "throughOn"
+      ],
+      "title": "SynchronizeInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.rent_expectation.void",
+    "title": "Void rent expectation",
+    "method": "post",
+    "path": "/api/rent-expectations/{expectation_id}/void",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "expectationId",
+    "operationId": "voidRentExpectation",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "voidReason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Voidreason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "voidReason"
+      ],
+      "title": "VoidInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.rent_expectation.timeliness_review",
+    "title": "Review rent timeliness",
+    "method": "post",
+    "path": "/api/rent-expectations/{expectation_id}/timeliness-reviews",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "expectationId",
+    "operationId": "reviewRentExpectationTimeliness",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "decision": {
+          "enum": [
+            "mark_missed",
+            "clear_missed"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "decision",
+        "reason",
+        "confirmed"
+      ],
+      "title": "ReviewInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.rent_receipt.create",
+    "title": "Record rent receipt",
+    "method": "post",
+    "path": "/api/rent-receipts",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "recordRentReceipt",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "allocations": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "amountMinor": {
+                "exclusiveMinimum": 0,
+                "title": "Amountminor",
+                "type": "integer"
+              },
+              "expectationId": {
+                "format": "uuid",
+                "title": "Expectationid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "expectationId",
+              "amountMinor"
+            ],
+            "title": "AllocationInput",
+            "type": "object"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Allocations",
+          "type": "array"
+        },
+        "amountMinor": {
+          "exclusiveMinimum": 0,
+          "title": "Amountminor",
+          "type": "integer"
+        },
+        "currencyCode": {
+          "const": "USD",
+          "title": "Currencycode",
+          "type": "string"
+        },
+        "duplicateConfirmed": {
+          "default": false,
+          "title": "Duplicateconfirmed",
+          "type": "boolean"
+        },
+        "duplicateReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Duplicatereason"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "leaseId": {
+          "format": "uuid",
+          "title": "Leaseid",
+          "type": "string"
+        },
+        "maskedReference": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Maskedreference"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "otherPaymentMethodNote": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Otherpaymentmethodnote"
+        },
+        "paymentMethodKind": {
+          "enum": [
+            "automatic_bank_payment",
+            "bank_transfer",
+            "check",
+            "cash",
+            "online_payment",
+            "other"
+          ],
+          "title": "Paymentmethodkind",
+          "type": "string"
+        },
+        "paymentMethodLabel": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Paymentmethodlabel"
+        },
+        "receivedByPartyId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Receivedbypartyid"
+        },
+        "receivedOn": {
+          "format": "date",
+          "title": "Receivedon",
+          "type": "string"
+        },
+        "replacesReceiptId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replacesreceiptid"
+        }
+      },
+      "required": [
+        "leaseId",
+        "idempotencyKey",
+        "expectedRevision",
+        "receivedOn",
+        "amountMinor",
+        "currencyCode",
+        "allocations",
+        "paymentMethodKind"
+      ],
+      "title": "ReceiptInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.rent_receipt.void",
+    "title": "Void rent receipt",
+    "method": "post",
+    "path": "/api/rent-receipts/{receipt_id}/void",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "receiptId",
+    "operationId": "voidRentReceipt",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "voidReason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Voidreason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "voidReason"
+      ],
+      "title": "VoidInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.prepaid_check.create",
+    "title": "Schedule prepaid check",
+    "method": "post",
+    "path": "/api/prepaid-checks",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createPrepaidCheck",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "checkDatedOn": {
+          "format": "date",
+          "title": "Checkdatedon",
+          "type": "string"
+        },
+        "expectationId": {
+          "format": "uuid",
+          "title": "Expectationid",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "maskedReference": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Maskedreference"
+        },
+        "payerPartyId": {
+          "format": "uuid",
+          "title": "Payerpartyid",
+          "type": "string"
+        },
+        "receivedOn": {
+          "format": "date",
+          "title": "Receivedon",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "expectationId",
+        "payerPartyId",
+        "receivedOn",
+        "checkDatedOn",
+        "idempotencyKey"
+      ],
+      "title": "CreateInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.prepaid_check.deposit",
+    "title": "Deposit prepaid check",
+    "method": "post",
+    "path": "/api/prepaid-checks/{check_id}/deposit",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "prepaidCheckId",
+    "operationId": "depositPrepaidCheck",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "existingReceiptId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Existingreceiptid"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "occurredOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Occurredon"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "DepositInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.prepaid_check.return",
+    "title": "Return prepaid check",
+    "method": "post",
+    "path": "/api/prepaid-checks/{check_id}/return",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "prepaidCheckId",
+    "operationId": "returnPrepaidCheck",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "returnedOn": {
+          "format": "date",
+          "title": "Returnedon",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason",
+        "returnedOn"
+      ],
+      "title": "ReturnInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.prepaid_check.void",
+    "title": "Void prepaid check",
+    "method": "post",
+    "path": "/api/prepaid-checks/{check_id}/void",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "prepaidCheckId",
+    "operationId": "voidPrepaidCheck",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "VoidInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.prepaid_check.replace",
+    "title": "Replace prepaid check",
+    "method": "post",
+    "path": "/api/prepaid-checks/{check_id}/replace",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "prepaidCheckId",
+    "operationId": "replacePrepaidCheck",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "checkDatedOn": {
+          "format": "date",
+          "title": "Checkdatedon",
+          "type": "string"
+        },
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectationId": {
+          "format": "uuid",
+          "title": "Expectationid",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "maskedReference": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Maskedreference"
+        },
+        "payerPartyId": {
+          "format": "uuid",
+          "title": "Payerpartyid",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "receivedOn": {
+          "format": "date",
+          "title": "Receivedon",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "expectationId",
+        "payerPartyId",
+        "receivedOn",
+        "checkDatedOn",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "ReplaceInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.expense.create",
+    "title": "Record paid expense",
+    "method": "post",
+    "path": "/api/expenses",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "recordExpense",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "pattern": "^(?:0|[1-9][0-9]{0,7})\\.[0-9]{2}$",
+          "title": "Amount",
+          "type": "string"
+        },
+        "categoryId": {
+          "format": "uuid",
+          "title": "Categoryid",
+          "type": "string"
+        },
+        "currencyCode": {
+          "const": "USD",
+          "title": "Currencycode",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "duplicateConfirmed": {
+          "default": false,
+          "title": "Duplicateconfirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "historicalEntryConfirmed": {
+          "default": false,
+          "title": "Historicalentryconfirmed",
+          "type": "boolean"
+        },
+        "historicalEntryReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Historicalentryreason"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "paidByKind": {
+          "enum": [
+            "local_operator",
+            "party"
+          ],
+          "title": "Paidbykind",
+          "type": "string"
+        },
+        "paidByPartyId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Paidbypartyid"
+        },
+        "paidOn": {
+          "format": "date",
+          "title": "Paidon",
+          "type": "string"
+        },
+        "payeeName": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Payeename"
+        },
+        "propertyId": {
+          "format": "uuid",
+          "title": "Propertyid",
+          "type": "string"
+        },
+        "providerPartyId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Providerpartyid"
+        },
+        "reference": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reference"
+        },
+        "replacesExpenseId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replacesexpenseid"
+        },
+        "spaceId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Spaceid"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "propertyId",
+        "categoryId",
+        "paidByKind",
+        "paidOn",
+        "amount",
+        "currencyCode",
+        "description"
+      ],
+      "title": "ExpenseInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.expense.patch",
+    "title": "Edit expense context",
+    "method": "patch",
+    "path": "/api/expenses/{expense_id}",
+    "sourceKind": "expense",
+    "nesting": "financialChanges",
+    "childKey": null,
+    "operationId": "patchExpense",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "categoryChangeReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Categorychangereason"
+        },
+        "categoryId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Categoryid"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "historicalEntryConfirmed": {
+          "default": false,
+          "title": "Historicalentryconfirmed",
+          "type": "boolean"
+        },
+        "historicalEntryReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Historicalentryreason"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ExpensePatchInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.expense.void",
+    "title": "Void expense",
+    "method": "post",
+    "path": "/api/expenses/{expense_id}/void",
+    "sourceKind": "expense",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "voidExpense",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "ExpenseVoidInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.expense_refund.create",
+    "title": "Record expense refund",
+    "method": "post",
+    "path": "/api/expenses/{expense_id}/refunds",
+    "sourceKind": "expense",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "recordExpenseRefund",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "pattern": "^(?:0|[1-9][0-9]{0,7})\\.[0-9]{2}$",
+          "title": "Amount",
+          "type": "string"
+        },
+        "currencyCode": {
+          "const": "USD",
+          "title": "Currencycode",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "receivedOn": {
+          "format": "date",
+          "title": "Receivedon",
+          "type": "string"
+        },
+        "replacesRefundId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replacesrefundid"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "receivedOn",
+        "amount",
+        "currencyCode"
+      ],
+      "title": "RefundInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.expense_refund.void",
+    "title": "Void expense refund",
+    "method": "post",
+    "path": "/api/expense-refunds/{refund_id}/void",
+    "sourceKind": "expense",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "voidExpenseRefund",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "ExpenseVoidInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.expense_category.create",
+    "title": "Create expense category",
+    "method": "post",
+    "path": "/api/expense-categories",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createExpenseCategory",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Description"
+        },
+        "displayName": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "displayOrder": {
+          "default": 0,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Displayorder",
+          "type": "integer"
+        },
+        "expectedRevision": {
+          "maximum": 0,
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "displayName"
+      ],
+      "title": "CategoryInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.expense_category.patch",
+    "title": "Edit expense category",
+    "method": "patch",
+    "path": "/api/expense-categories/{category_id}",
+    "sourceKind": "expense_category",
+    "nesting": "financialChanges",
+    "childKey": null,
+    "operationId": "patchExpenseCategory",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Description"
+        },
+        "displayName": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Displayname"
+        },
+        "displayOrder": {
+          "anyOf": [
+            {
+              "maximum": 10000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Displayorder"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "CategoryPatchInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.expense_category.archive",
+    "title": "Archive expense category",
+    "method": "post",
+    "path": "/api/expense-categories/{category_id}/archive",
+    "sourceKind": "expense_category",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "archiveExpenseCategory",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "CategoryLifecycleInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.expense_category.restore",
+    "title": "Restore expense category",
+    "method": "post",
+    "path": "/api/expense-categories/{category_id}/restore",
+    "sourceKind": "expense_category",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "restoreExpenseCategory",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "CategoryLifecycleInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_account.create",
+    "title": "Create deposit account",
+    "method": "post",
+    "path": "/api/leases/{lease_id}/security-deposit",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createSecurityDepositAccount",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "leaseTermId": {
+          "format": "uuid",
+          "title": "Leasetermid",
+          "type": "string"
+        },
+        "leaseId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "leaseTermId",
+        "leaseId"
+      ],
+      "title": "AccountInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_receipt.create",
+    "title": "Record deposit receipt",
+    "method": "post",
+    "path": "/api/security-deposits/{account_id}/receipts",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "recordSecurityDepositReceipt",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "pattern": "^(?:0|[1-9][0-9]{0,7})\\.[0-9]{2}$",
+          "title": "Amount",
+          "type": "string"
+        },
+        "currencyCode": {
+          "const": "USD",
+          "title": "Currencycode",
+          "type": "string"
+        },
+        "duplicateConfirmed": {
+          "default": false,
+          "title": "Duplicateconfirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "historicalEntryConfirmed": {
+          "default": false,
+          "title": "Historicalentryconfirmed",
+          "type": "boolean"
+        },
+        "historicalEntryReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Historicalentryreason"
+        },
+        "historicalPartyConfirmed": {
+          "default": false,
+          "title": "Historicalpartyconfirmed",
+          "type": "boolean"
+        },
+        "historicalPartyReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Historicalpartyreason"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "overageConfirmed": {
+          "default": false,
+          "title": "Overageconfirmed",
+          "type": "boolean"
+        },
+        "overageReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Overagereason"
+        },
+        "receivedByKind": {
+          "enum": [
+            "local_operator",
+            "party"
+          ],
+          "title": "Receivedbykind",
+          "type": "string"
+        },
+        "receivedByPartyId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Receivedbypartyid"
+        },
+        "receivedFromPartyId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Receivedfrompartyid"
+        },
+        "receivedOn": {
+          "format": "date",
+          "title": "Receivedon",
+          "type": "string"
+        },
+        "reference": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reference"
+        },
+        "replacesReceiptId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replacesreceiptid"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "receivedOn",
+        "amount",
+        "currencyCode",
+        "receivedByKind"
+      ],
+      "title": "ReceiptInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_receipt.void",
+    "title": "Void deposit receipt",
+    "method": "post",
+    "path": "/api/security-deposit-receipts/{receipt_id}/void",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "voidSecurityDepositReceipt",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "VoidInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_settlement.create",
+    "title": "Prepare deposit settlement",
+    "method": "post",
+    "path": "/api/security-deposits/{account_id}/settlements",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createSecurityDepositSettlement",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "deadlineOverrideConfirmed": {
+          "default": false,
+          "title": "Deadlineoverrideconfirmed",
+          "type": "boolean"
+        },
+        "deadlineOverrideReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Deadlineoverridereason"
+        },
+        "eligibilityOverrideConfirmed": {
+          "default": false,
+          "title": "Eligibilityoverrideconfirmed",
+          "type": "boolean"
+        },
+        "eligibilityOverrideReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Eligibilityoverridereason"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "legalRuleReference": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Legalrulereference"
+        },
+        "replacesSettlementId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replacessettlementid"
+        },
+        "reviewNotes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reviewnotes"
+        },
+        "settlementDueOn": {
+          "format": "date",
+          "title": "Settlementdueon",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "settlementDueOn"
+      ],
+      "title": "SettlementInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_settlement.patch",
+    "title": "Edit deposit settlement",
+    "method": "patch",
+    "path": "/api/security-deposit-settlements/{settlement_id}",
+    "sourceKind": "security_deposit_account",
+    "nesting": "financialChanges",
+    "childKey": "targetId",
+    "operationId": "patchSecurityDepositSettlement",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "deadlineOverrideConfirmed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Deadlineoverrideconfirmed"
+        },
+        "deadlineOverrideReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Deadlineoverridereason"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "legalRuleReference": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Legalrulereference"
+        },
+        "reviewNotes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reviewnotes"
+        },
+        "settlementDueOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Settlementdueon"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "SettlementPatchInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_settlement.approve",
+    "title": "Approve deposit settlement",
+    "method": "post",
+    "path": "/api/security-deposit-settlements/{settlement_id}/approve",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "approveSecurityDepositSettlement",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "zeroDollarClosureConfirmed": {
+          "default": false,
+          "title": "Zerodollarclosureconfirmed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "ConfirmInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_settlement.complete",
+    "title": "Complete deposit settlement",
+    "method": "post",
+    "path": "/api/security-deposit-settlements/{settlement_id}/complete",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "completeSecurityDepositSettlement",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "zeroDollarClosureConfirmed": {
+          "default": false,
+          "title": "Zerodollarclosureconfirmed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "ConfirmInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_settlement.void",
+    "title": "Void deposit settlement",
+    "method": "post",
+    "path": "/api/security-deposit-settlements/{settlement_id}/void",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "voidSecurityDepositSettlement",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "VoidInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_deduction.create",
+    "title": "Add settlement deduction",
+    "method": "post",
+    "path": "/api/security-deposit-settlements/{settlement_id}/deductions",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "addSecurityDepositDeduction",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "pattern": "^(?:0|[1-9][0-9]{0,7})\\.[0-9]{2}$",
+          "title": "Amount",
+          "type": "string"
+        },
+        "category": {
+          "enum": [
+            "unpaid_rent",
+            "damage",
+            "cleaning",
+            "missing_property",
+            "contractual_fee",
+            "other"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "rationale": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "category",
+        "amount",
+        "description",
+        "rationale"
+      ],
+      "title": "DeductionInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_deduction.update",
+    "title": "Edit settlement deduction",
+    "method": "patch",
+    "path": "/api/security-deposit-deductions/{deduction_id}",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "patchSecurityDepositDeduction",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "pattern": "^(?:0|[1-9][0-9]{0,7})\\.[0-9]{2}$",
+          "title": "Amount",
+          "type": "string"
+        },
+        "category": {
+          "enum": [
+            "unpaid_rent",
+            "damage",
+            "cleaning",
+            "missing_property",
+            "contractual_fee",
+            "other"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "rationale": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "category",
+        "amount",
+        "description",
+        "rationale"
+      ],
+      "title": "DeductionInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_deduction.delete",
+    "title": "Delete settlement deduction",
+    "method": "delete",
+    "path": "/api/security-deposit-deductions/{deduction_id}",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "deleteSecurityDepositDeduction",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "CommandInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_credit.create",
+    "title": "Add settlement credit",
+    "method": "post",
+    "path": "/api/security-deposit-settlements/{settlement_id}/credits",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "addSecurityDepositCredit",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "pattern": "^(?:0|[1-9][0-9]{0,7})\\.[0-9]{2}$",
+          "title": "Amount",
+          "type": "string"
+        },
+        "annualRateBasisPoints": {
+          "anyOf": [
+            {
+              "maximum": 100000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Annualratebasispoints"
+        },
+        "calculatorPrincipal": {
+          "anyOf": [
+            {
+              "pattern": "^(?:0|[1-9][0-9]{0,7})\\.[0-9]{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Calculatorprincipal"
+        },
+        "description": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "endsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Endson"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "interest",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "overrideReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Overridereason"
+        },
+        "startsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Startson"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "kind",
+        "amount",
+        "description"
+      ],
+      "title": "CreditInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_credit.update",
+    "title": "Edit settlement credit",
+    "method": "patch",
+    "path": "/api/security-deposit-credits/{credit_id}",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "patchSecurityDepositCredit",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "pattern": "^(?:0|[1-9][0-9]{0,7})\\.[0-9]{2}$",
+          "title": "Amount",
+          "type": "string"
+        },
+        "annualRateBasisPoints": {
+          "anyOf": [
+            {
+              "maximum": 100000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Annualratebasispoints"
+        },
+        "calculatorPrincipal": {
+          "anyOf": [
+            {
+              "pattern": "^(?:0|[1-9][0-9]{0,7})\\.[0-9]{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Calculatorprincipal"
+        },
+        "description": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "endsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Endson"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "interest",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "overrideReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Overridereason"
+        },
+        "startsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Startson"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "kind",
+        "amount",
+        "description"
+      ],
+      "title": "CreditInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_credit.delete",
+    "title": "Delete settlement credit",
+    "method": "delete",
+    "path": "/api/security-deposit-credits/{credit_id}",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "deleteSecurityDepositCredit",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "CommandInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_deduction_source.add",
+    "title": "Add deduction source",
+    "method": "post",
+    "path": "/api/security-deposit-deductions/{deduction_id}/sources",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "addSecurityDepositDeductionSource",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "duplicateUseConfirmed": {
+          "default": false,
+          "title": "Duplicateuseconfirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "historicalConfirmed": {
+          "default": false,
+          "title": "Historicalconfirmed",
+          "type": "boolean"
+        },
+        "historicalReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Historicalreason"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "sourceId": {
+          "format": "uuid",
+          "title": "Sourceid",
+          "type": "string"
+        },
+        "sourceKind": {
+          "enum": [
+            "inspection_comparison",
+            "inspection_observation",
+            "rent_expectation",
+            "expense"
+          ],
+          "title": "Sourcekind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "sourceKind",
+        "sourceId"
+      ],
+      "title": "DeductionSourceInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_deduction_source.delete",
+    "title": "Delete deduction source",
+    "method": "delete",
+    "path": "/api/security-deposit-deduction-sources/{source_id}",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "deleteSecurityDepositDeductionSource",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "CommandInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_refund.create",
+    "title": "Record deposit refund",
+    "method": "post",
+    "path": "/api/security-deposit-settlements/{settlement_id}/refunds",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "recordSecurityDepositRefund",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "pattern": "^(?:0|[1-9][0-9]{0,7})\\.[0-9]{2}$",
+          "title": "Amount",
+          "type": "string"
+        },
+        "currencyCode": {
+          "const": "USD",
+          "title": "Currencycode",
+          "type": "string"
+        },
+        "duplicateConfirmed": {
+          "default": false,
+          "title": "Duplicateconfirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "historicalPartyConfirmed": {
+          "default": false,
+          "title": "Historicalpartyconfirmed",
+          "type": "boolean"
+        },
+        "historicalPartyReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Historicalpartyreason"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "paidOn": {
+          "format": "date",
+          "title": "Paidon",
+          "type": "string"
+        },
+        "recipientOverrideConfirmed": {
+          "default": false,
+          "title": "Recipientoverrideconfirmed",
+          "type": "boolean"
+        },
+        "recipientOverrideReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Recipientoverridereason"
+        },
+        "recipientPartyId": {
+          "format": "uuid",
+          "title": "Recipientpartyid",
+          "type": "string"
+        },
+        "reference": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reference"
+        },
+        "replacesRefundId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replacesrefundid"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "recipientPartyId",
+        "paidOn",
+        "amount",
+        "currencyCode"
+      ],
+      "title": "RefundInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "finance.deposit_refund.void",
+    "title": "Void deposit refund",
+    "method": "post",
+    "path": "/api/security-deposit-refunds/{refund_id}/void",
+    "sourceKind": "security_deposit_account",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "voidSecurityDepositRefund",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "VoidInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "owner_rent_report.create",
+    "title": "Record owner rent report",
+    "method": "post",
+    "path": "/api/owner-rent-reports",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createOwnerRentReport",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "amountMinor": {
+          "exclusiveMinimum": 0,
+          "maximum": 9999999999,
+          "title": "Amountminor",
+          "type": "integer"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "leaseId": {
+          "format": "uuid",
+          "title": "Leaseid",
+          "type": "string"
+        },
+        "maskedReference": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Maskedreference"
+        },
+        "otherPaymentMethodNote": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Otherpaymentmethodnote"
+        },
+        "ownerPartyId": {
+          "format": "uuid",
+          "title": "Ownerpartyid",
+          "type": "string"
+        },
+        "paymentMethodKind": {
+          "enum": [
+            "automatic_bank_payment",
+            "bank_transfer",
+            "check",
+            "cash",
+            "online_payment",
+            "other"
+          ],
+          "title": "PaymentMethodKind",
+          "type": "string"
+        },
+        "paymentMethodLabel": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Paymentmethodlabel"
+        },
+        "receivedOn": {
+          "format": "date",
+          "title": "Receivedon",
+          "type": "string"
+        },
+        "replacesReportId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replacesreportid"
+        },
+        "reportedAtUtc": {
+          "format": "date-time",
+          "title": "Reportedatutc",
+          "type": "string"
+        },
+        "sourceNote": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sourcenote"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "leaseId",
+        "ownerPartyId",
+        "receivedOn",
+        "amountMinor",
+        "paymentMethodKind",
+        "reportedAtUtc",
+        "idempotencyKey"
+      ],
+      "title": "ReportInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "owner_rent_report.patch",
+    "title": "Edit owner rent report",
+    "method": "patch",
+    "path": "/api/owner-rent-reports/{report_id}",
+    "sourceKind": "owner_rent_report",
+    "nesting": "financialChanges",
+    "childKey": null,
+    "operationId": "patchOwnerRentReport",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "amountMinor": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "maximum": 9999999999,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Amountminor"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "maskedReference": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Maskedreference"
+        },
+        "otherPaymentMethodNote": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Otherpaymentmethodnote"
+        },
+        "ownerPartyId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Ownerpartyid"
+        },
+        "paymentMethodKind": {
+          "anyOf": [
+            {
+              "enum": [
+                "automatic_bank_payment",
+                "bank_transfer",
+                "check",
+                "cash",
+                "online_payment",
+                "other"
+              ],
+              "title": "PaymentMethodKind",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "paymentMethodLabel": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Paymentmethodlabel"
+        },
+        "receivedOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Receivedon"
+        },
+        "reportedAtUtc": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reportedatutc"
+        },
+        "sourceNote": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sourcenote"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "PatchInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "owner_rent_report.verify",
+    "title": "Verify owner rent report",
+    "method": "post",
+    "path": "/api/owner-rent-reports/{report_id}/verify",
+    "sourceKind": "owner_rent_report",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "verifyOwnerRentReport",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "allocations": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "amountMinor": {
+                "exclusiveMinimum": 0,
+                "title": "Amountminor",
+                "type": "integer"
+              },
+              "expectationId": {
+                "format": "uuid",
+                "title": "Expectationid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "expectationId",
+              "amountMinor"
+            ],
+            "title": "AllocationInput",
+            "type": "object"
+          },
+          "title": "Allocations",
+          "type": "array"
+        },
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "existingReceiptId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Existingreceiptid"
+        },
+        "expectedRentLedgerRevision": {
+          "minimum": 0,
+          "title": "Expectedrentledgerrevision",
+          "type": "integer"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "receiptIdempotencyKey": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Receiptidempotencykey"
+        },
+        "replacesReceiptId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replacesreceiptid"
+        },
+        "reviewNote": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reviewnote",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "expectedRentLedgerRevision",
+        "confirmed",
+        "reviewNote",
+        "idempotencyKey"
+      ],
+      "title": "VerifyInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "owner_rent_report.reject",
+    "title": "Reject owner rent report",
+    "method": "post",
+    "path": "/api/owner-rent-reports/{report_id}/reject",
+    "sourceKind": "owner_rent_report",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "rejectOwnerRentReport",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "confirmed",
+        "reason",
+        "idempotencyKey"
+      ],
+      "title": "RejectInput",
+      "type": "object"
+    }
+  },
+  {
     "formKey": "file.link.archive",
     "title": "Archive evidence link",
     "method": "post",

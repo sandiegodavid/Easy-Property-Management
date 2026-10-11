@@ -29,6 +29,7 @@ import { IdentityWorkspace } from "../workflows/identity";
 import { ProviderWorkspace } from "../workflows/providers";
 import { LeasingWorkspace } from "../workflows/leasing";
 import { InspectionWorkspace } from "../workflows/inspections";
+import { MoneyWorkspace } from "../workflows/money";
 
 function LeasingPage() {
   const [params] = useSearchParams();
@@ -266,6 +267,8 @@ export function ApplicationShell() {
                     <WorkflowPage kind="provider" />
                   ) : item.id === "leasing" ? (
                     <LeasingPage />
+                  ) : item.id === "money" ? (
+                    <MoneyWorkspace />
                   ) : (
                     <PendingPage title={item.label} />
                   )

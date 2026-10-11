@@ -203,6 +203,9 @@ class EvidenceResponse(Contract):
     createdAt: AwareDatetime
     archivedAt: AwareDatetime | None
     archiveReason: str | None
+    storageState: Literal["available", "missing", "quarantined"]
+    available: StrictBool
+    verifiedAt: AwareDatetime
 
 
 class RefundResponse(Contract):

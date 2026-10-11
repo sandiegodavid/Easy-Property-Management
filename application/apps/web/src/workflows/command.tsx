@@ -17,6 +17,7 @@ import { mutation } from "../shared/mutations";
 import type { Recovery } from "../shared/recovery";
 import { clean, Fields, type Choices } from "./fields";
 import { Facts, readResult } from "./reads";
+import { MoneyFacts } from "./money-presentation";
 
 export function workflowUrl(formKey: string, sourceId?: string, childId?: string) {
   const params = new URLSearchParams({ workflow: formKey });
@@ -26,11 +27,15 @@ export function workflowUrl(formKey: string, sourceId?: string, childId?: string
     ? "properties"
     : formKey.startsWith("provider.")
       ? "providers"
-      : formKey.startsWith("lease.") ||
-          formKey.startsWith("inspection.") ||
-          formKey === "file.link.archive"
-        ? "leasing"
-        : "parties";
+      : formKey.startsWith("finance.") ||
+          formKey.startsWith("owner_rent_report.") ||
+          formKey === "file.upload"
+        ? "money"
+        : formKey.startsWith("lease.") ||
+            formKey.startsWith("inspection.") ||
+            formKey === "file.link.archive"
+          ? "leasing"
+          : "parties";
   return `/${family}?${params}`;
 }
 
@@ -51,10 +56,30 @@ function toPayload(definition: Workflow, body: Record<string, unknown>, child?: 
     const { occupancy, ...rest } = values;
     payload = { ...record(occupancy), ...rest };
   }
+  if (definition.nesting === "financialChanges") {
+    const { expectedRevision, ...changes } = values;
+    payload = { expectedRevision, changes };
+  }
+  if (definition.formKey === "owner_rent_report.verify") {
+    const { expectedRentLedgerRevision, ...rest } = payload;
+    payload = { ...rest, expectedLedgerRevision: expectedRentLedgerRevision };
+  }
+  if (definition.formKey === "finance.deposit_settlement.complete") {
+    const { confirmed, zeroDollarClosureConfirmed, ...rest } = payload;
+    void zeroDollarClosureConfirmed;
+    payload = { ...rest, ...(confirmed === undefined ? {} : { zeroRefundConfirmed: confirmed }) };
+  }
+  if (definition.formKey === "finance.rent_receipt.create") delete payload.leaseId;
+  if (definition.formKey === "file.upload") delete payload.sizeBytes;
   if (definition.childKey) payload[definition.childKey] = child;
   return payload;
 }
-function toBody(definition: Workflow, payload: Record<string, unknown>, key?: string) {
+function toBody(
+  definition: Workflow,
+  payload: Record<string, unknown>,
+  key?: string,
+  sourceId?: string,
+) {
   const values = { ...payload };
   if (definition.childKey) delete values[definition.childKey];
   let body = values;
@@ -71,6 +96,19 @@ function toBody(definition: Workflow, payload: Record<string, unknown>, key?: st
     const { reason, expectedRevision, ...occupancy } = values;
     body = { reason, expectedRevision, occupancy };
   }
+  if (definition.nesting === "financialChanges") {
+    const { changes, ...rest } = values;
+    body = { ...rest, ...record(changes) };
+  }
+  if (definition.formKey === "owner_rent_report.verify") {
+    const { expectedLedgerRevision, ...rest } = body;
+    body = { ...rest, expectedRentLedgerRevision: expectedLedgerRevision };
+  }
+  if (definition.formKey === "finance.deposit_settlement.complete") {
+    const { zeroRefundConfirmed, ...rest } = body;
+    body = { ...rest, confirmed: zeroRefundConfirmed };
+  }
+  if (definition.formKey === "finance.rent_receipt.create" && sourceId) body.leaseId = sourceId;
   return key ? { ...body, idempotencyKey: key } : body;
 }
 
@@ -129,7 +167,11 @@ export function CommandLoader({
   initial?: Record<string, unknown>;
   choices?: Choices;
   returnTo?: string;
-  reviewSource?: () => Promise<{ revision: number; value: unknown }>;
+  reviewSource?: () => Promise<{
+    revision: number;
+    value: unknown;
+    relatedRevisions?: Record<string, number>;
+  }>;
   checkSource?: (values: Record<string, unknown>) => Promise<void>;
 }) {
   const { scope } = useWorkspace();
@@ -196,7 +238,11 @@ function CommandEditor({
   choices: Choices;
   recovered?: Recovery;
   returnTo?: string;
-  reviewSource?: () => Promise<{ revision: number; value: unknown }>;
+  reviewSource?: () => Promise<{
+    revision: number;
+    value: unknown;
+    relatedRevisions?: Record<string, number>;
+  }>;
   checkSource?: (values: Record<string, unknown>) => Promise<void>;
 }) {
   const { scope } = useWorkspace();
@@ -207,12 +253,16 @@ function CommandEditor({
     revision: number;
     value: unknown;
     spaceRevision?: number;
+    relatedRevisions?: Record<string, number>;
   }>();
   const [attachment, setAttachment] = useState<File>();
   const [selecting, setSelecting] = useState(false);
-  const evidence = definition.formKey === "inspection.evidence.attach";
+  const evidence =
+    definition.formKey === "inspection.evidence.attach" || definition.formKey === "file.upload";
   const [removalConfirmed, setRemovalConfirmed] = useState(false);
-  const requiresRemovalConfirmation = definition.formKey === "lease.participant.remove";
+  const requiresRemovalConfirmation =
+    definition.formKey === "lease.participant.remove" ||
+    (definition.formKey.startsWith("finance.") && definition.formKey.endsWith(".delete"));
   const [candidates, setCandidates] = useState<string[]>([]);
   const revisionField =
     definition.sourceKind === "property" || definition.formKey === "portfolio.property.create"
@@ -236,7 +286,7 @@ function CommandEditor({
     },
     initial: {
       data: recovered
-        ? toBody(definition, recovered.payload)
+        ? toBody(definition, recovered.payload, undefined, sourceId)
         : { ...initial, [revisionField]: revision },
     },
     recovered,
@@ -255,7 +305,9 @@ function CommandEditor({
       if (evidence) {
         if (!attachment) throw new Error("Reselect the original evidence before retrying.");
         const selected = await evidenceMetadata(attachment);
-        for (const key of Object.keys(selected))
+        for (const key of Object.keys(selected).filter(
+          (key) => definition.formKey !== "file.upload" || key !== "sizeBytes",
+        ))
           if (selected[key] !== saved.payload[key])
             throw new Error(
               "Selected evidence does not match the saved file. Reselect the original file.",
@@ -263,6 +315,21 @@ function CommandEditor({
         const body = new FormData();
         body.append("file", attachment);
         body.append("purpose", scalar(saved.payload.purpose));
+        if (definition.formKey === "file.upload") {
+          body.append("entity_type", scalar(saved.payload.entityType));
+          body.append("entity_id", scalar(saved.payload.entityId));
+          body.append("idempotency_key", key);
+          return api.POST("/api/files", {
+            body: {
+              file: "",
+              entity_type: scalar(saved.payload.entityType),
+              entity_id: scalar(saved.payload.entityId),
+              purpose: scalar(saved.payload.purpose),
+              idempotency_key: key,
+            },
+            bodySerializer: () => body,
+          });
+        }
         body.append("expected_revision", scalar(saved.payload.expectedRevision));
         body.append("idempotency_key", key);
         return api.POST("/api/condition-observations/{observation_id}/evidence", {
@@ -280,7 +347,7 @@ function CommandEditor({
         definition.formKey,
         sourceId ?? "",
         scalar(saved.payload[definition.childKey ?? ""], childId),
-        toBody(definition, saved.payload, key),
+        toBody(definition, saved.payload, key, sourceId),
       );
       const identifiers = record(record(response.error).detail).candidatePartyIds;
       if (Array.isArray(identifiers))
@@ -461,7 +528,9 @@ function CommandEditor({
                 checked={removalConfirmed}
                 onChange={(event) => setRemovalConfirmed(event.target.checked)}
               />
-              I confirm removal of this Lease participant
+              {definition.formKey === "lease.participant.remove"
+                ? "I confirm removal of this Lease participant"
+                : "I confirm deletion of this draft settlement child"}
             </label>
           )}
           {evidence && (
@@ -485,7 +554,9 @@ function CommandEditor({
                         if (
                           recovered &&
                           Object.entries(metadata).some(
-                            ([key, value]) => recovered.payload[key] !== value,
+                            ([key, value]) =>
+                              (definition.formKey !== "file.upload" || key !== "sizeBytes") &&
+                              recovered.payload[key] !== value,
                           )
                         )
                           throw new Error("Selected evidence does not match the saved file.");
@@ -619,6 +690,7 @@ function CommandEditor({
                 form.setValue("data", {
                   ...values,
                   [revisionField]: review.revision,
+                  ...review.relatedRevisions,
                   ...(review.spaceRevision === undefined
                     ? {}
                     : { expectedRevision: review.spaceRevision }),
@@ -644,11 +716,152 @@ function CommandEditor({
               operationId={state.record.receipt.receiptId}
             />
           )}
+          {(definition.formKey.startsWith("finance.") ||
+            definition.formKey.startsWith("owner_rent_report.") ||
+            definition.formKey === "file.upload") &&
+            state.record.attemptKey && (
+              <OriginalMoneyResult
+                definition={definition}
+                attemptKey={state.record.attemptKey}
+                sourceId={sourceId}
+              />
+            )}
         </section>
       )}
       <Link to={back}>Return to current record</Link>
       <RecoveryNavigation controller={controller} blocker={blocker} />
     </section>
+  );
+}
+
+function OriginalMoneyResult({
+  definition,
+  attemptKey,
+  sourceId,
+}: {
+  definition: Workflow;
+  attemptKey: string;
+  sourceId?: string;
+}) {
+  const { scope } = useWorkspace();
+  const result = useQuery({
+    queryKey: scope.key("original-money-result", definition.formKey, attemptKey),
+    queryFn: async ({ signal }) => {
+      if (definition.formKey === "file.upload")
+        return readResult(
+          await api.GET("/api/files/commands/by-key/{key}", {
+            signal,
+            params: { path: { key: attemptKey } },
+          }),
+        );
+      if (definition.formKey.startsWith("owner_rent_report."))
+        return readResult(
+          await api.GET("/api/owner-rent-report-operations/{key}", {
+            signal,
+            params: { path: { key: attemptKey } },
+          }),
+        ).result;
+      if (definition.formKey.startsWith("finance.expense_category."))
+        return readResult(
+          await api.GET("/api/expense-categories/operations/by-key/{key}", {
+            signal,
+            params: { path: { key: attemptKey } },
+          }),
+        );
+      return readResult(
+        await api.GET("/api/finance/command-operations/{idempotency_key}", {
+          signal,
+          params: { path: { idempotency_key: attemptKey } },
+        }),
+      ).result;
+    },
+  });
+  const item = record(result.data);
+  const kind = definition.formKey.startsWith("owner_rent_report.")
+    ? "report"
+    : definition.formKey.startsWith("finance.expense_category.")
+      ? "category"
+      : definition.formKey.startsWith("finance.expense_refund.")
+        ? "expense"
+        : definition.formKey.startsWith("finance.expense.")
+          ? "expense"
+          : definition.formKey.startsWith("finance.prepaid_check.")
+            ? "check"
+            : definition.formKey.startsWith("finance.rent_receipt.")
+              ? "receipt"
+              : definition.formKey.startsWith("finance.rent_expectation.")
+                ? "expectation"
+                : "deposit";
+  return (
+    <>
+      {result.isPending && <p role="status">Loading original money receipt…</p>}
+      {result.error && (
+        <p role="alert">
+          The money operation is committed; its detailed receipt is unavailable:{" "}
+          {result.error.message}
+        </p>
+      )}
+      {result.data && (
+        <>
+          <MoneyFacts
+            value={item}
+            fields={[
+              "id",
+              "status",
+              "amount",
+              "amountMinor",
+              "receivedOn",
+              "paidOn",
+              "paymentMethodKind",
+              "refundDue",
+              "voidReason",
+              "operationId",
+              "rentLedgerRevision",
+              "expenseRevision",
+              "depositAccountRevision",
+              "reportRevision",
+              "updatedAt",
+            ]}
+          />
+          {Array.isArray(item.items) &&
+            (item.items as unknown[]).map((entry) => (
+              <MoneyFacts
+                key={scalar(record(entry).id)}
+                value={entry}
+                fields={[
+                  "id",
+                  "dueOn",
+                  "periodStartsOn",
+                  "periodEndsOn",
+                  "expectedAmountMinor",
+                  "outstandingAmountMinor",
+                  "lifecycleStatus",
+                ]}
+              />
+            ))}
+          {Array.isArray(item.allocations) &&
+            (item.allocations as unknown[]).map((entry) => (
+              <MoneyFacts
+                key={scalar(record(entry).id)}
+                value={entry}
+                fields={["expectationId", "amountMinor", "expectationDueOn"]}
+              />
+            ))}
+          <p>This is the original committed response.</p>
+          {(item.id || item.expenseId || item.accountId) && (
+            <Link
+              to={
+                definition.formKey === "file.upload"
+                  ? `/money?file=${scalar(item.id)}`
+                  : `/money?record=${kind}&id=${scalar(item.expenseId ?? (kind === "deposit" ? (sourceId ?? item.accountId ?? item.id) : item.id))}`
+              }
+            >
+              Open current money record
+            </Link>
+          )}
+        </>
+      )}
+    </>
   );
 }
 

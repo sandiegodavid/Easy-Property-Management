@@ -167,6 +167,7 @@ class OwnerRentReportApiTests(unittest.TestCase):
         self.assertEqual(values["received_on"], "2026-01-02")
         self.assertEqual(values["amount_minor"], 1250)
         self.assertEqual(values["payment_method_kind"], "cash")
+        self.assertIs(type(values["payment_method_kind"]), str)
         self.assertEqual(values["reported_at_utc"], "2026-01-02T20:00:00+00:00")
 
     def test_verify_shape_and_cursor_are_rejected_at_the_api_boundary(self):

@@ -77,6 +77,7 @@ export function Fields({
               "expectedLeaseRevision",
               "expectedPropertyRevision",
               "idempotencyKey",
+              "expectedRentLedgerRevision",
             ].includes(key),
         )
         .map(([key, child]) => {

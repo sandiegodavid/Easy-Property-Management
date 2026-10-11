@@ -362,6 +362,8 @@ def build_router(service: OwnerRentReportService, runtime):
                 if isinstance(value, (date, datetime))
                 else str(value)
                 if isinstance(value, UUID)
+                else value.value
+                if isinstance(value, Enum)
                 else value
             )
             for key, value in raw.items()

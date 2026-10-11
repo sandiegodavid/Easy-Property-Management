@@ -10,6 +10,7 @@ from app.platform.testing_client import LocalApiClient as TestClient
 from sqlalchemy import text
 
 from app.bootstrap.api import create_app
+from app.modules.finance.api.deposit_router import DepositResponse
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.finance.application.prepaid_check_service import PrepaidCheckService
@@ -247,6 +248,23 @@ class DepositCommandTests(unittest.TestCase):
             expected_revision=1,
             idempotency_key=self.settlement_key,
         )
+
+    def test_account_detail_route_exposes_the_owning_revision_and_missing_identity(self):
+        with TestClient(create_app(self.config)) as client:
+            response = client.get(f"/api/security-deposits/{self.account['id']}")
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(
+                response.json(),
+                DepositResponse.model_validate(
+                    self.deposits.account(self.account["id"])
+                ).model_dump(mode="json"),
+            )
+            self.assertEqual(response.json()["depositAccountRevision"], 2)
+            self.assertEqual(client.get(f"/api/security-deposits/{uuid4()}").status_code, 404)
+            operation = client.get("/openapi.json").json()["paths"][
+                "/api/security-deposits/{account_id}"
+            ]["get"]
+            self.assertEqual(operation["operationId"], "getSecurityDepositAccount")
 
     def test_child_deletion_replay_noop_and_terminal_replay_preserve_original_results(self):
         key = str(uuid4())
