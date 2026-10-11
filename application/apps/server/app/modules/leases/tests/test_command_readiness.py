@@ -62,6 +62,45 @@ def _patch(notes):
     return LeasePatchCommand(notes=notes, supplied_fields=frozenset({"notes"}))
 
 
+def test_lease_directory_pages_are_bounded_without_hydrating_details(fixture):
+    expected_total, expected_selects = 3, 2
+    for _ in range(expected_total):
+        _vacant_draft(fixture)
+    statements = []
+
+    def capture(_connection, _cursor, statement, _parameters, _context, _many):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    engine = fixture.service.unit_of_work.engine
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        page = fixture.service.directory_page(limit=1, status="draft")
+        assert len(page["items"]) == 1
+        assert page["matchingTotal"] == expected_total
+        assert page["nextCursor"] is not None
+        assert len(statements) == expected_selects
+        assert "LIMIT" in statements[-1].upper()
+        seen = [page["items"][0]["id"]]
+        while page["nextCursor"] is not None:
+            page = fixture.service.directory_page(
+                limit=1, status="draft", cursor=page["nextCursor"]
+            )
+            assert page["matchingTotal"] == expected_total
+            seen.extend(item["id"] for item in page["items"])
+        assert len(seen) == len(set(seen)) == expected_total
+        statements.clear()
+        assert (
+            len(fixture.service.directory_page(limit=100, status="draft")["items"])
+            == expected_total
+        )
+        assert len(statements) == expected_selects
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+    with pytest.raises(LeaseError, match="cursor"):
+        fixture.service.directory_page(cursor="2026-02-30|" + str(uuid4()))
+
+
 def _vacant_draft(fixture):
     property_record = inventory_command(
         fixture.portfolio,

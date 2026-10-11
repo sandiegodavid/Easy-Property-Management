@@ -345,6 +345,23 @@ class LeaseOperationReceipt(Contract):
     response: TimelineLeaseResponse | LeaseMutationResponse | TerminationCaseMutationResponse
 
 
+class LeaseDirectoryItem(Contract):
+    id: UUID
+    spaceId: UUID
+    leaseKind: Literal["residential", "commercial"]
+    status: Literal["draft", "executed", "ended", "terminated", "void"]
+    contractStartsOn: date
+    contractEndsOn: date | None
+    leaseRevision: StrictInt = Field(ge=0)
+
+
+class LeaseDirectoryPage(Contract):
+    items: list[LeaseDirectoryItem]
+    matchingTotal: StrictInt = Field(ge=0)
+    nextCursor: str | None
+    asOf: AwareDatetime
+
+
 class LeaseConflictDetail(Contract):
     code: Literal["lease_conflict"]
     message: str
@@ -423,6 +440,27 @@ def build_router(service: LeaseService, runtime: WorkspaceRuntime) -> APIRouter:
                 contract_start_from=contract_start_from,
                 contract_start_to=contract_start_to,
                 renewal_due_on_or_before=renewal_due_on_or_before,
+            )
+        )
+
+    @leases.get("/directory", response_model=LeaseDirectoryPage, operation_id="getLeaseDirectory")
+    def directory(
+        lease_status: Literal["draft", "executed", "ended", "terminated", "void"] | None = Query(
+            None, alias="status"
+        ),
+        property_id: UUID | None = Query(None, alias="propertyId"),
+        cursor: str | None = Query(
+            None, max_length=47, pattern=r"^\d{4}-\d{2}-\d{2}\|[0-9a-f-]{36}$"
+        ),
+        limit: int = Query(25, ge=1, le=100),
+    ):
+        ready()
+        return invoke(
+            lambda: service.directory_page(
+                status=lease_status,
+                property_id=None if property_id is None else str(property_id),
+                cursor=cursor,
+                limit=limit,
             )
         )
 

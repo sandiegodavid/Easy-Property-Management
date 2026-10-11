@@ -483,6 +483,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/condition-observations/{observation_id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Observation Report */
+        get: operations["getConditionObservationReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/condition-reports/{report_id}": {
         parameters: {
             query?: never;
@@ -753,6 +770,23 @@ export interface paths {
         put?: never;
         /** Void Expense */
         post: operations["voidExpense"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/file-links/{link_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** File Link */
+        get: operations["getFileLink"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1115,6 +1149,23 @@ export interface paths {
         put?: never;
         /** Create */
         post: operations["leaseCreate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/leases/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Directory */
+        get: operations["getLeaseDirectory"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -10767,6 +10818,52 @@ export interface components {
              * Format: uuid
              */
             spaceId: string;
+        };
+        /** LeaseDirectoryItem */
+        LeaseDirectoryItem: {
+            /** Contractendson */
+            contractEndsOn: string | null;
+            /**
+             * Contractstartson
+             * Format: date
+             */
+            contractStartsOn: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Leasekind
+             * @enum {string}
+             */
+            leaseKind: "residential" | "commercial";
+            /** Leaserevision */
+            leaseRevision: number;
+            /**
+             * Spaceid
+             * Format: uuid
+             */
+            spaceId: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "executed" | "ended" | "terminated" | "void";
+        };
+        /** LeaseDirectoryPage */
+        LeaseDirectoryPage: {
+            /**
+             * Asof
+             * Format: date-time
+             */
+            asOf: string;
+            /** Items */
+            items: components["schemas"]["LeaseDirectoryItem"][];
+            /** Matchingtotal */
+            matchingTotal: number;
+            /** Nextcursor */
+            nextCursor: string | null;
         };
         /** LeaseFileResponse */
         LeaseFileResponse: {
@@ -21126,6 +21223,55 @@ export interface operations {
             };
         };
     };
+    getConditionObservationReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                observation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InspectionConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     getConditionReport: {
         parameters: {
             query?: never;
@@ -22156,6 +22302,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExpenseConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getFileLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileLinkResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileConflictResponse"];
                 };
             };
             /** @description Validation Error */
@@ -23298,6 +23493,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeaseMutationResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getLeaseDirectory: {
+        parameters: {
+            query?: {
+                status?: ("draft" | "executed" | "ended" | "terminated" | "void") | null;
+                propertyId?: string | null;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaseDirectoryPage"];
                 };
             };
             /** @description Local transport rejected. */

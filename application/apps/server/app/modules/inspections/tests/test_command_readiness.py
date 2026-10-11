@@ -46,6 +46,17 @@ def create_request(workflow, **changes):
     } | changes
 
 
+def test_observation_report_read_resolves_owning_context_without_writes(workflow):
+    service = workflow.inspections
+    created = service.create(workflow.lease["id"], **create_request(workflow))
+    observation_id = created["areas"][0]["observations"][0]["id"]
+    current = service.report_for_observation(observation_id)
+    assert current == service.get(created["id"])
+    assert current["revision"] == created["revision"]
+    assert current["leaseId"] == workflow.lease["id"]
+    assert service.unit_of_work.command_revision("lease", workflow.lease["id"]) == 1
+
+
 def test_create_patch_original_replay_and_bounded_lookup(workflow):
     service = workflow.inspections
     request = create_request(workflow)
@@ -340,8 +351,9 @@ def test_attachment_commit_failure_rolls_back_database_and_bytes(workflow):
 
 def test_api_contract_and_stale_snapshot(workflow):
     class Runtime:
-        def require_ready(self, **_kwargs):
-            return None
+        ready = True
+        can_write = True
+        error = None
 
     app = FastAPI()
     register_api_error_handlers(app)
@@ -358,6 +370,9 @@ def test_api_contract_and_stale_snapshot(workflow):
     created = client.post(endpoint, json=payload)
     assert created.status_code == 201, created.text
     original = created.json()
+    observation_report = client.get(f"/api/condition-observations/{uuid4()}/report")
+    not_found = 404
+    assert observation_report.status_code == not_found
     assert (
         client.get(f"/api/inspection-commands/{original['operationId']}").json()["result"]
         == original

@@ -1,5 +1,2711 @@
 [
   {
+    "formKey": "file.link.archive",
+    "title": "Archive evidence link",
+    "method": "post",
+    "path": "/api/file-links/{link_id}/archive",
+    "sourceKind": "file_link",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "archiveFileLink",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "confirmed",
+        "reason",
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ArchiveFileLinkInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.create",
+    "title": "Create lease draft",
+    "method": "post",
+    "path": "/api/leases",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "leaseCreate",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "contractEndsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Contractendson"
+        },
+        "contractStartsOn": {
+          "format": "date",
+          "title": "Contractstartson",
+          "type": "string"
+        },
+        "expectedLeaseRevision": {
+          "maximum": 0,
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "initialTerm": {
+          "additionalProperties": false,
+          "properties": {
+            "agreedSecurityDepositMinor": {
+              "minimum": 0,
+              "title": "Agreedsecuritydepositminor",
+              "type": "integer"
+            },
+            "baseRentMinor": {
+              "exclusiveMinimum": 0,
+              "title": "Baserentminor",
+              "type": "integer"
+            },
+            "currencyCode": {
+              "maxLength": 3,
+              "minLength": 3,
+              "pattern": "^[A-Z]{3}$",
+              "title": "Currencycode",
+              "type": "string"
+            },
+            "paymentDueDay": {
+              "anyOf": [
+                {
+                  "maximum": 31,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Paymentdueday"
+            },
+            "paymentFrequency": {
+              "enum": [
+                "monthly",
+                "weekly"
+              ],
+              "title": "Paymentfrequency",
+              "type": "string"
+            }
+          },
+          "required": [
+            "baseRentMinor",
+            "currencyCode",
+            "paymentFrequency",
+            "agreedSecurityDepositMinor"
+          ],
+          "title": "TermRequest",
+          "type": "object"
+        },
+        "leaseKind": {
+          "enum": [
+            "residential",
+            "commercial"
+          ],
+          "title": "Leasekind",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "occupancyStartsOn": {
+          "format": "date",
+          "title": "Occupancystartson",
+          "type": "string"
+        },
+        "participants": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "endsOn": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Endson"
+              },
+              "notes": {
+                "anyOf": [
+                  {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Notes"
+              },
+              "participantRole": {
+                "enum": [
+                  "primary_tenant",
+                  "co_tenant",
+                  "guarantor",
+                  "business_signatory"
+                ],
+                "title": "Participantrole",
+                "type": "string"
+              },
+              "startsOn": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Startson"
+              },
+              "tenantPartyId": {
+                "format": "uuid",
+                "title": "Tenantpartyid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "tenantPartyId",
+              "participantRole"
+            ],
+            "title": "ParticipantRequest",
+            "type": "object"
+          },
+          "minItems": 1,
+          "title": "Participants",
+          "type": "array"
+        },
+        "spaceId": {
+          "format": "uuid",
+          "title": "Spaceid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey",
+        "spaceId",
+        "leaseKind",
+        "contractStartsOn",
+        "occupancyStartsOn",
+        "initialTerm",
+        "participants"
+      ],
+      "title": "LeaseCreateRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.patch",
+    "title": "Edit lease draft",
+    "method": "patch",
+    "path": "/api/leases/{lease_id}",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "leasePatch",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "contractEndsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Contractendson"
+        },
+        "contractStartsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Contractstartson"
+        },
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "occupancyStartsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Occupancystartson"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey"
+      ],
+      "title": "LeasePatchRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.term.replace",
+    "title": "Replace draft rent terms",
+    "method": "put",
+    "path": "/api/leases/{lease_id}/initial-term",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "leaseReplaceTerm",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "agreedSecurityDepositMinor": {
+          "minimum": 0,
+          "title": "Agreedsecuritydepositminor",
+          "type": "integer"
+        },
+        "baseRentMinor": {
+          "exclusiveMinimum": 0,
+          "title": "Baserentminor",
+          "type": "integer"
+        },
+        "currencyCode": {
+          "maxLength": 3,
+          "minLength": 3,
+          "pattern": "^[A-Z]{3}$",
+          "title": "Currencycode",
+          "type": "string"
+        },
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "paymentDueDay": {
+          "anyOf": [
+            {
+              "maximum": 31,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Paymentdueday"
+        },
+        "paymentFrequency": {
+          "enum": [
+            "monthly",
+            "weekly"
+          ],
+          "title": "Paymentfrequency",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey",
+        "baseRentMinor",
+        "currencyCode",
+        "paymentFrequency",
+        "agreedSecurityDepositMinor"
+      ],
+      "title": "TermMutationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.participant.add",
+    "title": "Add lease participant",
+    "method": "post",
+    "path": "/api/leases/{lease_id}/participants",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "leaseAddParticipant",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "endsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Endson"
+        },
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "participantRole": {
+          "enum": [
+            "primary_tenant",
+            "co_tenant",
+            "guarantor",
+            "business_signatory"
+          ],
+          "title": "Participantrole",
+          "type": "string"
+        },
+        "startsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Startson"
+        },
+        "tenantPartyId": {
+          "format": "uuid",
+          "title": "Tenantpartyid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey",
+        "tenantPartyId",
+        "participantRole"
+      ],
+      "title": "ParticipantMutationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.participant.update",
+    "title": "Edit lease participant",
+    "method": "patch",
+    "path": "/api/leases/{lease_id}/participants/{participant_id}",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "participantId",
+    "operationId": "leaseUpdateParticipant",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "endsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Endson"
+        },
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "participantRole": {
+          "enum": [
+            "primary_tenant",
+            "co_tenant",
+            "guarantor",
+            "business_signatory"
+          ],
+          "title": "Participantrole",
+          "type": "string"
+        },
+        "startsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Startson"
+        },
+        "tenantPartyId": {
+          "format": "uuid",
+          "title": "Tenantpartyid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey",
+        "tenantPartyId",
+        "participantRole"
+      ],
+      "title": "ParticipantMutationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.participant.remove",
+    "title": "Remove lease participant",
+    "method": "delete",
+    "path": "/api/leases/{lease_id}/participants/{participant_id}",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "participantId",
+    "operationId": "leaseRemoveParticipant",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey"
+      ],
+      "title": "LeaseCommandRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.execute",
+    "title": "Execute lease",
+    "method": "post",
+    "path": "/api/leases/{lease_id}/execute",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "leaseExecute",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "executedOn": {
+          "format": "date",
+          "title": "Executedon",
+          "type": "string"
+        },
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey",
+        "confirmed",
+        "expectedRevision",
+        "executedOn"
+      ],
+      "title": "ExecuteRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.end",
+    "title": "End lease",
+    "method": "post",
+    "path": "/api/leases/{lease_id}/end",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "leaseEnd",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "actualMoveOutOn": {
+          "format": "date",
+          "title": "Actualmoveouton",
+          "type": "string"
+        },
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey",
+        "confirmed",
+        "expectedRevision",
+        "actualMoveOutOn"
+      ],
+      "title": "EndRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.terminate",
+    "title": "Terminate lease",
+    "method": "post",
+    "path": "/api/leases/{lease_id}/terminate",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "leaseTerminate",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "actualMoveOutOn": {
+          "format": "date",
+          "title": "Actualmoveouton",
+          "type": "string"
+        },
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "endReason": {
+          "enum": [
+            "early_termination",
+            "mutual_termination",
+            "other"
+          ],
+          "title": "Endreason",
+          "type": "string"
+        },
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey",
+        "confirmed",
+        "expectedRevision",
+        "actualMoveOutOn",
+        "endReason"
+      ],
+      "title": "TerminateRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.void",
+    "title": "Void lease",
+    "method": "post",
+    "path": "/api/leases/{lease_id}/void",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "leaseVoid",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey",
+        "confirmed",
+        "expectedRevision"
+      ],
+      "title": "TimelineConfirmationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.renewal.add",
+    "title": "Add renewal option",
+    "method": "post",
+    "path": "/api/leases/{lease_id}/renewal-options",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "leaseAddRenewal",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "noticeDueOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Noticedueon"
+        },
+        "proposedEndsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Proposedendson"
+        },
+        "proposedStartsOn": {
+          "format": "date",
+          "title": "Proposedstartson",
+          "type": "string"
+        },
+        "responseDueOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Responsedueon"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey",
+        "proposedStartsOn"
+      ],
+      "title": "RenewalRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.renewal.update",
+    "title": "Edit renewal option",
+    "method": "patch",
+    "path": "/api/leases/{lease_id}/renewal-options/{option_id}",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "optionId",
+    "operationId": "leaseDecideRenewal",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "noticeDueOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Noticedueon"
+        },
+        "proposedEndsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Proposedendson"
+        },
+        "proposedStartsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Proposedstartson"
+        },
+        "responseDueOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Responsedueon"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey"
+      ],
+      "title": "RenewalDecisionRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.renewal.decide",
+    "title": "Decide renewal option",
+    "method": "patch",
+    "path": "/api/leases/{lease_id}/renewal-options/{option_id}",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "optionId",
+    "operationId": "leaseDecideRenewal",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "decidedOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Decidedon"
+        },
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "exercised",
+                "declined",
+                "expired",
+                "withdrawn"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Status"
+        }
+      },
+      "required": [
+        "status",
+        "decidedOn",
+        "expectedLeaseRevision",
+        "idempotencyKey"
+      ],
+      "title": "RenewalDecisionRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.termination.create",
+    "title": "Request termination",
+    "method": "post",
+    "path": "/api/leases/{lease_id}/termination-cases",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "leaseCreateTerminationCase",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "contractClauseReference": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Contractclausereference"
+        },
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "expectedMoveOutOn": {
+          "format": "date",
+          "title": "Expectedmoveouton",
+          "type": "string"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "noticeReceivedOn": {
+          "format": "date",
+          "title": "Noticereceivedon",
+          "type": "string"
+        },
+        "operatorNotes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Operatornotes"
+        },
+        "reason": {
+          "enum": [
+            "job_relocation",
+            "military",
+            "habitability",
+            "mutual",
+            "other"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "requestedTerminationOn": {
+          "format": "date",
+          "title": "Requestedterminationon",
+          "type": "string"
+        },
+        "tenantExplanation": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Tenantexplanation"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey",
+        "reason",
+        "noticeReceivedOn",
+        "requestedTerminationOn",
+        "expectedMoveOutOn"
+      ],
+      "title": "TerminationCaseRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.termination.proposal.add",
+    "title": "Add termination proposal",
+    "method": "post",
+    "path": "/api/termination-cases/{case_id}/proposals",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "caseId",
+    "operationId": "leaseCreateTerminationProposal",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "accessArrangement": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Accessarrangement"
+        },
+        "currencyCode": {
+          "anyOf": [
+            {
+              "maxLength": 3,
+              "minLength": 3,
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Currencycode"
+        },
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "expectedMoveOutOn": {
+          "format": "date",
+          "title": "Expectedmoveouton",
+          "type": "string"
+        },
+        "feeWaived": {
+          "default": false,
+          "title": "Feewaived",
+          "type": "boolean"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "otherTerms": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Otherterms"
+        },
+        "proposedTerminationOn": {
+          "format": "date",
+          "title": "Proposedterminationon",
+          "type": "string"
+        },
+        "rentResponsibilityEndsOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rentresponsibilityendson"
+        },
+        "replacementTenantCondition": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replacementtenantcondition"
+        },
+        "responseDueOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Responsedueon"
+        },
+        "terminationFeeMinor": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Terminationfeeminor"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey",
+        "proposedTerminationOn",
+        "expectedMoveOutOn"
+      ],
+      "title": "TerminationProposalRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.termination.proposal.accept",
+    "title": "Accept termination proposal",
+    "method": "post",
+    "path": "/api/termination-cases/{case_id}/accept",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "caseId",
+    "operationId": "leaseAcceptTerminationProposal",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "acceptedOn": {
+          "format": "date",
+          "title": "Acceptedon",
+          "type": "string"
+        },
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "proposalId": {
+          "format": "uuid",
+          "title": "Proposalid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey",
+        "confirmed",
+        "proposalId",
+        "acceptedOn"
+      ],
+      "title": "TerminationAcceptRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.termination.transition",
+    "title": "Review termination request",
+    "method": "patch",
+    "path": "/api/termination-cases/{case_id}",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "caseId",
+    "operationId": "leaseTransitionTerminationCase",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "operatorNotes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Operatornotes"
+        },
+        "status": {
+          "enum": [
+            "under_review",
+            "withdrawn",
+            "declined"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey",
+        "status"
+      ],
+      "title": "TerminationCasePatchRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "lease.termination.complete",
+    "title": "Complete termination",
+    "method": "post",
+    "path": "/api/termination-cases/{case_id}/complete",
+    "sourceKind": "lease",
+    "nesting": null,
+    "childKey": "caseId",
+    "operationId": "leaseCompleteTerminationCase",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "actualMoveOutOn": {
+          "format": "date",
+          "title": "Actualmoveouton",
+          "type": "string"
+        },
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedLeaseRevision": {
+          "minimum": 0,
+          "title": "Expectedleaserevision",
+          "type": "integer"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedLeaseRevision",
+        "idempotencyKey",
+        "confirmed",
+        "expectedRevision",
+        "actualMoveOutOn"
+      ],
+      "title": "TerminationCompleteRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "inspection.report.create",
+    "title": "Create inspection draft",
+    "method": "post",
+    "path": "/api/leases/{lease_id}/condition-reports",
+    "sourceKind": "inspection_lease",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createConditionReport",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "areas": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "displayName": {
+                "maxLength": 160,
+                "minLength": 1,
+                "title": "Displayname",
+                "type": "string"
+              },
+              "notes": {
+                "anyOf": [
+                  {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Notes"
+              },
+              "observations": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "cleanlinessState": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "clean",
+                            "needs_cleaning",
+                            "not_assessed"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Cleanlinessstate"
+                    },
+                    "conditionState": {
+                      "enum": [
+                        "good",
+                        "fair",
+                        "poor",
+                        "damaged",
+                        "missing",
+                        "not_tested",
+                        "not_applicable"
+                      ],
+                      "title": "Conditionstate",
+                      "type": "string"
+                    },
+                    "isCompleted": {
+                      "default": false,
+                      "title": "Iscompleted",
+                      "type": "boolean"
+                    },
+                    "itemName": {
+                      "maxLength": 160,
+                      "minLength": 1,
+                      "title": "Itemname",
+                      "type": "string"
+                    },
+                    "notes": {
+                      "anyOf": [
+                        {
+                          "maxLength": 4000,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Notes"
+                    },
+                    "observedOn": {
+                      "anyOf": [
+                        {
+                          "format": "date",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Observedon"
+                    }
+                  },
+                  "required": [
+                    "itemName",
+                    "conditionState"
+                  ],
+                  "title": "ObservationRequest",
+                  "type": "object"
+                },
+                "title": "Observations",
+                "type": "array"
+              }
+            },
+            "required": [
+              "displayName"
+            ],
+            "title": "AreaRequest",
+            "type": "object"
+          },
+          "title": "Areas",
+          "type": "array"
+        },
+        "conductedBy": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Conductedby",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "generalNotes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Generalnotes"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reportKind": {
+          "enum": [
+            "pre_move_in",
+            "post_move_out"
+          ],
+          "title": "Reportkind",
+          "type": "string"
+        },
+        "templateId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Templateid"
+        },
+        "tenantPresence": {
+          "default": "not_recorded",
+          "enum": [
+            "present",
+            "not_present",
+            "declined",
+            "not_recorded"
+          ],
+          "title": "Tenantpresence",
+          "type": "string"
+        },
+        "walkthroughOn": {
+          "format": "date",
+          "title": "Walkthroughon",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "reportKind",
+        "walkthroughOn",
+        "conductedBy"
+      ],
+      "title": "CreateReportRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "inspection.report.patch",
+    "title": "Edit inspection draft",
+    "method": "patch",
+    "path": "/api/condition-reports/{report_id}",
+    "sourceKind": "condition_report",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "patchConditionReport",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "conductedBy": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Conductedby"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "generalNotes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Generalnotes"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "tenantPresence": {
+          "anyOf": [
+            {
+              "enum": [
+                "present",
+                "not_present",
+                "declined",
+                "not_recorded"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Tenantpresence"
+        },
+        "walkthroughOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Walkthroughon"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ReportPatchRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "inspection.report.areas.replace",
+    "title": "Edit inspection checklist",
+    "method": "put",
+    "path": "/api/condition-reports/{report_id}/areas",
+    "sourceKind": "condition_report",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "replaceConditionReportAreas",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "areas": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "displayName": {
+                "maxLength": 160,
+                "minLength": 1,
+                "title": "Displayname",
+                "type": "string"
+              },
+              "notes": {
+                "anyOf": [
+                  {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Notes"
+              },
+              "observations": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "cleanlinessState": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "clean",
+                            "needs_cleaning",
+                            "not_assessed"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Cleanlinessstate"
+                    },
+                    "conditionState": {
+                      "enum": [
+                        "good",
+                        "fair",
+                        "poor",
+                        "damaged",
+                        "missing",
+                        "not_tested",
+                        "not_applicable"
+                      ],
+                      "title": "Conditionstate",
+                      "type": "string"
+                    },
+                    "isCompleted": {
+                      "default": false,
+                      "title": "Iscompleted",
+                      "type": "boolean"
+                    },
+                    "itemName": {
+                      "maxLength": 160,
+                      "minLength": 1,
+                      "title": "Itemname",
+                      "type": "string"
+                    },
+                    "notes": {
+                      "anyOf": [
+                        {
+                          "maxLength": 4000,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Notes"
+                    },
+                    "observedOn": {
+                      "anyOf": [
+                        {
+                          "format": "date",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Observedon"
+                    }
+                  },
+                  "required": [
+                    "itemName",
+                    "conditionState"
+                  ],
+                  "title": "ObservationRequest",
+                  "type": "object"
+                },
+                "title": "Observations",
+                "type": "array"
+              }
+            },
+            "required": [
+              "displayName"
+            ],
+            "title": "AreaRequest",
+            "type": "object"
+          },
+          "title": "Areas",
+          "type": "array"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "areas"
+      ],
+      "title": "ReplaceAreasRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "inspection.report.acknowledge",
+    "title": "Record inspection acknowledgments",
+    "method": "put",
+    "path": "/api/condition-reports/{report_id}/acknowledgments",
+    "sourceKind": "condition_report",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "acknowledgeConditionReport",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "acknowledgments": {
+          "additionalProperties": {
+            "additionalProperties": false,
+            "properties": {
+              "notes": {
+                "anyOf": [
+                  {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Notes"
+              },
+              "status": {
+                "enum": [
+                  "acknowledged",
+                  "disputed",
+                  "declined",
+                  "not_requested",
+                  "pending"
+                ],
+                "title": "Status",
+                "type": "string"
+              }
+            },
+            "required": [
+              "status"
+            ],
+            "title": "AcknowledgmentItem",
+            "type": "object"
+          },
+          "title": "Acknowledgments",
+          "type": "object"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "acknowledgments"
+      ],
+      "title": "AcknowledgmentRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "inspection.report.finalize",
+    "title": "Finalize inspection",
+    "method": "post",
+    "path": "/api/condition-reports/{report_id}/finalize",
+    "sourceKind": "condition_report",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "finalizeConditionReport",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "timingExceptionReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Timingexceptionreason"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "FinalizeRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "inspection.report.correct",
+    "title": "Correct finalized inspection",
+    "method": "post",
+    "path": "/api/condition-reports/{report_id}/corrections",
+    "sourceKind": "condition_report",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "correctConditionReport",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "areas": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "displayName": {
+                "maxLength": 160,
+                "minLength": 1,
+                "title": "Displayname",
+                "type": "string"
+              },
+              "notes": {
+                "anyOf": [
+                  {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Notes"
+              },
+              "observations": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "cleanlinessState": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "clean",
+                            "needs_cleaning",
+                            "not_assessed"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Cleanlinessstate"
+                    },
+                    "conditionState": {
+                      "enum": [
+                        "good",
+                        "fair",
+                        "poor",
+                        "damaged",
+                        "missing",
+                        "not_tested",
+                        "not_applicable"
+                      ],
+                      "title": "Conditionstate",
+                      "type": "string"
+                    },
+                    "isCompleted": {
+                      "default": false,
+                      "title": "Iscompleted",
+                      "type": "boolean"
+                    },
+                    "itemName": {
+                      "maxLength": 160,
+                      "minLength": 1,
+                      "title": "Itemname",
+                      "type": "string"
+                    },
+                    "notes": {
+                      "anyOf": [
+                        {
+                          "maxLength": 4000,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Notes"
+                    },
+                    "observedOn": {
+                      "anyOf": [
+                        {
+                          "format": "date",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Observedon"
+                    }
+                  },
+                  "required": [
+                    "itemName",
+                    "conditionState"
+                  ],
+                  "title": "ObservationRequest",
+                  "type": "object"
+                },
+                "title": "Observations",
+                "type": "array"
+              }
+            },
+            "required": [
+              "displayName"
+            ],
+            "title": "AreaRequest",
+            "type": "object"
+          },
+          "title": "Areas",
+          "type": "array"
+        },
+        "conductedBy": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Conductedby",
+          "type": "string"
+        },
+        "correctionReason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Correctionreason",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "generalNotes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Generalnotes"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reportKind": {
+          "enum": [
+            "pre_move_in",
+            "post_move_out"
+          ],
+          "title": "Reportkind",
+          "type": "string"
+        },
+        "templateId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Templateid"
+        },
+        "tenantPresence": {
+          "default": "not_recorded",
+          "enum": [
+            "present",
+            "not_present",
+            "declined",
+            "not_recorded"
+          ],
+          "title": "Tenantpresence",
+          "type": "string"
+        },
+        "walkthroughOn": {
+          "format": "date",
+          "title": "Walkthroughon",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "reportKind",
+        "walkthroughOn",
+        "conductedBy",
+        "correctionReason"
+      ],
+      "title": "CorrectionRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "inspection.evidence.attach",
+    "title": "Attach inspection evidence",
+    "method": "post",
+    "path": "/api/condition-observations/{observation_id}/evidence",
+    "sourceKind": "condition_observation",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "attachConditionEvidence",
+    "schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "purpose",
+        "expectedRevision",
+        "idempotencyKey",
+        "originalName",
+        "mediaType",
+        "sizeBytes",
+        "contentSha256"
+      ],
+      "properties": {
+        "purpose": {
+          "enum": [
+            "condition_photo",
+            "supporting_document"
+          ],
+          "title": "Purpose",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "originalName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 52428800
+        },
+        "contentSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    }
+  },
+  {
+    "formKey": "inspection.comparison.review",
+    "title": "Review condition comparison",
+    "method": "put",
+    "path": "/api/leases/{lease_id}/condition-comparison",
+    "sourceKind": "inspection_lease",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "reviewConditionComparison",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "comparisons": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "comparisonState": {
+                "enum": [
+                  "unchanged",
+                  "improved",
+                  "normal_wear",
+                  "possible_tenant_damage",
+                  "maintenance_needed",
+                  "not_comparable"
+                ],
+                "title": "Comparisonstate",
+                "type": "string"
+              },
+              "operatorNotes": {
+                "anyOf": [
+                  {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Operatornotes"
+              },
+              "postObservationId": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Postobservationid"
+              },
+              "preObservationId": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Preobservationid"
+              }
+            },
+            "required": [
+              "comparisonState"
+            ],
+            "title": "ComparisonItemRequest",
+            "type": "object"
+          },
+          "title": "Comparisons",
+          "type": "array"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "comparisons"
+      ],
+      "title": "ComparisonRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "inspection.template.create",
+    "title": "Create inspection template",
+    "method": "post",
+    "path": "/api/condition-checklist-templates",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createConditionChecklistTemplate",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "applicability": {
+          "default": "any",
+          "enum": [
+            "residential",
+            "office",
+            "any"
+          ],
+          "title": "Applicability",
+          "type": "string"
+        },
+        "areas": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "displayName": {
+                "maxLength": 160,
+                "minLength": 1,
+                "title": "Displayname",
+                "type": "string"
+              },
+              "notes": {
+                "anyOf": [
+                  {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Notes"
+              },
+              "observations": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "cleanlinessState": {
+                      "anyOf": [
+                        {
+                          "enum": [
+                            "clean",
+                            "needs_cleaning",
+                            "not_assessed"
+                          ],
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Cleanlinessstate"
+                    },
+                    "conditionState": {
+                      "enum": [
+                        "good",
+                        "fair",
+                        "poor",
+                        "damaged",
+                        "missing",
+                        "not_tested",
+                        "not_applicable"
+                      ],
+                      "title": "Conditionstate",
+                      "type": "string"
+                    },
+                    "isCompleted": {
+                      "default": false,
+                      "title": "Iscompleted",
+                      "type": "boolean"
+                    },
+                    "itemName": {
+                      "maxLength": 160,
+                      "minLength": 1,
+                      "title": "Itemname",
+                      "type": "string"
+                    },
+                    "notes": {
+                      "anyOf": [
+                        {
+                          "maxLength": 4000,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Notes"
+                    },
+                    "observedOn": {
+                      "anyOf": [
+                        {
+                          "format": "date",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Observedon"
+                    }
+                  },
+                  "required": [
+                    "itemName",
+                    "conditionState"
+                  ],
+                  "title": "ObservationRequest",
+                  "type": "object"
+                },
+                "title": "Observations",
+                "type": "array"
+              }
+            },
+            "required": [
+              "displayName"
+            ],
+            "title": "AreaRequest",
+            "type": "object"
+          },
+          "title": "Areas",
+          "type": "array"
+        },
+        "displayName": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "displayName"
+      ],
+      "title": "TemplateRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "inspection.template.patch",
+    "title": "Edit inspection template",
+    "method": "patch",
+    "path": "/api/condition-checklist-templates/{template_id}",
+    "sourceKind": "condition_template",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "patchConditionChecklistTemplate",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "applicability": {
+          "anyOf": [
+            {
+              "enum": [
+                "residential",
+                "office",
+                "any"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Applicability"
+        },
+        "areas": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "displayName": {
+                    "maxLength": 160,
+                    "minLength": 1,
+                    "title": "Displayname",
+                    "type": "string"
+                  },
+                  "notes": {
+                    "anyOf": [
+                      {
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Notes"
+                  },
+                  "observations": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "cleanlinessState": {
+                          "anyOf": [
+                            {
+                              "enum": [
+                                "clean",
+                                "needs_cleaning",
+                                "not_assessed"
+                              ],
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "title": "Cleanlinessstate"
+                        },
+                        "conditionState": {
+                          "enum": [
+                            "good",
+                            "fair",
+                            "poor",
+                            "damaged",
+                            "missing",
+                            "not_tested",
+                            "not_applicable"
+                          ],
+                          "title": "Conditionstate",
+                          "type": "string"
+                        },
+                        "isCompleted": {
+                          "default": false,
+                          "title": "Iscompleted",
+                          "type": "boolean"
+                        },
+                        "itemName": {
+                          "maxLength": 160,
+                          "minLength": 1,
+                          "title": "Itemname",
+                          "type": "string"
+                        },
+                        "notes": {
+                          "anyOf": [
+                            {
+                              "maxLength": 4000,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "title": "Notes"
+                        },
+                        "observedOn": {
+                          "anyOf": [
+                            {
+                              "format": "date",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "title": "Observedon"
+                        }
+                      },
+                      "required": [
+                        "itemName",
+                        "conditionState"
+                      ],
+                      "title": "ObservationRequest",
+                      "type": "object"
+                    },
+                    "title": "Observations",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "displayName"
+                ],
+                "title": "AreaRequest",
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Areas"
+        },
+        "displayName": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Displayname"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "TemplatePatchRequest",
+      "type": "object"
+    }
+  },
+  {
     "formKey": "portfolio.property.create",
     "title": "Create property",
     "method": "post",

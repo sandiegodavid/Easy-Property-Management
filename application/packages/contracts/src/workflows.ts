@@ -3,6 +3,7 @@ import type { components } from "./generated/schema";
 export { dispatchWorkflow } from "./generated/workflow-dispatch";
 
 export type RequestSchema = {
+  title?: string;
   type?: string;
   properties?: Record<string, RequestSchema>;
   required?: string[];
@@ -20,7 +21,7 @@ export type RequestSchema = {
   maxItems?: number;
   pattern?: string;
   default?: unknown;
-  additionalProperties?: boolean;
+  additionalProperties?: boolean | RequestSchema;
 };
 export type Workflow = {
   formKey: components["schemas"]["RecoveryInput"]["formKey"];
@@ -72,6 +73,8 @@ export function validateRequest(schema: RequestSchema, value: unknown, name = "R
       if (!child && schema.additionalProperties === false)
         throw new Error(`${name}: unsupported field ${key}.`);
       if (child) validateRequest(child, item, `${name}.${key}`);
+      else if (typeof schema.additionalProperties === "object")
+        validateRequest(schema.additionalProperties, item, `${name}.${key}`);
     }
   }
   if (schema.type === "array") {

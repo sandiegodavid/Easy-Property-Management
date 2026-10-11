@@ -500,6 +500,15 @@ class FileService:
             raise FileError("File record was not found.", "file_not_found")
         return item
 
+    def get_link(self, link_id: str) -> dict[str, object]:
+        link = self.unit_of_work.get_link(link_id)
+        if link is None:
+            raise FileError("File link was not found.", "file_not_found")
+        return _link_snapshot(link) | {
+            "id": link.id,
+            "revision": 1 if link.archived_at is None else 2,
+        }
+
     def archive_link(
         self, link_id: str, *, confirmed: bool, reason: str, correlation_id: str | None = None
     ) -> dict[str, object]:

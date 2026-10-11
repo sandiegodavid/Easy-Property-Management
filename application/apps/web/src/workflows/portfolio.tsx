@@ -123,6 +123,11 @@ function SpaceRecord({ space, propertyId }: { space: Space; propertyId: string }
         title={`Inventory actions for ${space.displayName}`}
       />
       {space.status === "active" && (
+        <Link to={`/leasing?workflow=lease.create&spaceId=${space.id}`}>
+          Start lease draft for {space.displayName}
+        </Link>
+      )}
+      {space.status === "active" && (
         <CommandLinks
           target={space.id}
           keys={[

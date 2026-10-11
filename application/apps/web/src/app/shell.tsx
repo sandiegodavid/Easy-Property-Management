@@ -27,6 +27,19 @@ import { Directory, ContextOverview, ContextNavigator } from "../shared/context-
 import { PortfolioCommand, PortfolioEntry, PortfolioRecord } from "../workflows/portfolio";
 import { IdentityWorkspace } from "../workflows/identity";
 import { ProviderWorkspace } from "../workflows/providers";
+import { LeasingWorkspace } from "../workflows/leasing";
+import { InspectionWorkspace } from "../workflows/inspections";
+
+function LeasingPage() {
+  const [params] = useSearchParams();
+  return params.get("workflow")?.startsWith("inspection.") ||
+    params.get("workflow") === "file.link.archive" ||
+    params.has("templates") ? (
+    <InspectionWorkspace key={params.toString()} />
+  ) : (
+    <LeasingWorkspace key={params.toString()} />
+  );
+}
 
 function PropertiesPage() {
   const [params] = useSearchParams();
@@ -251,6 +264,8 @@ export function ApplicationShell() {
                     <Directory kind="owner" />
                   ) : item.id === "providers" ? (
                     <WorkflowPage kind="provider" />
+                  ) : item.id === "leasing" ? (
+                    <LeasingPage />
                   ) : (
                     <PendingPage title={item.label} />
                   )
@@ -312,6 +327,11 @@ export function ApplicationShell() {
             <Route path="providers/:id/:section" element={<WorkflowPage kind="provider" />} />
           </Route>
           <Route path="parties" element={<WorkflowPage kind="identity" />} />
+          <Route element={<DestinationGuard id="leasing" />}>
+            <Route path="leases/:id" element={<LeasingPage />} />
+            <Route path="leases/:id/:section" element={<LeasingPage />} />
+            <Route path="inspections/:id" element={<InspectionWorkspace />} />
+          </Route>
           {["tasks", "search"].map((path) => (
             <Route
               key={path}

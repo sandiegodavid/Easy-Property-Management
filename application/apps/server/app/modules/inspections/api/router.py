@@ -320,10 +320,10 @@ def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRo
     router = APIRouter(tags=["inspections"], responses={409: {"model": InspectionConflictResponse}})
 
     def ready(*, write=True):
-        try:
-            runtime.require_ready(write=write)
-        except Exception as error:
-            raise workspace_unavailable(str(error)) from error
+        if not runtime.ready or runtime.error:
+            raise workspace_unavailable(str(runtime.error or "Workspace is not ready."))
+        if write and not runtime.can_write:
+            raise workspace_unavailable("Workspace writer lock is unavailable.")
 
     def invoke(operation):
         try:
@@ -440,6 +440,15 @@ def build_router(service: InspectionService, runtime: WorkspaceRuntime) -> APIRo
     def list_templates():
         ready()
         return invoke(service.list_templates)
+
+    @router.get(
+        "/api/condition-observations/{observation_id}/report",
+        response_model=ReportResponse,
+        operation_id="getConditionObservationReport",
+    )
+    def observation_report(observation_id: UUID):
+        ready(write=False)
+        return invoke(lambda: service.report_for_observation(str(observation_id)))
 
     @router.patch(
         "/api/condition-checklist-templates/{template_id}",

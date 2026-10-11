@@ -85,6 +85,18 @@ class SQLiteInspectionUnitOfWork:
         with Session(self.engine) as session:
             return _report_view(session, report_id)
 
+    def observation_report_view(self, observation_id: str):
+        with Session(self.engine) as session:
+            report_id = session.execute(
+                select(ConditionAreaModel.condition_report_id)
+                .join(
+                    ConditionObservationModel,
+                    ConditionObservationModel.condition_area_id == ConditionAreaModel.id,
+                )
+                .where(ConditionObservationModel.id == observation_id)
+            ).scalar_one_or_none()
+            return None if report_id is None else _report_view(session, report_id)
+
     def report_views(self, lease_id: str):
         with Session(self.engine) as session:
             revision = _revision(session, "lease", lease_id)

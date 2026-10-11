@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from json import loads
 from datetime import UTC, date, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from app.modules.inspections.application.attention import inspection_attention
 from app.modules.leases.application.commands import (
@@ -34,6 +34,7 @@ from app.modules.portfolio.domain.models import SpaceOccupancyPeriod
 
 LEASE_KINDS = {"residential", "commercial"}
 LEASE_STATUSES = {"draft", "executed", "ended", "terminated", "void"}
+MAX_DIRECTORY_PAGE_SIZE = 100
 PARTICIPANT_ROLES = {"primary_tenant", "co_tenant", "guarantor", "business_signatory"}
 RENEWAL_STATUSES = {"open", "exercised", "declined", "expired", "withdrawn"}
 END_REASONS = {"contract_completed", "early_termination", "mutual_termination", "other"}
@@ -384,6 +385,51 @@ class LeaseService:
             if self.inspection_attention_reader
             else None,
         )
+
+    def directory_page(self, *, status=None, property_id=None, cursor=None, limit=25):
+        if type(limit) is not int or not 1 <= limit <= MAX_DIRECTORY_PAGE_SIZE:
+            raise LeaseError("Lease page size must be between 1 and 100.")
+        if status is not None and status not in LEASE_STATUSES:
+            raise LeaseError("Unsupported lease status filter.")
+        parsed = None
+        if cursor is not None:
+            try:
+                starts_on, identity = cursor.split("|")
+                if (
+                    date.fromisoformat(starts_on).isoformat() != starts_on
+                    or str(UUID(identity)) != identity
+                ):
+                    raise ValueError
+                parsed = (starts_on, identity)
+            except (ValueError, AttributeError) as error:
+                raise LeaseError("Invalid lease page cursor.") from error
+        as_of = _now()
+        rows, total = self.unit_of_work.lease_directory_page(
+            status=status,
+            property_id=property_id,
+            cursor=parsed,
+            limit=limit,
+        )
+        items = [
+            {
+                "id": row["id"],
+                "spaceId": row["space_id"],
+                "leaseKind": row["lease_kind"],
+                "status": row["status"],
+                "contractStartsOn": row["contract_starts_on"],
+                "contractEndsOn": row["contract_ends_on"],
+                "leaseRevision": row["lease_revision"],
+            }
+            for row in rows[:limit]
+        ]
+        return {
+            "items": items,
+            "matchingTotal": total,
+            "asOf": as_of,
+            "nextCursor": f"{rows[limit - 1]['contract_starts_on']}|{rows[limit - 1]['id']}"
+            if len(rows) > limit
+            else None,
+        }
 
     def list(
         self,

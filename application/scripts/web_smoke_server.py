@@ -2,16 +2,48 @@
 
 import argparse
 import json
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile
 
 import uvicorn
+from pydantic import BaseModel, Field
+import app.modules.leases.application.service as lease_service
 
 from app.bootstrap.api import create_app
 from app.modules.workspace.application.service import WorkspaceService
 
 APPLICATION = Path(__file__).resolve().parents[1]
+
+
+class LeaseClock(BaseModel):
+    days: int = Field(ge=0, le=2)
+
+
+class LeaseDateType(type):
+    def __instancecheck__(cls, value):
+        return isinstance(value, date)
+
+
+class BrowserLeaseDate(date, metaclass=LeaseDateType):
+    offset = 0
+
+    @classmethod
+    def today(cls):
+        return date.today() + timedelta(days=cls.offset)
+
+
+def lease_instant():
+    return (datetime.now(UTC) + timedelta(days=BrowserLeaseDate.offset)).isoformat()
+
+
+_lease_date = lease_service._date
+
+
+def lease_date(value, label):
+    # HTTP Pydantic dates remain real dates when the lifecycle clock is advanced.
+    return _lease_date(value.isoformat() if isinstance(value, date) else value, label)
 
 
 def main() -> None:
@@ -39,8 +71,19 @@ def main() -> None:
                     if content != (APPLICATION / "apps/web/dist" / relative).read_bytes():
                         raise RuntimeError("Wheel assets differ from the current Vite build")
                     destination.write_bytes(content)
+        app = create_app(config, web_build_path=web)
+        # Isolated smoke-server clock control; never registered in the product API.
+        lease_service.date = BrowserLeaseDate
+        lease_service._now = lease_instant
+        lease_service._date = lease_date
+
+        @app.post("/__test__/lease-clock", include_in_schema=False)
+        def lease_clock(command: LeaseClock):
+            BrowserLeaseDate.offset = command.days
+            return {"effectiveOn": BrowserLeaseDate.today().isoformat()}
+
         uvicorn.run(
-            create_app(config, web_build_path=web),
+            app,
             host="127.0.0.1",
             port=args.port,
             proxy_headers=False,

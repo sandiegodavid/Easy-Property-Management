@@ -72,12 +72,17 @@ export function Fields({
       {Object.entries(shape.properties ?? {})
         .filter(
           ([key]) =>
-            !["expectedRevision", "expectedPropertyRevision", "idempotencyKey"].includes(key),
+            ![
+              "expectedRevision",
+              "expectedLeaseRevision",
+              "expectedPropertyRevision",
+              "idempotencyKey",
+            ].includes(key),
         )
         .map(([key, child]) => {
           const current = values[key],
             childShape = fieldSchema(child),
-            name = label(key);
+            name = /^[0-9a-f-]{36}$/.test(key) ? (childShape.title ?? label(key)) : label(key);
           const fieldPath = path ? `${path}.${key}` : key;
           const update = (next: unknown) => {
             const replacement = { ...values };

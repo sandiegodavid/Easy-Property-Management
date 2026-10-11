@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select, tuple_
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -102,6 +102,39 @@ class SQLiteLeaseUnitOfWork:
             if lease is None:
                 return None
             return _view_record(session, lease)
+
+    def lease_directory_page(self, *, status, property_id, cursor, limit):
+        model = LeaseModel
+        filters = []
+        if status is not None:
+            filters.append(model.status == status)
+        if property_id is not None:
+            filters.append(
+                model.space_id.in_(self.portfolio_operations.space_ids_for_property(property_id))
+            )
+        with self.engine.begin() as connection:
+            total = connection.execute(
+                select(func.count()).select_from(model).where(*filters)
+            ).scalar_one()
+            query = select(
+                model.id,
+                model.space_id,
+                model.lease_kind,
+                model.status,
+                model.contract_starts_on,
+                model.contract_ends_on,
+                model.lease_revision,
+            ).where(*filters)
+            if cursor is not None:
+                query = query.where(tuple_(model.contract_starts_on, model.id) > cursor)
+            rows = (
+                connection.execute(
+                    query.order_by(model.contract_starts_on, model.id).limit(limit + 1)
+                )
+                .mappings()
+                .all()
+            )
+            return [dict(row) for row in rows], total
 
     def lease_views(
         self,

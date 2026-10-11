@@ -26,7 +26,11 @@ export function workflowUrl(formKey: string, sourceId?: string, childId?: string
     ? "properties"
     : formKey.startsWith("provider.")
       ? "providers"
-      : "parties";
+      : formKey.startsWith("lease.") ||
+          formKey.startsWith("inspection.") ||
+          formKey === "file.link.archive"
+        ? "leasing"
+        : "parties";
   return `/${family}?${params}`;
 }
 
@@ -34,6 +38,11 @@ function toPayload(definition: Workflow, body: Record<string, unknown>, child?: 
   const values = { ...body };
   delete values.idempotencyKey;
   let payload = values;
+  if (definition.formKey.startsWith("lease.")) {
+    const { expectedLeaseRevision, expectedRevision, ...rest } = values;
+    payload = { ...rest, expectedRevision: expectedLeaseRevision };
+    if (expectedRevision !== undefined) payload.expectedSpaceRevision = expectedRevision;
+  }
   if (definition.nesting === "changes") {
     const { expectedPropertyRevision, ...changes } = values;
     payload = { expectedPropertyRevision, changes };
@@ -49,6 +58,11 @@ function toBody(definition: Workflow, payload: Record<string, unknown>, key?: st
   const values = { ...payload };
   if (definition.childKey) delete values[definition.childKey];
   let body = values;
+  if (definition.formKey.startsWith("lease.")) {
+    const { expectedRevision, expectedSpaceRevision, ...rest } = values;
+    body = { ...rest, expectedLeaseRevision: expectedRevision };
+    if (expectedSpaceRevision !== undefined) body.expectedRevision = expectedSpaceRevision;
+  }
   if (definition.nesting === "changes") {
     const { changes, ...rest } = values;
     body = { ...rest, ...record(changes) };
@@ -105,6 +119,8 @@ export function CommandLoader({
   initial = {},
   choices = {},
   returnTo,
+  reviewSource,
+  checkSource,
 }: {
   definition: Workflow;
   sourceId?: string;
@@ -113,6 +129,8 @@ export function CommandLoader({
   initial?: Record<string, unknown>;
   choices?: Choices;
   returnTo?: string;
+  reviewSource?: () => Promise<{ revision: number; value: unknown }>;
+  checkSource?: (values: Record<string, unknown>) => Promise<void>;
 }) {
   const { scope } = useWorkspace();
   const [params] = useSearchParams();
@@ -152,6 +170,8 @@ export function CommandLoader({
       choices={choices}
       recovered={recovery.data}
       returnTo={returnTo}
+      reviewSource={reviewSource}
+      checkSource={checkSource}
     />
   );
 }
@@ -165,6 +185,8 @@ function CommandEditor({
   choices,
   recovered,
   returnTo,
+  reviewSource,
+  checkSource,
 }: {
   definition: Workflow;
   sourceId?: string;
@@ -174,17 +196,30 @@ function CommandEditor({
   choices: Choices;
   recovered?: Recovery;
   returnTo?: string;
+  reviewSource?: () => Promise<{ revision: number; value: unknown }>;
+  checkSource?: (values: Record<string, unknown>) => Promise<void>;
 }) {
   const { scope } = useWorkspace();
   const location = useLocation();
   const [id] = useState(() => recovered?.id ?? crypto.randomUUID());
   const [error, setError] = useState<string>();
-  const [review, setReview] = useState<{ revision: number; value: unknown }>();
+  const [review, setReview] = useState<{
+    revision: number;
+    value: unknown;
+    spaceRevision?: number;
+  }>();
+  const [attachment, setAttachment] = useState<File>();
+  const [selecting, setSelecting] = useState(false);
+  const evidence = definition.formKey === "inspection.evidence.attach";
+  const [removalConfirmed, setRemovalConfirmed] = useState(false);
+  const requiresRemovalConfirmation = definition.formKey === "lease.participant.remove";
   const [candidates, setCandidates] = useState<string[]>([]);
   const revisionField =
     definition.sourceKind === "property" || definition.formKey === "portfolio.property.create"
       ? "expectedPropertyRevision"
-      : "expectedRevision";
+      : definition.formKey.startsWith("lease.")
+        ? "expectedLeaseRevision"
+        : "expectedRevision";
   const project = useCallback(
     (values: { data: Record<string, unknown> }) =>
       toPayload(definition, record(clean(definition.schema, values.data)), childId),
@@ -217,6 +252,30 @@ function CommandEditor({
     const key = saved.attemptKey;
     if (!key) throw new Error("Prepare the original command identity first.");
     return mutation<unknown>(async () => {
+      if (evidence) {
+        if (!attachment) throw new Error("Reselect the original evidence before retrying.");
+        const selected = await evidenceMetadata(attachment);
+        for (const key of Object.keys(selected))
+          if (selected[key] !== saved.payload[key])
+            throw new Error(
+              "Selected evidence does not match the saved file. Reselect the original file.",
+            );
+        const body = new FormData();
+        body.append("file", attachment);
+        body.append("purpose", scalar(saved.payload.purpose));
+        body.append("expected_revision", scalar(saved.payload.expectedRevision));
+        body.append("idempotency_key", key);
+        return api.POST("/api/condition-observations/{observation_id}/evidence", {
+          params: { path: { observation_id: sourceId! } },
+          body: {
+            file: "",
+            purpose: saved.payload.purpose as "condition_photo" | "supporting_document",
+            expected_revision: Number(saved.payload.expectedRevision),
+            idempotency_key: key,
+          },
+          bodySerializer: () => body,
+        });
+      }
       const response = await dispatchWorkflow(
         definition.formKey,
         sourceId ?? "",
@@ -255,7 +314,26 @@ function CommandEditor({
   }
   async function readCurrent() {
     if (!sourceId) throw new Error("This command has no current source.");
+    if (reviewSource) {
+      setReview(await reviewSource());
+      return;
+    }
     switch (definition.sourceKind) {
+      case "lease": {
+        const lease = readResult(
+          await api.GET("/api/leases/{lease_id}", { params: { path: { lease_id: sourceId } } }),
+        );
+        const space =
+          "expectedRevision" in (definition.schema.properties ?? {})
+            ? readResult(
+                await api.GET("/api/spaces/{space_id}/status", {
+                  params: { path: { space_id: lease.spaceId } },
+                }),
+              )
+            : undefined;
+        setReview({ revision: lease.leaseRevision, value: lease, spaceRevision: space?.revision });
+        break;
+      }
       case "property": {
         const item = readResult(
           await api.GET("/api/properties/{property_id}", {
@@ -318,7 +396,7 @@ function CommandEditor({
               ? `/providers/${sourceId}/details`
               : definition.sourceKind === "party" || definition.sourceKind === "tenant"
                 ? `/parties?identity=${sourceId}`
-                : `/${definition.formKey.startsWith("provider.") ? "providers" : "properties"}`));
+                : `/${definition.formKey.startsWith("provider.") ? "providers" : definition.formKey.startsWith("lease.") || definition.formKey.startsWith("inspection.") ? "leasing" : "properties"}`));
   return (
     <section aria-label={definition.title} className="command-editor">
       <h2>{definition.title}</h2>
@@ -361,18 +439,84 @@ function CommandEditor({
         onSubmit={(event) => {
           event.preventDefault();
           void action(async () => {
+            if (evidence && !attachment)
+              throw new Error("Select the evidence file before submitting.");
+            if (requiresRemovalConfirmation && !removalConfirmed)
+              throw new Error("Confirm removal of this Lease participant.");
             validateRequest(definition.schema, {
               ...record(clean(definition.schema, values)),
               idempotencyKey: crypto.randomUUID(),
             });
+            if (checkSource) await checkSource(values);
             await controller.submit(dispatch);
           });
         }}
       >
         <fieldset disabled={locked || !scope.canWrite}>
           <legend>Requested change</legend>
+          {requiresRemovalConfirmation && (
+            <label>
+              <input
+                type="checkbox"
+                checked={removalConfirmed}
+                onChange={(event) => setRemovalConfirmed(event.target.checked)}
+              />
+              I confirm removal of this Lease participant
+            </label>
+          )}
+          {evidence && (
+            <>
+              <p>
+                Files are never saved in unfinished forms. After restart, reselect the original
+                file; its name, size and SHA-256 must match before replay.
+              </p>
+              <label>
+                Evidence file (required)
+                <input
+                  type="file"
+                  disabled={selecting}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    setAttachment(undefined);
+                    if (!file) return;
+                    setSelecting(true);
+                    void evidenceMetadata(file)
+                      .then((metadata) => {
+                        if (
+                          recovered &&
+                          Object.entries(metadata).some(
+                            ([key, value]) => recovered.payload[key] !== value,
+                          )
+                        )
+                          throw new Error("Selected evidence does not match the saved file.");
+                        form.setValue("data", { ...form.getValues("data"), ...metadata });
+                        setAttachment(file);
+                        setError(undefined);
+                      })
+                      .catch((cause: unknown) =>
+                        setError(
+                          cause instanceof Error ? cause.message : "Could not read evidence.",
+                        ),
+                      )
+                      .finally(() => setSelecting(false));
+                  }}
+                />
+              </label>
+              <Facts
+                value={values}
+                fields={["originalName", "mediaType", "sizeBytes", "contentSha256"]}
+              />
+            </>
+          )}
           <Fields
-            schema={definition.schema}
+            schema={
+              evidence
+                ? {
+                    ...definition.schema,
+                    properties: { purpose: definition.schema.properties!.purpose },
+                  }
+                : definition.schema
+            }
             value={values}
             onChange={(next) => form.setValue("data", record(next))}
             choices={choices}
@@ -381,7 +525,7 @@ function CommandEditor({
         </fieldset>
         {!locked && (
           <>
-            <button type="submit" disabled={!scope.canWrite}>
+            <button type="submit" disabled={!scope.canWrite || selecting}>
               Save {definition.title.toLowerCase()}
             </button>
             <button
@@ -467,8 +611,18 @@ function CommandEditor({
                 });
                 if (!response.data && response.response.status !== 404)
                   throw new Error("Could not check the saved form.");
-                controller.reviewSource(response.data, review.revision, revisionField);
-                form.setValue("data", { ...values, [revisionField]: review.revision });
+                controller.reviewSource(
+                  response.data,
+                  review.revision,
+                  definition.formKey.startsWith("lease.") ? "expectedRevision" : revisionField,
+                );
+                form.setValue("data", {
+                  ...values,
+                  [revisionField]: review.revision,
+                  ...(review.spaceRevision === undefined
+                    ? {}
+                    : { expectedRevision: review.spaceRevision }),
+                });
                 await controller.flush();
                 setReview(undefined);
               });
@@ -483,12 +637,103 @@ function CommandEditor({
           <h3>Committed result</h3>
           <p>Operation {state.record.receipt.receiptId}</p>
           <FactsResult value={state.record.receipt.result} />
+          {(definition.formKey.startsWith("lease.") ||
+            definition.formKey.startsWith("inspection.")) && (
+            <OriginalWorkflowResult
+              family={definition.formKey.startsWith("lease.") ? "lease" : "inspection"}
+              operationId={state.record.receipt.receiptId}
+            />
+          )}
         </section>
       )}
       <Link to={back}>Return to current record</Link>
       <RecoveryNavigation controller={controller} blocker={blocker} />
     </section>
   );
+}
+
+function OriginalWorkflowResult({
+  family,
+  operationId,
+}: {
+  family: "lease" | "inspection";
+  operationId: string;
+}) {
+  const { scope } = useWorkspace();
+  const result = useQuery({
+    queryKey: scope.key("original-workflow-result", family, operationId),
+    queryFn: async ({ signal }) => {
+      if (family === "lease")
+        return readResult(
+          await api.GET("/api/leases/operations/{operation_id}", {
+            signal,
+            params: { path: { operation_id: operationId } },
+          }),
+        ).response;
+      return readResult(
+        await api.GET("/api/inspection-commands/{operation_id}", {
+          signal,
+          params: { path: { operation_id: operationId } },
+        }),
+      ).result;
+    },
+  });
+  return (
+    <>
+      {result.isPending && <p role="status">Loading original committed snapshot…</p>}
+      {result.error && (
+        <p role="alert">
+          The primary result is committed. Its detailed receipt is unavailable:{" "}
+          {result.error.message}
+        </p>
+      )}
+      {result.data && (
+        <>
+          <Facts
+            value={result.data}
+            fields={["id", "status", "leaseRevision", "revision", "updatedAt", "operationId"]}
+          />
+          {family === "lease" && "spaceId" in result.data && (
+            <Link to={`/leases/${result.data.id}/details`}>
+              Open committed Lease and related setup
+            </Link>
+          )}
+          {family === "inspection" && "leaseId" in result.data && (
+            <Link to={`/inspections/${result.data.id}`}>Open committed inspection</Link>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+async function evidenceMetadata(file: File): Promise<Record<string, unknown>> {
+  if (file.size === 0 || file.size > 50 * 1024 * 1024)
+    throw new Error("Evidence must contain 1 byte to 50 MiB.");
+  const originalName = file.name.normalize("NFC").trim();
+  if (
+    !originalName ||
+    [".", ".."].includes(originalName) ||
+    /[/\\\p{Cc}]/u.test(originalName) ||
+    new TextEncoder().encode(originalName).length > 255
+  )
+    throw new Error("Evidence needs a safe display filename of at most 255 UTF-8 bytes.");
+  const declaredType = file.type.trim().toLowerCase();
+  const mediaType =
+    /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+(?:;[a-z0-9!#$&^_.+-]+=[a-z0-9!#$&^_.+-]+)*$/.test(
+      declaredType,
+    )
+      ? declaredType
+      : "application/octet-stream";
+  const hash = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return {
+    originalName,
+    mediaType,
+    sizeBytes: file.size,
+    contentSha256: Array.from(new Uint8Array(hash), (value) =>
+      value.toString(16).padStart(2, "0"),
+    ).join(""),
+  };
 }
 
 function FactsResult({ value }: { value: unknown }) {

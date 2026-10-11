@@ -1,6 +1,6 @@
 # UI-001 implementation slices
 
-Status: backend readiness Slices 41–43 and frontend Slices 44–50 delivered — October 11, 2026. Browser workflows in Slices 51–57 remain open; UI-001 is not complete.
+Status: backend readiness Slices 41–43 and frontend Slices 44–51 delivered — October 11, 2026. Browser workflows in Slices 52–57 remain open; UI-001 is not complete.
 
 Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
 feature-specific AI approval modes, Intake attention consequences, coordinated
@@ -13,9 +13,9 @@ The recorded backend readiness gate and React scaffold are complete; browser wor
 ## Subsequent UI slices — ordered implementation plan
 
 Updated October 11, 2026. Backend Slices 41–43 are recorded as delivered;
-Slices 44–50's React build, workspace gate, navigation, shared components, recovery transport, contextual reads and Portfolio/identity/Provider workflows are delivered. Implement the
+Slices 44–51's React build, workspace gate, navigation, shared components, recovery transport, contextual reads and Portfolio/identity/Provider/Lease/Inspection workflows are delivered. Implement the
 following slices sequentially. Slice numbers continue after the backend sequence;
-Slice 40 stays assigned to UI-002. Slices 44–50 are delivered; Slices 51–57 remain planned.
+Slice 40 stays assigned to UI-002. Slices 44–51 are delivered; Slices 52–57 remain planned.
 The [UI-001 design](UI-001_DESIGN.md#technical-implementation-design) owns the
 interaction and technical requirements.
 
@@ -125,14 +125,34 @@ quality checks above and report blockers without marking unrun checks passed.
    identity handling and interrupted writes. Lint, format, type, contract and
    packaging checks passed. Legal engagements remain UI-002.
 
-8. **Slice 51: Leasing and inspection workflows.**
-   Deliver Lease drafts/participants/terms, execution, renewal, termination and
-   move-out, plus inspection templates, drafts, evidence and lifecycle actions.
-   Respect independent Property/Space and Lease revisions where required. Present
-   lease execution/rent setup and move-out/inspection/settlement as explicit linked
-   steps; a secondary failure must preserve the committed primary result. Verify
-   incomplete drafts, stale timelines, source-owned guards, original receipts,
-   evidence reselection and restart recovery without merging domain lifecycles.
+8. **Slice 51: Leasing and inspection workflows (delivered).**
+   Added bounded Lease directory paging and contextual Lease/Inspection workspaces;
+   registered forms cover drafts, participants, terms, execution, renewal,
+   termination negotiation/completion, move-out, templates, checklists,
+   acknowledgments, finalization, correction, comparison and evidence attachment/archive.
+   Lease and Space revisions remain independent. Saved forms retain child identity;
+   recovery displays original owning-domain receipts rather than current records.
+   Evidence saves metadata/hash only and requires matching byte reselection.
+   Inspection failures do not hide an already committed Lease. Rent setup and
+   settlement links remain separate steps; Money controls belong to Slice 52.
+
+   Evidence below is in `apps/web/tests/leasing-inspections.spec.ts` unless noted.
+
+   | Scenario | Evidence | Result / gap |
+   | --- | --- | --- |
+   | Draft create/edit, participants, terms and renewal | Complete draft creation; saved edit resumption; child add/update/remove; distinct renewal edit/decision requests | Passed against real workspaces; incomplete/foreign-child inputs prevent dispatch |
+   | Execution, move-out and termination | Independent Lease/Space checks; stale Space preserves edits; end/terminate/void; termination request/proposal/accept/complete | Passed; isolated smoke-server clock advances lifecycle fixtures without changing production policy |
+   | Inspection lifecycle and comparison | Template create/edit; draft/checklist setup; acknowledgments/finalization; correction remains a draft; explicit post-move-out comparison | Passed; Inspection actions do not change the committed Lease lifecycle |
+   | Evidence and interrupted writes | Matching-file reselection after restart; changed bytes rejected; lost-response original-key reconciliation; draft archival/history; unavailable download disabled | Passed; bytes never enter persisted OPS recovery; unavailable-state presentation uses a targeted read mock |
+   | Partial failure and bounded reads | Inspection section failure leaves Lease visible; Lease directory no-gap paging and fixed query count in `leases/tests/test_command_readiness.py`; observation ownership read in `inspections/tests/test_command_readiness.py` | Passed; no directory detail hydration or per-row browser reads |
+   | Shared transport and final acceptance | Existing `workflows.spec.ts` and shared recovery tests; reproducible contracts and wheel packaging | Passed; full cross-workflow/theme/narrow-layout and encrypted restart/restore acceptance remains Slice 57 |
+
+   Validation: 28 packaged browser tests (16 Slice 51 and 12 shared workflow
+   regressions), 6 shared recovery tests and 71 focused backend Lease, Inspection
+   and File readiness/workflow tests passed.
+   Frontend lint, formatting, type checking and Python formatting passed. Whole-file
+   Python lint remains blocked by 94 pre-existing violations in the touched modules;
+   comparison with HEAD found no newly introduced diagnostics. No lint rules were relaxed.
 
 9. **Slice 52: Money workflows and reporting drill-down.**
    Deliver Rent, Expenses, Deposits, Scheduled checks and Owner reports using the
@@ -195,7 +215,7 @@ quality checks above and report blockers without marking unrun checks passed.
 ## Command-safety readiness inventory
 
 The approved backend contracts and OPS registrations are delivered. This inventory
-separates that delivery from pending browser workflow acceptance in UI Slices 51–57.
+separates that delivery from pending browser workflow acceptance in UI Slices 52–57.
 A delivered receipt does not enable a browser control or authorize automatic retries.
 
 | Workflow | Delivered backend boundary | UI handoff or scope boundary |
@@ -284,7 +304,9 @@ that a browser control is ready.
 - **Slice 50 delivered:** registered Portfolio inventory/manual-status, shared
   Party/contact, Tenant and Provider/category/child forms, contextual history,
   source review, recovery and original-receipt reconciliation.
-- **Slices 51–56:** consume the delivered bootstrap, source and OPS contracts;
+- **Slice 51 delivered:** Lease/Inspection forms, independent timeline revisions,
+  original receipts, byte-reselection recovery and bounded contextual reads.
+- **Slices 52–56:** consume the delivered bootstrap, source and OPS contracts;
   implement route states, contextual workflows, recovery and accessibility. Each
   enabled workflow needs a real critical read/write integration path and truthful
   capability registration. Do not reconstruct domain rules or receipts in the browser.
@@ -774,7 +796,7 @@ revisions and immutable receipts for all existing Lease and child commands.
 [LEASE-001_COMMAND_READINESS.md](LEASE-001_COMMAND_READINESS.md) contains the
 per-workflow inventory and validation matrix. Slice 30 delivers Lease OPS forms;
 Slices 17–18 and 34 deliver attachment/Inspection contracts and registration.
-Browser workflow integration belongs to UI Slice 51.
+Browser workflow integration is delivered in UI Slice 51.
 
 ## Slice 14: Property, Space, and ownership command safety
 

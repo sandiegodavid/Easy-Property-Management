@@ -217,6 +217,12 @@ class InspectionService:
             raise InspectionNotFoundError("Condition report was not found.")
         return value
 
+    def report_for_observation(self, observation_id):
+        value = self.unit_of_work.observation_report_view(observation_id)
+        if value is None:
+            raise InspectionNotFoundError("Condition observation was not found.")
+        return value
+
     def list_for_lease(self, lease_id):
         lease = self.unit_of_work.lease_summary(lease_id)
         if lease is None:

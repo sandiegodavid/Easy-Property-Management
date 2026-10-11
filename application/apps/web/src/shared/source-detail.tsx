@@ -157,6 +157,7 @@ export function SourceDetail() {
       {result.data && (
         <>
           <h4>{result.data.title}</h4>
+          {kind === "lease" && <Link to={`/leases/${id}/details`}>Open Lease workflow</Link>}
           <dl>
             {Object.entries(result.data.facts).map(([name, value]) => (
               <div key={name}>

@@ -1,6 +1,192 @@
-// The Slice 50 command allowlist. Every request schema comes from OpenAPI;
+// Delivered browser command allowlist. Every request schema comes from OpenAPI;
 // the form key names the independently registered OPS recovery contract.
 export const workflowDefinitions = [
+  [
+    "file.link.archive",
+    "Archive evidence link",
+    "post",
+    "/api/file-links/{link_id}/archive",
+    "file_link",
+  ],
+  ["lease.create", "Create lease draft", "post", "/api/leases", null],
+  ["lease.patch", "Edit lease draft", "patch", "/api/leases/{lease_id}", "lease"],
+  [
+    "lease.term.replace",
+    "Replace draft rent terms",
+    "put",
+    "/api/leases/{lease_id}/initial-term",
+    "lease",
+  ],
+  [
+    "lease.participant.add",
+    "Add lease participant",
+    "post",
+    "/api/leases/{lease_id}/participants",
+    "lease",
+  ],
+  [
+    "lease.participant.update",
+    "Edit lease participant",
+    "patch",
+    "/api/leases/{lease_id}/participants/{participant_id}",
+    "lease",
+    null,
+    "participantId",
+  ],
+  [
+    "lease.participant.remove",
+    "Remove lease participant",
+    "delete",
+    "/api/leases/{lease_id}/participants/{participant_id}",
+    "lease",
+    null,
+    "participantId",
+  ],
+  ...["execute", "end", "terminate", "void"].map((action) => [
+    `lease.${action}`,
+    `${action[0].toUpperCase()}${action.slice(1)} lease`,
+    "post",
+    `/api/leases/{lease_id}/${action}`,
+    "lease",
+  ]),
+  [
+    "lease.renewal.add",
+    "Add renewal option",
+    "post",
+    "/api/leases/{lease_id}/renewal-options",
+    "lease",
+  ],
+  [
+    "lease.renewal.update",
+    "Edit renewal option",
+    "patch",
+    "/api/leases/{lease_id}/renewal-options/{option_id}",
+    "lease",
+    null,
+    "optionId",
+  ],
+  [
+    "lease.renewal.decide",
+    "Decide renewal option",
+    "patch",
+    "/api/leases/{lease_id}/renewal-options/{option_id}",
+    "lease",
+    null,
+    "optionId",
+  ],
+  [
+    "lease.termination.create",
+    "Request termination",
+    "post",
+    "/api/leases/{lease_id}/termination-cases",
+    "lease",
+  ],
+  [
+    "lease.termination.proposal.add",
+    "Add termination proposal",
+    "post",
+    "/api/termination-cases/{case_id}/proposals",
+    "lease",
+    null,
+    "caseId",
+  ],
+  [
+    "lease.termination.proposal.accept",
+    "Accept termination proposal",
+    "post",
+    "/api/termination-cases/{case_id}/accept",
+    "lease",
+    null,
+    "caseId",
+  ],
+  [
+    "lease.termination.transition",
+    "Review termination request",
+    "patch",
+    "/api/termination-cases/{case_id}",
+    "lease",
+    null,
+    "caseId",
+  ],
+  [
+    "lease.termination.complete",
+    "Complete termination",
+    "post",
+    "/api/termination-cases/{case_id}/complete",
+    "lease",
+    null,
+    "caseId",
+  ],
+  [
+    "inspection.report.create",
+    "Create inspection draft",
+    "post",
+    "/api/leases/{lease_id}/condition-reports",
+    "inspection_lease",
+  ],
+  [
+    "inspection.report.patch",
+    "Edit inspection draft",
+    "patch",
+    "/api/condition-reports/{report_id}",
+    "condition_report",
+  ],
+  [
+    "inspection.report.areas.replace",
+    "Edit inspection checklist",
+    "put",
+    "/api/condition-reports/{report_id}/areas",
+    "condition_report",
+  ],
+  [
+    "inspection.report.acknowledge",
+    "Record inspection acknowledgments",
+    "put",
+    "/api/condition-reports/{report_id}/acknowledgments",
+    "condition_report",
+  ],
+  [
+    "inspection.report.finalize",
+    "Finalize inspection",
+    "post",
+    "/api/condition-reports/{report_id}/finalize",
+    "condition_report",
+  ],
+  [
+    "inspection.report.correct",
+    "Correct finalized inspection",
+    "post",
+    "/api/condition-reports/{report_id}/corrections",
+    "condition_report",
+  ],
+  [
+    "inspection.evidence.attach",
+    "Attach inspection evidence",
+    "post",
+    "/api/condition-observations/{observation_id}/evidence",
+    "condition_observation",
+  ],
+  [
+    "inspection.comparison.review",
+    "Review condition comparison",
+    "put",
+    "/api/leases/{lease_id}/condition-comparison",
+    "inspection_lease",
+  ],
+  [
+    "inspection.template.create",
+    "Create inspection template",
+    "post",
+    "/api/condition-checklist-templates",
+    null,
+  ],
+  [
+    "inspection.template.patch",
+    "Edit inspection template",
+    "patch",
+    "/api/condition-checklist-templates/{template_id}",
+    "condition_template",
+  ],
   ["portfolio.property.create", "Create property", "post", "/api/properties", null],
   [
     "portfolio.property.patch",
@@ -287,7 +473,7 @@ export function workflowContracts(openapi) {
         key,
         key === "properties"
           ? Object.fromEntries(Object.entries(value).map(([name, child]) => [name, inline(child)]))
-          : key === "items"
+          : key === "items" || (key === "additionalProperties" && typeof value === "object")
             ? inline(value)
             : key === "anyOf" || key === "oneOf"
               ? value.map(inline)
@@ -297,22 +483,76 @@ export function workflowContracts(openapi) {
   };
   return (
     JSON.stringify(
-      workflowDefinitions.map(([formKey, title, method, path, sourceKind, nesting, childKey]) => {
-        if (!openapi.components.schemas.RecoveryInput.properties.formKey.enum.includes(formKey))
-          throw new Error(`Unregistered OPS form: ${formKey}`);
-        const operation = openapi.paths[path][method];
-        return {
-          formKey,
-          title,
-          method,
-          path,
-          sourceKind,
-          nesting: nesting ?? null,
-          childKey: childKey ?? null,
-          operationId: operation.operationId,
-          schema: inline(operation.requestBody.content["application/json"].schema),
-        };
-      }),
+      workflowDefinitions
+        .map(([formKey, title, method, path, sourceKind, nesting, childKey]) => {
+          if (!openapi.components.schemas.RecoveryInput.properties.formKey.enum.includes(formKey))
+            throw new Error(`Unregistered OPS form: ${formKey}`);
+          const operation = openapi.paths[path][method];
+          return {
+            formKey,
+            title,
+            method,
+            path,
+            sourceKind,
+            nesting: nesting ?? null,
+            childKey: childKey ?? null,
+            operationId: operation.operationId,
+            schema:
+              formKey === "inspection.evidence.attach"
+                ? {
+                    type: "object",
+                    additionalProperties: false,
+                    required: [
+                      "purpose",
+                      "expectedRevision",
+                      "idempotencyKey",
+                      "originalName",
+                      "mediaType",
+                      "sizeBytes",
+                      "contentSha256",
+                    ],
+                    properties: {
+                      purpose: inline(operation.requestBody.content["multipart/form-data"].schema)
+                        .properties.purpose,
+                      expectedRevision: { type: "integer", minimum: 0 },
+                      idempotencyKey: { type: "string", format: "uuid" },
+                      originalName: { type: "string", minLength: 1, maxLength: 255 },
+                      mediaType: { type: "string", minLength: 1, maxLength: 255 },
+                      sizeBytes: { type: "integer", minimum: 1, maximum: 50 * 1024 * 1024 },
+                      contentSha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+                    },
+                  }
+                : inline(operation.requestBody.content["application/json"].schema),
+          };
+        })
+        .map((definition) => {
+          if (definition.formKey === "lease.renewal.update")
+            definition.schema.properties = Object.fromEntries(
+              Object.entries(definition.schema.properties).filter(
+                ([key]) => !["status", "decidedOn"].includes(key),
+              ),
+            );
+          if (definition.formKey === "lease.renewal.decide") {
+            definition.schema.properties = Object.fromEntries(
+              Object.entries(definition.schema.properties).filter(([key]) =>
+                [
+                  "status",
+                  "decidedOn",
+                  "notes",
+                  "expectedLeaseRevision",
+                  "idempotencyKey",
+                ].includes(key),
+              ),
+            );
+            definition.schema.required = [
+              "status",
+              "decidedOn",
+              "expectedLeaseRevision",
+              "idempotencyKey",
+            ];
+          }
+          return definition;
+        }),
       null,
       2,
     ) + "\n"
@@ -322,6 +562,8 @@ export function workflowContracts(openapi) {
 export function workflowDispatch(openapi) {
   const cases = workflowDefinitions
     .map(([key, , method, path, , , childKey]) => {
+      if (key === "inspection.evidence.attach")
+        return `    case ${JSON.stringify(key)}: throw new Error("Reselect verified evidence in the inspection editor.");`;
       const schema = openapi.paths[path][method].requestBody.content["application/json"].schema.$ref
         .split("/")
         .at(-1);

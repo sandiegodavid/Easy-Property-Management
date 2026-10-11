@@ -128,6 +128,14 @@ class LeaseTransaction(Protocol):
 
 
 class LeaseUnitOfWork(Protocol):
+    def lease_directory_page(
+        self,
+        *,
+        status: str | None,
+        property_id: str | None,
+        cursor: tuple[str, str] | None,
+        limit: int,
+    ) -> tuple[list[dict[str, object]], int]: ...
     def command_operation(
         self, *, operation_id: str | None = None, idempotency_key: str | None = None
     ) -> LeaseCommandReceipt | None: ...

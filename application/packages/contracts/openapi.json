@@ -16296,6 +16296,114 @@
         "title": "LeaseCreateRequest",
         "type": "object"
       },
+      "LeaseDirectoryItem": {
+        "additionalProperties": false,
+        "properties": {
+          "contractEndsOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contractendson"
+          },
+          "contractStartsOn": {
+            "format": "date",
+            "title": "Contractstartson",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "leaseKind": {
+            "enum": [
+              "residential",
+              "commercial"
+            ],
+            "title": "Leasekind",
+            "type": "string"
+          },
+          "leaseRevision": {
+            "minimum": 0.0,
+            "title": "Leaserevision",
+            "type": "integer"
+          },
+          "spaceId": {
+            "format": "uuid",
+            "title": "Spaceid",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "executed",
+              "ended",
+              "terminated",
+              "void"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "spaceId",
+          "leaseKind",
+          "status",
+          "contractStartsOn",
+          "contractEndsOn",
+          "leaseRevision"
+        ],
+        "title": "LeaseDirectoryItem",
+        "type": "object"
+      },
+      "LeaseDirectoryPage": {
+        "additionalProperties": false,
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "title": "Asof",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LeaseDirectoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "matchingTotal": {
+            "minimum": 0.0,
+            "title": "Matchingtotal",
+            "type": "integer"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "required": [
+          "items",
+          "matchingTotal",
+          "nextCursor",
+          "asOf"
+        ],
+        "title": "LeaseDirectoryPage",
+        "type": "object"
+      },
       "LeaseFileResponse": {
         "additionalProperties": false,
         "properties": {
@@ -44470,6 +44578,69 @@
         ]
       }
     },
+    "/api/condition-observations/{observation_id}/report": {
+      "get": {
+        "operationId": "getConditionObservationReport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "observation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Observation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectionConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Observation Report",
+        "tags": [
+          "inspections"
+        ]
+      }
+    },
     "/api/condition-reports/{report_id}": {
       "get": {
         "operationId": "getConditionReport",
@@ -46022,6 +46193,69 @@
         "summary": "Void Expense",
         "tags": [
           "expenses"
+        ]
+      }
+    },
+    "/api/file-links/{link_id}": {
+      "get": {
+        "operationId": "getFileLink",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "File Link",
+        "tags": [
+          "files"
         ]
       }
     },
@@ -47805,6 +48039,129 @@
           }
         },
         "summary": "Create",
+        "tags": [
+          "leases"
+        ]
+      }
+    },
+    "/api/leases/directory": {
+      "get": {
+        "operationId": "getLeaseDirectory",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "draft",
+                    "executed",
+                    "ended",
+                    "terminated",
+                    "void"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "propertyId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Propertyid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 47,
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}\\|[0-9a-f-]{36}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseDirectoryPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaseConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Directory",
         "tags": [
           "leases"
         ]

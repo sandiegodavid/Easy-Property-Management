@@ -234,6 +234,16 @@ def build_router(
         return {"count": len(outstanding), "outstanding": outstanding}
 
     @router.get(
+        "/api/file-links/{link_id}", response_model=FileLinkResponse, operation_id="getFileLink"
+    )
+    def file_link(link_id: UUID) -> dict[str, object]:
+        require_ready(write=False)
+        try:
+            return service.get_link(str(link_id))
+        except FileError as error:
+            raise _file_http_error(error) from error
+
+    @router.get(
         "/api/files/{file_id}", response_model=FileMetadataResponse, operation_id="getFileMetadata"
     )
     def metadata(file_id: UUID) -> dict[str, object]:
