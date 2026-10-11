@@ -1,6 +1,6 @@
 # UI-001 implementation slices
 
-Status: backend readiness Slices 41–43 and frontend Slices 44–48 delivered — October 10, 2026. Browser workflows in Slices 49–57 remain open; UI-001 is not complete.
+Status: backend readiness Slices 41–43 and frontend Slices 44–49 delivered — October 10, 2026. Browser workflows in Slices 50–57 remain open; UI-001 is not complete.
 
 Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
 feature-specific AI approval modes, Intake attention consequences, coordinated
@@ -13,9 +13,9 @@ The recorded backend readiness gate and React scaffold are complete; browser wor
 ## Subsequent UI slices — ordered implementation plan
 
 Updated October 9, 2026. Backend Slices 41–43 are recorded as delivered;
-Slices 44–48's React build, workspace gate, navigation, shared components, recovery transport and focused browser proofs are delivered. Implement the
+Slices 44–49's React build, workspace gate, navigation, shared components, recovery transport, contextual read workspaces and focused browser proofs are delivered. Implement the
 following slices sequentially. Slice numbers continue after the backend sequence;
-Slice 40 stays assigned to UI-002. Slices 44–48 are delivered; Slices 49–57 remain planned.
+Slice 40 stays assigned to UI-002. Slices 44–49 are delivered; Slices 50–57 remain planned.
 The [UI-001 design](UI-001_DESIGN.md#technical-implementation-design) owns the
 interaction and technical requirements.
 
@@ -72,7 +72,7 @@ support visual development but do not establish backend or workflow readiness.
    lost responses, same-key replay, changed-payload conflict, two-tab stale edits,
    cancellation, restart/restore and file-reselection guidance on real commands.
 
-6. **Slice 49: Property/owner directories and contextual read workspaces.**
+6. **Slice 49: Property/owner directories and contextual read workspaces (delivered).**
    Consume OPS bounded directories and overviews with recognition, filters, exact
    totals, independent continuations, `asOf`, partial availability and source
    drill-down. Implement current/former owner relationships and explicit-period
@@ -160,7 +160,7 @@ support visual development but do not establish backend or workflow readiness.
 ## Command-safety readiness inventory
 
 The approved backend contracts and OPS registrations are delivered. This inventory
-separates that delivery from pending browser workflow acceptance in UI Slices 49–57.
+separates that delivery from pending browser workflow acceptance in UI Slices 50–57.
 A delivered receipt does not enable a browser control or authorize automatic retries.
 
 | Workflow | Delivered backend boundary | UI handoff or scope boundary |
@@ -243,7 +243,10 @@ that a browser control is ready.
 - **Slice 48 delivered:** mutation error normalization, serialized autosave,
   durable OPS attempts, receipt reconciliation, RHF form ownership and guarded
   navigation; real Task commands exercise the shared recovery contracts.
-- **Slices 49–56:** consume the delivered bootstrap, source and OPS contracts;
+- **Slice 49 delivered:** bounded property/owner directories, contextual read
+  workspaces, independent section continuations, explicit-period whole-property
+  money and on-demand source detail.
+- **Slices 50–56:** consume the delivered bootstrap, source and OPS contracts;
   implement route states, contextual workflows, recovery and accessibility. Each
   enabled workflow needs a real critical read/write integration path and truthful
   capability registration. Do not reconstruct domain rules or receipts in the browser.
@@ -2424,3 +2427,52 @@ recovery-page test passed. All 14 registered deep-link cases and the focused
 encrypted OPS backup/restore test passed. Contract reproducibility, production
 build/wheel packaging, frontend lint/format/type checks, changed Python Ruff
 checks and diff whitespace validation passed. Only focused tests ran.
+
+## Slice 49: Property/owner directories and contextual read workspaces (delivered)
+
+Delivered October 10, 2026. Properties and Owners now consume the typed OPS
+directory endpoints with bounded 50-record requests, server totals, recognition
+fields, coverage previews, visible read instants and expandable source revisions.
+Search and lifecycle, ownership, occupancy, availability, attention and relationship
+filters live in the URL. Opaque continuations preserve the filters; expired or
+changed views offer an explicit restart. Sparse pages retain the server total and
+continuation. Membership and financial aggregation remain in the source-owned
+backend compositions.
+
+Contextual property and owner tabs consume OPS overview sections with independent
+10-record continuations, exact counts, provenance and unavailable states. A section
+failure does not become zero or erase healthy sections. Owner relationships can
+be current, former or all, with explicit intervals and archived identities.
+Directory return links preserve filters in navigation state, and a labeled record
+switcher searches a bounded directory. Source links load a selected Space, Lease,
+Task, Maintenance issue, Communication or Owner concern through its typed read
+endpoint; this happens only on demand. Property source links open the property
+workspace. Source detail closes back into the original contextual read.
+
+Money requires an explicit from/through period, shows authoritative decimal text
+and currency without floating-point arithmetic, and labels related-property
+activity as whole-property activity rather than owner entitlement. Current
+deposit obligations are separately explained as spanning all recorded dates.
+Scheduled checks and pending owner reports are not presented as received income.
+Dates and relationship scope remain in contextual navigation. Detailed financial
+source workflows belong to Slice 52; these views expose no mutation controls.
+Documents and the subsequent domain editors remain in their scheduled slices.
+
+Focused validation matrix:
+
+| Area | Focused proof |
+| --- | --- |
+| Happy paths | Packaged browser reads real temporary-workspace properties, distinct owners, related-property totals, record switching, source detail and explicit-period money |
+| Invalid combinations | Period inversion remains a visible error with input retained; source/section failures do not claim empty data; capability guards remain enforced |
+| Continuations/retry | Sparse page retains total/next cursor; 409 restarts preserve directory filters; Task paging changes only its section; explicit refresh without automatic retries |
+| Rollback/no effects | Read-only slice; no domain mutations or recovery writes from directory/overview navigation; test setup alone creates records |
+| Persistence/schema | Existing source-owned schema and generated API contracts reused; no schema or persistence changes |
+| Backup/restore | No new retained browser state; existing workspace identity/epoch gate scopes caches and continuations; archive UI acceptance remains Slice 57 |
+| Query budget | One bounded directory request, bounded previews, independent single-section continuation, selected-source-only detail; focused backend tests verify one/100-record and large-owner query budgets |
+| Temporal/history | Focused backend tests cover property-local midnight, end-exclusive relationships, former archived owners, source changes and snapshot consistency |
+| Accessibility | Labeled filters and switcher, named sections, visible status/error text, source links, narrow layout and existing light/dark shell proofs |
+
+Validation: 4 packaged directory/overview browser tests and 5 focused shell tests;
+27 focused OPS directory/overview Python tests. Frontend lint, format and complete
+project type checks, generated-contract reproducibility, production build/wheel
+packaging and diff whitespace validation pass. Only focused tests ran.

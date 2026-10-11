@@ -23,6 +23,7 @@ import {
 } from "./destinations";
 import { PreferencesProvider, PreferenceSettings, usePreferences } from "./preferences";
 import { RecoveryPage } from "../shared/recovery-page";
+import { Directory, ContextOverview, ContextNavigator } from "../shared/context-reads";
 
 function PendingPage({ title }: { title: string }) {
   const [params, setParams] = useSearchParams();
@@ -91,15 +92,19 @@ function DestinationGuard({ id }: { id: string }) {
 }
 function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
   const { id = "" } = useParams();
+  const [params] = useSearchParams();
+  const location = useLocation();
   const sections = kind === "property" ? propertySections : ownerSections;
+  const navigationState: unknown = location.state;
   if (contextPath({ kind, id }) === "/home") return <Unavailable />;
   return (
     <section>
       <h2>{kind === "property" ? "Property" : "Owner"} workspace</h2>
       <p>{id}</p>
+      <ContextNavigator key={`${kind}:${id}`} kind={kind} />
       <nav aria-label={`${kind} sections`}>
         {sections.map((section) => (
-          <NavLink key={section} to={section}>
+          <NavLink key={section} state={navigationState} to={`${section}?${params.toString()}`}>
             {section}
           </NavLink>
         ))}
@@ -207,7 +212,17 @@ export function ApplicationShell() {
             <Route key={item.id} element={<DestinationGuard id={item.id} />}>
               <Route
                 path={item.route}
-                element={item.id === "settings" ? <Outlet /> : <PendingPage title={item.label} />}
+                element={
+                  item.id === "settings" ? (
+                    <Outlet />
+                  ) : item.id === "properties" ? (
+                    <Directory kind="property" />
+                  ) : item.id === "owners" ? (
+                    <Directory kind="owner" />
+                  ) : (
+                    <PendingPage title={item.label} />
+                  )
+                }
               >
                 {item.id === "settings" && (
                   <>
@@ -243,7 +258,17 @@ export function ApplicationShell() {
               >
                 <Route index element={<Navigate to="overview" replace />} />
                 {(kind === "property" ? propertySections : ownerSections).map((section) => (
-                  <Route key={section} path={section} element={<PendingPage title={section} />} />
+                  <Route
+                    key={section}
+                    path={section}
+                    element={
+                      section === "documents" ? (
+                        <PendingPage title={section} />
+                      ) : (
+                        <ContextOverview kind={kind} tab={section} />
+                      )
+                    }
+                  />
                 ))}
               </Route>
             </Route>

@@ -138,3 +138,29 @@ li {
 h1 {
   line-height: 1.2;
 }
+.read-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: end;
+}
+.read-filters label {
+  display: grid;
+  gap: 0.3rem;
+}
+.context-cards {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+.context-cards > li,
+.context-section {
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-block: 1rem;
+}
+.read-revision {
+  overflow-wrap: anywhere;
+}
