@@ -4,6 +4,9 @@ import { api } from "@epm/contracts";
 import { useWorkspace } from "../app/workspace-gate";
 import { normalizeApiError } from "./mutations";
 import { recoveryApi } from "./recovery";
+import { Link } from "react-router-dom";
+import { workflows } from "@epm/contracts/workflows";
+import { workflowUrl } from "../workflows/command";
 
 // Bounded metadata only. Feature editors load their own allowlisted payloads.
 export function RecoveryPage() {
@@ -74,8 +77,17 @@ export function RecoveryPage() {
                     Reconcile attempt
                   </button>
                 )}
-                {record.status === "active" && (
-                  <span> — Resume from the owning workflow when its editor is available.</span>
+                {workflows.some((workflow) => workflow.formKey === record.formKey) &&
+                ["active", "outcome_unknown"].includes(record.status) ? (
+                  <Link
+                    to={`${workflowUrl(record.formKey, record.sourceId ?? undefined)}&resume=${record.id}`}
+                  >
+                    Resume {record.formKey}
+                  </Link>
+                ) : (
+                  record.status === "active" && (
+                    <span> — Resume from the owning workflow when its editor is available.</span>
+                  )
                 )}
               </li>
             ))}

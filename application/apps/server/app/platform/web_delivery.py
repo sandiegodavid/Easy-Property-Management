@@ -30,6 +30,7 @@ ROOT_ROUTES = {
     "/tasks",
     "/maintenance",
     "/providers",
+    "/parties",
     "/search",
     "/money",
     "/settings",

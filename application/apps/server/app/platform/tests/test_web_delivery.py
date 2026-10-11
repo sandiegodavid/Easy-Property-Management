@@ -43,6 +43,7 @@ def client(tmp_path, build):
     [
         "/home",
         "/properties",
+        "/parties",
         f"/properties/{ID}/units",
         f"/owners/{ID}/money",
         f"/leases/{ID}/terms",

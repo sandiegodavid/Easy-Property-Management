@@ -1,0 +1,4300 @@
+[
+  {
+    "formKey": "portfolio.property.create",
+    "title": "Create property",
+    "method": "post",
+    "path": "/api/properties",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createPortfolioProperty",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "addressLine1": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Addressline1",
+          "type": "string"
+        },
+        "addressLine2": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Addressline2"
+        },
+        "city": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "City",
+          "type": "string"
+        },
+        "countryCode": {
+          "maxLength": 2,
+          "minLength": 2,
+          "title": "Countrycode",
+          "type": "string"
+        },
+        "displayName": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "expectedPropertyRevision": {
+          "maximum": 0,
+          "minimum": 0,
+          "title": "Expectedpropertyrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "inventoryLayout": {
+          "anyOf": [
+            {
+              "enum": [
+                "single_space",
+                "whole_office",
+                "office_suites"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Inventorylayout"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "ownerships": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "inlineParty": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "displayName": {
+                        "maxLength": 240,
+                        "minLength": 1,
+                        "title": "Displayname",
+                        "type": "string"
+                      },
+                      "partyKind": {
+                        "enum": [
+                          "individual",
+                          "organization"
+                        ],
+                        "title": "Partykind",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "partyKind",
+                      "displayName"
+                    ],
+                    "title": "PartyRequest",
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ownerKind": {
+                "enum": [
+                  "local_operator",
+                  "client_owner"
+                ],
+                "title": "Ownerkind",
+                "type": "string"
+              },
+              "partyId": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Partyid"
+              }
+            },
+            "required": [
+              "ownerKind"
+            ],
+            "title": "OwnershipRequest",
+            "type": "object"
+          },
+          "minItems": 1,
+          "title": "Ownerships",
+          "type": "array"
+        },
+        "postalCode": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Postalcode"
+        },
+        "propertyType": {
+          "enum": [
+            "single_family_home",
+            "condo",
+            "townhome",
+            "office"
+          ],
+          "title": "Propertytype",
+          "type": "string"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Region"
+        },
+        "spaces": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "availability": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "availabilityStatus": {
+                            "enum": [
+                              "available_now",
+                              "available_on",
+                              "not_available",
+                              "unknown"
+                            ],
+                            "title": "Availabilitystatus",
+                            "type": "string"
+                          },
+                          "availableOn": {
+                            "anyOf": [
+                              {
+                                "format": "date",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "title": "Availableon"
+                          },
+                          "expectedRevision": {
+                            "anyOf": [
+                              {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "title": "Expectedrevision"
+                          },
+                          "idempotencyKey": {
+                            "anyOf": [
+                              {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "title": "Idempotencykey"
+                          },
+                          "note": {
+                            "anyOf": [
+                              {
+                                "maxLength": 1000,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "title": "Note"
+                          }
+                        },
+                        "required": [
+                          "availabilityStatus"
+                        ],
+                        "title": "AvailabilityRequest",
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "displayName": {
+                    "maxLength": 120,
+                    "minLength": 1,
+                    "title": "Displayname",
+                    "type": "string"
+                  },
+                  "notes": {
+                    "anyOf": [
+                      {
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Notes"
+                  },
+                  "occupancy": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "effectiveOn": {
+                            "format": "date",
+                            "title": "Effectiveon",
+                            "type": "string"
+                          },
+                          "expectedRevision": {
+                            "anyOf": [
+                              {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "title": "Expectedrevision"
+                          },
+                          "idempotencyKey": {
+                            "anyOf": [
+                              {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "title": "Idempotencykey"
+                          },
+                          "note": {
+                            "anyOf": [
+                              {
+                                "maxLength": 1000,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "title": "Note"
+                          },
+                          "occupancyStatus": {
+                            "enum": [
+                              "occupied",
+                              "vacant",
+                              "unknown"
+                            ],
+                            "title": "Occupancystatus",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "occupancyStatus",
+                          "effectiveOn"
+                        ],
+                        "title": "OccupancyRequest",
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "suiteOrFloor": {
+                    "anyOf": [
+                      {
+                        "maxLength": 80,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Suiteorfloor"
+                  }
+                },
+                "required": [
+                  "displayName"
+                ],
+                "title": "SpaceCreateRequest",
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Spaces"
+        }
+      },
+      "required": [
+        "expectedPropertyRevision",
+        "idempotencyKey",
+        "displayName",
+        "addressLine1",
+        "city",
+        "countryCode",
+        "ownerships",
+        "propertyType"
+      ],
+      "title": "PropertyCreateRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.property.patch",
+    "title": "Edit property",
+    "method": "patch",
+    "path": "/api/properties/{property_id}",
+    "sourceKind": "property",
+    "nesting": "changes",
+    "childKey": null,
+    "operationId": "patchPortfolioProperty",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "addressLine1": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Addressline1"
+        },
+        "addressLine2": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Addressline2"
+        },
+        "city": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "City"
+        },
+        "countryCode": {
+          "anyOf": [
+            {
+              "maxLength": 2,
+              "minLength": 2,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Countrycode"
+        },
+        "displayName": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Displayname"
+        },
+        "expectedPropertyRevision": {
+          "minimum": 0,
+          "title": "Expectedpropertyrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "postalCode": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Postalcode"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Region"
+        }
+      },
+      "required": [
+        "expectedPropertyRevision",
+        "idempotencyKey"
+      ],
+      "title": "PropertyPatchRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.property.archive",
+    "title": "Archive property",
+    "method": "post",
+    "path": "/api/properties/{property_id}/archive",
+    "sourceKind": "property",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "archivePortfolioProperty",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedPropertyRevision": {
+          "minimum": 0,
+          "title": "Expectedpropertyrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedPropertyRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "InventoryConfirmationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.property.restore",
+    "title": "Restore property",
+    "method": "post",
+    "path": "/api/properties/{property_id}/restore",
+    "sourceKind": "property",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "restorePortfolioProperty",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedPropertyRevision": {
+          "minimum": 0,
+          "title": "Expectedpropertyrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedPropertyRevision",
+        "idempotencyKey"
+      ],
+      "title": "InventoryRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.ownerships.replace",
+    "title": "Change ownership",
+    "method": "put",
+    "path": "/api/properties/{property_id}/ownerships",
+    "sourceKind": "property",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "replacePortfolioOwnerships",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "effectiveOn": {
+          "format": "date",
+          "title": "Effectiveon",
+          "type": "string"
+        },
+        "expectedPropertyRevision": {
+          "minimum": 0,
+          "title": "Expectedpropertyrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "ownerships": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "inlineParty": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "displayName": {
+                        "maxLength": 240,
+                        "minLength": 1,
+                        "title": "Displayname",
+                        "type": "string"
+                      },
+                      "partyKind": {
+                        "enum": [
+                          "individual",
+                          "organization"
+                        ],
+                        "title": "Partykind",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "partyKind",
+                      "displayName"
+                    ],
+                    "title": "PartyRequest",
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "ownerKind": {
+                "enum": [
+                  "local_operator",
+                  "client_owner"
+                ],
+                "title": "Ownerkind",
+                "type": "string"
+              },
+              "partyId": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Partyid"
+              }
+            },
+            "required": [
+              "ownerKind"
+            ],
+            "title": "OwnershipRequest",
+            "type": "object"
+          },
+          "minItems": 1,
+          "title": "Ownerships",
+          "type": "array"
+        }
+      },
+      "required": [
+        "expectedPropertyRevision",
+        "idempotencyKey",
+        "effectiveOn",
+        "ownerships"
+      ],
+      "title": "OwnershipReplaceRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.space.create",
+    "title": "Add office suite",
+    "method": "post",
+    "path": "/api/properties/{property_id}/spaces",
+    "sourceKind": "property",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "addPortfolioSpace",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "availability": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "availabilityStatus": {
+                  "enum": [
+                    "available_now",
+                    "available_on",
+                    "not_available",
+                    "unknown"
+                  ],
+                  "title": "Availabilitystatus",
+                  "type": "string"
+                },
+                "availableOn": {
+                  "anyOf": [
+                    {
+                      "format": "date",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Availableon"
+                },
+                "expectedRevision": {
+                  "anyOf": [
+                    {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Expectedrevision"
+                },
+                "idempotencyKey": {
+                  "anyOf": [
+                    {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Idempotencykey"
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "maxLength": 1000,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Note"
+                }
+              },
+              "required": [
+                "availabilityStatus"
+              ],
+              "title": "AvailabilityRequest",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "displayName": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "expectedPropertyRevision": {
+          "minimum": 0,
+          "title": "Expectedpropertyrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "occupancy": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "effectiveOn": {
+                  "format": "date",
+                  "title": "Effectiveon",
+                  "type": "string"
+                },
+                "expectedRevision": {
+                  "anyOf": [
+                    {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Expectedrevision"
+                },
+                "idempotencyKey": {
+                  "anyOf": [
+                    {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Idempotencykey"
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "maxLength": 1000,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Note"
+                },
+                "occupancyStatus": {
+                  "enum": [
+                    "occupied",
+                    "vacant",
+                    "unknown"
+                  ],
+                  "title": "Occupancystatus",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "occupancyStatus",
+                "effectiveOn"
+              ],
+              "title": "OccupancyRequest",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "suiteOrFloor": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Suiteorfloor"
+        }
+      },
+      "required": [
+        "expectedPropertyRevision",
+        "idempotencyKey",
+        "displayName"
+      ],
+      "title": "SpaceAddRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.space.patch",
+    "title": "Edit space",
+    "method": "patch",
+    "path": "/api/spaces/{space_id}",
+    "sourceKind": "property",
+    "nesting": "changes",
+    "childKey": "spaceId",
+    "operationId": "patchPortfolioSpace",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "displayName": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Displayname"
+        },
+        "expectedPropertyRevision": {
+          "minimum": 0,
+          "title": "Expectedpropertyrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "suiteOrFloor": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Suiteorfloor"
+        }
+      },
+      "required": [
+        "expectedPropertyRevision",
+        "idempotencyKey"
+      ],
+      "title": "SpacePatchRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.space.archive",
+    "title": "Archive space",
+    "method": "post",
+    "path": "/api/spaces/{space_id}/archive",
+    "sourceKind": "property",
+    "nesting": null,
+    "childKey": "spaceId",
+    "operationId": "archivePortfolioSpace",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedPropertyRevision": {
+          "minimum": 0,
+          "title": "Expectedpropertyrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedPropertyRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "InventoryConfirmationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.space.restore",
+    "title": "Restore space",
+    "method": "post",
+    "path": "/api/spaces/{space_id}/restore",
+    "sourceKind": "property",
+    "nesting": null,
+    "childKey": "spaceId",
+    "operationId": "restorePortfolioSpace",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedPropertyRevision": {
+          "minimum": 0,
+          "title": "Expectedpropertyrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "pattern": "^\\S(?:.*\\S)?$",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedPropertyRevision",
+        "idempotencyKey"
+      ],
+      "title": "InventoryRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.occupancy.change",
+    "title": "Change occupancy",
+    "method": "put",
+    "path": "/api/spaces/{space_id}/occupancy",
+    "sourceKind": "space",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "changePortfolioSpaceOccupancy",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "effectiveOn": {
+          "format": "date",
+          "title": "Effectiveon",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Note"
+        },
+        "occupancyStatus": {
+          "enum": [
+            "occupied",
+            "vacant",
+            "unknown"
+          ],
+          "title": "Occupancystatus",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occupancyStatus",
+        "effectiveOn",
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "OccupancyMutationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.availability.change",
+    "title": "Change availability",
+    "method": "put",
+    "path": "/api/spaces/{space_id}/availability",
+    "sourceKind": "space",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "changePortfolioSpaceAvailability",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "availabilityStatus": {
+          "enum": [
+            "available_now",
+            "available_on",
+            "not_available",
+            "unknown"
+          ],
+          "title": "Availabilitystatus",
+          "type": "string"
+        },
+        "availableOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Availableon"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Note"
+        }
+      },
+      "required": [
+        "availabilityStatus",
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "AvailabilityMutationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.space.classify",
+    "title": "Classify space",
+    "method": "put",
+    "path": "/api/spaces/{space_id}/classification",
+    "sourceKind": "space",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "classifyPortfolioSpace",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "availability": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "availabilityStatus": {
+                  "enum": [
+                    "available_now",
+                    "available_on",
+                    "not_available",
+                    "unknown"
+                  ],
+                  "title": "Availabilitystatus",
+                  "type": "string"
+                },
+                "availableOn": {
+                  "anyOf": [
+                    {
+                      "format": "date",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Availableon"
+                },
+                "expectedRevision": {
+                  "anyOf": [
+                    {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Expectedrevision"
+                },
+                "idempotencyKey": {
+                  "anyOf": [
+                    {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Idempotencykey"
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "maxLength": 1000,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Note"
+                }
+              },
+              "required": [
+                "availabilityStatus"
+              ],
+              "title": "AvailabilityRequest",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "occupancy": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "effectiveOn": {
+                  "format": "date",
+                  "title": "Effectiveon",
+                  "type": "string"
+                },
+                "expectedRevision": {
+                  "anyOf": [
+                    {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Expectedrevision"
+                },
+                "idempotencyKey": {
+                  "anyOf": [
+                    {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Idempotencykey"
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "maxLength": 1000,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Note"
+                },
+                "occupancyStatus": {
+                  "enum": [
+                    "occupied",
+                    "vacant",
+                    "unknown"
+                  ],
+                  "title": "Occupancystatus",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "occupancyStatus",
+                "effectiveOn"
+              ],
+              "title": "OccupancyRequest",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "SpaceClassificationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.occupancy.cancel",
+    "title": "Cancel scheduled occupancy",
+    "method": "post",
+    "path": "/api/spaces/{space_id}/occupancy/scheduled/{period_id}/cancel",
+    "sourceKind": "space",
+    "nesting": null,
+    "childKey": "periodId",
+    "operationId": "cancelPortfolioScheduledOccupancy",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "StatusMutationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.occupancy.replace",
+    "title": "Replace scheduled occupancy",
+    "method": "put",
+    "path": "/api/spaces/{space_id}/occupancy/scheduled/{period_id}/replace",
+    "sourceKind": "space",
+    "nesting": null,
+    "childKey": "periodId",
+    "operationId": "replacePortfolioScheduledOccupancy",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "effectiveOn": {
+          "format": "date",
+          "title": "Effectiveon",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Note"
+        },
+        "occupancyStatus": {
+          "enum": [
+            "occupied",
+            "vacant",
+            "unknown"
+          ],
+          "title": "Occupancystatus",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occupancyStatus",
+        "effectiveOn",
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "OccupancyMutationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.occupancy.reschedule",
+    "title": "Reschedule occupancy",
+    "method": "put",
+    "path": "/api/spaces/{space_id}/occupancy/scheduled/{period_id}/reschedule",
+    "sourceKind": "space",
+    "nesting": null,
+    "childKey": "periodId",
+    "operationId": "reschedulePortfolioScheduledOccupancy",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "effectiveOn": {
+          "format": "date",
+          "title": "Effectiveon",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Note"
+        },
+        "occupancyStatus": {
+          "enum": [
+            "occupied",
+            "vacant",
+            "unknown"
+          ],
+          "title": "Occupancystatus",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occupancyStatus",
+        "effectiveOn",
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "OccupancyMutationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "portfolio.occupancy.correct",
+    "title": "Correct occupancy",
+    "method": "post",
+    "path": "/api/spaces/{space_id}/occupancy/{period_id}/correct",
+    "sourceKind": "space",
+    "nesting": "occupancy",
+    "childKey": "periodId",
+    "operationId": "correctPortfolioSpaceOccupancy",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "occupancy": {
+          "additionalProperties": false,
+          "properties": {
+            "effectiveOn": {
+              "format": "date",
+              "title": "Effectiveon",
+              "type": "string"
+            },
+            "expectedRevision": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expectedrevision"
+            },
+            "idempotencyKey": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotencykey"
+            },
+            "note": {
+              "anyOf": [
+                {
+                  "maxLength": 1000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Note"
+            },
+            "occupancyStatus": {
+              "enum": [
+                "occupied",
+                "vacant",
+                "unknown"
+              ],
+              "title": "Occupancystatus",
+              "type": "string"
+            }
+          },
+          "required": [
+            "occupancyStatus",
+            "effectiveOn"
+          ],
+          "title": "OccupancyRequest",
+          "type": "object"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "occupancy",
+        "reason",
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "OccupancyCorrectionRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "party.create",
+    "title": "Create identity",
+    "method": "post",
+    "path": "/api/parties",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createParty",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmedNewParty": {
+          "default": false,
+          "title": "Confirmednewparty",
+          "type": "boolean"
+        },
+        "contacts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "extension": {
+                "anyOf": [
+                  {
+                    "maxLength": 6,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Extension"
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "maxLength": 80,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Label"
+              },
+              "methodKind": {
+                "enum": [
+                  "email",
+                  "phone"
+                ],
+                "title": "Methodkind",
+                "type": "string"
+              },
+              "value": {
+                "maxLength": 320,
+                "minLength": 1,
+                "title": "Value",
+                "type": "string"
+              }
+            },
+            "required": [
+              "methodKind",
+              "value"
+            ],
+            "title": "ContactRequest",
+            "type": "object"
+          },
+          "title": "Contacts",
+          "type": "array"
+        },
+        "displayName": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "partyKind": {
+          "enum": [
+            "individual",
+            "organization"
+          ],
+          "title": "Partykind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "partyKind",
+        "displayName"
+      ],
+      "title": "PartyRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "party.patch",
+    "title": "Edit identity",
+    "method": "patch",
+    "path": "/api/parties/{party_id}",
+    "sourceKind": "party",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "patchParty",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "displayName": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "displayName"
+      ],
+      "title": "PartyPatchRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "party.archive",
+    "title": "Archive identity",
+    "method": "post",
+    "path": "/api/parties/{party_id}/archive",
+    "sourceKind": "party",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "archiveParty",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "IdentityArchiveRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "party.restore",
+    "title": "Restore identity",
+    "method": "post",
+    "path": "/api/parties/{party_id}/restore",
+    "sourceKind": "party",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "restoreParty",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "IdentityConcurrency",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "party.contact.add",
+    "title": "Add contact",
+    "method": "post",
+    "path": "/api/parties/{party_id}/contact-methods",
+    "sourceKind": "party",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "addPartyContactMethod",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "extension": {
+          "anyOf": [
+            {
+              "maxLength": 6,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Extension"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Label"
+        },
+        "methodKind": {
+          "enum": [
+            "email",
+            "phone"
+          ],
+          "title": "Methodkind",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 320,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "methodKind",
+        "value"
+      ],
+      "title": "ContactMutationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "party.contact.update",
+    "title": "Edit contact",
+    "method": "patch",
+    "path": "/api/parties/{party_id}/contact-methods/{method_id}",
+    "sourceKind": "party",
+    "nesting": null,
+    "childKey": "methodId",
+    "operationId": "updatePartyContactMethod",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "extension": {
+          "anyOf": [
+            {
+              "maxLength": 6,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Extension"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Label"
+        },
+        "methodKind": {
+          "enum": [
+            "email",
+            "phone"
+          ],
+          "title": "Methodkind",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 320,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "methodKind",
+        "value"
+      ],
+      "title": "ContactMutationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "party.contact.archive",
+    "title": "Archive contact",
+    "method": "post",
+    "path": "/api/parties/{party_id}/contact-methods/{method_id}/archive",
+    "sourceKind": "party",
+    "nesting": null,
+    "childKey": "methodId",
+    "operationId": "archivePartyContactMethod",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "referenceResolutions": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "clear": {
+                "default": false,
+                "title": "Clear",
+                "type": "boolean"
+              },
+              "expectedTenantRevision": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Expectedtenantrevision"
+              },
+              "replacementContactMethodId": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Replacementcontactmethodid"
+              },
+              "role": {
+                "minLength": 1,
+                "title": "Role",
+                "type": "string"
+              },
+              "roleRecordId": {
+                "format": "uuid",
+                "title": "Rolerecordid",
+                "type": "string"
+              }
+            },
+            "required": [
+              "role",
+              "roleRecordId"
+            ],
+            "title": "ReferenceResolution",
+            "type": "object"
+          },
+          "maxItems": 20,
+          "title": "Referenceresolutions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "ArchiveRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "party.contact.restore",
+    "title": "Restore contact",
+    "method": "post",
+    "path": "/api/parties/{party_id}/contact-methods/{method_id}/restore",
+    "sourceKind": "party",
+    "nesting": null,
+    "childKey": "methodId",
+    "operationId": "restorePartyContactMethod",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ContactConcurrency",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "tenant.create",
+    "title": "Create tenant",
+    "method": "post",
+    "path": "/api/tenants",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "create_tenant",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmedNewParty": {
+          "default": false,
+          "title": "Confirmednewparty",
+          "type": "boolean"
+        },
+        "contacts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "extension": {
+                "anyOf": [
+                  {
+                    "maxLength": 6,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Extension"
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "maxLength": 80,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Label"
+              },
+              "methodKind": {
+                "enum": [
+                  "email",
+                  "phone"
+                ],
+                "title": "Methodkind",
+                "type": "string"
+              },
+              "value": {
+                "maxLength": 320,
+                "minLength": 1,
+                "title": "Value",
+                "type": "string"
+              }
+            },
+            "required": [
+              "methodKind",
+              "value"
+            ],
+            "title": "ContactRequest",
+            "type": "object"
+          },
+          "title": "Contacts",
+          "type": "array"
+        },
+        "displayName": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "doNotContact": {
+          "default": false,
+          "title": "Donotcontact",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "partyKind": {
+          "enum": [
+            "individual",
+            "organization"
+          ],
+          "title": "Partykind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "partyKind",
+        "displayName"
+      ],
+      "title": "TenantCreateRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "tenant.designate",
+    "title": "Use identity as tenant",
+    "method": "post",
+    "path": "/api/tenants/from-party/{party_id}",
+    "sourceKind": "tenant",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "designate_party_as_tenant",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "DesignateRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "tenant.profile.patch",
+    "title": "Edit tenant preferences",
+    "method": "patch",
+    "path": "/api/tenants/{party_id}",
+    "sourceKind": "tenant",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "update_tenant_profile",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "doNotContact": {
+          "default": false,
+          "title": "Donotcontact",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "preferredContactMethodId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Preferredcontactmethodid"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ProfilePatchRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "tenant.archive",
+    "title": "Archive tenant",
+    "method": "post",
+    "path": "/api/tenants/{party_id}/archive",
+    "sourceKind": "tenant",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "archive_tenant",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "ConfirmationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "tenant.restore",
+    "title": "Restore tenant",
+    "method": "post",
+    "path": "/api/tenants/{party_id}/restore",
+    "sourceKind": "tenant",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "restore_tenant",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ExistingRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.create",
+    "title": "Create provider",
+    "method": "post",
+    "path": "/api/providers",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "create_provider",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "categoryIds": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Categoryids",
+          "type": "array"
+        },
+        "confirmedNewParty": {
+          "default": false,
+          "title": "Confirmednewparty",
+          "type": "boolean"
+        },
+        "contacts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "extension": {
+                "anyOf": [
+                  {
+                    "maxLength": 6,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Extension"
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "maxLength": 80,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Label"
+              },
+              "methodKind": {
+                "enum": [
+                  "email",
+                  "phone"
+                ],
+                "title": "Methodkind",
+                "type": "string"
+              },
+              "value": {
+                "maxLength": 320,
+                "minLength": 1,
+                "title": "Value",
+                "type": "string"
+              }
+            },
+            "required": [
+              "methodKind",
+              "value"
+            ],
+            "title": "ContactInput",
+            "type": "object"
+          },
+          "title": "Contacts",
+          "type": "array"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "party": {
+          "additionalProperties": false,
+          "properties": {
+            "displayName": {
+              "maxLength": 240,
+              "minLength": 1,
+              "title": "Displayname",
+              "type": "string"
+            },
+            "partyKind": {
+              "enum": [
+                "individual",
+                "organization"
+              ],
+              "title": "Partykind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "partyKind",
+            "displayName"
+          ],
+          "title": "PartyInput",
+          "type": "object"
+        },
+        "references": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "email": {
+                "anyOf": [
+                  {
+                    "maxLength": 320,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Email"
+              },
+              "notes": {
+                "anyOf": [
+                  {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Notes"
+              },
+              "organizationName": {
+                "anyOf": [
+                  {
+                    "maxLength": 240,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Organizationname"
+              },
+              "phone": {
+                "anyOf": [
+                  {
+                    "maxLength": 320,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Phone"
+              },
+              "referenceName": {
+                "anyOf": [
+                  {
+                    "maxLength": 240,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Referencename"
+              },
+              "relationship": {
+                "anyOf": [
+                  {
+                    "maxLength": 240,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Relationship"
+              }
+            },
+            "title": "ReferenceInput",
+            "type": "object"
+          },
+          "title": "References",
+          "type": "array"
+        },
+        "selectionReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Selectionreason"
+        },
+        "selectionStatus": {
+          "default": "neutral",
+          "enum": [
+            "neutral",
+            "preferred",
+            "avoid"
+          ],
+          "title": "Selectionstatus",
+          "type": "string"
+        },
+        "serviceAreas": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "countryCode": {
+                "anyOf": [
+                  {
+                    "maxLength": 2,
+                    "minLength": 2,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Countrycode"
+              },
+              "displayName": {
+                "maxLength": 160,
+                "minLength": 1,
+                "title": "Displayname",
+                "type": "string"
+              }
+            },
+            "required": [
+              "displayName"
+            ],
+            "title": "AreaInput",
+            "type": "object"
+          },
+          "title": "Serviceareas",
+          "type": "array"
+        },
+        "services": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "displayName": {
+                "maxLength": 160,
+                "minLength": 1,
+                "title": "Displayname",
+                "type": "string"
+              }
+            },
+            "required": [
+              "displayName"
+            ],
+            "title": "ServiceInput",
+            "type": "object"
+          },
+          "title": "Services",
+          "type": "array"
+        },
+        "workHistory": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "outcomeNotes": {
+                "anyOf": [
+                  {
+                    "maxLength": 4000,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Outcomenotes"
+              },
+              "performedOn": {
+                "format": "date",
+                "title": "Performedon",
+                "type": "string"
+              },
+              "propertyId": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Propertyid"
+              },
+              "summary": {
+                "maxLength": 1000,
+                "minLength": 1,
+                "title": "Summary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "performedOn",
+              "summary"
+            ],
+            "title": "WorkInput",
+            "type": "object"
+          },
+          "title": "Workhistory",
+          "type": "array"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "party"
+      ],
+      "title": "CreateProviderInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.designate",
+    "title": "Use identity as provider",
+    "method": "post",
+    "path": "/api/providers/from-party/{party_id}",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "designate_party_as_provider",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "selectionReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Selectionreason"
+        },
+        "selectionStatus": {
+          "default": "neutral",
+          "enum": [
+            "neutral",
+            "preferred",
+            "avoid"
+          ],
+          "title": "Selectionstatus",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "DesignateInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.profile.patch",
+    "title": "Edit provider profile",
+    "method": "patch",
+    "path": "/api/providers/{party_id}",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "update_provider_profile",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "selectionReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Selectionreason"
+        },
+        "selectionStatus": {
+          "anyOf": [
+            {
+              "enum": [
+                "neutral",
+                "preferred",
+                "avoid"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Selectionstatus"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ProfilePatchInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.archive",
+    "title": "Archive provider",
+    "method": "post",
+    "path": "/api/providers/{party_id}/archive",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "archive_provider",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "ProviderArchiveInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.restore",
+    "title": "Restore provider",
+    "method": "post",
+    "path": "/api/providers/{party_id}/restore",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "restore_provider",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ExistingProviderConcurrency",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.category.create",
+    "title": "Create provider category",
+    "method": "post",
+    "path": "/api/provider-categories",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "create_provider_category",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Description"
+        },
+        "displayName": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "displayOrder": {
+          "minimum": 0,
+          "title": "Displayorder",
+          "type": "integer"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "displayName",
+        "displayOrder"
+      ],
+      "title": "CategoryInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.category.patch",
+    "title": "Edit provider category",
+    "method": "patch",
+    "path": "/api/provider-categories/{category_id}",
+    "sourceKind": "provider_category",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "update_provider_category",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Description"
+        },
+        "displayName": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Displayname"
+        },
+        "displayOrder": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Displayorder"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "CategoryPatchInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.category.archive",
+    "title": "Archive provider category",
+    "method": "post",
+    "path": "/api/provider-categories/{category_id}/archive",
+    "sourceKind": "provider_category",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "archive_provider_category",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "CategoryLifecycleInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.category.restore",
+    "title": "Restore provider category",
+    "method": "post",
+    "path": "/api/provider-categories/{category_id}/restore",
+    "sourceKind": "provider_category",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "restore_provider_category",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "CategoryRestoreInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.category_assignment.assign",
+    "title": "Assign category",
+    "method": "post",
+    "path": "/api/providers/{party_id}/category-assignments",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "assign_provider_category",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "categoryId": {
+          "format": "uuid",
+          "title": "Categoryid",
+          "type": "string"
+        },
+        "expectedCategoryRevision": {
+          "minimum": 1,
+          "title": "Expectedcategoryrevision",
+          "type": "integer"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "categoryId",
+        "expectedCategoryRevision"
+      ],
+      "title": "CategoryAssignmentInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.category_assignment.archive",
+    "title": "Archive category assignment",
+    "method": "post",
+    "path": "/api/providers/{party_id}/category-assignments/{assignment_id}/archive",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "assignmentId",
+    "operationId": "archive_provider_category_assignment",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "AssignmentArchiveInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.category_assignment.restore",
+    "title": "Restore category assignment",
+    "method": "post",
+    "path": "/api/providers/{party_id}/category-assignments/{assignment_id}/restore",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "assignmentId",
+    "operationId": "restore_provider_category_assignment",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedCategoryRevision": {
+          "minimum": 1,
+          "title": "Expectedcategoryrevision",
+          "type": "integer"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "expectedCategoryRevision"
+      ],
+      "title": "AssignmentRestoreInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.service.add",
+    "title": "Add service",
+    "method": "post",
+    "path": "/api/providers/{party_id}/services",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "add_provider_service",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "displayName": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "displayName"
+      ],
+      "title": "ServiceMutationInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.service.update",
+    "title": "Edit service",
+    "method": "patch",
+    "path": "/api/providers/{party_id}/services/{item_id}",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "update_provider_service",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "displayName": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "displayName"
+      ],
+      "title": "ServiceMutationInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.service.archive",
+    "title": "Archive service",
+    "method": "post",
+    "path": "/api/providers/{party_id}/services/{item_id}/archive",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "archive_provider_service",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "ProviderArchiveInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.service.restore",
+    "title": "Restore service",
+    "method": "post",
+    "path": "/api/providers/{party_id}/services/{item_id}/restore",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "restore_provider_service",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ExistingProviderConcurrency",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.area.add",
+    "title": "Add service area",
+    "method": "post",
+    "path": "/api/providers/{party_id}/service-areas",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "add_provider_area",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "countryCode": {
+          "anyOf": [
+            {
+              "maxLength": 2,
+              "minLength": 2,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Countrycode"
+        },
+        "displayName": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "displayName"
+      ],
+      "title": "AreaMutationInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.area.update",
+    "title": "Edit service area",
+    "method": "patch",
+    "path": "/api/providers/{party_id}/service-areas/{item_id}",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "update_provider_area",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "countryCode": {
+          "anyOf": [
+            {
+              "maxLength": 2,
+              "minLength": 2,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Countrycode"
+        },
+        "displayName": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "displayName"
+      ],
+      "title": "AreaMutationInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.area.archive",
+    "title": "Archive service area",
+    "method": "post",
+    "path": "/api/providers/{party_id}/service-areas/{item_id}/archive",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "archive_provider_area",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "ProviderArchiveInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.area.restore",
+    "title": "Restore service area",
+    "method": "post",
+    "path": "/api/providers/{party_id}/service-areas/{item_id}/restore",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "restore_provider_area",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ExistingProviderConcurrency",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.work_history.add",
+    "title": "Add work history",
+    "method": "post",
+    "path": "/api/providers/{party_id}/work-history",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "add_provider_work_history",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "outcomeNotes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Outcomenotes"
+        },
+        "performedOn": {
+          "format": "date",
+          "title": "Performedon",
+          "type": "string"
+        },
+        "propertyId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Propertyid"
+        },
+        "summary": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "performedOn",
+        "summary"
+      ],
+      "title": "WorkMutationInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.work_history.update",
+    "title": "Edit work history",
+    "method": "patch",
+    "path": "/api/providers/{party_id}/work-history/{item_id}",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "update_provider_work_history",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "outcomeNotes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Outcomenotes"
+        },
+        "performedOn": {
+          "format": "date",
+          "title": "Performedon",
+          "type": "string"
+        },
+        "propertyId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Propertyid"
+        },
+        "summary": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "performedOn",
+        "summary"
+      ],
+      "title": "WorkMutationInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.work_history.archive",
+    "title": "Archive work history",
+    "method": "post",
+    "path": "/api/providers/{party_id}/work-history/{item_id}/archive",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "archive_provider_work_history",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "ProviderArchiveInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.work_history.restore",
+    "title": "Restore work history",
+    "method": "post",
+    "path": "/api/providers/{party_id}/work-history/{item_id}/restore",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "restore_provider_work_history",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ExistingProviderConcurrency",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.reference.add",
+    "title": "Add reference",
+    "method": "post",
+    "path": "/api/providers/{party_id}/references",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "add_provider_reference",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "email": {
+          "anyOf": [
+            {
+              "maxLength": 320,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Email"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "organizationName": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Organizationname"
+        },
+        "phone": {
+          "anyOf": [
+            {
+              "maxLength": 320,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Phone"
+        },
+        "referenceName": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Referencename"
+        },
+        "relationship": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Relationship"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ReferenceMutationInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.reference.update",
+    "title": "Edit reference",
+    "method": "patch",
+    "path": "/api/providers/{party_id}/references/{item_id}",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "update_provider_reference",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "email": {
+          "anyOf": [
+            {
+              "maxLength": 320,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Email"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "organizationName": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Organizationname"
+        },
+        "phone": {
+          "anyOf": [
+            {
+              "maxLength": 320,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Phone"
+        },
+        "referenceName": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Referencename"
+        },
+        "relationship": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Relationship"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ReferenceMutationInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.reference.archive",
+    "title": "Archive reference",
+    "method": "post",
+    "path": "/api/providers/{party_id}/references/{item_id}/archive",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "archive_provider_reference",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "ProviderArchiveInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.reference.restore",
+    "title": "Restore reference",
+    "method": "post",
+    "path": "/api/providers/{party_id}/references/{item_id}/restore",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "restore_provider_reference",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ExistingProviderConcurrency",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.reputation_link.add",
+    "title": "Add reputation link",
+    "method": "post",
+    "path": "/api/providers/{party_id}/reputation-links",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "add_provider_reputation_link",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "lastCheckedOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lastcheckedon"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "sourceKind": {
+          "enum": [
+            "google",
+            "yelp",
+            "angi",
+            "other"
+          ],
+          "title": "Sourcekind",
+          "type": "string"
+        },
+        "sourceName": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sourcename"
+        },
+        "url": {
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "sourceKind",
+        "url"
+      ],
+      "title": "ReputationMutationInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.reputation_link.update",
+    "title": "Edit reputation link",
+    "method": "patch",
+    "path": "/api/providers/{party_id}/reputation-links/{link_id}",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "update_provider_reputation_link",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "lastCheckedOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lastcheckedon"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "sourceKind": {
+          "anyOf": [
+            {
+              "enum": [
+                "google",
+                "yelp",
+                "angi",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sourcekind"
+        },
+        "sourceName": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sourcename"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Url"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ReputationPatchMutationInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.reputation_link.archive",
+    "title": "Archive reputation link",
+    "method": "post",
+    "path": "/api/providers/{party_id}/reputation-links/{link_id}/archive",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "archive_provider_reputation_link",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "ProviderArchiveInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "provider.reputation_link.restore",
+    "title": "Restore reputation link",
+    "method": "post",
+    "path": "/api/providers/{party_id}/reputation-links/{link_id}/restore",
+    "sourceKind": "provider",
+    "nesting": null,
+    "childKey": "itemId",
+    "operationId": "restore_provider_reputation_link",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ExistingProviderConcurrency",
+      "type": "object"
+    }
+  }
+]

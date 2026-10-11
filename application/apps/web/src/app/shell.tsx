@@ -24,6 +24,36 @@ import {
 import { PreferencesProvider, PreferenceSettings, usePreferences } from "./preferences";
 import { RecoveryPage } from "../shared/recovery-page";
 import { Directory, ContextOverview, ContextNavigator } from "../shared/context-reads";
+import { PortfolioCommand, PortfolioEntry, PortfolioRecord } from "../workflows/portfolio";
+import { IdentityWorkspace } from "../workflows/identity";
+import { ProviderWorkspace } from "../workflows/providers";
+
+function PropertiesPage() {
+  const [params] = useSearchParams();
+  return params.has("workflow") ? (
+    <PortfolioCommand key={params.toString()} />
+  ) : (
+    <>
+      <PortfolioEntry />
+      <Directory kind="property" />
+    </>
+  );
+}
+function PropertyDetails({ tab }: { tab: string }) {
+  const { id = "" } = useParams();
+  return (
+    <>
+      <PortfolioRecord id={id} />
+      <ContextOverview kind="property" tab={tab} />
+    </>
+  );
+}
+function WorkflowPage({ kind }: { kind: "provider" | "identity" }) {
+  const [params] = useSearchParams();
+  const location = useLocation();
+  const key = `${location.pathname}:${params.get("workflow")}:${params.get("target")}:${params.get("child")}:${params.get("resume")}`;
+  return kind === "provider" ? <ProviderWorkspace key={key} /> : <IdentityWorkspace key={key} />;
+}
 
 function PendingPage({ title }: { title: string }) {
   const [params, setParams] = useSearchParams();
@@ -216,9 +246,11 @@ export function ApplicationShell() {
                   item.id === "settings" ? (
                     <Outlet />
                   ) : item.id === "properties" ? (
-                    <Directory kind="property" />
+                    <PropertiesPage />
                   ) : item.id === "owners" ? (
                     <Directory kind="owner" />
+                  ) : item.id === "providers" ? (
+                    <WorkflowPage kind="provider" />
                   ) : (
                     <PendingPage title={item.label} />
                   )
@@ -262,7 +294,9 @@ export function ApplicationShell() {
                     key={section}
                     path={section}
                     element={
-                      section === "documents" ? (
+                      kind === "property" && ["details", "units"].includes(section) ? (
+                        <PropertyDetails tab={section} />
+                      ) : section === "documents" ? (
                         <PendingPage title={section} />
                       ) : (
                         <ContextOverview kind={kind} tab={section} />
@@ -273,6 +307,11 @@ export function ApplicationShell() {
               </Route>
             </Route>
           ))}
+          <Route element={<DestinationGuard id="providers" />}>
+            <Route path="providers/:id" element={<WorkflowPage kind="provider" />} />
+            <Route path="providers/:id/:section" element={<WorkflowPage kind="provider" />} />
+          </Route>
+          <Route path="parties" element={<WorkflowPage kind="identity" />} />
           {["tasks", "search"].map((path) => (
             <Route
               key={path}

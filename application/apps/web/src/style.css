@@ -164,3 +164,41 @@ h1 {
 .read-revision {
   overflow-wrap: anywhere;
 }
+/* Source command workspaces reuse the shared focus, surface and theme tokens. */
+.command-editor,
+.workflow-actions,
+.workflow-field {
+  margin-block: 1rem;
+}
+.command-editor fieldset {
+  min-width: 0;
+  margin-block: 0.75rem;
+}
+.command-editor label {
+  display: block;
+  margin-block: 0.5rem;
+}
+.command-editor input:not([type="checkbox"]),
+.command-editor select,
+.command-editor textarea {
+  display: block;
+  width: min(100%, 34rem);
+}
+.workflow-actions nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-block: 0.75rem;
+}
+.workflow-facts {
+  overflow-wrap: anywhere;
+}
+.workflow-facts div {
+  margin-block: 0.5rem;
+}
+.workflow-facts dt {
+  font-weight: 600;
+}
+.workflow-facts dd {
+  margin-inline-start: 0;
+}

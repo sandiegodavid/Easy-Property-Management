@@ -1,6 +1,6 @@
 # UI-001 implementation slices
 
-Status: backend readiness Slices 41–43 and frontend Slices 44–49 delivered — October 10, 2026. Browser workflows in Slices 50–57 remain open; UI-001 is not complete.
+Status: backend readiness Slices 41–43 and frontend Slices 44–50 delivered — October 11, 2026. Browser workflows in Slices 51–57 remain open; UI-001 is not complete.
 
 Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
 feature-specific AI approval modes, Intake attention consequences, coordinated
@@ -12,10 +12,10 @@ The recorded backend readiness gate and React scaffold are complete; browser wor
 
 ## Subsequent UI slices — ordered implementation plan
 
-Updated October 9, 2026. Backend Slices 41–43 are recorded as delivered;
-Slices 44–49's React build, workspace gate, navigation, shared components, recovery transport, contextual read workspaces and focused browser proofs are delivered. Implement the
+Updated October 11, 2026. Backend Slices 41–43 are recorded as delivered;
+Slices 44–50's React build, workspace gate, navigation, shared components, recovery transport, contextual reads and Portfolio/identity/Provider workflows are delivered. Implement the
 following slices sequentially. Slice numbers continue after the backend sequence;
-Slice 40 stays assigned to UI-002. Slices 44–49 are delivered; Slices 50–57 remain planned.
+Slice 40 stays assigned to UI-002. Slices 44–50 are delivered; Slices 51–57 remain planned.
 The [UI-001 design](UI-001_DESIGN.md#technical-implementation-design) owns the
 interaction and technical requirements.
 
@@ -25,6 +25,36 @@ frontend changes, run `npm run lint`, `npm run format:check` and `npm run typech
 from `application/`, and verify generated-contract reproducibility when contracts
 change. Use real temporary workspaces for critical integration paths. Fixtures
 support visual development but do not establish backend or workflow readiness.
+
+**Frontend validation matrix instructions (Slices 44–57)**
+
+Use the shared coverage areas below to select focused frontend tests. In each
+slice's existing entry, record only the scenarios specific to that slice, their
+test file or named test, the observed result and any remaining gap. Use a compact
+`Scenario | Evidence | Result / gap` table for multiple independent workflows or
+failure paths; a short validation paragraph is sufficient for a small slice.
+Do not create a second delivery section or appendix, repeat the shared matrix,
+or use an aggregate passing test count as the sole evidence of workflow coverage.
+
+| Coverage area | Required checks when applicable |
+| --- | --- |
+| Reads and availability | Happy path, loading, empty, error and partial failure; unavailable data must not appear empty; bounded paging preserves filters, totals and continuation without per-row request fan-out |
+| Forms and accessibility | Required/invalid combinations, actionable field errors, explicit confirmations, keyboard operation, labels, focus and status announcements; invalid input preserves edits and prevents dispatch |
+| Concurrency and submission | Displayed source identity/revision, stale-source conflict with edits retained, explicit current-source review, and protection against duplicate dispatch |
+| Interrupted writes and recovery | Lost response, original-key reconciliation/replay, saved-form reload/resume and child context; unresolved outcomes cannot silently create a new attempt |
+| Navigation and context | Direct links, back/forward navigation, unsaved-edit handling, correct owning record and child membership, workspace changes and lifecycle/capability guards |
+| Presentation | Supported narrow layouts and themes, readable errors and exact domain formatting; history and unavailable content remain distinguishable from current actionable data |
+
+Mark evidence as **passed**, **failed**, **not run**, or **not applicable**. Give
+a reason for exclusions and identify any deferred acceptance proof by its owning
+slice. Mark a slice delivered only after its applicable implementation checks
+pass; explicitly scheduled final cross-workflow acceptance may remain in Slice 57.
+Reuse named shared-component tests when behavior is unchanged, but verify newly
+enabled critical read/write paths against a real temporary workspace. Mocks may
+exercise failures that are difficult to reproduce; they do not prove persistence
+or receipt integration. Reference existing backend schema, rollback and
+backup/restore proofs unless the frontend change alters that boundary. Run the
+quality checks above and report blockers without marking unrun checks passed.
 
 1. **Slice 44: React/Vite scaffold, generated contracts and packaged smoke test (delivered).**
    Extend the existing Node workspace with `apps/web`, `packages/contracts` and
@@ -81,14 +111,19 @@ support visual development but do not establish backend or workflow readiness.
    failures. Use composed backend contracts; no browser joins or authoritative
    aggregation. Later domain slices enable their corresponding write actions.
 
-7. **Slice 50: Portfolio, Party/Tenant and Provider workflows.**
-   Connect Property/Space creation, editing, lifecycle, ownership and manual
+7. **Slice 50: Portfolio, Party/Tenant and Provider workflows (delivered).**
+   Delivered browser forms for Property/Space creation, editing, lifecycle, ownership and manual
    occupancy/availability actions; shared identity/contact and Tenant lifecycle;
    Provider profiles, categories, assignments, service areas, history, references
-   and reputation. Use the source-owned receipts and registered OPS forms,
-   including Slice 41 inventory recovery. Support progressive property setup and
-   explicit history/corrections. Verify child membership, lifecycle guards, inline
-   identity handling and interrupted writes. Legal engagements remain UI-002.
+   and reputation. Reuses previously delivered backend receipts and OPS contracts,
+   including Slice 41 inventory recovery; the only Python addition is the `/parties`
+   packaged route and its test. New frontend work includes generated typed command
+   dispatch, progressive setup, contextual history, saved-form resumption and
+   explicit stale-source review/original-result reconciliation.
+   Validation: 21 packaged browser tests, 6 shared recovery tests and 104 focused
+   Python tests passed, covering child membership, lifecycle guards, inline
+   identity handling and interrupted writes. Lint, format, type, contract and
+   packaging checks passed. Legal engagements remain UI-002.
 
 8. **Slice 51: Leasing and inspection workflows.**
    Deliver Lease drafts/participants/terms, execution, renewal, termination and
@@ -160,7 +195,7 @@ support visual development but do not establish backend or workflow readiness.
 ## Command-safety readiness inventory
 
 The approved backend contracts and OPS registrations are delivered. This inventory
-separates that delivery from pending browser workflow acceptance in UI Slices 50–57.
+separates that delivery from pending browser workflow acceptance in UI Slices 51–57.
 A delivered receipt does not enable a browser control or authorize automatic retries.
 
 | Workflow | Delivered backend boundary | UI handoff or scope boundary |
@@ -246,7 +281,10 @@ that a browser control is ready.
 - **Slice 49 delivered:** bounded property/owner directories, contextual read
   workspaces, independent section continuations, explicit-period whole-property
   money and on-demand source detail.
-- **Slices 50–56:** consume the delivered bootstrap, source and OPS contracts;
+- **Slice 50 delivered:** registered Portfolio inventory/manual-status, shared
+  Party/contact, Tenant and Provider/category/child forms, contextual history,
+  source review, recovery and original-receipt reconciliation.
+- **Slices 51–56:** consume the delivered bootstrap, source and OPS contracts;
   implement route states, contextual workflows, recovery and accessibility. Each
   enabled workflow needs a real critical read/write integration path and truthful
   capability registration. Do not reconstruct domain rules or receipts in the browser.
@@ -774,7 +812,7 @@ revision used by occupancy, availability and classification.
 [PORT-001_COMMAND_READINESS.md](PORT-001_COMMAND_READINESS.md) records the
 workflow inventory and validation matrix. Slice 19 delivers manual-status forms
 and Slice 41 delivers inventory/ownership forms. Browser workflow integration
-belongs to UI Slice 50.
+is delivered in UI Slice 50.
 
 Validation: **422 focused tests and 103 subtests passed** across the changed
 Portfolio, Lease, Finance, Inspection, Maintenance, Owner-report/concern,

@@ -184,6 +184,30 @@ export class RecoveryController {
     this.publish({ draft: "dirty", error: undefined });
   }
 
+  /** Explicit operator review of a newly read owning-source revision. OPS rechecks
+   * it during save and preparation; an unresolved attempt can never be rebased. */
+  reviewSource(current: Recovery | undefined, revision: number, field: string) {
+    if (
+      this.locked ||
+      this.pendingSave ||
+      this.pendingPrepare ||
+      this.pendingReconcile ||
+      this.pendingDiscard ||
+      this.snapshot.command === "outcome_unknown" ||
+      this.snapshot.command === "committed" ||
+      (current && current.status !== "active") ||
+      (this.snapshot.record && !current)
+    )
+      throw new Error("Resolve the original attempt before reviewing another revision.");
+    if (!Number.isInteger(revision) || revision < 0)
+      throw new Error("Invalid displayed source revision.");
+    this.identity.baseSourceRevision = String(revision);
+    if (current) this.accept(current);
+    this.payload = { ...this.payload, [field]: revision };
+    this.acknowledged = current ? canonicalRequest(current.payload) : "";
+    this.publish({ draft: "dirty", command: "editing", error: undefined, problem: undefined });
+  }
+
   async submit(dispatch: (record: Recovery) => Promise<unknown>, fingerprint?: string) {
     if (
       this.locked ||
