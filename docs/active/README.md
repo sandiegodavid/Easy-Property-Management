@@ -5,7 +5,7 @@ Completed core UI-001 behavior is in [UI guides](../ui/operator-experience.md), 
 ## Remaining interface work
 
 - [UI-001 design](../ui/operator-experience.md): approved target interactions and technical requirements.
-- [DASH-001 design](DASH-001_DESIGN.md): Home aggregation, source contracts, implementation sequence and 16 accepted decisions; implementation remains pending.
+- [DASH-001 design](DASH-001_DESIGN.md): Home aggregation, source contracts, implementation sequence and 18 accepted decisions; implementation remains pending.
 - [UI-001 delivery evidence](../ui/validation.md): ordered remaining browser slices, completed handoff and explicit manual Intake acceptance.
 - [UI-002 preliminary design](UI-002_DESIGN_preliminary.md): legal/HOA, spreadsheet intake, issue proposals and connected assistants.
 
