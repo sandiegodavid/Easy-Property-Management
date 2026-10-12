@@ -314,13 +314,24 @@ quality checks above and report blockers without marking unrun checks passed.
     modes, and connected assistants remain outside UI-001; connected assistants
     remain UI-002. Slice 57 still owns broad integration/accessibility acceptance.
 
-13. **Slice 56: Home shell and shared attention/calendar primitives.**
-    Connect the Home route, reusable Needs action/Waiting/Upcoming/calendar and
-    information-review components, D35 disclosure and ready source-action adapters.
-    Test rendering and interaction using typed fixtures plus real domain actions.
-    Show an explicit limited/unavailable state until the DASH-001 composition is
-    delivered; do not simulate completed Home with browser-derived aggregates.
-    DASH-001 retains real Home aggregation and its aggregate acceptance criteria.
+13. **Slice 56: Home shell and shared attention/calendar primitives (delivered).**
+    Home explains that the combined work queue/calendar is unavailable and links
+    to delivered Task deadlines and Waiting follow-ups. Shared typed components
+    render Needs action, Waiting, Upcoming, information review and calendar items
+    through D35 disclosures. Source adapters supply classifications, totals,
+    timestamps and actions; calendar display preserves all-day dates and explicit
+    timed zones. Live Task deadline and follow-up directories reuse these rows and
+    open the existing recoverable Task workflows. No new aggregate endpoint or
+    browser-derived Home queue is introduced. DASH-001 retains Home composition
+    and its aggregate acceptance criteria.
+
+    | Scenario | Evidence | Result / gap |
+    | --- | --- | --- |
+    | Attention, calendar and information-review presentation | `component-tests/attention.spec.ts`: typed fixtures for all four queues and all-day/timed appointments | Passed; source totals and temporal facts are displayed without classification or date conversion |
+    | D35, narrow layout and themes | Same component test: full-bar pointer, Enter/Space, retained input, local collapse/focus, unique panel IDs, theme switch and 390px viewport | Passed; controls stay outside the summary bar and edits survive collapse |
+    | Home availability and live source actions | `tests/home.spec.ts`: real overdue Task, Home navigation, disclosure, committed Start command and Waiting directory | Passed; source status remains authoritative and an unscheduled follow-up preserves the overdue deadline |
+    | Shell and frontend checks | `tests/shell.spec.ts`; lint, format, typecheck, contracts and packaging | Passed; existing bundle-size warning is non-fatal |
+    | Persistence, retries and restore | Existing Task/OPS receipts are consumed without backend or schema changes | No new persistence; broader interrupted-command and encrypted-restore browser acceptance remains Slice 57 |
 
 14. **Slice 57: UI-001 integration, accessibility and production hardening.**
     Run the design's validation scenarios across real temporary workspaces,

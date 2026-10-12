@@ -34,6 +34,7 @@ import { WorkWorkspace } from "../workflows/work";
 import { MetadataSearch } from "../shared/search";
 import { CoveragePage, CoverageResume } from "../shared/coverage";
 import { AiDraftReview, AiGovernanceSettings } from "../workflows/ai-governance";
+import { Home } from "../shared/home";
 
 function LeasingPage() {
   const [params] = useSearchParams();
@@ -103,15 +104,6 @@ function PendingPage({ title }: { title: string }) {
           message: "This workflow is scheduled for a later UI slice. No records have been loaded.",
         }}
       />
-      {title === "Home" && (
-        <>
-          <p>
-            Hiding a destination does not hide its obligations. The Home work queue is not available
-            yet.
-          </p>
-          <Link to="/tasks">Tasks</Link>
-        </>
-      )}
       {title === "Maintenance" && <Link to="/providers">Providers</Link>}
     </>
   );
@@ -261,7 +253,9 @@ export function ApplicationShell() {
               <Route
                 path={item.route}
                 element={
-                  item.id === "settings" ? (
+                  item.id === "home" ? (
+                    <Home />
+                  ) : item.id === "settings" ? (
                     <Outlet />
                   ) : item.id === "properties" ? (
                     <PropertiesPage />
@@ -276,7 +270,7 @@ export function ApplicationShell() {
                   ) : item.id === "maintenance" ? (
                     <WorkWorkspace />
                   ) : (
-                    <PendingPage title={item.label} />
+                    <Unavailable />
                   )
                 }
               >

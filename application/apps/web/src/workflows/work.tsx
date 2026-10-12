@@ -1,6 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
+import { AttentionQueue, AttentionSection, type AttentionItem } from "@epm/ui";
+import type { components } from "@epm/contracts/generated";
 import { record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks } from "./command";
@@ -250,17 +252,39 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
               exist.
             </p>
           )}
-          <ul>
-            {result.data.items.map((item) => (
-              <li key={item.id}>
-                <Link to={workUrl(kind, item.id)}>
-                  {scalar(record(item).summary ?? record(item).subject ?? record(item).title)}
-                </Link>{" "}
-                · {item.status}
-                {"priority" in item && ` · ${item.priority}`}
-              </li>
-            ))}
-          </ul>
+          {follow && "asOf" in result.data && "matchingTotal" in result.data ? (
+            <AttentionQueue
+              kind="waiting"
+              asOf={String(result.data.asOf)}
+              total={Number(result.data.matchingTotal)}
+              emptyMessage="No matching recorded follow-ups."
+              items={result.data.items.map((item) => ({
+                sourceKey: `task:${item.id}`,
+                title: scalar(record(item).title),
+                status: scalar(record(item).followUpState),
+                summary: `Waiting for ${scalar(record(item).waitingForLabel)} · ${scalar(record(item).taskDeadlineState)}`,
+                renderDetails: () => (
+                  <>
+                    <p>Follow-up: {scalar(record(item).followUpAt) || "Not scheduled"}</p>
+                    <p>Waiting does not resolve the original source or change its deadline.</p>
+                    <Link to={workUrl("task", item.id)}>Review Task and follow-up</Link>
+                  </>
+                ),
+              }))}
+            />
+          ) : (
+            <ul>
+              {result.data.items.map((item) => (
+                <li key={item.id}>
+                  <Link to={workUrl(kind, item.id)}>
+                    {scalar(record(item).summary ?? record(item).subject ?? record(item).title)}
+                  </Link>{" "}
+                  · {item.status}
+                  {"priority" in item && ` · ${item.priority}`}
+                </li>
+              ))}
+            </ul>
+          )}
           {result.data.nextCursor && (
             <button
               onClick={() => {
@@ -307,19 +331,20 @@ function TaskSummary() {
         <>
           <p>As of {result.data.asOf}</p>
           {(["overdue", "today", "next7days"] as const).map((key) => (
-            <section key={key}>
-              <h4>
-                {key} · {result.data[`${key}Total`]}
-              </h4>
-              <ul>
-                {result.data[key].map((item) => (
-                  <li key={item.id}>
-                    <Link to={workUrl("task", item.id)}>{item.title}</Link> · {item.priority} ·{" "}
-                    {item.isWaiting ? `Waiting for ${item.waitingForLabel}` : item.status}
-                  </li>
-                ))}
-              </ul>
-            </section>
+            <AttentionSection
+              key={key}
+              title={
+                key === "next7days"
+                  ? "Upcoming Task deadlines"
+                  : key === "overdue"
+                    ? "Overdue Tasks"
+                    : "Tasks due today"
+              }
+              total={result.data[`${key}Total`]}
+              asOf={result.data.asOf}
+              emptyMessage="No matching Task deadlines in this response."
+              items={result.data[key].map(taskAttentionItem)}
+            />
           ))}
           <h4>Due reminders · {result.data.dueRemindersTotal}</h4>
           {result.data.dueReminders.map((item) => (
@@ -331,4 +356,22 @@ function TaskSummary() {
       )}
     </section>
   );
+}
+
+function taskAttentionItem(item: components["schemas"]["TaskResponse"]): AttentionItem {
+  return {
+    sourceKey: `task:${item.id}`,
+    title: item.title,
+    summary: `${item.priority}${item.isWaiting ? ` · Waiting for ${item.waitingForLabel}` : ""}`,
+    status: item.status,
+    renderDetails: () => (
+      <>
+        <p>
+          Task deadline: {item.dueAtUtc ?? "Not scheduled"} · {item.dueTimezone ?? "No time zone"}
+        </p>
+        <p>Completing this Task does not resolve its related issue or verify physical work.</p>
+        <Link to={workUrl("task", item.id)}>Review Task and actions</Link>
+      </>
+    ),
+  };
 }
