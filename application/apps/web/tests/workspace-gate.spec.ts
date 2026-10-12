@@ -66,7 +66,9 @@ test("network failure retries once and offers explicit connection retry", async 
   await expect(page.getByRole("alert")).toContainText("Cannot connect");
   expect(requests).toBe(2);
   await page.getByRole("button", { name: "Retry connection" }).click();
-  await expect(page.getByRole("status")).toHaveText("Local workspace connected.");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Local workspace connected." }),
+  ).toBeVisible();
   expect(requests).toBe(3);
 });
 
@@ -105,7 +107,9 @@ test("supported recovery rechecks bootstrap before admitting a new runtime", asy
   });
   await page.goto("/home");
   await page.getByRole("button", { name: "Retry workspace check" }).click();
-  await expect(page.getByRole("status")).toHaveText("Local workspace connected.");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Local workspace connected." }),
+  ).toBeVisible();
   expect(requests).toBe(2);
 });
 
@@ -143,7 +147,9 @@ test("readiness refresh withdraws domain content before a different workspace is
   let response: Bootstrap = ready;
   await page.route("**/api/operator/bootstrap", (route) => route.fulfill({ json: response }));
   await page.goto("/home");
-  await expect(page.getByRole("status")).toHaveText("Local workspace connected.");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Local workspace connected." }),
+  ).toBeVisible();
   response = { ...ready, state: "busy", canWrite: false, workspaceId: null };
   const refresh = async () => {
     await page.evaluate(() => {
@@ -162,5 +168,7 @@ test("readiness refresh withdraws domain content before a different workspace is
     runtimeEpoch: "00000000-0000-4000-8000-000000000004",
   };
   await refresh();
-  await expect(page.getByRole("status")).toHaveText("Local workspace connected.");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Local workspace connected." }),
+  ).toBeVisible();
 });

@@ -26,7 +26,7 @@ export function workflowUrl(formKey: string, sourceId?: string, childId?: string
   if (childId) params.set("child", childId);
   const family = formKey.startsWith("task.")
     ? "tasks"
-    : formKey.startsWith("communication.")
+    : formKey.startsWith("communication.") || formKey.startsWith("intake.")
       ? "conversations"
       : formKey.startsWith("maintenance.") || formKey.startsWith("owner_concern.")
         ? "maintenance"
@@ -292,6 +292,7 @@ function CommandEditor({
     relatedRevisions?: Record<string, number>;
   }>();
   const [attachment, setAttachment] = useState<File>();
+  const [intakeFiles, setIntakeFiles] = useState<File[]>([]);
   const [selecting, setSelecting] = useState(false);
   const evidence =
     definition.formKey === "inspection.evidence.attach" || definition.formKey === "file.upload";
@@ -338,6 +339,30 @@ function CommandEditor({
     const key = saved.attemptKey;
     if (!key) throw new Error("Prepare the original command identity first.");
     return mutation<unknown>(async () => {
+      if (definition.formKey === "intake.source.import") {
+        const manifest = saved.payload.attachments as {
+          role: "source_attachment" | "raw_source";
+          contentSha256: string;
+        }[];
+        if (intakeFiles.length !== manifest.length)
+          throw new Error("Reselect every original attachment in order.");
+        for (const [index, file] of intakeFiles.entries()) {
+          const metadata = await evidenceMetadata(file);
+          if (metadata.contentSha256 !== manifest[index].contentSha256)
+            throw new Error("Selected evidence does not match the saved attachment manifest.");
+        }
+        const { expectedRevision, attachments, ...metadata } = saved.payload;
+        void expectedRevision;
+        void attachments;
+        const body = new FormData();
+        body.append("metadata", JSON.stringify({ ...metadata, idempotencyKey: key }));
+        body.append("attachmentRoles", JSON.stringify(manifest.map((entry) => entry.role)));
+        for (const file of intakeFiles) body.append("files", file);
+        return api.POST("/api/intake/sources/import", {
+          body: { metadata: "", files: [] },
+          bodySerializer: () => body,
+        });
+      }
       if (evidence) {
         if (!attachment) throw new Error("Reselect the original evidence before retrying.");
         const selected = await evidenceMetadata(attachment);
@@ -619,6 +644,94 @@ function CommandEditor({
               />
             </>
           )}
+          {definition.formKey === "intake.source.import" && (
+            <>
+              <p>
+                Files are not saved in unfinished forms. Reselect the original bytes in the same
+                order after restart. Choose the role for each attachment below.
+              </p>
+              <label>
+                Source attachment files
+                <input
+                  type="file"
+                  multiple
+                  disabled={selecting}
+                  onChange={(event) => {
+                    const selected = Array.from(event.target.files ?? []);
+                    setIntakeFiles([]);
+                    if (
+                      selected.length > 20 ||
+                      selected.some((file) => file.size > 50 * 1024 * 1024) ||
+                      selected.reduce((sum, file) => sum + file.size, 0) > 100 * 1024 * 1024
+                    ) {
+                      setError(
+                        "Select at most 20 files, each at most 50 MiB, totaling at most 100 MiB.",
+                      );
+                      return;
+                    }
+                    setSelecting(true);
+                    void Promise.all(selected.map(evidenceMetadata))
+                      .then((metadata) => {
+                        if (
+                          selected.length > 20 ||
+                          selected.reduce((sum, file) => sum + file.size, 0) > 100 * 1024 * 1024
+                        )
+                          throw new Error("Select at most 20 files totaling at most 100 MiB.");
+                        const previous = (form.getValues("data").attachments ?? []) as {
+                          role: string;
+                          contentSha256: string;
+                        }[];
+                        if (
+                          recovered &&
+                          (previous.length !== metadata.length ||
+                            previous.some(
+                              (entry, index) =>
+                                entry.contentSha256 !== metadata[index].contentSha256,
+                            ))
+                        )
+                          throw new Error(
+                            "Selected evidence does not match the saved attachment manifest.",
+                          );
+                        form.setValue("data", {
+                          ...form.getValues("data"),
+                          attachments: metadata.map((item, index) => ({
+                            role: previous[index]?.role ?? "source_attachment",
+                            contentSha256: item.contentSha256,
+                          })),
+                        });
+                        setIntakeFiles(selected);
+                        setError(undefined);
+                      })
+                      .catch((cause: unknown) =>
+                        setError(
+                          cause instanceof Error
+                            ? cause.message
+                            : "Could not read source attachments.",
+                        ),
+                      )
+                      .finally(() => setSelecting(false));
+                  }}
+                />
+              </label>
+              {(Array.isArray(values.attachments) ? values.attachments : []).map((entry, index) => (
+                <label key={index}>
+                  Attachment {index + 1} role
+                  <select
+                    value={scalar(record(entry).role)}
+                    onChange={(event) => {
+                      const attachments = [...(values.attachments as Record<string, unknown>[])];
+                      attachments[index] = { ...record(entry), role: event.target.value };
+                      form.setValue("data", { ...values, attachments });
+                    }}
+                  >
+                    <option value="source_attachment">Source attachment</option>
+                    <option value="raw_source">Raw source</option>
+                  </select>
+                  <span>{scalar(record(entry).contentSha256)}</span>
+                </label>
+              ))}
+            </>
+          )}
           <Fields
             schema={
               evidence
@@ -626,7 +739,21 @@ function CommandEditor({
                     ...definition.schema,
                     properties: { purpose: definition.schema.properties!.purpose },
                   }
-                : definition.schema
+                : definition.formKey.startsWith("intake.")
+                  ? {
+                      ...definition.schema,
+                      properties: Object.fromEntries(
+                        Object.entries(definition.schema.properties ?? {}).filter(
+                          ([key]) =>
+                            ![
+                              "expectedEvidenceRevisionId",
+                              "expectedStatus",
+                              "attachments",
+                            ].includes(key),
+                        ),
+                      ),
+                    }
+                  : definition.schema
             }
             value={values}
             onChange={(next) => form.setValue("data", record(next))}
@@ -699,6 +826,23 @@ function CommandEditor({
       {review && (
         <section aria-label="Current source review">
           <h3>Current source revision {review.revision}</h3>
+          {definition.formKey.startsWith("intake.") && (
+            <>
+              <Facts
+                value={review.value}
+                fields={[
+                  "sourceRevision",
+                  "evidenceRevisionId",
+                  "technicalStatus",
+                  "attentionStatus",
+                ]}
+              />
+              <Facts
+                value={record(review.value).evidence}
+                fields={["subject", "body", "occurredAtContext"]}
+              />
+            </>
+          )}
           <Facts
             value={review.value}
             fields={[
@@ -730,6 +874,12 @@ function CommandEditor({
                 form.setValue("data", {
                   ...values,
                   [revisionField]: review.revision,
+                  ...(definition.formKey.startsWith("intake.")
+                    ? {
+                        expectedEvidenceRevisionId: record(review.value).evidenceRevisionId,
+                        expectedStatus: record(review.value).attentionStatus,
+                      }
+                    : {}),
                   ...review.relatedRevisions,
                   ...(review.spaceRevision === undefined
                     ? {}
@@ -749,6 +899,9 @@ function CommandEditor({
           <h3>Committed result</h3>
           <p>Operation {state.record.receipt.receiptId}</p>
           <FactsResult value={state.record.receipt.result} />
+          {definition.formKey.startsWith("intake.") && state.record.attemptKey && (
+            <OriginalIntakeResult attemptKey={state.record.attemptKey} />
+          )}
           {(definition.formKey.startsWith("task.") ||
             definition.formKey.startsWith("communication.") ||
             definition.formKey.startsWith("maintenance.") ||
@@ -783,6 +936,49 @@ function CommandEditor({
       <Link to={back}>Return to current record</Link>
       <RecoveryNavigation controller={controller} blocker={blocker} />
     </section>
+  );
+}
+
+function OriginalIntakeResult({ attemptKey }: { attemptKey: string }) {
+  const { scope } = useWorkspace();
+  const result = useQuery({
+    queryKey: scope.key("original-intake-result", attemptKey),
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/intake/sources/operations/by-key/{idempotency_key}", {
+          signal,
+          params: { path: { idempotency_key: attemptKey } },
+        }),
+      ),
+    retry: false,
+  });
+  return (
+    <>
+      {result.isPending && <p role="status">Loading original source receipt…</p>}
+      {result.error && (
+        <p role="alert">
+          The command committed, but its original receipt is unavailable: {result.error.message}
+        </p>
+      )}
+      {result.data && (
+        <>
+          <Facts
+            value={result.data}
+            fields={[
+              "sourceId",
+              "technicalStatus",
+              "attentionStatus",
+              "sourceRevision",
+              "operationId",
+            ]}
+          />
+          <p>This is the original committed response.</p>
+          <Link to={`/conversations?intake=true&source=${result.data.sourceId}`}>
+            Open current source evidence
+          </Link>
+        </>
+      )}
+    </>
   );
 }
 

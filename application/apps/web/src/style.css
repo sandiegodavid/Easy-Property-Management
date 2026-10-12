@@ -22,8 +22,12 @@ a {
   color: var(--accent);
 }
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 button,
 summary {
@@ -137,6 +141,13 @@ li {
 
 h1 {
   line-height: 1.2;
+}
+h1,
+h2,
+h3,
+button,
+summary {
+  overflow-wrap: anywhere;
 }
 .read-filters {
   display: flex;

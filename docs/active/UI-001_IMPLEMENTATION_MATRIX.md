@@ -1,6 +1,6 @@
 # UI-001 implementation slices
 
-Status: backend readiness Slices 41–43 and frontend Slices 44–54 delivered — October 11, 2026. Browser workflows in Slices 55–57 remain open; UI-001 is not complete.
+Status: backend readiness Slices 41–43 and frontend Slices 44–57 delivered — October 12, 2026. UI-001's implementation and acceptance gates are complete. Home aggregation remains DASH-001; issue-proposal review and connected assistants remain UI-002.
 
 Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
 feature-specific AI approval modes, Intake attention consequences, coordinated
@@ -12,10 +12,7 @@ The recorded backend readiness gate and React scaffold are complete; browser wor
 
 ## Subsequent UI slices — ordered implementation plan
 
-Updated October 11, 2026. Backend Slices 41–43 are recorded as delivered;
-Slices 44–54's React build, workspace gate, navigation, shared components, recovery transport, contextual reads, search/coverage and Portfolio/identity/Provider/Lease/Inspection/Money/Maintenance/Communication/Task/Owner-concern workflows are delivered. Implement the
-following slices sequentially. Slice numbers continue after the backend sequence;
-Slice 40 stays assigned to UI-002. Slices 44–54 are delivered; Slices 55–57 remain planned.
+Updated October 12, 2026. Backend Slices 41–43 and browser Slices 44–57 are delivered, including manual Intake, cross-workflow acceptance and encrypted restart/restore proofs. The following ordered slices record that delivery. Slice numbers continue after the backend sequence; Slice 40 stays assigned to UI-002.
 The [UI-001 design](UI-001_DESIGN.md#technical-implementation-design) owns the
 interaction and technical requirements.
 
@@ -333,21 +330,53 @@ quality checks above and report blockers without marking unrun checks passed.
     | Shell and frontend checks | `tests/shell.spec.ts`; lint, format, typecheck, contracts and packaging | Passed; existing bundle-size warning is non-fatal |
     | Persistence, retries and restore | Existing Task/OPS receipts are consumed without backend or schema changes | No new persistence; broader interrupted-command and encrypted-restore browser acceptance remains Slice 57 |
 
-14. **Slice 57: UI-001 integration, accessibility and production hardening.**
-    Run the design's validation scenarios across real temporary workspaces,
-    complete risk-based browser tests and verify keyboard/focus, both themes,
-    narrow layouts, mixed-section failures and context-preserving navigation.
-    Exercise source conflicts, interrupted commands, restart and encrypted restore,
-    credential isolation and no duplicate effects. Finish actual packaged-serving
-    and unrelated-origin/multipart security proofs from Slices 42–44. Verify every
-    visible control has a delivered capability, generated contracts are reproducible
-    and all frontend quality checks pass. Record remaining unavailable optional
-    features truthfully; mark UI-001 complete only when its definition of done passes.
+14. **Slice 57: UI-001 integration, accessibility and production hardening (delivered).**
+    The acceptance runner gives each workflow suite a fresh temporary workspace,
+    preserving state within each suite for original-key recovery. Packaged wheel
+    assets serve the delivered routes; browser multipart submissions from an
+    unrelated origin fail before request admission. Source actions pass keyboard,
+    focus, reduced-motion, 200% text-reflow and WCAG automated checks in Light and
+    Dark at 390px, 900px and 1440px. Narrow-window heading and control sizing was
+    corrected after the reflow test exposed overflow.
+
+    The restart/restore acceptance case interrupts a committed Task response,
+    resumes its saved original attempt after a real process restart, and checks
+    that there was one dispatch. Production encrypted backup/restore preserves
+    workspace identity, the original command receipt, Task state, saved form,
+    appearance preference, immutable evidence metadata, archived association
+    history, Intake provenance/correction/supersession history and exact content
+    bytes. Each new runtime has a different epoch;
+    sensitive form and record text stays out of browser storage. Backup secrets
+    are supplied only to the local test coordinator and are never browser inputs.
+
+    Manual Intake is available under Conversations → Retained source evidence.
+    Its six registered commands use generated contracts and the shared OPS form,
+    revision-review and original-receipt controls. The directory filters and
+    continuation remain server-owned and bounded; full evidence opens through
+    Intake's fail-closed audited read. Imports retain ordered roles/digests while
+    bytes require reselection after recovery. Failed or superseded sources retain
+    contextual history and do not offer new operator changes.
+
+    | Scenario | Evidence | Result / gap |
+    | --- | --- | --- |
+    | Keyboard, focus, supported widths and themes | `tests/acceptance.spec.ts`: six real Task edit paths, reduced motion, 200% text reflow and axe WCAG checks; shared component disclosure/dialog tests | Passed; automated checks supplement keyboard/focus validation |
+    | Production assets and browser transport | `tests/delivery.spec.ts` and unrelated-origin multipart case in `tests/acceptance.spec.ts` | Passed; actual wheel assets, deep links, CSP/nosniff/cache headers, reserved routes and rejected foreign commands |
+    | Lost response, restart and encrypted restore | `tests/restart-restore.spec.ts`; `scripts/web_acceptance_restore.py` invokes production BackupService while the fixture runtime is stopped | Passed; original receipt and stable IDs/history/content survive, epochs change and dispatch count remains one |
+    | Domain policy and consequential workflow boundaries | `leasing-inspections.spec.ts`, `money.spec.ts`, `work.spec.ts`, `workflows.spec.ts` | Passed; real source commits, revision conflicts, evidence partial success, receipt adoption, settlement steps, archive history and original-result recovery |
+    | Partial sections, paging, navigation and capability gates | `context-reads.spec.ts`, `search-coverage.spec.ts`, `shell.spec.ts`, `workspace-gate.spec.ts`, `ai-governance.spec.ts`, `home.spec.ts` | Passed; independent failures and unavailable integrations remain explicit; source rules and authoritative totals come from the server |
+    | Reproducibility and quality | Contracts check, packaged build, frontend lint/format/typecheck; changed Python lint/format | Passed; existing large-bundle warning remains informational |
+    | Manual Intake browser workstream | `tests/intake.spec.ts`: real admission/import/correction/supersession/dismissal/reopening, saved input, changed-byte rejection, stale-source review, failed sensitive-read admission and two-page/no-fan-out checks | Passed; original admission dispatch occurs once, raw-source roles and hashes remain ordered, corrections retain reasons, 30 records traverse two bounded pages without gaps |
+    | Serialized recovery and conflicting windows | `component-tests/recovery.spec.ts` plus real source conflicts in domain browser suites | Passed; acknowledged autosave, explicit discard, retained competing edits, original-key reconciliation/replay and rejected secret/file recovery |
+
+    Validation: 119 browser cases across isolated workflow suites, six shared
+    component cases and six recovery cases passed. Frontend lint, formatting,
+    typecheck, reproducible contracts, packaging, changed Python lint/format and
+    diff whitespace checks passed. No persistence format changed in this slice.
 
 ## Command-safety readiness inventory
 
-The approved backend contracts and OPS registrations are delivered. This inventory
-separates that delivery from pending browser workflow acceptance in UI Slices 54–57.
+The approved backend contracts, OPS registrations and browser acceptance are delivered. This inventory
+records their source-owned boundaries and browser handoffs in UI Slices 44–57.
 A delivered receipt does not enable a browser control or authorize automatic retries.
 
 | Workflow | Delivered backend boundary | UI handoff or scope boundary |
@@ -359,23 +388,23 @@ A delivered receipt does not enable a browser control or authorize automatic ret
 | Task waiting/follow-up | TASK-002 expected revision, idempotency and operation lookup; explicit OPS forms | Backend Slice 19 and browser Slices 48 and 53 delivered |
 | Task start/complete/cancel/reopen and reminder add/acknowledge/dismiss | Required parent revision and UUID key; atomic immutable receipt, typed response and lookup, same-key replay; explicit OPS forms | Backend Slices 8 and 19 and browser Slices 48 and 53 delivered |
 | Task editing/deletion | Required shared revision/key, immutable edit/no-op/delete receipts and retained tombstones; explicit OPS forms | Backend Slices 9 and 19 and browser Slices 48 and 53 delivered; lost deletion reconciles without a live source |
-| Portfolio manual status | Required revision/key, complete typed snapshots/conflicts and immutable operation/key lookup; explicit OPS forms | Slices 12 and 19 delivered; browser client/workflow acceptance remains in UI Slices 48–53 |
-| Lease draft/child and timeline actions | Required shared Lease revision/key, immutable original receipts and public read-only ID/key lookup; timeline actions also require the independent Space revision | Slice 13 source contracts and Slice 30 OPS recovery registration delivered; browser integration follows UI Slices 48 and 51 |
-| Property/Space lifecycle and ownership changes | Required shared Property revision/key, atomic immutable original receipts, typed conflicts and read-only ID/global/scoped key lookup | Slice 14 source contracts and Slice 41's nine inventory OPS forms delivered; browser transport follows |
-| Rent and prepaid-check commands | Shared ledger revision/key, immutable original receipts, atomic check/receipt/reminder effects and read-only key recovery; Owner receipt creation uses the same ledger contract | Slice 15 source contracts and all approved Finance OPS batches in Slices 31A–31E delivered; browser client integration follows UI Slices 48–53 |
-| Expense, Deposit and Owner-report commands | Required aggregate revision/key, original-result recovery, atomic child effects; Owner verification checks both report and ledger revisions | Slice 15 source contracts, Slice 28 category contracts and Slices 31C–31E OPS registration delivered; browser workflow acceptance remains in UI Slices 48–53 |
-| Intake commands | Required source/evidence revisions, immutable original operator results and indexed recovery; consumer attention remains transaction-aware | Slice 16 source contract and Slice 32's six local-operator OPS forms delivered; system integrity remains source-owned, INGEST-002 consumer consequences belong to UI-002; browser transport follows |
-| Files upload / link archival | Required UUID key; immutable original result and bounded recovery; archival requires association revision and returns a current-link conflict snapshot | Slice 17 source contract and Slice 33's two OPS forms delivered; internal reuse and system storage verification are not standalone OPS forms; browser transport follows |
-| Owning attachments / inspection lifecycle | Intake and Inspection own immutable receipts and Files batches; Inspection uses a lease-scoped revision and separate template revisions | Intake source contract and import OPS recovery delivered in Slices 16 and 32; Inspection source contract and ten OPS forms delivered in Slices 18 and 34; internal attachment consequences remain owning-workflow operations, not extra Files forms; browser transport follows |
-| Party identity | Required Party revision/UUID key, immutable identity receipts, detailed stale conflicts and indexed ID/global-key recovery | Slice 21 source contracts and Slice 35 OPS registration delivered; browser integration follows UI Slices 48 and 50 |
-| Party contact methods | Required shared Party revision/UUID key, immutable contact results, atomic owning-reference coordination and shared indexed recovery; Tenant resolutions additionally require their current Tenant revision | Slice 22 source contracts and Slice 35 OPS registration delivered; internal role-reference resolution remains an atomic owning consequence; browser integration follows UI Slices 48 and 50 |
-| Tenant creation/designation, profile/preferences, archive/restore | Required Tenant revision/UUID key, immutable original Tenant results, detailed stale conflicts and indexed ID/global-key recovery; Party identity/contact effects and preference-resolution receipts commit atomically | Slice 23 source contracts and Slice 35 OPS registration delivered; browser integration follows UI Slices 48 and 50 |
-| Provider creation/designation, profile, archive/restore | Required Provider revision/UUID key, immutable identity/profile results, current-profile stale conflicts and indexed ID/global-key recovery; initial Party/contact/child/category effects and audits commit atomically | Slice 24 source contracts and Slice 36 OPS registration delivered; browser integration follows UI Slices 48 and 50 |
-| Provider services, areas, work history, references and reputation | Required shared Provider revision/UUID key, immutable original child results, atomic child/profile/audit effects and indexed ID/global-key recovery | Slice 25 source contracts and Slice 36 OPS registration delivered; browser integration follows UI Slices 48 and 50 |
-| Provider categories and assignments | Required category revision/key or shared Provider revision/key; assign/restore also checks category revision; immutable typed original results and indexed recovery | Slice 26 source contracts and Slice 36 OPS registration delivered; browser integration follows UI Slices 48 and 50 |
+| Portfolio manual status | Required revision/key, complete typed snapshots/conflicts and immutable operation/key lookup; explicit OPS forms | Slices 12 and 19 delivered; browser client/workflow acceptance delivered in UI Slices 48–53 |
+| Lease draft/child and timeline actions | Required shared Lease revision/key, immutable original receipts and public read-only ID/key lookup; timeline actions also require the independent Space revision | Slice 13 source contracts and Slice 30 OPS recovery registration delivered; browser integration delivered in UI Slices 48 and 51 |
+| Property/Space lifecycle and ownership changes | Required shared Property revision/key, atomic immutable original receipts, typed conflicts and read-only ID/global/scoped key lookup | Slice 14 source contracts and Slice 41's nine inventory OPS forms delivered; browser acceptance delivered in Slices 50–57 |
+| Rent and prepaid-check commands | Shared ledger revision/key, immutable original receipts, atomic check/receipt/reminder effects and read-only key recovery; Owner receipt creation uses the same ledger contract | Slice 15 source contracts and all approved Finance OPS batches in Slices 31A–31E delivered; browser client integration delivered in UI Slices 48–53 |
+| Expense, Deposit and Owner-report commands | Required aggregate revision/key, original-result recovery, atomic child effects; Owner verification checks both report and ledger revisions | Slice 15 source contracts, Slice 28 category contracts and Slices 31C–31E OPS registration delivered; browser workflow acceptance delivered in UI Slices 48–53 |
+| Intake commands | Required source/evidence revisions, immutable original operator results and indexed recovery; consumer attention remains transaction-aware | Slice 16 source contract, Slice 32's six local-operator OPS forms and Slice 57 browser acceptance delivered; system integrity remains source-owned, INGEST-002 consumer consequences belong to UI-002 |
+| Files upload / link archival | Required UUID key; immutable original result and bounded recovery; archival requires association revision and returns a current-link conflict snapshot | Slice 17 source contract and Slice 33's two OPS forms delivered; internal reuse and system storage verification are not standalone OPS forms; browser acceptance delivered in Slices 50–57 |
+| Owning attachments / inspection lifecycle | Intake and Inspection own immutable receipts and Files batches; Inspection uses a lease-scoped revision and separate template revisions | Intake source contract and import OPS recovery delivered in Slices 16 and 32; Inspection source contract and ten OPS forms delivered in Slices 18 and 34; internal attachment consequences remain owning-workflow operations, not extra Files forms; browser acceptance delivered in Slices 50–57 |
+| Party identity | Required Party revision/UUID key, immutable identity receipts, detailed stale conflicts and indexed ID/global-key recovery | Slice 21 source contracts and Slice 35 OPS registration delivered; browser integration delivered in UI Slices 48 and 50 |
+| Party contact methods | Required shared Party revision/UUID key, immutable contact results, atomic owning-reference coordination and shared indexed recovery; Tenant resolutions additionally require their current Tenant revision | Slice 22 source contracts and Slice 35 OPS registration delivered; internal role-reference resolution remains an atomic owning consequence; browser integration delivered in UI Slices 48 and 50 |
+| Tenant creation/designation, profile/preferences, archive/restore | Required Tenant revision/UUID key, immutable original Tenant results, detailed stale conflicts and indexed ID/global-key recovery; Party identity/contact effects and preference-resolution receipts commit atomically | Slice 23 source contracts and Slice 35 OPS registration delivered; browser integration delivered in UI Slices 48 and 50 |
+| Provider creation/designation, profile, archive/restore | Required Provider revision/UUID key, immutable identity/profile results, current-profile stale conflicts and indexed ID/global-key recovery; initial Party/contact/child/category effects and audits commit atomically | Slice 24 source contracts and Slice 36 OPS registration delivered; browser integration delivered in UI Slices 48 and 50 |
+| Provider services, areas, work history, references and reputation | Required shared Provider revision/UUID key, immutable original child results, atomic child/profile/audit effects and indexed ID/global-key recovery | Slice 25 source contracts and Slice 36 OPS registration delivered; browser integration delivered in UI Slices 48 and 50 |
+| Provider categories and assignments | Required category revision/key or shared Provider revision/key; assign/restore also checks category revision; immutable typed original results and indexed recovery | Slice 26 source contracts and Slice 36 OPS registration delivered; browser integration delivered in UI Slices 48 and 50 |
 | Owner concerns and follow-ups | Required shared concern revision/UUID key; immutable original concern and Task results, atomic correlated effects, detailed stale conflicts and indexed recovery; links use COM-owned receipts | Backend Slices 27 and 37 and browser Slices 48 and 53 delivered |
-| Expense categories / Maintenance taxonomy | Required category revision/UUID key, immutable original results and indexed recovery; Maintenance has a fixed vocabulary and issue-owned category-edit receipts | Slice 28 source contracts and Slice 31C Expense-category OPS forms delivered; Maintenance category editing uses the existing issue-owned form; editable Maintenance category administration is outside scope; browser transport follows |
-| AI configuration and draft review | Required configuration revision or draft version and UUID key; immutable original results, detailed stale conflicts, indexed ID/key recovery; approval receipt and official effects commit in the owning transaction | Slice 29 source contracts and Slice 38 OPS registration delivered for currently registered commands; INGEST-002 approval/dismissal extensions move to UI-002; browser integration follows UI Slice 55 |
+| Expense categories / Maintenance taxonomy | Required category revision/UUID key, immutable original results and indexed recovery; Maintenance has a fixed vocabulary and issue-owned category-edit receipts | Slice 28 source contracts and Slice 31C Expense-category OPS forms delivered; Maintenance category editing uses the existing issue-owned form; editable Maintenance category administration is outside scope; browser acceptance delivered in Slices 50–57 |
+| AI configuration and draft review | Required configuration revision or draft version and UUID key; immutable original results, detailed stale conflicts, indexed ID/key recovery; approval receipt and official effects commit in the owning transaction | Slice 29 source contracts and Slice 38 OPS registration delivered for currently registered commands; INGEST-002 approval/dismissal extensions move to UI-002; browser integration delivered in UI Slice 55 |
 | AI credentials and connection probes | Required connection revision/key; durable sanitized intent/result, explicit uncertainty acknowledgement, original ID/key/OPS recovery; no automatic external retries | Slice 39 delivered under its approved non-atomic recovery contract; device-local readiness and browser workflow acceptance belong to UI Slice 55 |
 
 The registry now contains 192 explicit command-form keys, including all 41
@@ -415,7 +444,7 @@ existing owning commands, revisions, canonical fingerprints and immutable origin
 results. Backend delivery does not authorize automatic mutation retries or establish
 that a browser control is ready.
 
-### Remaining acceptance belongs to UI delivery
+### Browser acceptance delivery
 
 - **Slice 44 delivered:** actual generated client contracts, React/Vite assets,
   wheel asset inventory and temporary-workspace browser delivery now pass their
@@ -446,14 +475,11 @@ that a browser control is ready.
 - **Slice 54 delivered:** grouped metadata search, typed contextual links,
   source-backed coverage prompts and review decisions, with OPS form recovery,
   immutable original receipts and retained-data/restore validation.
-- **Slices 55–56:** consume the delivered bootstrap, source and OPS contracts;
-  implement route states, contextual workflows, recovery and accessibility. Each
-  enabled workflow needs a real critical read/write integration path and truthful
-  capability registration. Do not reconstruct domain rules or receipts in the browser.
-- **Slice 57:** finish cross-workflow verification, unrelated-origin/multipart
-  browser security, actual packaged serving, restart/restore and the UI-001
-  definition of done. Keep these final acceptance proofs distinct from the
-  delivered server-only evidence in Slices 42–43.
+- **Slices 55–56 delivered:** source-owned AI configuration/review controls,
+  truthful registration gates and shared Home attention/calendar primitives.
+- **Slice 57 delivered:** manual Intake workflows, packaged browser acceptance,
+  unrelated-origin multipart security, accessibility/reflow, shared recovery and
+  encrypted restart/restore proofs complete UI-001's acceptance gate.
 
 ### Scope boundaries
 
@@ -499,6 +525,6 @@ status does not replace the route/workflow acceptance required by these UI slice
 
 Backend Slices 1–43 and the detailed original delivery record are preserved in the [historical matrix](../archive/implementation-plans/UI-001_IMPLEMENTATION_MATRIX.md). Current backend contracts are documented in [module guides](../README.md#current-modules). This active matrix owns ordered browser delivery and remaining acceptance.
 
-## Explicit manual Intake acceptance
+## Explicit manual Intake acceptance (delivered)
 
-UI-001 retains manual source admission/import, bounded source/detail presentation, correction/supersession, dismissal/reopening, sensitive-read failure handling, attachments and original-operation recovery. Track these as a named workstream within the remaining UI delivery before Slice 57 completion. The existing numbered Slice 55 focuses AI controls; that focus must not drop manual Intake obligations. Issue-proposal approval and assistant setup stay in UI-002.
+Slice 57 delivers the manual Intake browser workstream and records its focused evidence in the validation table above. Issue-proposal approval and assistant setup remain UI-002.

@@ -1,5 +1,820 @@
 [
   {
+    "formKey": "intake.source.admit",
+    "title": "Retain source",
+    "method": "post",
+    "path": "/api/intake/sources",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "admitIntakeSource",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "minLength": 1,
+          "title": "Body",
+          "type": "string"
+        },
+        "channel": {
+          "enum": [
+            "email",
+            "sms",
+            "chat",
+            "internal",
+            "voice"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
+        "conversationRef": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Conversationref"
+        },
+        "externalSourceId": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Externalsourceid"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "occurredAtUtc": {
+          "format": "date-time",
+          "title": "Occurredatutc",
+          "type": "string"
+        },
+        "originSystem": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Originsystem",
+          "type": "string"
+        },
+        "participants": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Address"
+              },
+              "display": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Display"
+              },
+              "role": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Role",
+                "type": "string"
+              }
+            },
+            "required": [
+              "role"
+            ],
+            "title": "Participant",
+            "type": "object"
+          },
+          "maxItems": 50,
+          "title": "Participants",
+          "type": "array"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Provider"
+        },
+        "sourceKind": {
+          "enum": [
+            "email_message",
+            "sms_message",
+            "chat_message",
+            "operator_note",
+            "voice_transcript"
+          ],
+          "title": "Sourcekind",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject"
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sourceKind",
+        "channel",
+        "body",
+        "occurredAtUtc",
+        "originSystem",
+        "idempotencyKey",
+        "expectedRevision"
+      ],
+      "title": "SourceInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "intake.source.import",
+    "title": "Import source evidence",
+    "method": "post",
+    "path": "/api/intake/sources/import",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "importIntakeSource",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "minLength": 1,
+          "title": "Body",
+          "type": "string"
+        },
+        "channel": {
+          "enum": [
+            "email",
+            "sms",
+            "chat",
+            "internal",
+            "voice"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
+        "conversationRef": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Conversationref"
+        },
+        "externalSourceId": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Externalsourceid"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "occurredAtUtc": {
+          "format": "date-time",
+          "title": "Occurredatutc",
+          "type": "string"
+        },
+        "originSystem": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Originsystem",
+          "type": "string"
+        },
+        "participants": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Address"
+              },
+              "display": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Display"
+              },
+              "role": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Role",
+                "type": "string"
+              }
+            },
+            "required": [
+              "role"
+            ],
+            "title": "Participant",
+            "type": "object"
+          },
+          "maxItems": 50,
+          "title": "Participants",
+          "type": "array"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Provider"
+        },
+        "sourceKind": {
+          "enum": [
+            "email_message",
+            "sms_message",
+            "chat_message",
+            "operator_note",
+            "voice_transcript"
+          ],
+          "title": "Sourcekind",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject"
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "attachments": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "role",
+              "contentSha256"
+            ],
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": [
+                  "source_attachment",
+                  "raw_source"
+                ]
+              },
+              "contentSha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "sourceKind",
+        "channel",
+        "body",
+        "occurredAtUtc",
+        "originSystem",
+        "idempotencyKey",
+        "expectedRevision",
+        "attachments"
+      ],
+      "title": "SourceInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "intake.source.correct",
+    "title": "Correct source",
+    "method": "post",
+    "path": "/api/intake/sources/{source_id}/correct",
+    "sourceKind": "intake_source",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "correctIntakeSource",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "minLength": 1,
+          "title": "Body",
+          "type": "string"
+        },
+        "channel": {
+          "enum": [
+            "email",
+            "sms",
+            "chat",
+            "internal",
+            "voice"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
+        "conversationRef": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Conversationref"
+        },
+        "correctionReason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Correctionreason",
+          "type": "string"
+        },
+        "expectedEvidenceRevisionId": {
+          "format": "uuid",
+          "title": "Expectedevidencerevisionid",
+          "type": "string"
+        },
+        "externalSourceId": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Externalsourceid"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "occurredAtUtc": {
+          "format": "date-time",
+          "title": "Occurredatutc",
+          "type": "string"
+        },
+        "originSystem": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Originsystem",
+          "type": "string"
+        },
+        "participants": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Address"
+              },
+              "display": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Display"
+              },
+              "role": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Role",
+                "type": "string"
+              }
+            },
+            "required": [
+              "role"
+            ],
+            "title": "Participant",
+            "type": "object"
+          },
+          "maxItems": 50,
+          "title": "Participants",
+          "type": "array"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Provider"
+        },
+        "sourceKind": {
+          "enum": [
+            "email_message",
+            "sms_message",
+            "chat_message",
+            "operator_note",
+            "voice_transcript"
+          ],
+          "title": "Sourcekind",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject"
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "sourceKind",
+        "channel",
+        "body",
+        "occurredAtUtc",
+        "originSystem",
+        "idempotencyKey",
+        "correctionReason",
+        "expectedEvidenceRevisionId",
+        "expectedRevision"
+      ],
+      "title": "CorrectInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "intake.source.supersede",
+    "title": "Supersede source",
+    "method": "post",
+    "path": "/api/intake/sources/{source_id}/supersede",
+    "sourceKind": "intake_source",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "supersedeIntakeSource",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "minLength": 1,
+          "title": "Body",
+          "type": "string"
+        },
+        "channel": {
+          "enum": [
+            "email",
+            "sms",
+            "chat",
+            "internal",
+            "voice"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
+        "conversationRef": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Conversationref"
+        },
+        "expectedEvidenceRevisionId": {
+          "format": "uuid",
+          "title": "Expectedevidencerevisionid",
+          "type": "string"
+        },
+        "externalSourceId": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Externalsourceid"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "occurredAtUtc": {
+          "format": "date-time",
+          "title": "Occurredatutc",
+          "type": "string"
+        },
+        "originSystem": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Originsystem",
+          "type": "string"
+        },
+        "participants": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "address": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Address"
+              },
+              "display": {
+                "anyOf": [
+                  {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Display"
+              },
+              "role": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Role",
+                "type": "string"
+              }
+            },
+            "required": [
+              "role"
+            ],
+            "title": "Participant",
+            "type": "object"
+          },
+          "maxItems": 50,
+          "title": "Participants",
+          "type": "array"
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Provider"
+        },
+        "sourceKind": {
+          "enum": [
+            "email_message",
+            "sms_message",
+            "chat_message",
+            "operator_note",
+            "voice_transcript"
+          ],
+          "title": "Sourcekind",
+          "type": "string"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject"
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "sourceKind",
+        "channel",
+        "body",
+        "occurredAtUtc",
+        "originSystem",
+        "idempotencyKey",
+        "expectedEvidenceRevisionId",
+        "expectedRevision"
+      ],
+      "title": "SupersedeInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "intake.source.dismiss",
+    "title": "Dismiss source",
+    "method": "post",
+    "path": "/api/intake/sources/{source_id}/dismiss",
+    "sourceKind": "intake_source",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "dismissIntakeSource",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expectedStatus": {
+          "enum": [
+            "unprocessed",
+            "in_review",
+            "resolved",
+            "dismissed"
+          ],
+          "title": "Expectedstatus",
+          "type": "string"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "expectedEvidenceRevisionId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "reason",
+        "idempotencyKey",
+        "expectedRevision",
+        "expectedStatus",
+        "expectedEvidenceRevisionId"
+      ],
+      "title": "AttentionInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "intake.source.reopen",
+    "title": "Reopen source",
+    "method": "post",
+    "path": "/api/intake/sources/{source_id}/reopen",
+    "sourceKind": "intake_source",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "reopenIntakeSource",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expectedStatus": {
+          "enum": [
+            "unprocessed",
+            "in_review",
+            "resolved",
+            "dismissed"
+          ],
+          "title": "Expectedstatus",
+          "type": "string"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "expectedEvidenceRevisionId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "reason",
+        "idempotencyKey",
+        "expectedRevision",
+        "expectedStatus",
+        "expectedEvidenceRevisionId"
+      ],
+      "title": "AttentionInput",
+      "type": "object"
+    }
+  },
+  {
     "formKey": "task.create",
     "title": "Create task",
     "method": "post",

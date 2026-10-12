@@ -10,10 +10,13 @@ import { readResult } from "./reads";
 import { WorkCommand } from "./work-command";
 import { WorkRecord } from "./work-records";
 import { workUrl, type WorkKind } from "./work-links";
+import { IntakeWorkspace } from "./intake";
 
 export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
   const [params] = useSearchParams();
   const path = useParams();
+  if (params.get("intake") === "true" || params.get("workflow")?.startsWith("intake."))
+    return <IntakeWorkspace />;
   if (params.has("workflow")) return <WorkCommand key={params.toString()} />;
   const selected = params.get("record") as WorkKind | null;
   if (selected && !["issue", "task", "communication", "concern"].includes(selected))
@@ -38,7 +41,9 @@ export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
       <nav aria-label="Work views">
         <Link to="/maintenance">Issues</Link>{" "}
         <Link to="/maintenance?tab=concerns">Owner concerns</Link>{" "}
-        <Link to="/conversations">Conversations</Link> <Link to="/tasks">Tasks</Link>
+        <Link to="/conversations">Conversations</Link>{" "}
+        <Link to="/conversations?intake=true">Retained source evidence</Link>{" "}
+        <Link to="/tasks">Tasks</Link>
       </nav>
       {current === "task" && <TaskSummary />}
       <WorkDirectory key={current} kind={current} />

@@ -9,6 +9,12 @@ export function dispatchWorkflow(key: string, target: string, child: string, bod
   if (!definition) throw new Error("Unknown workflow.");
   validateRequest(definition.schema, body);
   switch (key) {
+    case "intake.source.admit": { const { expectedRevision, expectedEvidenceRevisionId, ...request } = body; return api.POST("/api/intake/sources", { body: request as components["schemas"]["SourceInput"] }); }
+    case "intake.source.import": throw new Error("Reselect verified evidence in the owning workflow editor.");
+    case "intake.source.correct": { const { expectedRevision, expectedEvidenceRevisionId, ...request } = body; return api.POST("/api/intake/sources/{source_id}/correct", { params: { path: { source_id: target } }, body: { ...request, expectedSourceRevision: expectedRevision, expectedEvidenceRevisionId } as components["schemas"]["CorrectInput"] }); }
+    case "intake.source.supersede": { const { expectedRevision, expectedEvidenceRevisionId, ...request } = body; return api.POST("/api/intake/sources/{source_id}/supersede", { params: { path: { source_id: target } }, body: { ...request, expectedSourceRevision: expectedRevision, expectedEvidenceRevisionId } as components["schemas"]["SupersedeInput"] }); }
+    case "intake.source.dismiss": { const { expectedRevision, expectedEvidenceRevisionId, ...request } = body; return api.POST("/api/intake/sources/{source_id}/dismiss", { params: { path: { source_id: target } }, body: { ...request, expectedSourceRevision: expectedRevision, expectedRevision: expectedEvidenceRevisionId } as components["schemas"]["AttentionInput"] }); }
+    case "intake.source.reopen": { const { expectedRevision, expectedEvidenceRevisionId, ...request } = body; return api.POST("/api/intake/sources/{source_id}/reopen", { params: { path: { source_id: target } }, body: { ...request, expectedSourceRevision: expectedRevision, expectedRevision: expectedEvidenceRevisionId } as components["schemas"]["AttentionInput"] }); }
     case "task.create": return api.POST("/api/tasks", { body: body as components["schemas"]["TaskCreationRequest"] });
     case "task.edit": return api.PATCH("/api/tasks/{task_id}", { params: { path: { task_id: target } }, body: body as components["schemas"]["TaskPatchRequest"] });
     case "task.delete": return api.DELETE("/api/tasks/{task_id}", { params: { path: { task_id: target } }, body: body as components["schemas"]["TaskConfirmationRequest"] });
@@ -54,7 +60,7 @@ export function dispatchWorkflow(key: string, target: string, child: string, bod
     case "owner_concern.resolved": return api.POST("/api/owner-concerns/{concern_id}/resolve", { params: { path: { concern_id: target } }, body: body as components["schemas"]["TransitionRequest"] });
     case "owner_concern.dismissed": return api.POST("/api/owner-concerns/{concern_id}/dismiss", { params: { path: { concern_id: target } }, body: body as components["schemas"]["TransitionRequest"] });
     case "owner_concern.follow_up": return api.POST("/api/owner-concerns/{concern_id}/follow-ups", { params: { path: { concern_id: target } }, body: body as components["schemas"]["ConcernFollowUpRequest"] });
-    case "file.upload": throw new Error("Reselect verified evidence in the inspection editor.");
+    case "file.upload": throw new Error("Reselect verified evidence in the owning workflow editor.");
     case "finance.rent_expectation.synchronize": return api.POST("/api/leases/{lease_id}/rent-expectations/synchronize", { params: { path: { lease_id: target } }, body: body as components["schemas"]["SynchronizeInput"] });
     case "finance.rent_expectation.void": return api.POST("/api/rent-expectations/{expectation_id}/void", { params: { path: { expectation_id: child } }, body: body as components["schemas"]["app__modules__finance__api__router__VoidInput"] });
     case "finance.rent_expectation.timeliness_review": return api.POST("/api/rent-expectations/{expectation_id}/timeliness-reviews", { params: { path: { expectation_id: child } }, body: body as components["schemas"]["app__modules__finance__api__router__ReviewInput"] });
@@ -121,7 +127,7 @@ export function dispatchWorkflow(key: string, target: string, child: string, bod
     case "inspection.report.acknowledge": return api.PUT("/api/condition-reports/{report_id}/acknowledgments", { params: { path: { report_id: target } }, body: body as components["schemas"]["AcknowledgmentRequest"] });
     case "inspection.report.finalize": return api.POST("/api/condition-reports/{report_id}/finalize", { params: { path: { report_id: target } }, body: body as components["schemas"]["FinalizeRequest"] });
     case "inspection.report.correct": return api.POST("/api/condition-reports/{report_id}/corrections", { params: { path: { report_id: target } }, body: body as components["schemas"]["CorrectionRequest"] });
-    case "inspection.evidence.attach": throw new Error("Reselect verified evidence in the inspection editor.");
+    case "inspection.evidence.attach": throw new Error("Reselect verified evidence in the owning workflow editor.");
     case "inspection.comparison.review": return api.PUT("/api/leases/{lease_id}/condition-comparison", { params: { path: { lease_id: target } }, body: body as components["schemas"]["ComparisonRequest"] });
     case "inspection.template.create": return api.POST("/api/condition-checklist-templates", { body: body as components["schemas"]["TemplateRequest"] });
     case "inspection.template.patch": return api.PATCH("/api/condition-checklist-templates/{template_id}", { params: { path: { template_id: target } }, body: body as components["schemas"]["TemplatePatchRequest"] });

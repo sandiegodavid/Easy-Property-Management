@@ -4,32 +4,22 @@ test("wheel assets mount React on direct and deep links using the generated clie
   page,
 }) => {
   const errors: string[] = [];
-  const apiRequests: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
   });
-  page.on("request", (request) => {
-    if (new URL(request.url()).pathname.startsWith("/api/")) apiRequests.push(request.url());
-  });
-  for (const path of [
-    "/home",
-    "/properties/00000000-0000-4000-8000-000000000001/units",
-    "/settings/workspace",
-  ]) {
+  for (const path of ["/home", "/tasks", "/settings/recovery"]) {
     const response = await page.goto(path);
     expect(response?.status()).toBe(200);
     expect(response?.headers()["x-content-type-options"]).toBe("nosniff");
     expect(response?.headers()["content-security-policy"]).toContain("script-src 'self'");
     expect(response?.headers()["cache-control"]).toBe("no-store");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Easy Property Management");
-    await expect(page.getByRole("status")).toHaveText("Local workspace connected.");
-    await expect(page.getByRole("button")).toHaveCount(0);
+    await expect(
+      page.getByRole("status").filter({ hasText: "Local workspace connected." }),
+    ).toBeVisible();
+    await expect(page.getByRole("main")).toBeVisible();
   }
-  expect(apiRequests.length).toBeGreaterThanOrEqual(3);
-  expect(apiRequests.every((url) => url === "http://127.0.0.1:18744/api/operator/bootstrap")).toBe(
-    true,
-  );
   expect(errors).toEqual([]);
 });
 

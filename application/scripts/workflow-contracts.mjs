@@ -1,6 +1,15 @@
 // Delivered browser command allowlist. Every request schema comes from OpenAPI;
 // the form key names the independently registered OPS recovery contract.
 export const workflowDefinitions = [
+  ["intake.source.admit", "Retain source", "post", "/api/intake/sources", null],
+  ["intake.source.import", "Import source evidence", "post", "/api/intake/sources/import", null],
+  ...["correct", "supersede", "dismiss", "reopen"].map((action) => [
+    `intake.source.${action}`,
+    `${action[0].toUpperCase()}${action.slice(1)} source`,
+    "post",
+    `/api/intake/sources/{source_id}/${action}`,
+    "intake_source",
+  ]),
   ["task.create", "Create task", "post", "/api/tasks", null],
   ["task.edit", "Edit task", "patch", "/api/tasks/{task_id}", "task", "financialChanges"],
   ["task.delete", "Delete task", "delete", "/api/tasks/{task_id}", "task"],
@@ -942,10 +951,48 @@ export function workflowContracts(openapi) {
                       contentSha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
                     },
                   }
-                : inline(operation.requestBody.content["application/json"].schema),
+                : inline(
+                    (formKey === "intake.source.import"
+                      ? openapi.paths["/api/intake/sources"].post
+                      : operation
+                    ).requestBody.content["application/json"].schema,
+                  ),
           };
         })
         .map((definition) => {
+          if (definition.formKey.startsWith("intake.")) {
+            const properties = definition.schema.properties;
+            properties.expectedRevision = {
+              type: "integer",
+              minimum: definition.sourceKind ? 1 : 0,
+            };
+            definition.schema.required = definition.schema.required.filter(
+              (key) => key !== "expectedSourceRevision",
+            );
+            delete properties.expectedSourceRevision;
+            if (["intake.source.dismiss", "intake.source.reopen"].includes(definition.formKey)) {
+              properties.expectedEvidenceRevisionId = { type: "string", format: "uuid" };
+              definition.schema.required.push("expectedEvidenceRevisionId");
+            }
+            if (!definition.schema.required.includes("expectedRevision"))
+              definition.schema.required.push("expectedRevision");
+            if (definition.formKey === "intake.source.import") {
+              properties.attachments = {
+                type: "array",
+                maxItems: 20,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  required: ["role", "contentSha256"],
+                  properties: {
+                    role: { type: "string", enum: ["source_attachment", "raw_source"] },
+                    contentSha256: { type: "string", pattern: "^[0-9a-f]{64}$" },
+                  },
+                },
+              };
+              definition.schema.required.push("attachments");
+            }
+          }
           if (definition.formKey === "task.create") {
             delete definition.schema.properties.status;
             delete definition.schema.properties.relatedLabel;
@@ -997,8 +1044,12 @@ export function workflowDispatch(openapi) {
     .map(([key, , method, path, , , childKey]) => {
       if (key === "maintenance.appointment.finish")
         return `    case "maintenance.appointment.finish": { const { cancelled, reason, ...request } = body; return cancelled ? api.POST("/api/maintenance-appointments/{appointment_id}/cancel", { params: { path: { appointment_id: child } }, body: { ...request, reason } as components["schemas"]["Reason"] }) : api.POST("/api/maintenance-appointments/{appointment_id}/complete", { params: { path: { appointment_id: child } }, body: { ...request, outcomeNote: reason } as components["schemas"]["AppointmentFinish"] }); }`;
-      if (key === "inspection.evidence.attach" || key === "file.upload")
-        return `    case ${JSON.stringify(key)}: throw new Error("Reselect verified evidence in the inspection editor.");`;
+      if (
+        key === "inspection.evidence.attach" ||
+        key === "file.upload" ||
+        key === "intake.source.import"
+      )
+        return `    case ${JSON.stringify(key)}: throw new Error("Reselect verified evidence in the owning workflow editor.");`;
       const schema = openapi.paths[path][method].requestBody.content["application/json"].schema.$ref
         .split("/")
         .at(-1);
@@ -1007,6 +1058,15 @@ export function workflowDispatch(openapi) {
         (match, index) =>
           `${match[1]}: ${key === "finance.deposit_account.create" ? "String(body.leaseId)" : index === 0 && !(childKey && placeholders.length === 1) ? "target" : "child"}`,
       );
+      if (key.startsWith("intake.")) {
+        const attention = ["intake.source.dismiss", "intake.source.reopen"].includes(key);
+        const request = attention
+          ? "{ ...request, expectedSourceRevision: expectedRevision, expectedRevision: expectedEvidenceRevisionId }"
+          : key === "intake.source.admit"
+            ? "request"
+            : "{ ...request, expectedSourceRevision: expectedRevision, expectedEvidenceRevisionId }";
+        return `    case ${JSON.stringify(key)}: { const { expectedRevision, expectedEvidenceRevisionId, ...request } = body; return api.POST(${JSON.stringify(path)}, { ${parameters.length ? `params: { path: { ${parameters.join(", ")} } }, ` : ""}body: ${request} as components["schemas"][${JSON.stringify(schema)}] }); }`;
+      }
       if (key === "finance.deposit_account.create")
         return `    case ${JSON.stringify(key)}: { const { leaseId, ...request } = body; return api.POST(${JSON.stringify(path)}, { params: { path: { lease_id: String(leaseId) } }, body: request as components["schemas"][${JSON.stringify(schema)}] }); }`;
       return `    case ${JSON.stringify(key)}: return api.${method.toUpperCase()}(${JSON.stringify(path)}, { ${parameters.length ? `params: { path: { ${parameters.join(", ")} } }, ` : ""}body: body as components["schemas"][${JSON.stringify(schema)}] });`;

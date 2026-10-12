@@ -4,9 +4,11 @@ test("packaged recovery route loads bounded metadata with reselection guidance",
   page,
 }) => {
   await page.goto("/home");
-  await page.evaluate(async () => {
+  const ids = await page.evaluate(async () => {
+    const saved: string[] = [];
     for (let index = 0; index < 2; index++) {
-      const result = await fetch(`/api/operator/recovery/${crypto.randomUUID()}`, {
+      const id = crypto.randomUUID();
+      const result = await fetch(`/api/operator/recovery/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -18,7 +20,9 @@ test("packaged recovery route loads bounded metadata with reselection guidance",
         }),
       });
       if (!result.ok) throw new Error("Fixture save failed.");
+      saved.push(id);
     }
+    return saved;
   });
   const reads: string[] = [];
   page.on("request", (request) => {
@@ -27,7 +31,11 @@ test("packaged recovery route loads bounded metadata with reselection guidance",
   await page.goto("/settings/recovery");
   await expect(page.getByRole("heading", { name: "Unfinished forms" })).toBeVisible();
   await expect(page.getByText(/Files and credentials must be selected again/)).toBeVisible();
-  await expect(page.getByText(/Resume from the owning workflow/)).toHaveCount(2);
+  for (const id of ids) {
+    const resume = page.locator(`a[href*="resume=${id}"]`);
+    await expect(resume).toHaveText("Resume task.create");
+    await expect(resume).toHaveAttribute("href", `/tasks?workflow=task.create&resume=${id}`);
+  }
   await expect(page.getByText(/Private draft/)).toHaveCount(0);
   expect(reads).toHaveLength(1);
   expect(reads[0]).toContain("limit=50");

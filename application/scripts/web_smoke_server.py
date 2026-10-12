@@ -2,6 +2,7 @@
 
 import argparse
 import json
+from contextlib import nullcontext
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -50,13 +51,20 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--state", choices=("ready", "unavailable"), required=True)
+    parser.add_argument("--directory", type=Path)
     args = parser.parse_args()
-    with TemporaryDirectory(prefix="epm-browser-") as directory:
+    context = (
+        nullcontext(str(args.directory))
+        if args.directory
+        else TemporaryDirectory(prefix="epm-browser-")
+    )
+    with context as directory:
         root = Path(directory).resolve()
         config = root / "config.json"
-        config.write_text(json.dumps({"localWorkspacePath": str(root / "workspace")}))
-        if args.state == "ready":
-            WorkspaceService.from_local_config(config).initialize()
+        if not config.exists():
+            config.write_text(json.dumps({"localWorkspacePath": str(root / "workspace")}))
+            if args.state == "ready":
+                WorkspaceService.from_local_config(config).initialize()
         wheel = APPLICATION / "dist/easy_property_management-0.1.0-py3-none-any.whl"
         web = root / "web_build"
         with ZipFile(wheel) as archive:
