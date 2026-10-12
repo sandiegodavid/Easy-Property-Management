@@ -5,6 +5,7 @@ Current behavior is in [module guides](../README.md#current-modules). These docu
 ## Core interface and acceptance
 
 - [UI-001 design](UI-001_DESIGN.md): approved target interactions and technical requirements.
+- [DASH-001 design](DASH-001_DESIGN.md): Home aggregation, source contracts, implementation sequence and 16 accepted decisions; implementation remains pending.
 - [UI-001 delivery matrix](UI-001_IMPLEMENTATION_MATRIX.md): ordered remaining browser slices, completed handoff and explicit manual Intake acceptance.
 - [UI-002 preliminary design](UI-002_DESIGN_preliminary.md): legal/HOA, spreadsheet intake, issue proposals and connected assistants.
 
