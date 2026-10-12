@@ -30,6 +30,7 @@ import { ProviderWorkspace } from "../workflows/providers";
 import { LeasingWorkspace } from "../workflows/leasing";
 import { InspectionWorkspace } from "../workflows/inspections";
 import { MoneyWorkspace } from "../workflows/money";
+import { WorkWorkspace } from "../workflows/work";
 
 function LeasingPage() {
   const [params] = useSearchParams();
@@ -269,6 +270,8 @@ export function ApplicationShell() {
                     <LeasingPage />
                   ) : item.id === "money" ? (
                     <MoneyWorkspace />
+                  ) : item.id === "maintenance" ? (
+                    <WorkWorkspace />
                   ) : (
                     <PendingPage title={item.label} />
                   )
@@ -335,7 +338,11 @@ export function ApplicationShell() {
             <Route path="leases/:id/:section" element={<LeasingPage />} />
             <Route path="inspections/:id" element={<InspectionWorkspace />} />
           </Route>
-          {["tasks", "search"].map((path) => (
+          <Route path="tasks" element={<WorkWorkspace kind="task" />} />
+          <Route path="tasks/:id" element={<WorkWorkspace kind="task" />} />
+          <Route path="conversations" element={<WorkWorkspace kind="communication" />} />
+          <Route path="maintenance/issues/:id" element={<WorkWorkspace />} />
+          {["search"].map((path) => (
             <Route
               key={path}
               path={path}

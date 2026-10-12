@@ -28,6 +28,7 @@ ROOT_ROUTES = {
     "/owners",
     "/leasing",
     "/tasks",
+    "/conversations",
     "/maintenance",
     "/providers",
     "/parties",

@@ -1,6 +1,167 @@
 // Delivered browser command allowlist. Every request schema comes from OpenAPI;
 // the form key names the independently registered OPS recovery contract.
 export const workflowDefinitions = [
+  ["task.create", "Create task", "post", "/api/tasks", null],
+  ["task.edit", "Edit task", "patch", "/api/tasks/{task_id}", "task", "financialChanges"],
+  ["task.delete", "Delete task", "delete", "/api/tasks/{task_id}", "task"],
+  ...["start", "complete", "cancel", "reopen"].map((action) => [
+    `task.${action}`,
+    `${action[0].toUpperCase()}${action.slice(1)} task`,
+    "post",
+    `/api/tasks/{task_id}/${action}`,
+    "task",
+  ]),
+  ["task.reminder.add", "Add task reminder", "post", "/api/tasks/{task_id}/reminders", "task"],
+  ...["acknowledge", "dismiss"].map((action) => [
+    `task.reminder.${action}`,
+    `${action[0].toUpperCase()}${action.slice(1)} reminder`,
+    "post",
+    `/api/tasks/{task_id}/reminders/{reminder_id}/${action}`,
+    "task",
+    null,
+    "reminderId",
+  ]),
+  ["task.waiting.set", "Set waiting context", "post", "/api/tasks/{task_id}/waiting", "task"],
+  [
+    "task.waiting.clear",
+    "Clear waiting context",
+    "post",
+    "/api/tasks/{task_id}/waiting/clear",
+    "task",
+  ],
+  [
+    "task.waiting.reschedule",
+    "Reschedule follow-up",
+    "post",
+    "/api/tasks/{task_id}/waiting/follow-up",
+    "task",
+  ],
+  ["communication.create", "Create conversation", "post", "/api/communications", null],
+  [
+    "communication.patch",
+    "Edit conversation draft",
+    "patch",
+    "/api/communications/{communication_id}",
+    "communication",
+  ],
+  [
+    "communication.draft.record",
+    "Record conversation",
+    "post",
+    "/api/communications/{communication_id}/record",
+    "communication",
+  ],
+  [
+    "communication.correct",
+    "Correct recorded conversation",
+    "post",
+    "/api/communications/{communication_id}/correct",
+    "communication",
+  ],
+  ["maintenance.issue.create", "Report maintenance issue", "post", "/api/maintenance-issues", null],
+  [
+    "maintenance.issue.patch",
+    "Edit maintenance issue",
+    "patch",
+    "/api/maintenance-issues/{issue_id}",
+    "maintenance_issue",
+    "financialChanges",
+  ],
+  [
+    "maintenance.reporter.correct",
+    "Correct issue reporter",
+    "post",
+    "/api/maintenance-issues/{issue_id}/reporter/correct",
+    "maintenance_issue",
+  ],
+  ...["start", "resolve", "cancel", "reopen"].map((action) => [
+    `maintenance.issue.${action}`,
+    `${action[0].toUpperCase()}${action.slice(1)} maintenance issue`,
+    "post",
+    `/api/maintenance-issues/{issue_id}/${action}`,
+    "maintenance_issue",
+  ]),
+  [
+    "maintenance.issue.return_to_open",
+    "Return issue to open",
+    "post",
+    "/api/maintenance-issues/{issue_id}/return-to-open",
+    "maintenance_issue",
+  ],
+  ...[
+    ["appointment.create", "Schedule appointment", "appointments"],
+    ["cost.create", "Record cost context", "cost-contexts"],
+    ["expense.link", "Link paid expense", "expense-links"],
+    ["quote.create", "Record provider quote", "quotes"],
+    ["assignment.create", "Assign provider", "assignments"],
+    ["follow_up.create", "Create issue follow-up", "follow-ups"],
+    ["journal.record", "Record work journal entry", "work-journal"],
+  ].map(([key, title, segment]) => [
+    `maintenance.${key}`,
+    title,
+    "post",
+    `/api/maintenance-issues/{issue_id}/${segment}`,
+    "maintenance_issue",
+  ]),
+  [
+    "maintenance.appointment.update",
+    "Reschedule appointment",
+    "patch",
+    "/api/maintenance-appointments/{appointment_id}",
+    "maintenance_issue",
+    null,
+    "targetId",
+  ],
+  [
+    "maintenance.appointment.finish",
+    "Finish appointment",
+    "post",
+    "/api/maintenance-appointments/{appointment_id}/complete",
+    "maintenance_issue",
+    null,
+    "targetId",
+  ],
+  ...[
+    ["cost.void", "Void cost context", "cost-contexts", "context_id", "void"],
+    ["expense.archive", "Archive expense association", "expense-links", "link_id", "archive"],
+    ["quote.withdraw", "Withdraw quote", "quotes", "quote_id", "withdraw"],
+    ["assignment.end", "End provider assignment", "assignments", "assignment_id", "end"],
+  ].map(([key, title, segment, parameter, action]) => [
+    `maintenance.${key}`,
+    title,
+    "post",
+    `/api/maintenance-${segment}/{${parameter}}/${action}`,
+    "maintenance_issue",
+    null,
+    "targetId",
+  ]),
+  ["owner_concern.create", "Record owner concern", "post", "/api/owner-concerns", null],
+  [
+    "owner_concern.patch",
+    "Edit owner concern",
+    "patch",
+    "/api/owner-concerns/{concern_id}",
+    "owner_concern",
+  ],
+  ...[
+    ["in_progress", "start"],
+    ["open", "reopen"],
+    ["resolved", "resolve"],
+    ["dismissed", "dismiss"],
+  ].map(([key, action]) => [
+    `owner_concern.${key}`,
+    `${action[0].toUpperCase()}${action.slice(1)} owner concern`,
+    "post",
+    `/api/owner-concerns/{concern_id}/${action}`,
+    "owner_concern",
+  ]),
+  [
+    "owner_concern.follow_up",
+    "Create concern follow-up",
+    "post",
+    "/api/owner-concerns/{concern_id}/follow-ups",
+    "owner_concern",
+  ],
   ["file.upload", "Attach supporting evidence", "post", "/api/files", null],
   [
     "finance.rent_expectation.synchronize",
@@ -758,7 +919,17 @@ export function workflowContracts(openapi) {
                         ? {
                             entityType: {
                               type: "string",
-                              enum: ["expense", "owner_rent_report", "security_deposit_deduction"],
+                              enum: [
+                                "expense",
+                                "owner_rent_report",
+                                "security_deposit_deduction",
+                                "maintenance_issue",
+                                "maintenance_appointment",
+                                "maintenance_cost_context",
+                                "maintenance_quote",
+                                "maintenance_assignment",
+                                "maintenance_work_journal_entry",
+                              ],
                             },
                             entityId: { type: "string", format: "uuid" },
                           }
@@ -775,6 +946,15 @@ export function workflowContracts(openapi) {
           };
         })
         .map((definition) => {
+          if (definition.formKey === "task.create") {
+            delete definition.schema.properties.status;
+            delete definition.schema.properties.relatedLabel;
+          }
+          if (definition.formKey === "maintenance.appointment.finish") {
+            definition.schema.properties.cancelled = { type: "boolean", default: false };
+            definition.schema.properties.reason = { type: "string", maxLength: 1000 };
+            delete definition.schema.properties.outcomeNote;
+          }
           if (definition.formKey === "finance.deposit_account.create") {
             definition.schema.properties.leaseId = { type: "string", format: "uuid" };
             definition.schema.required.push("leaseId");
@@ -815,6 +995,8 @@ export function workflowContracts(openapi) {
 export function workflowDispatch(openapi) {
   const cases = workflowDefinitions
     .map(([key, , method, path, , , childKey]) => {
+      if (key === "maintenance.appointment.finish")
+        return `    case "maintenance.appointment.finish": { const { cancelled, reason, ...request } = body; return cancelled ? api.POST("/api/maintenance-appointments/{appointment_id}/cancel", { params: { path: { appointment_id: child } }, body: { ...request, reason } as components["schemas"]["Reason"] }) : api.POST("/api/maintenance-appointments/{appointment_id}/complete", { params: { path: { appointment_id: child } }, body: { ...request, outcomeNote: reason } as components["schemas"]["AppointmentFinish"] }); }`;
       if (key === "inspection.evidence.attach" || key === "file.upload")
         return `    case ${JSON.stringify(key)}: throw new Error("Reselect verified evidence in the inspection editor.");`;
       const schema = openapi.paths[path][method].requestBody.content["application/json"].schema.$ref

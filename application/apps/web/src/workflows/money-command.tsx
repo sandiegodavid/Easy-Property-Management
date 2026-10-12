@@ -270,7 +270,7 @@ export function MoneyCommand() {
     Object.assign(initial, {
       entityType: params.get("entityType"),
       entityId: params.get("entityId"),
-      purpose: "supporting_document",
+      purpose: params.get("purpose") ?? "supporting_document",
     });
   if (state.ledgerRevision !== undefined) initial.expectedRentLedgerRevision = state.ledgerRevision;
   const verification = definition.formKey === "owner_rent_report.verify";

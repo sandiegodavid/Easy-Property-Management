@@ -158,6 +158,13 @@ export function SourceDetail() {
         <>
           <h4>{result.data.title}</h4>
           {kind === "lease" && <Link to={`/leases/${id}/details`}>Open Lease workflow</Link>}
+          {["task", "maintenance_issue", "communication", "owner_concern"].includes(kind) && (
+            <Link
+              to={`${kind === "task" ? "/tasks" : kind === "communication" ? "/conversations" : "/maintenance"}?record=${kind === "maintenance_issue" ? "issue" : kind === "owner_concern" ? "concern" : kind}&id=${id}`}
+            >
+              Open work workflow
+            </Link>
+          )}
           <dl>
             {Object.entries(result.data.facts).map(([name, value]) => (
               <div key={name}>

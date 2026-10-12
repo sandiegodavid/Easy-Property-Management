@@ -297,6 +297,15 @@ def build_router(
     def cancel(task_id: UUID, data: OutcomeRequest):
         return task_change(task_id, data, "cancel")
 
+    @router.get(
+        "/{task_id}/reminders",
+        response_model=list[ReminderResponse],
+        operation_id="listTaskReminders",
+    )
+    def reminders(task_id: UUID, limit: int = Query(100, ge=1, le=100)):
+        ready()
+        return invoke(lambda: service.reminders(str(task_id), limit=limit))
+
     @router.post(
         "/{task_id}/reminders",
         status_code=status.HTTP_201_CREATED,

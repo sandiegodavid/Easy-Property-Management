@@ -13951,6 +13951,10 @@
             ],
             "title": "Archivedat"
           },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
           "contentSha256": {
             "title": "Contentsha256",
             "type": "string"
@@ -13994,6 +13998,20 @@
           "sizeBytes": {
             "title": "Sizebytes",
             "type": "integer"
+          },
+          "storageState": {
+            "enum": [
+              "available",
+              "missing",
+              "quarantined"
+            ],
+            "title": "Storagestate",
+            "type": "string"
+          },
+          "verifiedAt": {
+            "format": "date-time",
+            "title": "Verifiedat",
+            "type": "string"
           }
         },
         "required": [
@@ -14008,7 +14026,10 @@
           "originalName",
           "mediaType",
           "sizeBytes",
-          "contentSha256"
+          "contentSha256",
+          "storageState",
+          "available",
+          "verifiedAt"
         ],
         "title": "FileSummaryResponse",
         "type": "object"
@@ -66116,6 +66137,83 @@
       }
     },
     "/api/tasks/{task_id}/reminders": {
+      "get": {
+        "operationId": "listTaskReminders",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReminderResponse"
+                  },
+                  "title": "Response Listtaskreminders",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reminders",
+        "tags": [
+          "tasks"
+        ]
+      },
       "post": {
         "operationId": "addTaskReminder",
         "parameters": [

@@ -18,24 +18,31 @@ import type { Recovery } from "../shared/recovery";
 import { clean, Fields, type Choices } from "./fields";
 import { Facts, readResult } from "./reads";
 import { MoneyFacts } from "./money-presentation";
+import { OriginalWorkResult } from "./work-result";
 
 export function workflowUrl(formKey: string, sourceId?: string, childId?: string) {
   const params = new URLSearchParams({ workflow: formKey });
   if (sourceId) params.set("target", sourceId);
   if (childId) params.set("child", childId);
-  const family = formKey.startsWith("portfolio.")
-    ? "properties"
-    : formKey.startsWith("provider.")
-      ? "providers"
-      : formKey.startsWith("finance.") ||
-          formKey.startsWith("owner_rent_report.") ||
-          formKey === "file.upload"
-        ? "money"
-        : formKey.startsWith("lease.") ||
-            formKey.startsWith("inspection.") ||
-            formKey === "file.link.archive"
-          ? "leasing"
-          : "parties";
+  const family = formKey.startsWith("task.")
+    ? "tasks"
+    : formKey.startsWith("communication.")
+      ? "conversations"
+      : formKey.startsWith("maintenance.") || formKey.startsWith("owner_concern.")
+        ? "maintenance"
+        : formKey.startsWith("portfolio.")
+          ? "properties"
+          : formKey.startsWith("provider.")
+            ? "providers"
+            : formKey.startsWith("finance.") ||
+                formKey.startsWith("owner_rent_report.") ||
+                formKey === "file.upload"
+              ? "money"
+              : formKey.startsWith("lease.") ||
+                  formKey.startsWith("inspection.") ||
+                  formKey === "file.link.archive"
+                ? "leasing"
+                : "parties";
   return `/${family}?${params}`;
 }
 
@@ -71,6 +78,24 @@ function toPayload(definition: Workflow, body: Record<string, unknown>, child?: 
   }
   if (definition.formKey === "finance.rent_receipt.create") delete payload.leaseId;
   if (definition.formKey === "file.upload") delete payload.sizeBytes;
+  if (
+    definition.formKey === "maintenance.journal.record" &&
+    (payload.correctedEntryKind ?? payload.entryKind) === "work_completed"
+  ) {
+    if (payload.operatorVerified === undefined) payload.operatorVerified = false;
+    if (payload.followUpRequired === undefined) payload.followUpRequired = false;
+  }
+  if (["task.create", "maintenance.issue.create"].includes(definition.formKey))
+    delete payload.expectedRevision;
+  if (definition.formKey.startsWith("task.waiting.")) {
+    const { waitingForKind, waitingForLabel, followUpAt, ...rest } = payload;
+    payload = {
+      ...rest,
+      ...(waitingForKind === undefined ? {} : { kind: waitingForKind }),
+      ...(waitingForLabel === undefined ? {} : { label: waitingForLabel }),
+      ...(followUpAt === undefined ? {} : { followUpAtUtc: followUpAt }),
+    };
+  }
   if (definition.childKey) payload[definition.childKey] = child;
   return payload;
 }
@@ -109,6 +134,17 @@ function toBody(
     body = { ...rest, confirmed: zeroRefundConfirmed };
   }
   if (definition.formKey === "finance.rent_receipt.create" && sourceId) body.leaseId = sourceId;
+  if (["task.create", "maintenance.issue.create"].includes(definition.formKey))
+    body.expectedRevision = 0;
+  if (definition.formKey.startsWith("task.waiting.")) {
+    const { kind, label, followUpAtUtc, ...rest } = body;
+    body = {
+      ...rest,
+      ...(kind === undefined ? {} : { waitingForKind: kind }),
+      ...(label === undefined ? {} : { waitingForLabel: label }),
+      ...(followUpAtUtc === undefined ? {} : { followUpAt: followUpAtUtc }),
+    };
+  }
   return key ? { ...body, idempotencyKey: key } : body;
 }
 
@@ -514,7 +550,11 @@ function CommandEditor({
               ...record(clean(definition.schema, values)),
               idempotencyKey: crypto.randomUUID(),
             });
-            if (checkSource) await checkSource(values);
+            if (checkSource)
+              await checkSource({
+                ...values,
+                ...(definition.childKey && childId ? { [definition.childKey]: childId } : {}),
+              });
             await controller.submit(dispatch);
           });
         }}
@@ -709,6 +749,18 @@ function CommandEditor({
           <h3>Committed result</h3>
           <p>Operation {state.record.receipt.receiptId}</p>
           <FactsResult value={state.record.receipt.result} />
+          {(definition.formKey.startsWith("task.") ||
+            definition.formKey.startsWith("communication.") ||
+            definition.formKey.startsWith("maintenance.") ||
+            definition.formKey.startsWith("owner_concern.")) &&
+            state.record.attemptKey && (
+              <OriginalWorkResult
+                definition={definition}
+                attemptKey={state.record.attemptKey}
+                operationId={state.record.receipt.receiptId}
+                sourceId={sourceId}
+              />
+            )}
           {(definition.formKey.startsWith("lease.") ||
             definition.formKey.startsWith("inspection.")) && (
             <OriginalWorkflowResult

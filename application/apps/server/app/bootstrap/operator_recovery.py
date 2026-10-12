@@ -11,6 +11,14 @@ from app.modules.operator.domain.models import OperatorConflict, OperatorError, 
 from app.modules.operator.application.ports import RecoveryBinding
 from app.modules.operator.application.command_forms import COMMAND_SCHEMAS
 from app.bootstrap.operator_command_forms import require_complete_form
+from app.bootstrap.operator_command_forms import command, snake_values
+from app.modules.tasks.application.creation import creation_fingerprint
+from app.modules.tasks.application.service import TaskCreateCommand
+from app.modules.maintenance.domain.models import (
+    IssueCreate,
+    ReporterAttribution,
+)
+from app.modules.maintenance.application.commands import command_fingerprint as issue_fingerprint
 from app.bootstrap.operator_intake_commands import intake_form_state
 from app.bootstrap.operator_inspection_commands import inspection_form_state
 from app.bootstrap.operator_identity_commands import identity_form_state
@@ -94,6 +102,21 @@ class OperatorRecoveryReferences:
         return specialized_command_state(connection, binding, state, value, payload)
 
     def attempt_fingerprint(self, value, key, *, connection=None):
+        payload = json.loads(value["payload_json"])
+        if value["form_key"] == "task.create":
+            return creation_fingerprint(TaskCreateCommand.from_mapping(payload))
+        if value["form_key"] == "maintenance.issue.create":
+            values = snake_values(payload)
+            values["reporter"] = command(
+                ReporterAttribution, snake_values(values.get("reporter") or {})
+            )
+            return issue_fingerprint(
+                action="create_issue",
+                target_kind="issue",
+                target_id=None,
+                payload={"command": command(IssueCreate, values)},
+                expected_revision=0,
+            )
         binding = self.commands.get(value["form_key"])
         if binding is None:
             raise OperatorConflict("This workflow has no registered command binding.")

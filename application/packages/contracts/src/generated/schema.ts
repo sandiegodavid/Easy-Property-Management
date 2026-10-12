@@ -4445,7 +4445,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Reminders */
+        get: operations["listTaskReminders"];
         put?: never;
         /** Add Reminder */
         post: operations["addTaskReminder"];
@@ -10011,6 +10012,8 @@ export interface components {
             archiveReason: string | null;
             /** Archivedat */
             archivedAt: string | null;
+            /** Available */
+            available: boolean;
             /** Contentsha256 */
             contentSha256: string;
             /**
@@ -10043,6 +10046,16 @@ export interface components {
             purpose: string;
             /** Sizebytes */
             sizeBytes: number;
+            /**
+             * Storagestate
+             * @enum {string}
+             */
+            storageState: "available" | "missing" | "quarantined";
+            /**
+             * Verifiedat
+             * Format: date-time
+             */
+            verifiedAt: string;
         };
         /** FileUploadResponse */
         FileUploadResponse: {
@@ -34746,6 +34759,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaskMutationResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listTaskReminders: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderResponse"][];
                 };
             };
             /** @description Local transport rejected. */

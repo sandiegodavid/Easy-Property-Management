@@ -308,6 +308,12 @@ class TaskService:
         except ValueError as error:
             raise TaskConflictError(str(error)) from error
 
+    def reminders(self, task_id: str, *, limit: int = 100) -> list[dict]:
+        self.get(task_id)
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise TaskError("Reminder limit must be between 1 and 100.")
+        return [item.to_dict() for item in self.unit_of_work.reminders(task_id, limit=limit)]
+
     def add_reminder(self, task_id: str, remind_at_utc: str) -> TaskReminder:
         instant, _ = _timestamp(remind_at_utc, "UTC", required=True)
         reminder = TaskReminder(str(uuid4()), task_id, instant, "pending", None, None, self._now())

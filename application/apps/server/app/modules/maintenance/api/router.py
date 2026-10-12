@@ -254,6 +254,9 @@ class FileSummaryResponse(Contract):
     mediaType: str
     sizeBytes: int
     contentSha256: str
+    storageState: Literal["available", "missing", "quarantined"]
+    available: bool
+    verifiedAt: AwareDatetime
 
 
 class TaskSummaryResponse(Contract):

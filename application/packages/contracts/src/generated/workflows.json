@@ -1,5 +1,3651 @@
 [
   {
+    "formKey": "task.create",
+    "title": "Create task",
+    "method": "post",
+    "path": "/api/tasks",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createTask",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "dueAtUtc": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Dueatutc"
+        },
+        "dueTimezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Duetimezone"
+        },
+        "expectedRevision": {
+          "maximum": 0,
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "isAllDay": {
+          "default": false,
+          "title": "Isallday",
+          "type": "boolean"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "priority": {
+          "default": "normal",
+          "enum": [
+            "low",
+            "normal",
+            "high",
+            "urgent"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "relatedEntityId": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Relatedentityid"
+        },
+        "relatedEntityType": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Relatedentitytype"
+        },
+        "title": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "TaskCreationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "task.edit",
+    "title": "Edit task",
+    "method": "patch",
+    "path": "/api/tasks/{task_id}",
+    "sourceKind": "task",
+    "nesting": "financialChanges",
+    "childKey": null,
+    "operationId": "editTask",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "dueAtUtc": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Dueatutc"
+        },
+        "dueTimezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Duetimezone"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "isAllDay": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Isallday"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 10000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "normal",
+                "high",
+                "urgent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Priority"
+        },
+        "relatedEntityId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Relatedentityid"
+        },
+        "relatedEntityType": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Relatedentitytype"
+        },
+        "relatedLabel": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Relatedlabel"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Title"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "TaskPatchRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "task.delete",
+    "title": "Delete task",
+    "method": "delete",
+    "path": "/api/tasks/{task_id}",
+    "sourceKind": "task",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "deleteTask",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "TaskConfirmationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "task.start",
+    "title": "Start task",
+    "method": "post",
+    "path": "/api/tasks/{task_id}/start",
+    "sourceKind": "task",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "startTask",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "TaskMutationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "task.complete",
+    "title": "Complete task",
+    "method": "post",
+    "path": "/api/tasks/{task_id}/complete",
+    "sourceKind": "task",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "completeTask",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "outcomeNote": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Outcomenote"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "OutcomeRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "task.cancel",
+    "title": "Cancel task",
+    "method": "post",
+    "path": "/api/tasks/{task_id}/cancel",
+    "sourceKind": "task",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "cancelTask",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "outcomeNote": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Outcomenote"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "OutcomeRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "task.reopen",
+    "title": "Reopen task",
+    "method": "post",
+    "path": "/api/tasks/{task_id}/reopen",
+    "sourceKind": "task",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "reopenTask",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "TaskConfirmationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "task.reminder.add",
+    "title": "Add task reminder",
+    "method": "post",
+    "path": "/api/tasks/{task_id}/reminders",
+    "sourceKind": "task",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "addTaskReminder",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "remindAtUtc": {
+          "format": "date-time",
+          "title": "Remindatutc",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "remindAtUtc"
+      ],
+      "title": "ReminderRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "task.reminder.acknowledge",
+    "title": "Acknowledge reminder",
+    "method": "post",
+    "path": "/api/tasks/{task_id}/reminders/{reminder_id}/acknowledge",
+    "sourceKind": "task",
+    "nesting": null,
+    "childKey": "reminderId",
+    "operationId": "acknowledgeTaskReminder",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "TaskConfirmationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "task.reminder.dismiss",
+    "title": "Dismiss reminder",
+    "method": "post",
+    "path": "/api/tasks/{task_id}/reminders/{reminder_id}/dismiss",
+    "sourceKind": "task",
+    "nesting": null,
+    "childKey": "reminderId",
+    "operationId": "dismissTaskReminder",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "TaskConfirmationRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "task.waiting.set",
+    "title": "Set waiting context",
+    "method": "post",
+    "path": "/api/tasks/{task_id}/waiting",
+    "sourceKind": "task",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "setTaskWaiting",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "followUpAt": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Followupat"
+        },
+        "followUpTimezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Followuptimezone"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "waitingForKind": {
+          "enum": [
+            "person",
+            "organization",
+            "event",
+            "other"
+          ],
+          "title": "Waitingforkind",
+          "type": "string"
+        },
+        "waitingForLabel": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Waitingforlabel",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "waitingForKind",
+        "waitingForLabel"
+      ],
+      "title": "WaitingSetRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "task.waiting.clear",
+    "title": "Clear waiting context",
+    "method": "post",
+    "path": "/api/tasks/{task_id}/waiting/clear",
+    "sourceKind": "task",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "clearTaskWaiting",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "WaitingClearRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "task.waiting.reschedule",
+    "title": "Reschedule follow-up",
+    "method": "post",
+    "path": "/api/tasks/{task_id}/waiting/follow-up",
+    "sourceKind": "task",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "rescheduleTaskFollowUp",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "clearFollowUp": {
+          "default": false,
+          "title": "Clearfollowup",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "followUpAt": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Followupat"
+        },
+        "followUpTimezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Followuptimezone"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "FollowUpRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "communication.create",
+    "title": "Create conversation",
+    "method": "post",
+    "path": "/api/communications",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createCommunication",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "maxLength": 10000,
+          "minLength": 1,
+          "title": "Body",
+          "type": "string"
+        },
+        "channel": {
+          "enum": [
+            "phone",
+            "email",
+            "sms",
+            "in_person",
+            "letter",
+            "other"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "inbound",
+            "outbound",
+            "internal"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "followUp": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "dueAtUtc": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Dueatutc"
+                },
+                "dueTimezone": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Duetimezone"
+                },
+                "notes": {
+                  "anyOf": [
+                    {
+                      "maxLength": 10000,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Notes"
+                },
+                "title": {
+                  "maxLength": 240,
+                  "minLength": 1,
+                  "title": "Title",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title"
+              ],
+              "title": "FollowUpInputModel",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "links": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "format": "uuid",
+                "title": "Entityid",
+                "type": "string"
+              },
+              "entityType": {
+                "enum": [
+                  "party",
+                  "property",
+                  "space",
+                  "lease",
+                  "rent_expectation",
+                  "rent_receipt",
+                  "renewal_option",
+                  "task",
+                  "maintenance_issue",
+                  "owner_concern",
+                  "intake_source"
+                ],
+                "title": "Entitytype",
+                "type": "string"
+              }
+            },
+            "required": [
+              "entityType",
+              "entityId"
+            ],
+            "title": "LinkInputModel",
+            "type": "object"
+          },
+          "title": "Links",
+          "type": "array"
+        },
+        "occurredAtUtc": {
+          "format": "date-time",
+          "title": "Occurredatutc",
+          "type": "string"
+        },
+        "occurredTimezone": {
+          "title": "Occurredtimezone",
+          "type": "string"
+        },
+        "participants": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "partyContactMethodId": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Partycontactmethodid"
+              },
+              "partyId": {
+                "format": "uuid",
+                "title": "Partyid",
+                "type": "string"
+              },
+              "role": {
+                "enum": [
+                  "sender",
+                  "recipient",
+                  "reporter",
+                  "other"
+                ],
+                "title": "Role",
+                "type": "string"
+              }
+            },
+            "required": [
+              "partyId",
+              "role"
+            ],
+            "title": "ParticipantInputModel",
+            "type": "object"
+          },
+          "minItems": 1,
+          "title": "Participants",
+          "type": "array"
+        },
+        "record": {
+          "default": false,
+          "title": "Record",
+          "type": "boolean"
+        },
+        "subject": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "direction",
+        "channel",
+        "subject",
+        "body",
+        "occurredAtUtc",
+        "occurredTimezone",
+        "participants",
+        "idempotencyKey"
+      ],
+      "title": "CommunicationInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "communication.patch",
+    "title": "Edit conversation draft",
+    "method": "patch",
+    "path": "/api/communications/{communication_id}",
+    "sourceKind": "communication",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "patchCommunication",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "anyOf": [
+            {
+              "maxLength": 10000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Body"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "links": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "entityId": {
+                    "format": "uuid",
+                    "title": "Entityid",
+                    "type": "string"
+                  },
+                  "entityType": {
+                    "enum": [
+                      "party",
+                      "property",
+                      "space",
+                      "lease",
+                      "rent_expectation",
+                      "rent_receipt",
+                      "renewal_option",
+                      "task",
+                      "maintenance_issue",
+                      "owner_concern",
+                      "intake_source"
+                    ],
+                    "title": "Entitytype",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "entityType",
+                  "entityId"
+                ],
+                "title": "LinkInputModel",
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Links"
+        },
+        "occurredAtUtc": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Occurredatutc"
+        },
+        "occurredTimezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Occurredtimezone"
+        },
+        "participants": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "partyContactMethodId": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Partycontactmethodid"
+                  },
+                  "partyId": {
+                    "format": "uuid",
+                    "title": "Partyid",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "sender",
+                      "recipient",
+                      "reporter",
+                      "other"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "partyId",
+                  "role"
+                ],
+                "title": "ParticipantInputModel",
+                "type": "object"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Participants"
+        },
+        "subject": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Subject"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "PatchInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "communication.draft.record",
+    "title": "Record conversation",
+    "method": "post",
+    "path": "/api/communications/{communication_id}/record",
+    "sourceKind": "communication",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "recordCommunication",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "followUp": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "dueAtUtc": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Dueatutc"
+                },
+                "dueTimezone": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Duetimezone"
+                },
+                "notes": {
+                  "anyOf": [
+                    {
+                      "maxLength": 10000,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Notes"
+                },
+                "title": {
+                  "maxLength": 240,
+                  "minLength": 1,
+                  "title": "Title",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title"
+              ],
+              "title": "FollowUpInputModel",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "RecordInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "communication.correct",
+    "title": "Correct recorded conversation",
+    "method": "post",
+    "path": "/api/communications/{communication_id}/correct",
+    "sourceKind": "communication",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "correctCommunication",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "maxLength": 10000,
+          "minLength": 1,
+          "title": "Body",
+          "type": "string"
+        },
+        "channel": {
+          "enum": [
+            "phone",
+            "email",
+            "sms",
+            "in_person",
+            "letter",
+            "other"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
+        "correctionReason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Correctionreason",
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "inbound",
+            "outbound",
+            "internal"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "followUp": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "dueAtUtc": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Dueatutc"
+                },
+                "dueTimezone": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Duetimezone"
+                },
+                "notes": {
+                  "anyOf": [
+                    {
+                      "maxLength": 10000,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Notes"
+                },
+                "title": {
+                  "maxLength": 240,
+                  "minLength": 1,
+                  "title": "Title",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title"
+              ],
+              "title": "FollowUpInputModel",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "links": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "entityId": {
+                "format": "uuid",
+                "title": "Entityid",
+                "type": "string"
+              },
+              "entityType": {
+                "enum": [
+                  "party",
+                  "property",
+                  "space",
+                  "lease",
+                  "rent_expectation",
+                  "rent_receipt",
+                  "renewal_option",
+                  "task",
+                  "maintenance_issue",
+                  "owner_concern",
+                  "intake_source"
+                ],
+                "title": "Entitytype",
+                "type": "string"
+              }
+            },
+            "required": [
+              "entityType",
+              "entityId"
+            ],
+            "title": "LinkInputModel",
+            "type": "object"
+          },
+          "title": "Links",
+          "type": "array"
+        },
+        "occurredAtUtc": {
+          "format": "date-time",
+          "title": "Occurredatutc",
+          "type": "string"
+        },
+        "occurredTimezone": {
+          "title": "Occurredtimezone",
+          "type": "string"
+        },
+        "participants": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "partyContactMethodId": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Partycontactmethodid"
+              },
+              "partyId": {
+                "format": "uuid",
+                "title": "Partyid",
+                "type": "string"
+              },
+              "role": {
+                "enum": [
+                  "sender",
+                  "recipient",
+                  "reporter",
+                  "other"
+                ],
+                "title": "Role",
+                "type": "string"
+              }
+            },
+            "required": [
+              "partyId",
+              "role"
+            ],
+            "title": "ParticipantInputModel",
+            "type": "object"
+          },
+          "minItems": 1,
+          "title": "Participants",
+          "type": "array"
+        },
+        "subject": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Subject",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "direction",
+        "channel",
+        "subject",
+        "body",
+        "occurredAtUtc",
+        "occurredTimezone",
+        "participants",
+        "correctionReason",
+        "idempotencyKey"
+      ],
+      "title": "CorrectionInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.issue.create",
+    "title": "Report maintenance issue",
+    "method": "post",
+    "path": "/api/maintenance-issues",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createMaintenanceIssue",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "enum": [
+            "plumbing",
+            "electrical",
+            "heating_cooling",
+            "appliance",
+            "structural",
+            "safety_security",
+            "pest",
+            "exterior_grounds",
+            "cleaning",
+            "other"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "categoryDetail": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Categorydetail"
+        },
+        "description": {
+          "maxLength": 10000,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "priority": {
+          "default": "normal",
+          "enum": [
+            "low",
+            "normal",
+            "high",
+            "urgent"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "propertyId": {
+          "format": "uuid",
+          "title": "Propertyid",
+          "type": "string"
+        },
+        "reportedAtUtc": {
+          "format": "date-time",
+          "title": "Reportedatutc",
+          "type": "string"
+        },
+        "reporter": {
+          "additionalProperties": false,
+          "properties": {
+            "historicalSelectionConfirmed": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Historicalselectionconfirmed"
+            },
+            "historicalSelectionReason": {
+              "anyOf": [
+                {
+                  "maxLength": 1000,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Historicalselectionreason"
+            },
+            "partyId": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Partyid"
+            },
+            "role": {
+              "enum": [
+                "owner",
+                "tenant",
+                "manager",
+                "staff"
+              ],
+              "title": "Role",
+              "type": "string"
+            },
+            "subjectKind": {
+              "enum": [
+                "party",
+                "local_operator"
+              ],
+              "title": "Subjectkind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "role",
+            "subjectKind"
+          ],
+          "title": "ReporterInput",
+          "type": "object"
+        },
+        "spaceId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Spaceid"
+        },
+        "summary": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "propertyId",
+        "summary",
+        "description",
+        "category",
+        "reportedAtUtc",
+        "reporter"
+      ],
+      "title": "IssueInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.issue.patch",
+    "title": "Edit maintenance issue",
+    "method": "patch",
+    "path": "/api/maintenance-issues/{issue_id}",
+    "sourceKind": "maintenance_issue",
+    "nesting": "financialChanges",
+    "childKey": null,
+    "operationId": "editMaintenanceIssue",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "anyOf": [
+            {
+              "enum": [
+                "plumbing",
+                "electrical",
+                "heating_cooling",
+                "appliance",
+                "structural",
+                "safety_security",
+                "pest",
+                "exterior_grounds",
+                "cleaning",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Category"
+        },
+        "categoryDetail": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Categorydetail"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 10000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Description"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "normal",
+                "high",
+                "urgent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Priority"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Summary"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "IssuePatch",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.reporter.correct",
+    "title": "Correct issue reporter",
+    "method": "post",
+    "path": "/api/maintenance-issues/{issue_id}/reporter/correct",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "correctMaintenanceIssueReporter",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "reporter": {
+          "additionalProperties": false,
+          "properties": {
+            "historicalSelectionConfirmed": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Historicalselectionconfirmed"
+            },
+            "historicalSelectionReason": {
+              "anyOf": [
+                {
+                  "maxLength": 1000,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Historicalselectionreason"
+            },
+            "partyId": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Partyid"
+            },
+            "role": {
+              "enum": [
+                "owner",
+                "tenant",
+                "manager",
+                "staff"
+              ],
+              "title": "Role",
+              "type": "string"
+            },
+            "subjectKind": {
+              "enum": [
+                "party",
+                "local_operator"
+              ],
+              "title": "Subjectkind",
+              "type": "string"
+            }
+          },
+          "required": [
+            "role",
+            "subjectKind"
+          ],
+          "title": "ReporterInput",
+          "type": "object"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "reporter",
+        "confirmed",
+        "reason"
+      ],
+      "title": "ReporterCorrectionInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.issue.start",
+    "title": "Start maintenance issue",
+    "method": "post",
+    "path": "/api/maintenance-issues/{issue_id}/start",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "startMaintenanceIssue",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "CommandInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.issue.resolve",
+    "title": "Resolve maintenance issue",
+    "method": "post",
+    "path": "/api/maintenance-issues/{issue_id}/resolve",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "resolveMaintenanceIssue",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "Reason",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.issue.cancel",
+    "title": "Cancel maintenance issue",
+    "method": "post",
+    "path": "/api/maintenance-issues/{issue_id}/cancel",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "cancelMaintenanceIssue",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "Reason",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.issue.reopen",
+    "title": "Reopen maintenance issue",
+    "method": "post",
+    "path": "/api/maintenance-issues/{issue_id}/reopen",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "reopenMaintenanceIssue",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "Reason",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.issue.return_to_open",
+    "title": "Return issue to open",
+    "method": "post",
+    "path": "/api/maintenance-issues/{issue_id}/return-to-open",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "returnMaintenanceIssueToOpen",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "CommandInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.appointment.create",
+    "title": "Schedule appointment",
+    "method": "post",
+    "path": "/api/maintenance-issues/{issue_id}/appointments",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createMaintenanceAppointment",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "endsAtUtc": {
+          "format": "date-time",
+          "title": "Endsatutc",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "instructions": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Instructions"
+        },
+        "purpose": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "startsAtUtc": {
+          "format": "date-time",
+          "title": "Startsatutc",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "startsAtUtc",
+        "endsAtUtc",
+        "purpose"
+      ],
+      "title": "AppointmentInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.cost.create",
+    "title": "Record cost context",
+    "method": "post",
+    "path": "/api/maintenance-issues/{issue_id}/cost-contexts",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createMaintenanceCostContext",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "title": "Amount",
+          "type": "string"
+        },
+        "contextKind": {
+          "enum": [
+            "operator_estimate",
+            "work_reported"
+          ],
+          "title": "Contextkind",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "observedOn": {
+          "format": "date",
+          "title": "Observedon",
+          "type": "string"
+        },
+        "replacesCostContextId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replacescostcontextid"
+        },
+        "sourceNote": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sourcenote"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "contextKind",
+        "label",
+        "amount",
+        "observedOn"
+      ],
+      "title": "CostInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.expense.link",
+    "title": "Link paid expense",
+    "method": "post",
+    "path": "/api/maintenance-issues/{issue_id}/expense-links",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "linkMaintenanceExpense",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "expenseId": {
+          "format": "uuid",
+          "title": "Expenseid",
+          "type": "string"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "expenseId"
+      ],
+      "title": "ExpenseLinkInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.quote.create",
+    "title": "Record provider quote",
+    "method": "post",
+    "path": "/api/maintenance-issues/{issue_id}/quotes",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createMaintenanceQuote",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "title": "Amount",
+          "type": "string"
+        },
+        "earliestWorkStartOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Earliestworkstarton"
+        },
+        "estimatedWorkFinishOn": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Estimatedworkfinishon"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "providerPartyId": {
+          "format": "uuid",
+          "title": "Providerpartyid",
+          "type": "string"
+        },
+        "receivedOn": {
+          "format": "date",
+          "title": "Receivedon",
+          "type": "string"
+        },
+        "replacesQuoteId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replacesquoteid"
+        },
+        "scopeSummary": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Scopesummary",
+          "type": "string"
+        },
+        "termsNotes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Termsnotes"
+        },
+        "validThrough": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Validthrough"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "providerPartyId",
+        "label",
+        "scopeSummary",
+        "amount",
+        "receivedOn"
+      ],
+      "title": "QuoteInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.assignment.create",
+    "title": "Assign provider",
+    "method": "post",
+    "path": "/api/maintenance-issues/{issue_id}/assignments",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createMaintenanceAssignment",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "avoidOverrideConfirmed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Avoidoverrideconfirmed"
+        },
+        "avoidOverrideReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Avoidoverridereason"
+        },
+        "directAssignmentConfirmed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Directassignmentconfirmed"
+        },
+        "endReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Endreason"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "instructions": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Instructions"
+        },
+        "providerPartyId": {
+          "format": "uuid",
+          "title": "Providerpartyid",
+          "type": "string"
+        },
+        "quoteId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Quoteid"
+        },
+        "replacementConfirmed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replacementconfirmed"
+        },
+        "replacesAssignmentId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replacesassignmentid"
+        },
+        "selectionReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Selectionreason"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "providerPartyId"
+      ],
+      "title": "AssignmentInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.follow_up.create",
+    "title": "Create issue follow-up",
+    "method": "post",
+    "path": "/api/maintenance-issues/{issue_id}/follow-ups",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "createMaintenanceFollowUp",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "dueAtUtc": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Dueatutc"
+        },
+        "dueTimezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Duetimezone"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 10000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "priority": {
+          "default": "normal",
+          "enum": [
+            "low",
+            "normal",
+            "high",
+            "urgent"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "title"
+      ],
+      "title": "FollowUpInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.journal.record",
+    "title": "Record work journal entry",
+    "method": "post",
+    "path": "/api/maintenance-issues/{issue_id}/work-journal",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "recordMaintenanceWorkJournalEntry",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "assignmentId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Assignmentid"
+        },
+        "correctedEntryKind": {
+          "anyOf": [
+            {
+              "enum": [
+                "work_started",
+                "progress_update",
+                "work_blocked",
+                "work_completed",
+                "general_note"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Correctedentrykind"
+        },
+        "correctionReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Correctionreason"
+        },
+        "correctsEntryId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Correctsentryid"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Detail"
+        },
+        "entryKind": {
+          "enum": [
+            "work_started",
+            "progress_update",
+            "work_blocked",
+            "work_completed",
+            "general_note",
+            "correction"
+          ],
+          "title": "Entrykind",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "followUpRequired": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Followuprequired"
+        },
+        "historicalEntryConfirmed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Historicalentryconfirmed"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "occurredAtUtc": {
+          "format": "date-time",
+          "title": "Occurredatutc",
+          "type": "string"
+        },
+        "operatorVerified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Operatorverified"
+        },
+        "outcomeStatus": {
+          "anyOf": [
+            {
+              "enum": [
+                "completed",
+                "partially_completed",
+                "unsuccessful"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Outcomestatus"
+        },
+        "outcomeSummary": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Outcomesummary"
+        },
+        "sourceKind": {
+          "enum": [
+            "operator_observation",
+            "provider_report",
+            "other_report"
+          ],
+          "title": "Sourcekind",
+          "type": "string"
+        },
+        "summary": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "entryKind",
+        "sourceKind",
+        "occurredAtUtc",
+        "summary"
+      ],
+      "title": "WorkJournalInput",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.appointment.update",
+    "title": "Reschedule appointment",
+    "method": "patch",
+    "path": "/api/maintenance-appointments/{appointment_id}",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "editMaintenanceAppointment",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "endsAtUtc": {
+          "format": "date-time",
+          "title": "Endsatutc",
+          "type": "string"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "instructions": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Instructions"
+        },
+        "purpose": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "rescheduleReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reschedulereason"
+        },
+        "startsAtUtc": {
+          "format": "date-time",
+          "title": "Startsatutc",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "startsAtUtc",
+        "endsAtUtc",
+        "purpose"
+      ],
+      "title": "AppointmentPatch",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.appointment.finish",
+    "title": "Finish appointment",
+    "method": "post",
+    "path": "/api/maintenance-appointments/{appointment_id}/complete",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "completeMaintenanceAppointment",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "cancelled": {
+          "type": "boolean",
+          "default": false
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 1000
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "AppointmentFinish",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.cost.void",
+    "title": "Void cost context",
+    "method": "post",
+    "path": "/api/maintenance-cost-contexts/{context_id}/void",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "voidMaintenanceCostContext",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "Reason",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.expense.archive",
+    "title": "Archive expense association",
+    "method": "post",
+    "path": "/api/maintenance-expense-links/{link_id}/archive",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "archiveMaintenanceExpenseLink",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "Reason",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.quote.withdraw",
+    "title": "Withdraw quote",
+    "method": "post",
+    "path": "/api/maintenance-quotes/{quote_id}/withdraw",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "withdrawMaintenanceQuote",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "Reason",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "maintenance.assignment.end",
+    "title": "End provider assignment",
+    "method": "post",
+    "path": "/api/maintenance-assignments/{assignment_id}/end",
+    "sourceKind": "maintenance_issue",
+    "nesting": null,
+    "childKey": "targetId",
+    "operationId": "endMaintenanceAssignment",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed",
+        "reason"
+      ],
+      "title": "Reason",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "owner_concern.create",
+    "title": "Record owner concern",
+    "method": "post",
+    "path": "/api/owner-concerns",
+    "sourceKind": null,
+    "nesting": null,
+    "childKey": null,
+    "operationId": "create_owner_concern",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "concernType": {
+          "enum": [
+            "general_rental",
+            "lease",
+            "tenant",
+            "vacancy"
+          ],
+          "title": "Concerntype",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 10000,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "duplicateConfirmed": {
+          "default": false,
+          "title": "Duplicateconfirmed",
+          "type": "boolean"
+        },
+        "duplicateReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Duplicatereason"
+        },
+        "expectedRevision": {
+          "maximum": 0,
+          "minimum": 0,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "followUp": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "dueAtUtc": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Dueatutc"
+                },
+                "dueTimezone": {
+                  "anyOf": [
+                    {
+                      "maxLength": 128,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Duetimezone"
+                },
+                "notes": {
+                  "anyOf": [
+                    {
+                      "maxLength": 10000,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Notes"
+                },
+                "priority": {
+                  "default": "normal",
+                  "enum": [
+                    "low",
+                    "normal",
+                    "high",
+                    "urgent"
+                  ],
+                  "title": "Priority",
+                  "type": "string"
+                },
+                "title": {
+                  "maxLength": 255,
+                  "minLength": 1,
+                  "title": "Title",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title"
+              ],
+              "title": "FollowUpRequest",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "historicalSelectionConfirmed": {
+          "default": false,
+          "title": "Historicalselectionconfirmed",
+          "type": "boolean"
+        },
+        "historicalSelectionReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Historicalselectionreason"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "leaseId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Leaseid"
+        },
+        "originatingCommunicationId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Originatingcommunicationid"
+        },
+        "ownerPartyId": {
+          "format": "uuid",
+          "title": "Ownerpartyid",
+          "type": "string"
+        },
+        "priority": {
+          "default": "normal",
+          "enum": [
+            "low",
+            "normal",
+            "high",
+            "urgent"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "propertyId": {
+          "format": "uuid",
+          "title": "Propertyid",
+          "type": "string"
+        },
+        "raisedAtUtc": {
+          "format": "date-time",
+          "title": "Raisedatutc",
+          "type": "string"
+        },
+        "replacesConcernId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Replacesconcernid"
+        },
+        "spaceId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Spaceid"
+        },
+        "summary": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        },
+        "tenantPartyId": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Tenantpartyid"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "ownerPartyId",
+        "propertyId",
+        "concernType",
+        "summary",
+        "description",
+        "raisedAtUtc",
+        "idempotencyKey"
+      ],
+      "title": "ConcernCreateRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "owner_concern.patch",
+    "title": "Edit owner concern",
+    "method": "patch",
+    "path": "/api/owner-concerns/{concern_id}",
+    "sourceKind": "owner_concern",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "update_owner_concern",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 10000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Description"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "enum": [
+                "low",
+                "normal",
+                "high",
+                "urgent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Priority"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 240,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Summary"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ConcernPatchRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "owner_concern.in_progress",
+    "title": "Start owner concern",
+    "method": "post",
+    "path": "/api/owner-concerns/{concern_id}/start",
+    "sourceKind": "owner_concern",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "start_owner_concern",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Summary"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "TransitionRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "owner_concern.open",
+    "title": "Reopen owner concern",
+    "method": "post",
+    "path": "/api/owner-concerns/{concern_id}/reopen",
+    "sourceKind": "owner_concern",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "reopen_owner_concern",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Summary"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "TransitionRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "owner_concern.resolved",
+    "title": "Resolve owner concern",
+    "method": "post",
+    "path": "/api/owner-concerns/{concern_id}/resolve",
+    "sourceKind": "owner_concern",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "resolve_owner_concern",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Summary"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "TransitionRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "owner_concern.dismissed",
+    "title": "Dismiss owner concern",
+    "method": "post",
+    "path": "/api/owner-concerns/{concern_id}/dismiss",
+    "sourceKind": "owner_concern",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "dismiss_owner_concern",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Summary"
+        }
+      },
+      "required": [
+        "expectedRevision",
+        "idempotencyKey",
+        "confirmed"
+      ],
+      "title": "TransitionRequest",
+      "type": "object"
+    }
+  },
+  {
+    "formKey": "owner_concern.follow_up",
+    "title": "Create concern follow-up",
+    "method": "post",
+    "path": "/api/owner-concerns/{concern_id}/follow-ups",
+    "sourceKind": "owner_concern",
+    "nesting": null,
+    "childKey": null,
+    "operationId": "add_owner_concern_follow_up",
+    "schema": {
+      "additionalProperties": false,
+      "properties": {
+        "dueAtUtc": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Dueatutc"
+        },
+        "dueTimezone": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Duetimezone"
+        },
+        "expectedRevision": {
+          "minimum": 1,
+          "title": "Expectedrevision",
+          "type": "integer"
+        },
+        "idempotencyKey": {
+          "format": "uuid",
+          "title": "Idempotencykey",
+          "type": "string"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 10000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notes"
+        },
+        "priority": {
+          "default": "normal",
+          "enum": [
+            "low",
+            "normal",
+            "high",
+            "urgent"
+          ],
+          "title": "Priority",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "expectedRevision",
+        "idempotencyKey"
+      ],
+      "title": "ConcernFollowUpRequest",
+      "type": "object"
+    }
+  },
+  {
     "formKey": "file.upload",
     "title": "Attach supporting evidence",
     "method": "post",
@@ -32,7 +3678,13 @@
           "enum": [
             "expense",
             "owner_rent_report",
-            "security_deposit_deduction"
+            "security_deposit_deduction",
+            "maintenance_issue",
+            "maintenance_appointment",
+            "maintenance_cost_context",
+            "maintenance_quote",
+            "maintenance_assignment",
+            "maintenance_work_journal_entry"
           ]
         },
         "entityId": {

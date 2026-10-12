@@ -346,9 +346,9 @@ class OperatorService:
                 or tx.validate_recovery(current) != "available"
             ):
                 raise OperatorConflict("Refresh this form before starting an attempt.")
-            from app.modules.operator.application.command_forms import COMMAND_SCHEMAS
+            from app.modules.operator.application.command_forms import source_owns_fingerprint
 
-            if current["form_key"] in COMMAND_SCHEMAS:
+            if source_owns_fingerprint(current["form_key"]):
                 calculated = tx.attempt_fingerprint(current, attempt_key)
                 if request_fingerprint is not None and calculated != request_fingerprint:
                     raise OperatorConflict("The attempted command does not match the saved form.")

@@ -24,6 +24,28 @@ from app.platform.config import LocalConfig
 
 
 class TaskTests(unittest.TestCase):
+    def test_reminder_read_is_bounded_and_does_not_mutate(self) -> None:
+        task = self.tasks.create({"title": "Reminder read"})
+        for _ in range(3):
+            self.tasks.add_reminder(task.id, "2999-01-01T00:00:00+00:00")
+        statements = []
+
+        def collect(_connection, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement)
+
+        event.listen(self.tasks.unit_of_work.engine, "before_cursor_execute", collect)
+        try:
+            items = self.tasks.reminders(task.id, limit=2)
+        finally:
+            event.remove(self.tasks.unit_of_work.engine, "before_cursor_execute", collect)
+        self.assertEqual(len(items), 2)
+        self.assertTrue(all(item["status"] == "pending" for item in items))
+        selects = [item for item in statements if item.lstrip().upper().startswith("SELECT")]
+        self.assertLessEqual(len(selects), 2)
+        self.assertIn("LIMIT", selects[-1].upper())
+        with self.assertRaises(TaskError):
+            self.tasks.reminders(task.id, limit=101)
+
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

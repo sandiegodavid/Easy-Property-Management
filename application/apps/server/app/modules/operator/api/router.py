@@ -7,6 +7,7 @@ from fastapi import APIRouter, Query
 from pydantic import AwareDatetime, Field, StrictBool, StrictInt, model_validator
 
 from app.modules.operator.domain.models import Contract, OperatorError, source_identifier
+from app.modules.operator.application.command_forms import source_owns_fingerprint
 from app.platform.api_errors import domain_problem
 from app.modules.operator.application.directory_service import OperatorDirectoryService
 from app.modules.operator.api.directory_router import register_directory
@@ -232,7 +233,9 @@ def build_router(
                 "formKey": key,
                 "schemaVersion": 1,
                 "sourceKind": command_source_kind(key) if key in COMMAND_SCHEMAS else None,
-                "fingerprintMode": "source_owned" if key in COMMAND_SCHEMAS else "caller_provided",
+                "fingerprintMode": "source_owned"
+                if source_owns_fingerprint(key)
+                else "caller_provided",
                 "payloadSchema": schema.model_json_schema(),
             }
             for key, schema in registered_schemas().items()

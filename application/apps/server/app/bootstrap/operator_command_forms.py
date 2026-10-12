@@ -132,6 +132,7 @@ def communication_request(action, source_id, payload, key):
     else:
         value = communication_command(payload, patch=action == "patched")
         if action == "corrected":
+            value = replace(value, record=True)
             reason = payload.get("correctionReason")
             if not isinstance(reason, str) or not reason.strip():
                 raise OperatorError("Complete the correction reason.")

@@ -131,11 +131,17 @@ class SQLiteTaskUnitOfWork:
             ).limit(limit)
             return [_task(row) for row in session.execute(query).scalars()]
 
-    def reminders(self, task_id: str | None = None) -> list[TaskReminder]:
+    def reminders(
+        self, task_id: str | None = None, *, limit: int | None = None
+    ) -> list[TaskReminder]:
         with Session(self.engine) as session:
-            query = select(TaskReminderModel).order_by(TaskReminderModel.remind_at_utc)
+            query = select(TaskReminderModel).order_by(
+                TaskReminderModel.remind_at_utc, TaskReminderModel.id
+            )
             if task_id:
                 query = query.where(TaskReminderModel.task_id == task_id)
+            if limit is not None:
+                query = query.limit(limit)
             return [_reminder(row) for row in session.execute(query).scalars()]
 
     def summary(self, *, now: datetime, limit: int) -> TaskSummary:
