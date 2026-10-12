@@ -131,6 +131,6 @@ test("narrow navigation, keyboard operation, nested history and unsupported sect
   );
   const unsupported = await page.goto("/settings/unsupported");
   expect(unsupported?.status()).toBe(404);
-  await page.goto("/ai/review/00000000-0000-4000-8000-000000000001");
-  await expect(page.getByRole("heading", { name: "Page unavailable" })).toBeVisible();
+  await page.goto("/settings/ai");
+  await expect(page.getByRole("heading", { name: "Built-in AI assistance" })).toBeVisible();
 });

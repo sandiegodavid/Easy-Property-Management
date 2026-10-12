@@ -276,16 +276,43 @@ quality checks above and report blockers without marking unrun checks passed.
     changed-file Python checks, wheel packaging and diff whitespace validation
     passed. The existing Vite chunk-size warning remains non-fatal.
 
-12. **Slice 55: Built-in AI configuration, governance and supported draft review.**
-    Deliver Off/On this device/Cloud service controls, registered capabilities,
-    write-only credentials, explicit destination disclosure, synthetic tests,
-    per-action limits and global pause. Use Slice 39's external-effect uncertainty
-    and acknowledgement contract; no automatic credential/probe retries. Show
-    frozen provenance, governed input, edits and source-checked review only for
-    registered owning handlers. Verify unavailable runtime, missing credentials,
-    unsupported modality, pause, restore and stale-source failures. Optional model
-    availability must not block manual work. INGEST-002 modes and connected
-    assistants remain UI-002.
+12. **Slice 55: Built-in AI configuration, governance and supported draft review (delivered).**
+    The Settings route now provides Off/On this device/Cloud service controls,
+    registry-derived adapter/model/action capabilities, explicit cloud data-class
+    disclosure, write-only credential entry, synthetic connection tests,
+    per-action limits, redaction-profile summaries and the global pause. Mutations
+    persist allowlisted intents and original attempt keys through OPS before
+    dispatch, restore unresolved attempts after navigation/reload, and use
+    source-owned revision/idempotency contracts. Credential effects are never
+    automatically retried: uncertain results require lookup by the original key
+    and explicit acknowledgment. Draft review shows frozen provenance, governed
+    input, source comparison, edits and history. Approval is offered only when a
+    registered owning-domain handler exists and the source is current and
+    available and the displayed JSON matches the acknowledged saved payload.
+    Editing clears review confirmation; approval requires review of the saved
+    version. Action readiness checks the selected qualified model allowlist and
+    enabled connection, as well as the revision-specific synthetic probe.
+    Otherwise the UI explains the unavailable or stale state. The API
+    response now exposes required data classes and approval availability as typed
+    fields. No models are downloaded and no transport fallback is implied.
+
+    | Scenario | Evidence | Result / gap |
+    | --- | --- | --- |
+    | Settings, pause and no registered capabilities | `ai-governance.spec.ts`: real Settings API pause/clear plus no-adapter/no-action state | Passed; state persists and absence is explicit |
+    | Registered cloud connection and disclosure | `ai-governance.spec.ts`: registered adapter/model fixture, connection creation and explicit data-class consent | Passed; choices are registry-bound and disclosure is connection-scoped |
+    | Durable command recovery and external uncertainty | `ai-governance.spec.ts`: aborted connection-create, draft-edit and credential responses followed by reload; OPS preparation before dispatch, original-key lookup and acknowledgment | Passed; attempts survive reload, fresh dispatch stays locked, secret excluded from OPS, one request per action |
+    | Saved payload approval and action readiness | `ai-governance.spec.ts`: unsaved/invalid JSON, edit reconciliation, renewed version confirmation, successful probe followed by model disallow and connection disable | Passed; approval uses acknowledged edits; availability explains policy failures |
+    | Stale or unsupported draft approval | `ai-governance.spec.ts`: changed source and unavailable handler | Passed; governed input and provenance remain visible; approval is not offered |
+    | API contracts and focused persistence behavior | `test_governance.py -k run_retains_only_redacted_input_and_replays_same_request`; OpenAPI generation/check | Passed; typed `requiredDataClasses` and `approvalAvailable`, redaction/replay regression retained |
+    | Accessibility, shell navigation and quality gates | AI governance and shell Playwright specs; lint, format, typecheck, contracts, Ruff, packaging | Passed; packaged-serving warning about the existing large Vite chunk is non-fatal |
+
+    This delivers the configurable workflow surface, not production model
+    availability: the current installation registers no production adapters,
+    actions, or owning-domain approval handlers, so generation and approval remain
+    explicitly unavailable until those source-owned registrations are composed.
+    Model-runtime installation/selection beyond registered options, INGEST-002
+    modes, and connected assistants remain outside UI-001; connected assistants
+    remain UI-002. Slice 57 still owns broad integration/accessibility acceptance.
 
 13. **Slice 56: Home shell and shared attention/calendar primitives.**
     Connect the Home route, reusable Needs action/Waiting/Upcoming/calendar and

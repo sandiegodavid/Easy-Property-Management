@@ -33,6 +33,7 @@ import { MoneyWorkspace } from "../workflows/money";
 import { WorkWorkspace } from "../workflows/work";
 import { MetadataSearch } from "../shared/search";
 import { CoveragePage, CoverageResume } from "../shared/coverage";
+import { AiDraftReview, AiGovernanceSettings } from "../workflows/ai-governance";
 
 function LeasingPage() {
   const [params] = useSearchParams();
@@ -286,17 +287,8 @@ export function ApplicationShell() {
                     {["appearance", "navigation"].map((section) => (
                       <Route key={section} path={section} element={<PreferenceSettings />} />
                     ))}
-                    {["workspace", "ai"].map((section) => (
-                      <Route
-                        key={section}
-                        path={section}
-                        element={
-                          <PendingPage
-                            title={section === "ai" ? "AI assistance" : "Workspace settings"}
-                          />
-                        }
-                      />
-                    ))}
+                    <Route path="workspace" element={<PendingPage title="Workspace settings" />} />
+                    <Route path="ai" element={<AiGovernanceSettings />} />
                   </>
                 )}
               </Route>
@@ -345,6 +337,7 @@ export function ApplicationShell() {
           <Route path="conversations" element={<WorkWorkspace kind="communication" />} />
           <Route path="maintenance/issues/:id" element={<WorkWorkspace />} />
           <Route path="search" element={<MetadataSearch />} />
+          <Route path="ai/review/:id" element={<AiDraftReview />} />
           <Route path="coverage/:kind/:id/:area" element={<CoveragePage />} />
           <Route path="coverage/reviews/:id" element={<CoverageResume />} />
           <Route path="*" element={<Unavailable />} />

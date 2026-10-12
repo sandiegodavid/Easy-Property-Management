@@ -57,6 +57,7 @@ class RegisteredActionResponse(ResponseContract):
     maxCompletionTokens: StrictInt = Field(gt=0)
     requiredCapabilities: list[str]
     requiredInputModalities: list[str]
+    requiredDataClasses: list[str]
 
 
 class SettingsResponse(SettingsMutationResponse):
@@ -170,6 +171,7 @@ class DraftDetailResponse(DraftSummaryResponse):
     sourceRevision: str
     sourceFingerprint: str = Field(pattern="^[0-9a-f]{64}$")
     currentSource: CurrentSourceResponse | None
+    approvalAvailable: StrictBool
     reviewHistory: list[ReviewDecisionResponse]
     provenance: DraftProvenanceResponse
     supersedesDraftId: UUID | None

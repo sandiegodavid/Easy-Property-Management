@@ -1096,6 +1096,7 @@ class AiConfigurationService:
                     "maxCompletionTokens": x.max_completion_tokens,
                     "requiredCapabilities": sorted(x.required_capabilities),
                     "requiredInputModalities": sorted(x.required_input_modalities),
+                    "requiredDataClasses": sorted(x.required_data_classes),
                 }
                 for x in self.actions.all()
             ],
@@ -1538,6 +1539,7 @@ class AiDraftReviewService:
         if not row:
             raise AiNotFoundError("AI draft was not found.")
         value = self._draft_view(row, detail=True)
+        value["approvalAvailable"] = row["action_type"] in self.approval_handlers
         projection = self.source_projections.get(row["source_entity_type"])
         value["currentSource"] = (
             None

@@ -413,6 +413,7 @@ class AiGovernanceTests(TestCase):
         self.assertEqual(1, self.provider.calls)
         self.assertEqual(result, replay)
         detail = self.drafts.draft_detail(result["draft"]["id"])
+        self.assertTrue(detail["approvalAvailable"])
         self.assertEqual({"message": "safe"}, detail["governedInput"])
         self.assertNotIn("private", detail["governedInput"])
         with self.assertRaises(AiConflictError):

@@ -8624,6 +8624,8 @@ export interface components {
         DraftDetailResponse: {
             /** Actiontype */
             actionType: string;
+            /** Approvalavailable */
+            approvalAvailable: boolean;
             /** Confidence */
             confidence: {
                 [key: string]: components["schemas"]["JsonValue"];
@@ -14218,6 +14220,8 @@ export interface components {
             owningModule: string;
             /** Requiredcapabilities */
             requiredCapabilities: string[];
+            /** Requireddataclasses */
+            requiredDataClasses: string[];
             /** Requiredinputmodalities */
             requiredInputModalities: string[];
         };

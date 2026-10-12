@@ -10356,6 +10356,10 @@
             "title": "Actiontype",
             "type": "string"
           },
+          "approvalAvailable": {
+            "title": "Approvalavailable",
+            "type": "boolean"
+          },
           "confidence": {
             "anyOf": [
               {
@@ -10507,6 +10511,7 @@
           "sourceRevision",
           "sourceFingerprint",
           "currentSource",
+          "approvalAvailable",
           "reviewHistory",
           "provenance",
           "supersedesDraftId",
@@ -26503,6 +26508,13 @@
             "title": "Requiredcapabilities",
             "type": "array"
           },
+          "requiredDataClasses": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Requireddataclasses",
+            "type": "array"
+          },
           "requiredInputModalities": {
             "items": {
               "type": "string"
@@ -26518,7 +26530,8 @@
           "maxPromptTokens",
           "maxCompletionTokens",
           "requiredCapabilities",
-          "requiredInputModalities"
+          "requiredInputModalities",
+          "requiredDataClasses"
         ],
         "title": "RegisteredActionResponse",
         "type": "object"
