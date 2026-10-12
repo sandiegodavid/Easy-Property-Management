@@ -1,5 +1,6 @@
 # Local runtime configuration must remain outside version control.
 application/config.local.json
+application/demo/config.local.json
 
 # Python environments and generated artifacts.
 .venv/

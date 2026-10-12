@@ -1,0 +1,334 @@
+{
+  "version": 1,
+  "owners": [
+    {
+      "key": "owner_1",
+      "name": "Morgan Chen (Demo)",
+      "email": "owner1@example.invalid"
+    },
+    {
+      "key": "owner_2",
+      "name": "Sam Rivera (Demo)",
+      "email": "owner2@example.invalid"
+    }
+  ],
+  "providers": [
+    {
+      "name": "Clearwater Plumbing (Demo)",
+      "category": "Plumbing",
+      "service": "Leak detection and fixture repair",
+      "email": "provider-01@example.invalid"
+    },
+    {
+      "name": "North Star Pipeworks (Demo)",
+      "category": "Plumbing",
+      "service": "Leak detection and fixture repair",
+      "email": "provider-02@example.invalid"
+    },
+    {
+      "name": "Cedar Flow Services (Demo)",
+      "category": "Plumbing",
+      "service": "Leak detection and fixture repair",
+      "email": "provider-03@example.invalid"
+    },
+    {
+      "name": "Cascade Climate (Demo)",
+      "category": "HVAC / A/C",
+      "service": "Heating and cooling service",
+      "email": "provider-04@example.invalid"
+    },
+    {
+      "name": "Evergreen Heating (Demo)",
+      "category": "HVAC / A/C",
+      "service": "Heating and cooling service",
+      "email": "provider-05@example.invalid"
+    },
+    {
+      "name": "Rose City HVAC (Demo)",
+      "category": "HVAC / A/C",
+      "service": "Heating and cooling service",
+      "email": "provider-06@example.invalid"
+    },
+    {
+      "name": "Bright Circuit (Demo)",
+      "category": "Electrical",
+      "service": "Electrical troubleshooting",
+      "email": "provider-07@example.invalid"
+    },
+    {
+      "name": "Beacon Electric (Demo)",
+      "category": "Electrical",
+      "service": "Electrical troubleshooting",
+      "email": "provider-08@example.invalid"
+    },
+    {
+      "name": "Pacific Panel Services (Demo)",
+      "category": "Electrical",
+      "service": "Electrical troubleshooting",
+      "email": "provider-09@example.invalid"
+    },
+    {
+      "name": "Juniper Grounds (Demo)",
+      "category": "Landscaping",
+      "service": "Grounds and irrigation",
+      "email": "provider-10@example.invalid"
+    },
+    {
+      "name": "Maple Garden Care (Demo)",
+      "category": "Landscaping",
+      "service": "Grounds and irrigation",
+      "email": "provider-11@example.invalid"
+    },
+    {
+      "name": "Greenway Landscaping (Demo)",
+      "category": "Landscaping",
+      "service": "Grounds and irrigation",
+      "email": "provider-12@example.invalid"
+    },
+    {
+      "name": "Homeworks Appliance (Demo)",
+      "category": "Appliance repair",
+      "service": "Appliance diagnostics",
+      "email": "provider-13@example.invalid"
+    },
+    {
+      "name": "Reliable Appliance Lab (Demo)",
+      "category": "Appliance repair",
+      "service": "Appliance diagnostics",
+      "email": "provider-14@example.invalid"
+    },
+    {
+      "name": "Metro Repair Co (Demo)",
+      "category": "Appliance repair",
+      "service": "Appliance diagnostics",
+      "email": "provider-15@example.invalid"
+    },
+    {
+      "name": "Cedar Handyman (Demo)",
+      "category": "General maintenance",
+      "service": "General repairs and turnover",
+      "email": "provider-16@example.invalid"
+    },
+    {
+      "name": "Summit Building Care (Demo)",
+      "category": "General maintenance",
+      "service": "General repairs and turnover",
+      "email": "provider-17@example.invalid"
+    },
+    {
+      "name": "Harbor Property Services (Demo)",
+      "category": "General maintenance",
+      "service": "General repairs and turnover",
+      "email": "provider-18@example.invalid"
+    },
+    {
+      "name": "Oakridge Housing Counsel (Demo)",
+      "category": "Legal / Attorney",
+      "service": "Lease advice and housing matters",
+      "email": "provider-19@example.invalid"
+    },
+    {
+      "name": "Westbank Lease Counsel (Demo)",
+      "category": "Legal / Attorney",
+      "service": "Lease advice and housing matters",
+      "email": "provider-20@example.invalid"
+    }
+  ],
+  "properties": [
+    {
+      "key": "op-vacant",
+      "owner": "operator",
+      "name": "Cedar Cottage \u2014 Vacant",
+      "address": "110 Demo Cedar Lane",
+      "type": "single_family_home",
+      "rentMinor": 0,
+      "tenant": "",
+      "notes": "Fictional demonstration property; all people and transactions are synthetic.",
+      "vacant": true
+    },
+    {
+      "key": "op-home",
+      "owner": "operator",
+      "name": "Maple House",
+      "address": "220 Demo Maple Avenue",
+      "type": "single_family_home",
+      "rentMinor": 215000,
+      "tenant": "Alex Morgan (Demo)",
+      "notes": "Fictional demonstration property; all people and transactions are synthetic."
+    },
+    {
+      "key": "op-office",
+      "owner": "operator",
+      "name": "Operator Office",
+      "address": "330 Demo Commerce Way",
+      "type": "office",
+      "rentMinor": 280000,
+      "tenant": "Juniper Studio LLC (Demo)",
+      "notes": "Fictional demonstration property; all people and transactions are synthetic."
+    },
+    {
+      "key": "o1-late",
+      "owner": "owner_1",
+      "name": "Birch Townhome \u2014 Rent Follow-up",
+      "address": "410 Demo Birch Court",
+      "type": "townhome",
+      "rentMinor": 195000,
+      "tenant": "Taylor Reed (Demo)",
+      "notes": "Fictional demonstration property; all people and transactions are synthetic.",
+      "late": true
+    },
+    {
+      "key": "o1-prepaid",
+      "owner": "owner_1",
+      "name": "Willow House \u2014 Prepaid",
+      "address": "420 Demo Willow Street",
+      "type": "single_family_home",
+      "rentMinor": 235000,
+      "tenant": "Jamie Brooks (Demo)",
+      "notes": "Fictional demonstration property; all people and transactions are synthetic.",
+      "prepaid": true
+    },
+    {
+      "key": "o2-condo-101",
+      "owner": "owner_2",
+      "name": "Riverbend Condo 101",
+      "address": "500 Demo Riverbend Drive",
+      "type": "condo",
+      "rentMinor": 180000,
+      "tenant": "Jordan Ellis (Demo)",
+      "notes": "Fictional demonstration property; all people and transactions are synthetic. One independently managed condo unit in the shared Riverbend building.",
+      "unit": "Unit 101"
+    },
+    {
+      "key": "o2-condo-102",
+      "owner": "owner_2",
+      "name": "Riverbend Condo 102",
+      "address": "500 Demo Riverbend Drive",
+      "type": "condo",
+      "rentMinor": 185000,
+      "tenant": "Casey Quinn (Demo)",
+      "notes": "Fictional demonstration property; all people and transactions are synthetic. One independently managed condo unit in the shared Riverbend building.",
+      "unit": "Unit 102"
+    },
+    {
+      "key": "o2-condo-103",
+      "owner": "owner_2",
+      "name": "Riverbend Condo 103",
+      "address": "500 Demo Riverbend Drive",
+      "type": "condo",
+      "rentMinor": 190000,
+      "tenant": "Riley Parker (Demo)",
+      "notes": "Fictional demonstration property; all people and transactions are synthetic. One independently managed condo unit in the shared Riverbend building.",
+      "unit": "Unit 103"
+    },
+    {
+      "key": "o2-home",
+      "owner": "owner_2",
+      "name": "Spruce House",
+      "address": "610 Demo Spruce Road",
+      "type": "single_family_home",
+      "rentMinor": 260000,
+      "tenant": "Avery Lane (Demo)",
+      "notes": "Fictional demonstration property; all people and transactions are synthetic."
+    },
+    {
+      "key": "o2-office",
+      "owner": "owner_2",
+      "name": "Owner 2 Office",
+      "address": "620 Demo Business Avenue",
+      "type": "office",
+      "rentMinor": 320000,
+      "tenant": "Northlight Design LLC (Demo)",
+      "notes": "Fictional demonstration property; all people and transactions are synthetic."
+    }
+  ],
+  "issues": [
+    {
+      "key": "op-upcoming",
+      "property": "op-home",
+      "summary": "Seasonal furnace service scheduled",
+      "description": "Preventive furnace service before winter. Tenant has confirmed access.",
+      "category": "heating_cooling",
+      "priority": "normal",
+      "appointmentDays": 3
+    },
+    {
+      "key": "owner1-appointment",
+      "property": "o1-prepaid",
+      "summary": "Annual plumbing inspection",
+      "description": "Routine fixture and shutoff inspection. No active leak.",
+      "category": "plumbing",
+      "priority": "low",
+      "appointmentDays": 5
+    },
+    {
+      "key": "owner2-urgent-leak",
+      "property": "o2-condo-102",
+      "summary": "Urgent under-sink leak",
+      "description": "Tenant reports active cabinet leak; supply shut off pending plumber. Compare fixture replacement quotes.",
+      "category": "plumbing",
+      "priority": "urgent",
+      "quotes": [
+        480,
+        625,
+        790
+      ],
+      "providerIndexes": [
+        0,
+        1,
+        2
+      ],
+      "appointmentDays": 1
+    },
+    {
+      "key": "owner2-urgent-heat",
+      "property": "o2-home",
+      "summary": "Urgent loss of heating",
+      "description": "No heat reported; arrange prompt assessment and compare repair options.",
+      "category": "heating_cooling",
+      "priority": "urgent",
+      "quotes": [
+        920,
+        1150,
+        1380
+      ],
+      "providerIndexes": [
+        3,
+        4,
+        5
+      ]
+    }
+  ],
+  "communications": [
+    {
+      "property": "op-home",
+      "subject": "Furnace appointment access confirmed",
+      "body": "Tenant confirms availability for the upcoming seasonal furnace visit."
+    },
+    {
+      "property": "op-office",
+      "subject": "Office maintenance update",
+      "body": "Occupant reports the entry lighting is working and requests a routine check next month."
+    },
+    {
+      "property": "o1-late",
+      "subject": "Rent follow-up \u2014 payment date requested",
+      "body": "Tenant acknowledges the unpaid current-month rent. Operator requested a payment date; no payment received yet."
+    },
+    {
+      "property": "o2-condo-102",
+      "subject": "Leak report and temporary shutoff",
+      "body": "Tenant reports the kitchen supply is shut off. Please confirm the repair appointment."
+    },
+    {
+      "property": "o2-home",
+      "subject": "Heating repair options",
+      "body": "Tenant confirms the loss of heating. Operator is comparing three quotes."
+    },
+    {
+      "property": "o2-condo-101",
+      "subject": "Move-in walkthrough notes",
+      "body": "Tenant reviewed the kitchen condition checklist. Minor cabinet wear is documented in the inspection draft."
+    }
+  ]
+}

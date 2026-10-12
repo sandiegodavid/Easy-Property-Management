@@ -26,6 +26,14 @@ application/config.example.json     # Git-tracked template with a fake path
 
 Set `localWorkspacePath` in the live file to the chosen external data folder. The live configuration file, SQLite database, attachments, backups, exports, and connection credentials must never be committed. The configuration template is safe to commit because it contains no live path or user data.
 
+## Synthetic demo workspace
+
+[application/demo](application/demo/README.md) contains a reproducible synthetic
+portfolio, generator, verifier and browser launcher. It includes ten properties,
+twenty providers and linked lease, deposit, finance and maintenance scenarios.
+The generated database lives outside the repository; its demo configuration is
+separate from the operator's live configuration.
+
 ## Application layout and delivery
 
 `application/apps/server` contains the FastAPI modules, current schema validation and tests. `application/apps/web` contains React workflows; `packages/ui` supplies shared components and `packages/contracts` supplies generated API contracts. A new workspace uses one current greenfield baseline.
