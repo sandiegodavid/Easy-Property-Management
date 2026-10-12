@@ -18,3 +18,7 @@ The complete original bodies remain available for decision rationale and contrac
 ## Source mapping
 
 [Document inventory](../DOCUMENT_INVENTORY.md) identifies each original source, current authoritative guide, active work and archive location. No pending review findings are closed by this move.
+
+## Completed core browser delivery
+
+The [final UI-001 design](designs/UI-001_DESIGN_COMPLETED_2026-10-12.md) and [final delivery matrix](implementation-plans/UI-001_IMPLEMENTATION_MATRIX_COMPLETED_2026-10-12.md) preserve the completed October 12 record separately from earlier partial snapshots. Current behavior lives in [UI guides](../ui/operator-experience.md) and [modules](../README.md#current-modules); remaining Home and extension work lives in DASH-001/UI-002.

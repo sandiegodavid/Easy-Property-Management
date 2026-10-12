@@ -50,4 +50,4 @@ The following executable specifications are the starting point for focused valid
 - [test_command_readiness.py](../../application/apps/server/app/modules/files/tests/test_command_readiness.py).
 - [test_files.py](../../application/apps/server/app/modules/files/tests/test_files.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

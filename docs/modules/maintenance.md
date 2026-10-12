@@ -26,6 +26,10 @@ Issue-backed Provider history is derived from journal facts. Providers owns sepa
 
 Quoted earliest-start and estimated-finish dates exist in current `QuoteCreate` validation, persistence and comparisons. Browser workflow acceptance is tracked separately; older planning statements that the fields are absent are historical.
 
+## Browser workflow boundary
+
+Maintenance browser records expose issue reporter/context, appointments, operational costs, quotes/comparison, assignments, expense associations, journal, evidence and follow-up. Owning issue revisions/receipts govern child actions. Source Task, appointment and verified repair lifecycles remain distinct; loss of a response reconciles the original operation. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/maintenance/domain).
@@ -47,4 +51,4 @@ The following executable specifications are the starting point for focused valid
 - [test_models.py](../../application/apps/server/app/modules/maintenance/tests/test_models.py).
 - [test_workflow.py](../../application/apps/server/app/modules/maintenance/tests/test_workflow.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

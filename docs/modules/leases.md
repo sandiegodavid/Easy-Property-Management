@@ -24,6 +24,10 @@ Lease documents use registered File link policies and retain evidence history. C
 
 Start with Lease use cases and the Portfolio source-timeline port. Read [Inspections](inspections.md) for walkthrough attention, [Finance](finance.md) for explicit rent synchronization, and [Files](files.md) for document publication. Preserve independent authority and avoid implicit finance or inspection writes during contract changes.
 
+## Browser workflow boundary
+
+Lease browser workflows cover draft/participants/terms, execution, renewal, termination negotiation/completion and move-out with independent Lease/Space revision checks. Rent setup remains an explicit Finance step; Inspection failure does not hide the Lease. Bounded directory continuations retain filters on changed-view restart. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/leases/domain).
@@ -44,4 +48,4 @@ The following executable specifications are the starting point for focused valid
 - [test_command_readiness.py](../../application/apps/server/app/modules/leases/tests/test_command_readiness.py).
 - [test_leases.py](../../application/apps/server/app/modules/leases/tests/test_leases.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

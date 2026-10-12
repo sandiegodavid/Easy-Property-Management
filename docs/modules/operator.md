@@ -34,6 +34,10 @@ Save is acknowledged and revision-safe. Preparing an attempt validates complete 
 
 Directory/overview/search/coverage services are separate from recovery/preferences. Form registries are under `application/*_forms.py`, with receipt adapters in bootstrap. Use the actual registry instead of historical slice counts. HTTP routers expose `/api/operator` reads, review and recovery actions. [Frontend architecture](../ui/frontend-architecture.md) explains client state and dispatch ownership.
 
+## Browser workflow boundary
+
+Browser consumers implement bounded contextual directories/overviews, independent section continuations, metadata search, source-backed coverage review and appearance/navigation. Coverage review is an allowlisted recoverable form with source fingerprint and original receipt; acknowledgment never fills required gaps. Shared recovery composes registered source commands without dispatching generic domain retries. Home aggregation remains DASH-001. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/operator/domain).
@@ -73,4 +77,4 @@ The following executable specifications are the starting point for focused valid
 - [test_search.py](../../application/apps/server/app/modules/operator/tests/test_search.py).
 - [test_synchronization_recovery.py](../../application/apps/server/app/modules/operator/tests/test_synchronization_recovery.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

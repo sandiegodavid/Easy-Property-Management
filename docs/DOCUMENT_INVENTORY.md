@@ -51,8 +51,8 @@ Consolidated October 11, 2026. Existing backlog status is preserved; source/mode
 | TASK-002_DESIGN.md | 🟡 In progress — pending UI | [tasks.md](modules/tasks.md) | [TASK-002_DESIGN.md](active/TASK-002_DESIGN.md) | [TASK-002_DESIGN.md](archive/designs/TASK-002_DESIGN.md) |
 | TASK-002_TEST_MATRIX.md | Historical delivery / validation evidence | — | — | [TASK-002_TEST_MATRIX.md](archive/validation/TASK-002_TEST_MATRIX.md) |
 | TEN-001_DESIGN.md | ✅ Done | [tenants.md](modules/tenants.md) | — | [TEN-001_DESIGN.md](archive/designs/TEN-001_DESIGN.md) |
-| UI-001_DESIGN.md | Partial browser delivery / remaining acceptance | [operator-experience.md](ui/operator-experience.md) | [UI-001_DESIGN.md](active/UI-001_DESIGN.md) | [UI-001_DESIGN.md](archive/designs/UI-001_DESIGN.md) |
-| UI-001_IMPLEMENTATION_MATRIX.md | Slices 44–51 delivered; 52–57 active | [frontend-architecture.md](ui/frontend-architecture.md) | [UI-001_IMPLEMENTATION_MATRIX.md](active/UI-001_IMPLEMENTATION_MATRIX.md) | [UI-001_IMPLEMENTATION_MATRIX.md](archive/implementation-plans/UI-001_IMPLEMENTATION_MATRIX.md) |
+| UI-001_DESIGN.md | Core UI delivered; consolidated October 12, 2026 | [operator-experience.md](ui/operator-experience.md), [workflows.md](ui/workflows.md), [frontend-architecture.md](ui/frontend-architecture.md) | —; follow-ups in DASH-001/UI-002 | [Completed design](archive/designs/UI-001_DESIGN_COMPLETED_2026-10-12.md); earlier partial snapshot retained |
+| UI-001_IMPLEMENTATION_MATRIX.md | Backend/browser acceptance delivered through Slice 57 | [validation.md](ui/validation.md), module browser boundaries | —; follow-ups in DASH-001/UI-002 | [Completed matrix](archive/implementation-plans/UI-001_IMPLEMENTATION_MATRIX_COMPLETED_2026-10-12.md); earlier backend matrix retained |
 | UI-002_DESIGN_preliminary.md | Active proposal / see backlog | — | [UI-002_DESIGN_preliminary.md](active/UI-002_DESIGN_preliminary.md) | — |
 | UNIVERSAL_READER_RESEARCH.md | Research / exploratory proposal | — | [UNIVERSAL_READER_RESEARCH.md](research/UNIVERSAL_READER_RESEARCH.md) | — |
 | VEND-001_DESIGN.md | 🟡 In progress — pending UI | [providers.md](modules/providers.md) | [VEND-001_DESIGN.md](active/VEND-001_DESIGN.md) | [VEND-001_DESIGN.md](archive/designs/VEND-001_DESIGN.md) |
@@ -64,8 +64,8 @@ Consolidated October 11, 2026. Existing backlog status is preserved; source/mode
 
 Module guides consolidate verified source ownership and implemented code paths. Exact schema/API details are linked to current models, baseline, routers and generated contracts. Historical designs retain deeper rationale. Remaining UI requirements and original acceptance constraints were extracted to active feature documents rather than inferred complete from existing backend tests.
 
-Quoted Maintenance work dates are present in source validation/models; the older backlog phrase saying they are pending is corrected to pending UI. The AI production registries are empty despite implemented governance infrastructure. UI Slices 44–51 are recorded delivered; 52–57 remain open. Manual Intake browser acceptance remains explicit alongside the existing UI plan.
+Quoted Maintenance work dates are present in source validation/models; the older backlog phrase saying they are pending is corrected to pending UI. The AI production registries are empty despite implemented governance infrastructure. The final UI-001 matrix records delivery through Slice 57, including manual Intake, accessibility and encrypted restart/restore acceptance. Current behavior/evidence is consolidated into UI/module guides; remaining Home and extension work is DASH-001/UI-002.
 
-Pending review comments and design-versus-code defects remain subject to their owning reviews. No application code, acceptance status or backlog scope is changed by this consolidation.
+Pending review comments and design-versus-code defects remain subject to their owning reviews. No application code or backlog scope is changed by this consolidation. UI-001 status reflects the existing completed matrix; other feature acceptance and reviews remain independently governed.
 
 Root product brief, decisions, backlog and roadmap remain product/delivery authorities. Agent working notes, collaboration guidance, code-quality policy and review-comment files retain their roles.

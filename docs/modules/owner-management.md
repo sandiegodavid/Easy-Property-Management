@@ -16,6 +16,10 @@ Create/patch/lifecycle/follow-up commands share concern revision, key and immuta
 
 `/api/owner-concerns` supplies source workflows; ID/key operation endpoints provide recovery. General activity uses redacted policy and contextual history explains full decisions. [Operator](operator.md) composes owner views while this module retains source authority.
 
+## Browser workflow boundary
+
+Concern browser records provide context/history, lifecycle and linked follow-up through source commands and Operator recovery. Task completion never resolves a concern and resolution never changes Lease or Finance state. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/owner_management/domain).
@@ -36,4 +40,4 @@ The following executable specifications are the starting point for focused valid
 - [test_command_readiness.py](../../application/apps/server/app/modules/owner_management/tests/test_command_readiness.py).
 - [test_owner_concerns.py](../../application/apps/server/app/modules/owner_management/tests/test_owner_concerns.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

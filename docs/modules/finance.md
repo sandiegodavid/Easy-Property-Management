@@ -58,6 +58,10 @@ Read under one deferred snapshot and captured instant, using a source-owned Leas
 
 Rent expectation/receipt/ledger routes, `/api/prepaid-checks`, Expense/category/refund routes and deposit account/settlement routes own writes. Money summary/source routes own reads. Use each router's typed contracts for exact fields and domain error codes; use Finance's command-key recovery for immutable original results. [Owner rent reports](owner-accounting.md) create/adopt receipts through Finance's transaction port, rather than writing a second income source.
 
+## Browser workflow boundary
+
+Money browser views separate Rent, Received rent, Expenses, Deposits, Scheduled checks, Owner reports, category administration and explicit-period Reporting. Registered forms preserve aggregate revisions and original results; actual refunds, void/replacement and settlement actions remain explicit. Evidence upload is an independent recoverable step, so failure preserves committed money. Reporting uses bounded FIN-003 source/property pages with integer USD formatting. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/finance/domain).
@@ -84,4 +88,4 @@ The following executable specifications are the starting point for focused valid
 - [test_money_context.py](../../application/apps/server/app/modules/finance/tests/test_money_context.py).
 - [test_money_summary.py](../../application/apps/server/app/modules/finance/tests/test_money_summary.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

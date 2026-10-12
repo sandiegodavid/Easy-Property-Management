@@ -1,6 +1,6 @@
 # Easy Property Management
 
-Easy Property Management is a local-first, AI-assisted property-management application for independent landlords and managers with roughly 1–50 rentable spaces. The MVP serves only the United States: property addresses and spaces are US-based, property-local dates use US IANA time zones, and monetary workflows use USD. Its implemented backend covers portfolio, people, leases, inspections, maintenance, money, communications, tasks, retained evidence and optional AI governance. The browser interface is partially delivered; [the documentation index](docs/README.md) distinguishes current behavior from remaining work.
+Easy Property Management is a local-first, AI-assisted property-management application for independent landlords and managers with roughly 1–50 rentable spaces. The MVP serves only the United States: property addresses and spaces are US-based, property-local dates use US IANA time zones, and monetary workflows use USD. Its implemented backend covers portfolio, people, leases, inspections, maintenance, money, communications, tasks, retained evidence and optional AI governance. Core browser workflows are delivered; live Home aggregation and follow-up integrations remain planned; [the documentation index](docs/README.md) distinguishes current behavior from remaining work.
 
 ## Repository layout
 
@@ -38,7 +38,7 @@ separate from the operator's live configuration.
 
 `application/apps/server` contains the FastAPI modules, current schema validation and tests. `application/apps/web` contains React workflows; `packages/ui` supplies shared components and `packages/contracts` supplies generated API contracts. A new workspace uses one current greenfield baseline.
 
-The current browser shell, workspace gate, recovery, contextual reads and Portfolio/identity/Provider/Lease/Inspection workflows are delivered. Remaining Money, Maintenance/coordination, search/coverage, AI controls and final interface acceptance are tracked in [active UI delivery](docs/active/UI-001_IMPLEMENTATION_MATRIX.md). The [visual demo](demo/operator-experience.html) includes design/future states and is not a capability inventory.
+The current browser shell, workspace gate, recovery, contextual reads and Portfolio/identity/Provider/Lease/Inspection workflows are delivered. Remaining Money, Maintenance/coordination, search/coverage, AI controls and final interface acceptance are tracked in [browser validation](docs/ui/validation.md). The [visual demo](demo/operator-experience.html) includes design/future states and is not a capability inventory.
 
 ## Local HTTP transport
 

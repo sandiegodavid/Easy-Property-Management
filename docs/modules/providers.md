@@ -22,6 +22,10 @@ Reputation links are manually recorded safe URLs with source, notes and last-che
 
 Browser setup/management exists in the current frontend. Legal engagements and spreadsheet onboarding remain separate planned work.
 
+## Browser workflow boundary
+
+Provider browser workflows cover profiles, categories/assignments, services/areas, manual work history, references and reputation with revision-safe child operations, explicit source review and original receipts. Providers remains a configurable destination and is reachable within Maintenance. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/vendors/domain).
@@ -45,4 +49,4 @@ The following executable specifications are the starting point for focused valid
 - [test_slice20_router_boundaries.py](../../application/apps/server/app/modules/vendors/tests/test_slice20_router_boundaries.py).
 - [test_vendors.py](../../application/apps/server/app/modules/vendors/tests/test_vendors.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

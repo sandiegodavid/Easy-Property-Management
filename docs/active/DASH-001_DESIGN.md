@@ -7,7 +7,7 @@ Status: Design decisions accepted October 12, 2026; implementation and validatio
 
 Home answers what needs attention now, what is waiting, and what happens next, with source-backed money and information coverage. It is a read composition over authoritative modules, not a new task store or workflow engine. An empty queue establishes only that no recorded work matches supported rules at the displayed instant.
 
-This design follows [Architecture](../ARCHITECTURE.md), [Product brief](../PRODUCT_BRIEF.md), [Backlog](../FEATURE_BACKLOG.md), [Decisions](../DECISIONS.md), and the confirmed interactions in [UI-001](UI-001_DESIGN.md). Current behavior is documented in the [module guides](../README.md); accepted decisions here define required delivery; they do not establish existing capability.
+This design follows [Architecture](../ARCHITECTURE.md), [Product brief](../PRODUCT_BRIEF.md), [Backlog](../FEATURE_BACKLOG.md), [Decisions](../DECISIONS.md), and the confirmed interactions in [UI-001](../ui/operator-experience.md). Current behavior is documented in the [module guides](../README.md); accepted decisions here define required delivery; they do not establish existing capability.
 
 DASH-001 delivers Needs action, Waiting, Upcoming, appointments, information review, inventory context and recorded-money summary. It consumes UI-001 forms, routes, disclosure, recovery and source commands. Legal/HOA extensions arrive with UI-002; showings with LEAD-002; intake/AI/assistant health with DASH-003; reports/value estimates with DASH-002. No mail polling, AI reasoning, background notifications, legal calculations, import or new domain lifecycle belongs here.
 

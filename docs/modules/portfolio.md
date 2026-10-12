@@ -32,6 +32,10 @@ The outer Lease operation also validates its own Lease revision. A contract end 
 
 Read [source_timeline.py](../../application/apps/server/app/modules/portfolio/application/source_timeline.py), then the Lease service call sites and the Portfolio unit of work. Preserve source ownership, the independent revisions, complete pre-write validation and one transaction across both modules.
 
+## Browser workflow boundary
+
+Portfolio browser forms cover Property/Space inventory, lifecycle, ownership and manual status with source revision review and original receipts. Property/Owner directories and workspaces use Operator compositions; progressive setup never infers vacancy or fabricates local-operator owner identity. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/portfolio/domain).
@@ -53,4 +57,4 @@ The following executable specifications are the starting point for focused valid
 - [test_inventory_readiness.py](../../application/apps/server/app/modules/portfolio/tests/test_inventory_readiness.py).
 - [test_portfolio.py](../../application/apps/server/app/modules/portfolio/tests/test_portfolio.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

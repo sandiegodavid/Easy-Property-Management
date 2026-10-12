@@ -14,6 +14,10 @@ Archival checks active Lease participation through transaction-aware guards; his
 
 `/api/tenants` supports profile operations and list/detail. Its operation ID/key endpoints recover original committed results. Role designation, profile changes and lifecycle transitions retain correlated audit events and portable snapshots. Browser role forms preserve explicit source identity and distinguish Party revision from Tenant revision.
 
+## Browser workflow boundary
+
+Tenant profile/contact-preference and lifecycle forms reuse Party identity and owning Tenant receipts. Source participant/context checks remain in the backend; browser designation does not independently infer Lease participation. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/tenants/domain).
@@ -34,4 +38,4 @@ The following executable specifications are the starting point for focused valid
 - [test_command_readiness.py](../../application/apps/server/app/modules/tenants/tests/test_command_readiness.py).
 - [test_tenants.py](../../application/apps/server/app/modules/tenants/tests/test_tenants.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

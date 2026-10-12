@@ -71,7 +71,7 @@ Users can inspect, back up, open, or move the workspace through **Settings → D
 
 ## Confirmed operator experience
 
-The [UI-001 operator design](active/UI-001_DESIGN.md), confirmed September 23, 2026, defines the interaction contract: configurable Home, Properties, Owners, Leasing, Money, Maintenance, and Providers destinations; searchable property/owner directories; contextual workspaces; Light/Dark appearance; and inline disclosure through the entire non-editable summary bar. Inputs and commit actions appear only inside expanded content or dedicated workflow pages. Show the hint: “Click anywhere on an item’s summary bar to expand or collapse its details.”
+The [UI-001 operator design](ui/operator-experience.md), confirmed September 23, 2026, defines the interaction contract: configurable Home, Properties, Owners, Leasing, Money, Maintenance, and Providers destinations; searchable property/owner directories; contextual workspaces; Light/Dark appearance; and inline disclosure through the entire non-editable summary bar. Inputs and commit actions appear only inside expanded content or dedicated workflow pages. Show the hint: “Click anywhere on an item’s summary bar to expand or collapse its details.”
 
 Home separates actionable, waiting, and upcoming work, with visible appointments and information gaps. Waiting retains follow-up context without changing original deadlines or concealing urgent unresolved work. Coverage distinguishes recorded information, missing required information, review needs, and justified non-applicability. Resumable drafts, source drill-down, and precise partial-success feedback support operator trust.
 

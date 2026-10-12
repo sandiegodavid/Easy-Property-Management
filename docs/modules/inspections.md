@@ -18,6 +18,10 @@ Lease-scoped `/api/leases/{id}/condition-reports` and condition report/template/
 
 Lease detail exposes inspection attention; missing evidence does not block recording actual move-in/out. [Finance](finance.md) explicitly selects finalized evidence for settlement decisions, and [Maintenance](maintenance.md) remains separately authoritative for repair work. Neither comparison nor acknowledgment changes those domains.
 
+## Browser workflow boundary
+
+Inspection browser workflows cover template/checklist drafts, observations, acknowledgment/finalization, correction/comparison and evidence history. Acknowledgment uses exactly the walkthrough-active participants. Child deletion recovers original receipts; evidence recovery requires matching-byte reselection. Findings do not automatically become deposit deductions. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/inspections/domain).
@@ -40,4 +44,4 @@ The following executable specifications are the starting point for focused valid
 - [test_contracts.py](../../application/apps/server/app/modules/inspections/tests/test_contracts.py).
 - [test_workflow.py](../../application/apps/server/app/modules/inspections/tests/test_workflow.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

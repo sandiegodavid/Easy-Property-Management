@@ -28,7 +28,7 @@ TASK-002 is complete when the typed persistence, audit, command, bounded read, a
 
 - [Current module and focused tests](../modules/tasks.md#validation).
 - [Shared validation matrix](../platform/persistence.md#validation-matrix).
-- [Active operator design](UI-001_DESIGN.md) and [delivery matrix](UI-001_IMPLEMENTATION_MATRIX.md).
+- [Current operator experience](../ui/operator-experience.md) and [delivery evidence](../ui/validation.md).
 - [Historical full design](../archive/designs/TASK-002_DESIGN.md) for decision rationale and original contract detail. It is a planning snapshot, not the current implementation reference.
 
 Outstanding review findings remain in [pending_code_review_comments](../pending_code_review_comments); this documentation change does not resolve them.

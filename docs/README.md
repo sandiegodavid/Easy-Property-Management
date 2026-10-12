@@ -2,7 +2,7 @@
 
 ## Start here
 
-Read these in order for the whole project:
+Read these in order for the whole project. Core UI-001 delivery is complete; live Home aggregation and follow-up integrations remain active:
 
 1. [Repository README](../README.md): setup, local workspace and development commands.
 2. [Product brief](PRODUCT_BRIEF.md): intended users, operating vocabulary and product scope.
@@ -29,7 +29,7 @@ For a specific change, read its owning module, relevant shared platform contract
 | Source intake | [Intake](modules/intake.md) | Evidence envelope, provenance, deduplication and sensitive reads |
 | Optional AI | [AI governance](modules/ai-governance.md) | Configuration, registries, review and uncertain external effects |
 | Operator support | [Operator](modules/operator.md) | Composed reads, coverage, search, preferences and recovery |
-| Browser interface | [Operator experience](ui/operator-experience.md), [Frontend architecture](ui/frontend-architecture.md) | Implemented routes, shared behavior, state and dispatch |
+| Browser interface | [Operator experience](ui/operator-experience.md), [Frontend architecture](ui/frontend-architecture.md) | [Workflows](ui/workflows.md), [validation](ui/validation.md), state and dispatch |
 
 ## Shared contracts
 
@@ -40,7 +40,7 @@ For a specific change, read its owning module, relevant shared platform contract
 
 ## Delivery, decisions and research
 
-[Feature backlog](FEATURE_BACKLOG.md) owns feature status, outcome and dependencies. [Active designs](active/README.md) own remaining acceptance and proposed changes; [UI delivery](active/UI-001_IMPLEMENTATION_MATRIX.md) distinguishes delivered browser surfaces from planned ones. Completion requires its acceptance gate, not merely a guide or design approval.
+[Feature backlog](FEATURE_BACKLOG.md) owns feature status, outcome and dependencies. [Current UI guides](ui/operator-experience.md), [workflows](ui/workflows.md), [frontend architecture](ui/frontend-architecture.md) and [validation evidence](ui/validation.md) describe completed core browser delivery. [Active designs](active/README.md) contain remaining acceptance and proposed changes, including DASH-001 Home aggregation and UI-002 extensions. Completion requires its acceptance gate, not merely a guide or design approval.
 
 [Decisions](DECISIONS.md) preserves agreed rationale, including future product decisions. [Roadmap](ROADMAP.md) groups intended delivery. [Research](research/README.md) contains dated external investigations and experiments; findings need verification before implementing a changing provider/runtime capability.
 

@@ -1,10 +1,12 @@
+> Archived completed UI-001 record, October 12, 2026. Current behavior is consolidated in [UI guides](../../ui/operator-experience.md) and [module guides](../../README.md#current-modules). Historical planning language and dated evidence below are retained for traceability.
+
 # UI-001 — remaining operator experience and acceptance
 
 This is the authoritative product, interaction, and frontend technical specification for UI-001 deliverables. It defines the operator experience, the boundary between the web client and backend capabilities, and the readiness criteria for implementation. Domain API and schema contracts identified as prerequisites still require their owning backlog items; approval of this design does not mean those capabilities are implemented.
 
-The UI-001 product decisions below are confirmed; original decision IDs are retained for traceability. Where this document describes a feature-specific workflow, the dedicated feature design is authoritative for backend policy and its UI handoff. UI-001 remains authoritative for the shared shell, navigation, interaction patterns, accessibility, client architecture, and core end-to-end workflows. [ARCHITECTURE.md](../ARCHITECTURE.md) governs any concern this document does not settle.
+The UI-001 product decisions below are confirmed; original decision IDs are retained for traceability. Where this document describes a feature-specific workflow, the dedicated feature design is authoritative for backend policy and its UI handoff. UI-001 remains authoritative for the shared shell, navigation, interaction patterns, accessibility, client architecture, and core end-to-end workflows. [ARCHITECTURE.md](../../ARCHITECTURE.md) governs any concern this document does not settle.
 
-Current frontend conventions are in [operator experience](../ui/operator-experience.md) and [frontend architecture](../ui/frontend-architecture.md). This active design preserves approved target behavior and acceptance, including workflows still awaiting browser delivery. The [delivery matrix](UI-001_IMPLEMENTATION_MATRIX.md) distinguishes delivered surfaces from remaining work.
+Current frontend conventions are in [operator experience](../../ui/operator-experience.md) and [frontend architecture](../../ui/frontend-architecture.md). This active design preserves approved target behavior and acceptance, including workflows still awaiting browser delivery. The [delivery matrix](../../archive/implementation-plans/UI-001_IMPLEMENTATION_MATRIX_COMPLETED_2026-10-12.md) distinguishes delivered surfaces from remaining work.
 
 ## Goals
 
@@ -109,7 +111,7 @@ Settings includes Appearance with Light and Dark controls. Apply changes immedia
 
 Record who or what the operator is waiting for and a follow-up date. Waiting work resurfaces in Needs action when follow-up is due. Without a date, show Follow-up not scheduled. Deferring a reminder does not resolve its source issue. D18 requires the backend extensions identified under Feature ownership and delivery readiness.
 
-Follow the [accepted TASK-002 contract](../archive/designs/TASK-002_DESIGN.md#resolved-design-decisions): timed follow-ups become actionable at their exact instant; future today remains scheduled. Display the server's follow-up state, due-today flag, actionability, and captured `asOf`; use `taskDeadlineState` for Task deadlines and separately labeled owning-source facts for actual source deadlines. Past commitments are valid and may already be overdue. The waiting editor replaces its complete kind/label/date context, supports removing only the date, and submits expected revision/idempotency key. Clearing waiting does not acknowledge/dismiss a reminder. Complete/cancel clears waiting atomically; reopen restores neither waiting nor dismissed reminders. Use the exact-total follow-up directory and bounded source previews, preserving cursor filters on a 409 refresh; live Home refresh starts a fresh read rather than treating frozen continuation classifications as current.
+Follow the [accepted TASK-002 contract](../../archive/designs/TASK-002_DESIGN.md#resolved-design-decisions): timed follow-ups become actionable at their exact instant; future today remains scheduled. Display the server's follow-up state, due-today flag, actionability, and captured `asOf`; use `taskDeadlineState` for Task deadlines and separately labeled owning-source facts for actual source deadlines. Past commitments are valid and may already be overdue. The waiting editor replaces its complete kind/label/date context, supports removing only the date, and submits expected revision/idempotency key. Clearing waiting does not acknowledge/dismiss a reminder. Complete/cancel clears waiting atomically; reopen restores neither waiting nor dismissed reminders. Use the exact-total follow-up directory and bounded source previews, preserving cursor filters on a 409 refresh; live Home refresh starts a fresh read rather than treating frozen continuation classifications as current.
 
 #### D8: Show coverage by applicable responsibility
 
@@ -241,7 +243,7 @@ UI-001 composes completed capabilities; it does not move domain policy into the 
 
 UI-001 delivers the React/Vite shell, generated contracts, bootstrap, navigation/appearance, core domain directories and workspaces, Tasks, coverage, search, drafts/recovery, and AI-GOV-001 built-in model/governance controls. It supplies Home layout/disclosure primitives and source-action adapters; DASH-001 owns the complete Home aggregation and its acceptance criteria. Until that contract is available, show an explicit unavailable/limited-preview state or hide unsupported queue sections.
 
-Legal/HOA workflows, Excel/Google Sheets intake, issue-proposal review, and connected-assistant setup are outside UI-001. Their retained decisions and implementation material are in [UI-002 preliminary design](UI-002_DESIGN_preliminary.md). Backend capability alone must not expose an undelivered UI workflow.
+Legal/HOA workflows, Excel/Google Sheets intake, issue-proposal review, and connected-assistant setup are outside UI-001. Their retained decisions and implementation material are in [UI-002 preliminary design](../../active/UI-002_DESIGN_preliminary.md). Backend capability alone must not expose an undelivered UI workflow.
 
 ### Authoritative feature designs
 
@@ -249,8 +251,8 @@ This document remains the product interaction and shared web-client specificatio
 
 | Backlog item | Dedicated design | Owns |
 | --- | --- | --- |
-| TASK-002 | [Waiting and Follow-up](TASK-002_DESIGN.md) | Waiting context, follow-up scheduling, resurfacing, and source-deadline separation. |
-| OPS-001 | [Operator Support](OPS-001_DESIGN.md) | Bootstrap, preferences, contextual compositions, search, coverage provenance, and short-form recovery. |
+| TASK-002 | [Waiting and Follow-up](../../active/TASK-002_DESIGN.md) | Waiting context, follow-up scheduling, resurfacing, and source-deadline separation. |
+| OPS-001 | [Operator Support](../../active/OPS-001_DESIGN.md) | Bootstrap, preferences, contextual compositions, search, coverage provenance, and short-form recovery. |
 
 UI-001 owns the React/Vite shell, generated-client boundary, route composition, shared presentation components, accessibility, and end-to-end operator interactions. It consumes the feature contracts above and must not recreate their policy in browser code.
 
@@ -262,7 +264,7 @@ UI-001 owns the React/Vite shell, generated-client boundary, route composition, 
 
 ### Current backend references
 
-Current domain behavior, source authority, code entry points and focused tests are in [the module directory](../README.md#current-modules). The backend readiness contract is implemented; backend history is retained in the [archived matrix](../archive/implementation-plans/UI-001_IMPLEMENTATION_MATRIX.md). Browser acceptance remains separately tracked.
+Current domain behavior, source authority, code entry points and focused tests are in [the module directory](../../README.md#current-modules). The backend readiness contract is implemented; backend history is retained in the [archived matrix](../../archive/implementation-plans/UI-001_IMPLEMENTATION_MATRIX.md). Browser acceptance remains separately tracked.
 
 ### Delivery boundaries
 
@@ -275,13 +277,13 @@ Reports, owner balances/statements, automated sending, remote access, and legal-
 
 ## Technical implementation design
 
-This section translates the confirmed decisions into an implementation contract. [ARCHITECTURE.md](../ARCHITECTURE.md) governs where this section is silent or where a later inconsistency is found. In particular, the browser is a React/Vite client of the FastAPI application; it never reads SQLite or workspace files directly, reimplements domain policy, or treats an optimistic browser state as an official record.
+This section translates the confirmed decisions into an implementation contract. [ARCHITECTURE.md](../../ARCHITECTURE.md) governs where this section is silent or where a later inconsistency is found. In particular, the browser is a React/Vite client of the FastAPI application; it never reads SQLite or workspace files directly, reimplements domain policy, or treats an optimistic browser state as an official record.
 
 ### Technical baseline and delivery unit
 
 - Build the web client in `application/apps/web` with React and TypeScript on the current Node.js LTS release. Use Vite for development and production builds.
 - Keep the Node workspace manifest and one lockfile under `application/`. The workspace includes `apps/web`, `packages/contracts`, and `packages/ui`; do not introduce a second package manager or per-package lockfiles.
-- Reuse the established [implementation quality checks](../CODE_QUALITY.md): TypeScript-aware ESLint recommended rules, React hooks and JSX accessibility rules, Prettier, and strict compiler validation. Run the root npm scripts against handwritten frontend code and include generated contracts in type checking. Any package-specific TypeScript configuration must retain the shared strict baseline and complete root check coverage.
+- Reuse the established [implementation quality checks](../../CODE_QUALITY.md): TypeScript-aware ESLint recommended rules, React hooks and JSX accessibility rules, Prettier, and strict compiler validation. Run the root npm scripts against handwritten frontend code and include generated contracts in type checking. Any package-specific TypeScript configuration must retain the shared strict baseline and complete root check coverage.
 - Use React Router for route and nested-workspace composition, TanStack Query for server state, and React Hook Form for form lifecycle. These libraries manage presentation concerns only; FastAPI/Pydantic and the owning domain service remain authoritative for validation and transitions.
 - Generate TypeScript API types and a typed browser client from FastAPI OpenAPI into `application/packages/contracts`. Generated files are replaced by generation and are never hand-edited. Handwritten feature code must not recreate request or response interfaces already present in OpenAPI.
 - Keep reusable, domain-neutral presentational components in `application/packages/ui`. A component that knows about leases, deposits, maintenance issues, or another domain belongs in the corresponding `apps/web/src/features` folder.
@@ -426,7 +428,7 @@ Every paged collection uses a stable sort and opaque cursor. Responses include `
 
 Keep totals and slices under identical filters and a consistent read snapshot, with a stable ID tie-breaker. A sparse page with `items: []` and a non-null `nextCursor` is not an empty result; expose continuation. Summary endpoints such as TASK-001 may use explicitly bounded buckets and totals rather than page envelopes; their View all actions open a filtered directory. Composite responses carry `asOf` and per-section availability. OPS-001 server sections are `available` or `unavailable`; the UI may mark a retained prior successful result `stale`, preserving its original timestamp and revision. A failed money section must not erase successfully loaded maintenance data or produce a zero balance.
 
-The [13 accepted OPS-001 decisions](../archive/designs/OPS-001_DESIGN.md#resolved-design-decisions) govern operator support. Consume typed HTTP 200 bootstrap readiness envelopes without interpreting unavailable preferences as defaults; ordinary OPS APIs require validated readiness. Show only implemented recovery controls or clearly labeled setup guidance. OPS directory pages default to 50/max 100; overview/search sections default to 10/max 50, with exact totals and independent continuations. Cursor expiry/change returns 409 after a maximum 15 minutes; restart with visible filters retained. Server route targets are typed identities mapped by the client registry. Owner views default to current effective relationships, offer former/archived history, and require an explicit money period; related-property figures never imply owner entitlement. Coverage review submits the displayed area-specific evidence revision and cannot clear a required gap. Recovery uses registered field allowlists, 64 KiB per record, 100 active records, and ordinary 30-day expiry; preserve unresolved command attempts until reconciled, including across restore. Preferences default to light appearance and the agreed navigation order at revision 0 without a read-side write. A membership-source failure fails its collection rather than returning an incomplete successful directory.
+The [13 accepted OPS-001 decisions](../../archive/designs/OPS-001_DESIGN.md#resolved-design-decisions) govern operator support. Consume typed HTTP 200 bootstrap readiness envelopes without interpreting unavailable preferences as defaults; ordinary OPS APIs require validated readiness. Show only implemented recovery controls or clearly labeled setup guidance. OPS directory pages default to 50/max 100; overview/search sections default to 10/max 50, with exact totals and independent continuations. Cursor expiry/change returns 409 after a maximum 15 minutes; restart with visible filters retained. Server route targets are typed identities mapped by the client registry. Owner views default to current effective relationships, offer former/archived history, and require an explicit money period; related-property figures never imply owner entitlement. Coverage review submits the displayed area-specific evidence revision and cannot clear a required gap. Recovery uses registered field allowlists, 64 KiB per record, 100 active records, and ordinary 30-day expiry; preserve unresolved command attempts until reconciled, including across restore. Preferences default to light appearance and the agreed navigation order at revision 0 without a read-side write. A membership-source failure fails its collection rather than returning an incomplete successful directory.
 
 Define response models and stable operation IDs before generating clients: generated types from unconstrained dictionaries are insufficient. Export OpenAPI against an isolated configuration without opening the operator's live workspace, pin the generator in the lockfile, and verify a reproducible snapshot. Source modules expose facts through application protocols; OPS-001/reporting composition must not import other modules' persistence or issue a request per displayed row.
 
@@ -622,12 +624,12 @@ These UI-001 scenarios retain their original numbers for traceability. Gaps in n
 
 ## Screen review
 
-The [operator experience visual reference](../../demo/operator-experience.html) is a local, fictional-data prototype for reviewing directories, workspaces, inline actions, navigation customization, and visual direction. It also illustrates future Home and integration experiences outside UI-001. The prototype does not write application records, prove integration readiness, or define API/domain contracts or acceptance criteria. This document governs UI-001 delivery.
+The [operator experience visual reference](../../../demo/operator-experience.html) is a local, fictional-data prototype for reviewing directories, workspaces, inline actions, navigation customization, and visual direction. It also illustrates future Home and integration experiences outside UI-001. The prototype does not write application records, prove integration readiness, or define API/domain contracts or acceptance criteria. This document governs UI-001 delivery.
 
 ## Sources
 
-- [Feature backlog](../FEATURE_BACKLOG.md)
-- [Product brief](../PRODUCT_BRIEF.md)
-- [Architecture](../ARCHITECTURE.md)
-- [Product decisions](../DECISIONS.md)
-- [README](../../README.md)
+- [Feature backlog](../../FEATURE_BACKLOG.md)
+- [Product brief](../../PRODUCT_BRIEF.md)
+- [Architecture](../../ARCHITECTURE.md)
+- [Product decisions](../../DECISIONS.md)
+- [README](../../../README.md)

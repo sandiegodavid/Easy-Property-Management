@@ -1,12 +1,12 @@
 # Active designs and remaining work
 
-Current behavior is in [module guides](../README.md#current-modules). These documents track delivery/acceptance or proposed changes. Original partial designs are retained as historical snapshots; they are not marked complete.
+Completed core UI-001 behavior is in [UI guides](../ui/operator-experience.md), [workflows](../ui/workflows.md) and [validation evidence](../ui/validation.md). Current domain behavior is in [module guides](../README.md#current-modules). These documents track delivery/acceptance or proposed changes. Completed UI-001 records are archived. Other partial designs retain their individual acceptance status; UI-001 completion alone does not close their pending reviews or backlog gates.
 
-## Core interface and acceptance
+## Remaining interface work
 
-- [UI-001 design](UI-001_DESIGN.md): approved target interactions and technical requirements.
+- [UI-001 design](../ui/operator-experience.md): approved target interactions and technical requirements.
 - [DASH-001 design](DASH-001_DESIGN.md): Home aggregation, source contracts, implementation sequence and 16 accepted decisions; implementation remains pending.
-- [UI-001 delivery matrix](UI-001_IMPLEMENTATION_MATRIX.md): ordered remaining browser slices, completed handoff and explicit manual Intake acceptance.
+- [UI-001 delivery evidence](../ui/validation.md): ordered remaining browser slices, completed handoff and explicit manual Intake acceptance.
 - [UI-002 preliminary design](UI-002_DESIGN_preliminary.md): legal/HOA, spreadsheet intake, issue proposals and connected assistants.
 
 ## Implemented backends with open feature acceptance

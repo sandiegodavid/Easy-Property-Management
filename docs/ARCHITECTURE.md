@@ -19,7 +19,7 @@ FastAPI · loopback transport policy · packaged web assets
     └─ OS credential store / host credentials, outside portable data
 ```
 
-The backend and core frontend are implemented. Browser delivery remains incomplete: the current shell, recovery, contextual reads and Portfolio/identity/Provider/Lease/Inspection workflows are present; remaining workflows and acceptance are tracked in [active UI delivery](active/UI-001_IMPLEMENTATION_MATRIX.md). The [product brief](PRODUCT_BRIEF.md) describes the intended product, and the [backlog](FEATURE_BACKLOG.md) tracks delivery. Neither is an inventory of current capabilities.
+The backend and core UI-001 browser workflows are implemented, including Money, Maintenance, Tasks/communications, search/coverage, manual Intake and capability-gated AI Settings/review. [Current UI guides](ui/operator-experience.md) describe behavior; [validation evidence](ui/validation.md) records completed packaged-browser and restart/restore acceptance. Home aggregation remains DASH-001 and legal/HOA, spreadsheet intake, issue-proposal review and assistant setup remain UI-002. The [product brief](PRODUCT_BRIEF.md) describes intended scope and the [backlog](FEATURE_BACKLOG.md) tracks delivery; production AI availability remains separately registered and gated.
 
 ## Ownership map
 

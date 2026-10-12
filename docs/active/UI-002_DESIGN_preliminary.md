@@ -6,7 +6,7 @@ This preliminary design preserves the confirmed follow-up product decisions and 
 
 UI-002 follows UI-001 and DASH-001. Its prerequisites are LEGAL-001, HOA-001, DATA-002, DATA-003, INGEST-002, and MCP-001. Deliver legal matters, HOA notices/shared repairs, Excel/Google Sheets intake, retained-evidence issue-proposal review, and connected-assistant setup/health. Extend existing workspaces, search, coverage, and Home through supported source contracts. DASH-003 retains the broader ingestion/voice/assistant attention dashboard scope.
 
-Reuse [UI-001's shell, navigation, components, accessibility, client architecture, and recovery contracts](UI-001_DESIGN.md#technical-implementation-design). Do not duplicate that specification or implement domain policy in the browser. Backend readiness and UI delivery registration must both permit a route. Unsupported deep links explain the missing capability and offer a safe return. Do not claim legal/HOA, import, or assistant coverage before its UI is delivered.
+Reuse [UI-001's shell, navigation, components, accessibility, client architecture, and recovery contracts](../ui/frontend-architecture.md). Do not duplicate that specification or implement domain policy in the browser. Backend readiness and UI delivery registration must both permit a route. Unsupported deep links explain the missing capability and offer a safe return. Do not claim legal/HOA, import, or assistant coverage before its UI is delivered.
 
 ## Domain terms
 
@@ -76,7 +76,7 @@ Inside the expanded shared-repair case, show:
 
 Preparing the follow-up uses the selected correspondence and latest commitment to draft a message. Review shows the proposed content, supporting records, and intended changes together. Draft approval and message sending are distinct actions. Keep the next follow-up and unresolved repair visible until separately updated or physically verified; an assistant's work status never establishes repair completion.
 
-The actions sit inside expanded content per [UI-001 D35](UI-001_DESIGN.md#d35-toggle-secondary-actions-directly-beneath-their-source-item). AI-assisted preparation follows D46's availability and review controls and the owning drafting feature; drafting availability is not guaranteed by UI-002 alone.
+The actions sit inside expanded content per [UI-001 D35](../ui/operator-experience.md). AI-assisted preparation follows D46's availability and review controls and the owning drafting feature; drafting availability is not guaranteed by UI-002 alone.
 
 ### Spreadsheet intake
 
@@ -299,7 +299,7 @@ Home says No actions due today, retaining counts for waiting, upcoming, and info
 The [operator experience prototype](../../demo/operator-experience.html) contains simulated Home/integration states and fictional data. It does not prove integration readiness or define domain contracts; feature designs and this delivery allocation govern deferred workflows.
 
 - [Feature backlog](../FEATURE_BACKLOG.md)
-- [UI-001 core design](UI-001_DESIGN.md)
+- [Core operator experience](../ui/operator-experience.md)
 - [Architecture](../ARCHITECTURE.md)
 - [AI integration research](../research/AI_INTEGRATION_RESEARCH.md)
 - [California Courts eviction overview](https://selfhelp.courts.ca.gov/eviction), used to distinguish notices from court cases when structuring manual legal matters.

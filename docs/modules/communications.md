@@ -20,6 +20,10 @@ Supported contexts include Property/Space, Lease, maintenance issue, owner conce
 
 For original source snapshots use [Intake](intake.md). For reminder/waiting semantics use [Tasks](tasks.md).
 
+## Browser workflow boundary
+
+Manual conversation browser records expose recorded/corrected history and optional Task follow-up with source context. Retained evidence is reached separately under Conversations; recording an interaction does not send a message or approve an issue proposal. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/communications/domain).
@@ -39,4 +43,4 @@ The following executable specifications are the starting point for focused valid
 
 - [test_communications.py](../../application/apps/server/app/modules/communications/tests/test_communications.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

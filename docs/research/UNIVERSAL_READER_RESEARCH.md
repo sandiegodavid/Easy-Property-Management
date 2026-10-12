@@ -207,7 +207,7 @@ Keep operation decisions (`create`, `link`, `skip`), selected existing IDs, revi
 
 ## Operator experience
 
-Use a shared onboarding and later-import flow, aligned with [UI-001](../active/UI-001_DESIGN.md):
+Use a shared onboarding and later-import flow, aligned with [UI-001](../ui/operator-experience.md):
 
 1. **Choose source.** Upload Excel or select read-only Sheets. Explain supported formats and limits.
 2. **Inspect and suggest.** Preview detected entities/regions. Offer automatic interpretation only through a configured, permitted model, and retain manual mapping.

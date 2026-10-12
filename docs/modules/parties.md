@@ -18,6 +18,10 @@ Party archival consults every registered active-role guard inside the writer tra
 
 Read [Tenants](tenants.md), [Providers](providers.md) and [Portfolio](portfolio.md) for role-specific eligibility and relationship rules.
 
+## Browser workflow boundary
+
+Shared Party/contact forms retain identity/duplicate guards and source revisions. Tenant and Provider designation reuse shared identity through owning commands; saved forms and original-result recovery preserve child membership. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/parties/domain).
@@ -38,4 +42,4 @@ The following executable specifications are the starting point for focused valid
 - [test_contact_commands.py](../../application/apps/server/app/modules/parties/tests/test_contact_commands.py).
 - [test_identity_commands.py](../../application/apps/server/app/modules/parties/tests/test_identity_commands.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

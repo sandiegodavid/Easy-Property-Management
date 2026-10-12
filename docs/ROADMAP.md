@@ -11,7 +11,7 @@ Deliver complete, understandable workflows for:
 - Operator-run setup scripts to initialize or restore each user's local workspace, select data and backup locations, record its machine-local locator, and verify readiness.
 - Portfolio setup for self-owned and client-managed properties.
 - Reviewed Excel and read-only Google Sheets snapshot imports for properties, owners, and providers, with explicit create/link/skip and duplicate-safe retries.
-- The confirmed [operator experience](active/UI-001_DESIGN.md): configurable navigation, property/owner directories, Providers, Light/Dark Settings, full-summary-bar inline expansion, drafts, coverage reviews, and visible waiting/follow-up work.
+- The confirmed [operator experience](ui/operator-experience.md): configurable navigation, property/owner directories, Providers, Light/Dark Settings, full-summary-bar inline expansion, drafts, coverage reviews, and visible waiting/follow-up work.
 - Manual eviction/legal-matter tracking with attorney links and sourced milestone/deadline records, plus property-linked HOA violation notices with explicit response and closure.
 - Single-family homes, condos, townhomes, and offices.
 - Tenants, leases, pre-move-in/post-move-out condition reports, rent tracking, security-deposit settlement, recorded payment methods, prepaid-check deposit reminders, expenses, and a manual owner/tenant communication ledger with task follow-up.

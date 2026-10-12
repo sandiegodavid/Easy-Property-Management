@@ -24,6 +24,10 @@ Credential updates/deletion and connection probes have their own external-operat
 
 `/api/ai` exposes settings, connections/disclosure/credential/test, limits, profiles, draft detail/edit/approve/dismiss and command/external-operation reads. Registry availability gates controls. Source body and generated output stay out of global activity/search. [Intake](intake.md) retains original evidence; later issue-review and connected-assistant features supply their own domain/transport contracts.
 
+## Browser workflow boundary
+
+Settings provides Off/device/cloud controls, registry-derived capabilities, explicit data-class disclosure, write-only credentials, synthetic probes, limits/redaction and global pause. Generic draft review preserves governed input/provenance/history; approval requires a current source, registered handler and acknowledged saved version. Editing clears confirmation. External secret effects retain original-key recovery and explicit uncertainty acknowledgment. Production model/action/approval registries remain empty. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/ai_governance/domain).
@@ -47,4 +51,4 @@ The following executable specifications are the starting point for focused valid
 - [test_governance.py](../../application/apps/server/app/modules/ai_governance/tests/test_governance.py).
 - [test_openapi_readiness.py](../../application/apps/server/app/modules/ai_governance/tests/test_openapi_readiness.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

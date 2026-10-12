@@ -20,6 +20,10 @@ Pending reports can be patched. Verified/rejected records preserve the decision.
 
 `/api/owner-rent-reports` supplies create/edit/verify/reject/detail/list; `/api/owner-rent-report-operations/{key}` recovers committed results. Owner summaries count the linked receipt once. Statements, fees, distributable balances and disbursements are separate planned capabilities and are not computed by this report module.
 
+## Browser workflow boundary
+
+Owner-report browser verification requires explicit receipt-adoption or receipt-creation choice and current report plus ledger revisions. Conflicts preserve review notes; matching receipts are counted once. Statements/disbursements/fees retain separate delivery scopes. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/owner_accounting/domain).
@@ -39,4 +43,4 @@ The following executable specifications are the starting point for focused valid
 
 - [test_owner_accounting.py](../../application/apps/server/app/modules/owner_accounting/tests/test_owner_accounting.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

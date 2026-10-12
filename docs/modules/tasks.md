@@ -28,6 +28,10 @@ Task source adapters accept the consumer's connection and captured instant, retu
 
 Keep waiting, deadlines and reminder state independent. Preserve replay before current-state validation, task tombstones and original-result recovery. Return derived deadline/follow-up facts from the server; clients must not recalculate them from browser time.
 
+## Browser workflow boundary
+
+Live Task deadline/waiting directories use shared attention rows and recoverable source forms. Waiting retains independent deadline/urgency/reminder facts. Terminal/deleted Tasks retain command receipts for original-key reconciliation, including after live record removal. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/tasks/domain).
@@ -49,4 +53,4 @@ The following executable specifications are the starting point for focused valid
 - [test_tasks.py](../../application/apps/server/app/modules/tasks/tests/test_tasks.py).
 - [test_waiting.py](../../application/apps/server/app/modules/tasks/tests/test_waiting.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is tracked separately in [active UI delivery](../active/UI-001_IMPLEMENTATION_MATRIX.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

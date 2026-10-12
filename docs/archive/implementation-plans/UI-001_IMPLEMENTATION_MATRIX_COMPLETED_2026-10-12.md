@@ -1,3 +1,5 @@
+> Archived completed UI-001 record, October 12, 2026. Current behavior is consolidated in [UI guides](../../ui/operator-experience.md) and [module guides](../../README.md#current-modules). Historical planning language and dated evidence below are retained for traceability.
+
 # UI-001 implementation slices
 
 Status: backend readiness Slices 41–43 and frontend Slices 44–57 delivered — October 12, 2026. UI-001's implementation and acceptance gates are complete. Home aggregation remains DASH-001; issue-proposal review and connected assistants remain UI-002.
@@ -5,7 +7,7 @@ Status: backend readiness Slices 41–43 and frontend Slices 44–57 delivered �
 Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
 feature-specific AI approval modes, Intake attention consequences, coordinated
 Maintenance writes and OPS recovery registration belong to UI-002. The former
-planned Slice 40 is tracked in [UI-002's preliminary design](UI-002_DESIGN_preliminary.md#ingest-002--issue-review-readiness-and-recovery-former-slice-40).
+planned Slice 40 is tracked in [UI-002's preliminary design](../../active/UI-002_DESIGN_preliminary.md#ingest-002--issue-review-readiness-and-recovery-former-slice-40).
 None of that work gates UI-001. Delivered generic AI-governance and local-operator
 Intake contracts remain in this matrix; their delivery does not enable INGEST-002.
 The recorded backend readiness gate and React scaffold are complete; browser workflow delivery follows the ordered UI slices below.
@@ -13,7 +15,7 @@ The recorded backend readiness gate and React scaffold are complete; browser wor
 ## Subsequent UI slices — ordered implementation plan
 
 Updated October 12, 2026. Backend Slices 41–43 and browser Slices 44–57 are delivered, including manual Intake, cross-workflow acceptance and encrypted restart/restore proofs. The following ordered slices record that delivery. Slice numbers continue after the backend sequence; Slice 40 stays assigned to UI-002.
-The [UI-001 design](UI-001_DESIGN.md#technical-implementation-design) owns the
+The [UI-001 design](../../archive/designs/UI-001_DESIGN_COMPLETED_2026-10-12.md#technical-implementation-design) owns the
 interaction and technical requirements.
 
 Each slice includes its focused component/HTTP/browser tests as it is implemented;
@@ -484,7 +486,7 @@ that a browser control is ready.
 ### Scope boundaries
 
 Slice 40 remains assigned to
-[UI-002 issue-review readiness](UI-002_DESIGN_preliminary.md#ingest-002--issue-review-readiness-and-recovery-former-slice-40);
+[UI-002 issue-review readiness](../../active/UI-002_DESIGN_preliminary.md#ingest-002--issue-review-readiness-and-recovery-former-slice-40);
 do not reuse its number. INGEST-002 approval modes, consumer-owned dismissal,
 Intake/Maintenance consequences and issue-review OPS forms do not gate UI-001.
 Generic AI review and local-operator Intake registrations remain available in
@@ -523,7 +525,7 @@ status does not replace the route/workflow acceptance required by these UI slice
 
 ## Delivery history and source contracts
 
-Backend Slices 1–43 and the detailed original delivery record are preserved in the [historical matrix](../archive/implementation-plans/UI-001_IMPLEMENTATION_MATRIX.md). Current backend contracts are documented in [module guides](../README.md#current-modules). This active matrix owns ordered browser delivery and remaining acceptance.
+Backend Slices 1–43 and the detailed original delivery record are preserved in the [historical matrix](../../archive/implementation-plans/UI-001_IMPLEMENTATION_MATRIX.md). Current backend contracts are documented in [module guides](../../README.md#current-modules). This active matrix owns ordered browser delivery and remaining acceptance.
 
 ## Explicit manual Intake acceptance (delivered)
 
