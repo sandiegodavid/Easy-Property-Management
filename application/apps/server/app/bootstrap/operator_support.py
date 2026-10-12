@@ -39,6 +39,9 @@ from app.bootstrap.operator_search import compose_metadata_search
 from app.modules.operator.application.search_service import OperatorSearchService
 from app.bootstrap.operator_coverage import compose_coverage_sources
 from app.modules.operator.application.coverage_service import OperatorCoverageService
+from app.bootstrap.operator_home import compose_home_sources
+from app.modules.operator.application.home_service import HomeCompositionService
+from app.modules.operator.infrastructure.home_unit_of_work import SQLiteHomeUnitOfWork
 
 
 def compose_operator(workspace, runtime, recorder, sources):
@@ -92,10 +95,12 @@ def compose_operator(workspace, runtime, recorder, sources):
             ),
         ),
     )
+    home_uow = SQLiteHomeUnitOfWork(workspace.paths.database, compose_home_sources(), marker)
     return (
         OperatorService(
             unit_of_work,
             runtime=identity,
+            capability_checks={"operator.home": lambda: home_uow.sources.ready},
             capabilities=(
                 "operator.preferences",
                 "operator.recovery",
@@ -110,4 +115,5 @@ def compose_operator(workspace, runtime, recorder, sources):
         OperatorOverviewService(unit_of_work, runtime=identity),
         OperatorSearchService(unit_of_work, runtime=identity),
         OperatorCoverageService(unit_of_work, runtime=identity),
+        HomeCompositionService(home_uow, runtime=identity),
     )

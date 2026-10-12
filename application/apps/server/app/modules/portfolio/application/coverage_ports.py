@@ -22,6 +22,7 @@ class CoverageLocation:
 
 
 class PortfolioCoverageReader(Protocol):
+    def portfolio_facts(self, connection, *, as_of: datetime, property_id=None) -> FromClause: ...
     def locations(
         self, connection, subjects: Collection[CoverageSubject], *, as_of: datetime
     ) -> Mapping[CoverageSubject, CoverageLocation]: ...

@@ -47,6 +47,8 @@ Persistence identities below are read from the current models. Column definition
 
 ## Validation
 
+DASH-001's caller-transaction Task attention reader supplies SQL-filtered deadlines, waiting follow-ups and grouped reminder previews, including unlinked Tasks and retained archived context. Its source counts and SQL facts support the later Home composition; they do not replace the existing TASK-001 summary or enable Home on their own. See the [DASH delivery matrix](../active/DASH-001_CONTRACT_EXAMPLES.md#slice-3-task-reminder-and-waiting-facts) and [focused attention tests](../../application/apps/server/app/modules/tasks/tests/test_attention_reader.py).
+
 The following executable specifications are the starting point for focused validation. This documentation consolidation did not rerun them or establish feature completion.
 
 - [test_creation.py](../../application/apps/server/app/modules/tasks/tests/test_creation.py).

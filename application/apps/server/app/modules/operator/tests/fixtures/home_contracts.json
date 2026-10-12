@@ -1,0 +1,1586 @@
+{
+  "requests": {
+    "home": {
+      "scope": {
+        "kind": "portfolio"
+      },
+      "horizonDays": 7,
+      "fromOn": "2026-10-01",
+      "throughOn": "2026-10-31",
+      "limitPerSection": 10
+    },
+    "attention": {
+      "scope": {
+        "kind": "portfolio"
+      },
+      "limit": 10
+    },
+    "collection": {
+      "scope": {
+        "kind": "portfolio"
+      },
+      "collection": "needs_action",
+      "horizonDays": 7,
+      "limit": 50,
+      "cursor": null
+    }
+  },
+  "items": [
+    {
+      "key": "task:00000000-0000-4000-8000-000000000001",
+      "source": {
+        "kind": "task",
+        "id": "00000000-0000-4000-8000-000000000001"
+      },
+      "sourceRevision": "1",
+      "sourceStatus": "open",
+      "title": "Recorded task",
+      "collection": "needs_action",
+      "reasons": [
+        {
+          "code": "undated",
+          "priority": "review",
+          "source": {
+            "kind": "task",
+            "id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      ],
+      "nextAction": {
+        "kind": "review_task",
+        "target": {
+          "kind": "source",
+          "source": {
+            "kind": "task",
+            "id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      },
+      "provenance": {
+        "owner": "tasks",
+        "sourceRevision": "1"
+      }
+    },
+    {
+      "key": "rent_expectation:00000000-0000-4000-8000-000000000001",
+      "source": {
+        "kind": "rent_expectation",
+        "id": "00000000-0000-4000-8000-000000000001"
+      },
+      "sourceRevision": "1",
+      "sourceStatus": "open",
+      "title": "Recorded rent_expectation",
+      "collection": "needs_action",
+      "reasons": [
+        {
+          "code": "due_today",
+          "priority": "today",
+          "source": {
+            "kind": "rent_expectation",
+            "id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      ],
+      "nextAction": {
+        "kind": "record_payment",
+        "target": {
+          "kind": "source",
+          "source": {
+            "kind": "rent_expectation",
+            "id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      },
+      "provenance": {
+        "owner": "finance",
+        "sourceRevision": "1"
+      },
+      "outstandingMinor": 12345,
+      "currency": "USD"
+    },
+    {
+      "key": "maintenance_issue:00000000-0000-4000-8000-000000000001",
+      "source": {
+        "kind": "maintenance_issue",
+        "id": "00000000-0000-4000-8000-000000000001"
+      },
+      "sourceRevision": "1",
+      "sourceStatus": "open",
+      "title": "Recorded maintenance_issue",
+      "collection": "needs_action",
+      "reasons": [
+        {
+          "code": "urgent",
+          "priority": "urgent",
+          "source": {
+            "kind": "maintenance_issue",
+            "id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      ],
+      "nextAction": {
+        "kind": "review_issue",
+        "target": {
+          "kind": "source",
+          "source": {
+            "kind": "maintenance_issue",
+            "id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      },
+      "provenance": {
+        "owner": "maintenance",
+        "sourceRevision": "1"
+      }
+    },
+    {
+      "key": "owner_rent_report:00000000-0000-4000-8000-000000000001",
+      "source": {
+        "kind": "owner_rent_report",
+        "id": "00000000-0000-4000-8000-000000000001"
+      },
+      "sourceRevision": "1",
+      "sourceStatus": "pending",
+      "title": "Recorded owner_rent_report",
+      "collection": "needs_action",
+      "reasons": [
+        {
+          "code": "pending_verification",
+          "priority": "review",
+          "source": {
+            "kind": "owner_rent_report",
+            "id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      ],
+      "nextAction": {
+        "kind": "review_report",
+        "target": {
+          "kind": "source",
+          "source": {
+            "kind": "owner_rent_report",
+            "id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      },
+      "provenance": {
+        "owner": "owner_accounting",
+        "sourceRevision": "1"
+      }
+    },
+    {
+      "key": "owner_concern:00000000-0000-4000-8000-000000000001",
+      "source": {
+        "kind": "owner_concern",
+        "id": "00000000-0000-4000-8000-000000000001"
+      },
+      "sourceRevision": "1",
+      "sourceStatus": "open",
+      "title": "Recorded owner_concern",
+      "collection": "needs_action",
+      "reasons": [
+        {
+          "code": "unresolved",
+          "priority": "review",
+          "source": {
+            "kind": "owner_concern",
+            "id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      ],
+      "nextAction": {
+        "kind": "review_concern",
+        "target": {
+          "kind": "source",
+          "source": {
+            "kind": "owner_concern",
+            "id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      },
+      "provenance": {
+        "owner": "owner_management",
+        "sourceRevision": "1"
+      }
+    },
+    {
+      "key": "lease:00000000-0000-4000-8000-000000000001",
+      "source": {
+        "kind": "lease",
+        "id": "00000000-0000-4000-8000-000000000001"
+      },
+      "sourceRevision": "1",
+      "sourceStatus": "executed",
+      "title": "Recorded lease",
+      "collection": "needs_action",
+      "reasons": [
+        {
+          "code": "lease_review",
+          "priority": "review",
+          "source": {
+            "kind": "lease",
+            "id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      ],
+      "nextAction": {
+        "kind": "review_lease",
+        "target": {
+          "kind": "source",
+          "source": {
+            "kind": "lease",
+            "id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      },
+      "provenance": {
+        "owner": "leases",
+        "sourceRevision": "1"
+      }
+    },
+    {
+      "key": "maintenance_appointment:00000000-0000-4000-8000-000000000001",
+      "source": {
+        "kind": "maintenance_appointment",
+        "id": "00000000-0000-4000-8000-000000000001"
+      },
+      "sourceRevision": "1",
+      "sourceStatus": "scheduled",
+      "title": "Recorded maintenance_appointment",
+      "collection": "needs_action",
+      "reasons": [
+        {
+          "code": "outcome_review",
+          "priority": "review",
+          "source": {
+            "kind": "maintenance_appointment",
+            "id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      ],
+      "nextAction": {
+        "kind": "review_appointment",
+        "target": {
+          "kind": "source",
+          "source": {
+            "kind": "maintenance_appointment",
+            "id": "00000000-0000-4000-8000-000000000001"
+          }
+        }
+      },
+      "provenance": {
+        "owner": "maintenance",
+        "sourceRevision": "1"
+      }
+    },
+    {
+      "key": "coverage:00000000-0000-4000-8000-000000000001:property:occupancy",
+      "source": {
+        "kind": "coverage",
+        "id": "00000000-0000-4000-8000-000000000001",
+        "subjectKind": "property",
+        "area": "occupancy"
+      },
+      "sourceRevision": "1",
+      "sourceStatus": "missing_required",
+      "title": "Recorded coverage",
+      "collection": "information_review",
+      "reasons": [
+        {
+          "code": "missing_required",
+          "priority": "information",
+          "source": {
+            "kind": "coverage",
+            "id": "00000000-0000-4000-8000-000000000001",
+            "subjectKind": "property",
+            "area": "occupancy"
+          }
+        }
+      ],
+      "nextAction": {
+        "kind": "review_coverage",
+        "target": {
+          "kind": "source",
+          "source": {
+            "kind": "coverage",
+            "id": "00000000-0000-4000-8000-000000000001",
+            "subjectKind": "property",
+            "area": "occupancy"
+          }
+        }
+      },
+      "provenance": {
+        "owner": "operator",
+        "sourceRevision": "1"
+      }
+    }
+  ],
+  "home": {
+    "contractVersion": 1,
+    "workspaceId": "00000000-0000-4000-8000-000000000001",
+    "runtimeEpoch": "00000000-0000-4000-8000-000000000001",
+    "scope": {
+      "kind": "portfolio"
+    },
+    "supportedSources": [
+      "task",
+      "rent_expectation",
+      "maintenance_issue",
+      "owner_rent_report",
+      "owner_concern",
+      "lease",
+      "maintenance_appointment",
+      "coverage"
+    ],
+    "asOf": "2026-10-12T12:00:00Z",
+    "sourceRevision": "1",
+    "nextTransitionAt": "2026-10-12T13:00:00Z",
+    "needsAction": {
+      "status": "available",
+      "collection": "needs_action",
+      "capture": {
+        "asOf": "2026-10-12T12:00:00Z",
+        "sourceRevision": "1",
+        "readMode": "live",
+        "freshness": "checked",
+        "checkedAt": "2026-10-12T12:00:00Z",
+        "nextTransitionAt": "2026-10-12T13:00:00Z"
+      },
+      "matchingTotal": 7,
+      "items": [
+        {
+          "key": "task:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "task",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "open",
+          "title": "Recorded task",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "undated",
+              "priority": "review",
+              "source": {
+                "kind": "task",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_task",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "task",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "tasks",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "rent_expectation:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "rent_expectation",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "open",
+          "title": "Recorded rent_expectation",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "due_today",
+              "priority": "today",
+              "source": {
+                "kind": "rent_expectation",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "record_payment",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "rent_expectation",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "finance",
+            "sourceRevision": "1"
+          },
+          "outstandingMinor": 12345,
+          "currency": "USD"
+        },
+        {
+          "key": "maintenance_issue:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "maintenance_issue",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "open",
+          "title": "Recorded maintenance_issue",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "urgent",
+              "priority": "urgent",
+              "source": {
+                "kind": "maintenance_issue",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_issue",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "maintenance_issue",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "maintenance",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "owner_rent_report:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "owner_rent_report",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "pending",
+          "title": "Recorded owner_rent_report",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "pending_verification",
+              "priority": "review",
+              "source": {
+                "kind": "owner_rent_report",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_report",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "owner_rent_report",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "owner_accounting",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "owner_concern:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "owner_concern",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "open",
+          "title": "Recorded owner_concern",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "unresolved",
+              "priority": "review",
+              "source": {
+                "kind": "owner_concern",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_concern",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "owner_concern",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "owner_management",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "lease:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "lease",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "executed",
+          "title": "Recorded lease",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "lease_review",
+              "priority": "review",
+              "source": {
+                "kind": "lease",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_lease",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "lease",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "leases",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "maintenance_appointment:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "maintenance_appointment",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "scheduled",
+          "title": "Recorded maintenance_appointment",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "outcome_review",
+              "priority": "review",
+              "source": {
+                "kind": "maintenance_appointment",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_appointment",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "maintenance_appointment",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "maintenance",
+            "sourceRevision": "1"
+          }
+        }
+      ],
+      "nextCursor": null,
+      "viewAllTarget": {
+        "kind": "home_collection",
+        "collection": "needs_action",
+        "scope": {
+          "kind": "portfolio"
+        }
+      }
+    },
+    "waiting": {
+      "status": "available",
+      "collection": "waiting",
+      "capture": {
+        "asOf": "2026-10-12T12:00:00Z",
+        "sourceRevision": "1",
+        "readMode": "live",
+        "freshness": "checked",
+        "checkedAt": "2026-10-12T12:00:00Z",
+        "nextTransitionAt": "2026-10-12T13:00:00Z"
+      },
+      "matchingTotal": 0,
+      "items": [],
+      "nextCursor": null,
+      "viewAllTarget": {
+        "kind": "home_collection",
+        "collection": "waiting",
+        "scope": {
+          "kind": "portfolio"
+        }
+      }
+    },
+    "upcoming": {
+      "status": "available",
+      "collection": "upcoming",
+      "capture": {
+        "asOf": "2026-10-12T12:00:00Z",
+        "sourceRevision": "1",
+        "readMode": "live",
+        "freshness": "checked",
+        "checkedAt": "2026-10-12T12:00:00Z",
+        "nextTransitionAt": "2026-10-12T13:00:00Z"
+      },
+      "matchingTotal": 0,
+      "items": [],
+      "nextCursor": null,
+      "viewAllTarget": {
+        "kind": "home_collection",
+        "collection": "upcoming",
+        "scope": {
+          "kind": "portfolio"
+        }
+      }
+    },
+    "appointments": {
+      "status": "available",
+      "collection": "appointments",
+      "capture": {
+        "asOf": "2026-10-12T12:00:00Z",
+        "sourceRevision": "1",
+        "readMode": "live",
+        "freshness": "checked",
+        "checkedAt": "2026-10-12T12:00:00Z",
+        "nextTransitionAt": "2026-10-12T13:00:00Z"
+      },
+      "matchingTotal": 0,
+      "items": [],
+      "nextCursor": null,
+      "viewAllTarget": {
+        "kind": "home_collection",
+        "collection": "appointments",
+        "scope": {
+          "kind": "portfolio"
+        }
+      }
+    },
+    "informationReview": {
+      "status": "available",
+      "collection": "information_review",
+      "capture": {
+        "asOf": "2026-10-12T12:00:00Z",
+        "sourceRevision": "1",
+        "readMode": "live",
+        "freshness": "checked",
+        "checkedAt": "2026-10-12T12:00:00Z",
+        "nextTransitionAt": "2026-10-12T13:00:00Z"
+      },
+      "matchingTotal": 1,
+      "items": [
+        {
+          "key": "coverage:00000000-0000-4000-8000-000000000001:property:occupancy",
+          "source": {
+            "kind": "coverage",
+            "id": "00000000-0000-4000-8000-000000000001",
+            "subjectKind": "property",
+            "area": "occupancy"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "missing_required",
+          "title": "Recorded coverage",
+          "collection": "information_review",
+          "reasons": [
+            {
+              "code": "missing_required",
+              "priority": "information",
+              "source": {
+                "kind": "coverage",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "subjectKind": "property",
+                "area": "occupancy"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_coverage",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "coverage",
+                "id": "00000000-0000-4000-8000-000000000001",
+                "subjectKind": "property",
+                "area": "occupancy"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "operator",
+            "sourceRevision": "1"
+          }
+        }
+      ],
+      "nextCursor": null,
+      "viewAllTarget": {
+        "kind": "home_collection",
+        "collection": "information_review",
+        "scope": {
+          "kind": "portfolio"
+        }
+      }
+    },
+    "inventory": {
+      "status": "available",
+      "capture": {
+        "asOf": "2026-10-12T12:00:00Z",
+        "sourceRevision": "1",
+        "readMode": "live",
+        "freshness": "checked",
+        "checkedAt": "2026-10-12T12:00:00Z",
+        "nextTransitionAt": "2026-10-12T13:00:00Z"
+      },
+      "vacant": {
+        "count": 0,
+        "target": {
+          "kind": "inventory",
+          "scope": {
+            "kind": "portfolio"
+          },
+          "occupancy": "vacant",
+          "propertyState": "active"
+        }
+      },
+      "unknown": {
+        "count": 1,
+        "target": {
+          "kind": "inventory",
+          "scope": {
+            "kind": "portfolio"
+          },
+          "occupancy": "unknown",
+          "propertyState": "active"
+        }
+      }
+    },
+    "money": {
+      "status": "available",
+      "capture": {
+        "asOf": "2026-10-12T12:00:00Z",
+        "sourceRevision": "1",
+        "readMode": "live",
+        "freshness": "checked",
+        "checkedAt": "2026-10-12T12:00:00Z",
+        "nextTransitionAt": "2026-10-12T13:00:00Z"
+      },
+      "fromOn": "2026-10-01",
+      "throughOn": "2026-10-31",
+      "metrics": [
+        {
+          "amountMinor": 0,
+          "amount": "0.00",
+          "currency": "USD",
+          "target": {
+            "kind": "money_metric",
+            "scope": {
+              "kind": "portfolio"
+            },
+            "metric": "rentReceived",
+            "fromOn": "2026-10-01",
+            "throughOn": "2026-10-31",
+            "propertyState": "all"
+          }
+        },
+        {
+          "amountMinor": 0,
+          "amount": "0.00",
+          "currency": "USD",
+          "target": {
+            "kind": "money_metric",
+            "scope": {
+              "kind": "portfolio"
+            },
+            "metric": "expensesPaid",
+            "fromOn": "2026-10-01",
+            "throughOn": "2026-10-31",
+            "propertyState": "all"
+          }
+        },
+        {
+          "amountMinor": 0,
+          "amount": "0.00",
+          "currency": "USD",
+          "target": {
+            "kind": "money_metric",
+            "scope": {
+              "kind": "portfolio"
+            },
+            "metric": "expenseRefundsReceived",
+            "fromOn": "2026-10-01",
+            "throughOn": "2026-10-31",
+            "propertyState": "all"
+          }
+        },
+        {
+          "amountMinor": 0,
+          "amount": "0.00",
+          "currency": "USD",
+          "target": {
+            "kind": "money_metric",
+            "scope": {
+              "kind": "portfolio"
+            },
+            "metric": "netRecordedExpenses",
+            "fromOn": "2026-10-01",
+            "throughOn": "2026-10-31",
+            "propertyState": "all"
+          }
+        },
+        {
+          "amountMinor": 0,
+          "amount": "0.00",
+          "currency": "USD",
+          "target": {
+            "kind": "money_metric",
+            "scope": {
+              "kind": "portfolio"
+            },
+            "metric": "operatingRemainder",
+            "fromOn": "2026-10-01",
+            "throughOn": "2026-10-31",
+            "propertyState": "all"
+          }
+        }
+      ]
+    }
+  },
+  "attention": {
+    "contractVersion": 1,
+    "workspaceId": "00000000-0000-4000-8000-000000000001",
+    "runtimeEpoch": "00000000-0000-4000-8000-000000000001",
+    "scope": {
+      "kind": "portfolio"
+    },
+    "supportedSources": [
+      "task",
+      "rent_expectation",
+      "maintenance_issue",
+      "owner_rent_report",
+      "owner_concern",
+      "lease",
+      "maintenance_appointment"
+    ],
+    "asOf": "2026-10-12T12:00:00Z",
+    "sourceRevision": "1",
+    "nextTransitionAt": "2026-10-12T13:00:00Z",
+    "needsAction": {
+      "status": "available",
+      "collection": "needs_action",
+      "capture": {
+        "asOf": "2026-10-12T12:00:00Z",
+        "sourceRevision": "1",
+        "readMode": "live",
+        "freshness": "checked",
+        "checkedAt": "2026-10-12T12:00:00Z",
+        "nextTransitionAt": "2026-10-12T13:00:00Z"
+      },
+      "matchingTotal": 7,
+      "items": [
+        {
+          "key": "task:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "task",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "open",
+          "title": "Recorded task",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "undated",
+              "priority": "review",
+              "source": {
+                "kind": "task",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_task",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "task",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "tasks",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "rent_expectation:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "rent_expectation",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "open",
+          "title": "Recorded rent_expectation",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "due_today",
+              "priority": "today",
+              "source": {
+                "kind": "rent_expectation",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "record_payment",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "rent_expectation",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "finance",
+            "sourceRevision": "1"
+          },
+          "outstandingMinor": 12345,
+          "currency": "USD"
+        },
+        {
+          "key": "maintenance_issue:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "maintenance_issue",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "open",
+          "title": "Recorded maintenance_issue",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "urgent",
+              "priority": "urgent",
+              "source": {
+                "kind": "maintenance_issue",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_issue",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "maintenance_issue",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "maintenance",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "owner_rent_report:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "owner_rent_report",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "pending",
+          "title": "Recorded owner_rent_report",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "pending_verification",
+              "priority": "review",
+              "source": {
+                "kind": "owner_rent_report",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_report",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "owner_rent_report",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "owner_accounting",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "owner_concern:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "owner_concern",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "open",
+          "title": "Recorded owner_concern",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "unresolved",
+              "priority": "review",
+              "source": {
+                "kind": "owner_concern",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_concern",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "owner_concern",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "owner_management",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "lease:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "lease",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "executed",
+          "title": "Recorded lease",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "lease_review",
+              "priority": "review",
+              "source": {
+                "kind": "lease",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_lease",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "lease",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "leases",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "maintenance_appointment:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "maintenance_appointment",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "scheduled",
+          "title": "Recorded maintenance_appointment",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "outcome_review",
+              "priority": "review",
+              "source": {
+                "kind": "maintenance_appointment",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_appointment",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "maintenance_appointment",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "maintenance",
+            "sourceRevision": "1"
+          }
+        }
+      ],
+      "nextCursor": null,
+      "viewAllTarget": {
+        "kind": "home_collection",
+        "collection": "needs_action",
+        "scope": {
+          "kind": "portfolio"
+        }
+      }
+    },
+    "priorityTotals": {
+      "urgent": 1,
+      "today": 1,
+      "overdue": 0,
+      "review": 5
+    },
+    "reasonTotals": {
+      "undated": 1,
+      "due_today": 1,
+      "urgent": 1,
+      "pending_verification": 1,
+      "unresolved": 1,
+      "lease_review": 1,
+      "outcome_review": 1
+    }
+  },
+  "collection": {
+    "contractVersion": 1,
+    "asOf": "2026-10-12T12:00:00Z",
+    "sourceRevision": "1",
+    "nextTransitionAt": "2026-10-12T13:00:00Z",
+    "workspaceId": "00000000-0000-4000-8000-000000000001",
+    "runtimeEpoch": "00000000-0000-4000-8000-000000000001",
+    "scope": {
+      "kind": "portfolio"
+    },
+    "supportedSources": [
+      "task",
+      "rent_expectation",
+      "maintenance_issue",
+      "owner_rent_report",
+      "owner_concern",
+      "lease",
+      "maintenance_appointment",
+      "coverage"
+    ],
+    "result": {
+      "status": "available",
+      "collection": "needs_action",
+      "capture": {
+        "asOf": "2026-10-12T12:00:00Z",
+        "sourceRevision": "1",
+        "readMode": "live",
+        "freshness": "checked",
+        "checkedAt": "2026-10-12T12:00:00Z",
+        "nextTransitionAt": "2026-10-12T13:00:00Z"
+      },
+      "matchingTotal": 7,
+      "items": [
+        {
+          "key": "task:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "task",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "open",
+          "title": "Recorded task",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "undated",
+              "priority": "review",
+              "source": {
+                "kind": "task",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_task",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "task",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "tasks",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "rent_expectation:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "rent_expectation",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "open",
+          "title": "Recorded rent_expectation",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "due_today",
+              "priority": "today",
+              "source": {
+                "kind": "rent_expectation",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "record_payment",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "rent_expectation",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "finance",
+            "sourceRevision": "1"
+          },
+          "outstandingMinor": 12345,
+          "currency": "USD"
+        },
+        {
+          "key": "maintenance_issue:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "maintenance_issue",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "open",
+          "title": "Recorded maintenance_issue",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "urgent",
+              "priority": "urgent",
+              "source": {
+                "kind": "maintenance_issue",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_issue",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "maintenance_issue",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "maintenance",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "owner_rent_report:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "owner_rent_report",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "pending",
+          "title": "Recorded owner_rent_report",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "pending_verification",
+              "priority": "review",
+              "source": {
+                "kind": "owner_rent_report",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_report",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "owner_rent_report",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "owner_accounting",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "owner_concern:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "owner_concern",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "open",
+          "title": "Recorded owner_concern",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "unresolved",
+              "priority": "review",
+              "source": {
+                "kind": "owner_concern",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_concern",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "owner_concern",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "owner_management",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "lease:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "lease",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "executed",
+          "title": "Recorded lease",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "lease_review",
+              "priority": "review",
+              "source": {
+                "kind": "lease",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_lease",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "lease",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "leases",
+            "sourceRevision": "1"
+          }
+        },
+        {
+          "key": "maintenance_appointment:00000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "maintenance_appointment",
+            "id": "00000000-0000-4000-8000-000000000001"
+          },
+          "sourceRevision": "1",
+          "sourceStatus": "scheduled",
+          "title": "Recorded maintenance_appointment",
+          "collection": "needs_action",
+          "reasons": [
+            {
+              "code": "outcome_review",
+              "priority": "review",
+              "source": {
+                "kind": "maintenance_appointment",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          ],
+          "nextAction": {
+            "kind": "review_appointment",
+            "target": {
+              "kind": "source",
+              "source": {
+                "kind": "maintenance_appointment",
+                "id": "00000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "provenance": {
+            "owner": "maintenance",
+            "sourceRevision": "1"
+          }
+        }
+      ],
+      "nextCursor": null,
+      "viewAllTarget": {
+        "kind": "home_collection",
+        "collection": "needs_action",
+        "scope": {
+          "kind": "portfolio"
+        }
+      }
+    }
+  },
+  "failures": [
+    {
+      "contractVersion": 1,
+      "workspaceId": "00000000-0000-4000-8000-000000000001",
+      "runtimeEpoch": "00000000-0000-4000-8000-000000000001",
+      "scope": {
+        "kind": "portfolio"
+      },
+      "supportedSources": [
+        "task",
+        "rent_expectation",
+        "maintenance_issue",
+        "owner_rent_report",
+        "owner_concern",
+        "lease",
+        "maintenance_appointment"
+      ],
+      "asOf": "2026-10-12T12:00:00Z",
+      "sourceRevision": "1",
+      "nextTransitionAt": "2026-10-12T13:00:00Z",
+      "needsAction": {
+        "status": "unavailable",
+        "collection": "needs_action",
+        "capture": {
+          "asOf": "2026-10-12T12:00:00Z",
+          "sourceRevision": "1",
+          "readMode": "live",
+          "freshness": "unavailable",
+          "checkedAt": null,
+          "nextTransitionAt": "2026-10-12T13:00:00Z"
+        },
+        "reasonCode": "adapter_missing",
+        "retryTarget": {
+          "kind": "home_collection",
+          "collection": "needs_action",
+          "scope": {
+            "kind": "portfolio"
+          }
+        }
+      },
+      "priorityTotals": null,
+      "reasonTotals": null
+    },
+    {
+      "contractVersion": 1,
+      "workspaceId": "00000000-0000-4000-8000-000000000001",
+      "runtimeEpoch": "00000000-0000-4000-8000-000000000001",
+      "scope": {
+        "kind": "portfolio"
+      },
+      "supportedSources": [
+        "task",
+        "rent_expectation",
+        "maintenance_issue",
+        "owner_rent_report",
+        "owner_concern",
+        "lease",
+        "maintenance_appointment"
+      ],
+      "asOf": "2026-10-12T12:00:00Z",
+      "sourceRevision": "1",
+      "nextTransitionAt": "2026-10-12T13:00:00Z",
+      "needsAction": {
+        "status": "unavailable",
+        "collection": "needs_action",
+        "capture": {
+          "asOf": "2026-10-12T12:00:00Z",
+          "sourceRevision": "1",
+          "readMode": "live",
+          "freshness": "unavailable",
+          "checkedAt": null,
+          "nextTransitionAt": "2026-10-12T13:00:00Z"
+        },
+        "reasonCode": "source_unavailable",
+        "retryTarget": {
+          "kind": "home_collection",
+          "collection": "needs_action",
+          "scope": {
+            "kind": "portfolio"
+          }
+        }
+      },
+      "priorityTotals": null,
+      "reasonTotals": null
+    },
+    {
+      "contractVersion": 1,
+      "workspaceId": "00000000-0000-4000-8000-000000000001",
+      "runtimeEpoch": "00000000-0000-4000-8000-000000000001",
+      "scope": {
+        "kind": "portfolio"
+      },
+      "supportedSources": [
+        "task",
+        "rent_expectation",
+        "maintenance_issue",
+        "owner_rent_report",
+        "owner_concern",
+        "lease",
+        "maintenance_appointment"
+      ],
+      "asOf": "2026-10-12T12:00:00Z",
+      "sourceRevision": "1",
+      "nextTransitionAt": "2026-10-12T13:00:00Z",
+      "needsAction": {
+        "status": "unavailable",
+        "collection": "needs_action",
+        "capture": {
+          "asOf": "2026-10-12T12:00:00Z",
+          "sourceRevision": "1",
+          "readMode": "live",
+          "freshness": "unavailable",
+          "checkedAt": null,
+          "nextTransitionAt": "2026-10-12T13:00:00Z"
+        },
+        "reasonCode": "source_contract_invalid",
+        "retryTarget": {
+          "kind": "home_collection",
+          "collection": "needs_action",
+          "scope": {
+            "kind": "portfolio"
+          }
+        }
+      },
+      "priorityTotals": null,
+      "reasonTotals": null
+    }
+  ]
+}

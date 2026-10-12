@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Literal
+from uuid import UUID
 import hashlib
 import json
 
@@ -46,6 +47,19 @@ def evidence_revision(value):
 class CoverageSubject:
     kind: Literal["property", "space"]
     id: str
+
+
+@dataclass(frozen=True)
+class CoverageResolution:
+    subject_kind: Literal["property", "space"]
+    subject_id: UUID
+    area: CoverageArea
+
+    def __post_init__(self):
+        if self.area not in AREAS or self.subject_kind != (
+            "property" if self.area == "maintenance" else "space"
+        ):
+            raise ValueError("Coverage resolution must match its area and subject.")
 
 
 @dataclass(frozen=True)

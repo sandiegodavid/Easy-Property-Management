@@ -2,6 +2,7 @@
 
 import json
 import re
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -35,9 +36,11 @@ class OperatorService:
         runtime,
         now=lambda: datetime.now(UTC),
         capabilities=(),
+        capability_checks: Mapping[str, Callable[[], bool]] | None = None,
     ):
         self.unit_of_work, self.runtime, self.now = unit_of_work, runtime, now
         self.capabilities = tuple(capabilities)
+        self.capability_checks = capability_checks or {}
 
     def instant(self):
         value = self.now()
@@ -87,7 +90,16 @@ class OperatorService:
             "runtimeEpoch": identity.epoch,
             "canWrite": ready and identity.can_write,
             "reasonCode": reason_code,
-            "capabilities": list(self.capabilities) if ready else [],
+            "capabilities": list(
+                dict.fromkeys(
+                    (
+                        *self.capabilities,
+                        *(key for key, check in self.capability_checks.items() if check()),
+                    )
+                )
+            )
+            if ready
+            else [],
             "capabilityVersion": 1,
             "preferencesState": "available" if ready else "unavailable",
             "preferences": preferences,

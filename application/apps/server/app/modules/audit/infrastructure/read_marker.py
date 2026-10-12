@@ -4,10 +4,13 @@ from sqlalchemy import text, select, func, literal_column, table, column
 
 
 class SQLiteAuditReadMarker:
-    def markers_for_groups(self, connection, references):
+    def grouped_markers(self, references):
         events = table("audit_events", column("entity_type"), column("entity_id"))
-        rows = connection.execute(
-            select(references.c.group_id, func.max(literal_column("audit_events.rowid")))
+        return (
+            select(
+                references.c.group_id,
+                func.max(literal_column("audit_events.rowid")).label("marker"),
+            )
             .select_from(
                 events.join(
                     references,
@@ -16,7 +19,11 @@ class SQLiteAuditReadMarker:
                 )
             )
             .group_by(references.c.group_id)
+            .subquery()
         )
+
+    def markers_for_groups(self, connection, references):
+        rows = connection.execute(select(self.grouped_markers(references)))
         return {key: str(marker) for key, marker in rows}
 
     def marker_for_references(self, connection, references):

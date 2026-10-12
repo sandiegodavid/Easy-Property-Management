@@ -4,6 +4,9 @@ from collections import defaultdict
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, or_, literal, union_all, func, case
+from dataclasses import asdict
+from app.platform.sql_coverage import json_fields, register_json_function
+from app.modules.portfolio.application.attention_calendar import local_day, next_midnight
 
 from app.modules.portfolio.application.coverage_ports import CoverageLocation
 from app.modules.portfolio.infrastructure.sqlalchemy_models import (
@@ -23,6 +26,103 @@ from app.platform.sql_context_reads import bounded_page
 
 
 class SQLitePortfolioCoverageReader:
+    def portfolio_facts(self, connection, *, as_of, property_id=None):
+        database = connection.connection.driver_connection
+        database.create_function("attention_local_day", 2, local_day, deterministic=True)
+        database.create_function("attention_next_midnight", 2, next_midnight, deterministic=True)
+        register_json_function(connection, "coverage_location", 4, _relational_location)
+        p, s = PropertyModel.__table__, SpaceModel.__table__
+        o, a = SpaceOccupancyPeriodModel.__table__, SpaceAvailabilityModel.__table__
+        properties = select(p).where(p.c.id == str(property_id)) if property_id else select(p)
+        properties = properties.cte("coverage_properties")
+        captured = as_of.isoformat()
+        day = func.attention_local_day(properties.c.time_zone, captured)
+        ranked = (
+            select(
+                o,
+                func.row_number()
+                .over(partition_by=o.c.space_id, order_by=o.c.id)
+                .label("position"),
+            )
+            .select_from(
+                o.join(s, o.c.space_id == s.c.id).join(
+                    properties, s.c.property_id == properties.c.id
+                )
+            )
+            .where(
+                o.c.record_state == "valid",
+                o.c.starts_on <= day,
+                or_(o.c.ends_on.is_(None), o.c.ends_on > day),
+            )
+            .cte("coverage_current_periods")
+        )
+        period_names = (
+            "id",
+            "occupancy_status",
+            "source_kind",
+            "source_id",
+            "starts_on",
+            "ends_on",
+        )
+        periods = (
+            select(
+                ranked.c.space_id,
+                func.json_group_array(func.json(json_fields(ranked.c, period_names))).label(
+                    "periods"
+                ),
+            )
+            .where(ranked.c.position <= 2)
+            .group_by(ranked.c.space_id)
+            .subquery()
+        )
+        available = json_fields(
+            a.c, ("availability_status", "available_on", "source_kind", "source_id")
+        )
+        location_row = func.json_object(
+            "kind", "space", "property_id", properties.c.id, "time_zone", properties.c.time_zone
+        )
+        spaces = (
+            select(
+                s.c.id.label("id"),
+                literal("space").label("subject_kind"),
+                properties.c.id.label("property_id"),
+                s.c.display_name.label("title"),
+                properties.c.status.label("property_state"),
+                properties.c.time_zone,
+                day.label("local_date"),
+                func.attention_next_midnight(properties.c.time_zone, captured).label(
+                    "next_transition"
+                ),
+                func.coverage_location(
+                    location_row,
+                    func.coalesce(periods.c.periods, "[]"),
+                    case((a.c.space_id.is_not(None), available)),
+                    func.json_quote(day),
+                ).label("location"),
+            )
+            .select_from(
+                s.join(properties, s.c.property_id == properties.c.id)
+                .outerjoin(periods, periods.c.space_id == s.c.id)
+                .outerjoin(a, a.c.space_id == s.c.id)
+            )
+            .where(or_(s.c.status == "active", properties.c.status == "archived"))
+        )
+        property_row = func.json_object(
+            "kind", "property", "property_id", properties.c.id, "time_zone", properties.c.time_zone
+        )
+        maintenance = select(
+            properties.c.id,
+            literal("property"),
+            properties.c.id,
+            properties.c.display_name,
+            properties.c.status,
+            properties.c.time_zone,
+            day,
+            func.attention_next_midnight(properties.c.time_zone, captured),
+            func.coverage_location(property_row, "[]", literal(None), func.json_quote(day)),
+        )
+        return union_all(spaces, maintenance).cte("portfolio_coverage_locations")
+
     def location(self, connection, subject, *, as_of):
         return self.locations(connection, [subject], as_of=as_of).get(subject)
 
@@ -214,3 +314,8 @@ def _location(row, periods, available, day):
         current["source_id"] if current else None,
         revision,
     )
+
+
+def _relational_location(row, periods, available, day):
+    periods.sort(key=lambda period: period["id"])
+    return asdict(_location(row, periods, available, day))

@@ -1,6 +1,7 @@
 """Opaque append marker for a caller-owned consistent read snapshot."""
 
 from typing import Any, Protocol
+from sqlalchemy.sql.selectable import FromClause
 
 
 class AuditReadMarker(Protocol):
@@ -12,3 +13,4 @@ class AuditEntityReadMarker(Protocol):
 
     def marker_for_references(self, connection: Any, references: Any) -> str: ...
     def markers_for_groups(self, connection: Any, references: Any) -> dict[str, str]: ...
+    def grouped_markers(self, references: FromClause) -> FromClause: ...

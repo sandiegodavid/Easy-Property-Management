@@ -18,3 +18,12 @@ class PortfolioLocationRelations(Protocol):
     def spaces(self) -> FromClause:
         """Columns: space_id, property_id; includes every retained space."""
         ...
+
+
+class PortfolioOccupancyRelations(Protocol):
+    def occupancy_periods(self) -> FromClause:
+        """Columns: space_id, occupancy_status, starts_on, ends_on, record_state,
+        source_kind, source_id. Retained periods, including cancelled/history;
+        consumers must use valid records and end-exclusive date boundaries.
+        """
+        ...

@@ -2,9 +2,11 @@
 
 from typing import Protocol
 from collections.abc import Collection, Mapping
+from sqlalchemy.sql.selectable import FromClause
 
 
 class MaintenanceCoverageReader(Protocol):
+    def revision_relation(self, connection, properties: FromClause) -> FromClause: ...
     def evidence_revisions(
         self, connection, property_ids: Collection[str]
     ) -> Mapping[str, str]: ...

@@ -21,6 +21,7 @@
 ## Implementation scope
 
 - Address only the named feature and findings.
+- Implement each slice as one cohesive change where practical.
 - List adjacent issues separately; do not implement them unless explicitly requested.
 
 ## Implementation lint validation

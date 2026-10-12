@@ -3,9 +3,11 @@
 from typing import Protocol
 from collections.abc import Collection, Mapping
 from app.platform.coverage import CoverageArea, CoverageFacts
+from sqlalchemy.sql.selectable import FromClause
 
 
 class FinanceCoverageReader(Protocol):
+    def fact_relation(self, connection, contexts: FromClause) -> FromClause: ...
     def facts_for_contexts(
         self,
         connection,

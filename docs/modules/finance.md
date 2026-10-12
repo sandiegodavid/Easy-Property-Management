@@ -78,6 +78,8 @@ Persistence identities below are read from the current models. Column definition
 
 ## Validation
 
+DASH-001's source rent-attention reader projects current positive outstanding expectations using active allocations, local due dates and Finance's effective review policy. Home's recorded-money projection reuses the FIN-003 caller-snapshot reader and exact metric drill-downs; reports, scheduled checks and deposit activity remain separate from received rent. See the [Slice 5 validation matrix](../active/DASH-001_CONTRACT_EXAMPLES.md#slice-5-rent-attention-and-recorded-money), [rent attention tests](../../application/apps/server/app/modules/finance/tests/test_attention_reader.py) and [Home money integration tests](../../application/apps/server/app/modules/operator/tests/test_home_money.py).
+
 The following executable specifications are the starting point for focused validation. This documentation consolidation did not rerun them or establish feature completion.
 
 - [test_category_command_readiness.py](../../application/apps/server/app/modules/finance/tests/test_category_command_readiness.py).

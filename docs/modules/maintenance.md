@@ -45,6 +45,8 @@ Persistence identities below are read from the current models. Column definition
 
 ## Validation
 
+DASH-001's source attention reader projects urgent/ordinary issues, explicit Task-supported waiting, scheduled appointment intervals and missed outcomes on a caller-owned snapshot. Exact counts and bounded child previews support the later Home composition while issue, appointment and Task lifecycle commands remain independent. See the [Slice 4 validation matrix](../active/DASH-001_CONTRACT_EXAMPLES.md#slice-4-maintenance-issue-and-appointment-facts) and [attention tests](../../application/apps/server/app/modules/maintenance/tests/test_attention_reader.py).
+
 The following executable specifications are the starting point for focused validation. This documentation consolidation did not rerun them or establish feature completion.
 
 - [test_command_readiness.py](../../application/apps/server/app/modules/maintenance/tests/test_command_readiness.py).

@@ -560,28 +560,39 @@ def create_app(  # noqa: C901, PLR0915
     app.state.ai_configuration_service = ai_configuration
     app.state.ai_draft_review_service = ai_drafts
     app.include_router(build_router(service, runtime))
-    operator, operator_directories, operator_overviews, operator_search, operator_coverage = (
-        compose_operator(
-            service,
-            runtime,
-            recorder,
-            RecoverySourcePorts(
-                portfolio_context_reader,
-                party_operations,
-                SQLiteCommunicationContextOperations(
-                    task_transaction_operations, SQLiteIntakeSourceReader()
-                ),
+    (
+        operator,
+        operator_directories,
+        operator_overviews,
+        operator_search,
+        operator_coverage,
+        operator_home,
+    ) = compose_operator(
+        service,
+        runtime,
+        recorder,
+        RecoverySourcePorts(
+            portfolio_context_reader,
+            party_operations,
+            SQLiteCommunicationContextOperations(
+                task_transaction_operations, SQLiteIntakeSourceReader()
             ),
-        )
+        ),
     )
     app.state.operator_service = operator
     app.state.operator_directory_service = operator_directories
     app.state.operator_overview_service = operator_overviews
     app.state.operator_search_service = operator_search
     app.state.operator_coverage_service = operator_coverage
+    app.state.operator_home_service = operator_home
     app.include_router(
         build_operator_router(
-            operator, operator_directories, operator_overviews, operator_search, operator_coverage
+            operator,
+            operator_directories,
+            operator_overviews,
+            operator_search,
+            operator_coverage,
+            home=operator_home,
         )
     )
     policies = AuditSnapshotPolicyRegistry(

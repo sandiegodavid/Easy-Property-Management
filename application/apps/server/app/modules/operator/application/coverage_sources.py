@@ -60,7 +60,7 @@ class CoverageSources:
             if location is None:
                 continue
             lease = leases.get(subject.id)
-            result = self._derive(area, location, lease, maintenance)
+            result = self.derive(area, location, lease, maintenance)
             if result is not None:
                 results[subject, area] = result
             else:
@@ -73,7 +73,7 @@ class CoverageSources:
         return results
 
     @staticmethod
-    def _derive(area, location, lease, maintenance):
+    def derive(area, location, lease, maintenance):
         if area == "maintenance":
             return CoverageFacts(
                 area,

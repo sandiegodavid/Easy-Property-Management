@@ -16,6 +16,8 @@ Create/patch/lifecycle/follow-up commands share concern revision, key and immuta
 
 `/api/owner-concerns` supplies source workflows; ID/key operation endpoints provide recovery. General activity uses redacted policy and contextual history explains full decisions. [Operator](operator.md) composes owner views while this module retains source authority.
 
+The [DASH-001 attention reader](../../application/apps/server/app/modules/owner_management/infrastructure/attention_reader.py) classifies unresolved concerns from explicit owning follow-up operations, with bounded Task/reminder previews and retained owner context. Generic related Tasks do not establish waiting; terminal concerns do not terminalize their Tasks. See the [Slice 7 validation matrix](../active/DASH-001_CONTRACT_EXAMPLES.md#slice-7-owner-report-and-concern-attention).
+
 ## Browser workflow boundary
 
 Concern browser records provide context/history, lifecycle and linked follow-up through source commands and Operator recovery. Task completion never resolves a concern and resolution never changes Lease or Finance state. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.

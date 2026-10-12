@@ -22,6 +22,8 @@ Cursors bind endpoint, workspace/runtime, filters, captured instant and read mar
 
 Coverage uses source facts for occupancy, Lease, rent, deposit and Maintenance. Return applicability, state, causes, evidence revision, manual review provenance and a typed resolution target. Missing required information precedes needs-review/recorded; unavailable sources never count as complete. Non-applicability requires allowed reasons and cannot bypass required data. Coverage acknowledgment does not synchronize rent or verify a repair.
 
+DASH-001's `SQLiteCoverageAttentionReader` selects portfolio-wide information review through source-owned SQL relations. Exact review and applicability counts precede bounded continuation; shared pure coverage rules preserve manual-review provenance and typed resolution targets. `HomeCompositionService` composes Home and complete live Needs action on one deferred transaction and instant, grouping explicit active follow-ups before SQL counts/limits and retaining terminal-parent Task context. Labels and child/reminder previews are bounded batch projections. `/api/operator/home`, `/api/operator/home/attention` and `/api/operator/home/items` are typed worker-executed reads; composite continuations freeze capture and reject changed filters, source markers, runtime identity or expiry. Bootstrap advertises `operator.home` only with the complete current adapter bundle. DASH-001 Slice 11 retains the integrated performance proof; its browser Home starts at Slice 12.
+
 Search is bounded literal metadata matching with typed targets, independent source groups, explicit archived inclusion and full matching counts. Raw source evidence, documents, credentials and recovery payloads are excluded. Hidden destinations do not hide eligible results.
 
 ## Incomplete forms and attempts
@@ -61,6 +63,9 @@ The following executable specifications are the starting point for focused valid
 - [test_context_sources.py](../../application/apps/server/app/modules/operator/tests/test_context_sources.py).
 - [test_coverage.py](../../application/apps/server/app/modules/operator/tests/test_coverage.py).
 - [test_coverage_integration.py](../../application/apps/server/app/modules/operator/tests/test_coverage_integration.py).
+- [test_coverage_attention.py](../../application/apps/server/app/modules/operator/tests/test_coverage_attention.py).
+- [test_home_composition.py](../../application/apps/server/app/modules/operator/tests/test_home_composition.py).
+- [test_home_api.py](../../application/apps/server/app/modules/operator/tests/test_home_api.py).
 - [test_directories.py](../../application/apps/server/app/modules/operator/tests/test_directories.py).
 - [test_endpoint_contracts.py](../../application/apps/server/app/modules/operator/tests/test_endpoint_contracts.py).
 - [test_file_recovery.py](../../application/apps/server/app/modules/operator/tests/test_file_recovery.py).

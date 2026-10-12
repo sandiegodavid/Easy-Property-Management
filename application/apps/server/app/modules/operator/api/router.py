@@ -19,6 +19,8 @@ from app.modules.operator.api.coverage_router import register_coverage
 from app.modules.operator.application.coverage_service import OperatorCoverageService
 from app.modules.operator.application.recovery_schemas import registered_schemas
 from app.modules.operator.application.command_forms import COMMAND_SCHEMAS, command_source_kind
+from app.modules.operator.application.home_service import HomeCompositionService
+from app.modules.operator.api.home_router import register_home
 
 FormKey = Literal[tuple(registered_schemas())]
 SourceId = UUID | Literal["1"] | Annotated[str, Field(pattern="^[a-z][a-z0-9_]{0,63}$")]
@@ -219,6 +221,7 @@ def build_router(
     overviews: OperatorOverviewService | None = None,
     search: OperatorSearchService | None = None,
     coverage: OperatorCoverageService | None = None,
+    home: HomeCompositionService | None = None,
 ):
     router = APIRouter(prefix="/api/operator", tags=["operator"])
 
@@ -249,6 +252,8 @@ def build_router(
         register_search(router, search, invoke)
     if coverage is not None:
         register_coverage(router, coverage, invoke)
+    if home is not None:
+        register_home(router, home)
 
     @router.get("/bootstrap", response_model=BootstrapResponse, operation_id="getOperatorBootstrap")
     def bootstrap():
