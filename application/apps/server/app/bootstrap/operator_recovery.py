@@ -25,6 +25,8 @@ from app.bootstrap.operator_identity_commands import identity_form_state
 from app.bootstrap.operator_provider_commands import provider_form_state
 from app.bootstrap.operator_ai_commands import ai_form_state
 from app.bootstrap.operator_inventory_commands import inventory_form_state
+from app.bootstrap.operator_coverage import compose_coverage_sources
+from app.modules.operator.infrastructure.coverage_recovery import SQLiteCoverageRecoveryReader
 from app.modules.operator.application.recovery_results import receipt_projection
 from app.modules.parties.application.ports import PartyTransactionOperations
 from app.modules.portfolio.application.ports import PortfolioContextReader
@@ -55,12 +57,15 @@ class OperatorRecoveryReferences:
         )
         self.issues, self.communications = issues, communications
         self.tasks = tasks
+        self.coverage = SQLiteCoverageRecoveryReader(compose_coverage_sources())
         self.commands = commands or {}
         if commands is not None and set(commands) != set(COMMAND_SCHEMAS):
             raise ValueError("Recovery schemas and source bindings must match exactly.")
 
     def validate(self, connection, value):
         payload = json.loads(value["payload_json"])
+        if value["form_key"] == "coverage.review":
+            return self.coverage.validate(connection, payload)
         if value["form_key"] in self.commands:
             state = self._command_state(connection, value, payload)
             return self._context_state(connection, payload) if state == "available" else state
@@ -103,6 +108,8 @@ class OperatorRecoveryReferences:
 
     def attempt_fingerprint(self, value, key, *, connection=None):
         payload = json.loads(value["payload_json"])
+        if value["form_key"] == "coverage.review":
+            return self.coverage.fingerprint(payload, key)
         if value["form_key"] == "task.create":
             return creation_fingerprint(TaskCreateCommand.from_mapping(payload))
         if value["form_key"] == "maintenance.issue.create":
@@ -221,6 +228,8 @@ class OperatorRecoveryReferences:
         return "available"
 
     def resolve_attempt(self, connection, form_key, key, request_fingerprint, *, source_id=None):
+        if form_key == "coverage.review":
+            return self.coverage.outcome(connection, key, request_fingerprint)
         if form_key in self.commands:
             return self._command_outcome(connection, form_key, key, request_fingerprint, source_id)
         if form_key == "maintenance.issue.create":

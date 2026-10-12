@@ -1,13 +1,20 @@
 """Exact OPS schema and correlated portable mutation history."""
 
 import json
-from datetime import timedelta
+from datetime import date, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import CheckConstraint, UniqueConstraint, inspect, select, text
 
 from app.modules.operator.application.recovery_schemas import validate_payload
 from app.modules.operator.application.ports import RecoveryBinding
-from app.modules.operator.application.command_forms import COMMAND_SCHEMAS
+from app.modules.operator.application.command_forms import COMMAND_SCHEMAS, source_owns_fingerprint
+from app.modules.operator.application.coverage_models import (
+    CoverageReview,
+    CoverageResult,
+    review_audit_snapshot,
+)
+from app.platform.coverage import CoverageSubject
 from app.modules.operator.application.recovery_results import receipt_projection
 from collections.abc import Mapping
 from app.modules.operator.domain.models import (
@@ -117,18 +124,7 @@ def validate_command_recovery(connection, bindings: Mapping[str, RecoveryBinding
         for row in rows:
             binding = bindings[row["form_key"]]
             payload = portable_json(row["payload_json"])
-            if row["source_kind"] != binding.source_kind:
-                raise ValueError("Recovery has the wrong source kind.")
-            if binding.source_kind is None:
-                if row["source_id"] is not None or row["base_source_revision"] is not None:
-                    raise ValueError("Creation form cannot retain official source state.")
-            elif (
-                row["source_id"] is None
-                or not isinstance(row["base_source_revision"], str)
-                or not row["base_source_revision"].isdecimal()
-                or str(int(row["base_source_revision"])) != row["base_source_revision"]
-            ):
-                raise ValueError("Recovery source revision is invalid.")
+            _validate_command_identity(row, binding)
             if row["attempt_key"] is not None:
                 if binding.fingerprint_payload is not None:
                     payload = binding.fingerprint_payload(connection, row["source_id"], payload)
@@ -155,8 +151,6 @@ def validate_command_recovery(connection, bindings: Mapping[str, RecoveryBinding
 
 def validate_coverage_targets(connection, portfolio):
     """Retained target existence through its source owner, never OPS foreign SQL."""
-    from app.platform.coverage import CoverageSubject
-
     for row in connection.execute(select(OperatorCoverageReviewModel.__table__)).mappings():
         subject = CoverageSubject(row["subject_kind"], row["subject_id"])
         if portfolio.location(connection, subject, as_of=utc(row["created_at"])) is None:
@@ -177,6 +171,7 @@ RECOVERY_FIELDS = {
     "savedAt": "saved_at",
     "expiresAt": "expires_at",
 }
+SHA256_LENGTH = 64
 RECOVERY_PRIVATE_FIELDS = {"payload", "receipt", "attemptKey", "requestFingerprint"}
 
 
@@ -187,20 +182,7 @@ def validate_operator_data(connection):
             row["id"]: row
             for row in connection.execute(select(OperatorRecoveryModel.__table__)).mappings()
         }
-        for row in preferences:
-            value = Preferences(
-                appearance=row["appearance"],
-                destination_order=json.loads(row["destination_order"]),
-                hidden_destination_ids=json.loads(row["hidden_destination_ids"]),
-                revision=row["revision"],
-                updated_at=row["updated_at"],
-            )
-            if (
-                value.revision < 1
-                or canonical(value.destination_order) != row["destination_order"]
-                or canonical(value.hidden_destination_ids) != row["hidden_destination_ids"]
-            ):
-                raise ValueError("Invalid preferences.")
+        _validate_preferences(preferences)
         active = 0
         for row in recovery.values():
             identifier(row["id"])
@@ -209,16 +191,7 @@ def validate_operator_data(connection):
                 raise ValueError("Recovery payload is not normalized.")
             if row["source_id"] is not None:
                 source_identifier(row["source_kind"], row["source_id"])
-            if row["attempt_key"] is not None:
-                identifier(row["attempt_key"])
-                if len(row["request_fingerprint"]) != 64 or any(
-                    c not in "0123456789abcdef" for c in row["request_fingerprint"]
-                ):
-                    raise ValueError("Invalid owning fingerprint.")
-            if row["receipt_json"] is not None:
-                receipt = portable_json(row["receipt_json"])
-                if receipt["attemptKey"] != row["attempt_key"]:
-                    raise ValueError("Receipt does not match attempt.")
+            _validate_recovery_attempt(row)
             if utc(row["expires_at"]) != utc(row["saved_at"]) + timedelta(days=30):
                 raise ValueError("Invalid acknowledged expiry.")
             active += row["status"] in {"active", "outcome_unknown", "reconciled"}
@@ -231,19 +204,12 @@ def validate_operator_data(connection):
 
 
 def _validate_coverage_reviews(connection):
-    from app.modules.operator.application.coverage_models import (
-        CoverageReview,
-        review_audit_snapshot,
-    )
-    from app.modules.operator.application.coverage_models import CoverageResult
-    from datetime import date
-    from zoneinfo import ZoneInfo
-
     events = {
         row["entity_id"]: row
         for row in connection.execute(
             text(
-                "SELECT * FROM audit_events WHERE entity_type='operator_coverage_review' ORDER BY rowid"
+                "SELECT * FROM audit_events WHERE entity_type='operator_coverage_review' "
+                "ORDER BY rowid"
             )
         ).mappings()
     }
@@ -279,30 +245,7 @@ def _validate_coverage_reviews(connection):
             raise ValueError("Review reason differs from its command.")
         result = portable_json(row["result_json"])
         CoverageResult.model_validate(result)
-        if (
-            result["effectiveLocalDate"]
-            != utc(row["created_at"]).astimezone(ZoneInfo(row["time_zone"])).date().isoformat()
-        ):
-            raise ValueError("Coverage result lost its property-local date.")
-        if any(
-            result[key] != row[stored]
-            for key, stored in (
-                ("operationId", "id"),
-                ("subjectKind", "subject_kind"),
-                ("subjectId", "subject_id"),
-                ("area", "area"),
-                ("evidenceRevision", "evidence_revision"),
-                ("asOf", "created_at"),
-                ("lastManualReviewAt", "created_at"),
-            )
-        ):
-            raise ValueError("Coverage replay result differs from decision.")
-        if command.basis == "not_applicable" and result["state"] != "not_applicable":
-            raise ValueError("Invalid historical non-applicability.")
-        if row["next_review_on"] and date.fromisoformat(
-            row["next_review_on"]
-        ) <= date.fromisoformat(result["effectiveLocalDate"]):
-            raise ValueError("Invalid review date.")
+        _validate_coverage_result(row, command, result)
         event = events.pop(row["id"], None)
         expected = review_audit_snapshot(row, result)
         if (
@@ -332,12 +275,168 @@ def _validate_operations(connection, preferences, recovery):
     audit_rows = (
         connection.execute(
             text(
-                "SELECT * FROM audit_events WHERE entity_type IN ('operator_operation','operator_preferences','operator_recovery','operator_coverage_review') ORDER BY rowid"
+                "SELECT * FROM audit_events WHERE entity_type IN "
+                "('operator_operation','operator_preferences','operator_recovery',"
+                "'operator_coverage_review') ORDER BY rowid"
             )
         )
         .mappings()
         .all()
     )
+    audit_by_operation, mutations = _operation_audits(audit_rows)
+    revisions = {}
+    latest = {}
+    recovery_history = {}
+    for row in operations:
+        for key in ("id", "idempotency_key", "correlation_id"):
+            identifier(row[key])
+        utc(row["created_at"])
+        request, result = portable_json(row["request_json"]), portable_json(row["result_json"])
+        _validate_request_result(row, request, result)
+        _validate_operation_result(row, request, result, recovery, preferences)
+        entity = (row["entity_type"], row["entity_id"])
+        # Creation-time ties are ordered by the revision, not random operation UUIDs.
+        revisions.setdefault(entity, []).append(row["expected_revision"])
+        if entity not in latest or latest[entity]["resulting_revision"] < row["resulting_revision"]:
+            latest[entity] = row
+        change = _validate_operation_audit(row, result, audit_by_operation, mutations)
+        if row["entity_type"] == "operator_recovery":
+            recovery_history.setdefault(row["entity_id"], []).append((row, request, result, change))
+    if audit_by_operation:
+        raise ValueError("Operator audit lost its receipt.")
+    for entity, values in revisions.items():
+        if sorted(values) != list(range(len(values))):
+            raise ValueError("Operator revision history is incomplete.")
+    for history in recovery_history.values():
+        _validate_recovery_history(history)
+    _validate_latest_results(preferences, recovery, latest)
+
+
+def _validate_recovery_history(history):
+    previous = None
+    for row, request, result, change in sorted(
+        history, key=lambda item: item[0]["resulting_revision"]
+    ):
+        state = {key: result[key] for key in (*RECOVERY_FIELDS, "payload", "receipt")}
+        before = json.loads(change["before_snapshot"]) if change["before_snapshot"] else None
+        expected_before = (
+            {key: value for key, value in previous.items() if key not in RECOVERY_PRIVATE_FIELDS}
+            if previous is not None
+            else None
+        )
+        if before != expected_before:
+            raise ValueError("Recovery mutation does not follow its recorded predecessor.")
+        if (
+            validate_payload(state["formKey"], state["schemaVersion"], state["payload"])
+            != state["payload"]
+        ):
+            raise ValueError("Invalid historical recovery payload.")
+        if utc(state["expiresAt"]) != utc(state["savedAt"]) + timedelta(days=30):
+            raise ValueError("Invalid historical recovery expiry.")
+        _validate_history_transition(row, request, state, previous)
+        previous = state
+
+
+def _validate_request_result(row, request, result):
+    kinds = {
+        "preferences": "updated",
+        "recovery_save": "saved",
+        "recovery_attempt": "saved",
+        "recovery_discarded": "discarded",
+        "recovery_reconciled": "reconciled",
+        "recovery_expire": "expired",
+    }
+    if kinds.get(request.get("kind")) != row["action"]:
+        raise ValueError("Operation action differs from its command.")
+    if row["entity_type"] == "operator_preferences":
+        _validate_preference_request(row, request, result)
+        return
+    if request["id"] != row["entity_id"] or result["asOf"] != row["created_at"]:
+        raise ValueError("Recovery result differs from its operation identity or instant.")
+    if request["kind"] == "recovery_save":
+        _validate_recovery_save(row, request, result)
+    elif request["kind"] == "recovery_attempt":
+        if (
+            result["status"] != "outcome_unknown"
+            or result["attemptKey"] != request["attemptKey"]
+            or (
+                request["requestFingerprint"] is not None
+                and result["requestFingerprint"] != request["requestFingerprint"]
+            )
+            or (
+                request["requestFingerprint"] is None
+                and not source_owns_fingerprint(result["formKey"])
+            )
+        ):
+            raise ValueError("Recovery attempt differs from its receipt.")
+    else:
+        status = {"discarded": "discarded", "reconciled": "reconciled", "expired": "expired"}[
+            row["action"]
+        ]
+        if result["status"] != status:
+            raise ValueError("Recovery transition differs from its receipt.")
+
+
+def _validate_command_identity(row, binding):
+    if row["source_kind"] != binding.source_kind:
+        raise ValueError("Recovery has the wrong source kind.")
+    if binding.source_kind is None:
+        if row["source_id"] is not None or row["base_source_revision"] is not None:
+            raise ValueError("Creation form cannot retain official source state.")
+    elif (
+        row["source_id"] is None
+        or not isinstance(row["base_source_revision"], str)
+        or not row["base_source_revision"].isdecimal()
+        or str(int(row["base_source_revision"])) != row["base_source_revision"]
+    ):
+        raise ValueError("Recovery source revision is invalid.")
+
+
+def _validate_preferences(preferences):
+    for row in preferences:
+        value = Preferences(
+            appearance=row["appearance"],
+            destination_order=json.loads(row["destination_order"]),
+            hidden_destination_ids=json.loads(row["hidden_destination_ids"]),
+            revision=row["revision"],
+            updated_at=row["updated_at"],
+        )
+        if (
+            value.revision < 1
+            or canonical(value.destination_order) != row["destination_order"]
+            or canonical(value.hidden_destination_ids) != row["hidden_destination_ids"]
+        ):
+            raise ValueError("Invalid preferences.")
+
+
+def _validate_coverage_result(row, command, result):
+    if (
+        result["effectiveLocalDate"]
+        != utc(row["created_at"]).astimezone(ZoneInfo(row["time_zone"])).date().isoformat()
+    ):
+        raise ValueError("Coverage result lost its property-local date.")
+    if any(
+        result[key] != row[stored]
+        for key, stored in (
+            ("operationId", "id"),
+            ("subjectKind", "subject_kind"),
+            ("subjectId", "subject_id"),
+            ("area", "area"),
+            ("evidenceRevision", "evidence_revision"),
+            ("asOf", "created_at"),
+            ("lastManualReviewAt", "created_at"),
+        )
+    ):
+        raise ValueError("Coverage replay result differs from decision.")
+    if command.basis == "not_applicable" and result["state"] != "not_applicable":
+        raise ValueError("Invalid historical non-applicability.")
+    if row["next_review_on"] and date.fromisoformat(row["next_review_on"]) <= date.fromisoformat(
+        result["effectiveLocalDate"]
+    ):
+        raise ValueError("Invalid review date.")
+
+
+def _operation_audits(audit_rows):
     audit_by_operation = {}
     mutations = {}
     for event in audit_rows:
@@ -349,74 +448,62 @@ def _validate_operations(connection, preferences, recovery):
             if event["entity_id"] in audit_by_operation:
                 raise ValueError("Duplicate receipt audit.")
             audit_by_operation[event["entity_id"]] = event
-    revisions = {}
-    latest = {}
-    recovery_history = {}
-    for row in operations:
-        for key in ("id", "idempotency_key", "correlation_id"):
-            identifier(row[key])
-        utc(row["created_at"])
-        request, result = portable_json(row["request_json"]), portable_json(row["result_json"])
-        _validate_request_result(row, request, result)
-        if row["entity_type"] == "operator_recovery":
-            if (
-                row["entity_id"] not in recovery
-                or row["recovery_id"] != row["entity_id"]
-                or result["id"] != row["entity_id"]
-            ):
-                raise ValueError("Recovery receipt lost its record.")
-        elif row["entity_type"] == "operator_preferences":
-            if row["entity_id"] != "workspace" or not preferences or row["recovery_id"] is not None:
-                raise ValueError("Preference receipt lost its record.")
+    return audit_by_operation, mutations
+
+
+def _validate_operation_result(row, request, result, recovery, preferences):
+    if row["entity_type"] == "operator_recovery":
         if (
-            fingerprint(request) != row["request_fingerprint"]
-            or result["operationId"] != row["id"]
-            or result["revision"] != row["resulting_revision"]
+            row["entity_id"] not in recovery
+            or row["recovery_id"] != row["entity_id"]
+            or result["id"] != row["entity_id"]
         ):
-            raise ValueError("Invalid operation replay evidence.")
-        if request["expectedRevision"] != row["expected_revision"]:
-            raise ValueError("Command revision differs from receipt.")
-        entity = (row["entity_type"], row["entity_id"])
-        # Creation-time ties are ordered by the revision, not random operation UUIDs.
-        revisions.setdefault(entity, []).append(row["expected_revision"])
-        if entity not in latest or latest[entity]["resulting_revision"] < row["resulting_revision"]:
-            latest[entity] = row
-        event = audit_by_operation.pop(row["id"], None)
-        if (
-            event is None
-            or event["action"] != "recorded"
-            or event["correlation_id"] != row["correlation_id"]
-            or event["occurred_at"] != row["created_at"]
-        ):
-            raise ValueError("Missing correlated operation audit.")
-        if json.loads(event["after_snapshot"]) != {
-            "entityType": row["entity_type"],
-            "entityId": row["entity_id"],
-            "action": row["action"],
-            "revision": row["resulting_revision"],
-        }:
-            raise ValueError("Receipt audit was rewritten.")
-        change = mutations.get(
-            (row["entity_type"], row["entity_id"], row["correlation_id"], row["action"])
-        )
-        if (
-            change is None
-            or change["occurred_at"] != row["created_at"]
-            or change["actor_kind"] != "local_operator"
-        ):
-            raise ValueError("Missing correlated record mutation.")
-        expected = audit_metadata(result)
-        if json.loads(change["after_snapshot"]) != expected:
-            raise ValueError("Mutation snapshot differs from recorded result.")
-        if row["entity_type"] == "operator_recovery":
-            recovery_history.setdefault(row["entity_id"], []).append((row, request, result, change))
-    if audit_by_operation:
-        raise ValueError("Operator audit lost its receipt.")
-    for entity, values in revisions.items():
-        if sorted(values) != list(range(len(values))):
-            raise ValueError("Operator revision history is incomplete.")
-    for history in recovery_history.values():
-        _validate_recovery_history(history)
+            raise ValueError("Recovery receipt lost its record.")
+    elif row["entity_type"] == "operator_preferences":
+        if row["entity_id"] != "workspace" or not preferences or row["recovery_id"] is not None:
+            raise ValueError("Preference receipt lost its record.")
+    if (
+        fingerprint(request) != row["request_fingerprint"]
+        or result["operationId"] != row["id"]
+        or result["revision"] != row["resulting_revision"]
+    ):
+        raise ValueError("Invalid operation replay evidence.")
+    if request["expectedRevision"] != row["expected_revision"]:
+        raise ValueError("Command revision differs from receipt.")
+
+
+def _validate_operation_audit(row, result, audit_by_operation, mutations):
+    event = audit_by_operation.pop(row["id"], None)
+    if (
+        event is None
+        or event["action"] != "recorded"
+        or event["correlation_id"] != row["correlation_id"]
+        or event["occurred_at"] != row["created_at"]
+    ):
+        raise ValueError("Missing correlated operation audit.")
+    if json.loads(event["after_snapshot"]) != {
+        "entityType": row["entity_type"],
+        "entityId": row["entity_id"],
+        "action": row["action"],
+        "revision": row["resulting_revision"],
+    }:
+        raise ValueError("Receipt audit was rewritten.")
+    change = mutations.get(
+        (row["entity_type"], row["entity_id"], row["correlation_id"], row["action"])
+    )
+    if (
+        change is None
+        or change["occurred_at"] != row["created_at"]
+        or change["actor_kind"] != "local_operator"
+    ):
+        raise ValueError("Missing correlated record mutation.")
+    expected = audit_metadata(result)
+    if json.loads(change["after_snapshot"]) != expected:
+        raise ValueError("Mutation snapshot differs from recorded result.")
+    return change
+
+
+def _validate_latest_results(preferences, recovery, latest):
     for row in preferences:
         operation = latest.get(("operator_preferences", "workspace"))
         if operation is None or operation["resulting_revision"] != row["revision"]:
@@ -449,125 +536,87 @@ def _validate_operations(connection, preferences, recovery):
             raise ValueError("Recovery state differs from recorded result.")
 
 
-def _validate_recovery_history(history):
-    previous = None
-    for row, request, result, change in sorted(
-        history, key=lambda item: item[0]["resulting_revision"]
-    ):
-        state = {key: result[key] for key in (*RECOVERY_FIELDS, "payload", "receipt")}
-        before = json.loads(change["before_snapshot"]) if change["before_snapshot"] else None
-        expected_before = (
-            {key: value for key, value in previous.items() if key not in RECOVERY_PRIVATE_FIELDS}
-            if previous is not None
-            else None
-        )
-        if before != expected_before:
-            raise ValueError("Recovery mutation does not follow its recorded predecessor.")
-        if (
-            validate_payload(state["formKey"], state["schemaVersion"], state["payload"])
-            != state["payload"]
-        ):
-            raise ValueError("Invalid historical recovery payload.")
-        if utc(state["expiresAt"]) != utc(state["savedAt"]) + timedelta(days=30):
-            raise ValueError("Invalid historical recovery expiry.")
-        kind = request["kind"]
-        if kind == "recovery_save":
-            if previous is not None and (
-                previous["status"] != "active" or previous["formKey"] != state["formKey"]
-            ):
-                raise ValueError("Recovery save cannot overwrite this predecessor.")
-            if any(
-                state[key] is not None for key in ("attemptKey", "requestFingerprint", "receipt")
-            ):
-                raise ValueError("Recovery save contains unacknowledged attempt evidence.")
-        else:
-            if previous is None:
-                raise ValueError("Recovery transition has no saved predecessor.")
-            permitted = {
-                "recovery_attempt": {"active"},
-                "recovery_reconciled": {"outcome_unknown"},
-                "recovery_discarded": {"active", "reconciled"},
-                "recovery_expire": {"active", "reconciled"},
-            }
-            if previous["status"] not in permitted[kind]:
-                raise ValueError("Illegal recovery lifecycle transition.")
-            changed = {"revision", "status"}
-            if kind == "recovery_attempt":
-                changed.update(("attemptKey", "requestFingerprint"))
-                identifier(state["attemptKey"])
-                if (
-                    utc(row["created_at"]) >= utc(previous["expiresAt"])
-                    or len(state["requestFingerprint"]) != 64
-                    or any(c not in "0123456789abcdef" for c in state["requestFingerprint"])
-                ):
-                    raise ValueError("Invalid historical owning attempt.")
-            elif kind == "recovery_reconciled":
-                changed.add("receipt")
-                if (
-                    not isinstance(state["receipt"], dict)
-                    or state["receipt"].get("attemptKey") != previous["attemptKey"]
-                ):
-                    raise ValueError("Reconciliation receipt differs from its owning attempt.")
-            elif kind == "recovery_expire" and utc(row["created_at"]) < utc(previous["expiresAt"]):
-                raise ValueError("Recovery expired before its acknowledged deadline.")
-            if any(state[key] != previous[key] for key in state.keys() - changed):
-                raise ValueError("Recovery transition rewrote preserved evidence.")
-        previous = state
-
-
-def _validate_request_result(row, request, result):
-    kinds = {
-        "preferences": "updated",
-        "recovery_save": "saved",
-        "recovery_attempt": "saved",
-        "recovery_discarded": "discarded",
-        "recovery_reconciled": "reconciled",
-        "recovery_expire": "expired",
-    }
-    if kinds.get(request.get("kind")) != row["action"]:
-        raise ValueError("Operation action differs from its command.")
-    if row["entity_type"] == "operator_preferences":
-        if (
-            set(request) != {"kind", "value", "expectedRevision"}
-            or request["kind"] != "preferences"
-        ):
-            raise ValueError("Invalid preference command.")
-        value = Preferences.model_validate(request["value"])
-        if (
-            result["appearance"] != value.appearance
-            or result["destinationOrder"] != list(value.destination_order)
-            or result["hiddenDestinationIds"] != list(value.hidden_destination_ids)
-            or result["updatedAt"] != row["created_at"]
-        ):
-            raise ValueError("Preference result differs from its request.")
-        return
-    if request["id"] != row["entity_id"] or result["asOf"] != row["created_at"]:
-        raise ValueError("Recovery result differs from its operation identity or instant.")
-    if request["kind"] == "recovery_save":
-        payload = validate_payload(request["formKey"], request["schemaVersion"], request["payload"])
-        for key in ("formKey", "schemaVersion", "sourceKind", "sourceId", "baseSourceRevision"):
-            if request[key] != result[key]:
-                raise ValueError("Recovery result differs from its source command.")
-        if (
-            payload != result["payload"]
-            or result["savedAt"] != row["created_at"]
-            or result["status"] != "active"
-        ):
-            raise ValueError("Recovery save does not match its acknowledgment.")
-    elif request["kind"] == "recovery_attempt":
-        if (
-            result["status"] != "outcome_unknown"
-            or result["attemptKey"] != request["attemptKey"]
-            or (
-                request["requestFingerprint"] is not None
-                and result["requestFingerprint"] != request["requestFingerprint"]
-            )
-            or (request["requestFingerprint"] is None and result["formKey"] not in COMMAND_SCHEMAS)
-        ):
-            raise ValueError("Recovery attempt differs from its receipt.")
+def _validate_history_transition(row, request, state, previous):
+    kind = request["kind"]
+    if kind == "recovery_save":
+        _validate_history_save(state, previous)
     else:
-        status = {"discarded": "discarded", "reconciled": "reconciled", "expired": "expired"}[
-            row["action"]
-        ]
-        if result["status"] != status:
-            raise ValueError("Recovery transition differs from its receipt.")
+        if previous is None:
+            raise ValueError("Recovery transition has no saved predecessor.")
+        permitted = {
+            "recovery_attempt": {"active"},
+            "recovery_reconciled": {"outcome_unknown"},
+            "recovery_discarded": {"active", "reconciled"},
+            "recovery_expire": {"active", "reconciled"},
+        }
+        if previous["status"] not in permitted[kind]:
+            raise ValueError("Illegal recovery lifecycle transition.")
+        changed = {"revision", "status"}
+        if kind == "recovery_attempt":
+            changed.update(("attemptKey", "requestFingerprint"))
+            identifier(state["attemptKey"])
+            if (
+                utc(row["created_at"]) >= utc(previous["expiresAt"])
+                or len(state["requestFingerprint"]) != SHA256_LENGTH
+                or any(c not in "0123456789abcdef" for c in state["requestFingerprint"])
+            ):
+                raise ValueError("Invalid historical owning attempt.")
+        elif kind == "recovery_reconciled":
+            changed.add("receipt")
+            if (
+                not isinstance(state["receipt"], dict)
+                or state["receipt"].get("attemptKey") != previous["attemptKey"]
+            ):
+                raise ValueError("Reconciliation receipt differs from its owning attempt.")
+        elif kind == "recovery_expire" and utc(row["created_at"]) < utc(previous["expiresAt"]):
+            raise ValueError("Recovery expired before its acknowledged deadline.")
+        if any(state[key] != previous[key] for key in state.keys() - changed):
+            raise ValueError("Recovery transition rewrote preserved evidence.")
+
+
+def _validate_preference_request(row, request, result):
+    if set(request) != {"kind", "value", "expectedRevision"} or request["kind"] != "preferences":
+        raise ValueError("Invalid preference command.")
+    value = Preferences.model_validate(request["value"])
+    if (
+        result["appearance"] != value.appearance
+        or result["destinationOrder"] != list(value.destination_order)
+        or result["hiddenDestinationIds"] != list(value.hidden_destination_ids)
+        or result["updatedAt"] != row["created_at"]
+    ):
+        raise ValueError("Preference result differs from its request.")
+
+
+def _validate_recovery_attempt(row):
+    if row["attempt_key"] is not None:
+        identifier(row["attempt_key"])
+        if len(row["request_fingerprint"]) != SHA256_LENGTH or any(
+            c not in "0123456789abcdef" for c in row["request_fingerprint"]
+        ):
+            raise ValueError("Invalid owning fingerprint.")
+    if row["receipt_json"] is not None:
+        receipt = portable_json(row["receipt_json"])
+        if receipt["attemptKey"] != row["attempt_key"]:
+            raise ValueError("Receipt does not match attempt.")
+
+
+def _validate_recovery_save(row, request, result):
+    payload = validate_payload(request["formKey"], request["schemaVersion"], request["payload"])
+    for key in ("formKey", "schemaVersion", "sourceKind", "sourceId", "baseSourceRevision"):
+        if request[key] != result[key]:
+            raise ValueError("Recovery result differs from its source command.")
+    if (
+        payload != result["payload"]
+        or result["savedAt"] != row["created_at"]
+        or result["status"] != "active"
+    ):
+        raise ValueError("Recovery save does not match its acknowledgment.")
+
+
+def _validate_history_save(state, previous):
+    if previous is not None and (
+        previous["status"] != "active" or previous["formKey"] != state["formKey"]
+    ):
+        raise ValueError("Recovery save cannot overwrite this predecessor.")
+    if any(state[key] is not None for key in ("attemptKey", "requestFingerprint", "receipt")):
+        raise ValueError("Recovery save contains unacknowledged attempt evidence.")

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { CoverageLinks } from "../shared/coverage";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
 import { workflows, scalar } from "@epm/contracts/workflows";
@@ -97,6 +98,7 @@ function SpaceRecord({ space, propertyId }: { space: Space; propertyId: string }
   return (
     <article className="context-section">
       <h4>{space.displayName}</h4>
+      <CoverageLinks propertyId={propertyId} spaceId={space.id} />
       <Facts
         value={space}
         fields={["spaceKind", "status", "revision", "suiteOrFloor", "notes", "effectiveLocalDate"]}

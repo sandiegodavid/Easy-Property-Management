@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { CoverageLinks } from "../shared/coverage";
 import { Link } from "react-router-dom";
 import { api } from "@epm/contracts";
 import { record, scalar } from "@epm/contracts/workflows";
@@ -85,6 +86,7 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
       {value && (
         <>
           <h2>{scalar(value.summary ?? value.subject ?? value.title)}</h2>
+          {!!value.propertyId && <CoverageLinks propertyId={scalar(value.propertyId)} />}
           <Facts value={value} fields={common} />
           {!!value.propertyId && (
             <p>

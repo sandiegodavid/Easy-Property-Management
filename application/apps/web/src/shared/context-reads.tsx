@@ -86,6 +86,11 @@ function CoveragePreview({ preview }: { preview: Schema["CoveragePreview"] }) {
             {preview.items?.map((item) => (
               <li key={`${item.subjectId}:${item.area}`}>
                 {label(item.area)}: {label(item.state ?? "unavailable")}
+                {"subjectKind" in item && (
+                  <Link to={`/coverage/${item.subjectKind}/${item.subjectId}/${item.area}`}>
+                    Review {item.area}
+                  </Link>
+                )}
               </li>
             ))}
           </ul>
@@ -561,6 +566,9 @@ function SectionContents({ section }: { section: Section }) {
               <p>
                 {item.area} · {item.availability} · {item.state ?? "State unavailable"} ·{" "}
                 {item.causes.join(", ")}
+                <Link to={`/coverage/${item.subjectKind}/${item.subjectId}/${item.area}`}>
+                  Review {item.area} coverage
+                </Link>
               </p>
             )}
           </li>

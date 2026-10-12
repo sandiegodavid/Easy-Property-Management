@@ -25157,6 +25157,7 @@
           },
           "formKey": {
             "enum": [
+              "coverage.review",
               "task.create",
               "maintenance.issue.create",
               "communication.record",
@@ -25410,6 +25411,7 @@
           },
           "formKey": {
             "enum": [
+              "coverage.review",
               "task.create",
               "maintenance.issue.create",
               "communication.record",

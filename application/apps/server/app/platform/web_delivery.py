@@ -120,6 +120,7 @@ def browser_route(path: str) -> bool:
             or (kind == "ai" and identity == "review" and _uuid(section))
             or (kind == "maintenance" and identity == "issues" and _uuid(section))
             or (kind == "money" and identity == "deposit-settlements" and _uuid(section))
+            or (kind == "coverage" and identity == "reviews" and _uuid(section))
         )
     return _extended_route(parts)
 
@@ -131,6 +132,13 @@ def _extended_route(parts: list[str]) -> bool:
     return _uuid(identity) and (
         (kind == "maintenance" and group == "issues" and section in ISSUE_SECTIONS)
         or (kind == "money" and group == "owner-reports" and section == "review")
+        or (
+            kind == "coverage"
+            and (
+                (group == "property" and section == "maintenance")
+                or (group == "space" and section in {"occupancy", "lease", "rent", "deposit"})
+            )
+        )
     )
 
 

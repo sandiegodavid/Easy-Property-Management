@@ -31,6 +31,8 @@ import { LeasingWorkspace } from "../workflows/leasing";
 import { InspectionWorkspace } from "../workflows/inspections";
 import { MoneyWorkspace } from "../workflows/money";
 import { WorkWorkspace } from "../workflows/work";
+import { MetadataSearch } from "../shared/search";
+import { CoveragePage, CoverageResume } from "../shared/coverage";
 
 function LeasingPage() {
   const [params] = useSearchParams();
@@ -342,13 +344,9 @@ export function ApplicationShell() {
           <Route path="tasks/:id" element={<WorkWorkspace kind="task" />} />
           <Route path="conversations" element={<WorkWorkspace kind="communication" />} />
           <Route path="maintenance/issues/:id" element={<WorkWorkspace />} />
-          {["search"].map((path) => (
-            <Route
-              key={path}
-              path={path}
-              element={<PendingPage title={path === "tasks" ? "Tasks" : "Search"} />}
-            />
-          ))}
+          <Route path="search" element={<MetadataSearch />} />
+          <Route path="coverage/:kind/:id/:area" element={<CoveragePage />} />
+          <Route path="coverage/reviews/:id" element={<CoverageResume />} />
           <Route path="*" element={<Unavailable />} />
         </Route>,
       ),

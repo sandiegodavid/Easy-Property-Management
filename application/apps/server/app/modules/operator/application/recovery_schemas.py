@@ -1,5 +1,7 @@
 """Incomplete browser forms, not official commands or source-owned drafts."""
 
+from datetime import date
+from importlib import import_module
 from typing import Literal
 from uuid import UUID
 
@@ -97,7 +99,18 @@ class CommunicationForm(Contract):
     links: list[LinkForm] = Field(default_factory=list, max_length=100)
 
 
+class CoverageReviewForm(Contract):
+    subjectKind: Literal["property", "space"]
+    subjectId: UUID
+    area: Literal["occupancy", "lease", "rent", "deposit", "maintenance"]
+    expectedEvidenceRevision: str = Field(pattern="^[0-9a-f]{64}$")
+    basis: Literal["acknowledged", "not_applicable"] = "acknowledged"
+    reason: str | None = Field(None, max_length=1000)
+    nextReviewOn: date | None = None
+
+
 SCHEMAS = {
+    "coverage.review": CoverageReviewForm,
     "task.create": TaskForm,
     "maintenance.issue.create": IssueForm,
     "communication.record": CommunicationForm,
@@ -105,9 +118,10 @@ SCHEMAS = {
 
 
 def registered_schemas():
-    from app.modules.operator.application.command_forms import COMMAND_SCHEMAS
-
-    return {**SCHEMAS, **COMMAND_SCHEMAS}
+    # Command forms reuse the base form types in this module; resolve the registry
+    # after both modules have initialized.
+    commands = import_module("app.modules.operator.application.command_forms")
+    return {**SCHEMAS, **commands.COMMAND_SCHEMAS}
 
 
 def validate_payload(form_key, schema_version, payload):

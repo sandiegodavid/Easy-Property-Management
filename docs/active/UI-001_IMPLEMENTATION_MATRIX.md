@@ -1,6 +1,6 @@
 # UI-001 implementation slices
 
-Status: backend readiness Slices 41–43 and frontend Slices 44–53 delivered — October 11, 2026. Browser workflows in Slices 54–57 remain open; UI-001 is not complete.
+Status: backend readiness Slices 41–43 and frontend Slices 44–54 delivered — October 11, 2026. Browser workflows in Slices 55–57 remain open; UI-001 is not complete.
 
 Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
 feature-specific AI approval modes, Intake attention consequences, coordinated
@@ -13,9 +13,9 @@ The recorded backend readiness gate and React scaffold are complete; browser wor
 ## Subsequent UI slices — ordered implementation plan
 
 Updated October 11, 2026. Backend Slices 41–43 are recorded as delivered;
-Slices 44–53's React build, workspace gate, navigation, shared components, recovery transport, contextual reads and Portfolio/identity/Provider/Lease/Inspection/Money/Maintenance/Communication/Task/Owner-concern workflows are delivered. Implement the
+Slices 44–54's React build, workspace gate, navigation, shared components, recovery transport, contextual reads, search/coverage and Portfolio/identity/Provider/Lease/Inspection/Money/Maintenance/Communication/Task/Owner-concern workflows are delivered. Implement the
 following slices sequentially. Slice numbers continue after the backend sequence;
-Slice 40 stays assigned to UI-002. Slices 44–53 are delivered; Slices 54–57 remain planned.
+Slice 40 stays assigned to UI-002. Slices 44–54 are delivered; Slices 55–57 remain planned.
 The [UI-001 design](UI-001_DESIGN.md#technical-implementation-design) owns the
 interaction and technical requirements.
 
@@ -239,14 +239,42 @@ quality checks above and report blockers without marking unrun checks passed.
     aligning the source-owned fingerprint descriptors. The existing Vite
     chunk-size warning remains non-fatal.
 
-11. **Slice 54: Search, coverage and review prompts across workspaces.**
-    Add bounded contextual/global search, grouped results, typed targets, archived
-    markers and continuations. Present source-backed coverage states, explanations,
-    non-applicability and review decisions with the displayed area evidence revision.
-    Preserve required gaps and dirty forms when sources change. Verify membership
-    failures, stale review conflicts, relevant-change prompts, hidden-destination
-    links and absent/unavailable coverage. Reuse recovery from Slice 48 and waiting
-    workflows from Slice 53; do not create duplicate state stores or policies.
+11. **Slice 54: Search, coverage and review prompts across workspaces (delivered).**
+    Global metadata search uses the registered OPS groups, ten-result slices,
+    matching totals, archived markers and independent URL continuations. Typed
+    targets open their owning records; hidden destinations remain reachable.
+    Search typing is debounced and obsolete reads are cancelled. Existing contextual
+    directory searches and section continuations remain the workspace search paths.
+
+    Coverage links connect Property/Owner overview facts, inventory spaces, Lease
+    records and Maintenance context to area-specific source reads. Explanations,
+    applicability, causes, relevant-change prompts and last-review/local-date
+    metadata come from OPS. Reviews submit the displayed evidence revision;
+    acknowledging a review never fills a required gap. Editable reasons and dates
+    survive refreshed or unavailable source facts. A changed revision requires an
+    explicit operator review before reuse.
+
+    `coverage.review` is now an allowlisted OPS form with a source-derived
+    fingerprint and original review receipt. It reuses Slice 48's autosave,
+    navigation guards, immutable attempts and reconciliation rather than introducing
+    another store. Interrupted attempts can resume after reload and reconcile the
+    original result. Rejected prepared attempts retain their edits and remain locked
+    under the shared OPS outcome-resolution rules. Existing Task waiting workflows
+    remain the follow-up mechanism. No schema or coverage-policy changes.
+
+    | Scenario | Evidence | Result / gap |
+    | --- | --- | --- |
+    | Bounded search and typed navigation | `search-coverage.spec.ts`: eleven Task hits, separate continuation, detail/back navigation and hidden Property destination | Passed; ten plus one without gaps/duplicates, two search requests, URL retains the selected group page |
+    | Independent failures and cursor restart | Search-source failure/retry and expired group continuation; `context-reads.spec.ts` | Passed; retry targets one group, filters survive restart, unavailable results do not appear empty |
+    | Review states and required gaps | Real Maintenance acknowledgment; unknown occupancy and non-applicable lease | Passed; original receipt recorded, gaps retained and non-applicability offered only when source rules permit it |
+    | Changed facts, conflicts and outages | Explicit revision review, stale admission race, missing/unsupported subject and unavailable coverage with open edits | Passed; text retained, stale submission rejected, no review written and duplicate/new dispatch guarded |
+    | Recovery and original results | Saved-review resume; committed response loss, reload and original-key reconciliation | Passed; uses the existing OPS controller and source receipt, with no list-row recovery fan-out |
+    | Persistence, retry and portability | `test_coverage_recovery.py`, `test_coverage.py`, `test_operator.py`, `test_search.py`, `test_web_delivery.py` | Passed; 130 focused tests cover replay, audit rollback, retained tampering, encrypted recovery/receipt round trip and existing query bounds |
+    | Accessibility and context | Labeled forms/buttons, narrow unavailable-state layout; contextual directory/source browser regressions | Passed; nine slice-specific and four contextual browser tests. Full theme/keyboard/restore browser acceptance remains Slice 57 |
+
+    Frontend lint, formatting, complete type checking, reproducible contracts,
+    changed-file Python checks, wheel packaging and diff whitespace validation
+    passed. The existing Vite chunk-size warning remains non-fatal.
 
 12. **Slice 55: Built-in AI configuration, governance and supported draft review.**
     Deliver Off/On this device/Cloud service controls, registered capabilities,
@@ -377,7 +405,10 @@ that a browser control is ready.
 - **Slice 53 delivered:** Maintenance/child, manual conversation, Task/reminder,
   waiting and Owner-concern workflows, bounded reads, source guards and original
   receipts, including lost-response recovery after Task deletion.
-- **Slices 54–56:** consume the delivered bootstrap, source and OPS contracts;
+- **Slice 54 delivered:** grouped metadata search, typed contextual links,
+  source-backed coverage prompts and review decisions, with OPS form recovery,
+  immutable original receipts and retained-data/restore validation.
+- **Slices 55–56:** consume the delivered bootstrap, source and OPS contracts;
   implement route states, contextual workflows, recovery and accessibility. Each
   enabled workflow needs a real critical read/write integration path and truthful
   capability registration. Do not reconstruct domain rules or receipts in the browser.

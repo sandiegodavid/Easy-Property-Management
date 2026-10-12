@@ -77,6 +77,10 @@ export function RecoveryPage() {
                     Reconcile attempt
                   </button>
                 )}
+                {record.formKey === "coverage.review" &&
+                  ["active", "outcome_unknown"].includes(record.status) && (
+                    <Link to={`/coverage/reviews/${record.id}`}>Resume coverage review</Link>
+                  )}
                 {workflows.some((workflow) => workflow.formKey === record.formKey) &&
                 ["active", "outcome_unknown"].includes(record.status) ? (
                   <Link

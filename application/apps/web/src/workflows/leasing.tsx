@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { CoverageLinks } from "../shared/coverage";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
 import { workflows, record, scalar } from "@epm/contracts/workflows";
@@ -166,6 +167,7 @@ export function LeaseRecord({ id }: { id: string }) {
         ]}
       />
       <Link to="/leasing">Return to Leasing</Link>
+      <CoverageLinks spaceId={item.spaceId} />
       <CommandLinks
         target={id}
         keys={

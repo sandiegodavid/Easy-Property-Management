@@ -615,7 +615,11 @@ def command_source_kind(form_key):
 
 
 def source_owns_fingerprint(form_key: str) -> bool:
-    return form_key in COMMAND_SCHEMAS or form_key in {"task.create", "maintenance.issue.create"}
+    return form_key in COMMAND_SCHEMAS or form_key in {
+        "task.create",
+        "maintenance.issue.create",
+        "coverage.review",
+    }
 
 
 def financial_source_kind(form_key):

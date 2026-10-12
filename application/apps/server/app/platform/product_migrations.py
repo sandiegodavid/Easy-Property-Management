@@ -45,6 +45,7 @@ from app.modules.owner_management.infrastructure.schema_validation import (
 from app.modules.operator.infrastructure.schema_validation import validate_operator_schema
 from app.modules.operator.infrastructure.schema_validation import validate_coverage_targets
 from app.modules.operator.infrastructure.schema_validation import validate_command_recovery
+from app.modules.operator.infrastructure.coverage_recovery import validate_coverage_recovery
 from app.bootstrap.operator_recovery_composition import compose_recovery_bindings
 from app.bootstrap.operator_coverage import compose_coverage_sources
 from app.modules.portfolio.infrastructure.schema_validation import validate_portfolio_schema
@@ -249,6 +250,7 @@ def validate_latest_schema(database_path: Path) -> None:
             validate_file_data(connection, build_file_link_policy_registry().as_mapping())
             validate_coverage_targets(connection, compose_coverage_sources().portfolio)
             validate_command_recovery(connection, compose_recovery_bindings())
+            validate_coverage_recovery(connection)
             validate_intake_schema(connection)
             validate_ai_governance_schema(
                 connection,
