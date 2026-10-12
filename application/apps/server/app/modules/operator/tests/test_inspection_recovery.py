@@ -8,7 +8,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 from app.platform.testing_client import LocalApiClient as TestClient
 from sqlalchemy import event
 
@@ -67,7 +67,7 @@ def ready():
     app.include_router(
         inspection_router(
             fixture.inspections,
-            SimpleNamespace(require_ready=lambda **kwargs: None),
+            SimpleNamespace(ready=True, error=None, can_write=True),
         )
     )
     try:
@@ -99,16 +99,17 @@ def resolved(ops, record):
     return ops.reconcile_recovery(record, expected_revision=2, idempotency_key=str(uuid4()))
 
 
-def run(ready, form, method, path, values, source=None):
+def run(ready, form, request, values, *, source=None):
+    method, path = request
     fixture, ops, client = ready
     record, key = begin(ops, form, values, source)
     pending = client.post(
         f"/api/operator/recovery/{record}/reconcile",
         json={"expectedRevision": 2, "idempotencyKey": str(uuid4())},
     )
-    assert pending.status_code == 409
+    assert pending.status_code == status.HTTP_409_CONFLICT
     response = client.request(method, path, json=values | {"idempotencyKey": key})
-    assert response.status_code in {200, 201}, response.text
+    assert response.status_code in {status.HTTP_200_OK, status.HTTP_201_CREATED}, response.text
     original = response.json()
     recovery = resolved(ops, record)
     receipt = recovery["receipt"]
@@ -150,43 +151,38 @@ def test_real_report_template_child_and_evidence_recovery(ready):
     template, _ = run(
         ready,
         "inspection.template.create",
-        "POST",
-        "/api/condition-checklist-templates",
+        ("POST", "/api/condition-checklist-templates"),
         {"expectedRevision": 0, "displayName": " Checklist ", "areas": checklist()},
     )
     run(
         ready,
         "inspection.template.patch",
-        "PATCH",
-        f"/api/condition-checklist-templates/{template['id']}",
+        ("PATCH", f"/api/condition-checklist-templates/{template['id']}"),
         {"expectedRevision": 1, "notes": None},
-        template["id"],
+        source=template["id"],
     )
     lease_id = fixture.lease["id"]
     report, create_record = run(
         ready,
         "inspection.report.create",
-        "POST",
-        f"/api/leases/{lease_id}/condition-reports",
+        ("POST", f"/api/leases/{lease_id}/condition-reports"),
         create_values(),
-        lease_id,
+        source=lease_id,
     )
     report_id = report["id"]
     report, _ = run(
         ready,
         "inspection.report.patch",
-        "PATCH",
-        f"/api/condition-reports/{report_id}",
+        ("PATCH", f"/api/condition-reports/{report_id}"),
         {"expectedRevision": 1, "generalNotes": None},
-        report_id,
+        source=report_id,
     )
     report, _ = run(
         ready,
         "inspection.report.areas.replace",
-        "PUT",
-        f"/api/condition-reports/{report_id}/areas",
+        ("PUT", f"/api/condition-reports/{report_id}/areas"),
         {"expectedRevision": 2, "areas": checklist()},
-        report_id,
+        source=report_id,
     )
     acknowledgments = {
         item["leaseParticipantId"]: {"status": "acknowledged"} for item in report["acknowledgments"]
@@ -194,10 +190,9 @@ def test_real_report_template_child_and_evidence_recovery(ready):
     report, _ = run(
         ready,
         "inspection.report.acknowledge",
-        "PUT",
-        f"/api/condition-reports/{report_id}/acknowledgments",
+        ("PUT", f"/api/condition-reports/{report_id}/acknowledgments"),
         {"expectedRevision": 3, "acknowledgments": acknowledgments},
-        report_id,
+        source=report_id,
     )
     observation = report["areas"][0]["observations"][0]["id"]
     values = {
@@ -214,24 +209,22 @@ def test_real_report_template_child_and_evidence_recovery(ready):
         data={"expected_revision": 4, "idempotency_key": key, "purpose": "supporting_document"},
         files={"file": ("cafe\u0301.txt", b"Evidence", "text/plain")},
     )
-    assert response.status_code == 201, response.text
+    assert response.status_code == status.HTTP_201_CREATED, response.text
     receipt = resolved(ops, record)["receipt"]
     assert receipt["result"]["targetId"] == response.json()["id"]
     report, _ = run(
         ready,
         "inspection.report.finalize",
-        "POST",
-        f"/api/condition-reports/{report_id}/finalize",
+        ("POST", f"/api/condition-reports/{report_id}/finalize"),
         {"expectedRevision": 5, "confirmed": True},
-        report_id,
+        source=report_id,
     )
     correction, _ = run(
         ready,
         "inspection.report.correct",
-        "POST",
-        f"/api/condition-reports/{report_id}/corrections",
+        ("POST", f"/api/condition-reports/{report_id}/corrections"),
         create_values(6) | {"correctionReason": "Correct the checklist"},
-        report_id,
+        source=report_id,
     )
     inspection_command(
         fixture.inspections, "acknowledge", correction["id"], fixture._acknowledge_all(correction)
@@ -264,10 +257,9 @@ def test_comparison_original_recovery_after_replacement(ready):
     result, record = run(
         ready,
         "inspection.comparison.review",
-        "PUT",
-        f"/api/leases/{fixture.lease['id']}/condition-comparison",
+        ("PUT", f"/api/leases/{fixture.lease['id']}/condition-comparison"),
         values,
-        fixture.lease["id"],
+        source=fixture.lease["id"],
     )
     inspection_command(fixture.inspections, "save_comparisons", fixture.lease["id"], [])
     assert ops.recovery(record)["receipt"]["result"]["revision"] == result["revision"]
@@ -293,10 +285,9 @@ def test_outcome_single_query_and_encrypted_portability(ready):
     result, record = run(
         ready,
         "inspection.report.create",
-        "POST",
-        f"/api/leases/{fixture.lease['id']}/condition-reports",
+        ("POST", f"/api/leases/{fixture.lease['id']}/condition-reports"),
         create_values(),
-        fixture.lease["id"],
+        source=fixture.lease["id"],
     )
     database = fixture.workspace.paths.database
     with sqlite3.connect(database) as connection:
@@ -315,7 +306,7 @@ def test_outcome_single_query_and_encrypted_portability(ready):
     engine = fixture.inspections.unit_of_work.engine
     statements = []
 
-    def track(connection, cursor, statement, parameters, context, many):
+    def track(_connection, _cursor, statement, *_args):
         if statement.lstrip().upper().startswith("SELECT"):
             statements.append(statement)
 
@@ -377,10 +368,9 @@ def test_stale_scope_and_draft_only_gates(ready):
     report, _ = run(
         ready,
         "inspection.report.create",
-        "POST",
-        f"/api/leases/{fixture.lease['id']}/condition-reports",
+        ("POST", f"/api/leases/{fixture.lease['id']}/condition-reports"),
         create_values(),
-        fixture.lease["id"],
+        source=fixture.lease["id"],
     )
     record, key = begin(ops, "inspection.report.patch", {"expectedRevision": 1}, report["id"])
     inspection_command(fixture.inspections, "patch_report", report["id"], conducted_by="Changed")
@@ -410,7 +400,7 @@ def test_changed_receipt_and_failed_attachment_leave_attempt_unknown(ready):
         f"/api/leases/{fixture.lease['id']}/condition-reports",
         json=values | {"conductedBy": "Different", "idempotencyKey": key},
     )
-    assert response.status_code == 201
+    assert response.status_code == status.HTTP_201_CREATED
     with pytest.raises(OperatorConflict):
         resolved(ops, record)
     assert ops.recovery(record)["status"] == "outcome_unknown"
@@ -470,10 +460,9 @@ def test_incomplete_prepare_and_tampered_fingerprint_rejected(ready):
     result, record = run(
         ready,
         "inspection.report.create",
-        "POST",
-        f"/api/leases/{fixture.lease['id']}/condition-reports",
+        ("POST", f"/api/leases/{fixture.lease['id']}/condition-reports"),
         create_values(),
-        fixture.lease["id"],
+        source=fixture.lease["id"],
     )
     with sqlite3.connect(fixture.workspace.paths.database) as connection:
         connection.execute(
@@ -489,10 +478,9 @@ def test_attachment_commit_failure_retry_and_no_republication(ready):
     report, _ = run(
         ready,
         "inspection.report.create",
-        "POST",
-        f"/api/leases/{fixture.lease['id']}/condition-reports",
+        ("POST", f"/api/leases/{fixture.lease['id']}/condition-reports"),
         create_values(),
-        fixture.lease["id"],
+        source=fixture.lease["id"],
     )
     observation = report["areas"][0]["observations"][0]["id"]
     values = {
@@ -526,7 +514,7 @@ def test_attachment_commit_failure_retry_and_no_republication(ready):
     with pytest.raises(OperatorConflict):
         resolved(ops, record)
     original = attach()
-    assert original.status_code == 201, original.text
+    assert original.status_code == status.HTTP_201_CREATED, original.text
     with patch.object(
         fixture.files.content_store, "store", side_effect=AssertionError("republished")
     ):
@@ -535,8 +523,8 @@ def test_attachment_commit_failure_retry_and_no_republication(ready):
         f"/api/operator/recovery/{record}/reconcile",
         json={"expectedRevision": 2, "idempotencyKey": str(uuid4())},
     )
-    assert recovered.status_code == 200, recovered.text
+    assert recovered.status_code == status.HTTP_200_OK, recovered.text
     result = recovered.json()["receipt"]["result"]
     assert result["fileId"] == original.json()["id"]
     assert result["linkId"] == original.json()["links"][0]["id"]
-    assert result["revision"] == 2
+    assert result["revision"] == values["expectedRevision"] + 1

@@ -1,13 +1,14 @@
 """Slice 19: actual source outcomes, no dispatch, bounded reads and portability."""
 
 import json
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 from app.platform.testing_client import LocalApiClient as TestClient
 from sqlalchemy import event, text
 
@@ -28,20 +29,37 @@ from app.modules.communications.infrastructure.receipt_reader import (
 )
 from app.modules.communications.infrastructure.unit_of_work import SQLiteCommunicationUnitOfWork
 from app.modules.intake.infrastructure.source_reader import SQLiteIntakeSourceReader
-from app.modules.maintenance.domain.models import AppointmentCreate, CostCreate
+from app.modules.maintenance.domain.models import (
+    AppointmentCreate,
+    AssignmentCreate,
+    CostCreate,
+    QuoteCreate,
+    ReporterAttribution,
+    ReporterCorrection,
+)
+from app.modules.maintenance.domain.work_journal import WorkJournalCreate
 from app.modules.maintenance.infrastructure.receipt_reader import SQLiteIssueCommandReceiptReader
 from app.modules.maintenance.tests import test_command_readiness as maintenance_fixtures
 from app.modules.operator.api.router import build_router
 from app.modules.operator.application.command_forms import COMMAND_SCHEMAS
 from app.modules.operator.application.ports import RuntimeIdentity
-from app.modules.operator.application.recovery_schemas import registered_schemas, validate_payload
+from app.modules.operator.application.recovery_schemas import (
+    SCHEMAS,
+    registered_schemas,
+    validate_payload,
+)
 from app.modules.operator.application.service import OperatorService
 from app.modules.operator.domain.models import OperatorConflict, OperatorError, OperatorTooLarge
 from app.modules.operator.infrastructure.schema_validation import validate_command_recovery
 from app.modules.operator.infrastructure.unit_of_work import SQLiteOperatorUnitOfWork
 from app.modules.parties.application.service import PartyCreateCommand
 from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations
-from app.modules.portfolio.application.service import AvailabilityCommand, OccupancyCommand
+from app.modules.portfolio.application.service import (
+    AvailabilityCommand,
+    OccupancyCommand,
+    OccupancyCorrectionCommand,
+    SpaceClassificationCommand,
+)
 from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
 from app.modules.tasks.application.mutations import TaskMutationCommand, TaskMutationService
 from app.modules.tasks.application.service import TaskService
@@ -133,7 +151,7 @@ def test_incomplete_lease_participants_can_be_saved_but_not_attempted(ready, par
     app.include_router(build_router(support))
     with TestClient(app) as client:
         saved = client.put("/api/operator/recovery/" + record_id, json=request)
-        assert saved.status_code == 200, saved.text
+        assert saved.status_code == status.HTTP_200_OK, saved.text
         assert saved.json()["payload"] == payload
         assert saved.json()["status"] == "active"
         assert saved.json()["reuseState"] == "available"
@@ -141,7 +159,7 @@ def test_incomplete_lease_participants_can_be_saved_but_not_attempted(ready, par
             client.put("/api/operator/recovery/" + record_id, json=request).json() == saved.json()
         )
         detail = client.get("/api/operator/recovery/" + record_id)
-        assert detail.status_code == 200, detail.text
+        assert detail.status_code == status.HTTP_200_OK, detail.text
         assert detail.json() == {**saved.json(), "operationId": None}
         with support.unit_of_work.engine.connect() as connection:
             before = {
@@ -156,7 +174,7 @@ def test_incomplete_lease_participants_can_be_saved_but_not_attempted(ready, par
                 "attemptKey": str(uuid4()),
             },
         )
-        assert attempt.status_code == 422, attempt.text
+        assert attempt.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT, attempt.text
         assert client.get("/api/operator/recovery/" + record_id).json() == detail.json()
         with support.unit_of_work.engine.connect() as connection:
             for table, count in before.items():
@@ -455,40 +473,7 @@ def test_maintenance_issue_and_child_receipts_use_issue_scope(ready, action):
         prior = service.create_cost(issue_id, cost, str(uuid4()), expected_revision=expected)
         target, expected = prior["id"], prior["revision"]
         payload.update(targetId=target, expectedRevision=expected)
-    if action in {"resolve", "cancel", "reopen", "cost.void"}:
-        payload.update(reason="Operator action", confirmed=True)
-    if action == "patch":
-        payload["changes"] = {"summary": "Updated repair"}
-    if action == "reporter.correct":
-        payload.update(
-            reporter={"role": "staff", "subjectKind": "local_operator"},
-            reason="Reporter corrected",
-            confirmed=True,
-        )
-    if action in {"appointment.create", "appointment.update"}:
-        payload.update(
-            startsAtUtc=appointment.starts_at_utc,
-            endsAtUtc=appointment.ends_at_utc,
-            purpose=appointment.purpose,
-        )
-    if action == "appointment.finish":
-        payload.update(cancelled=False, confirmed=True, reason="Work reported")
-    if action == "cost.create":
-        payload.update(
-            contextKind=cost.context_kind,
-            label=cost.label,
-            amount="10.00",
-            observedOn=cost.observed_on,
-        )
-    if action == "follow_up.create":
-        payload["title"] = "Check repair"
-    if action == "journal.record":
-        payload.update(
-            entryKind="general_note",
-            sourceKind="operator_observation",
-            occurredAtUtc=datetime.now(UTC).isoformat(),
-            summary="Progress",
-        )
+    complete_maintenance_payload(action, payload, appointment=appointment, cost=cost)
     form = (
         "maintenance.issue." + action
         if action in {"start", "return_to_open", "resolve", "cancel", "reopen", "patch"}
@@ -496,20 +481,38 @@ def test_maintenance_issue_and_child_receipts_use_issue_scope(ready, action):
     )
     attempt, key = prepare(support, form, issue_id, payload)
     original = maintenance_dispatch(
-        context, action, issue_id, target, expected, key, payload, appointment, cost
+        context,
+        action,
+        issue_id,
+        target,
+        MaintenanceCommandInputs(
+            expected_revision=expected,
+            idempotency_key=key,
+            payload=payload,
+            appointment=appointment,
+            cost=cost,
+        ),
     )
     with patch.object(service, "transition", side_effect=AssertionError("Redispatch")):
         reconcile(support, attempt, original)
     validate_latest_schema(context.workspace.paths.database)
 
 
-def maintenance_dispatch(
-    context, action, issue_id, target, expected, key, payload, appointment, cost
-):
-    from app.modules.maintenance.domain.models import ReporterAttribution, ReporterCorrection
-    from app.modules.maintenance.domain.work_journal import WorkJournalCreate
+@dataclass(frozen=True)
+class MaintenanceCommandInputs:
+    expected_revision: int
+    idempotency_key: str
+    payload: dict
+    appointment: AppointmentCreate
+    cost: CostCreate
 
-    options = {"expected_revision": expected, "idempotency_key": key}
+
+def maintenance_dispatch(context, action, issue_id, target, inputs: MaintenanceCommandInputs):
+    payload, appointment, cost = inputs.payload, inputs.appointment, inputs.cost
+    options = {
+        "expected_revision": inputs.expected_revision,
+        "idempotency_key": inputs.idempotency_key,
+    }
     service = context.service
     calls = {
         "patch": lambda: service.patch_issue(
@@ -589,8 +592,6 @@ def test_manual_portfolio_results_keep_original_temporal_snapshot(ready, action)
             idempotency_key=key,
         )
     else:
-        from app.modules.portfolio.application.service import SpaceClassificationCommand
-
         result = portfolio.classify_space(
             context.space_id,
             SpaceClassificationCommand(availability=AvailabilityCommand("not_available")),
@@ -609,7 +610,6 @@ def test_manual_portfolio_results_keep_original_temporal_snapshot(ready, action)
 
 @pytest.mark.parametrize("action", ["cancel", "replace", "correct", "reschedule"])
 def test_manual_occupancy_period_commands_recover_exact_receipts(ready, action):
-    from app.modules.portfolio.application.service import OccupancyCorrectionCommand
 
     context, support, _, _, _, _ = ready
     portfolio, space_id = context.portfolio, context.space_id
@@ -669,8 +669,6 @@ def test_manual_occupancy_period_commands_recover_exact_receipts(ready, action):
     ],
 )
 def test_maintenance_financial_and_provider_children_recover(ready, action):
-    from app.modules.maintenance.domain.models import AssignmentCreate, QuoteCreate
-    from zoneinfo import ZoneInfo
 
     context, support, _, _, _, _ = ready
     issue, target = context.issue(), None
@@ -735,7 +733,13 @@ def test_maintenance_financial_and_provider_children_recover(ready, action):
 def test_registry_is_exact_and_incomplete_payloads_are_bounded_and_fail_closed(ready):
     _, support, tasks, _, _, _ = ready
     assert set(support.unit_of_work.references.commands) == set(COMMAND_SCHEMAS)
-    assert len(registered_schemas()) == len(COMMAND_SCHEMAS) + 3
+    assert set(SCHEMAS) == {
+        "task.create",
+        "maintenance.issue.create",
+        "communication.record",
+        "coverage.review",
+    }
+    assert set(registered_schemas()) == set(COMMAND_SCHEMAS) | set(SCHEMAS)
     for form in COMMAND_SCHEMAS:
         assert validate_payload(form, 1, {}) == {}
         with pytest.raises(OperatorError):
@@ -801,7 +805,7 @@ def test_api_forms_schema_and_server_fingerprint_without_source_dispatch(ready):
     )
     with TestClient(app) as client:
         catalog = client.get("/api/operator/recovery-forms")
-        assert catalog.status_code == 200
+        assert catalog.status_code == status.HTTP_200_OK
         assert {item["formKey"] for item in catalog.json()} == set(registered_schemas())
         assert (
             app.openapi()["paths"]["/api/operator/recovery-forms"]["get"]["operationId"]
@@ -820,14 +824,14 @@ def test_api_forms_schema_and_server_fingerprint_without_source_dispatch(ready):
                 "idempotencyKey": str(uuid4()),
             },
         )
-        assert saved.status_code == 200, saved.text
+        assert saved.status_code == status.HTTP_200_OK, saved.text
         key = str(uuid4())
         with patch.object(tasks, "create_command", side_effect=AssertionError("Dispatch")):
             attempted = client.post(
                 "/api/operator/recovery/" + saved.json()["id"] + "/attempt",
                 json={"attemptKey": key, "expectedRevision": 1, "idempotencyKey": str(uuid4())},
             )
-        assert attempted.status_code == 200, attempted.text
+        assert attempted.status_code == status.HTTP_200_OK, attempted.text
         assert (
             attempted.json()["requestFingerprint"]
             == TaskMutationCommand(task["id"], "start", 1, key).fingerprint()
@@ -1112,3 +1116,40 @@ def test_retained_reconciliation_must_match_the_source_owned_original(ready):
             validate_command_recovery(connection, compose_recovery_bindings())
     with pytest.raises(MigrationSchemaError):
         validate_latest_schema(context.workspace.paths.database)
+
+
+def complete_maintenance_payload(action, payload, *, appointment, cost):
+    if action in {"resolve", "cancel", "reopen", "cost.void"}:
+        payload.update(reason="Operator action", confirmed=True)
+    if action == "patch":
+        payload["changes"] = {"summary": "Updated repair"}
+    if action == "reporter.correct":
+        payload.update(
+            reporter={"role": "staff", "subjectKind": "local_operator"},
+            reason="Reporter corrected",
+            confirmed=True,
+        )
+    if action in {"appointment.create", "appointment.update"}:
+        payload.update(
+            startsAtUtc=appointment.starts_at_utc,
+            endsAtUtc=appointment.ends_at_utc,
+            purpose=appointment.purpose,
+        )
+    if action == "appointment.finish":
+        payload.update(cancelled=False, confirmed=True, reason="Work reported")
+    if action == "cost.create":
+        payload.update(
+            contextKind=cost.context_kind,
+            label=cost.label,
+            amount="10.00",
+            observedOn=cost.observed_on,
+        )
+    if action == "follow_up.create":
+        payload["title"] = "Check repair"
+    if action == "journal.record":
+        payload.update(
+            entryKind="general_note",
+            sourceKind="operator_observation",
+            occurredAtUtc=datetime.now(UTC).isoformat(),
+            summary="Progress",
+        )
