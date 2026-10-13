@@ -66,6 +66,65 @@ def create(service, key=None):
     )
 
 
+def test_bounded_party_selection_preserves_unicode_paging_and_archive_context(identities):
+    _, service, _ = identities
+    created = [
+        service.create(
+            PartyCreateCommand("individual", name),
+            expected_revision=0,
+            idempotency_key=str(uuid4()),
+        )
+        for name in ("Éclair A", "Éclair B", "Other")
+    ]
+    service.archive(
+        created[0]["id"], confirmed=True, expected_revision=1, idempotency_key=str(uuid4())
+    )
+    assert [item["id"] for item in service.selection(search="éclair")["items"]] == [
+        created[1]["id"]
+    ]
+    assert [item["id"] for item in service.selection(search="E\u0301clair")["items"]] == [
+        created[1]["id"]
+    ]
+    statements = []
+    engine = service.party_reads.operations.engine
+
+    def count(_connection, _cursor, sql, _parameters, _context, _many):
+        if sql.lstrip().upper().startswith("SELECT"):
+            statements.append(sql)
+
+    event.listen(engine, "before_cursor_execute", count)
+    try:
+        first = service.selection(search="éclair", include_archived=True, limit=1)
+        second = service.selection(
+            search="éclair", include_archived=True, limit=1, cursor=first["nextCursor"]
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+    assert len(statements) == 2
+    assert all("LIMIT" in sql for sql in statements)
+    assert {row["id"] for page in (first, second) for row in page["items"]} == {
+        created[0]["id"],
+        created[1]["id"],
+    }
+    assert second["nextCursor"] is None
+    assert service.selection(limit=100)["items"]
+    for options in ({"limit": 101}, {"limit": True}, {"cursor": "bad"}):
+        with pytest.raises(PartyValidationError):
+            service.selection(**options)
+    app = FastAPI()
+    app.include_router(
+        build_router(
+            service,
+            PartyContactService(service.unit_of_work),
+            SimpleNamespace(ready=True, error=None, can_write=True),
+        )
+    )
+    with TestClient(app) as client:
+        response = client.get("/api/parties/selection", params={"search": "éclair", "limit": 1})
+        assert response.status_code == 200, response.text
+        assert response.json()["items"][0]["id"] == created[1]["id"]
+
+
 def test_original_receipts_replay_after_later_changes_and_recover(identities):
     workspace, service, _ = identities
     key = str(uuid4())

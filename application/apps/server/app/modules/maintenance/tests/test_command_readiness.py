@@ -11,7 +11,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from app.platform.testing_client import LocalApiClient as TestClient
-from sqlalchemy import func, select, text
+from sqlalchemy import event, func, select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.bootstrap.api import create_app
@@ -33,6 +33,7 @@ from app.modules.maintenance.domain.models import (
     ReporterCorrection,
 )
 from app.modules.maintenance.domain.work_journal import WorkJournalCreate
+from app.modules.maintenance.domain.audit_policy import MAINTENANCE_ACTIVITY_POLICY
 from app.modules.maintenance.infrastructure.receipt_reader import SQLiteIssueCommandReceiptReader
 from app.modules.maintenance.infrastructure.schema_validation import (
     COMMAND_RECEIPT_TRIGGERS,
@@ -549,6 +550,228 @@ def test_encrypted_restore_retains_original_receipts_and_source_reader(context):
             assert json.loads(result["response_payload"]) == issue
             validate_maintenance_schema(connection)
     finally:
+        engine.dispose()
+
+
+def test_quote_schedule_documents_and_assignment_survive_encrypted_restore(context):
+    issue = context.issue()
+    provider = context.provider()
+    on = datetime.now(ZoneInfo(issue["reportedTimezone"])).date().isoformat()
+    quote = context.service.create_quote(
+        issue["id"],
+        QuoteCreate(
+            provider,
+            "Portable offer",
+            "Repair scope",
+            "35.00",
+            on,
+            earliest_work_start_on=on,
+            estimated_work_finish_on=on,
+        ),
+        str(uuid4()),
+        expected_revision=1,
+    )
+    assignment = context.service.create_assignment(
+        issue["id"],
+        AssignmentCreate(provider, quote_id=quote["id"]),
+        str(uuid4()),
+        expected_revision=2,
+    )
+    with TestClient(create_app(context.workspace.config.config_path)) as client:
+        upload = client.post(
+            "/api/files",
+            data={
+                "entity_type": "maintenance_quote",
+                "entity_id": quote["id"],
+                "purpose": "quote_document",
+                "idempotency_key": str(uuid4()),
+            },
+            files={"file": ("offer.txt", b"Immutable quoted scope", "text/plain")},
+        )
+    assert upload.status_code == 201, upload.text
+    before = context.service.detail(issue["id"])
+    archive = Path(context.temp.name) / "quote.epm-backup"
+    root = Path(context.temp.name) / "restored-quote"
+    backup = BackupService(
+        context.workspace,
+        AuditRecorder(SQLiteAuditRepository(context.workspace.paths.database)),
+        lambda database: AuditRecorder(SQLiteAuditRepository(database)),
+    )
+    with fast_backup_encryption():
+        backup.create_backup("a sufficiently long test passphrase", output_path=archive)
+        backup.restore(archive, "a sufficiently long test passphrase", root)
+    context.service.unit_of_work.database = root / "database" / "property-management.sqlite"
+    restored = MaintenanceService(context.service.unit_of_work)
+    after = restored.detail(issue["id"])
+    assert after["quotes"] == before["quotes"]
+    assert after["assignments"] == before["assignments"]
+    assert after["quotes"][0]["earliestWorkStartOn"] == on
+    assert after["quotes"][0]["files"][0]["fileId"] == before["quotes"][0]["files"][0]["fileId"]
+    assert restored.command_receipt(assignment["operationId"])["response"] == assignment
+
+
+def test_journal_correction_evidence_history_survives_encrypted_restore(context):
+    issue = context.issue()
+    at = datetime.now(UTC).isoformat()
+    original = context.journal.record(
+        issue["id"],
+        WorkJournalCreate(
+            None,
+            "work_completed",
+            "operator_observation",
+            at,
+            "Initial observation",
+            outcome_status="completed",
+            outcome_summary="Initially dry",
+            follow_up_required=False,
+            operator_verified=True,
+        ),
+        str(uuid4()),
+        expected_revision=1,
+    )
+    with TestClient(create_app(context.workspace.config.config_path)) as client:
+        upload = client.post(
+            "/api/files",
+            data={
+                "entity_type": "maintenance_work_journal_entry",
+                "entity_id": original["id"],
+                "purpose": "completion_photo",
+                "idempotency_key": str(uuid4()),
+            },
+            files={"file": ("condition.txt", b"Initial observed condition", "text/plain")},
+        )
+        assert upload.status_code == 201, upload.text
+        metadata = client.get(f"/api/files/{upload.json()['id']}").json()
+        link = metadata["links"][0]
+        archived = client.post(
+            f"/api/file-links/{link['id']}/archive",
+            json={
+                "confirmed": True,
+                "reason": "Retain original evidence in history",
+                "expectedRevision": link["revision"],
+                "idempotencyKey": str(uuid4()),
+            },
+        )
+        assert archived.status_code == 200, archived.text
+    correction = context.journal.record(
+        issue["id"],
+        WorkJournalCreate(
+            None,
+            "correction",
+            "operator_observation",
+            at,
+            "Corrected observation",
+            outcome_status="partially_completed",
+            outcome_summary="Residual leak",
+            follow_up_required=True,
+            operator_verified=True,
+            corrects_entry_id=original["id"],
+            corrected_entry_kind="work_completed",
+            correction_reason="Recheck changed conclusion",
+        ),
+        str(uuid4()),
+        expected_revision=2,
+    )
+    before = context.journal.issue_journal(issue["id"])
+    repository = SQLiteAuditRepository(context.workspace.paths.database)
+    before_audits = {
+        entry_id: repository.history("maintenance_work_journal_entry", entry_id)
+        for entry_id in (original["id"], correction["id"])
+    }
+    event_after = before_audits[correction["id"]][0]
+    assert event_after.after_snapshot["correctionReason"] == "Recheck changed conclusion"
+    assert event_after.after_snapshot["outcomeSummary"] == "Residual leak"
+    activity = event_after.to_dict(MAINTENANCE_ACTIVITY_POLICY)["after"]
+    assert "correctionReason" not in activity
+    assert "outcomeSummary" not in activity
+    backup = BackupService(
+        context.workspace,
+        AuditRecorder(SQLiteAuditRepository(context.workspace.paths.database)),
+        lambda database: AuditRecorder(SQLiteAuditRepository(database)),
+    )
+    archive, root = (
+        Path(context.temp.name) / "journal.epm-backup",
+        Path(context.temp.name) / "journal-restored",
+    )
+    with fast_backup_encryption():
+        backup.create_backup("a sufficiently long test passphrase", output_path=archive)
+        backup.restore(archive, "a sufficiently long test passphrase", root)
+    context.service.unit_of_work.database = root / "database" / "property-management.sqlite"
+    assert context.journal.issue_journal(issue["id"]) == before
+    assert context.service.command_receipt(correction["operationId"])["response"] == correction
+    assert context.service.detail(issue["id"])["status"] == "open"
+    repository = SQLiteAuditRepository(context.service.unit_of_work.database)
+    assert {
+        entry_id: repository.history("maintenance_work_journal_entry", entry_id)
+        for entry_id in before_audits
+    } == before_audits
+    engine = create_sqlite_engine(context.service.unit_of_work.database)
+    try:
+        with engine.connect() as connection:
+            retained = (
+                connection.execute(
+                    text(
+                        "SELECT file_id, archived_at, archive_reason FROM file_links WHERE id=:id"
+                    ),
+                    {"id": link["id"]},
+                )
+                .mappings()
+                .one()
+            )
+            assert retained["file_id"] == metadata["id"]
+            assert retained["archived_at"]
+            assert retained["archive_reason"] == "Retain original evidence in history"
+            assert datetime.fromisoformat(
+                connection.execute(
+                    text("SELECT verified_at FROM file_content_locations WHERE file_id=:id"),
+                    {"id": metadata["id"]},
+                ).scalar_one()
+            ) == datetime.fromisoformat(metadata["verifiedAt"])
+            assert (
+                root / "files" / "managed" / sha256(b"Initial observed condition").hexdigest()
+            ).read_bytes() == b"Initial observed condition"
+            validate_maintenance_schema(connection)
+    finally:
+        engine.dispose()
+
+
+def test_journal_page_query_budget_is_constant(context):
+    issue = context.issue()
+    for index in range(21):
+        context.journal.record(
+            issue["id"],
+            WorkJournalCreate(
+                None,
+                "general_note",
+                "operator_observation",
+                datetime.now(UTC).isoformat(),
+                f"Fact {index}",
+            ),
+            str(uuid4()),
+            expected_revision=index + 1,
+        )
+    import app.modules.maintenance.infrastructure.unit_of_work as adapter
+
+    engine = create_sqlite_engine(context.workspace.paths.database)
+    statements = []
+
+    def capture(_connection, _cursor, statement, *_args):
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        with patch.object(adapter, "create_engine", return_value=engine):
+            context.journal.issue_journal(issue["id"], page_size=1)
+            one = len(statements)
+            statements.clear()
+            page = context.journal.issue_journal(issue["id"], page_size=20)
+            assert len(statements) == one
+            assert len(statements) <= 6
+            assert len(page["items"]) == 20
+            assert page["nextCursor"]
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
         engine.dispose()
 
 

@@ -608,6 +608,23 @@ def test_manual_portfolio_results_keep_original_temporal_snapshot(ready, action)
     validate_latest_schema(context.workspace.paths.database)
 
 
+@pytest.mark.parametrize("form_key", ["portfolio.availability.change", "portfolio.space.classify"])
+def test_invalid_portfolio_availability_can_be_saved_but_not_attempted(ready, form_key):
+    context, support, _, _, _, _ = ready
+    before = context.portfolio.get_space_status(context.space_id)
+    availability = {"availabilityStatus": "available_on"}
+    payload = {
+        "expectedRevision": before["revision"],
+        **({"availability": availability} if form_key.endswith("classify") else availability),
+    }
+    with pytest.raises(OperatorError, match="requires a date"):
+        prepare(support, form_key, context.space_id, payload)
+    after = context.portfolio.get_space_status(context.space_id)
+    assert {key: value for key, value in after.items() if key != "asOf"} == {
+        key: value for key, value in before.items() if key != "asOf"
+    }
+
+
 @pytest.mark.parametrize("action", ["cancel", "replace", "correct", "reschedule"])
 def test_manual_occupancy_period_commands_recover_exact_receipts(ready, action):
 

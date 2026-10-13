@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import (
@@ -25,6 +25,7 @@ from app.modules.intake.api.responses import (
     CommandReceiptResponse,
     ConflictResponse,
     CorrectionResponse,
+    EvidenceDetailResponse,
     SourceDetailResponse,
     SourceMutationResponse,
     SourcePageResponse,
@@ -37,6 +38,7 @@ from app.platform.api_errors import (
     workspace_unavailable,
 )
 from app.modules.files.application.errors import PublicationCleanupIncomplete
+from app.modules.intake.application.ports import IntakeEvidenceDetailRequest
 from app.modules.intake.application.service import (
     AttachmentInput,
     IntakeAdmissionCommand,
@@ -292,6 +294,26 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
     )
     def get(source_id: UUID):
         return call(lambda: service.get(str(source_id)))
+
+    @router.get(
+        "/{source_id}/revisions/{revision_id}",
+        dependencies=[Depends(ready)],
+        operation_id="getIntakeEvidenceRevision",
+        response_model=EvidenceDetailResponse,
+    )
+    def evidence_revision(source_id: UUID, revision_id: UUID):
+        return call(
+            lambda: service.evidence_detail(
+                IntakeEvidenceDetailRequest(
+                    source_id=str(source_id),
+                    revision_id=str(revision_id),
+                    actor_kind="local_operator",
+                    actor_reference=None,
+                    reason="intake_revision_read",
+                    correlation_id=str(uuid4()),
+                )
+            )
+        )
 
     @router.post(
         "/{source_id}/correct",

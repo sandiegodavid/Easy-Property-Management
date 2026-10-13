@@ -251,6 +251,38 @@ class ExpenseCreateCommand:
 
 
 @dataclass(frozen=True)
+class ExpenseDuplicateReviewCommand:
+    property_id: str
+    paid_on: str
+    amount: str
+    provider_party_id: str | None = None
+    payee_name: str | None = None
+
+    def __post_init__(self):
+        object.__setattr__(self, "property_id", identifier(self.property_id, "Property ID"))
+        object.__setattr__(self, "paid_on", local_date(self.paid_on, "Paid date"))
+        amount_minor(self.amount)
+        if (self.provider_party_id is None) == (self.payee_name is None):
+            raise FinanceError("Select exactly one Provider or merchant label.")
+        if self.provider_party_id is not None:
+            object.__setattr__(
+                self, "provider_party_id", identifier(self.provider_party_id, "Provider ID")
+            )
+        else:
+            object.__setattr__(
+                self, "payee_name", text(self.payee_name, "Payee name", 200, required=True)
+            )
+
+    @property
+    def amount_minor(self):
+        return amount_minor(self.amount)
+
+    @property
+    def currency_code(self):
+        return "USD"
+
+
+@dataclass(frozen=True)
 class ExpensePatchCommand:
     fields: frozenset[str]
     category_id: str | None = None

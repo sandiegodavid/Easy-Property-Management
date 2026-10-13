@@ -42,6 +42,35 @@ class FinanceService:
         self.unit_of_work = unit_of_work
         self.now = now
 
+    def preview_schedule(self, lease_id, command: SynchronizeExpectationsCommand):
+        instant = self.now()
+
+        def read(tx):
+            snapshot, effective, rows, existing = _schedule_changes(tx, lease_id, command, instant)
+            retained = [row for row in existing if row.period_ends_on <= command.through_on]
+            if len(rows) + len(retained) > 240:
+                raise FinanceError(
+                    "Preview may display at most 240 periods. Select a shorter horizon."
+                )
+            return {
+                "rentLedgerRevision": tx.commands.command_revision(
+                    FinanceScope("rent_ledger", lease_id)
+                ),
+                "timeZone": snapshot.time_zone,
+                "termStartsOn": snapshot.effective_on,
+                "termEndsOn": snapshot.ends_on,
+                "responsibilityEndsOn": effective.responsibility_ends_on_override
+                or snapshot.responsibility_ends_on,
+                "actualMoveOutOn": snapshot.actual_move_out_on,
+                "baseRentMinor": snapshot.base_rent_minor,
+                "paymentFrequency": snapshot.payment_frequency,
+                "scheduleAnchorOn": effective.schedule_anchor_on,
+                "items": [_preview_period(row) for row in rows],
+                "existingItems": [_preview_period(row) for row in retained],
+            }
+
+        return self.unit_of_work.read(read)
+
     def synchronize(
         self,
         lease_id,
@@ -54,61 +83,7 @@ class FinanceService:
         correlation = str(uuid4())
 
         def operation(tx):
-            snapshot = tx.lease_term_snapshot(lease_id, command.lease_term_id)
-            if snapshot is None:
-                raise FinanceNotFoundError("Eligible lease term was not found.")
-            if snapshot.currency_code != "USD":
-                raise FinanceError("FIN-001 supports USD terms only.")
-            existing = tx.expectations_for_term(snapshot.id)
-            if existing:
-                stored_anchor = existing[0].schedule_anchor_on
-                if (
-                    command.schedule_anchor_on is not None
-                    and command.schedule_anchor_on != stored_anchor
-                ):
-                    raise FinanceConflictError(
-                        "A term's confirmed schedule anchor cannot change after expectations exist."
-                    )
-                effective_command = replace(command, schedule_anchor_on=stored_anchor)
-            elif command.schedule_anchor_on is None:
-                raise FinanceError("A schedule anchor is required for the first synchronization.")
-            else:
-                effective_command = command
-            rows = _schedule(snapshot, effective_command, instant)
-            # A responsibility amendment can add a second, adjacent piece to an
-            # already persisted occurrence.  Identity must include the covered
-            # interval, not merely its due date, so repeating the amendment is
-            # a no-op rather than an attempted duplicate insert.
-            existing_intervals = {
-                (item.period_starts_on, item.period_ends_on, item.due_on) for item in existing
-            }
-            new = []
-            for row in rows:
-                prior = _initial_piece_for_interval(existing, row)
-                if prior is None:
-                    new.append(row)
-                elif _immutable_expectation(prior) != _immutable_expectation(row):
-                    if not _historical_boundary_snapshot(prior):
-                        raise FinanceConflictError(
-                            "Stored expectation conflicts with the requested immutable schedule."
-                        )
-                    furthest = _furthest_contiguous_piece(existing, row)
-                    if furthest is not None and row.period_ends_on > furthest.period_ends_on:
-                        supplement = _boundary_extension_piece(
-                            furthest,
-                            row,
-                            snapshot.base_rent_minor,
-                        )
-                        identity = (
-                            supplement.period_starts_on,
-                            supplement.period_ends_on,
-                            supplement.due_on,
-                        )
-                        if identity not in existing_intervals:
-                            new.append(supplement)
-            _reconcile_proration(new, snapshot.base_rent_minor, existing)
-            if len(new) > 240:
-                raise FinanceError("Synchronization may create at most 240 expectations.")
+            _, _, new, _ = _schedule_changes(tx, lease_id, command, instant)
             for item in new:
                 tx.insert_expectation(item)
                 tx.record_change(
@@ -577,6 +552,7 @@ class FinanceService:
                 "settlementStatus": None,
                 "timelinessStatus": None,
                 "effectiveMissedReview": False,
+                "timelinessReviews": [_camel(row) for row in projection["reviews"]],
                 "allocationCount": len(summaries),
                 "allocationSummaries": summaries,
                 "receivedAmountMinor": 0,
@@ -620,6 +596,7 @@ class FinanceService:
             "receivedAmountMinor": received,
             "outstandingAmountMinor": outstanding,
             "effectiveMissedReview": timeliness == "missed",
+            "timelinessReviews": [_camel(row) for row in projection["reviews"]],
             "allocationCount": len(summaries),
             "allocationSummaries": summaries,
         }
@@ -632,6 +609,76 @@ class FinanceService:
         if zone is None:
             raise FinanceConflictError("Expectation property is unavailable.")
         return (instant or self.now()).astimezone(ZoneInfo(zone)).date()
+
+
+def _schedule_changes(tx, lease_id, command, instant):
+    """Shared read-only planning for preview and the atomic synchronization command."""
+    snapshot = tx.lease_term_snapshot(lease_id, command.lease_term_id)
+    if snapshot is None:
+        raise FinanceNotFoundError("Eligible lease term was not found.")
+    if snapshot.currency_code != "USD":
+        raise FinanceError("FIN-001 supports USD terms only.")
+    existing = tx.expectations_for_term(snapshot.id)
+    if existing:
+        stored_anchor = existing[0].schedule_anchor_on
+        if command.schedule_anchor_on is not None and command.schedule_anchor_on != stored_anchor:
+            raise FinanceConflictError(
+                "A term's confirmed schedule anchor cannot change after expectations exist."
+            )
+        effective = replace(command, schedule_anchor_on=stored_anchor)
+    elif command.schedule_anchor_on is None:
+        raise FinanceError("A schedule anchor is required for the first synchronization.")
+    else:
+        effective = command
+    rows = _schedule(snapshot, effective, instant)
+    existing_intervals = {
+        (item.period_starts_on, item.period_ends_on, item.due_on) for item in existing
+    }
+    new = []
+    for row in rows:
+        prior = _initial_piece_for_interval(existing, row)
+        if prior is None:
+            new.append(row)
+        elif _immutable_expectation(prior) != _immutable_expectation(row):
+            if not _historical_boundary_snapshot(prior):
+                raise FinanceConflictError(
+                    "Stored expectation conflicts with the requested immutable schedule."
+                )
+            furthest = _furthest_contiguous_piece(existing, row)
+            if furthest is not None and row.period_ends_on > furthest.period_ends_on:
+                supplement = _boundary_extension_piece(furthest, row, snapshot.base_rent_minor)
+                identity = (
+                    supplement.period_starts_on,
+                    supplement.period_ends_on,
+                    supplement.due_on,
+                )
+                if identity not in existing_intervals:
+                    new.append(supplement)
+    _reconcile_proration(new, snapshot.base_rent_minor, existing)
+    if len(new) > 240:
+        raise FinanceError("Synchronization may create at most 240 expectations.")
+    return snapshot, effective, new, existing
+
+
+def _preview_period(row):
+    result = {
+        key: value
+        for key, value in row.to_dict().items()
+        if key
+        in {
+            "periodStartsOn",
+            "periodEndsOn",
+            "dueOn",
+            "expectedAmountMinor",
+            "isProrated",
+            "prorationNumeratorDays",
+            "prorationDenominatorDays",
+            "responsibilityBoundaryOn",
+        }
+    }
+    result["isProrated"] = bool(row.is_prorated)
+    result["lifecycleStatus"] = "voided" if row.voided_at else "active"
+    return result
 
 
 def _schedule(s, c, now):

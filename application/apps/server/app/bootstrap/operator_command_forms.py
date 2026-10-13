@@ -31,6 +31,7 @@ from app.modules.maintenance.domain.models import (
 )
 from app.modules.maintenance.domain.work_journal import WorkJournalCreate
 from app.modules.portfolio.application.service import (
+    PortfolioError,
     OccupancyCommand,
     OccupancyCorrectionCommand,
     AvailabilityCommand,
@@ -239,6 +240,13 @@ def maintenance_request(action, source_id, payload, key):
 
 
 def portfolio_request(action, source_id, payload, key):
+    try:
+        return _portfolio_request(action, source_id, payload, key)
+    except PortfolioError as error:
+        raise OperatorError(str(error)) from error
+
+
+def _portfolio_request(action, source_id, payload, key):
     values = snake_values(payload)
     request = {"action": action, "expectedRevision": revision(payload)}
     if action not in {"availability_changed", "space_classified", "occupancy_cancelled"}:

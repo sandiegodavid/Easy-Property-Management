@@ -505,6 +505,9 @@ class SQLiteIntakeTransaction:
                 .limit(max_history + 1)
             ).mappings()
         )
+        metadata = self.file_links.links_with_files_for_ids(
+            self.connection, [row["file_link_id"] for row in attachments[:max_attachments]]
+        )
         return {
             **revision,
             "evidence": json.loads(envelope),
@@ -513,6 +516,7 @@ class SQLiteIntakeTransaction:
                     "fileLinkId": row["file_link_id"],
                     "role": row["attachment_role"],
                     "displayOrder": row["display_order"],
+                    "file": _file_metadata(metadata.get(row["file_link_id"])),
                 }
                 for row in attachments[:max_attachments]
             ],

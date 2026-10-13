@@ -30,6 +30,7 @@ from app.modules.finance.domain.expense_models import (
     CategoryCreateCommand,
     CategoryPatchCommand,
     ExpenseCreateCommand,
+    ExpenseDuplicateReviewCommand,
     ExpensePatchCommand,
     ExpenseQueryCommand,
     RefundCreateCommand,
@@ -350,6 +351,66 @@ class ExpenseWorkflowTests(unittest.TestCase):
                 "/api/expenses", json={**payload, "idempotencyKey": str(uuid4()), "amount": 125.0}
             )
             self.assertEqual(invalid.status_code, 422)
+
+    def test_duplicate_review_is_read_only_bounded_and_matches_normalized_payee(self):
+        # Unrelated payees must not consume the bounded candidate set.
+        for index in range(12):
+            expense_command(
+                self.expenses, "record_expense", self.command(payee_name=f"Other {index}")
+            )
+        expected = []
+        for _ in range(12):
+            expected.append(
+                expense_command(
+                    self.expenses,
+                    "record_expense",
+                    self.command(
+                        payee_name="ÉCLAIR  / Merchant",
+                        duplicate_confirmed=True,
+                    ),
+                )["id"]
+            )
+        payload = {
+            "propertyId": self.property_id,
+            "paidOn": self.command().paid_on,
+            "amount": "125.00",
+            "payeeName": "éclair  / merchant",
+        }
+        engine = self.expenses.unit_of_work.engine
+        statements = []
+
+        def count(_connection, _cursor, statement, _parameters, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        with TestClient(create_app(self.config)) as client:
+            # Count the source-owned read separately from HTTP readiness bookkeeping.
+            event.listen(engine, "before_cursor_execute", count)
+            try:
+                reviewed = self.expenses.review_duplicates(
+                    ExpenseDuplicateReviewCommand(
+                        property_id=self.property_id,
+                        paid_on=payload["paidOn"],
+                        amount="125.00",
+                        payee_name=payload["payeeName"],
+                    )
+                )
+            finally:
+                event.remove(engine, "before_cursor_execute", count)
+            self.assertEqual(len(statements), 1)
+            self.assertIn("LIMIT", statements[0])
+            self.assertEqual([row["id"] for row in reviewed["candidates"]], expected[:10])
+            response = client.post("/api/expenses/duplicate-review", json=payload)
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json(), reviewed)
+            self.assertEqual(
+                client.post(
+                    "/api/expenses/duplicate-review",
+                    json={**payload, "providerPartyId": str(uuid4())},
+                ).status_code,
+                422,
+            )
+        self.assertEqual(len(self.expenses.list_expenses()["items"]), 24)
 
     def test_expense_link_limit_is_enforced_but_archival_remains_available(self):
         expense = expense_command(self.expenses, "record_expense", self.command())

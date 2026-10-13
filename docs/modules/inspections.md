@@ -20,7 +20,7 @@ Lease detail exposes inspection attention; missing evidence does not block recor
 
 ## Browser workflow boundary
 
-Inspection browser workflows cover template/checklist drafts, observations, acknowledgment/finalization, correction/comparison and evidence history. Acknowledgment uses exactly the walkthrough-active participants. Child deletion recovers original receipts; evidence recovery requires matching-byte reselection. Findings do not automatically become deposit deductions. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+Inspection browser workflows cover residential/office template/checklist drafts, observations, acknowledgment/finalization, correction/comparison and evidence history. Reports display their Space identity. Acknowledgment uses exactly the walkthrough-active participants. Child deletion recovers original receipts; evidence recovery requires matching-byte reselection. Active evidence includes a metadata/history link; unavailable content has no download action. Archived associations remain in selected file history. Findings do not automatically become deposit deductions; Finance explicitly selects finalized observations or reviewed comparisons. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
 
 ## Implementation map
 
@@ -38,10 +38,10 @@ Persistence identities below are read from the current models. Column definition
 
 ## Validation
 
-The following executable specifications are the starting point for focused validation. This documentation consolidation did not rerun them or establish feature completion.
+INSP-001 acceptance was completed on October 12, 2026. The [completed acceptance record](../archive/designs/INSP-001_DESIGN_COMPLETED_2026-10-12.md) records focused results, the validation matrix and check limitations.
 
 - [test_command_readiness.py](../../application/apps/server/app/modules/inspections/tests/test_command_readiness.py).
 - [test_contracts.py](../../application/apps/server/app/modules/inspections/tests/test_contracts.py).
 - [test_workflow.py](../../application/apps/server/app/modules/inspections/tests/test_workflow.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is recorded in [browser validation](../ui/validation.md).

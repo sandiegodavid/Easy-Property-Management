@@ -11,7 +11,15 @@ export function readResult<T>(response: { data?: T; error?: unknown; response: R
     throw new Error(normalizeApiError(response.response.status, response.error).message);
   return response.data;
 }
-export function Facts({ value, fields }: { value: unknown; fields: string[] }) {
+export function Facts({
+  value,
+  fields,
+  verbatim = false,
+}: {
+  value: unknown;
+  fields: string[];
+  verbatim?: boolean;
+}) {
   const values = record(value);
   return (
     <dl className="workflow-facts">
@@ -25,14 +33,24 @@ export function Facts({ value, fields }: { value: unknown; fields: string[] }) {
                 ? values[key]
                   ? "Yes"
                   : "No"
-                : scalar(values[key]).replaceAll("_", " ")}
+                : verbatim
+                  ? scalar(values[key])
+                  : scalar(values[key]).replaceAll("_", " ")}
           </dd>
         </div>
       ))}
     </dl>
   );
 }
-export function History({ kind, id }: { kind: string; id: string }) {
+export function History({
+  kind,
+  id,
+  snapshotFields,
+}: {
+  kind: string;
+  id: string;
+  snapshotFields?: string[];
+}) {
   const { scope } = useWorkspace();
   const [open, setOpen] = useState(false);
   const [offset, setOffset] = useState(0);
@@ -62,21 +80,24 @@ export function History({ kind, id }: { kind: string; id: string }) {
               <summary>{phase === "before" ? "Prior facts" : "Resulting facts"}</summary>
               <Facts
                 value={event[phase]}
+                verbatim={!!snapshotFields}
                 fields={Object.keys(record(event[phase])).filter((key) =>
-                  [
-                    "displayName",
-                    "status",
-                    "archivedAt",
-                    "archiveReason",
-                    "ownerKind",
-                    "startsOn",
-                    "endsOn",
-                    "effectiveOn",
-                    "ownershipContext",
-                    "occupancyStatus",
-                    "availabilityStatus",
-                    "note",
-                  ].includes(key),
+                  (
+                    snapshotFields ?? [
+                      "displayName",
+                      "status",
+                      "archivedAt",
+                      "archiveReason",
+                      "ownerKind",
+                      "startsOn",
+                      "endsOn",
+                      "effectiveOn",
+                      "ownershipContext",
+                      "occupancyStatus",
+                      "availabilityStatus",
+                      "note",
+                    ]
+                  ).includes(key),
                 )}
               />
               {Array.isArray(record(event[phase]).ownerships) &&

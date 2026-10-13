@@ -28,7 +28,9 @@ DASH-001's [lease attention reader](../../application/apps/server/app/modules/le
 
 ## Browser workflow boundary
 
-Lease browser workflows cover draft/participants/terms, execution, renewal, termination negotiation/completion and move-out with independent Lease/Space revision checks. Rent setup remains an explicit Finance step; Inspection failure does not hide the Lease. Bounded directory continuations retain filters on changed-view restart. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+Lease browser workflows cover residential/commercial drafts, participants, USD rent/deposit terms, execution, renewal, termination negotiation/completion and move-out with independent Lease/Space revision checks. Milestones distinguish contractual dates from physical occupancy. Current Space status is a separate bounded read with its own unavailable state; its failure does not hide Lease facts. Inspection attention remains in the existing related-inspections section. Rent setup remains an explicit Finance step. Bounded directory continuations retain filters on changed-view restart.
+
+Lease and termination-case document panels open the shared, context-bound FILE-001 upload form. Unfinished forms require the original bytes to be reselected; interrupted responses reconcile the original operation instead of uploading again. Upload completion returns to Lease detail without changing its revision or lifecycle. Active unavailable documents remain visible without a download action; metadata/history is fetched only when selected and retains archived associations. Termination detail displays request explanations, proposal versions, fees, conditions, access arrangements and decision dates without inferring an agreement or move-out. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md).
 
 ## Implementation map
 
@@ -45,9 +47,10 @@ Persistence identities below are read from the current models. Column definition
 
 ## Validation
 
-The following executable specifications are the starting point for focused validation. This documentation consolidation did not rerun them or establish feature completion.
+LEASE-001 acceptance was completed on October 12, 2026. The [completed acceptance record](../archive/designs/LEASE-001_DESIGN_COMPLETED_2026-10-12.md) contains the focused validation matrix and command results. Executable specifications:
 
 - [test_command_readiness.py](../../application/apps/server/app/modules/leases/tests/test_command_readiness.py).
 - [test_leases.py](../../application/apps/server/app/modules/leases/tests/test_leases.py).
+- [leasing-inspections.spec.ts](../../application/apps/web/tests/leasing-inspections.spec.ts).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Browser acceptance is recorded in [browser validation](../ui/validation.md). Separate Inspection and Finance backlog acceptance remains in [active work](../active/README.md).

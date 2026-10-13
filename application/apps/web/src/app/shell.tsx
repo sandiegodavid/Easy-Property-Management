@@ -283,6 +283,7 @@ export function ApplicationShell() {
                     ))}
                     <Route path="workspace" element={<PendingPage title="Workspace settings" />} />
                     <Route path="ai" element={<AiGovernanceSettings />} />
+                    <Route path="provider-categories" element={<ProviderWorkspace catalogOnly />} />
                   </>
                 )}
               </Route>

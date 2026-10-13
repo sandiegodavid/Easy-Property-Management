@@ -1,14 +1,22 @@
 import { record, scalar } from "@epm/contracts/workflows";
 import { label } from "./fields";
 
-export function cents(value: number | string): string {
+export function cents(value: number | string | bigint): string {
   const amount = BigInt(value),
     negative = amount < 0n,
     absolute = negative ? -amount : amount;
   return `${negative ? "-" : ""}${absolute / 100n}.${String(absolute % 100n).padStart(2, "0")}`;
 }
 
-export function MoneyFacts({ value, fields }: { value: unknown; fields: string[] }) {
+export function MoneyFacts({
+  value,
+  fields,
+  labels,
+}: {
+  value: unknown;
+  fields: string[];
+  labels?: Record<string, string>;
+}) {
   const item = record(value);
   return (
     <dl className="workflow-facts">
@@ -16,7 +24,7 @@ export function MoneyFacts({ value, fields }: { value: unknown; fields: string[]
         .filter((key) => key in item)
         .map((key) => (
           <div key={key}>
-            <dt>{label(key)}</dt>
+            <dt>{labels?.[key] ?? label(key)}</dt>
             <dd>
               {item[key] == null
                 ? "Not recorded"
@@ -32,7 +40,10 @@ export function MoneyFacts({ value, fields }: { value: unknown; fields: string[]
                         ? item[key]
                             .filter((value): value is string => typeof value === "string")
                             .join("; ") || "None"
-                        : scalar(item[key]).replaceAll("_", " ")}
+                        : /(?:Status|Kind)$/.test(key) ||
+                            ["status", "paymentFrequency", "decision"].includes(key)
+                          ? scalar(item[key]).replaceAll("_", " ")
+                          : scalar(item[key])}
             </dd>
           </div>
         ))}

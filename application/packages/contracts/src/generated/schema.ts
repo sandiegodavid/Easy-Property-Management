@@ -724,6 +724,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/expenses/duplicate-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Duplicates */
+        post: operations["reviewExpenseDuplicates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/expenses/{expense_id}": {
         parameters: {
             query?: never;
@@ -1120,6 +1137,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/intake/sources/{source_id}/revisions/{revision_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evidence Revision */
+        get: operations["getIntakeEvidenceRevision"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/intake/sources/{source_id}/supersede": {
         parameters: {
             query?: never;
@@ -1378,6 +1412,23 @@ export interface paths {
         head?: never;
         /** Decide Renewal */
         patch: operations["leaseDecideRenewal"];
+        trace?: never;
+    };
+    "/api/leases/{lease_id}/rent-expectations/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Schedule */
+        post: operations["previewRentExpectations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/leases/{lease_id}/rent-expectations/synchronize": {
@@ -2065,6 +2116,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/operator/home": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Home */
+        get: operations["getOperatorHome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/operator/home/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Attention */
+        get: operations["getOperatorHomeAttention"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/operator/home/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Items */
+        get: operations["getOperatorHomeItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/operator/operations/{key}": {
         parameters: {
             query?: never;
@@ -2591,6 +2693,23 @@ export interface paths {
         };
         /** Operation By Id */
         get: operations["getPartyOperation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/parties/selection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Selection */
+        get: operations["selectParties"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4022,6 +4141,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/security-deposits/{account_id}/deduction-source-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Source Preview */
+        get: operations["previewSecurityDepositDeductionSource"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/security-deposits/{account_id}/receipts": {
         parameters: {
             query?: never;
@@ -5208,6 +5344,19 @@ export interface components {
              */
             startsAtUtc: string;
         };
+        /** AppointmentSource */
+        AppointmentSource: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "maintenance_appointment";
+        };
         /** AppointmentSummaryResponse */
         AppointmentSummaryResponse: {
             /**
@@ -5528,6 +5677,27 @@ export interface components {
             /** Reason */
             reason: string;
         };
+        /** AttentionReason */
+        AttentionReason: {
+            /** At */
+            at?: string | null;
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "emergency" | "urgent" | "overdue" | "due_today" | "follow_up_due" | "reminder_due" | "undated" | "unresolved" | "pending_verification" | "lease_review" | "continued_occupancy" | "outcome_review" | "waiting" | "follow_up_unscheduled" | "scheduled" | "missing_required" | "needs_review";
+            /** On */
+            on?: string | null;
+            /**
+             * Priority
+             * @enum {string}
+             */
+            priority: "urgent" | "overdue" | "today" | "review" | "waiting" | "future" | "information";
+            /** Source */
+            source: components["schemas"]["TaskSource"] | components["schemas"]["RentSource"] | components["schemas"]["IssueSource"] | components["schemas"]["ReportSource"] | components["schemas"]["ConcernSource"] | components["schemas"]["LeaseSource"] | components["schemas"]["AppointmentSource"] | components["schemas"]["CoverageSource"];
+            /** Timezone */
+            timeZone?: string | null;
+        };
         /** AttentionReasonResponse */
         AttentionReasonResponse: {
             /**
@@ -5537,19 +5707,6 @@ export interface components {
             code: "occupancy_unknown" | "availability_unknown" | "source_conflict" | "missing_status_record";
             /** Resolution */
             resolution: string;
-        };
-        /** AttentionResponse */
-        AttentionResponse: {
-            /**
-             * Postmoveout
-             * @enum {string}
-             */
-            postMoveOut: "complete" | "due" | "not_due";
-            /**
-             * Premovein
-             * @enum {string}
-             */
-            preMoveIn: "complete" | "due" | "overdue" | "not_due";
         };
         /** AvailabilityMutationRequest */
         AvailabilityMutationRequest: {
@@ -5621,6 +5778,55 @@ export interface components {
              * Format: date-time
              */
             updatedAt: string;
+        };
+        /** AvailableCollection */
+        AvailableCollection: {
+            capture: components["schemas"]["Capture"];
+            collection: components["schemas"]["Collection"];
+            /** Items */
+            items: components["schemas"]["HomeItem"][];
+            /** Matchingtotal */
+            matchingTotal: number;
+            /** Nextcursor */
+            nextCursor?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "available";
+            viewAllTarget: components["schemas"]["CollectionTarget"];
+        };
+        /** AvailableInventory */
+        AvailableInventory: {
+            capture: components["schemas"]["Capture"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "available";
+            unknown: components["schemas"]["InventoryCount"];
+            vacant: components["schemas"]["InventoryCount"];
+        };
+        /** AvailableMoney */
+        AvailableMoney: {
+            capture: components["schemas"]["Capture"];
+            /**
+             * Fromon
+             * Format: date
+             */
+            fromOn: string;
+            /** Metrics */
+            metrics: components["schemas"]["MoneyMetric"][];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "available";
+            /**
+             * Throughon
+             * Format: date
+             */
+            throughOn: string;
         };
         /** Body_attachConditionEvidence */
         Body_attachConditionEvidence: {
@@ -5703,6 +5909,32 @@ export interface components {
             /** Workspaceid */
             workspaceId: string | null;
         };
+        /** Capture */
+        Capture: {
+            /**
+             * Asof
+             * Format: date-time
+             */
+            asOf: string;
+            /** Checkedat */
+            checkedAt?: string | null;
+            /**
+             * Freshness
+             * @enum {string}
+             */
+            freshness: "checked" | "checking" | "stale" | "unavailable";
+            /** Generationid */
+            generationId?: string | null;
+            /** Nexttransitionat */
+            nextTransitionAt?: string | null;
+            /**
+             * Readmode
+             * @enum {string}
+             */
+            readMode: "live" | "snapshot";
+            /** Sourcerevision */
+            sourceRevision: string;
+        };
         /** CategoryAssignmentInput */
         CategoryAssignmentInput: {
             /**
@@ -5778,6 +6010,39 @@ export interface components {
              */
             updatedAt: string;
         };
+        /** ChildPreview */
+        ChildPreview: {
+            /**
+             * Childcount
+             * @default 0
+             */
+            childCount: number;
+            /**
+             * Children
+             * @default []
+             */
+            children: components["schemas"]["ChildPreview"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "task" | "reminder";
+            /**
+             * Reasons
+             * @default []
+             */
+            reasons: components["schemas"]["AttentionReason"][];
+            /** Sourcerevision */
+            sourceRevision?: string | null;
+            /** Sourcestatus */
+            sourceStatus?: string | null;
+            target: components["schemas"]["SourceTarget"];
+        };
         /** CleanupAttentionResponse */
         CleanupAttentionResponse: {
             /**
@@ -5792,6 +6057,61 @@ export interface components {
             provider: "local" | "s3";
             /** Publicationid */
             publicationId: string;
+        };
+        /**
+         * Collection
+         * @enum {string}
+         */
+        Collection: "needs_action" | "waiting" | "upcoming" | "appointments" | "information_review";
+        /** CollectionResponse */
+        CollectionResponse: {
+            /**
+             * Asof
+             * Format: date-time
+             */
+            asOf: string;
+            /**
+             * Contractversion
+             * @default 1
+             * @constant
+             */
+            contractVersion: 1;
+            /** Nexttransitionat */
+            nextTransitionAt?: string | null;
+            /** Result */
+            result: components["schemas"]["AvailableCollection"] | components["schemas"]["UnavailableCollection"];
+            /**
+             * Runtimeepoch
+             * Format: uuid
+             */
+            runtimeEpoch: string;
+            scope: components["schemas"]["HomeScope"];
+            /** Sourcerevision */
+            sourceRevision: string;
+            /** Supportedsources */
+            supportedSources: components["schemas"]["SourceKind"][];
+            /**
+             * Workspaceid
+             * Format: uuid
+             */
+            workspaceId: string;
+        };
+        /** CollectionTarget */
+        CollectionTarget: {
+            collection: components["schemas"]["Collection"];
+            /**
+             * Horizondays
+             * @default 7
+             * @enum {integer}
+             */
+            horizonDays: 7 | 30 | 90;
+            /**
+             * Kind
+             * @default home_collection
+             * @constant
+             */
+            kind: "home_collection";
+            scope: components["schemas"]["HomeScope"];
         };
         /** CommandConflictDetail */
         CommandConflictDetail: {
@@ -6732,6 +7052,19 @@ export interface components {
             sourceRevision: string | null;
             viewAll: components["schemas"]["ContextTarget"];
         };
+        /** ConcernSource */
+        ConcernSource: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "owner_concern";
+        };
         /** ConcernSummaryResponse */
         ConcernSummaryResponse: {
             /** Activefollowupcount */
@@ -7536,6 +7869,29 @@ export interface components {
             sourceRevision: string | null;
             viewAll: components["schemas"]["ContextTarget"];
         };
+        /** CoverageSource */
+        CoverageSource: {
+            /**
+             * Area
+             * @enum {string}
+             */
+            area: "occupancy" | "lease" | "rent" | "deposit" | "maintenance";
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "coverage";
+            /**
+             * Subjectkind
+             * @enum {string}
+             */
+            subjectKind: "property" | "space";
+        };
         /** CoverageTarget */
         CoverageTarget: {
             /**
@@ -8014,6 +8370,25 @@ export interface components {
              * Format: uuid
              */
             operationId: string;
+            /** Outstandingamount */
+            outstandingAmount: string | null;
+            /**
+             * Sourceid
+             * Format: uuid
+             */
+            sourceId: string;
+            /**
+             * Sourcekind
+             * @enum {string}
+             */
+            sourceKind: "inspection_comparison" | "inspection_observation" | "rent_expectation" | "expense";
+            /** Sourcesummary */
+            sourceSummary: string;
+        };
+        /** DeductionSourcePreviewResponse */
+        DeductionSourcePreviewResponse: {
+            /** Active */
+            active: boolean;
             /** Outstandingamount */
             outstandingAmount: string | null;
             /**
@@ -8956,6 +9331,88 @@ export interface components {
              */
             verifiedAt: string;
         };
+        /**
+         * EvidenceDetailResponse
+         * @description Audited exact revision; source lifecycle fields remain current facts.
+         */
+        EvidenceDetailResponse: {
+            /** Attachmentcount */
+            attachmentCount: number;
+            /** Attachments */
+            attachments: components["schemas"]["AttachmentResponse"][];
+            /** Attachmentstruncated */
+            attachmentsTruncated: boolean;
+            /**
+             * Attentionstatus
+             * @enum {string}
+             */
+            attentionStatus: "unprocessed" | "in_review" | "resolved" | "dismissed";
+            /**
+             * Channel
+             * @enum {string}
+             */
+            channel: "email" | "sms" | "chat" | "internal" | "voice";
+            /** Comparisonavailable */
+            comparisonAvailable: boolean;
+            /** Correctionreason */
+            correctionReason: string | null;
+            evidence: components["schemas"]["app__modules__intake__api__responses__EvidenceResponse"];
+            /**
+             * Evidencerevisionid
+             * Format: uuid
+             */
+            evidenceRevisionId: string;
+            /** Failurecode */
+            failureCode: "attachment_content_unavailable" | null;
+            /** Fingerprint */
+            fingerprint: string | null;
+            /** History */
+            history: components["schemas"]["EvidenceRevisionResponse"][];
+            /** Historytruncated */
+            historyTruncated: boolean;
+            /** Occurredatutc */
+            occurredAtUtc: string;
+            provenance: components["schemas"]["ProvenanceResponse"];
+            /** Receivedatutc */
+            receivedAtUtc: string;
+            /**
+             * Revision
+             * Format: uuid
+             */
+            revision: string;
+            /** Revisioncreatedat */
+            revisionCreatedAt: string;
+            /**
+             * Revisionkind
+             * @enum {string}
+             */
+            revisionKind: "submitted" | "operator_correction" | "transcript_revision";
+            /** Revisionnumber */
+            revisionNumber: number;
+            /**
+             * Sourceid
+             * Format: uuid
+             */
+            sourceId: string;
+            /**
+             * Sourcekind
+             * @enum {string}
+             */
+            sourceKind: "email_message" | "sms_message" | "chat_message" | "operator_note" | "voice_transcript";
+            /** Sourcerevision */
+            sourceRevision: number;
+            /** Supersededbysourceid */
+            supersededBySourceId: string | null;
+            /** Supersedessourceid */
+            supersedesSourceId: string | null;
+            /**
+             * Technicalstatus
+             * @enum {string}
+             */
+            technicalStatus: "ready" | "failed" | "superseded";
+            /** Updatedat */
+            updatedAt: string;
+        };
         /** EvidenceLinkResponse */
         EvidenceLinkResponse: {
             /** Archivereason */
@@ -9170,6 +9627,8 @@ export interface components {
              * Format: uuid
              */
             spaceId: string;
+            /** Timelinessreviews */
+            timelinessReviews: components["schemas"]["TimelinessReviewResponse"][];
             /** Timelinessstatus */
             timelinessStatus: ("upcoming" | "due" | "late" | "missed" | "paid_on_time" | "paid_late") | null;
             /** Voidreason */
@@ -9272,6 +9731,8 @@ export interface components {
              * Format: uuid
              */
             spaceId: string;
+            /** Timelinessreviews */
+            timelinessReviews: components["schemas"]["TimelinessReviewResponse"][];
             /** Timelinessstatus */
             timelinessStatus: ("upcoming" | "due" | "late" | "missed" | "paid_on_time" | "paid_late") | null;
             /** Voidreason */
@@ -9361,6 +9822,30 @@ export interface components {
             paidOn: string;
             /** Payeename */
             payeeName: string;
+        };
+        /** ExpenseDuplicateReviewInput */
+        ExpenseDuplicateReviewInput: {
+            /** Amount */
+            amount: string;
+            /**
+             * Paidon
+             * Format: date
+             */
+            paidOn: string;
+            /** Payeename */
+            payeeName?: string | null;
+            /**
+             * Propertyid
+             * Format: uuid
+             */
+            propertyId: string;
+            /** Providerpartyid */
+            providerPartyId?: string | null;
+        };
+        /** ExpenseDuplicateReviewResponse */
+        ExpenseDuplicateReviewResponse: {
+            /** Candidates */
+            candidates: components["schemas"]["ExpenseDuplicateCandidate"][];
         };
         /** ExpenseInput */
         ExpenseInput: {
@@ -9727,6 +10212,8 @@ export interface components {
             propertyId: string;
             /** Spaceid */
             spaceId: string | null;
+            /** Voidedat */
+            voidedAt?: string | null;
         };
         /** ExpenseVoidInput */
         ExpenseVoidInput: {
@@ -10265,10 +10752,156 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** GroupLink */
+        GroupLink: {
+            /**
+             * Childid
+             * Format: uuid
+             */
+            childId: string;
+            /** Parent */
+            parent: components["schemas"]["TaskSource"] | components["schemas"]["RentSource"] | components["schemas"]["IssueSource"] | components["schemas"]["ReportSource"] | components["schemas"]["ConcernSource"] | components["schemas"]["LeaseSource"] | components["schemas"]["AppointmentSource"] | components["schemas"]["CoverageSource"];
+            /**
+             * Relation
+             * @enum {string}
+             */
+            relation: "issue_follow_up" | "concern_follow_up" | "task_reminder";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HomeAction */
+        HomeAction: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "review_task" | "record_payment" | "review_issue" | "review_report" | "review_concern" | "review_lease" | "review_appointment" | "review_coverage";
+            target: components["schemas"]["SourceTarget"];
+        };
+        /** HomeErrorResponse */
+        HomeErrorResponse: {
+            detail: components["schemas"]["HomeProblem"];
+        };
+        /** HomeItem */
+        HomeItem: {
+            /**
+             * Childcount
+             * @default 0
+             */
+            childCount: number;
+            childDetailTarget?: components["schemas"]["SourceTarget"] | null;
+            /**
+             * Children
+             * @default []
+             */
+            children: components["schemas"]["ChildPreview"][];
+            collection: components["schemas"]["Collection"];
+            /** Currency */
+            currency?: "USD" | null;
+            followUp?: components["schemas"]["TemporalFact"] | null;
+            /**
+             * Grouplinks
+             * @default []
+             */
+            groupLinks: components["schemas"]["GroupLink"][];
+            /** Key */
+            key: string;
+            nextAction: components["schemas"]["HomeAction"];
+            /** Outstandingminor */
+            outstandingMinor?: number | null;
+            /**
+             * Propertyarchived
+             * @default false
+             */
+            propertyArchived: boolean;
+            /** Propertyid */
+            propertyId?: string | null;
+            /** Propertyname */
+            propertyName?: string | null;
+            provenance: components["schemas"]["Provenance"];
+            /** Reasons */
+            reasons: components["schemas"]["AttentionReason"][];
+            relatedSource?: components["schemas"]["RelatedSourceContext"] | null;
+            /** Source */
+            source: components["schemas"]["TaskSource"] | components["schemas"]["RentSource"] | components["schemas"]["IssueSource"] | components["schemas"]["ReportSource"] | components["schemas"]["ConcernSource"] | components["schemas"]["LeaseSource"] | components["schemas"]["AppointmentSource"] | components["schemas"]["CoverageSource"];
+            sourceDeadline?: components["schemas"]["TemporalFact"] | null;
+            /** Sourcerevision */
+            sourceRevision: string;
+            /** Sourcestatus */
+            sourceStatus: string;
+            /** Spaceid */
+            spaceId?: string | null;
+            /** Spacename */
+            spaceName?: string | null;
+            taskDeadline?: components["schemas"]["TemporalFact"] | null;
+            /** Title */
+            title: string;
+        };
+        /** HomeProblem */
+        HomeProblem: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
+        /** HomeResponse */
+        HomeResponse: {
+            /** Appointments */
+            appointments: components["schemas"]["AvailableCollection"] | components["schemas"]["UnavailableCollection"];
+            /**
+             * Asof
+             * Format: date-time
+             */
+            asOf: string;
+            /**
+             * Contractversion
+             * @default 1
+             * @constant
+             */
+            contractVersion: 1;
+            /** Informationreview */
+            informationReview: components["schemas"]["AvailableCollection"] | components["schemas"]["UnavailableCollection"];
+            /** Inventory */
+            inventory: components["schemas"]["AvailableInventory"] | components["schemas"]["UnavailableSummary"];
+            /** Money */
+            money: components["schemas"]["AvailableMoney"] | components["schemas"]["UnavailableSummary"];
+            /** Needsaction */
+            needsAction: components["schemas"]["AvailableCollection"] | components["schemas"]["UnavailableCollection"];
+            /** Nexttransitionat */
+            nextTransitionAt?: string | null;
+            /**
+             * Runtimeepoch
+             * Format: uuid
+             */
+            runtimeEpoch: string;
+            scope: components["schemas"]["HomeScope"];
+            /** Sourcerevision */
+            sourceRevision: string;
+            /** Supportedsources */
+            supportedSources: components["schemas"]["SourceKind"][];
+            /** Upcoming */
+            upcoming: components["schemas"]["AvailableCollection"] | components["schemas"]["UnavailableCollection"];
+            /** Waiting */
+            waiting: components["schemas"]["AvailableCollection"] | components["schemas"]["UnavailableCollection"];
+            /**
+             * Workspaceid
+             * Format: uuid
+             */
+            workspaceId: string;
+        };
+        /** HomeScope */
+        HomeScope: {
+            /**
+             * Kind
+             * @default portfolio
+             * @enum {string}
+             */
+            kind: "portfolio" | "property";
+            /** Propertyid */
+            propertyId?: string | null;
         };
         /** IdentityArchiveRequest */
         IdentityArchiveRequest: {
@@ -10371,6 +11004,12 @@ export interface components {
         InventoryConflictResponse: {
             detail: components["schemas"]["InventoryConflictDetail"];
         };
+        /** InventoryCount */
+        InventoryCount: {
+            /** Count */
+            count: number;
+            target: components["schemas"]["InventoryTarget"];
+        };
         /** InventoryOperationReceipt */
         InventoryOperationReceipt: {
             /**
@@ -10415,6 +11054,27 @@ export interface components {
             expectedPropertyRevision: number;
             /** Idempotencykey */
             idempotencyKey: string;
+        };
+        /** InventoryTarget */
+        InventoryTarget: {
+            /**
+             * Kind
+             * @default inventory
+             * @constant
+             */
+            kind: "inventory";
+            /**
+             * Occupancy
+             * @enum {string}
+             */
+            occupancy: "vacant" | "unknown";
+            /**
+             * Propertystate
+             * @default active
+             * @constant
+             */
+            propertyState: "active";
+            scope: components["schemas"]["HomeScope"];
         };
         /** IssueCommandResponse */
         IssueCommandResponse: {
@@ -10743,6 +11403,19 @@ export interface components {
             /** Sourcerevision */
             sourceRevision: string | null;
             viewAll: components["schemas"]["ContextTarget"];
+        };
+        /** IssueSource */
+        IssueSource: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "maintenance_issue";
         };
         /** IssueSummaryResponse */
         IssueSummaryResponse: {
@@ -11297,6 +11970,19 @@ export interface components {
             sourceRevision: string | null;
             viewAll: components["schemas"]["ContextTarget"];
         };
+        /** LeaseSource */
+        LeaseSource: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "lease";
+        };
         /** LeaseTermResponse */
         LeaseTermResponse: {
             /** Agreedsecuritydepositminor */
@@ -11625,6 +12311,20 @@ export interface components {
              */
             updatedAt: string;
         };
+        /** MoneyMetric */
+        MoneyMetric: {
+            /** Amount */
+            amount: string;
+            /** Amountminor */
+            amountMinor: number;
+            /**
+             * Currency
+             * @default USD
+             * @constant
+             */
+            currency: "USD";
+            target: components["schemas"]["MoneyTarget"];
+        };
         /** MoneySection */
         MoneySection: {
             /**
@@ -11694,6 +12394,37 @@ export interface components {
             scope: components["schemas"]["Scope"];
             /** Source Revision */
             source_revision: string;
+        };
+        /** MoneyTarget */
+        MoneyTarget: {
+            /**
+             * Fromon
+             * Format: date
+             */
+            fromOn: string;
+            /**
+             * Kind
+             * @default money_metric
+             * @constant
+             */
+            kind: "money_metric";
+            /**
+             * Metric
+             * @enum {string}
+             */
+            metric: "rentReceived" | "expensesPaid" | "expenseRefundsReceived" | "netRecordedExpenses" | "operatingRemainder";
+            /**
+             * Propertystate
+             * @default all
+             * @constant
+             */
+            propertyState: "all";
+            scope: components["schemas"]["HomeScope"];
+            /**
+             * Throughon
+             * Format: date
+             */
+            throughOn: string;
         };
         /** MutationInput */
         MutationInput: {
@@ -12708,6 +13439,13 @@ export interface components {
              */
             idempotencyKey: string;
         };
+        /** PartySelectionPage */
+        PartySelectionPage: {
+            /** Items */
+            items: components["schemas"]["PartyState"][];
+            /** Nextcursor */
+            nextCursor: string | null;
+        };
         /** PartyState */
         PartyState: {
             /** Archivedat */
@@ -13424,6 +14162,18 @@ export interface components {
             status?: string | null;
             /** Timezone */
             timeZone?: string | null;
+        };
+        /** Provenance */
+        Provenance: {
+            /**
+             * Owner
+             * @enum {string}
+             */
+            owner: "tasks" | "finance" | "maintenance" | "owner_accounting" | "owner_management" | "leases" | "operator";
+            /** Recordedat */
+            recordedAt?: string | null;
+            /** Sourcerevision */
+            sourceRevision: string;
         };
         /** ProvenanceResponse */
         ProvenanceResponse: {
@@ -14278,6 +15028,13 @@ export interface components {
              */
             status: "active" | "archived";
         };
+        /** RelatedSourceContext */
+        RelatedSourceContext: {
+            /** Active */
+            active: boolean;
+            /** Source */
+            source: components["schemas"]["IssueSource"] | components["schemas"]["ConcernSource"];
+        };
         /** RelationshipItem */
         RelationshipItem: {
             /** Endson */
@@ -14437,6 +15194,19 @@ export interface components {
             /** Responsedueon */
             responseDueOn?: string | null;
         };
+        /** RentSource */
+        RentSource: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "rent_expectation";
+        };
         /** ReplaceAreasRequest */
         ReplaceAreasRequest: {
             /** Areas */
@@ -14594,7 +15364,7 @@ export interface components {
         };
         /** ReportListResponse */
         ReportListResponse: {
-            attention: components["schemas"]["AttentionResponse"];
+            attention: components["schemas"]["app__modules__inspections__api__router__AttentionResponse"];
             /** Reports */
             reports: components["schemas"]["ReportResponse"][];
             /** Revision */
@@ -14676,6 +15446,19 @@ export interface components {
              * Format: date
              */
             walkthroughOn: string;
+        };
+        /** ReportSource */
+        ReportSource: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "owner_rent_report";
         };
         /**
          * ReportStatus
@@ -14913,6 +15696,97 @@ export interface components {
             currentRevision: number;
             /** Message */
             message: string;
+        };
+        /** SchedulePreviewInput */
+        SchedulePreviewInput: {
+            /**
+             * Leasetermid
+             * Format: uuid
+             */
+            leaseTermId: string;
+            /**
+             * Overrideconfirmed
+             * @default false
+             */
+            overrideConfirmed: boolean;
+            /** Overridereason */
+            overrideReason?: string | null;
+            /** Responsibilityendsonoverride */
+            responsibilityEndsOnOverride?: string | null;
+            /** Scheduleanchoron */
+            scheduleAnchorOn?: string | null;
+            /**
+             * Throughon
+             * Format: date
+             */
+            throughOn: string;
+        };
+        /** SchedulePreviewItem */
+        SchedulePreviewItem: {
+            /**
+             * Dueon
+             * Format: date
+             */
+            dueOn: string;
+            /** Expectedamountminor */
+            expectedAmountMinor: number;
+            /** Isprorated */
+            isProrated: boolean;
+            /**
+             * Lifecyclestatus
+             * @enum {string}
+             */
+            lifecycleStatus: "active" | "voided";
+            /**
+             * Periodendson
+             * Format: date
+             */
+            periodEndsOn: string;
+            /**
+             * Periodstartson
+             * Format: date
+             */
+            periodStartsOn: string;
+            /** Prorationdenominatordays */
+            prorationDenominatorDays: number | null;
+            /** Prorationnumeratordays */
+            prorationNumeratorDays: number | null;
+            /** Responsibilityboundaryon */
+            responsibilityBoundaryOn: string | null;
+        };
+        /** SchedulePreviewResponse */
+        SchedulePreviewResponse: {
+            /** Actualmoveouton */
+            actualMoveOutOn: string | null;
+            /** Baserentminor */
+            baseRentMinor: number;
+            /** Existingitems */
+            existingItems: components["schemas"]["SchedulePreviewItem"][];
+            /** Items */
+            items: components["schemas"]["SchedulePreviewItem"][];
+            /**
+             * Paymentfrequency
+             * @enum {string}
+             */
+            paymentFrequency: "weekly" | "monthly";
+            /** Rentledgerrevision */
+            rentLedgerRevision: number;
+            /** Responsibilityendson */
+            responsibilityEndsOn: string | null;
+            /**
+             * Scheduleanchoron
+             * Format: date
+             */
+            scheduleAnchorOn: string;
+            /** Termendson */
+            termEndsOn: string | null;
+            /**
+             * Termstartson
+             * Format: date
+             */
+            termStartsOn: string;
+            /** Timezone */
+            timeZone: string;
         };
         /** Scope */
         Scope: {
@@ -15484,6 +16358,11 @@ export interface components {
             /** Subject */
             subject?: string | null;
         };
+        /**
+         * SourceKind
+         * @enum {string}
+         */
+        SourceKind: "task" | "rent_expectation" | "maintenance_issue" | "owner_rent_report" | "owner_concern" | "lease" | "maintenance_appointment" | "coverage";
         /** SourceMutationResponse */
         SourceMutationResponse: {
             /** Attachmentcount */
@@ -15606,6 +16485,17 @@ export interface components {
             technicalStatus: "ready" | "failed" | "superseded";
             /** Updatedat */
             updatedAt: string;
+        };
+        /** SourceTarget */
+        SourceTarget: {
+            /**
+             * Kind
+             * @default source
+             * @constant
+             */
+            kind: "source";
+            /** Source */
+            source: components["schemas"]["TaskSource"] | components["schemas"]["RentSource"] | components["schemas"]["IssueSource"] | components["schemas"]["ReportSource"] | components["schemas"]["ConcernSource"] | components["schemas"]["LeaseSource"] | components["schemas"]["AppointmentSource"] | components["schemas"]["CoverageSource"];
         };
         /** SpaceAddRequest */
         SpaceAddRequest: {
@@ -16443,8 +17333,23 @@ export interface components {
             sourceRevision: string | null;
             viewAll: components["schemas"]["ContextTarget"];
         };
+        /** TaskSource */
+        TaskSource: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "task";
+        };
         /** TaskSummaryCommandResponse */
         TaskSummaryCommandResponse: {
+            /** Deletedatutc */
+            deletedAtUtc?: string | null;
             /** Dueatutc */
             dueAtUtc: string | null;
             /** Duetimezone */
@@ -16613,6 +17518,18 @@ export interface components {
              * Format: date-time
              */
             updatedAt: string;
+        };
+        /**
+         * TemporalFact
+         * @description Dates are source facts, independent of the attention reason vocabulary.
+         */
+        TemporalFact: {
+            /** At */
+            at?: string | null;
+            /** On */
+            on?: string | null;
+            /** Timezone */
+            timeZone: string;
         };
         /** TenantCreateRequest */
         TenantCreateRequest: {
@@ -17223,6 +18140,31 @@ export interface components {
              */
             updatedAt: string;
         };
+        /** TimelinessReviewResponse */
+        TimelinessReviewResponse: {
+            /**
+             * Createdat
+             * Format: date-time
+             */
+            createdAt: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "mark_missed" | "clear_missed";
+            /**
+             * Expectationid
+             * Format: uuid
+             */
+            expectationId: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Reason */
+            reason: string;
+        };
         /** TransitionRequest */
         TransitionRequest: {
             /** Confirmed */
@@ -17250,6 +18192,36 @@ export interface components {
             code: "transport_host_rejected" | "transport_origin_rejected" | "transport_origin_required" | "transport_preflight_rejected";
             /** Message */
             message: string;
+        };
+        /** UnavailableCollection */
+        UnavailableCollection: {
+            capture: components["schemas"]["Capture"];
+            collection: components["schemas"]["Collection"];
+            /**
+             * Reasoncode
+             * @enum {string}
+             */
+            reasonCode: "source_unavailable" | "adapter_missing" | "source_contract_invalid";
+            retryTarget: components["schemas"]["CollectionTarget"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "unavailable";
+        };
+        /** UnavailableSummary */
+        UnavailableSummary: {
+            capture: components["schemas"]["Capture"];
+            /**
+             * Reasoncode
+             * @enum {string}
+             */
+            reasonCode: "source_unavailable" | "adapter_missing" | "source_contract_invalid";
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "unavailable";
         };
         /** ValidationError */
         ValidationError: {
@@ -17823,8 +18795,14 @@ export interface components {
         };
         /** EvidenceResponse */
         app__modules__finance__api__deposit_router__EvidenceResponse: {
+            /** Archivereason */
+            archiveReason: string | null;
             /** Archivedat */
             archivedAt: string | null;
+            /** Available */
+            available: boolean;
+            /** Contentsha256 */
+            contentSha256: string;
             /**
              * Createdat
              * Format: date-time
@@ -17835,8 +18813,26 @@ export interface components {
              * Format: uuid
              */
             fileId: string;
+            /**
+             * Linkid
+             * Format: uuid
+             */
+            linkId: string;
+            /** Mediatype */
+            mediaType: string;
+            /** Originalname */
+            originalName: string;
             /** Purpose */
             purpose: string;
+            /** Sizebytes */
+            sizeBytes: number;
+            /**
+             * Storagestate
+             * @enum {string}
+             */
+            storageState: "available" | "missing" | "quarantined";
+            /** Verifiedat */
+            verifiedAt: string | null;
         };
         /** ReceiptInput */
         app__modules__finance__api__deposit_router__ReceiptInput: {
@@ -18857,6 +19853,19 @@ export interface components {
             /** Sortorder */
             sortOrder: number;
         };
+        /** AttentionResponse */
+        app__modules__inspections__api__router__AttentionResponse: {
+            /**
+             * Postmoveout
+             * @enum {string}
+             */
+            postMoveOut: "complete" | "due" | "not_due";
+            /**
+             * Premovein
+             * @enum {string}
+             */
+            preMoveIn: "complete" | "due" | "overdue" | "not_due";
+        };
         /** CommandRecoveryResponse */
         app__modules__inspections__api__router__CommandRecoveryResponse: {
             /** Result */
@@ -19002,6 +20011,8 @@ export interface components {
         };
         /** TaskSummaryResponse */
         app__modules__maintenance__api__router__TaskSummaryResponse: {
+            /** Deletedatutc */
+            deletedAtUtc?: string | null;
             /** Dueatutc */
             dueAtUtc: string | null;
             /** Duetimezone */
@@ -19052,6 +20063,47 @@ export interface components {
             nextReviewOn?: string | null;
             /** Reason */
             reason: string;
+        };
+        /** AttentionResponse */
+        app__modules__operator__application__home_contracts__AttentionResponse: {
+            /**
+             * Asof
+             * Format: date-time
+             */
+            asOf: string;
+            /**
+             * Contractversion
+             * @default 1
+             * @constant
+             */
+            contractVersion: 1;
+            /** Needsaction */
+            needsAction: components["schemas"]["AvailableCollection"] | components["schemas"]["UnavailableCollection"];
+            /** Nexttransitionat */
+            nextTransitionAt?: string | null;
+            /** Prioritytotals */
+            priorityTotals?: {
+                [key: string]: number;
+            } | null;
+            /** Reasontotals */
+            reasonTotals?: {
+                [key: string]: number;
+            } | null;
+            /**
+             * Runtimeepoch
+             * Format: uuid
+             */
+            runtimeEpoch: string;
+            scope: components["schemas"]["HomeScope"];
+            /** Sourcerevision */
+            sourceRevision: string;
+            /** Supportedsources */
+            supportedSources: components["schemas"]["SourceKind"][];
+            /**
+             * Workspaceid
+             * Format: uuid
+             */
+            workspaceId: string;
         };
         /** PatchInput */
         app__modules__owner_accounting__api__router__PatchInput: {
@@ -22153,6 +23205,57 @@ export interface operations {
             };
         };
     };
+    reviewExpenseDuplicates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExpenseDuplicateReviewInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseDuplicateReviewResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpenseConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     getExpense: {
         parameters: {
             query?: never;
@@ -23411,6 +24514,56 @@ export interface operations {
             };
         };
     };
+    getIntakeEvidenceRevision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_id: string;
+                revision_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceDetailResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__modules__intake__api__responses__ConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     supersedeIntakeSource: {
         parameters: {
             query?: never;
@@ -24442,6 +25595,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LeaseConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    previewRentExpectations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                lease_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SchedulePreviewInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchedulePreviewResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
                 };
             };
             /** @description Validation Error */
@@ -26740,6 +27946,243 @@ export interface operations {
             };
         };
     };
+    getOperatorHome: {
+        parameters: {
+            query: {
+                propertyId?: string | null;
+                horizonDays?: 7 | 30 | 90;
+                fromOn: string;
+                throughOn: string;
+                limitPerSection?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+        };
+    };
+    getOperatorHomeAttention: {
+        parameters: {
+            query?: {
+                propertyId?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__modules__operator__application__home_contracts__AttentionResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+        };
+    };
+    getOperatorHomeItems: {
+        parameters: {
+            query: {
+                propertyId?: string | null;
+                horizonDays?: 7 | 30 | 90;
+                collection: components["schemas"]["Collection"];
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollectionResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+        };
+    };
     getOperatorOperation: {
         parameters: {
             query?: never;
@@ -28502,6 +29945,49 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PartyMutationResponse"] | components["schemas"]["ContactMutationResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    selectParties: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                includeArchived?: boolean;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartySelectionPage"];
                 };
             };
             /** @description Local transport rejected. */
@@ -33325,6 +34811,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DepositResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepositConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    previewSecurityDepositDeductionSource: {
+        parameters: {
+            query: {
+                sourceKind: "inspection_comparison" | "inspection_observation" | "rent_expectation" | "expense";
+                sourceId: string;
+            };
+            header?: never;
+            path: {
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeductionSourcePreviewResponse"];
                 };
             };
             /** @description Local transport rejected. */

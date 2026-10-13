@@ -113,9 +113,55 @@ test("search failure is independent and stale continuations restart with filters
   await expect(group.getByRole("link")).toHaveAttribute("href", `/properties/${item.id}/overview`);
   await group.getByRole("button", { name: "Next properties results" }).click();
   await expect(group.getByRole("alert")).toBeVisible();
+  const restarted = page.waitForRequest((entry) => {
+    const url = new URL(entry.url());
+    return (
+      url.pathname === "/api/operator/search" &&
+      url.searchParams.get("group") === "properties" &&
+      !url.searchParams.has("cursor")
+    );
+  });
+  const restartedResponse = page.waitForResponse((entry) => {
+    const url = new URL(entry.url());
+    return (
+      url.pathname === "/api/operator/search" &&
+      url.searchParams.get("group") === "properties" &&
+      !url.searchParams.has("cursor")
+    );
+  });
   await group.getByRole("button", { name: "Restart group" }).click();
+  const fresh = new URL((await restarted).url());
+  await restartedResponse;
+  expect(fresh.searchParams.get("q")).toBe("Search54 independent");
+  expect(fresh.searchParams.get("includeArchived")).toBe("true");
   await expect(page.getByLabel("Search metadata")).toHaveValue("Search54 independent");
   await expect(page.getByLabel("Include archived records")).toBeChecked();
+});
+
+test("archived metadata remains opt-in and opens the retained contextual record", async ({
+  page,
+  request,
+}) => {
+  const item = await property(request, "Archived OPS acceptance property");
+  const archived = await request.post(`/api/properties/${item.id}/archive`, {
+    data: {
+      confirmed: true,
+      expectedPropertyRevision: item.propertyRevision,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(archived.ok(), await archived.text()).toBe(true);
+  await page.goto("/search?q=Archived%20OPS%20acceptance%20property");
+  const group = page.getByRole("region", { name: "properties search results" });
+  await expect(group).toContainText("0 matches");
+  await page.getByLabel("Include archived records").click();
+  await expect(page.getByLabel("Include archived records")).toBeChecked();
+  await expect(group).toContainText("1 matches");
+  await expect(group).toContainText("Archived");
+  await group.getByRole("link", { name: "Archived OPS acceptance property", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Archived OPS acceptance property", exact: true }),
+  ).toBeVisible();
 });
 
 test("maintenance review commits a source-bound receipt and dirty forms resume", async ({

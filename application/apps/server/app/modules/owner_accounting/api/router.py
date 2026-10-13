@@ -291,7 +291,7 @@ def build_router(service: OwnerRentReportService, runtime):
         receivedFrom: date | None = None,
         receivedTo: date | None = None,
         status: ReportStatus | None = None,
-        hasEvidence: StrictBool | None = None,
+        hasEvidence: bool | None = None,
         receiptLifecycle: ReceiptLifecycle | None = None,
         cursor: str | None = None,
         pageSize: int = Query(100, ge=1, le=500),

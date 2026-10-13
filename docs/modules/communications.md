@@ -24,6 +24,10 @@ For original source snapshots use [Intake](intake.md). For reminder/waiting sema
 
 Manual conversation browser records expose recorded/corrected history and optional Task follow-up with source context. Retained evidence is reached separately under Conversations; recording an interaction does not send a message or approve an issue proposal. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
 
+The command review explicitly distinguishes drafts from recorded history and outbound records from sending. Active participant search returns at most 25 shared identities; no Tenant role is required. Each selected participant can use an active contact belonging to that identity, or omit the contact snapshot. Body/contact/correction privacy cues remain contextual. Typed source links are explicitly selected and server-validated; saved links display their preserved Property time zone and current owning-source context, including Intake replacement state.
+
+The timeline supports status, direction, channel, participant, Property/Space/Lease, typed-link, stored-local-date range and follow-up Task-status filters. Cursor selection remains server-owned and bounded; no per-row detail reads were added. Detail displays occurrence in the retained IANA zone, participant/contact snapshots, follow-up deadlines and correction lineage. Recorded entries are never silently edited, and a correction does not replace the original entry's Tasks. Lost command responses reconcile their original operation without recording another interaction or follow-up.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/communications/domain).
@@ -39,7 +43,7 @@ Persistence identities below are read from the current models. Column definition
 
 ## Validation
 
-The following executable specifications are the starting point for focused validation. This documentation consolidation did not rerun them or establish feature completion.
+COM-001 acceptance completed on October 13, 2026. The [completed acceptance record](../archive/designs/COM-001_DESIGN_COMPLETED_2026-10-13.md) records focused backend/browser results and limitations. Current browser review is in [communication-context.tsx](../../application/apps/web/src/workflows/communication-context.tsx), with lifecycle, contact/filter and recovery cases in [work.spec.ts](../../application/apps/web/tests/work.spec.ts).
 
 - [test_communications.py](../../application/apps/server/app/modules/communications/tests/test_communications.py).
 

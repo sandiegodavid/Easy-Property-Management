@@ -26,6 +26,14 @@ The [DASH-001 attention reader](../../application/apps/server/app/modules/owner_
 
 Owner-report browser verification requires explicit receipt-adoption or receipt-creation choice and current report plus ledger revisions. Conflicts preserve review notes; matching receipts are counted once. Statements/disbursements/fees retain separate delivery scopes. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
 
+Claim creation/edit review shows Property zone/current ownership choices, selected Party name/archive state and stored claim facts. Current Property ownership is not presented as historical eligibility: an ended Owner may be absent from that projection, while the server validates the retained identity's relationship on the payment date. Archived historical identities remain selectable by their contextual ID. No Owner Party is synthesized for Local operator ownership. Amounts display exact USD cents; pending/rejected claims create no income.
+
+Verification offers only active receipt choices matching the report's date, amount, recipient and immutable method snapshot from a bounded 100-receipt page. Finance rechecks compatibility, allocations and exclusive report linkage. Creation review shows reported/allocated/remaining totals and prevents unmatched allocation totals. A duplicate conflict supplies bounded receipt drill-down links and a separate explicit adoption review, never an independent-payment override. Lost verification responses reconcile the original operation without a second receipt or dispatch.
+
+Terminal correction starts a new report with predecessor Owner/date/method/source context prefilled; amount and report timestamp require fresh input. Detail links prior/replacement reports, the verified receipt and its successor. A verified predecessor's active receipt must be voided in Finance first; creation-mode verification prefills its exact replacement pointer. Report/evidence state refresh cannot erase the immutable committed-result view.
+
+Evidence is uploaded independently and reviewed through Files metadata. Contextual archive uses File-link revision, confirmation and reason; the server protects the last active available link on verified reports. Active and archived evidence/history remain distinct, and unavailable content cannot be opened. The report directory combines status, Owner/Property/Lease scope, received-date range, active-evidence and linked-receipt-lifecycle filters. HTTP evidence query booleans are parsed from URL values; command body booleans remain strict. Page reads stay set-based without row-by-row detail queries.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/owner_accounting/domain).
@@ -41,7 +49,7 @@ Persistence identities below are read from the current models. Column definition
 
 ## Validation
 
-The following executable specifications are the starting point for focused validation. This documentation consolidation did not rerun them or establish feature completion.
+OWNER-003 acceptance completed on October 13, 2026; see the [completed matrix](../archive/designs/OWNER-003_DESIGN_COMPLETED_2026-10-13.md). Browser review/filters are in [owner-report-context.tsx](../../application/apps/web/src/workflows/owner-report-context.tsx), coordinated verification in [money-command.tsx](../../application/apps/web/src/workflows/money-command.tsx), and real-workspace acceptance in [money.spec.ts](../../application/apps/web/tests/money.spec.ts).
 
 - [test_owner_accounting.py](../../application/apps/server/app/modules/owner_accounting/tests/test_owner_accounting.py).
 

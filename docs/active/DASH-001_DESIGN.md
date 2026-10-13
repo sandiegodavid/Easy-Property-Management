@@ -13,6 +13,8 @@ DASH-001 delivers Needs action, Waiting, Upcoming, appointments, information rev
 
 ## Existing implementation and required extensions
 
+OWNER-004's concern source workflow completed October 13, 2026. By the confirmed scope decision, its Home owner-action/concern presentation remains here, not an open OWNER-004 gate. Compose its existing attention reader with typed source drill-down, explicit follow-up waiting and independent section availability; verify terminal concerns and active child Tasks separately. The Home placeholder remains until DASH-001 browser acceptance is delivered. See [completed source acceptance](../archive/designs/OWNER-004_DESIGN_COMPLETED_2026-10-13.md).
+
 | Boundary | Verified implementation | DASH-001 work |
 | --- | --- | --- |
 | Browser Home | `application/apps/web/src/shared/home.tsx` explicitly renders unavailable Home plus Task links. | Replace placeholder only when real contracts and adapters are ready. Reuse existing frontend workflows. |

@@ -3,7 +3,7 @@
 from dataclasses import asdict, dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Protocol
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from app.modules.parties.application.ports import (
     PartyReadOperations,
@@ -476,6 +476,30 @@ class PartyIdentityService:
             parties = [item for item in parties if item.archived_at is not None]
         methods = self.party_reads.methods_for_parties([item.id for item in parties])
         return [(item, methods.get(item.id, [])) for item in parties]
+
+    def selection(self, *, include_archived=False, search=None, cursor=None, limit=25):
+        if type(include_archived) is not bool or type(limit) is not int or not 1 <= limit <= 100:
+            raise PartyValidationError(
+                "Party selection requires a boolean archive flag and a limit from 1 through 100."
+            )
+        if cursor is not None:
+            try:
+                if str(UUID(cursor)) != cursor:
+                    raise ValueError
+            except (ValueError, TypeError, AttributeError) as error:
+                raise PartyValidationError(
+                    "Party selection cursor must be a canonical UUID."
+                ) from error
+        rows = self.party_reads.selection(
+            include_archived=include_archived,
+            search=_optional(search, "Search", 240),
+            cursor=cursor,
+            limit=limit + 1,
+        )
+        return {
+            "items": [item.identity_snapshot() for item in rows[:limit]],
+            "nextCursor": rows[limit - 1].id if len(rows) > limit else None,
+        }
 
     def active_roles(self, party_id: str) -> list[str]:
         return sorted(

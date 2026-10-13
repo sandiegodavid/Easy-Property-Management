@@ -1346,28 +1346,20 @@ class PortfolioService:
 
     def portfolio_status_summary(self) -> dict[str, object]:
         as_of = self._instant()
-        properties = self.list_properties(status="active", as_of=as_of)
-        summaries = [item["statusSummary"] for item in properties]
-        nearest_dates = [
-            item["nearestAvailableOn"]
-            for item in summaries
-            if item["nearestAvailableOn"] is not None
-        ]
-        return {
-            "activePropertyCount": len(properties),
-            "activeSpaceCount": sum(item["activeSpaceCount"] for item in summaries),
-            "occupiedCount": sum(item["occupiedCount"] for item in summaries),
-            "vacantCount": sum(item["vacantCount"] for item in summaries),
-            "unknownOccupancyCount": sum(item["unknownOccupancyCount"] for item in summaries),
-            "availableNowCount": sum(item["availableNowCount"] for item in summaries),
-            "availableLaterCount": sum(item["availableLaterCount"] for item in summaries),
-            "nearestAvailableOn": min(nearest_dates, default=None),
-            "needsAttentionSpaceCount": sum(item["needsAttentionCount"] for item in summaries),
-            "needsAttentionPropertyCount": sum(
-                bool(item["needsAttentionCount"]) for item in summaries
-            ),
-            "asOf": as_of.isoformat(),
+        counts = self.unit_of_work.read(lambda transaction: transaction.status_summary(as_of))
+        names = {
+            "activePropertyCount": "active_property_count",
+            "activeSpaceCount": "active_space_count",
+            "occupiedCount": "occupied_count",
+            "vacantCount": "vacant_count",
+            "unknownOccupancyCount": "unknown_occupancy_count",
+            "availableNowCount": "available_now_count",
+            "availableLaterCount": "available_later_count",
+            "nearestAvailableOn": "nearest_available_on",
+            "needsAttentionSpaceCount": "needs_attention_space_count",
+            "needsAttentionPropertyCount": "needs_attention_property_count",
         }
+        return {**{name: counts[key] for name, key in names.items()}, "asOf": as_of.isoformat()}
 
     def change_occupancy(
         self,

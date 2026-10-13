@@ -155,6 +155,23 @@ test("correction, dismissal, reopening and supersession retain source history", 
   await expect(page.getByRole("region", { name: "Source evidence detail" })).toContainText(
     "Clarify original testimony",
   );
+  await page.getByRole("button", { name: "Read retained revision 1", exact: true }).click();
+  const historical = page.getByRole("region", { name: "Selected retained evidence revision" });
+  await expect(historical).toContainText("Original evidence");
+  await expect(historical).not.toContainText("Corrected evidence");
+  await page.getByRole("button", { name: "Read retained revision 2", exact: true }).click();
+  await expect(historical).toContainText("Corrected evidence");
+  await page.route(
+    `**/api/intake/sources/${original.sourceId}/revisions/${original.evidenceRevisionId}`,
+    (route) =>
+      route.fulfill({
+        status: 503,
+        json: { detail: { code: "audit_unavailable", message: "Required revision audit failed" } },
+      }),
+  );
+  await page.getByRole("button", { name: "Read retained revision 1", exact: true }).click();
+  await expect(historical).toContainText("Revision evidence is withheld");
+  await expect(historical).not.toContainText("Original evidence");
   await page.getByRole("link", { name: "Open replacement source" }).click();
   await expect(page.getByRole("region", { name: "Source evidence detail" })).toContainText(
     "Replacement evidence",
@@ -226,6 +243,79 @@ test("a stale correction preserves edits and requires review of current source e
   const result = (await current.json()) as Schema["SourceDetailResponse"];
   expect(result.evidence.body).toBe("My retained correction");
   expect(result.revisions).toHaveLength(3);
+});
+
+test("retention does not create conversations; explicit source links preserve independent history", async ({
+  request,
+  page,
+}) => {
+  const before = (await (
+    await request.get("/api/communications?limit=100")
+  ).json()) as Schema["CommunicationPage"];
+  const original = await source(request, "Independent retained source");
+  const after = (await (
+    await request.get("/api/communications?limit=100")
+  ).json()) as Schema["CommunicationPage"];
+  expect(after.items.map((item) => item.id)).toEqual(before.items.map((item) => item.id));
+  const partyResponse = await request.post("/api/parties", {
+    data: {
+      partyKind: "individual",
+      displayName: "Intake source reporter",
+      contacts: [],
+      confirmedNewParty: true,
+      expectedRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(partyResponse.ok(), await partyResponse.text()).toBe(true);
+  const party = (await partyResponse.json()) as { id: string };
+  const response = await request.post("/api/communications", {
+    data: {
+      direction: "inbound",
+      channel: "email",
+      subject: "Explicit retained-source conversation",
+      body: "Operator recorded discussion, not copied source",
+      occurredAtUtc: occurred,
+      occurredTimezone: "America/Los_Angeles",
+      record: true,
+      participants: [{ partyId: party.id, role: "sender" }],
+      links: [{ entityType: "intake_source", entityId: original.sourceId }],
+      expectedRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+  const conversation = (await response.json()) as Schema["CommunicationReceiptResponse"];
+  const replacement = await request.post(`/api/intake/sources/${original.sourceId}/supersede`, {
+    data: {
+      sourceKind: "operator_note",
+      channel: "internal",
+      body: "Correct source identity",
+      occurredAtUtc: occurred,
+      originSystem: "local_operator",
+      expectedSourceRevision: original.sourceRevision,
+      expectedEvidenceRevisionId: original.evidenceRevisionId,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(replacement.ok(), await replacement.text()).toBe(true);
+  const successor = (await replacement.json()) as Schema["SourceMutationResponse"];
+  const current = (await (
+    await request.get(`/api/communications/${conversation.id}`)
+  ).json()) as Schema["CommunicationResponse"];
+  expect(current.body).toBe(conversation.body);
+  expect(current.revision).toBe(conversation.revision);
+  expect(current.links[0].entityId).toBe(original.sourceId);
+  expect(current.links[0].context).toMatchObject({
+    technicalStatus: "superseded",
+    isCurrent: false,
+    supersededBySourceId: successor.sourceId,
+  });
+  await page.goto(`/conversations?record=communication&id=${conversation.id}`);
+  await expect(
+    page.getByText("Operator recorded discussion, not copied source", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("superseded", { exact: true })).toBeVisible();
 });
 
 test("source directory continuation preserves filters without gaps or detail requests", async ({

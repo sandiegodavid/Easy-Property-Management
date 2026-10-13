@@ -5,9 +5,10 @@ from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from unittest.mock import patch
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from app.platform.testing_client import LocalApiClient as TestClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from app.bootstrap.api import create_app
 from app.modules.finance.api.deposit_router import DepositResponse
@@ -417,6 +418,42 @@ class PrepaidCommandTests(unittest.TestCase):
             self.finance.rent_ledger_revision(self.lease["id"])["rentLedgerRevision"], 4
         )
         validate_latest_schema(self.workspace.paths.database)
+
+    def test_check_eligibility_changes_at_property_midnight_without_writes(self):
+        zone = ZoneInfo("America/Los_Angeles")
+        received = self.instant.astimezone(zone).date()
+        dated = received + timedelta(days=1)
+        command = replace(
+            self.command, received_on=received.isoformat(), check_dated_on=dated.isoformat()
+        )
+        self.instant = datetime.combine(received, datetime.min.time(), zone).replace(hour=12)
+        check = self.prepaid.create(command, expected_revision=1)
+        self.assertEqual(check["depositEligibility"], "not_yet_eligible")
+        statements = []
+
+        def record_statement(_connection, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement.lstrip().split()[0].upper())
+
+        engine = self.prepaid.unit_of_work.engine
+        event.listen(engine, "before_cursor_execute", record_statement)
+        try:
+            midnight = datetime.combine(dated, datetime.min.time(), zone).astimezone(UTC)
+            self.instant = midnight - timedelta(microseconds=1)
+            self.assertEqual(
+                self.prepaid.get(check["id"])["depositEligibility"], "not_yet_eligible"
+            )
+            self.instant = midnight
+            current = self.prepaid.get(check["id"])
+            self.assertEqual(current["depositEligibility"], "eligible")
+            self.assertEqual(current["status"], "scheduled")
+            self.assertEqual(current["reminderStatus"], "pending")
+            self.assertIsNone(current["receiptId"])
+        finally:
+            event.remove(engine, "before_cursor_execute", record_statement)
+        self.assertFalse(set(statements) & {"INSERT", "UPDATE", "DELETE"})
+        self.assertEqual(
+            self.finance.rent_ledger_revision(self.lease["id"])["rentLedgerRevision"], 2
+        )
 
     def test_task_failure_rolls_back_check_and_ledger_reservation(self):
         with (

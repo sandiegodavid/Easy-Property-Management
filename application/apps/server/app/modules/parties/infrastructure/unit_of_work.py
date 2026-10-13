@@ -2,8 +2,9 @@
 
 from collections.abc import Callable
 from typing import Any, TypeVar
+from unicodedata import normalize
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
@@ -199,8 +200,26 @@ class SQLitePartyOperations(PartyTransactionOperations):
                 )
             return [_party(row) for row in session.execute(query).scalars()]
 
+    def selection(self, *, include_archived, search, cursor, limit):
+        query = select(PartyModel).order_by(PartyModel.id).limit(limit)
+        if not include_archived:
+            query = query.where(PartyModel.archived_at.is_(None))
+        if cursor is not None:
+            query = query.where(PartyModel.id > cursor)
+        if search:
+            query = query.where(
+                func.unicode_casefold(PartyModel.display_name).like(
+                    like_contains_pattern(normalize("NFKC", search).casefold()), escape="\\"
+                )
+            )
+        with Session(self.engine) as session:
+            return [_party(item) for item in session.execute(query).scalars()]
+
 
 class SQLitePartyReadOperations:
+    def selection(self, **filters):
+        return self.operations.selection(**filters)
+
     def __init__(self, operations: SQLitePartyOperations) -> None:
         self.operations = operations
 

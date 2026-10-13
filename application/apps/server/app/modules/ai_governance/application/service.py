@@ -1586,6 +1586,12 @@ class AiDraftReviewService:
         row = self.unit_of_work.approval_context_row(draft_id)
         if row is None:
             raise AiNotFoundError("AI draft was not found.")
+        if row["version"] != version or row["status"] not in {"proposed", "edited"}:
+            # Another caller may have committed after the initial receipt lookup.
+            # Recover its result before treating the now-current draft as a conflict.
+            replay = read_command_replay(self.unit_of_work, command)
+            if replay is not None:
+                return replay
         require_revision(command, row["version"], self._draft_view(row))
         if row["status"] not in {"proposed", "edited"}:
             raise AiConflictError("ai_draft_terminal")

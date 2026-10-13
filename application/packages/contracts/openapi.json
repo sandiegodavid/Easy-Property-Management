@@ -958,6 +958,27 @@
         "title": "AppointmentPatch",
         "type": "object"
       },
+      "AppointmentSource": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "maintenance_appointment",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "title": "AppointmentSource",
+        "type": "object"
+      },
       "AppointmentSummaryResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1820,6 +1841,133 @@
         "title": "AttentionInput",
         "type": "object"
       },
+      "AttentionReason": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "code": {
+            "enum": [
+              "emergency",
+              "urgent",
+              "overdue",
+              "due_today",
+              "follow_up_due",
+              "reminder_due",
+              "undated",
+              "unresolved",
+              "pending_verification",
+              "lease_review",
+              "continued_occupancy",
+              "outcome_review",
+              "waiting",
+              "follow_up_unscheduled",
+              "scheduled",
+              "missing_required",
+              "needs_review"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On"
+          },
+          "priority": {
+            "enum": [
+              "urgent",
+              "overdue",
+              "today",
+              "review",
+              "waiting",
+              "future",
+              "information"
+            ],
+            "title": "Priority",
+            "type": "string"
+          },
+          "source": {
+            "discriminator": {
+              "mapping": {
+                "coverage": "#/components/schemas/CoverageSource",
+                "lease": "#/components/schemas/LeaseSource",
+                "maintenance_appointment": "#/components/schemas/AppointmentSource",
+                "maintenance_issue": "#/components/schemas/IssueSource",
+                "owner_concern": "#/components/schemas/ConcernSource",
+                "owner_rent_report": "#/components/schemas/ReportSource",
+                "rent_expectation": "#/components/schemas/RentSource",
+                "task": "#/components/schemas/TaskSource"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TaskSource"
+              },
+              {
+                "$ref": "#/components/schemas/RentSource"
+              },
+              {
+                "$ref": "#/components/schemas/IssueSource"
+              },
+              {
+                "$ref": "#/components/schemas/ReportSource"
+              },
+              {
+                "$ref": "#/components/schemas/ConcernSource"
+              },
+              {
+                "$ref": "#/components/schemas/LeaseSource"
+              },
+              {
+                "$ref": "#/components/schemas/AppointmentSource"
+              },
+              {
+                "$ref": "#/components/schemas/CoverageSource"
+              }
+            ],
+            "title": "Source"
+          },
+          "timeZone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "required": [
+          "code",
+          "priority",
+          "source"
+        ],
+        "title": "AttentionReason",
+        "type": "object"
+      },
       "AttentionReasonResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1843,36 +1991,6 @@
           "resolution"
         ],
         "title": "AttentionReasonResponse",
-        "type": "object"
-      },
-      "AttentionResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "postMoveOut": {
-            "enum": [
-              "complete",
-              "due",
-              "not_due"
-            ],
-            "title": "Postmoveout",
-            "type": "string"
-          },
-          "preMoveIn": {
-            "enum": [
-              "complete",
-              "due",
-              "overdue",
-              "not_due"
-            ],
-            "title": "Premovein",
-            "type": "string"
-          }
-        },
-        "required": [
-          "preMoveIn",
-          "postMoveOut"
-        ],
-        "title": "AttentionResponse",
         "type": "object"
       },
       "AvailabilityMutationRequest": {
@@ -2102,6 +2220,129 @@
         "title": "AvailabilityResponse",
         "type": "object"
       },
+      "AvailableCollection": {
+        "additionalProperties": false,
+        "properties": {
+          "capture": {
+            "$ref": "#/components/schemas/Capture"
+          },
+          "collection": {
+            "$ref": "#/components/schemas/Collection"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HomeItem"
+            },
+            "maxItems": 100,
+            "title": "Items",
+            "type": "array"
+          },
+          "matchingTotal": {
+            "minimum": 0.0,
+            "title": "Matchingtotal",
+            "type": "integer"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          },
+          "status": {
+            "const": "available",
+            "default": "available",
+            "title": "Status",
+            "type": "string"
+          },
+          "viewAllTarget": {
+            "$ref": "#/components/schemas/CollectionTarget"
+          }
+        },
+        "required": [
+          "collection",
+          "capture",
+          "matchingTotal",
+          "items",
+          "viewAllTarget"
+        ],
+        "title": "AvailableCollection",
+        "type": "object"
+      },
+      "AvailableInventory": {
+        "additionalProperties": false,
+        "properties": {
+          "capture": {
+            "$ref": "#/components/schemas/Capture"
+          },
+          "status": {
+            "const": "available",
+            "default": "available",
+            "title": "Status",
+            "type": "string"
+          },
+          "unknown": {
+            "$ref": "#/components/schemas/InventoryCount"
+          },
+          "vacant": {
+            "$ref": "#/components/schemas/InventoryCount"
+          }
+        },
+        "required": [
+          "capture",
+          "vacant",
+          "unknown"
+        ],
+        "title": "AvailableInventory",
+        "type": "object"
+      },
+      "AvailableMoney": {
+        "additionalProperties": false,
+        "properties": {
+          "capture": {
+            "$ref": "#/components/schemas/Capture"
+          },
+          "fromOn": {
+            "format": "date",
+            "title": "Fromon",
+            "type": "string"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/MoneyMetric"
+            },
+            "maxItems": 5,
+            "minItems": 5,
+            "title": "Metrics",
+            "type": "array"
+          },
+          "status": {
+            "const": "available",
+            "default": "available",
+            "title": "Status",
+            "type": "string"
+          },
+          "throughOn": {
+            "format": "date",
+            "title": "Throughon",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capture",
+          "fromOn",
+          "throughOn",
+          "metrics"
+        ],
+        "title": "AvailableMoney",
+        "type": "object"
+      },
       "Body_attachConditionEvidence": {
         "properties": {
           "expected_revision": {
@@ -2315,6 +2556,84 @@
         "title": "BootstrapResponse",
         "type": "object"
       },
+      "Capture": {
+        "additionalProperties": false,
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "title": "Asof",
+            "type": "string"
+          },
+          "checkedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkedat"
+          },
+          "freshness": {
+            "enum": [
+              "checked",
+              "checking",
+              "stale",
+              "unavailable"
+            ],
+            "title": "Freshness",
+            "type": "string"
+          },
+          "generationId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generationid"
+          },
+          "nextTransitionAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nexttransitionat"
+          },
+          "readMode": {
+            "enum": [
+              "live",
+              "snapshot"
+            ],
+            "title": "Readmode",
+            "type": "string"
+          },
+          "sourceRevision": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Sourcerevision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asOf",
+          "sourceRevision",
+          "readMode",
+          "freshness"
+        ],
+        "title": "Capture",
+        "type": "object"
+      },
       "CategoryAssignmentInput": {
         "additionalProperties": false,
         "properties": {
@@ -2493,6 +2812,84 @@
         "title": "CategorySnapshotResponse",
         "type": "object"
       },
+      "ChildPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "childCount": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Childcount",
+            "type": "integer"
+          },
+          "children": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChildPreview"
+            },
+            "maxItems": 3,
+            "title": "Children",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "task",
+              "reminder"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reasons": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AttentionReason"
+            },
+            "maxItems": 32,
+            "title": "Reasons",
+            "type": "array"
+          },
+          "sourceRevision": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcerevision"
+          },
+          "sourceStatus": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sourcestatus"
+          },
+          "target": {
+            "$ref": "#/components/schemas/SourceTarget"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "target"
+        ],
+        "title": "ChildPreview",
+        "type": "object"
+      },
       "CleanupAttentionResponse": {
         "properties": {
           "openedAt": {
@@ -2521,6 +2918,133 @@
           "openedAt"
         ],
         "title": "CleanupAttentionResponse",
+        "type": "object"
+      },
+      "Collection": {
+        "enum": [
+          "needs_action",
+          "waiting",
+          "upcoming",
+          "appointments",
+          "information_review"
+        ],
+        "title": "Collection",
+        "type": "string"
+      },
+      "CollectionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "title": "Asof",
+            "type": "string"
+          },
+          "contractVersion": {
+            "const": 1,
+            "default": 1,
+            "title": "Contractversion",
+            "type": "integer"
+          },
+          "nextTransitionAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nexttransitionat"
+          },
+          "result": {
+            "discriminator": {
+              "mapping": {
+                "available": "#/components/schemas/AvailableCollection",
+                "unavailable": "#/components/schemas/UnavailableCollection"
+              },
+              "propertyName": "status"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AvailableCollection"
+              },
+              {
+                "$ref": "#/components/schemas/UnavailableCollection"
+              }
+            ],
+            "title": "Result"
+          },
+          "runtimeEpoch": {
+            "format": "uuid",
+            "title": "Runtimeepoch",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/HomeScope"
+          },
+          "sourceRevision": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Sourcerevision",
+            "type": "string"
+          },
+          "supportedSources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceKind"
+            },
+            "title": "Supportedsources",
+            "type": "array"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "title": "Workspaceid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "runtimeEpoch",
+          "scope",
+          "supportedSources",
+          "asOf",
+          "sourceRevision",
+          "result"
+        ],
+        "title": "CollectionResponse",
+        "type": "object"
+      },
+      "CollectionTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "collection": {
+            "$ref": "#/components/schemas/Collection"
+          },
+          "horizonDays": {
+            "default": 7,
+            "enum": [
+              7,
+              30,
+              90
+            ],
+            "title": "Horizondays",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "home_collection",
+            "default": "home_collection",
+            "title": "Kind",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/HomeScope"
+          }
+        },
+        "required": [
+          "collection",
+          "scope"
+        ],
+        "title": "CollectionTarget",
         "type": "object"
       },
       "CommandConflictDetail": {
@@ -5297,6 +5821,27 @@
         "title": "ConcernSection",
         "type": "object"
       },
+      "ConcernSource": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "owner_concern",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "title": "ConcernSource",
+        "type": "object"
+      },
       "ConcernSummaryResponse": {
         "additionalProperties": false,
         "properties": {
@@ -7620,6 +8165,48 @@
         "title": "CoverageSection",
         "type": "object"
       },
+      "CoverageSource": {
+        "additionalProperties": false,
+        "properties": {
+          "area": {
+            "enum": [
+              "occupancy",
+              "lease",
+              "rent",
+              "deposit",
+              "maintenance"
+            ],
+            "title": "Area",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "coverage",
+            "title": "Kind",
+            "type": "string"
+          },
+          "subjectKind": {
+            "enum": [
+              "property",
+              "space"
+            ],
+            "title": "Subjectkind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "subjectKind",
+          "area"
+        ],
+        "title": "CoverageSource",
+        "type": "object"
+      },
       "CoverageTarget": {
         "additionalProperties": false,
         "properties": {
@@ -7687,6 +8274,7 @@
             "anyOf": [
               {
                 "maxLength": 80,
+                "pattern": "^(?:[A-Za-z][A-Za-z ]{0,59} )?[\u2022*]{2,}(?:[ -]?[0-9]{1,4})?$",
                 "type": "string"
               },
               {
@@ -8912,6 +9500,54 @@
           "operationId"
         ],
         "title": "DeductionSourceMutationResponse",
+        "type": "object"
+      },
+      "DeductionSourcePreviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "outstandingAmount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outstandingamount"
+          },
+          "sourceId": {
+            "format": "uuid",
+            "title": "Sourceid",
+            "type": "string"
+          },
+          "sourceKind": {
+            "enum": [
+              "inspection_comparison",
+              "inspection_observation",
+              "rent_expectation",
+              "expense"
+            ],
+            "title": "Sourcekind",
+            "type": "string"
+          },
+          "sourceSummary": {
+            "title": "Sourcesummary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourceKind",
+          "sourceId",
+          "sourceSummary",
+          "active",
+          "outstandingAmount"
+        ],
+        "title": "DeductionSourcePreviewResponse",
         "type": "object"
       },
       "DeductionSourceResponse": {
@@ -11284,6 +11920,230 @@
         "title": "EvidenceCommandResponse",
         "type": "object"
       },
+      "EvidenceDetailResponse": {
+        "additionalProperties": false,
+        "description": "Audited exact revision; source lifecycle fields remain current facts.",
+        "properties": {
+          "attachmentCount": {
+            "minimum": 0.0,
+            "title": "Attachmentcount",
+            "type": "integer"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/AttachmentResponse"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
+          "attachmentsTruncated": {
+            "title": "Attachmentstruncated",
+            "type": "boolean"
+          },
+          "attentionStatus": {
+            "enum": [
+              "unprocessed",
+              "in_review",
+              "resolved",
+              "dismissed"
+            ],
+            "title": "Attentionstatus",
+            "type": "string"
+          },
+          "channel": {
+            "enum": [
+              "email",
+              "sms",
+              "chat",
+              "internal",
+              "voice"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "comparisonAvailable": {
+            "title": "Comparisonavailable",
+            "type": "boolean"
+          },
+          "correctionReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correctionreason"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/app__modules__intake__api__responses__EvidenceResponse"
+          },
+          "evidenceRevisionId": {
+            "format": "uuid",
+            "title": "Evidencerevisionid",
+            "type": "string"
+          },
+          "failureCode": {
+            "anyOf": [
+              {
+                "const": "attachment_content_unavailable",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failurecode"
+          },
+          "fingerprint": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fingerprint"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRevisionResponse"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "historyTruncated": {
+            "title": "Historytruncated",
+            "type": "boolean"
+          },
+          "occurredAtUtc": {
+            "title": "Occurredatutc",
+            "type": "string"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/ProvenanceResponse"
+          },
+          "receivedAtUtc": {
+            "title": "Receivedatutc",
+            "type": "string"
+          },
+          "revision": {
+            "format": "uuid",
+            "title": "Revision",
+            "type": "string"
+          },
+          "revisionCreatedAt": {
+            "title": "Revisioncreatedat",
+            "type": "string"
+          },
+          "revisionKind": {
+            "enum": [
+              "submitted",
+              "operator_correction",
+              "transcript_revision"
+            ],
+            "title": "Revisionkind",
+            "type": "string"
+          },
+          "revisionNumber": {
+            "minimum": 1.0,
+            "title": "Revisionnumber",
+            "type": "integer"
+          },
+          "sourceId": {
+            "format": "uuid",
+            "title": "Sourceid",
+            "type": "string"
+          },
+          "sourceKind": {
+            "enum": [
+              "email_message",
+              "sms_message",
+              "chat_message",
+              "operator_note",
+              "voice_transcript"
+            ],
+            "title": "Sourcekind",
+            "type": "string"
+          },
+          "sourceRevision": {
+            "minimum": 1.0,
+            "title": "Sourcerevision",
+            "type": "integer"
+          },
+          "supersededBySourceId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersededbysourceid"
+          },
+          "supersedesSourceId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedessourceid"
+          },
+          "technicalStatus": {
+            "enum": [
+              "ready",
+              "failed",
+              "superseded"
+            ],
+            "title": "Technicalstatus",
+            "type": "string"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourceId",
+          "sourceKind",
+          "channel",
+          "revision",
+          "sourceRevision",
+          "evidenceRevisionId",
+          "updatedAt",
+          "fingerprint",
+          "technicalStatus",
+          "failureCode",
+          "attentionStatus",
+          "occurredAtUtc",
+          "receivedAtUtc",
+          "supersedesSourceId",
+          "supersededBySourceId",
+          "provenance",
+          "attachmentCount",
+          "comparisonAvailable",
+          "revisionNumber",
+          "revisionKind",
+          "correctionReason",
+          "revisionCreatedAt",
+          "evidence",
+          "attachments",
+          "attachmentsTruncated",
+          "history",
+          "historyTruncated"
+        ],
+        "title": "EvidenceDetailResponse",
+        "type": "object"
+      },
       "EvidenceLinkResponse": {
         "additionalProperties": false,
         "properties": {
@@ -11743,6 +12603,13 @@
             "title": "Spaceid",
             "type": "string"
           },
+          "timelinessReviews": {
+            "items": {
+              "$ref": "#/components/schemas/TimelinessReviewResponse"
+            },
+            "title": "Timelinessreviews",
+            "type": "array"
+          },
           "timelinessStatus": {
             "anyOf": [
               {
@@ -11811,6 +12678,7 @@
           "settlementStatus",
           "timelinessStatus",
           "effectiveMissedReview",
+          "timelinessReviews",
           "allocationCount",
           "allocationSummaries",
           "receivedAmountMinor",
@@ -12015,6 +12883,13 @@
             "title": "Spaceid",
             "type": "string"
           },
+          "timelinessReviews": {
+            "items": {
+              "$ref": "#/components/schemas/TimelinessReviewResponse"
+            },
+            "title": "Timelinessreviews",
+            "type": "array"
+          },
           "timelinessStatus": {
             "anyOf": [
               {
@@ -12083,6 +12958,7 @@
           "settlementStatus",
           "timelinessStatus",
           "effectiveMissedReview",
+          "timelinessReviews",
           "allocationCount",
           "allocationSummaries",
           "receivedAmountMinor",
@@ -12306,6 +13182,76 @@
           "description"
         ],
         "title": "ExpenseDuplicateCandidate",
+        "type": "object"
+      },
+      "ExpenseDuplicateReviewInput": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "pattern": "^(?:0|[1-9][0-9]{0,7})\\.[0-9]{2}$",
+            "title": "Amount",
+            "type": "string"
+          },
+          "paidOn": {
+            "format": "date",
+            "title": "Paidon",
+            "type": "string"
+          },
+          "payeeName": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payeename"
+          },
+          "propertyId": {
+            "format": "uuid",
+            "title": "Propertyid",
+            "type": "string"
+          },
+          "providerPartyId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providerpartyid"
+          }
+        },
+        "required": [
+          "propertyId",
+          "paidOn",
+          "amount"
+        ],
+        "title": "ExpenseDuplicateReviewInput",
+        "type": "object"
+      },
+      "ExpenseDuplicateReviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ExpenseDuplicateCandidate"
+            },
+            "maxItems": 10,
+            "title": "Candidates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "candidates"
+        ],
+        "title": "ExpenseDuplicateReviewResponse",
         "type": "object"
       },
       "ExpenseInput": {
@@ -13273,6 +14219,18 @@
               }
             ],
             "title": "Spaceid"
+          },
+          "voidedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voidedat"
           }
         },
         "required": [
@@ -14647,6 +15605,74 @@
         "title": "FollowUpSummary",
         "type": "object"
       },
+      "GroupLink": {
+        "additionalProperties": false,
+        "properties": {
+          "childId": {
+            "format": "uuid",
+            "title": "Childid",
+            "type": "string"
+          },
+          "parent": {
+            "discriminator": {
+              "mapping": {
+                "coverage": "#/components/schemas/CoverageSource",
+                "lease": "#/components/schemas/LeaseSource",
+                "maintenance_appointment": "#/components/schemas/AppointmentSource",
+                "maintenance_issue": "#/components/schemas/IssueSource",
+                "owner_concern": "#/components/schemas/ConcernSource",
+                "owner_rent_report": "#/components/schemas/ReportSource",
+                "rent_expectation": "#/components/schemas/RentSource",
+                "task": "#/components/schemas/TaskSource"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TaskSource"
+              },
+              {
+                "$ref": "#/components/schemas/RentSource"
+              },
+              {
+                "$ref": "#/components/schemas/IssueSource"
+              },
+              {
+                "$ref": "#/components/schemas/ReportSource"
+              },
+              {
+                "$ref": "#/components/schemas/ConcernSource"
+              },
+              {
+                "$ref": "#/components/schemas/LeaseSource"
+              },
+              {
+                "$ref": "#/components/schemas/AppointmentSource"
+              },
+              {
+                "$ref": "#/components/schemas/CoverageSource"
+              }
+            ],
+            "title": "Parent"
+          },
+          "relation": {
+            "enum": [
+              "issue_follow_up",
+              "concern_follow_up",
+              "task_reminder"
+            ],
+            "title": "Relation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "relation",
+          "childId",
+          "parent"
+        ],
+        "title": "GroupLink",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -14658,6 +15684,546 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HomeAction": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "review_task",
+              "record_payment",
+              "review_issue",
+              "review_report",
+              "review_concern",
+              "review_lease",
+              "review_appointment",
+              "review_coverage"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/components/schemas/SourceTarget"
+          }
+        },
+        "required": [
+          "kind",
+          "target"
+        ],
+        "title": "HomeAction",
+        "type": "object"
+      },
+      "HomeErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/HomeProblem"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "HomeErrorResponse",
+        "type": "object"
+      },
+      "HomeItem": {
+        "additionalProperties": false,
+        "properties": {
+          "childCount": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Childcount",
+            "type": "integer"
+          },
+          "childDetailTarget": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "children": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ChildPreview"
+            },
+            "maxItems": 3,
+            "title": "Children",
+            "type": "array"
+          },
+          "collection": {
+            "$ref": "#/components/schemas/Collection"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "const": "USD",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "followUp": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TemporalFact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "groupLinks": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GroupLink"
+            },
+            "maxItems": 3,
+            "title": "Grouplinks",
+            "type": "array"
+          },
+          "key": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "nextAction": {
+            "$ref": "#/components/schemas/HomeAction"
+          },
+          "outstandingMinor": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outstandingminor"
+          },
+          "propertyArchived": {
+            "default": false,
+            "title": "Propertyarchived",
+            "type": "boolean"
+          },
+          "propertyId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Propertyid"
+          },
+          "propertyName": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Propertyname"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/Provenance"
+          },
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/AttentionReason"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Reasons",
+            "type": "array"
+          },
+          "relatedSource": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RelatedSourceContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "discriminator": {
+              "mapping": {
+                "coverage": "#/components/schemas/CoverageSource",
+                "lease": "#/components/schemas/LeaseSource",
+                "maintenance_appointment": "#/components/schemas/AppointmentSource",
+                "maintenance_issue": "#/components/schemas/IssueSource",
+                "owner_concern": "#/components/schemas/ConcernSource",
+                "owner_rent_report": "#/components/schemas/ReportSource",
+                "rent_expectation": "#/components/schemas/RentSource",
+                "task": "#/components/schemas/TaskSource"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TaskSource"
+              },
+              {
+                "$ref": "#/components/schemas/RentSource"
+              },
+              {
+                "$ref": "#/components/schemas/IssueSource"
+              },
+              {
+                "$ref": "#/components/schemas/ReportSource"
+              },
+              {
+                "$ref": "#/components/schemas/ConcernSource"
+              },
+              {
+                "$ref": "#/components/schemas/LeaseSource"
+              },
+              {
+                "$ref": "#/components/schemas/AppointmentSource"
+              },
+              {
+                "$ref": "#/components/schemas/CoverageSource"
+              }
+            ],
+            "title": "Source"
+          },
+          "sourceDeadline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TemporalFact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceRevision": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Sourcerevision",
+            "type": "string"
+          },
+          "sourceStatus": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Sourcestatus",
+            "type": "string"
+          },
+          "spaceId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spaceid"
+          },
+          "spaceName": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spacename"
+          },
+          "taskDeadline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TemporalFact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "source",
+          "sourceRevision",
+          "sourceStatus",
+          "title",
+          "collection",
+          "reasons",
+          "nextAction",
+          "provenance"
+        ],
+        "title": "HomeItem",
+        "type": "object"
+      },
+      "HomeProblem": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "HomeProblem",
+        "type": "object"
+      },
+      "HomeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "appointments": {
+            "discriminator": {
+              "mapping": {
+                "available": "#/components/schemas/AvailableCollection",
+                "unavailable": "#/components/schemas/UnavailableCollection"
+              },
+              "propertyName": "status"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AvailableCollection"
+              },
+              {
+                "$ref": "#/components/schemas/UnavailableCollection"
+              }
+            ],
+            "title": "Appointments"
+          },
+          "asOf": {
+            "format": "date-time",
+            "title": "Asof",
+            "type": "string"
+          },
+          "contractVersion": {
+            "const": 1,
+            "default": 1,
+            "title": "Contractversion",
+            "type": "integer"
+          },
+          "informationReview": {
+            "discriminator": {
+              "mapping": {
+                "available": "#/components/schemas/AvailableCollection",
+                "unavailable": "#/components/schemas/UnavailableCollection"
+              },
+              "propertyName": "status"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AvailableCollection"
+              },
+              {
+                "$ref": "#/components/schemas/UnavailableCollection"
+              }
+            ],
+            "title": "Informationreview"
+          },
+          "inventory": {
+            "discriminator": {
+              "mapping": {
+                "available": "#/components/schemas/AvailableInventory",
+                "unavailable": "#/components/schemas/UnavailableSummary"
+              },
+              "propertyName": "status"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AvailableInventory"
+              },
+              {
+                "$ref": "#/components/schemas/UnavailableSummary"
+              }
+            ],
+            "title": "Inventory"
+          },
+          "money": {
+            "discriminator": {
+              "mapping": {
+                "available": "#/components/schemas/AvailableMoney",
+                "unavailable": "#/components/schemas/UnavailableSummary"
+              },
+              "propertyName": "status"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AvailableMoney"
+              },
+              {
+                "$ref": "#/components/schemas/UnavailableSummary"
+              }
+            ],
+            "title": "Money"
+          },
+          "needsAction": {
+            "discriminator": {
+              "mapping": {
+                "available": "#/components/schemas/AvailableCollection",
+                "unavailable": "#/components/schemas/UnavailableCollection"
+              },
+              "propertyName": "status"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AvailableCollection"
+              },
+              {
+                "$ref": "#/components/schemas/UnavailableCollection"
+              }
+            ],
+            "title": "Needsaction"
+          },
+          "nextTransitionAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nexttransitionat"
+          },
+          "runtimeEpoch": {
+            "format": "uuid",
+            "title": "Runtimeepoch",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/HomeScope"
+          },
+          "sourceRevision": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Sourcerevision",
+            "type": "string"
+          },
+          "supportedSources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceKind"
+            },
+            "title": "Supportedsources",
+            "type": "array"
+          },
+          "upcoming": {
+            "discriminator": {
+              "mapping": {
+                "available": "#/components/schemas/AvailableCollection",
+                "unavailable": "#/components/schemas/UnavailableCollection"
+              },
+              "propertyName": "status"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AvailableCollection"
+              },
+              {
+                "$ref": "#/components/schemas/UnavailableCollection"
+              }
+            ],
+            "title": "Upcoming"
+          },
+          "waiting": {
+            "discriminator": {
+              "mapping": {
+                "available": "#/components/schemas/AvailableCollection",
+                "unavailable": "#/components/schemas/UnavailableCollection"
+              },
+              "propertyName": "status"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AvailableCollection"
+              },
+              {
+                "$ref": "#/components/schemas/UnavailableCollection"
+              }
+            ],
+            "title": "Waiting"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "title": "Workspaceid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "runtimeEpoch",
+          "asOf",
+          "sourceRevision",
+          "scope",
+          "supportedSources",
+          "needsAction",
+          "waiting",
+          "upcoming",
+          "appointments",
+          "informationReview",
+          "inventory",
+          "money"
+        ],
+        "title": "HomeResponse",
+        "type": "object"
+      },
+      "HomeScope": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "default": "portfolio",
+            "enum": [
+              "portfolio",
+              "property"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "propertyId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Propertyid"
+          }
+        },
+        "title": "HomeScope",
         "type": "object"
       },
       "IdentityArchiveRequest": {
@@ -14962,6 +16528,25 @@
         "title": "InventoryConflictResponse",
         "type": "object"
       },
+      "InventoryCount": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "minimum": 0.0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "target": {
+            "$ref": "#/components/schemas/InventoryTarget"
+          }
+        },
+        "required": [
+          "count",
+          "target"
+        ],
+        "title": "InventoryCount",
+        "type": "object"
+      },
       "InventoryOperationReceipt": {
         "additionalProperties": false,
         "properties": {
@@ -15066,6 +16651,40 @@
           "idempotencyKey"
         ],
         "title": "InventoryRequest",
+        "type": "object"
+      },
+      "InventoryTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "inventory",
+            "default": "inventory",
+            "title": "Kind",
+            "type": "string"
+          },
+          "occupancy": {
+            "enum": [
+              "vacant",
+              "unknown"
+            ],
+            "title": "Occupancy",
+            "type": "string"
+          },
+          "propertyState": {
+            "const": "active",
+            "default": "active",
+            "title": "Propertystate",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/HomeScope"
+          }
+        },
+        "required": [
+          "scope",
+          "occupancy"
+        ],
+        "title": "InventoryTarget",
         "type": "object"
       },
       "IssueCommandResponse": {
@@ -16031,6 +17650,27 @@
           "kind"
         ],
         "title": "IssueSection",
+        "type": "object"
+      },
+      "IssueSource": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "maintenance_issue",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "title": "IssueSource",
         "type": "object"
       },
       "IssueSummaryResponse": {
@@ -17497,6 +19137,27 @@
         "title": "LeaseSection",
         "type": "object"
       },
+      "LeaseSource": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "lease",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "title": "LeaseSource",
+        "type": "object"
+      },
       "LeaseTermResponse": {
         "additionalProperties": false,
         "properties": {
@@ -18323,6 +19984,36 @@
         "title": "ModelConnectionResponse",
         "type": "object"
       },
+      "MoneyMetric": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "pattern": "^-?[0-9]+\\.[0-9]{2}$",
+            "title": "Amount",
+            "type": "string"
+          },
+          "amountMinor": {
+            "title": "Amountminor",
+            "type": "integer"
+          },
+          "currency": {
+            "const": "USD",
+            "default": "USD",
+            "title": "Currency",
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/components/schemas/MoneyTarget"
+          }
+        },
+        "required": [
+          "amountMinor",
+          "amount",
+          "target"
+        ],
+        "title": "MoneyMetric",
+        "type": "object"
+      },
       "MoneySection": {
         "additionalProperties": false,
         "properties": {
@@ -18492,6 +20183,55 @@
           "metrics"
         ],
         "title": "MoneySummary",
+        "type": "object"
+      },
+      "MoneyTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "fromOn": {
+            "format": "date",
+            "title": "Fromon",
+            "type": "string"
+          },
+          "kind": {
+            "const": "money_metric",
+            "default": "money_metric",
+            "title": "Kind",
+            "type": "string"
+          },
+          "metric": {
+            "enum": [
+              "rentReceived",
+              "expensesPaid",
+              "expenseRefundsReceived",
+              "netRecordedExpenses",
+              "operatingRemainder"
+            ],
+            "title": "Metric",
+            "type": "string"
+          },
+          "propertyState": {
+            "const": "all",
+            "default": "all",
+            "title": "Propertystate",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/HomeScope"
+          },
+          "throughOn": {
+            "format": "date",
+            "title": "Throughon",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "metric",
+          "fromOn",
+          "throughOn"
+        ],
+        "title": "MoneyTarget",
         "type": "object"
       },
       "MutationInput": {
@@ -21467,6 +23207,36 @@
         "title": "PartyPatchRequest",
         "type": "object"
       },
+      "PartySelectionPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PartyState"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ],
+        "title": "PartySelectionPage",
+        "type": "object"
+      },
       "PartyState": {
         "additionalProperties": false,
         "properties": {
@@ -23706,6 +25476,48 @@
           "displayName"
         ],
         "title": "PropertySummaryResponse",
+        "type": "object"
+      },
+      "Provenance": {
+        "additionalProperties": false,
+        "properties": {
+          "owner": {
+            "enum": [
+              "tasks",
+              "finance",
+              "maintenance",
+              "owner_accounting",
+              "owner_management",
+              "leases",
+              "operator"
+            ],
+            "title": "Owner",
+            "type": "string"
+          },
+          "recordedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recordedat"
+          },
+          "sourceRevision": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Sourcerevision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "owner",
+          "sourceRevision"
+        ],
+        "title": "Provenance",
         "type": "object"
       },
       "ProvenanceResponse": {
@@ -26665,6 +28477,32 @@
         "title": "RelatedPropertyPreview",
         "type": "object"
       },
+      "RelatedSourceContext": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IssueSource"
+              },
+              {
+                "$ref": "#/components/schemas/ConcernSource"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "source",
+          "active"
+        ],
+        "title": "RelatedSourceContext",
+        "type": "object"
+      },
       "RelationshipItem": {
         "additionalProperties": false,
         "properties": {
@@ -27157,6 +28995,27 @@
         "title": "RenewalRequest",
         "type": "object"
       },
+      "RentSource": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "rent_expectation",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "title": "RentSource",
+        "type": "object"
+      },
       "ReplaceAreasRequest": {
         "additionalProperties": false,
         "properties": {
@@ -27217,6 +29076,7 @@
             "anyOf": [
               {
                 "maxLength": 80,
+                "pattern": "^(?:[A-Za-z][A-Za-z ]{0,59} )?[\u2022*]{2,}(?:[ -]?[0-9]{1,4})?$",
                 "type": "string"
               },
               {
@@ -27546,7 +29406,7 @@
         "additionalProperties": false,
         "properties": {
           "attention": {
-            "$ref": "#/components/schemas/AttentionResponse"
+            "$ref": "#/components/schemas/app__modules__inspections__api__router__AttentionResponse"
           },
           "reports": {
             "items": {
@@ -27807,6 +29667,27 @@
           "acknowledgmentComplete"
         ],
         "title": "ReportResponse",
+        "type": "object"
+      },
+      "ReportSource": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "owner_rent_report",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "title": "ReportSource",
         "type": "object"
       },
       "ReportStatus": {
@@ -28482,6 +30363,252 @@
           "currentAttentionStatus"
         ],
         "title": "RevisionConflictDetailResponse",
+        "type": "object"
+      },
+      "SchedulePreviewInput": {
+        "additionalProperties": false,
+        "properties": {
+          "leaseTermId": {
+            "format": "uuid",
+            "title": "Leasetermid",
+            "type": "string"
+          },
+          "overrideConfirmed": {
+            "default": false,
+            "title": "Overrideconfirmed",
+            "type": "boolean"
+          },
+          "overrideReason": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overridereason"
+          },
+          "responsibilityEndsOnOverride": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responsibilityendsonoverride"
+          },
+          "scheduleAnchorOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduleanchoron"
+          },
+          "throughOn": {
+            "format": "date",
+            "title": "Throughon",
+            "type": "string"
+          }
+        },
+        "required": [
+          "leaseTermId",
+          "throughOn"
+        ],
+        "title": "SchedulePreviewInput",
+        "type": "object"
+      },
+      "SchedulePreviewItem": {
+        "additionalProperties": false,
+        "properties": {
+          "dueOn": {
+            "format": "date",
+            "title": "Dueon",
+            "type": "string"
+          },
+          "expectedAmountMinor": {
+            "title": "Expectedamountminor",
+            "type": "integer"
+          },
+          "isProrated": {
+            "title": "Isprorated",
+            "type": "boolean"
+          },
+          "lifecycleStatus": {
+            "enum": [
+              "active",
+              "voided"
+            ],
+            "title": "Lifecyclestatus",
+            "type": "string"
+          },
+          "periodEndsOn": {
+            "format": "date",
+            "title": "Periodendson",
+            "type": "string"
+          },
+          "periodStartsOn": {
+            "format": "date",
+            "title": "Periodstartson",
+            "type": "string"
+          },
+          "prorationDenominatorDays": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prorationdenominatordays"
+          },
+          "prorationNumeratorDays": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prorationnumeratordays"
+          },
+          "responsibilityBoundaryOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responsibilityboundaryon"
+          }
+        },
+        "required": [
+          "lifecycleStatus",
+          "periodStartsOn",
+          "periodEndsOn",
+          "dueOn",
+          "expectedAmountMinor",
+          "isProrated",
+          "prorationNumeratorDays",
+          "prorationDenominatorDays",
+          "responsibilityBoundaryOn"
+        ],
+        "title": "SchedulePreviewItem",
+        "type": "object"
+      },
+      "SchedulePreviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "actualMoveOutOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actualmoveouton"
+          },
+          "baseRentMinor": {
+            "title": "Baserentminor",
+            "type": "integer"
+          },
+          "existingItems": {
+            "items": {
+              "$ref": "#/components/schemas/SchedulePreviewItem"
+            },
+            "title": "Existingitems",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SchedulePreviewItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "paymentFrequency": {
+            "enum": [
+              "weekly",
+              "monthly"
+            ],
+            "title": "Paymentfrequency",
+            "type": "string"
+          },
+          "rentLedgerRevision": {
+            "minimum": 0.0,
+            "title": "Rentledgerrevision",
+            "type": "integer"
+          },
+          "responsibilityEndsOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responsibilityendson"
+          },
+          "scheduleAnchorOn": {
+            "format": "date",
+            "title": "Scheduleanchoron",
+            "type": "string"
+          },
+          "termEndsOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Termendson"
+          },
+          "termStartsOn": {
+            "format": "date",
+            "title": "Termstartson",
+            "type": "string"
+          },
+          "timeZone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rentLedgerRevision",
+          "timeZone",
+          "termStartsOn",
+          "termEndsOn",
+          "responsibilityEndsOn",
+          "actualMoveOutOn",
+          "baseRentMinor",
+          "paymentFrequency",
+          "scheduleAnchorOn",
+          "items",
+          "existingItems"
+        ],
+        "title": "SchedulePreviewResponse",
         "type": "object"
       },
       "Scope": {
@@ -30252,6 +32379,20 @@
         "title": "SourceInput",
         "type": "object"
       },
+      "SourceKind": {
+        "enum": [
+          "task",
+          "rent_expectation",
+          "maintenance_issue",
+          "owner_rent_report",
+          "owner_concern",
+          "lease",
+          "maintenance_appointment",
+          "coverage"
+        ],
+        "title": "SourceKind",
+        "type": "string"
+      },
       "SourceMutationResponse": {
         "additionalProperties": false,
         "properties": {
@@ -30576,6 +32717,64 @@
           "comparisonAvailable"
         ],
         "title": "SourceSummaryResponse",
+        "type": "object"
+      },
+      "SourceTarget": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "source",
+            "default": "source",
+            "title": "Kind",
+            "type": "string"
+          },
+          "source": {
+            "discriminator": {
+              "mapping": {
+                "coverage": "#/components/schemas/CoverageSource",
+                "lease": "#/components/schemas/LeaseSource",
+                "maintenance_appointment": "#/components/schemas/AppointmentSource",
+                "maintenance_issue": "#/components/schemas/IssueSource",
+                "owner_concern": "#/components/schemas/ConcernSource",
+                "owner_rent_report": "#/components/schemas/ReportSource",
+                "rent_expectation": "#/components/schemas/RentSource",
+                "task": "#/components/schemas/TaskSource"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TaskSource"
+              },
+              {
+                "$ref": "#/components/schemas/RentSource"
+              },
+              {
+                "$ref": "#/components/schemas/IssueSource"
+              },
+              {
+                "$ref": "#/components/schemas/ReportSource"
+              },
+              {
+                "$ref": "#/components/schemas/ConcernSource"
+              },
+              {
+                "$ref": "#/components/schemas/LeaseSource"
+              },
+              {
+                "$ref": "#/components/schemas/AppointmentSource"
+              },
+              {
+                "$ref": "#/components/schemas/CoverageSource"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "SourceTarget",
         "type": "object"
       },
       "SpaceAddRequest": {
@@ -31771,10 +33970,10 @@
           }
         },
         "required": [
-          "expectedRevision",
-          "idempotencyKey",
           "leaseTermId",
-          "throughOn"
+          "throughOn",
+          "expectedRevision",
+          "idempotencyKey"
         ],
         "title": "SynchronizeInput",
         "type": "object"
@@ -33187,9 +35386,42 @@
         "title": "TaskSection",
         "type": "object"
       },
+      "TaskSource": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "task",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "title": "TaskSource",
+        "type": "object"
+      },
       "TaskSummaryCommandResponse": {
         "additionalProperties": false,
         "properties": {
+          "deletedAtUtc": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deletedatutc"
+          },
           "dueAtUtc": {
             "anyOf": [
               {
@@ -33639,6 +35871,45 @@
           "items"
         ],
         "title": "TemplateResponse",
+        "type": "object"
+      },
+      "TemporalFact": {
+        "additionalProperties": false,
+        "description": "Dates are source facts, independent of the attention reason vocabulary.",
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On"
+          },
+          "timeZone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timeZone"
+        ],
+        "title": "TemporalFact",
         "type": "object"
       },
       "TenantCreateRequest": {
@@ -35267,6 +37538,47 @@
         "title": "TimelineLeaseResponse",
         "type": "object"
       },
+      "TimelinessReviewResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAt": {
+            "format": "date-time",
+            "title": "Createdat",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "mark_missed",
+              "clear_missed"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "expectationId": {
+            "format": "uuid",
+            "title": "Expectationid",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "expectationId",
+          "decision",
+          "reason",
+          "createdAt"
+        ],
+        "title": "TimelinessReviewResponse",
+        "type": "object"
+      },
       "TransitionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -35342,6 +37654,72 @@
           "message"
         ],
         "title": "TransportProblem",
+        "type": "object"
+      },
+      "UnavailableCollection": {
+        "additionalProperties": false,
+        "properties": {
+          "capture": {
+            "$ref": "#/components/schemas/Capture"
+          },
+          "collection": {
+            "$ref": "#/components/schemas/Collection"
+          },
+          "reasonCode": {
+            "enum": [
+              "source_unavailable",
+              "adapter_missing",
+              "source_contract_invalid"
+            ],
+            "title": "Reasoncode",
+            "type": "string"
+          },
+          "retryTarget": {
+            "$ref": "#/components/schemas/CollectionTarget"
+          },
+          "status": {
+            "const": "unavailable",
+            "default": "unavailable",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "collection",
+          "capture",
+          "reasonCode",
+          "retryTarget"
+        ],
+        "title": "UnavailableCollection",
+        "type": "object"
+      },
+      "UnavailableSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "capture": {
+            "$ref": "#/components/schemas/Capture"
+          },
+          "reasonCode": {
+            "enum": [
+              "source_unavailable",
+              "adapter_missing",
+              "source_contract_invalid"
+            ],
+            "title": "Reasoncode",
+            "type": "string"
+          },
+          "status": {
+            "const": "unavailable",
+            "default": "unavailable",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capture",
+          "reasonCode"
+        ],
+        "title": "UnavailableSummary",
         "type": "object"
       },
       "ValidationError": {
@@ -37322,6 +39700,17 @@
       "app__modules__finance__api__deposit_router__EvidenceResponse": {
         "additionalProperties": false,
         "properties": {
+          "archiveReason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archivereason"
+          },
           "archivedAt": {
             "anyOf": [
               {
@@ -37334,6 +39723,14 @@
             ],
             "title": "Archivedat"
           },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "contentSha256": {
+            "title": "Contentsha256",
+            "type": "string"
+          },
           "createdAt": {
             "format": "date-time",
             "title": "Createdat",
@@ -37344,16 +39741,63 @@
             "title": "Fileid",
             "type": "string"
           },
+          "linkId": {
+            "format": "uuid",
+            "title": "Linkid",
+            "type": "string"
+          },
+          "mediaType": {
+            "title": "Mediatype",
+            "type": "string"
+          },
+          "originalName": {
+            "title": "Originalname",
+            "type": "string"
+          },
           "purpose": {
             "title": "Purpose",
             "type": "string"
+          },
+          "sizeBytes": {
+            "title": "Sizebytes",
+            "type": "integer"
+          },
+          "storageState": {
+            "enum": [
+              "available",
+              "missing",
+              "quarantined"
+            ],
+            "title": "Storagestate",
+            "type": "string"
+          },
+          "verifiedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verifiedat"
           }
         },
         "required": [
+          "linkId",
           "fileId",
           "purpose",
           "createdAt",
-          "archivedAt"
+          "archivedAt",
+          "archiveReason",
+          "originalName",
+          "mediaType",
+          "sizeBytes",
+          "contentSha256",
+          "storageState",
+          "available",
+          "verifiedAt"
         ],
         "title": "EvidenceResponse",
         "type": "object"
@@ -39458,6 +41902,7 @@
             "anyOf": [
               {
                 "maxLength": 80,
+                "pattern": "^(?:[A-Za-z][A-Za-z ]{0,59} )?[\u2022*]{2,}(?:[ -]?[0-9]{1,4})?$",
                 "type": "string"
               },
               {
@@ -40032,6 +42477,36 @@
         "title": "AreaResponse",
         "type": "object"
       },
+      "app__modules__inspections__api__router__AttentionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "postMoveOut": {
+            "enum": [
+              "complete",
+              "due",
+              "not_due"
+            ],
+            "title": "Postmoveout",
+            "type": "string"
+          },
+          "preMoveIn": {
+            "enum": [
+              "complete",
+              "due",
+              "overdue",
+              "not_due"
+            ],
+            "title": "Premovein",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preMoveIn",
+          "postMoveOut"
+        ],
+        "title": "AttentionResponse",
+        "type": "object"
+      },
       "app__modules__inspections__api__router__CommandRecoveryResponse": {
         "additionalProperties": false,
         "properties": {
@@ -40481,6 +42956,18 @@
       "app__modules__maintenance__api__router__TaskSummaryResponse": {
         "additionalProperties": false,
         "properties": {
+          "deletedAtUtc": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deletedatutc"
+          },
           "dueAtUtc": {
             "anyOf": [
               {
@@ -40608,6 +43095,146 @@
           "idempotencyKey"
         ],
         "title": "ReviewInput",
+        "type": "object"
+      },
+      "app__modules__operator__application__home_contracts__AttentionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "title": "Asof",
+            "type": "string"
+          },
+          "contractVersion": {
+            "const": 1,
+            "default": 1,
+            "title": "Contractversion",
+            "type": "integer"
+          },
+          "needsAction": {
+            "discriminator": {
+              "mapping": {
+                "available": "#/components/schemas/AvailableCollection",
+                "unavailable": "#/components/schemas/UnavailableCollection"
+              },
+              "propertyName": "status"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AvailableCollection"
+              },
+              {
+                "$ref": "#/components/schemas/UnavailableCollection"
+              }
+            ],
+            "title": "Needsaction"
+          },
+          "nextTransitionAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nexttransitionat"
+          },
+          "priorityTotals": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "propertyNames": {
+                  "enum": [
+                    "urgent",
+                    "overdue",
+                    "today",
+                    "review"
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prioritytotals"
+          },
+          "reasonTotals": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "propertyNames": {
+                  "enum": [
+                    "emergency",
+                    "urgent",
+                    "overdue",
+                    "due_today",
+                    "follow_up_due",
+                    "reminder_due",
+                    "undated",
+                    "unresolved",
+                    "pending_verification",
+                    "lease_review",
+                    "continued_occupancy",
+                    "outcome_review",
+                    "waiting",
+                    "follow_up_unscheduled",
+                    "scheduled",
+                    "missing_required",
+                    "needs_review"
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasontotals"
+          },
+          "runtimeEpoch": {
+            "format": "uuid",
+            "title": "Runtimeepoch",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/HomeScope"
+          },
+          "sourceRevision": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Sourcerevision",
+            "type": "string"
+          },
+          "supportedSources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceKind"
+            },
+            "title": "Supportedsources",
+            "type": "array"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "title": "Workspaceid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "runtimeEpoch",
+          "scope",
+          "asOf",
+          "sourceRevision",
+          "supportedSources",
+          "needsAction"
+        ],
+        "title": "AttentionResponse",
         "type": "object"
       },
       "app__modules__owner_accounting__api__router__PatchInput": {
@@ -45973,6 +48600,67 @@
         ]
       }
     },
+    "/api/expenses/duplicate-review": {
+      "post": {
+        "operationId": "reviewExpenseDuplicates",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpenseDuplicateReviewInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpenseDuplicateReviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpenseConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Duplicates",
+        "tags": [
+          "expenses"
+        ]
+      }
+    },
     "/api/expenses/{expense_id}": {
       "get": {
         "operationId": "getExpense",
@@ -47790,6 +50478,79 @@
         ]
       }
     },
+    "/api/intake/sources/{source_id}/revisions/{revision_id}": {
+      "get": {
+        "operationId": "getIntakeEvidenceRevision",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Revision Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__modules__intake__api__responses__ConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evidence Revision",
+        "tags": [
+          "intake"
+        ]
+      }
+    },
     "/api/intake/sources/{source_id}/supersede": {
       "post": {
         "operationId": "supersedeIntakeSource",
@@ -49371,6 +52132,79 @@
         "summary": "Decide Renewal",
         "tags": [
           "leases"
+        ]
+      }
+    },
+    "/api/leases/{lease_id}/rent-expectations/preview": {
+      "post": {
+        "operationId": "previewRentExpectations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lease_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Lease Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchedulePreviewInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchedulePreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Schedule",
+        "tags": [
+          "finance"
         ]
       }
     },
@@ -53174,6 +56008,418 @@
         ]
       }
     },
+    "/api/operator/home": {
+      "get": {
+        "operationId": "getOperatorHome",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "propertyId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Propertyid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "horizonDays",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "enum": [
+                7,
+                30,
+                90
+              ],
+              "title": "Horizondays",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fromOn",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Fromon",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "throughOn",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Throughon",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limitPerSection",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 10,
+              "minimum": 1,
+              "title": "Limitpersection",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Home",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
+    "/api/operator/home/attention": {
+      "get": {
+        "operationId": "getOperatorHomeAttention",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "propertyId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Propertyid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 10,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/app__modules__operator__application__home_contracts__AttentionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Attention",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
+    "/api/operator/home/items": {
+      "get": {
+        "operationId": "getOperatorHomeItems",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "propertyId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Propertyid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "horizonDays",
+            "required": false,
+            "schema": {
+              "default": 7,
+              "enum": [
+                7,
+                30,
+                90
+              ],
+              "title": "Horizondays",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "collection",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Collection"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Items",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
     "/api/operator/operations/{key}": {
       "get": {
         "operationId": "getOperatorOperation",
@@ -56392,6 +59638,104 @@
           }
         },
         "summary": "Operation By Id",
+        "tags": [
+          "parties"
+        ]
+      }
+    },
+    "/api/parties/selection": {
+      "get": {
+        "operationId": "selectParties",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "includeArchived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Includearchived",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartySelectionPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Selection",
         "tags": [
           "parties"
         ]
@@ -63972,6 +67316,94 @@
           }
         },
         "summary": "Account",
+        "tags": [
+          "security deposits"
+        ]
+      }
+    },
+    "/api/security-deposits/{account_id}/deduction-source-preview": {
+      "get": {
+        "operationId": "previewSecurityDepositDeductionSource",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "account_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Account Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sourceKind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "inspection_comparison",
+                "inspection_observation",
+                "rent_expectation",
+                "expense"
+              ],
+              "title": "Sourcekind",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sourceId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Sourceid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeductionSourcePreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepositConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Source Preview",
         "tags": [
           "security deposits"
         ]

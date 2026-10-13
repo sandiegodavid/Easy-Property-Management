@@ -61,7 +61,7 @@ def database_snapshot(context, *, source_audits_only=False):
                 connection.exec_driver_sql(
                     f"SELECT * FROM {table}"
                     + (
-                        " WHERE entity_type LIKE 'owner_concern%' OR entity_type LIKE 'task%'"
+                        " WHERE entity_type LIKE 'owner_concern%' OR entity_type LIKE 'task%' OR entity_type LIKE 'communication%'"
                         if table == "audit_events" and source_audits_only
                         else ""
                     )
@@ -73,6 +73,10 @@ def database_snapshot(context, *, source_audits_only=False):
                 "owner_concern_follow_up_operations",
                 "owner_concern_command_operations",
                 "tasks",
+                "communications",
+                "communication_participants",
+                "communication_links",
+                "communication_operations",
                 "audit_events",
             )
         }
@@ -613,12 +617,35 @@ def test_encrypted_backup_restores_original_results_and_evidence(context, tmp_pa
     )
     terminal = context.service.transition(
         created["id"],
-        "resolved",
+        "dismissed",
         confirmed=True,
         narrative="Done",
         expected_revision=3,
         idempotency_key=str(uuid4()),
     )
+    replacement = create_concern(
+        context, replaces_concern_id=created["id"], summary="Portable corrected concern"
+    )
+    config = tmp_path / "portable-config.json"
+    config.write_text(json.dumps({"localWorkspacePath": str(context.workspace.paths.root)}))
+    with TestClient(create_app(config)) as client:
+        communication = client.post(
+            "/api/communications",
+            json={
+                "direction": "inbound",
+                "channel": "phone",
+                "subject": "Portable Owner conversation",
+                "body": "Retained source discussion",
+                "occurredAtUtc": context.now.isoformat(),
+                "occurredTimezone": "America/Los_Angeles",
+                "participants": [{"partyId": context.owner.id, "role": "sender"}],
+                "links": [{"entityType": "owner_concern", "entityId": created["id"]}],
+                "record": True,
+                "expectedRevision": 0,
+                "idempotencyKey": str(uuid4()),
+            },
+        )
+        assert communication.status_code == 200, communication.text
     before = database_snapshot(context, source_audits_only=True)
     backups = BackupService(
         context.workspace,
@@ -644,10 +671,12 @@ def test_encrypted_backup_restores_original_results_and_evidence(context, tmp_pa
         ),
         now=lambda: context.now,
     )
-    for original in (created, patched, followed, terminal):
+    for original in (created, patched, followed, terminal, replacement):
         assert service.command_operation(original["operationId"]) == original
     with patch.object(context, "service", service):
         assert database_snapshot(context, source_audits_only=True) == before
+    assert service.get(created["id"])["linkedCommunicationCount"] == 1
+    assert service.get(created["id"])["successor"]["id"] == replacement["id"]
 
 
 def test_real_api_success_required_metadata_and_original_recovery(context, tmp_path):

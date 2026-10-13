@@ -92,7 +92,7 @@ test("AI draft detail separates governed input and blocks unsupported or stale a
     owningModule: "maintenance",
     updatedAt: "2026-10-12T12:00:00Z",
     draftPayload: { summary: "Suggested summary" },
-    confidence: null,
+    confidence: { label: "medium", provenance: "registered synthetic assessment" },
     governedInput: { description: "Bounded source text" },
     sourceRevision: "3",
     sourceFingerprint: "a".repeat(64),
@@ -124,15 +124,25 @@ test("AI draft detail separates governed input and blocks unsupported or stale a
       completionTokens: 8,
       correlationId: "00000000-0000-4000-8000-000000000093",
     },
-    supersedesDraftId: null,
+    supersedesDraftId: "00000000-0000-4000-8000-000000000090",
     createdAt: "2026-10-12T12:00:00Z",
     terminalAt: null,
   };
   await page.route(`**/api/ai/drafts/${id}`, (route) => route.fulfill({ json: draft }));
   await page.goto(`/ai/review/${id}`);
   await expect(page.getByRole("heading", { name: "Review AI draft" })).toBeVisible();
+  await expect(page.getByText("sha256:local", { exact: true })).toBeVisible();
+  await expect(page.getByText("runtime 1 · quantization Q4", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: draft.supersedesDraftId! })).toHaveAttribute(
+    "href",
+    `/ai/review/${draft.supersedesDraftId}`,
+  );
+  await page.getByText("Registered confidence and provenance", { exact: true }).click();
+  await expect(
+    page.locator("pre").filter({ hasText: "registered synthetic assessment" }),
+  ).toBeVisible();
   await page.getByText("Governed input sent for this draft").click();
-  await expect(page.locator("pre")).toContainText("Bounded source text");
+  await expect(page.locator("pre").filter({ hasText: "Bounded source text" })).toBeVisible();
   await expect(page.getByText(/available; changed/)).toBeVisible();
   await expect(page.getByText(/no owning-domain approval handler is registered/)).toBeVisible();
   await expect(page.getByRole("button", { name: /Approve through/ })).toHaveCount(0);
@@ -149,6 +159,21 @@ test("AI draft detail separates governed input and blocks unsupported or stale a
   await page.route(`**/api/ai/drafts/${id}/approve`, async (route) => {
     approvals += 1;
     expect([...recovery.values()].some((item) => item.status === "outcome_unknown")).toBe(true);
+    draft.status = "approved";
+    draft.terminalAt = "2026-10-12T12:05:00Z";
+    draft.reviewHistory = [
+      {
+        id: "00000000-0000-4000-8000-000000000094",
+        decision: "approved",
+        draftVersionBefore: draft.version,
+        draftVersionAfter: draft.version,
+        operatorNote: "Reviewed against current source",
+        resultEntityType: "maintenance_issue",
+        resultEntityId: "issue-91",
+        correlationId: draft.provenance.correlationId,
+        decidedAt: draft.terminalAt,
+      },
+    ];
     return route.fulfill({ json: { id } });
   });
   await page.route(`**/api/ai/drafts/${id}`, async (route) => {
@@ -190,8 +215,58 @@ test("AI draft detail separates governed input and blocks unsupported or stale a
   await review.check();
   await approve.click();
   await expect(page.getByText("The owning domain recorded the approved result.")).toBeVisible();
+  await expect(page.getByText("Recorded result: maintenance_issue · issue-91")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Approve through/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save draft edits" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Dismiss draft" })).toHaveCount(0);
+  await expect(payload).toBeDisabled();
   expect(approvals).toBe(1);
   expect(edits).toBe(1);
+});
+
+test("draft status and bounded continuation pages have truthful empty states and a reset", async ({
+  page,
+}) => {
+  const id = "00000000-0000-4000-8000-000000000095";
+  const requests: URL[] = [];
+  await page.route("**/api/ai/drafts?*", (route) => {
+    const url = new URL(route.request().url());
+    requests.push(url);
+    const first = !url.searchParams.has("cursor") && url.searchParams.get("status") === "proposed";
+    return route.fulfill({
+      json: {
+        items: first
+          ? [
+              {
+                id,
+                runId: "00000000-0000-4000-8000-000000000096",
+                entityKind: "summary",
+                actionType: "record.summary",
+                owningModule: "records",
+                sourceEntityType: "record",
+                sourceEntityId: "record-1",
+                version: 1,
+                status: "proposed",
+                updatedAt: "2026-10-12T12:00:00Z",
+              } satisfies Schema["DraftSummaryResponse"],
+            ]
+          : [],
+        nextCursor: first ? "opaque-next-page" : null,
+      },
+    });
+  });
+  await page.goto("/settings/ai");
+  await expect(page.getByRole("link", { name: "summary · record.summary" })).toBeVisible();
+  await page.getByRole("button", { name: "Next drafts" }).click();
+  await expect(page.getByText("No AI drafts match this status on this page.")).toBeVisible();
+  await page.getByRole("button", { name: "First drafts page" }).click();
+  await expect(page.getByRole("link", { name: "summary · record.summary" })).toBeVisible();
+  await page.getByLabel("Draft status").selectOption("approved");
+  await expect(page.getByText("No AI drafts match this status on this page.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "First drafts page" })).toHaveCount(0);
+  expect(requests.some((url) => url.searchParams.get("cursor") === "opaque-next-page")).toBe(true);
+  expect(requests.at(-1)?.searchParams.get("status")).toBe("approved");
+  expect(requests.every((url) => url.searchParams.get("pageSize") === "100")).toBe(true);
 });
 
 test("cloud setup records disclosure, keeps credentials write-only and never repeats an uncertain effect", async ({

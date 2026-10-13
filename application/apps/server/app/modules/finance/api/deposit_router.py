@@ -189,10 +189,19 @@ class ReceiptResponse(Contract):
 
 
 class EvidenceResponse(Contract):
+    linkId: UUID
     fileId: UUID
     purpose: str
     createdAt: AwareDatetime
     archivedAt: AwareDatetime | None
+    archiveReason: str | None
+    originalName: str
+    mediaType: str
+    sizeBytes: StrictInt
+    contentSha256: str
+    storageState: Literal["available", "missing", "quarantined"]
+    available: bool
+    verifiedAt: AwareDatetime | None
 
 
 class DeductionSourceResponse(Contract):
@@ -208,6 +217,16 @@ class DeductionSourceResponse(Contract):
     historicalReason: str | None
     duplicateUseConfirmed: bool
     createdAt: AwareDatetime
+
+
+class DeductionSourcePreviewResponse(Contract):
+    sourceKind: Literal[
+        "inspection_comparison", "inspection_observation", "rent_expectation", "expense"
+    ]
+    sourceId: UUID
+    sourceSummary: str
+    active: bool
+    outstandingAmount: str | None
 
 
 class DeductionLineResponse(Contract):
@@ -464,6 +483,21 @@ def build_router(service: DepositService, runtime: WorkspaceRuntime):
     def account(account_id: UUID):
         ready()
         return invoke(lambda: service.account(str(account_id)))
+
+    @router.get(
+        "/api/security-deposits/{account_id}/deduction-source-preview",
+        response_model=DeductionSourcePreviewResponse,
+        operation_id="previewSecurityDepositDeductionSource",
+    )
+    def source_preview(
+        account_id: UUID,
+        sourceKind: Literal[
+            "inspection_comparison", "inspection_observation", "rent_expectation", "expense"
+        ],
+        sourceId: UUID,
+    ):
+        ready()
+        return invoke(lambda: service.source_preview(str(account_id), sourceKind, str(sourceId)))
 
     @router.post(
         "/api/security-deposits/{account_id}/receipts",

@@ -129,6 +129,7 @@ function ReportRecord({ id }: { id: string }) {
         fields={[
           "status",
           "revision",
+          "spaceId",
           "walkthroughOn",
           "conductedBy",
           "tenantPresence",
@@ -191,6 +192,9 @@ function ReportRecord({ id }: { id: string }) {
               {observation.files.map((file) => (
                 <p key={file.id}>
                   {file.originalName} · {file.storageState}{" "}
+                  <Link to={`/money?file=${file.id}`}>
+                    Metadata and history: {file.originalName}
+                  </Link>{" "}
                   {file.available ? (
                     <a href={`/api/files/${file.id}/content`}>Download {file.originalName}</a>
                   ) : (

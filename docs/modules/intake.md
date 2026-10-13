@@ -26,15 +26,15 @@ Trusted replay resolves matching retained historical lineage evidence and reject
 
 ## Sensitive disclosure
 
-`IntakeService.get()` commits its fail-closed sensitive-read audit before returning evidence. The caller-owned connection reader exposes bounded non-sensitive current/historical facts only; it cannot return raw evidence inside a transaction that the caller could roll back. Lists/search/receipt recovery disclose only approved metadata.
+`IntakeService.get()` commits its fail-closed sensitive-read audit before returning evidence. `evidence_detail()` similarly audits an exact revision and enforces history/attachment bounds before disclosure. The caller-owned connection reader exposes bounded non-sensitive current/historical facts only; it cannot return raw evidence inside a transaction that the caller could roll back. Lists/search disclose only approved metadata; reading a correction receipt containing evidence also requires an audit commit.
 
 ## API and integration
 
-`/api/intake/sources` supplies manual admission/import, detail/list, correct/supersede/dismiss/reopen and operation lookup. Admission and recovery do not fetch mail or authenticate assistants. Communications can explicitly link a source without copying content or creating a ledger entry. Governed extraction, issue proposal review and assistant transports are separate active work; manual evidence retention remains usable with AI off.
+`/api/intake/sources` supplies manual admission/import, detail/list, correct/supersede/dismiss/reopen and operation lookup. `/{source_id}/revisions/{revision_id}` supplies typed, bounded, audited exact evidence with immutable revision facts and current source lifecycle metadata; foreign revision membership fails closed. Admission and recovery do not fetch mail or authenticate assistants. Communications can explicitly link a source without copying content or creating a ledger entry; its current-source projection identifies superseded sources while preserving the stored historical link. Governed extraction, issue proposal review and assistant transports are separate active work; manual evidence retention remains usable with AI off.
 
 ## Browser workflow boundary
 
-Conversations → Retained source evidence provides bounded manual admission/import/correction/supersession/dismissal/reopening with the six registered operator command forms. Full content is disclosed through the fail-closed audited Intake read. Saved import metadata retains ordered roles/digests; bytes require reselection. Failed/superseded evidence remains historical and guarded. Issue-proposal review remains UI-002. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+Conversations → Retained source evidence provides bounded manual admission/import/correction/supersession/dismissal/reopening with the six registered operator command forms. Full content is disclosed through fail-closed audited Intake reads. Revision selection explicitly opens retained historical evidence alongside the current representation; failed authorization never reveals the selected body. Saved import metadata retains ordered roles/digests; bytes require reselection. Failed/superseded evidence remains historical and guarded, and unavailable attachments cannot be opened. Issue-proposal review remains UI-002. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
 
 ## Implementation map
 
@@ -51,7 +51,7 @@ Persistence identities below are read from the current models. Column definition
 
 ## Validation
 
-The following executable specifications are the starting point for focused validation. This documentation consolidation did not rerun them or establish feature completion.
+Acceptance completed October 13, 2026: **72 focused Intake/Communications backend tests** and **7 packaged Intake browser tests** passed. The [completed acceptance matrix](../archive/designs/INGEST-001_DESIGN_COMPLETED_2026-10-13.md) records scope and quality-check limitations. Encrypted restore compares retained source/revision/operation/File rows, correlated audits and exact attachment bytes; page queries have a constant three-SELECT upper bound for one versus 25 records.
 
 - [test_command_readiness.py](../../application/apps/server/app/modules/intake/tests/test_command_readiness.py).
 - [test_intake.py](../../application/apps/server/app/modules/intake/tests/test_intake.py).

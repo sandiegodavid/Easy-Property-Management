@@ -40,6 +40,7 @@ from app.modules.portfolio.infrastructure.sqlalchemy_models import (
     SpaceOccupancyPeriodModel,
     SpaceStatusOperationModel,
 )
+from app.modules.portfolio.infrastructure.directory_reader import portfolio_status_counts
 from app.platform.sqlite_engine import create_sqlite_engine, immediate_transaction
 
 Result = TypeVar("Result")
@@ -653,6 +654,9 @@ class _SQLitePortfolioTransaction:
 
     def property_time_zones(self) -> set[str]:
         return set(self.connection.execute(select(PropertyModel.time_zone).distinct()).scalars())
+
+    def status_summary(self, as_of):
+        return portfolio_status_counts(self.connection, as_of)
 
     def property_views_for_ids(
         self, property_ids: list[str]

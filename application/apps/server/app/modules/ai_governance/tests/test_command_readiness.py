@@ -454,6 +454,37 @@ def test_approval_duplicate_race_creates_only_one_official_result(ai_commands):
     validate(ai_commands)
 
 
+@pytest.mark.parametrize("operator_note", [None, "Different request"])
+def test_approval_rechecks_replay_after_concurrent_commit(ai_commands, operator_note):
+    draft_id = generate(ai_commands)
+    key = str(uuid4())
+    original_context = ai_commands.unit_of_work.approval_context_row
+    committed = {}
+
+    def context_after_approval(target_id):
+        # Commit after the outer request misses the receipt, before it reads the draft.
+        with patch.object(ai_commands.unit_of_work, "approval_context_row", original_context):
+            committed["result"] = ai_commands.drafts.approve_draft(
+                draft_id, version=1, idempotency_key=key
+            )
+        committed["state"] = state(ai_commands)
+        return original_context(target_id)
+
+    with patch.object(
+        ai_commands.unit_of_work, "approval_context_row", side_effect=context_after_approval
+    ):
+        if operator_note is None:
+            result = ai_commands.drafts.approve_draft(draft_id, version=1, idempotency_key=key)
+            assert result == committed["result"]
+        else:
+            with pytest.raises(AiConflictError, match="ai_idempotency_conflict"):
+                ai_commands.drafts.approve_draft(
+                    draft_id, version=1, idempotency_key=key, operator_note=operator_note
+                )
+    assert state(ai_commands) == committed["state"]
+    validate(ai_commands)
+
+
 def test_commit_failure_rolls_back_command_receipt_and_effects(ai_commands):
     before = state(ai_commands)
 

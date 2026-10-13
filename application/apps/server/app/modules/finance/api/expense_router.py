@@ -30,6 +30,7 @@ from app.modules.finance.domain.expense_models import (
     CategoryCreateCommand,
     CategoryPatchCommand,
     ExpenseCreateCommand,
+    ExpenseDuplicateReviewCommand,
     ExpensePatchCommand,
     ExpenseQueryCommand,
     RefundCreateCommand,
@@ -131,6 +132,32 @@ class ExpenseInput(ExpenseCommandInput):
                 "historicalEntryConfirmed and historicalEntryReason must be supplied together."
             )
         return self
+
+
+class ExpenseDuplicateReviewInput(Contract):
+    propertyId: UUID
+    paidOn: date
+    amount: str = Field(pattern=r"^(?:0|[1-9][0-9]{0,7})\.[0-9]{2}$", strict=True)
+    providerPartyId: UUID | None = None
+    payeeName: str | None = Field(None, min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_payee(self):
+        if (self.providerPartyId is None) == (self.payeeName is None):
+            raise ValueError("Provide exactly one providerPartyId or payeeName.")
+        return self
+
+
+class ExpenseDuplicateCandidate(Contract):
+    id: UUID
+    paidOn: date
+    amount: str
+    payeeName: str
+    description: str
+
+
+class ExpenseDuplicateReviewResponse(Contract):
+    candidates: list[ExpenseDuplicateCandidate] = Field(max_length=10)
 
 
 class ExpensePatchInput(ExpenseCommandInput):
@@ -280,14 +307,6 @@ class RefundMutationResponse(RefundResponse):
     operationId: UUID
 
 
-class ExpenseDuplicateCandidate(Contract):
-    id: UUID
-    paidOn: date
-    amount: str
-    payeeName: str
-    description: str
-
-
 class ExpenseConflictDetail(FinanceConflictDetail):
     candidates: list[ExpenseDuplicateCandidate] | None = None
     currentCategory: CategoryResponse | None = None
@@ -324,6 +343,25 @@ def build_router(service: ExpenseService, runtime: WorkspaceRuntime) -> APIRoute
             ) from error
         except FinanceError as error:
             raise domain_problem(error, status_code=400, code="finance_validation") from error
+
+    @router.post(
+        "/api/expenses/duplicate-review",
+        response_model=ExpenseDuplicateReviewResponse,
+        operation_id="reviewExpenseDuplicates",
+    )
+    def review_duplicates(data: ExpenseDuplicateReviewInput):
+        ready()
+        return invoke(
+            lambda: service.review_duplicates(
+                ExpenseDuplicateReviewCommand(
+                    property_id=str(data.propertyId),
+                    paid_on=data.paidOn.isoformat(),
+                    amount=data.amount,
+                    provider_party_id=str(data.providerPartyId) if data.providerPartyId else None,
+                    payee_name=data.payeeName,
+                )
+            )
+        )
 
     @router.get(
         "/api/expense-categories",

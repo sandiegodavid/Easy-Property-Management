@@ -28,6 +28,35 @@ LEASE_ID, KEY = str(uuid4()), str(uuid4())
 REVISION = 4
 
 
+def test_receipt_recovery_rejects_raw_references_and_normalizes_safe_masks():
+    for reference in (
+        "123456789",
+        "4111111111111111",
+        "access_token=private",
+        "Check • 1234",
+        "•••• 12345",
+    ):
+        with pytest.raises(OperatorError):
+            validate_payload("finance.rent_receipt.create", 1, {"maskedReference": reference})
+    assert (
+        validate_payload(
+            "finance.rent_receipt.create", 1, {"maskedReference": "  Check •••• 9182  "}
+        )["maskedReference"]
+        == "Check •••• 9182"
+    )
+
+
+def test_prepaid_recovery_cannot_retain_raw_check_references():
+    for form in ("finance.prepaid_check.create", "finance.prepaid_check.replace"):
+        for reference in ("123456789", "account=123456789", "Check • 1234", "•••• 12345"):
+            with pytest.raises(OperatorError):
+                validate_payload(form, 1, {"maskedReference": reference})
+        assert (
+            validate_payload(form, 1, {"maskedReference": "  Check •••• 9182  "})["maskedReference"]
+            == "Check •••• 9182"
+        )
+
+
 def _expected(action, target_id, payload):
     return fingerprint(
         FinanceCommandIdentity(

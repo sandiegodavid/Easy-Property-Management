@@ -3,7 +3,7 @@
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import (
     AwareDatetime,
     BaseModel,
@@ -122,6 +122,11 @@ class PartyResponse(PartyState):
     activeRoles: list[Literal["tenant", "provider", "client_owner"]] = Field(default_factory=list)
 
 
+class PartySelectionPage(Contract):
+    items: list[PartyState]
+    nextCursor: UUID | None
+
+
 class PartyMutationResponse(PartyState):
     operationId: UUID
 
@@ -230,6 +235,23 @@ def build_router(
             ) from error
         except PartyValidationError as error:
             raise HTTPException(400, str(error)) from error
+
+    @router.get("/selection", response_model=PartySelectionPage, operation_id="selectParties")
+    def selection(
+        search: str | None = None,
+        includeArchived: bool = False,
+        cursor: UUID | None = None,
+        limit: int = Query(25, ge=1, le=100),
+    ):
+        ready()
+        return invoke(
+            lambda: identity.selection(
+                search=search,
+                include_archived=includeArchived,
+                cursor=str(cursor) if cursor else None,
+                limit=limit,
+            )
+        )
 
     @router.get("", response_model=list[PartyResponse], operation_id="listParties")
     def list_parties(

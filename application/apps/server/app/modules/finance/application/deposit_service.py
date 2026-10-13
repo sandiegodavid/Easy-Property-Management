@@ -30,7 +30,7 @@ from app.modules.finance.domain.deposit_models import (
     money,
     signed_money,
 )
-from app.modules.finance.domain.expense_models import amount_minor
+from app.modules.finance.domain.expense_models import amount_minor, identifier
 from app.modules.finance.domain.models import (
     FinanceConflictError,
     FinanceError,
@@ -55,6 +55,46 @@ class DepositService:
     def __init__(self, unit_of_work: DepositUnitOfWork, *, now=lambda: datetime.now(UTC)):
         self.unit_of_work = unit_of_work
         self.now = now
+
+    def source_preview(self, account_id: str, source_kind: str, source_id: str):
+        """Review one explicit source without adding it or making a deduction decision."""
+        account_id = identifier(account_id, "Deposit account ID")
+        source_id = identifier(source_id, "Source ID")
+        if source_kind not in {
+            "inspection_comparison",
+            "inspection_observation",
+            "rent_expectation",
+            "expense",
+        }:
+            raise FinanceError("Unsupported deduction source kind.")
+
+        def read(tx):
+            account = _required(tx.account(account_id), "Security-deposit account was not found.")
+            source = _required(
+                tx.source_context(source_kind, source_id), "Deduction source was not found."
+            )
+            if any(
+                source.get(key) not in {None, account[field]}
+                for key, field in (
+                    ("leaseId", "lease_id"),
+                    ("propertyId", "property_id"),
+                    ("spaceId", "space_id"),
+                )
+            ):
+                raise FinanceConflictError(
+                    "Deduction source does not belong to this lease and space."
+                )
+            return {
+                "sourceKind": source_kind,
+                "sourceId": source_id,
+                "sourceSummary": source["summary"],
+                "active": source["active"],
+                "outstandingAmount": money(source["outstandingAmountMinor"])
+                if "outstandingAmountMinor" in source
+                else None,
+            }
+
+        return self.unit_of_work.read(read)
 
     def create_account(
         self,
@@ -1761,8 +1801,17 @@ def _source_view(item):
 
 def _evidence_view(item):
     return {
+        "linkId": item["id"],
         "fileId": item["file_id"],
         "purpose": item["purpose"],
         "createdAt": item["created_at"],
         "archivedAt": item["archived_at"],
+        "archiveReason": item["archive_reason"],
+        "originalName": item["original_name"],
+        "mediaType": item["media_type"],
+        "sizeBytes": item["size_bytes"],
+        "contentSha256": item["content_sha256"],
+        "storageState": item["storage_state"],
+        "available": item["storage_state"] == "available",
+        "verifiedAt": item["verified_at"],
     }

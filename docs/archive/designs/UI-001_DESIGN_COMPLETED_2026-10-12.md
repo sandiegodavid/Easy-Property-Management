@@ -252,7 +252,7 @@ This document remains the product interaction and shared web-client specificatio
 | Backlog item | Dedicated design | Owns |
 | --- | --- | --- |
 | TASK-002 | [Waiting and Follow-up](../../active/TASK-002_DESIGN.md) | Waiting context, follow-up scheduling, resurfacing, and source-deadline separation. |
-| OPS-001 | [Operator Support](../../active/OPS-001_DESIGN.md) | Bootstrap, preferences, contextual compositions, search, coverage provenance, and short-form recovery. |
+| OPS-001 | [Operator Support](OPS-001_DESIGN.md) | Bootstrap, preferences, contextual compositions, search, coverage provenance, and short-form recovery. |
 
 UI-001 owns the React/Vite shell, generated-client boundary, route composition, shared presentation components, accessibility, and end-to-end operator interactions. It consumes the feature contracts above and must not recreate their policy in browser code.
 

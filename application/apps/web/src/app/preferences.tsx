@@ -1,5 +1,6 @@
 import { useLayoutEffect, useState, type ReactNode, createContext, useContext } from "react";
 import { api } from "@epm/contracts";
+import { Link } from "react-router-dom";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "./workspace-gate";
 import { defaultOrder, destination } from "./destinations";
@@ -115,6 +116,9 @@ export function PreferenceSettings() {
   return (
     <>
       <h2>Appearance and navigation</h2>
+      <p>
+        <Link to="/settings/provider-categories">Provider categories</Link>
+      </p>
       {!writable && (
         <p>Preference editing requires available preferences and workspace write access.</p>
       )}

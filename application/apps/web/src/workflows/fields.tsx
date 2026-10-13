@@ -1,6 +1,6 @@
 import { fieldSchema, record, type RequestSchema } from "@epm/contracts/workflows";
 
-export type Choice = { id: string; label: string; revision?: number };
+export type Choice = { id: string; label: string; revision?: number; historical?: boolean };
 export type Choices = Record<string, Choice[]>;
 export function label(name: string) {
   const overrides: Record<string, string> = {
@@ -72,6 +72,12 @@ export function Fields({
       {Object.entries(shape.properties ?? {})
         .filter(
           ([key]) =>
+            !(
+              path === "reporter" &&
+              values.subjectKind !== "party" &&
+              ["partyId", "historicalSelectionConfirmed", "historicalSelectionReason"].includes(key)
+            ) &&
+            !(key === "otherPaymentMethodNote" && values.paymentMethodKind !== "other") &&
             ![
               "expectedRevision",
               "expectedLeaseRevision",
@@ -87,6 +93,28 @@ export function Fields({
           const fieldPath = path ? `${path}.${key}` : key;
           const update = (next: unknown) => {
             const replacement = { ...values };
+            if (path === "reporter") {
+              if (key === "partyId" && next !== current) {
+                delete replacement.historicalSelectionConfirmed;
+                delete replacement.historicalSelectionReason;
+              }
+              if (key === "role" && (next === "manager" || next === "staff"))
+                replacement.subjectKind = "local_operator";
+              if (key === "role" && next === "tenant") replacement.subjectKind = "party";
+              if (
+                (key === "subjectKind" && next === "local_operator") ||
+                replacement.subjectKind === "local_operator"
+              ) {
+                delete replacement.partyId;
+                delete replacement.historicalSelectionConfirmed;
+                delete replacement.historicalSelectionReason;
+              }
+            }
+            if (key === "paymentMethodKind" && next !== values.paymentMethodKind) {
+              delete replacement.paymentMethodLabel;
+              delete replacement.maskedReference;
+              delete replacement.otherPaymentMethodNote;
+            }
             if (key === "partyId" && next) delete replacement.inlineParty;
             if (key === "inlineParty" && next) delete replacement.partyId;
             if (key === "ownerKind" && next === "local_operator") {
@@ -95,6 +123,31 @@ export function Fields({
             }
             if (next === undefined) delete replacement[key];
             else replacement[key] = next;
+            if (
+              shape.properties?.correctedEntryKind &&
+              ["entryKind", "correctedEntryKind"].includes(key)
+            ) {
+              const effective =
+                replacement.entryKind === "correction"
+                  ? replacement.correctedEntryKind
+                  : replacement.entryKind;
+              if (replacement.entryKind !== "correction") {
+                delete replacement.correctedEntryKind;
+                delete replacement.correctsEntryId;
+                delete replacement.correctionReason;
+              }
+              for (const field of [
+                "outcomeStatus",
+                "outcomeSummary",
+                "followUpRequired",
+                "operatorVerified",
+              ])
+                if (effective !== "work_completed") delete replacement[field];
+              if (effective === "work_completed") {
+                replacement.followUpRequired ??= false;
+                replacement.operatorVerified ??= false;
+              }
+            }
             onChange(replacement);
           };
           const nullable = child.anyOf?.some((item) => item.type === "null");

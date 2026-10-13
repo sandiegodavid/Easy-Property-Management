@@ -202,6 +202,81 @@ class FinanceCommandTests(unittest.TestCase):
         )
         validate_latest_schema(self.workspace.paths.database)
 
+    def test_schedule_preview_is_read_only_bounded_and_matches_committed_rounding(self):
+        command = replace(
+            self.schedule, through_on=(date.today() + timedelta(days=120)).isoformat()
+        )
+        statements = []
+
+        def capture(connection, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+
+        event.listen(self.engine, "before_cursor_execute", capture)
+        try:
+            preview = self.finance.preview_schedule(self.lease["id"], command)
+        finally:
+            event.remove(self.engine, "before_cursor_execute", capture)
+        self.assertLessEqual(
+            sum(sql.lstrip().upper().startswith("SELECT") for sql in statements), 8
+        )
+        self.assertFalse(
+            any(
+                sql.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+                for sql in statements
+            )
+        )
+        self.assertEqual(preview["rentLedgerRevision"], 1)
+        self.assertEqual(preview["timeZone"], "America/Los_Angeles")
+        result = self.finance.synchronize(
+            self.lease["id"], command, expected_revision=1, idempotency_key=str(uuid4())
+        )
+        fields = set(preview["items"][0])
+        self.assertEqual(
+            preview["items"],
+            [
+                {key: value for key, value in item.items() if key in fields}
+                for item in result["items"]
+            ],
+        )
+        self.assertEqual(self.finance.preview_schedule(self.lease["id"], command)["items"], [])
+        self.finance.void_expectation(
+            result["items"][0]["id"],
+            VoidCommand(True, "Incorrect schedule snapshot"),
+            expected_revision=result["rentLedgerRevision"],
+            idempotency_key=str(uuid4()),
+        )
+        retained = self.finance.preview_schedule(self.lease["id"], command)
+        self.assertEqual(retained["items"], [])
+        self.assertIn("voided", [item["lifecycleStatus"] for item in retained["existingItems"]])
+
+    def test_schedule_preview_http_is_typed_and_requires_override_confirmation(self):
+        with TestClient(create_app(self.config)) as client:
+            path = f"/api/leases/{self.lease['id']}/rent-expectations/preview"
+            params = {
+                "leaseTermId": self.schedule.lease_term_id,
+                "throughOn": self.schedule.through_on,
+                "scheduleAnchorOn": self.schedule.schedule_anchor_on,
+            }
+            response = client.post(path, json=params)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["items"], [])
+            self.assertEqual(
+                client.post(path, json={**params, "throughOn": "invalid"}).status_code, 422
+            )
+            self.assertEqual(
+                client.post(
+                    path,
+                    json={**params, "responsibilityEndsOnOverride": self.schedule.through_on},
+                ).status_code,
+                400,
+            )
+            self.assertEqual(
+                client.get("/openapi.json").json()["paths"][
+                    "/api/leases/{lease_id}/rent-expectations/preview"
+                ]["post"]["operationId"],
+                "previewRentExpectations",
+            )
+
     def test_review_and_expectation_void_replay_preserve_original_state(self):
         from datetime import UTC, datetime
 

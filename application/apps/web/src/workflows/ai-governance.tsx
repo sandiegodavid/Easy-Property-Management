@@ -961,9 +961,7 @@ export function AiGovernanceSettings() {
         </label>
         {drafts.isPending && <p role="status">Loading AI drafts…</p>}
         {drafts.error && <ApiError error={drafts.error} />}
-        {drafts.data?.items.length === 0 && (
-          <p>No proposed or edited drafts are waiting for review.</p>
-        )}
+        {drafts.data?.items.length === 0 && <p>No AI drafts match this status on this page.</p>}
         <ul>
           {drafts.data?.items.map((draft) => (
             <li key={draft.id}>
@@ -978,6 +976,9 @@ export function AiGovernanceSettings() {
           <button onClick={() => setDraftCursor(drafts.data?.nextCursor ?? undefined)}>
             Next drafts
           </button>
+        )}
+        {draftCursor && (
+          <button onClick={() => setDraftCursor(undefined)}>First drafts page</button>
         )}
       </section>
       {pendingKey && (
@@ -1271,8 +1272,29 @@ export function AiDraftReview() {
             {draft.provenance.promptTokens ?? "Unknown"} prompt /{" "}
             {draft.provenance.completionTokens ?? "Unknown"} completion tokens
           </dd>
+          <dt>Adapter version</dt>
+          <dd>{draft.provenance.adapterVersion ?? "Not applicable"}</dd>
+          <dt>Model artifact</dt>
+          <dd>{draft.provenance.modelArtifactDigest ?? "Not recorded"}</dd>
+          <dt>Runtime</dt>
+          <dd>
+            {draft.provenance.runtimeId ?? "Not recorded"} {draft.provenance.runtimeVersion ?? ""} ·
+            quantization {draft.provenance.quantization ?? "Not recorded"}
+          </dd>
         </dl>
+        {draft.supersedesDraftId && (
+          <p>
+            Replaces draft:{" "}
+            <Link to={`/ai/review/${draft.supersedesDraftId}`}>{draft.supersedesDraftId}</Link>
+          </p>
+        )}
       </section>
+      {draft.confidence && (
+        <details>
+          <summary>Registered confidence and provenance</summary>
+          <pre>{json(draft.confidence)}</pre>
+        </details>
+      )}
       <details>
         <summary>Governed input sent for this draft</summary>
         <pre>{json(draft.governedInput)}</pre>
@@ -1382,6 +1404,11 @@ export function AiDraftReview() {
                 {entry.decision} · version {entry.draftVersionBefore} → {entry.draftVersionAfter} ·{" "}
                 {entry.decidedAt}
                 {entry.operatorNote && <p>{entry.operatorNote}</p>}
+                {entry.resultEntityType && entry.resultEntityId && (
+                  <p>
+                    Recorded result: {entry.resultEntityType} · {entry.resultEntityId}
+                  </p>
+                )}
               </li>
             ))}
           </ol>

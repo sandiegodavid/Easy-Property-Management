@@ -40,6 +40,8 @@ Directory/overview/search/coverage services are separate from recovery/preferenc
 
 Browser consumers implement bounded contextual directories/overviews, independent section continuations, metadata search, source-backed coverage review and appearance/navigation. Coverage review is an allowlisted recoverable form with source fingerprint and original receipt; acknowledgment never fills required gaps. Shared recovery composes registered source commands without dispatching generic domain retries. Home aggregation remains DASH-001. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
 
+Search groups retain independent continuations and full counts. Restarting a stale group fetches a fresh first page with the same query/archive filter rather than reusing its original preview. Archived search results are opt-in, visibly labeled, and open retained contextual records. Hidden destinations remain reachable from eligible search/context links. Coverage distinguishes missing information, recorded facts, review causes and source-owned non-applicability; a review receipt is not a repair, financial verification or completed source command.
+
 ## Implementation map
 
 - [Domain values and invariants](../../application/apps/server/app/modules/operator/domain).
@@ -55,7 +57,7 @@ Persistence identities below are read from the current models. Column definition
 
 ## Validation
 
-The following executable specifications are the starting point for focused validation. This documentation consolidation did not rerun them or establish feature completion.
+OPS-001 acceptance completed October 13, 2026: **519 focused backend tests, 20 packaged browser cases and 12 shared component/recovery cases passed**. The [completed acceptance matrix](../archive/designs/OPS-001_DESIGN_COMPLETED_2026-10-13.md) records composition/search/coverage/preferences/recovery, audit/retained-data, encrypted portability and quality-check limits. Home-specific tests and broader DASH-001 acceptance remain separately owned. The following executable specifications remain regression entry points.
 
 - [test_ai_recovery.py](../../application/apps/server/app/modules/operator/tests/test_ai_recovery.py).
 - [test_command_recovery.py](../../application/apps/server/app/modules/operator/tests/test_command_recovery.py).

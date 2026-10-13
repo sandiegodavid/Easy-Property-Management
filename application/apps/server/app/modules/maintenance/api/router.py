@@ -269,6 +269,7 @@ class TaskSummaryResponse(Contract):
     isAllDay: bool
     relatedEntityType: str
     relatedEntityId: UUID
+    deletedAtUtc: AwareDatetime | None = None
 
 
 class PropertySummaryResponse(Contract):
@@ -293,6 +294,7 @@ class ExpenseSummaryResponse(Contract):
     currencyCode: Literal["USD"]
     occurredOn: str
     payeeSnapshot: str
+    voidedAt: AwareDatetime | None = None
 
 
 class AppointmentSummaryResponse(Contract):

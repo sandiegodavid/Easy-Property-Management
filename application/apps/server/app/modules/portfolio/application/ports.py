@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Collection
+from datetime import datetime
 from typing import Any, Literal, Protocol, TypeVar
 
 from app.modules.portfolio.domain.models import (
@@ -85,6 +86,7 @@ class PortfolioConflictError(RuntimeError):
 
 
 class PortfolioTransaction(Protocol):
+    def status_summary(self, as_of: datetime) -> dict[str, int | str | None]: ...
     def inventory_operation(
         self, *, operation_id: str | None = None, idempotency_key: str | None = None
     ) -> dict[str, object] | None: ...

@@ -12,7 +12,9 @@ The release-owned `ACTION_REGISTRY`, `ADAPTER_REGISTRY`, redaction profiles and 
 
 A registered action defines capability, source checks, input/output rules and limits. Generation reserves its run under an atomic boundary, records actual provider/model/runtime provenance and treats provider calls as external effects. Retained output is a draft. Cloud data disclosure is explicit and versioned redaction is applied before dispatch. No implicit provider fallback or unsupported modality is accepted.
 
-Review preserves frozen source revision/fingerprint and validates current evidence before committing. Draft edits and dismissal remain separate decisions. Non-advisory approval requires the registered source validator and owning handler; governance does not write Maintenance, Finance or Lease tables directly. Global pause and per-action caps fail closed without blocking manual workflows.
+Review preserves frozen source revision/fingerprint and validates current evidence before committing. Draft edits and generic dismissal remain separate decisions. Every approval, including advisory approval, requires a registered owning handler and current-source validation; governance does not write Maintenance, Finance or Lease tables directly. Global pause and per-action caps fail closed without blocking manual workflows.
+
+Each registered action currently declares one approval effect (`create`, `update`, or `advisory_only`). Operator-selectable approval modes, link-only issue consequences and domain-owned dismissal are extensions owned by [INGEST-002](../active/INGEST-002_DESIGN.md), not delivered capabilities. Completing this foundation does not register a production action or qualify a model/runtime.
 
 ## Configuration, credentials and uncertain effects
 
@@ -26,7 +28,7 @@ Credential updates/deletion and connection probes have their own external-operat
 
 ## Browser workflow boundary
 
-Settings provides Off/device/cloud controls, registry-derived capabilities, explicit data-class disclosure, write-only credentials, synthetic probes, limits/redaction and global pause. Generic draft review preserves governed input/provenance/history; approval requires a current source, registered handler and acknowledged saved version. Editing clears confirmation. External secret effects retain original-key recovery and explicit uncertainty acknowledgment. Production model/action/approval registries remain empty. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+Settings provides Off/device/cloud controls, registry-derived capabilities, explicit data-class disclosure, write-only credentials, synthetic probes, limits/redaction and global pause. A Settings read does not probe the transport or claim current readiness. Generic draft review preserves governed input, qualified provider/model/runtime provenance, registered confidence, predecessor links and decision/result history; approval requires a current source, registered handler and acknowledged saved version. Editing clears confirmation. Terminal drafts cannot be edited or decided again. Status-filtered draft pages use bounded server continuations and a first-page reset. External secret effects retain original-key recovery and explicit uncertainty acknowledgment. Production model/action/approval registries remain empty. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
 
 ## Implementation map
 
@@ -43,7 +45,7 @@ Persistence identities below are read from the current models. Column definition
 
 ## Validation
 
-The following executable specifications are the starting point for focused validation. This documentation consolidation did not rerun them or establish feature completion.
+Foundation acceptance completed October 13, 2026: **82 focused backend tests**, **4 packaged browser tests**, and the shared component/recovery checks recorded in the [completed acceptance matrix](../archive/designs/AI-GOV-001_DESIGN_COMPLETED_2026-10-13.md). Real release Settings checks exercise empty registries; browser adapter/review contracts are synthetic. Backend synthetic adapters prove domain approval, redaction, concurrency, audit validation and encrypted portability without enabling production inference.
 
 - [test_api_contracts.py](../../application/apps/server/app/modules/ai_governance/tests/test_api_contracts.py).
 - [test_command_readiness.py](../../application/apps/server/app/modules/ai_governance/tests/test_command_readiness.py).
@@ -51,4 +53,4 @@ The following executable specifications are the starting point for focused valid
 - [test_governance.py](../../application/apps/server/app/modules/ai_governance/tests/test_governance.py).
 - [test_openapi_readiness.py](../../application/apps/server/app/modules/ai_governance/tests/test_openapi_readiness.py).
 
-Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).
+Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Later production actions, runtimes and domain terminal-mode extensions remain in [active work](../active/README.md).

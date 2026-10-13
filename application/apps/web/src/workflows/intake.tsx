@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
@@ -36,7 +37,7 @@ export function IntakeWorkspace() {
       {params.has("workflow") ? (
         <IntakeCommand key={params.toString()} />
       ) : params.has("source") ? (
-        <SourceDetail id={params.get("source")!} />
+        <SourceDetail key={params.get("source")} id={params.get("source")!} />
       ) : (
         <SourceDirectory />
       )}
@@ -205,6 +206,7 @@ function SourceDirectory() {
 
 function SourceDetail({ id }: { id: string }) {
   const { scope } = useWorkspace();
+  const [revisionId, setRevisionId] = useState<string | null>(null);
   const [params] = useSearchParams();
   const loaded = useQuery({
     queryKey: scope.key("intake-sensitive-detail", id),
@@ -313,12 +315,19 @@ function SourceDetail({ id }: { id: string }) {
       ))}
       <h3>Retained revision history</h3>
       {item.revisions.map((revision) => (
-        <Facts
-          key={revision.id}
-          value={revision}
-          fields={["id", "number", "kind", "createdAt", "correctionReason"]}
-        />
+        <div key={revision.id}>
+          <Facts
+            value={revision}
+            fields={["id", "number", "kind", "createdAt", "correctionReason"]}
+          />
+          <button onClick={() => setRevisionId(revision.id)}>
+            Read retained revision {revision.number}
+          </button>
+        </div>
       ))}
+      {revisionId && (
+        <RetainedRevision key={`${id}:${revisionId}`} sourceId={id} revisionId={revisionId} />
+      )}
       <h3>Operation history</h3>
       {item.operations.map((operation, index) => (
         <Facts key={index} value={operation} fields={["type", "outcome", "createdAt"]} />
@@ -332,6 +341,75 @@ function SourceDetail({ id }: { id: string }) {
           · {candidate.reason} · {candidate.disposition}
         </p>
       ))}
+    </section>
+  );
+}
+
+function RetainedRevision({ sourceId, revisionId }: { sourceId: string; revisionId: string }) {
+  const { scope } = useWorkspace();
+  const loaded = useQuery({
+    queryKey: scope.key("intake-sensitive-revision", sourceId, revisionId),
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/intake/sources/{source_id}/revisions/{revision_id}", {
+          signal,
+          params: { path: { source_id: sourceId, revision_id: revisionId } },
+        }),
+      ),
+    retry: false,
+    gcTime: 0,
+  });
+  return (
+    <section aria-label="Selected retained evidence revision">
+      <h4>Exact retained evidence — not the current representation</h4>
+      {loaded.isPending && <p role="status">Authorizing audited revision read…</p>}
+      {loaded.error ? (
+        <>
+          <p role="alert">Revision evidence is withheld: {loaded.error.message}</p>
+          <button onClick={() => void loaded.refetch()}>Retry audited revision read</button>
+        </>
+      ) : (
+        loaded.data && (
+          <>
+            <Facts
+              value={loaded.data}
+              fields={[
+                "revisionNumber",
+                "revisionKind",
+                "revisionCreatedAt",
+                "correctionReason",
+                "fingerprint",
+              ]}
+            />
+            <Facts
+              value={loaded.data.evidence}
+              fields={["subject", "body", "occurredAtUtc", "occurredAtContext"]}
+            />
+            {loaded.data.evidence.participants.map((participant, index) => (
+              <Facts key={index} value={participant} fields={["role", "display", "address"]} />
+            ))}
+            {loaded.data.attachments.map((attachment) => (
+              <div key={attachment.fileLinkId}>
+                <Facts value={attachment} fields={["role", "displayOrder"]} />
+                {attachment.file ? (
+                  <Facts
+                    value={attachment.file}
+                    fields={["original_name", "content_sha256", "storage_state", "verified_at"]}
+                  />
+                ) : (
+                  <p>Attachment metadata unavailable.</p>
+                )}
+              </div>
+            ))}
+            {(loaded.data.historyTruncated || loaded.data.attachmentsTruncated) && (
+              <p>
+                This bounded read is incomplete; additional retained history or attachments are not
+                shown.
+              </p>
+            )}
+          </>
+        )
+      )}
     </section>
   );
 }

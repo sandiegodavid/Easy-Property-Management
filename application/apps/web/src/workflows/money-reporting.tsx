@@ -73,6 +73,13 @@ export function MoneyReporting() {
     if (revision) next.set("sourceRevision", revision);
     setParams(next);
   }
+  function metricTarget(value: Metric) {
+    const next = new URLSearchParams(params);
+    next.set("metric", value);
+    next.set("sourceRevision", properties.data!.summary.sourceRevision);
+    next.delete("cursor");
+    return `/money?${next}`;
+  }
   return (
     <section aria-label="Money reporting">
       <h3>Explicit-period recorded activity</h3>
@@ -160,6 +167,7 @@ export function MoneyReporting() {
                 <MoneyFacts
                   value={properties.data.summary[name]}
                   fields={Object.keys(properties.data.summary[name])}
+                  labels={{ operatingRemainder: "Rent less net expenses" }}
                 />
               ) : (
                 <p role="alert">This money section is unavailable.</p>
@@ -167,31 +175,30 @@ export function MoneyReporting() {
             </section>
           ))}
           <nav aria-label="Reporting metric sources">
-            {properties.data.summary.metrics.map((item) => {
-              const next = new URLSearchParams(params);
-              next.set("metric", item.metric);
-              next.set("sourceRevision", properties.data.summary.sourceRevision);
-              next.delete("cursor");
-              return (
-                <Link key={item.metric} to={`/money?${next}`}>
-                  {item.metric} · USD {item.amount}
-                </Link>
-              );
-            })}
-            <Link
-              to={`/money?${new URLSearchParams({ ...Object.fromEntries(params), metric: "recordedDepositObligation", sourceRevision: properties.data.summary.sourceRevision })}`}
-            >
+            {properties.data.summary.metrics.map((item) => (
+              <Link key={item.metric} to={metricTarget(item.metric)}>
+                {item.metric === "operatingRemainder" ? "Rent less net expenses" : item.metric} ·
+                USD {item.amount}
+              </Link>
+            ))}
+            <Link to={metricTarget("recordedDepositObligation")}>
               Current recorded deposit obligation
             </Link>
           </nav>
           {properties.data.items.map((item) => (
             <article key={item.propertyId}>
-              <Link to={`/properties/${item.propertyId}/money`}>
+              <Link
+                to={`/money?${new URLSearchParams({ ...Object.fromEntries([...params].filter(([key]) => key !== "cursor")), propertyId: item.propertyId, sourceRevision: properties.data.summary.sourceRevision })}`}
+              >
                 {item.propertyName} · {item.propertyState}
               </Link>
+              <p>
+                <Link to={`/properties/${item.propertyId}/money`}>Property context</Link>
+              </p>
               {item.operating.available ? (
                 <MoneyFacts
                   value={item.operating}
+                  labels={{ operatingRemainder: "Rent less net expenses" }}
                   fields={[
                     "rentReceived",
                     "expensesPaid",

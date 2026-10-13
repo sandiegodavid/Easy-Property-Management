@@ -1259,6 +1259,76 @@ class PortfolioTests(unittest.TestCase):
         self.assertEqual(summary["availableNowCount"], 1)
         self.assertEqual(summary["needsAttentionPropertyCount"], 1)
 
+    def test_summary_is_one_aggregate_for_empty_and_large_inventory(self) -> None:
+        engine = self.service.unit_of_work.engine
+
+        def summary():
+            queries = []
+
+            def capture(_connection, _cursor, statement, _parameters, _context, _many):
+                if statement.lstrip().upper().startswith("SELECT"):
+                    queries.append(statement)
+
+            event.listen(engine, "before_cursor_execute", capture)
+            try:
+                with patch.object(
+                    self.service,
+                    "list_properties",
+                    side_effect=AssertionError("unbounded hydration"),
+                ):
+                    result = self.service.portfolio_status_summary()
+            finally:
+                event.remove(engine, "before_cursor_execute", capture)
+            self.assertEqual(len(queries), 1)
+            return result
+
+        self.assertEqual(summary()["activeSpaceCount"], 0)
+        self._property([OwnershipInput("local_operator")])
+        self.assertEqual(summary()["activeSpaceCount"], 1)
+        for _ in range(10):
+            self._property([OwnershipInput("local_operator")])
+        result = summary()
+        self.assertEqual(result["activePropertyCount"], 11)
+        self.assertEqual(result["unknownOccupancyCount"], 11)
+        self.assertEqual(result["needsAttentionSpaceCount"], 11)
+
+    def test_summary_uses_each_property_local_date_and_excludes_archived_inventory(self) -> None:
+        captured = datetime.fromisoformat("2026-01-02T06:00:00+00:00")
+        self.service._clock = lambda: captured
+        west = self._property([OwnershipInput("local_operator")])
+        east = self._property([OwnershipInput("local_operator")])
+        inventory_command(
+            self.service,
+            "patch_property",
+            east.id,
+            {
+                "addressLine1": "11 Broadway",
+                "city": "New York",
+                "region": "NY",
+                "postalCode": "10001",
+            },
+        )
+        archived = self._property([OwnershipInput("local_operator")])
+        inventory_command(self.service, "archive_property", archived.id, confirmed=True)
+        for property in (west, east):
+            record = self.service.get_property(property.id)
+            self._classify_space(
+                record["spaces"][0]["id"],
+                SpaceClassificationCommand(
+                    OccupancyCommand("occupied", record["effectiveLocalDate"]),
+                    AvailabilityCommand("available_on", "2026-01-02"),
+                ),
+            )
+        result = self.service.portfolio_status_summary()
+        self.assertEqual(result["activePropertyCount"], 2)
+        self.assertEqual(result["activeSpaceCount"], 2)
+        self.assertEqual(result["occupiedCount"], 2)
+        self.assertEqual(result["availableNowCount"], 1)
+        self.assertEqual(result["availableLaterCount"], 1)
+        self.assertEqual(result["nearestAvailableOn"], "2026-01-02")
+        self.assertEqual(result["needsAttentionSpaceCount"], 0)
+        self.assertEqual(result["asOf"], captured.isoformat())
+
     def test_status_api_uses_typed_dates_and_exposes_summary_and_replacement(self) -> None:
         config = Path(self.temp.name) / "typed-status-api-config.json"
         config.write_text(

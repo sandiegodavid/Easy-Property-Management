@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { useWatch } from "react-hook-form";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
@@ -19,6 +19,7 @@ import { clean, Fields, type Choices } from "./fields";
 import { Facts, readResult } from "./reads";
 import { MoneyFacts } from "./money-presentation";
 import { OriginalWorkResult } from "./work-result";
+import { TaskCreateFields } from "./task-fields";
 
 export function workflowUrl(formKey: string, sourceId?: string, childId?: string) {
   const params = new URLSearchParams({ workflow: formKey });
@@ -192,9 +193,12 @@ export function CommandLoader({
   revision,
   initial = {},
   choices = {},
+  choicesForValues,
   returnTo,
   reviewSource,
   checkSource,
+  renderContext,
+  canSubmit,
 }: {
   definition: Workflow;
   sourceId?: string;
@@ -202,6 +206,7 @@ export function CommandLoader({
   revision: number;
   initial?: Record<string, unknown>;
   choices?: Choices;
+  choicesForValues?: (values: Record<string, unknown>) => Choices;
   returnTo?: string;
   reviewSource?: () => Promise<{
     revision: number;
@@ -209,6 +214,12 @@ export function CommandLoader({
     relatedRevisions?: Record<string, number>;
   }>;
   checkSource?: (values: Record<string, unknown>) => Promise<void>;
+  canSubmit?: (values: Record<string, unknown>) => boolean;
+  renderContext?: (
+    values: Record<string, unknown>,
+    locked: boolean,
+    onChange: (values: Record<string, unknown>) => void,
+  ) => ReactNode;
 }) {
   const { scope } = useWorkspace();
   const [params] = useSearchParams();
@@ -246,10 +257,13 @@ export function CommandLoader({
       revision={revision}
       initial={initial}
       choices={choices}
+      choicesForValues={choicesForValues}
       recovered={recovery.data}
       returnTo={returnTo}
       reviewSource={reviewSource}
       checkSource={checkSource}
+      renderContext={renderContext}
+      canSubmit={canSubmit}
     />
   );
 }
@@ -261,10 +275,13 @@ function CommandEditor({
   revision,
   initial,
   choices,
+  choicesForValues,
   recovered,
   returnTo,
   reviewSource,
   checkSource,
+  renderContext,
+  canSubmit,
 }: {
   definition: Workflow;
   sourceId?: string;
@@ -272,6 +289,7 @@ function CommandEditor({
   revision: number;
   initial: Record<string, unknown>;
   choices: Choices;
+  choicesForValues?: (values: Record<string, unknown>) => Choices;
   recovered?: Recovery;
   returnTo?: string;
   reviewSource?: () => Promise<{
@@ -280,6 +298,12 @@ function CommandEditor({
     relatedRevisions?: Record<string, number>;
   }>;
   checkSource?: (values: Record<string, unknown>) => Promise<void>;
+  canSubmit?: (values: Record<string, unknown>) => boolean;
+  renderContext?: (
+    values: Record<string, unknown>,
+    locked: boolean,
+    onChange: (values: Record<string, unknown>) => void,
+  ) => ReactNode;
 }) {
   const { scope } = useWorkspace();
   const location = useLocation();
@@ -301,6 +325,9 @@ function CommandEditor({
     definition.formKey === "lease.participant.remove" ||
     (definition.formKey.startsWith("finance.") && definition.formKey.endsWith(".delete"));
   const [candidates, setCandidates] = useState<string[]>([]);
+  const [receiptCandidates, setReceiptCandidates] = useState<string[]>([]);
+  const [concernCandidates, setConcernCandidates] = useState<string[]>([]);
+  const [expenseCandidates, setExpenseCandidates] = useState<Record<string, unknown>[]>([]);
   const revisionField =
     definition.sourceKind === "property" || definition.formKey === "portfolio.property.create"
       ? "expectedPropertyRevision"
@@ -411,6 +438,29 @@ function CommandEditor({
         toBody(definition, saved.payload, key, sourceId),
       );
       const identifiers = record(record(response.error).detail).candidatePartyIds;
+      const detail = record(record(response.error).detail);
+      if (
+        definition.formKey === "owner_concern.create" &&
+        Array.isArray(detail.candidateConcernIds)
+      )
+        setConcernCandidates(
+          detail.candidateConcernIds
+            .filter((id): id is string => typeof id === "string")
+            .slice(0, 20),
+        );
+      if (definition.formKey === "owner_rent_report.verify") {
+        const ids = record(detail.details).candidateReceiptIds;
+        if (Array.isArray(ids))
+          setReceiptCandidates(
+            ids.filter((id): id is string => typeof id === "string").slice(0, 10),
+          );
+      }
+      if (
+        definition.formKey === "finance.expense.create" &&
+        detail.code === "possible_duplicate_expense" &&
+        Array.isArray(detail.candidates)
+      )
+        setExpenseCandidates(detail.candidates.slice(0, 10).map(record));
       if (Array.isArray(identifiers))
         setCandidates(
           identifiers.filter((item): item is string => typeof item === "string").slice(0, 10),
@@ -554,6 +604,46 @@ function CommandEditor({
           ))}
         </section>
       )}
+      {receiptCandidates.length > 0 && (
+        <section aria-label="Possible duplicate rent receipts">
+          <h3>Review existing rent receipts</h3>
+          <p>
+            No new income was recorded. Review the matching receipt and explicitly choose adoption;
+            there is no independent-payment override for Owner reports.
+          </p>
+          {receiptCandidates.map((id) => (
+            <p key={id}>
+              <Link to={`/money?record=receipt&id=${id}`}>Review existing receipt {id}</Link>
+            </p>
+          ))}
+          <Link
+            to={`/money?workflow=owner_rent_report.verify&target=${sourceId}&receiptMode=existing`}
+          >
+            Start explicit adoption review
+          </Link>
+        </section>
+      )}
+      {concernCandidates.length > 0 && (
+        <section aria-label="Possible duplicate concerns">
+          <h3>Review existing Owner concerns</h3>
+          <p>
+            No concern was merged or created. Review the candidates, then start a separate
+            independent-concern review with explicit confirmation and a reason. The original attempt
+            remains retained for recovery.
+          </p>
+          {concernCandidates.map((id) => (
+            <p key={id}>
+              <Link to={`/maintenance?record=concern&id=${id}`}>Review existing concern {id}</Link>
+            </p>
+          ))}
+          <Link
+            state={{ concernReview: values }}
+            to="/maintenance?workflow=owner_concern.create&independentReview=true"
+          >
+            Start independent concern review
+          </Link>
+        </section>
+      )}
       {state.problem && (
         <ul>
           {Object.entries(state.problem.fieldErrors).map(([name, errors]) => (
@@ -562,6 +652,31 @@ function CommandEditor({
             </li>
           ))}
         </ul>
+      )}
+      {expenseCandidates.length > 0 && (
+        <section aria-label="Possible duplicate expenses">
+          <h3>Review possible duplicate expenses</h3>
+          <p>
+            No new expense has been recorded. Review the existing spending before recording a
+            separate payment.
+          </p>
+          {expenseCandidates.map((candidate) => (
+            <article key={scalar(candidate.id)}>
+              <MoneyFacts
+                value={candidate}
+                fields={["paidOn", "amount", "payeeName", "description"]}
+              />
+              <Link to={`/money?record=expense&id=${encodeURIComponent(scalar(candidate.id))}`}>
+                Open existing expense
+              </Link>
+            </article>
+          ))}
+          <Link to={returnTo ?? "/money?tab=expenses"}>Go back</Link>
+          <p>
+            The original submitted payload remains locked. Do not change or resend an unresolved
+            attempt.
+          </p>
+        </section>
       )}
       <form
         onSubmit={(event) => {
@@ -732,38 +847,52 @@ function CommandEditor({
               ))}
             </>
           )}
-          <Fields
-            schema={
-              evidence
-                ? {
-                    ...definition.schema,
-                    properties: { purpose: definition.schema.properties!.purpose },
-                  }
-                : definition.formKey.startsWith("intake.")
+          {definition.formKey === "task.create" ? (
+            <TaskCreateFields
+              schema={definition.schema}
+              value={values}
+              onChange={(next) => form.setValue("data", next)}
+              choices={choicesForValues?.(values) ?? choices}
+              disabled={locked}
+            />
+          ) : (
+            <Fields
+              schema={
+                evidence
                   ? {
                       ...definition.schema,
-                      properties: Object.fromEntries(
-                        Object.entries(definition.schema.properties ?? {}).filter(
-                          ([key]) =>
-                            ![
-                              "expectedEvidenceRevisionId",
-                              "expectedStatus",
-                              "attachments",
-                            ].includes(key),
-                        ),
-                      ),
+                      properties: { purpose: definition.schema.properties!.purpose },
                     }
-                  : definition.schema
-            }
-            value={values}
-            onChange={(next) => form.setValue("data", record(next))}
-            choices={choices}
-            disabled={locked}
-          />
+                  : definition.formKey.startsWith("intake.")
+                    ? {
+                        ...definition.schema,
+                        properties: Object.fromEntries(
+                          Object.entries(definition.schema.properties ?? {}).filter(
+                            ([key]) =>
+                              ![
+                                "expectedEvidenceRevisionId",
+                                "expectedStatus",
+                                "attachments",
+                              ].includes(key),
+                          ),
+                        ),
+                      }
+                    : definition.schema
+              }
+              value={values}
+              onChange={(next) => form.setValue("data", record(next))}
+              choices={choicesForValues?.(values) ?? choices}
+              disabled={locked}
+            />
+          )}
         </fieldset>
+        {renderContext?.(values, locked, (next) => form.setValue("data", next))}
         {!locked && (
           <>
-            <button type="submit" disabled={!scope.canWrite || selecting}>
+            <button
+              type="submit"
+              disabled={!scope.canWrite || selecting || canSubmit?.(values) === false}
+            >
               Save {definition.title.toLowerCase()}
             </button>
             <button
@@ -1097,15 +1226,30 @@ function OriginalMoneyResult({
             ))}
           <p>This is the original committed response.</p>
           {(item.id || item.expenseId || item.accountId) && (
-            <Link
-              to={
-                definition.formKey === "file.upload"
-                  ? `/money?file=${scalar(item.id)}`
-                  : `/money?record=${kind}&id=${scalar(item.expenseId ?? (kind === "deposit" ? (sourceId ?? item.accountId ?? item.id) : item.id))}`
-              }
-            >
-              Open current money record
-            </Link>
+            <>
+              {definition.formKey === "finance.expense.create" && item.id && (
+                <p>
+                  Expense saved. Add evidence now or keep the saved expense without attachments.{" "}
+                  <Link
+                    to={`/money?workflow=file.upload&entityType=expense&entityId=${scalar(item.id)}&purpose=receipt`}
+                  >
+                    Add expense evidence
+                  </Link>{" "}
+                  <Link to={`/money?record=expense&id=${scalar(item.id)}`}>
+                    Skip evidence and review saved expense
+                  </Link>
+                </p>
+              )}
+              <Link
+                to={
+                  definition.formKey === "file.upload"
+                    ? `/money?file=${scalar(item.id)}`
+                    : `/money?record=${kind}&id=${scalar(item.expenseId ?? (kind === "deposit" ? (sourceId ?? item.accountId ?? item.id) : item.id))}`
+                }
+              >
+                Open current money record
+              </Link>
+            </>
           )}
         </>
       )}

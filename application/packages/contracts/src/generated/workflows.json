@@ -4491,6 +4491,8 @@
         "entityType": {
           "type": "string",
           "enum": [
+            "lease",
+            "lease_termination_case",
             "expense",
             "owner_rent_report",
             "security_deposit_deduction",
@@ -4611,10 +4613,10 @@
         }
       },
       "required": [
-        "expectedRevision",
-        "idempotencyKey",
         "leaseTermId",
-        "throughOn"
+        "throughOn",
+        "expectedRevision",
+        "idempotencyKey"
       ],
       "title": "SynchronizeInput",
       "type": "object"
@@ -4800,6 +4802,7 @@
           "anyOf": [
             {
               "maxLength": 80,
+              "pattern": "^(?:[A-Za-z][A-Za-z ]{0,59} )?[•*]{2,}(?:[ -]?[0-9]{1,4})?$",
               "type": "string"
             },
             {
@@ -4979,6 +4982,7 @@
           "anyOf": [
             {
               "maxLength": 80,
+              "pattern": "^(?:[A-Za-z][A-Za-z ]{0,59} )?[•*]{2,}(?:[ -]?[0-9]{1,4})?$",
               "type": "string"
             },
             {
@@ -5202,6 +5206,7 @@
           "anyOf": [
             {
               "maxLength": 80,
+              "pattern": "^(?:[A-Za-z][A-Za-z ]{0,59} )?[•*]{2,}(?:[ -]?[0-9]{1,4})?$",
               "type": "string"
             },
             {

@@ -8,6 +8,7 @@ import { label } from "./fields";
 import { History, readResult } from "./reads";
 export { MoneyFacts } from "./money-presentation";
 import { MoneyFacts } from "./money-presentation";
+import { CheckContext } from "./check-context";
 
 export type MoneyKind =
   | "expectation"
@@ -114,6 +115,11 @@ const detailFields = [
   "payeeName",
   "ownerDisplayNameSnapshot",
   "currentOwnerState",
+  "reportedAtUtc",
+  "propertyTimezoneSnapshot",
+  "receiptLifecycleStatus",
+  "financiallyEffective",
+  "reportRevision",
   "displayName",
   "description",
   "notes",
@@ -128,6 +134,7 @@ const detailFields = [
   "paymentMethodKind",
   "paymentMethodLabel",
   "maskedReference",
+  "otherPaymentMethodNote",
   "receivedByPartyId",
   "amountMinor",
   "expectedAmountMinor",
@@ -140,6 +147,13 @@ const detailFields = [
   "activeReceivedAmount",
   "varianceAmount",
   "settlementStatus",
+  "timelinessStatus",
+  "scheduleAnchorOn",
+  "isProrated",
+  "prorationNumeratorDays",
+  "prorationDenominatorDays",
+  "responsibilityBoundaryOn",
+  "responsibilityOverrideReason",
   "receiptLifecycleStatus",
   "financiallyEffective",
   "depositEligibility",
@@ -154,6 +168,12 @@ const detailFields = [
   "replacesPrepaidCheckId",
   "replacedByPrepaidCheckId",
   "settlementDueOn",
+  "legalRuleReference",
+  "reviewNotes",
+  "deadlineState",
+  "unresolvedBalance",
+  "replacesSettlementId",
+  "replacedBySettlementId",
   "refundDue",
   "receiptTotal",
   "deductionTotal",
@@ -205,6 +225,27 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
       <h2>{label(kind)} record</h2>
       <Link to="/money">Return to Money</Link>
       <MoneyFacts value={item} fields={detailFields} />
+      {kind === "check" && <CheckContext check={item} />}
+      {kind === "expense" && (
+        <MoneyFacts
+          value={{
+            property: record(item.property).displayName,
+            space: record(item.space).displayName ?? "Whole Property",
+            category: record(item.category).displayName,
+            paidBy:
+              item.paidByKind === "party"
+                ? `Party ${scalar(item.paidByPartyId)}`
+                : "Local operator",
+          }}
+          fields={["property", "space", "category", "paidBy"]}
+        />
+      )}
+      {kind === "expectation" && (
+        <p>
+          Settlement describes allocations. Timeliness uses the Property local date, with no hidden
+          grace period. Late or missed is an operator record, not a legal determination.
+        </p>
+      )}
       {leaseId && <Link to={`/leases/${leaseId}/details`}>Owning Lease</Link>}
       {!!item.propertyId && (
         <Link to={`/properties/${scalar(item.propertyId)}/money`}>Property money context</Link>
@@ -257,6 +298,30 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
         <Link to={moneyRecordUrl("receipt", scalar(item.verifiedReceiptId))}>
           Verified Finance receipt
         </Link>
+      )}
+      {kind === "report" && (
+        <>
+          <p>
+            A retained Owner claim is not income. Only the active Finance receipt counts; voiding it
+            leaves this verification history financially ineffective.
+          </p>
+          {(["priorReportId", "replacementReportId"] as const).map(
+            (key) =>
+              item[key] && (
+                <p key={key}>
+                  {key === "priorReportId" ? "Prior report" : "Replacement report"}:{" "}
+                  <Link to={moneyRecordUrl("report", scalar(item[key]))}>
+                    Review report history
+                  </Link>
+                </p>
+              ),
+          )}
+          {item.replacementReceiptId && (
+            <Link to={moneyRecordUrl("receipt", scalar(item.replacementReceiptId))}>
+              Replacement Finance receipt
+            </Link>
+          )}
+        </>
       )}
       {kind === "deposit" && (
         <>
@@ -311,6 +376,7 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
         "allocations",
         "allocationSummaries",
         "receiptAllocations",
+        "timelinessReviews",
         "refunds",
         "deductions",
         "credits",
@@ -338,11 +404,24 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
                         "receivedFromName",
                         "authorizedBySettlementId",
                         "reason",
+                        "decision",
+                        "calculatorPrincipal",
+                        "annualRateBasisPoints",
+                        "startsOn",
+                        "endsOn",
+                        "dayCount",
+                        "calculatedAmount",
+                        "overrideReason",
                       ]}
                     />
                     {!!child.expectationId && (
                       <Link to={moneyRecordUrl("expectation", scalar(child.expectationId))}>
                         Allocated expectation
+                      </Link>
+                    )}
+                    {!!child.receiptId && (
+                      <Link to={moneyRecordUrl("receipt", scalar(child.receiptId))}>
+                        Recorded receipt for this allocation
                       </Link>
                     )}
                     {kind === "expense" &&
@@ -354,6 +433,16 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
                           target={id}
                           child={childId}
                         />
+                      )}
+                    {kind === "expense" &&
+                      name === "refunds" &&
+                      !!child.voidedAt &&
+                      !item.voidedAt && (
+                        <Link
+                          to={`${workflowUrl("finance.expense_refund.create", id)}&replacesRefundId=${childId}`}
+                        >
+                          Record replacement refund
+                        </Link>
                       )}
                     {kind === "settlement" &&
                       item.status === "draft" &&
@@ -379,9 +468,31 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
                         child={childId}
                       />
                     )}
+                    {kind === "settlement" &&
+                      name === "refunds" &&
+                      !!child.voidedAt &&
+                      item.status === "approved" && (
+                        <Link
+                          to={`${workflowUrl("finance.deposit_refund.create", accountId, id)}&replacesRefundId=${childId}`}
+                        >
+                          Record replacement deposit refund
+                        </Link>
+                      )}
                     {name === "deductions" && (
                       <>
-                        <MoneyEvidence value={child.evidence} />
+                        <MoneyEvidence
+                          value={child.evidence}
+                          archiveContext={
+                            item.status === "draft" ? { accountId, settlementId: id } : undefined
+                          }
+                        />
+                        {Array.isArray(child.evidence) &&
+                          child.evidence.some((entry) => !!record(entry).archivedAt) && (
+                            <details>
+                              <summary>Archived deduction evidence history</summary>
+                              <MoneyEvidence value={child.evidence} history />
+                            </details>
+                          )}
                         {item.status === "draft" && (
                           <Link
                             to={`${workflowUrl("file.upload")}&entityType=security_deposit_deduction&entityId=${childId}&accountId=${accountId}`}
@@ -401,6 +512,7 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
                                     "sourceSummary",
                                     "outstandingAmount",
                                     "historicalConfirmed",
+                                    "historicalReason",
                                   ]}
                                 />
                                 {item.status === "draft" && (
@@ -421,7 +533,15 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
             </section>
           ),
       )}
-      <MoneyEvidence value={item.activeEvidence ?? item.files ?? item.evidence} />
+      <MoneyEvidence
+        value={item.activeEvidence ?? item.files ?? item.evidence}
+        allowArchive={kind === "expense" || kind === "report"}
+        archiveContext={
+          kind === "settlement" && item.status === "draft"
+            ? { accountId, settlementId: id }
+            : undefined
+        }
+      />
       {(Array.isArray(item.archivedEvidence) || Array.isArray(item.files)) && (
         <details>
           <summary>Archived evidence history</summary>
@@ -453,7 +573,17 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
     </section>
   );
 }
-function MoneyEvidence({ value, history = false }: { value: unknown; history?: boolean }) {
+function MoneyEvidence({
+  value,
+  history = false,
+  allowArchive = false,
+  archiveContext,
+}: {
+  value: unknown;
+  history?: boolean;
+  allowArchive?: boolean;
+  archiveContext?: { accountId: string; settlementId: string };
+}) {
   if (!Array.isArray(value)) return null;
   return (
     <section aria-label="Supporting evidence">
@@ -488,6 +618,20 @@ function MoneyEvidence({ value, history = false }: { value: unknown; history?: b
               )}
               {available && <a href={`/api/files/${fileId}/content`}>Download evidence</a>}{" "}
               <Link to={`/money?file=${fileId}`}>Evidence metadata and history</Link>
+              {allowArchive && !history && (
+                <Link
+                  to={`/money?workflow=file.link.archive&target=${scalar(item.linkId ?? item.id)}${item.entity_type === "owner_rent_report" ? "&reportEvidence=true" : ""}`}
+                >
+                  Archive evidence association
+                </Link>
+              )}
+              {archiveContext && !history && (
+                <Link
+                  to={`/money?workflow=file.link.archive&target=${scalar(item.linkId)}&accountId=${archiveContext.accountId}&settlementId=${archiveContext.settlementId}`}
+                >
+                  Archive deposit evidence association
+                </Link>
+              )}
             </p>
           );
         })}
@@ -542,6 +686,13 @@ function DepositHistory({ id }: { id: string }) {
           />
           {receipt.lifecycleStatus === "active" && (
             <CommandLinks keys={["finance.deposit_receipt.void"]} target={id} child={receipt.id} />
+          )}
+          {receipt.lifecycleStatus === "voided" && !receipt.replacedByReceiptId && (
+            <Link
+              to={`${workflowUrl("finance.deposit_receipt.create", id)}&replacesReceiptId=${receipt.id}`}
+            >
+              Record replacement deposit receipt
+            </Link>
           )}
         </article>
       ))}

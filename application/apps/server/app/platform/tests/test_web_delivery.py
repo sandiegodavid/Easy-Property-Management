@@ -55,6 +55,7 @@ def client(tmp_path, build):
         "/money/expenses",
         "/settings/workspace",
         "/settings/recovery",
+        "/settings/provider-categories",
         "/search",
     ],
 )

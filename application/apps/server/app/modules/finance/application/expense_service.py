@@ -28,6 +28,7 @@ from app.modules.finance.domain.expense_models import (
     Expense,
     ExpenseCategory,
     ExpenseCreateCommand,
+    ExpenseDuplicateReviewCommand,
     ExpensePatchCommand,
     ExpenseQueryCommand,
     ExpenseRefund,
@@ -56,6 +57,14 @@ class ExpenseService:
     def __init__(self, unit_of_work: ExpenseUnitOfWork, *, now=lambda: datetime.now(UTC)) -> None:
         self.unit_of_work = unit_of_work
         self.now = now
+
+    def review_duplicates(self, command: ExpenseDuplicateReviewCommand):
+        """Read-only, bounded review before preparing an immutable create attempt."""
+        return self.unit_of_work.read(
+            lambda tx: {
+                "candidates": [_duplicate_summary(item) for item in tx.duplicate_expenses(command)]
+            }
+        )
 
     def list_categories(self, *, include_archived: bool = False):
         return self.unit_of_work.read(

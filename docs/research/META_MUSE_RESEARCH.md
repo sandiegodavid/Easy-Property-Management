@@ -160,7 +160,7 @@ The recommended architecture is **app-controlled, reviewable model assistance pl
 
 ## Relationship to the current repository decisions
 
-[UI-001 D46](../ui/workflows.md), [AI-GOV-001](../active/AI-GOV-001_DESIGN.md), and [MCP-001](../active/MCP-001_DESIGN.md) define this application's intended behavior. Meta Model API is one registered-provider candidate; personal-agent access is independent and capability-gated. The app’s decision to use authorized assistants or manual entry for inbound evidence, retain submitted evidence, monitor heartbeats, and leave outbound sending manual is a **repository decision**, not independently verified Meta product support. Likewise, proposed setup bundles, ingestion schedules, token rotation, and retry behavior remain application integration requirements until proven against a supported personal-agent interface.
+[UI-001 D46](../ui/workflows.md), [AI-GOV-001](../modules/ai-governance.md), and [MCP-001](../active/MCP-001_DESIGN.md) define this application's intended behavior. Meta Model API is one registered-provider candidate; personal-agent access is independent and capability-gated. The app’s decision to use authorized assistants or manual entry for inbound evidence, retain submitted evidence, monitor heartbeats, and leave outbound sending manual is a **repository decision**, not independently verified Meta product support. Likewise, proposed setup bundles, ingestion schedules, token rotation, and retry behavior remain application integration requirements until proven against a supported personal-agent interface.
 
 ## Proposed operator experience
 

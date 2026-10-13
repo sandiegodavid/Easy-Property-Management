@@ -4,7 +4,8 @@ from datetime import date
 from typing import Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, Field, StrictBool, StrictInt
+from pydantic import AwareDatetime, Field, StrictBool, StrictInt, field_validator
+from app.modules.finance.domain.models import SAFE_MASKED_REFERENCE_PATTERN
 
 from app.modules.operator.domain.models import Contract
 from app.modules.operator.application.financial_forms import FINANCIAL_SCHEMAS
@@ -449,13 +450,18 @@ class RentReceiptCreateForm(FinanceRevisionForm):
         | None
     ) = None
     paymentMethodLabel: str | None = Field(None, max_length=100)
-    maskedReference: str | None = Field(None, max_length=80)
+    maskedReference: str | None = Field(None, max_length=80, pattern=SAFE_MASKED_REFERENCE_PATTERN)
     otherPaymentMethodNote: str | None = Field(None, max_length=200)
     receivedByPartyId: UUID | None = None
     replacesReceiptId: UUID | None = None
     notes: str | None = Field(None, max_length=4000)
     duplicateConfirmed: StrictBool | None = None
     duplicateReason: str | None = Field(None, max_length=1000)
+
+    @field_validator("maskedReference", mode="before")
+    @classmethod
+    def trim_masked_reference(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 
 class ReceiptVoidForm(FinanceRevisionForm):
@@ -469,7 +475,12 @@ class PrepaidCheckCreateForm(FinanceRevisionForm):
     payerPartyId: UUID | None = None
     receivedOn: date | None = None
     checkDatedOn: date | None = None
-    maskedReference: str | None = Field(None, max_length=80)
+    maskedReference: str | None = Field(None, max_length=80, pattern=SAFE_MASKED_REFERENCE_PATTERN)
+
+    @field_validator("maskedReference", mode="before")
+    @classmethod
+    def normalize_reference(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 
 class PrepaidCheckDepositForm(FinanceRevisionForm):

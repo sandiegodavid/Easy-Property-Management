@@ -61,7 +61,14 @@ function SearchGroup({ initial, q, archived }: { initial: Group; q: string; arch
       {result.error ? (
         <>
           <p role="alert">{result.error.message} Restart this group with the same filters.</p>
-          <button onClick={() => setCursor(undefined)}>Restart group</button>
+          <button
+            onClick={() => {
+              setRefreshed(true);
+              setCursor(undefined);
+            }}
+          >
+            Restart group
+          </button>
         </>
       ) : !group ? (
         <p role="status">Loading results…</p>

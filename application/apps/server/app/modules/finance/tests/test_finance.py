@@ -43,6 +43,7 @@ from app.modules.finance.application.service import (
     _schedule,
 )
 from app.modules.finance.domain.deposit_models import (
+    CreditCommand,
     DeductionCommand,
     DepositAccountCreateCommand,
     DepositReceiptCommand,
@@ -113,6 +114,102 @@ from app.platform.product_migrations import ProductSchemaError, validate_latest_
 
 
 class FinanceWorkflowTests(unittest.TestCase):
+    def test_deduction_source_preview_is_bounded_read_only_and_checks_membership(self):
+        account = deposit_command(
+            self.deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(self.lease["terms"][0]["id"]),
+        )
+        expectations = rent_command(
+            self.finance,
+            "synchronize",
+            self.lease["id"],
+            SynchronizeExpectationsCommand(
+                self.lease["terms"][0]["id"],
+                (date.today() + timedelta(days=60)).isoformat(),
+                self.lease["terms"][0]["effectiveOn"],
+            ),
+        )
+        source = expectations[0]
+        revision = self.deposits.revision(account["id"])
+        statements = []
+
+        def count(_connection, _cursor, statement, _parameters, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        engine = self.deposits.unit_of_work.engine
+        event.listen(engine, "before_cursor_execute", count)
+        try:
+            preview = self.deposits.source_preview(account["id"], "rent_expectation", source["id"])
+        finally:
+            event.remove(engine, "before_cursor_execute", count)
+        self.assertLessEqual(len(statements), 3)
+        self.assertEqual(preview["outstandingAmount"], "1000.00")
+        self.assertTrue(preview["active"])
+        self.assertEqual(self.deposits.revision(account["id"]), revision)
+        with TestClient(create_app(self.config)) as client:
+            response = client.get(
+                f"/api/security-deposits/{account['id']}/deduction-source-preview",
+                params={"sourceKind": "rent_expectation", "sourceId": source["id"]},
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(response.json(), preview)
+            self.assertEqual(
+                client.get(
+                    f"/api/security-deposits/{account['id']}/deduction-source-preview",
+                    params={"sourceKind": "expense", "sourceId": str(uuid4())},
+                ).status_code,
+                404,
+            )
+        # Simulate a source relationship corrupted outside supported commands.
+        raw = self.finance.unit_of_work.engine.raw_connection()
+        try:
+            raw.execute("PRAGMA foreign_keys = OFF")
+            raw.execute(
+                "UPDATE rent_expectations SET lease_id = ? WHERE id = ?",
+                (str(uuid4()), source["id"]),
+            )
+            raw.commit()
+        finally:
+            raw.close()
+        with self.assertRaises(FinanceConflictError):
+            self.deposits.source_preview(account["id"], "rent_expectation", source["id"])
+
+    def test_interest_credit_rounds_half_up_once_and_requires_override_context(self):
+        inputs = {
+            "kind": "interest",
+            "amount": "0.01",
+            "description": "Reviewed interest",
+            "calculator_principal": "1.00",
+            "annual_rate_basis_points": 50,
+            "starts_on": "2025-01-01",
+            "ends_on": "2026-01-01",
+        }
+        credit = CreditCommand(**inputs)
+        self.assertEqual(credit.calculated_amount_minor, 1)
+        with self.assertRaises(FinanceError):
+            CreditCommand(**{**inputs, "amount": "0.02"})
+        self.assertEqual(
+            CreditCommand(
+                **{
+                    **inputs,
+                    "amount": "0.02",
+                    "override_reason": "Operator applied documented adjustment",
+                }
+            ).calculated_amount_minor,
+            1,
+        )
+        for changes in (
+            {"ends_on": "2025-01-01"},
+            {"annual_rate_basis_points": 0},
+            {"annual_rate_basis_points": 100001},
+            {"starts_on": "1900-01-01", "ends_on": "2026-01-01"},
+        ):
+            with self.subTest(changes=changes), self.assertRaises(FinanceError):
+                CreditCommand(**{**inputs, **changes})
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -363,6 +460,9 @@ class FinanceWorkflowTests(unittest.TestCase):
             purpose="supporting_document",
         )
         link_id = self.files.get(stored.id).links[0]["id"]
+        evidence = self.deposits.settlement(settlement["id"])["deductions"][0]["evidence"][0]
+        self.assertEqual(evidence["originalName"], source.name)
+        self.assertTrue(evidence["available"])
         with self.assertRaisesRegex(FinanceConflictError, "Archive deduction evidence"):
             deposit_command(self.deposits, "delete_deduction", deduction["id"])
 
@@ -381,6 +481,10 @@ class FinanceWorkflowTests(unittest.TestCase):
                 True,
                 zero_dollar_closure_confirmed=True,
             )
+
+        evidence = self.deposits.settlement(settlement["id"])["deductions"][0]["evidence"][0]
+        self.assertEqual(evidence["storageState"], "quarantined")
+        self.assertFalse(evidence["available"])
 
         self.files.archive_link(link_id, confirmed=True, reason="Evidence was attached in error.")
         self.assertEqual(
@@ -1648,6 +1752,28 @@ class FinanceWorkflowTests(unittest.TestCase):
                     "cash",
                 ),
             )
+
+    def test_payment_method_suggestion_has_a_fixed_read_query_budget(self):
+        statements = []
+
+        def count(_connection, _cursor, sql, _parameters, _context, _many):
+            statements.append(sql)
+
+        engine = self.finance.unit_of_work.engine
+        event.listen(engine, "before_cursor_execute", count)
+        try:
+            self.assertIsNone(self.finance.payment_method_suggestion(self.lease["id"]))
+        finally:
+            event.remove(engine, "before_cursor_execute", count)
+        selects = [sql for sql in statements if sql.lstrip().upper().startswith("SELECT")]
+        self.assertLessEqual(len(selects), 4)
+        self.assertTrue(any("LIMIT" in sql and "rent_receipts" in sql for sql in selects))
+        self.assertFalse(
+            any(
+                sql.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+                for sql in statements
+            )
+        )
 
     def test_payment_method_validation_and_suggestion_route(self):
         with self.assertRaises(FinanceError):

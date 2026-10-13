@@ -929,6 +929,8 @@ export function workflowContracts(openapi) {
                             entityType: {
                               type: "string",
                               enum: [
+                                "lease",
+                                "lease_termination_case",
                                 "expense",
                                 "owner_rent_report",
                                 "security_deposit_deduction",

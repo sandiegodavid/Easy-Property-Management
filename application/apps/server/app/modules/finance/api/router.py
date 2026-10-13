@@ -5,7 +5,15 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Response, status
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictBool, StrictInt
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    field_validator,
+)
 
 from app.modules.finance.api.conflicts import FinanceConflictResponse
 
@@ -25,6 +33,7 @@ from app.modules.finance.api.deposit_router import (
     DeletedMutationResponse,
 )
 from app.modules.finance.domain.models import (
+    SAFE_MASKED_REFERENCE_PATTERN,
     FinanceConflictError,
     FinanceError,
     FinanceNotFoundError,
@@ -47,13 +56,43 @@ class CommandInput(Contract):
     idempotencyKey: UUID
 
 
-class SynchronizeInput(CommandInput):
+class SchedulePreviewInput(Contract):
     leaseTermId: UUID
     throughOn: date
     scheduleAnchorOn: date | None = None
     responsibilityEndsOnOverride: date | None = None
     overrideReason: str | None = Field(None, max_length=1000)
     overrideConfirmed: StrictBool = False
+
+
+class SynchronizeInput(CommandInput, SchedulePreviewInput):
+    pass
+
+
+class SchedulePreviewItem(Contract):
+    lifecycleStatus: Literal["active", "voided"]
+    periodStartsOn: date
+    periodEndsOn: date
+    dueOn: date
+    expectedAmountMinor: StrictInt
+    isProrated: StrictBool
+    prorationNumeratorDays: StrictInt | None
+    prorationDenominatorDays: StrictInt | None
+    responsibilityBoundaryOn: date | None
+
+
+class SchedulePreviewResponse(Contract):
+    rentLedgerRevision: StrictInt = Field(ge=0)
+    timeZone: str
+    termStartsOn: date
+    termEndsOn: date | None
+    responsibilityEndsOn: date | None
+    actualMoveOutOn: date | None
+    baseRentMinor: StrictInt
+    paymentFrequency: Literal["weekly", "monthly"]
+    scheduleAnchorOn: date
+    items: list[SchedulePreviewItem]
+    existingItems: list[SchedulePreviewItem]
 
 
 class AllocationInput(Contract):
@@ -73,13 +112,18 @@ class ReceiptInput(Contract):
         "automatic_bank_payment", "bank_transfer", "check", "cash", "online_payment", "other"
     ]
     paymentMethodLabel: str | None = Field(None, max_length=100)
-    maskedReference: str | None = Field(None, max_length=80)
+    maskedReference: str | None = Field(None, max_length=80, pattern=SAFE_MASKED_REFERENCE_PATTERN)
     otherPaymentMethodNote: str | None = Field(None, max_length=200)
     receivedByPartyId: UUID | None = None
     replacesReceiptId: UUID | None = None
     notes: str | None = Field(None, max_length=4000)
     duplicateConfirmed: StrictBool = False
     duplicateReason: str | None = Field(None, max_length=1000)
+
+    @field_validator("maskedReference", mode="before")
+    @classmethod
+    def trim_masked_reference(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 
 class VoidInput(CommandInput):
@@ -112,6 +156,14 @@ class ExpectationAllocationSummaryResponse(Contract):
     receiptLifecycleStatus: Literal["active", "voided"]
 
 
+class TimelinessReviewResponse(Contract):
+    id: UUID
+    expectationId: UUID
+    decision: Literal["mark_missed", "clear_missed"]
+    reason: str
+    createdAt: AwareDatetime
+
+
 class ExpectationResponse(Contract):
     id: UUID
     leaseId: UUID
@@ -139,6 +191,7 @@ class ExpectationResponse(Contract):
         Literal["upcoming", "due", "late", "missed", "paid_on_time", "paid_late"] | None
     )
     effectiveMissedReview: bool
+    timelinessReviews: list[TimelinessReviewResponse]
     allocationCount: int
     allocationSummaries: list[ExpectationAllocationSummaryResponse]
     receivedAmountMinor: int
@@ -282,6 +335,29 @@ def build_router(service: FinanceService, runtime: WorkspaceRuntime):
             raise domain_problem(e, status_code=422, code="finance_validation") from e
         except FinanceError as e:
             raise domain_problem(e, status_code=400, code="finance_validation") from e
+
+    @router.post(
+        "/api/leases/{lease_id}/rent-expectations/preview",
+        response_model=SchedulePreviewResponse,
+        operation_id="previewRentExpectations",
+    )
+    def preview_schedule(lease_id: UUID, data: SchedulePreviewInput):
+        ready()
+        return invoke(
+            lambda: service.preview_schedule(
+                str(lease_id),
+                SynchronizeExpectationsCommand(
+                    str(data.leaseTermId),
+                    data.throughOn.isoformat(),
+                    data.scheduleAnchorOn.isoformat() if data.scheduleAnchorOn else None,
+                    data.responsibilityEndsOnOverride.isoformat()
+                    if data.responsibilityEndsOnOverride
+                    else None,
+                    data.overrideReason,
+                    data.overrideConfirmed,
+                ),
+            )
+        )
 
     @router.post(
         "/api/leases/{lease_id}/rent-expectations/synchronize",

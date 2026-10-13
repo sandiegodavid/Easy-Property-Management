@@ -370,7 +370,9 @@ class _Transaction:
     def evidence(self, entity_type, entity_id):
         return [
             asdict(link)
-            for link in self.files.links_for_entity(self.connection, entity_type, entity_id)
+            for link in self.files.links_for_entities(
+                self.connection, entity_type, [entity_id]
+            ).get(entity_id, [])
         ]
 
     def inspection_warnings(self, lease_id):

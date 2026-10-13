@@ -841,6 +841,10 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             expected_revision=self.issue_revision(item["id"], kind="issue"),
         )
         self.assertEqual(task["relatedEntityType"], "maintenance_issue")
+        with TestClient(create_app(self.workspace.config.config_path)) as client:
+            response = client.get(f"/api/maintenance-issues/{item['id']}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.json()["tasks"][0]["deletedAtUtc"])
 
     def test_later_voided_expense_remains_visible_through_active_link(self) -> None:
         issue = self.issue()
@@ -856,6 +860,10 @@ class MaintenanceWorkflowTests(unittest.TestCase):
         )
         detail = self.service.detail(issue["id"])
         self.assertEqual(detail["expenseLinks"][0]["expense"]["lifecycleStatus"], "voided")
+        with TestClient(create_app(self.workspace.config.config_path)) as client:
+            response = client.get(f"/api/maintenance-issues/{issue['id']}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.json()["expenseLinks"][0]["expense"]["voidedAt"])
         self.workspace.open()
 
     def test_missing_expense_link_creation_audit_fails_workspace_validation(self) -> None:

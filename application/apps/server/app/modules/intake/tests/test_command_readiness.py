@@ -290,7 +290,43 @@ class IntakeCommandReadinessTests(TestCase):
         self.source = self.service.admit(self.original_command)
         key = str(uuid4())
         corrected = self.correction(self.source, key)
-        self.attention(corrected, "dismissed", str(uuid4()))
+        dismissed = self.attention(corrected, "dismissed", str(uuid4()))
+        replacement_command = command("Replacement source identity.")
+        replacement = self.service.supersede(
+            self.source["sourceId"],
+            replacement_command,
+            expected_source_revision=dismissed["sourceRevision"],
+            expected_evidence_revision_id=dismissed["evidenceRevisionId"],
+        )
+        tables = (
+            "intake_sources",
+            "intake_evidence_revisions",
+            "intake_revision_file_links",
+            "intake_source_operations",
+            "intake_source_duplicate_candidates",
+            "file_records",
+            "file_content_locations",
+            "file_links",
+        )
+
+        def retained(database):
+            with sqlite3.connect(database) as connection:
+                return {
+                    **{
+                        table: connection.execute(f"SELECT * FROM {table} ORDER BY 1, 2").fetchall()
+                        for table in tables
+                    },
+                    "audits": connection.execute(
+                        "SELECT * FROM audit_events WHERE entity_type LIKE 'intake_%' OR "
+                        "entity_type IN ('file', 'file_link') ORDER BY id"
+                    ).fetchall(),
+                }
+
+        stored = self.service.get(self.source["sourceId"])["attachments"][0]["file"]
+        digest = stored["content_sha256"]
+        original_bytes = (self.workspace.paths.files / "managed" / digest).read_bytes()
+        # The audited detail read above is retained too.
+        before = retained(self.database)
         backups = BackupService(
             self.workspace,
             self.recorder,
@@ -301,13 +337,85 @@ class IntakeCommandReadinessTests(TestCase):
         restored_root = self.root / "restored"
         backups.restore(archive.archive_path, passphrase, restored_root)
         restored_database = restored_root / "database" / "property-management.sqlite"
+        self.assertEqual(before, retained(restored_database))
+        self.assertEqual(
+            original_bytes, (restored_root / "files" / "managed" / digest).read_bytes()
+        )
         restored = self.make_service(restored_database)
         self.assertEqual(
             self.source, restored.receipt_by_key(self.original_command.idempotency_key)
         )
         self.assertEqual(corrected, restored.receipt_by_key(key))
-        self.assertEqual(3, restored.get(self.source["sourceId"])["sourceRevision"])
+        self.assertEqual(replacement, restored.receipt_by_key(replacement_command.idempotency_key))
+        restored_source = restored.get(self.source["sourceId"])
+        self.assertEqual(4, restored_source["sourceRevision"])
+        self.assertEqual(replacement["sourceId"], restored_source["supersededBySourceId"])
         validate_latest_schema(restored_database)
+
+    def test_exact_revision_api_commits_audit_and_rejects_foreign_membership(self):
+        corrected = self.correction(self.source, str(uuid4()))
+
+        class Runtime:
+            ready = True
+            can_write = True
+            error = None
+
+        app = FastAPI()
+        app.include_router(build_router(self.service, Runtime()))
+        with TestClient(app) as client:
+            path = f"/api/intake/sources/{self.source['sourceId']}/revisions/{self.source['evidenceRevisionId']}"
+            response = client.get(path)
+            self.assertEqual(200, response.status_code, response.text)
+            self.assertEqual("Original evidence.", response.json()["evidence"]["body"])
+            self.assertEqual(1, response.json()["revisionNumber"])
+            self.assertEqual(corrected["sourceRevision"], response.json()["sourceRevision"])
+            with sqlite3.connect(self.database) as connection:
+                audit = connection.execute(
+                    "SELECT actor_kind,after_snapshot FROM audit_events "
+                    "WHERE reason='intake_revision_read'"
+                ).fetchone()
+            self.assertEqual("local_operator", audit[0])
+            self.assertIn(self.source["evidenceRevisionId"], audit[1])
+            self.assertEqual(
+                404, client.get(path.replace(self.source["sourceId"], str(uuid4()))).status_code
+            )
+            with patch.object(
+                self.service.unit_of_work.recorder,
+                "record_change",
+                side_effect=RuntimeError("audit failed"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "audit failed"):
+                    client.get(path)
+        self.assertEqual(
+            "getIntakeEvidenceRevision",
+            app.openapi()["paths"]["/api/intake/sources/{source_id}/revisions/{revision_id}"][
+                "get"
+            ]["operationId"],
+        )
+
+    def test_source_pages_have_a_constant_query_budget_without_evidence_disclosure(self):
+        for index in range(25):
+            self.service.admit(command(f"Private source {index}"))
+        statements = []
+
+        def record(_connection, _cursor, statement, _parameters, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        engine = self.service.unit_of_work.engine
+        event.listen(engine, "before_cursor_execute", record)
+        try:
+            self.service.list(limit=1)
+            small_count = len(statements)
+            statements.clear()
+            page, cursor = self.service.list(limit=25)
+            self.assertEqual(small_count, len(statements))
+            self.assertLessEqual(len(statements), 3)
+            self.assertEqual(25, len(page))
+            self.assertIsNotNone(cursor)
+            self.assertTrue(all("evidence" not in item and "body" not in item for item in page))
+        finally:
+            event.remove(engine, "before_cursor_execute", record)
 
     def test_api_requires_concurrency_fields_and_exposes_safe_recovery(self):
         class Runtime:

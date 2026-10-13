@@ -1,10 +1,251 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import type { components } from "@epm/contracts/generated";
+import axe from "axe-core";
 
 type Schemas = components["schemas"];
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
+test("Lease documents resume with original bytes and reconcile one committed upload", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  await page.goto(`/leases/${f.lease.id}/details`);
+  const documents = page.getByRole("region", {
+    name: `Lease documents ${f.lease.id}`,
+    exact: true,
+  });
+  await documents.getByRole("link", { name: "Attach lease document", exact: true }).click();
+  const attachment = {
+    name: "signed-lease.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Signed lease document for retained evidence"),
+  };
+  await page.getByLabel("Evidence file (required)", { exact: true }).setInputFiles(attachment);
+  const saving = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" && response.url().includes("/api/operator/recovery/"),
+  );
+  await page.getByRole("button", { name: "Save unfinished form", exact: true }).click();
+  const recovery = (await (await saving).json()) as Schemas["RecoveryResponse"];
+  await page.goto(
+    `/money?workflow=file.upload&leaseId=${f.lease.id}&entityType=lease&entityId=${f.lease.id}&resume=${recovery.id}`,
+  );
+  await page.getByRole("button", { name: "Save attach supporting evidence", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Select the evidence file");
+  await page.getByLabel("Evidence file (required)", { exact: true }).setInputFiles(attachment);
+  let writes = 0;
+  await page.route("**/api/files", async (route) => {
+    if (route.request().method() === "POST") {
+      writes++;
+      await route.fetch();
+      await route.abort("failed");
+    } else await route.continue();
+  });
+  await page.getByRole("button", { name: "Save attach supporting evidence", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Check original result", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+  expect(writes).toBe(1);
+  const response = await request.get(`/api/leases/${f.lease.id}`);
+  const lease = (await response.json()) as Schemas["LeaseResponse"];
+  expect(lease.files).toHaveLength(1);
+  expect(lease.leaseRevision).toBe(f.lease.leaseRevision);
+  let metadataReads = 0;
+  page.on("request", (request) => {
+    if (/\/api\/files\/[0-9a-f-]{36}$/.test(new URL(request.url()).pathname)) metadataReads++;
+  });
+  await page.getByRole("link", { name: "Return to current record", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/leases/${f.lease.id}/details`));
+  await expect(
+    documents.getByRole("link", { name: "Download signed-lease.txt", exact: true }),
+  ).toBeVisible();
+  expect(metadataReads).toBe(0);
+  await documents
+    .getByRole("link", { name: "Metadata and history: signed-lease.txt", exact: true })
+    .click();
+  await expect(page.getByRole("region", { name: "Evidence metadata", exact: true })).toContainText(
+    lease.files[0].contentSha256,
+  );
+  expect(metadataReads).toBe(1);
+});
 
-async function fixture(request: APIRequestContext, futureOccupancy = false) {
+test("termination documents and full proposal context preserve truthful occupancy", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  const executed = await execute(request, f);
+  const created = await request.post(`/api/leases/${f.lease.id}/termination-cases`, {
+    data: {
+      reason: "job_relocation",
+      noticeReceivedOn: f.today,
+      requestedTerminationOn: f.today,
+      expectedMoveOutOn: f.today,
+      tenantExplanation: "Moving for work",
+      contractClauseReference: "Clause 12",
+      expectedLeaseRevision: executed.leaseRevision,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(created.ok(), await created.text()).toBe(true);
+  const item = (await created.json()) as Schemas["TerminationCaseMutationResponse"];
+  const proposed = await request.post(`/api/termination-cases/${item.id}/proposals`, {
+    data: {
+      proposedTerminationOn: f.today,
+      expectedMoveOutOn: f.today,
+      terminationFeeMinor: 20500,
+      currencyCode: "USD",
+      feeWaived: false,
+      replacementTenantCondition: "Operator review required",
+      accessArrangement: "By appointment",
+      responseDueOn: f.today,
+      expectedLeaseRevision: item.leaseRevision,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(proposed.ok(), await proposed.text()).toBe(true);
+  await page.goto(`/leases/${f.lease.id}/details`);
+  const requests = page.getByRole("region", { name: "Termination requests", exact: true });
+  await expect(requests).toContainText("Moving for work");
+  await expect(requests).toContainText("Clause 12");
+  await expect(requests).toContainText("USD 205.00");
+  await expect(requests).toContainText("By appointment");
+  await requests.getByRole("link", { name: "Attach termination document", exact: true }).click();
+  await page.getByLabel("Purpose (required)", { exact: true }).fill("relocation_support");
+  await page.getByLabel("Evidence file (required)", { exact: true }).setInputFiles({
+    name: "relocation.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Voluntarily supplied relocation evidence"),
+  });
+  await save(page, "Attach supporting evidence");
+  await page.getByRole("link", { name: "Return to current record", exact: true }).click();
+  await expect(requests).toContainText("relocation.txt");
+  const leaseResponse = await request.get(`/api/leases/${f.lease.id}`);
+  const lease = (await leaseResponse.json()) as Schemas["LeaseResponse"];
+  expect(lease.status).toBe("executed");
+  expect(lease.actualMoveOutOn).toBeNull();
+  expect(lease.files).toEqual([]);
+  const spaceResponse = await request.get(`/api/spaces/${lease.spaceId}/status`);
+  expect(
+    ((await spaceResponse.json()) as Schemas["SpaceStatusResponse"]).currentOccupancy.sourceId,
+  ).toBe(lease.id);
+});
+
+test("commercial Lease execution and milestones support narrow keyboard review in both themes", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request, true, true);
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto(`/leasing?workflow=lease.execute&target=${f.lease.id}`);
+  await page.getByLabel("Executed on (required)").fill(f.today);
+  await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
+  const submit = page.getByRole("button", { name: "Save execute lease", exact: true });
+  await submit.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  for (const theme of ["light", "dark"]) {
+    await page.goto("/settings");
+    await page
+      .getByRole("radio", { name: theme === "dark" ? "Dark" : "Light", exact: true })
+      .check();
+    await page.getByRole("button", { name: "Save preferences", exact: true }).click();
+    await expect(page.getByText("Preferences saved.")).toBeVisible();
+    await page.goto(`/leases/${f.lease.id}/details`);
+    await expect(page.getByRole("region", { name: "Lease milestones", exact: true })).toContainText(
+      f.lease.occupancyStartsOn,
+    );
+    await expect(
+      page.getByRole("region", { name: "Lease inspections", exact: true }),
+    ).toContainText("not due");
+    await expect(page.getByRole("region", { name: "Lease workspace", exact: true })).toContainText(
+      "USD 1000.00",
+    );
+    await page.evaluate(axe.source);
+    const violations = await page.evaluate(async () =>
+      (
+        await window.axe.run(document, {
+          runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+        })
+      ).violations.map((item) => item.id),
+    );
+    expect(violations).toEqual([]);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+  }
+  await page
+    .getByRole("link", { name: "Review Space occupancy and availability", exact: true })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/properties/${f.property.id}/units`));
+});
+
+test("unavailable documents and Space context keep Lease facts visible without opening content", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  const upload = await request.post("/api/files", {
+    multipart: {
+      entity_type: "lease",
+      entity_id: f.lease.id,
+      purpose: "supporting_document",
+      idempotency_key: crypto.randomUUID(),
+      file: {
+        name: "unavailable-lease.txt",
+        mimeType: "text/plain",
+        buffer: Buffer.from("Retained lease document"),
+      },
+    },
+  });
+  expect(upload.ok(), await upload.text()).toBe(true);
+  await page.route(`**/api/leases/${f.lease.id}`, async (route) => {
+    const response = await route.fetch();
+    const lease = (await response.json()) as Schemas["LeaseResponse"];
+    await route.fulfill({
+      response,
+      json: {
+        ...lease,
+        files: lease.files.map((file) => ({
+          ...file,
+          available: false,
+          storageState: "quarantined",
+        })),
+      },
+    });
+  });
+  await page.route(`**/api/spaces/${f.lease.spaceId}/status`, (route) =>
+    route.fulfill({
+      status: 503,
+      json: { detail: { code: "source_unavailable", message: "Space status unavailable" } },
+    }),
+  );
+  await page.goto(`/leases/${f.lease.id}/details`);
+  await expect(
+    page.getByRole("region", { name: "Lease Space context", exact: true }).getByRole("alert"),
+  ).toContainText("Lease records remain available");
+  await expect(page.getByRole("region", { name: "Lease milestones", exact: true })).toContainText(
+    f.lease.contractStartsOn,
+  );
+  const documents = page.getByRole("region", {
+    name: `Lease documents ${f.lease.id}`,
+    exact: true,
+  });
+  await expect(documents).toContainText("Content unavailable; opening disabled.");
+  await expect(
+    documents.getByRole("link", { name: "Download unavailable-lease.txt", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    documents.getByRole("link", {
+      name: "Metadata and history: unavailable-lease.txt",
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+
+async function fixture(request: APIRequestContext, futureOccupancy = false, commercial = false) {
   expect((await request.post("/__test__/lease-clock", { data: { days: 0 } })).ok()).toBe(true);
   const propertyResponse = await request.post("/api/properties", {
     data: {
@@ -14,7 +255,7 @@ async function fixture(request: APIRequestContext, futureOccupancy = false) {
       region: "OR",
       postalCode: "97201",
       countryCode: "US",
-      propertyType: "single_family_home",
+      propertyType: commercial ? "office" : "single_family_home",
       ownerships: [{ ownerKind: "local_operator" }],
       expectedPropertyRevision: 0,
       idempotencyKey: crypto.randomUUID(),
@@ -41,7 +282,7 @@ async function fixture(request: APIRequestContext, futureOccupancy = false) {
       expectedLeaseRevision: 0,
       idempotencyKey: crypto.randomUUID(),
       spaceId: property.spaces[0].id,
-      leaseKind: "residential",
+      leaseKind: commercial ? "commercial" : "residential",
       contractStartsOn: startsOn,
       occupancyStartsOn: startsOn,
       initialTerm: {
@@ -51,7 +292,12 @@ async function fixture(request: APIRequestContext, futureOccupancy = false) {
         paymentDueDay: 1,
         agreedSecurityDepositMinor: 100000,
       },
-      participants: [{ tenantPartyId: tenant.id, participantRole: "primary_tenant" }],
+      participants: [
+        {
+          tenantPartyId: tenant.id,
+          participantRole: commercial ? "business_signatory" : "primary_tenant",
+        },
+      ],
     },
   });
   expect(created.status(), await created.text()).toBe(201);
@@ -167,7 +413,7 @@ test("a complete Lease draft is created through its saved command contract", asy
   await page.getByLabel("Participant role (required)").selectOption("primary_tenant");
   await save(page, "Create lease draft");
   await page.getByRole("link", { name: "Open committed Lease and related setup" }).click();
-  await expect(page.getByRole("region", { name: "Lease workspace" })).toContainText("123456");
+  await expect(page.getByRole("region", { name: "Lease workspace" })).toContainText("USD 1234.56");
 });
 
 test("renewal editing and decisions use different request shapes", async ({ page, request }) => {
@@ -716,6 +962,13 @@ test("draft evidence archival preserves contextual history and unavailable files
   });
   expect(uploaded.status(), await uploaded.text()).toBe(201);
   const file = (await uploaded.json()) as Schemas["EvidenceCommandResponse"];
+  await page.goto(`/inspections/${draft.id}`);
+  await page
+    .getByRole("link", { name: "Metadata and history: archive-evidence.txt", exact: true })
+    .click();
+  await expect(page.getByRole("region", { name: "Evidence metadata", exact: true })).toContainText(
+    file.contentSha256,
+  );
   await page.route(`**/api/condition-reports/${draft.id}`, async (route) => {
     const response = await route.fetch();
     const data = (await response.json()) as Schemas["ReportResponse"];
@@ -739,6 +992,74 @@ test("draft evidence archival preserves contextual history and unavailable files
   const metadata = (await retained.json()) as Schemas["FileMetadataResponse"];
   expect(metadata.links[0].archiveReason).toBe("Duplicate context evidence");
   expect(metadata.links[0].archivedAt).not.toBeNull();
+  await page.goto(`/money?file=${file.id}`);
+  await expect(page.getByRole("region", { name: "Evidence metadata", exact: true })).toContainText(
+    "Duplicate context evidence",
+  );
+});
+
+test("office checklist snapshots support accessible inspection review", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request, false, true);
+  await execute(request, f);
+  const name = `Office checklist ${f.lease.id}`;
+  await page.goto("/leasing?workflow=inspection.template.create");
+  await page.getByLabel("Display name (required)").fill(name);
+  await page.getByRole("combobox", { name: "Applicability", exact: true }).selectOption("office");
+  await page.getByRole("button", { name: "Add areas entry", exact: true }).click();
+  await page
+    .getByRole("group", { name: "Areas 1", exact: true })
+    .getByLabel("Display name (required)")
+    .fill("Office suite");
+  await page.getByRole("button", { name: "Add observations entry", exact: true }).click();
+  await page.getByLabel("Item name (required)").fill("Access door");
+  await page.getByLabel("Condition state (required)").selectOption("good");
+  await save(page, "Create inspection template");
+  const templates = (await (
+    await request.get("/api/condition-checklist-templates")
+  ).json()) as Schemas["TemplateResponse"][];
+  const template = templates.find((item) => item.displayName === name)!;
+  await page.goto(`/leasing?workflow=inspection.report.create&target=${f.lease.id}`);
+  await page.getByRole("combobox", { name: "Template id", exact: true }).selectOption(template.id);
+  await page.getByLabel("Walkthrough on (required)").fill(f.today);
+  await page.getByLabel("Conducted by (required)").fill("Office operator");
+  await save(page, "Create inspection draft");
+  const reports = (await (
+    await request.get(`/api/leases/${f.lease.id}/condition-reports`)
+  ).json()) as Schemas["ReportListResponse"];
+  const draft = reports.reports[0];
+  const detail = (await (
+    await request.get(`/api/condition-reports/${draft.id}`)
+  ).json()) as Schemas["ReportResponse"];
+  expect(detail.areas[0].observations[0].itemName).toBe("Access door");
+  await page.setViewportSize({ width: 390, height: 900 });
+  for (const theme of ["light", "dark"]) {
+    await page.goto("/settings");
+    await page
+      .getByRole("radio", { name: theme === "dark" ? "Dark" : "Light", exact: true })
+      .check();
+    await page.getByRole("button", { name: "Save preferences", exact: true }).click();
+    await expect(page.getByText("Preferences saved.")).toBeVisible();
+    await page.goto(`/inspections/${draft.id}`);
+    await expect(
+      page.getByRole("region", { name: "Inspection report", exact: true }),
+    ).toContainText("Access door");
+    await page.evaluate(axe.source);
+    expect(
+      await page.evaluate(async () =>
+        (
+          await window.axe.run(document, {
+            runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+          })
+        ).violations.map((item) => item.id),
+      ),
+    ).toEqual([]);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+  }
 });
 
 test("inspection section failure preserves the committed Lease and unavailable evidence cannot open", async ({

@@ -1,11 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
+import { MaintenanceFilters } from "./maintenance-context";
+import { MaintenanceEvidenceArchive } from "./maintenance-evidence";
+import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
 import { AttentionQueue, AttentionSection, type AttentionItem } from "@epm/ui";
 import type { components } from "@epm/contracts/generated";
-import { record, scalar } from "@epm/contracts/workflows";
+import { record, scalar, workflows } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
-import { CommandLinks } from "./command";
+import { CommandLinks, CommandLoader } from "./command";
+import { TaskCompletion, TaskOutcome } from "./task-controls";
 import { readResult } from "./reads";
 import { WorkCommand } from "./work-command";
 import { WorkRecord } from "./work-records";
@@ -15,6 +19,8 @@ import { IntakeWorkspace } from "./intake";
 export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
   const [params] = useSearchParams();
   const path = useParams();
+  if (params.get("workflow") === "file.link.archive")
+    return <MaintenanceEvidenceArchive key={params.toString()} />;
   if (params.get("intake") === "true" || params.get("workflow")?.startsWith("intake."))
     return <IntakeWorkspace />;
   if (params.has("workflow")) return <WorkCommand key={params.toString()} />;
@@ -45,7 +51,12 @@ export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
         <Link to="/conversations?intake=true">Retained source evidence</Link>{" "}
         <Link to="/tasks">Tasks</Link>
       </nav>
-      {current === "task" && <TaskSummary />}
+      {current === "task" && (
+        <>
+          <TaskQuickAdd />
+          <TaskSummary />
+        </>
+      )}
       <WorkDirectory key={current} kind={current} />
     </section>
   );
@@ -60,6 +71,8 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
   const entityType = params.get("entityType") ?? undefined;
   const entityId = params.get("entityId") ?? undefined;
   const follow = kind === "task" && params.get("followUps") === "true";
+  const priority = params.get("priority") ?? undefined;
+  const due = params.get("due") ?? undefined;
   const result = useQuery({
     queryKey: scope.key("work-directory", kind, params.toString()),
     retry: false,
@@ -75,6 +88,31 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                   cursor,
                   pageSize: 25,
                   status: status as "open" | "in_progress" | "resolved" | "cancelled" | undefined,
+                  spaceId: params.get("spaceId") ?? undefined,
+                  reporterRole:
+                    (params.get("reporterRole") as
+                      "owner" | "tenant" | "manager" | "staff" | undefined) || undefined,
+                  reporterSubjectKind:
+                    (params.get("reporterSubjectKind") as "party" | "local_operator" | undefined) ||
+                    undefined,
+                  reporterPartyId: params.get("reporterPartyId") ?? undefined,
+                  category:
+                    (params.get("category") as components["schemas"]["IssueInput"]["category"]) ||
+                    undefined,
+                  priority: priority as "low" | "normal" | "high" | "urgent" | undefined,
+                  reportedFrom: params.get("reportedFrom") ?? undefined,
+                  reportedTo: params.get("reportedTo") ?? undefined,
+                  appointmentFrom: params.get("appointmentFrom") ?? undefined,
+                  appointmentTo: params.get("appointmentTo") ?? undefined,
+                  hasEvidence: params.has("hasEvidence")
+                    ? params.get("hasEvidence") === "true"
+                    : undefined,
+                  hasLinkedExpense: params.has("hasLinkedExpense")
+                    ? params.get("hasLinkedExpense") === "true"
+                    : undefined,
+                  hasActiveTask: params.has("hasActiveTask")
+                    ? params.get("hasActiveTask") === "true"
+                    : undefined,
                 },
               },
             }),
@@ -87,6 +125,17 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                 query: {
                   propertyId,
                   ownerPartyId: params.get("ownerId") ?? undefined,
+                  spaceId: params.get("spaceId") ?? undefined,
+                  leaseId: params.get("leaseId") ?? undefined,
+                  tenantPartyId: params.get("tenantPartyId") ?? undefined,
+                  concernType:
+                    (params.get("concernType") as
+                      "general_rental" | "lease" | "tenant" | "vacancy" | undefined) || undefined,
+                  priority:
+                    (params.get("priority") as "low" | "normal" | "high" | "urgent" | undefined) ||
+                    undefined,
+                  raisedLocalOnOrAfter: params.get("raisedLocalOnOrAfter") ?? undefined,
+                  raisedLocalOnOrBefore: params.get("raisedLocalOnOrBefore") ?? undefined,
                   cursor,
                   pageSize: 25,
                   status: status as "open" | "in_progress" | "resolved" | "dismissed" | undefined,
@@ -106,6 +155,21 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                   cursor,
                   pageSize: 25,
                   status: status as "draft" | "recorded" | "superseded" | undefined,
+                  partyId: params.get("partyId") ?? undefined,
+                  spaceId: params.get("spaceId") ?? undefined,
+                  leaseId: params.get("leaseId") ?? undefined,
+                  direction:
+                    (params.get("direction") as "inbound" | "outbound" | "internal" | undefined) ||
+                    undefined,
+                  channel:
+                    (params.get("channel") as
+                      "phone" | "email" | "sms" | "in_person" | "letter" | "other" | undefined) ||
+                    undefined,
+                  occurredOnOrAfter: params.get("occurredOnOrAfter") ?? undefined,
+                  occurredOnOrBefore: params.get("occurredOnOrBefore") ?? undefined,
+                  linkedTaskStatus:
+                    (params.get("linkedTaskStatus") as
+                      "open" | "in_progress" | "completed" | "cancelled" | undefined) || undefined,
                 },
               },
             }),
@@ -119,6 +183,7 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                     query: {
                       limit: 25,
                       cursor,
+                      priority: priority as "low" | "normal" | "high" | "urgent" | undefined,
                       relatedEntityType: entityType,
                       relatedEntityId: entityId,
                       state:
@@ -136,6 +201,8 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                       pageSize: 25,
                       cursor,
                       status,
+                      priority,
+                      due,
                       includeVoided: true,
                       relatedEntityType: entityType,
                       relatedEntityId: entityId,
@@ -182,6 +249,31 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
             "entityId",
             "state",
             "followUps",
+            "priority",
+            "due",
+            "partyId",
+            "spaceId",
+            "leaseId",
+            "tenantPartyId",
+            "concernType",
+            "raisedLocalOnOrAfter",
+            "raisedLocalOnOrBefore",
+            "direction",
+            "channel",
+            "occurredOnOrAfter",
+            "occurredOnOrBefore",
+            "linkedTaskStatus",
+            "category",
+            "reporterRole",
+            "reporterSubjectKind",
+            "reporterPartyId",
+            "reportedFrom",
+            "reportedTo",
+            "appointmentFrom",
+            "appointmentTo",
+            "hasEvidence",
+            "hasLinkedExpense",
+            "hasActiveTask",
           ]) {
             const raw = data.get(key);
             const value = typeof raw === "string" ? raw : "";
@@ -207,11 +299,49 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
           </label>
         )}
         {kind === "concern" && (
-          <label>
-            Owner identity ID
-            <input name="ownerId" defaultValue={params.get("ownerId") ?? ""} />
-          </label>
+          <>
+            <label>
+              Owner identity ID
+              <input name="ownerId" defaultValue={params.get("ownerId") ?? ""} />
+            </label>
+            <label>
+              Concern type
+              <select name="concernType" defaultValue={params.get("concernType") ?? ""}>
+                <option value="">Any</option>
+                {["general_rental", "lease", "tenant", "vacancy"].map((type) => (
+                  <option key={type}>{type}</option>
+                ))}
+              </select>
+            </label>
+            {[
+              ["spaceId", "Concern Space ID"],
+              ["leaseId", "Concern Lease ID"],
+              ["tenantPartyId", "Concern Tenant ID"],
+            ].map(([key, label]) => (
+              <label key={key}>
+                {label}
+                <input name={key} defaultValue={params.get(key) ?? ""} />
+              </label>
+            ))}
+            <label>
+              Raised local from
+              <input
+                type="date"
+                name="raisedLocalOnOrAfter"
+                defaultValue={params.get("raisedLocalOnOrAfter") ?? ""}
+              />
+            </label>
+            <label>
+              Raised local through
+              <input
+                type="date"
+                name="raisedLocalOnOrBefore"
+                defaultValue={params.get("raisedLocalOnOrBefore") ?? ""}
+              />
+            </label>
+          </>
         )}
+        {kind === "issue" && <MaintenanceFilters />}
         {(kind === "communication" || kind === "task") && (
           <>
             <label>
@@ -224,8 +354,78 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
             </label>
           </>
         )}
+        {kind === "communication" && (
+          <>
+            {[
+              ["direction", "Direction", ["inbound", "outbound", "internal"]],
+              ["channel", "Channel", ["phone", "email", "sms", "in_person", "letter", "other"]],
+              [
+                "linkedTaskStatus",
+                "Follow-up Task status",
+                ["open", "in_progress", "completed", "cancelled"],
+              ],
+            ].map(([key, title, options]) => (
+              <label key={key as string}>
+                {title}
+                <select name={key as string} defaultValue={params.get(key as string) ?? ""}>
+                  <option value="">Any</option>
+                  {(options as string[]).map((option) => (
+                    <option key={option} value={option}>
+                      {option.replaceAll("_", " ")}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            {[
+              ["partyId", "Participant Party ID"],
+              ["spaceId", "Space ID"],
+              ["leaseId", "Lease ID"],
+            ].map(([key, title]) => (
+              <label key={key}>
+                {title}
+                <input name={key} maxLength={36} defaultValue={params.get(key) ?? ""} />
+              </label>
+            ))}
+            <label>
+              Occurred from (stored local date)
+              <input
+                type="date"
+                name="occurredOnOrAfter"
+                defaultValue={params.get("occurredOnOrAfter") ?? ""}
+              />
+            </label>
+            <label>
+              Occurred to (stored local date)
+              <input
+                type="date"
+                name="occurredOnOrBefore"
+                defaultValue={params.get("occurredOnOrBefore") ?? ""}
+              />
+            </label>
+          </>
+        )}
         {kind === "task" && (
           <>
+            <label>
+              Priority
+              <select name="priority" defaultValue={priority ?? ""}>
+                <option value="">All priorities</option>
+                {["low", "normal", "high", "urgent"].map((item) => (
+                  <option key={item}>{item}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Due period
+              <select name="due" defaultValue={due ?? ""} disabled={follow}>
+                <option value="">All due dates</option>
+                <option value="overdue">Overdue</option>
+                <option value="today">Today</option>
+                <option value="next7days">Next 7 days</option>
+                <option value="nodate">No due date</option>
+              </select>
+            </label>
             <label>
               <input type="checkbox" name="followUps" value="true" defaultChecked={follow} />
               Waiting follow-ups
@@ -271,6 +471,11 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                 renderDetails: () => (
                   <>
                     <p>Follow-up: {scalar(record(item).followUpAt) || "Not scheduled"}</p>
+                    <p>
+                      Task deadline: {scalar(record(item).dueAtUtc) || "Not recorded"} ·{" "}
+                      {scalar(record(item).dueTimezone) || "No deadline zone"}
+                    </p>
+                    <p>Priority: {scalar(record(item).priority)}</p>
                     <p>Waiting does not resolve the original source or change its deadline.</p>
                     <Link to={workUrl("task", item.id)}>Review Task and follow-up</Link>
                   </>
@@ -286,6 +491,29 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                   </Link>{" "}
                   · {item.status}
                   {"priority" in item && ` · ${item.priority}`}
+                  {kind === "issue" && (
+                    <p>
+                      Reported by {scalar(record(record(item).reporter).displayName)} ·{" "}
+                      {scalar(record(record(item).reporter).role)} (
+                      {scalar(record(record(item).reporter).subjectKind).replaceAll("_", " ")}) —
+                      retained attribution, not current relationship eligibility.
+                    </p>
+                  )}
+                  {kind === "task" && (
+                    <>
+                      <TaskOutcome value={record(item)} />
+                      {["open", "in_progress"].includes(item.status) && (
+                        <details>
+                          <summary>Task details and completion</summary>
+                          <p>
+                            Task deadline: {scalar(record(item).dueAtUtc) || "No due date"} ·{" "}
+                            {scalar(record(item).dueTimezone)}
+                          </p>
+                          <TaskCompletion value={record(item)} />
+                        </details>
+                      )}
+                    </>
+                  )}
                 </li>
               ))}
             </ul>
@@ -314,6 +542,27 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
           )}
         </>
       )}
+    </section>
+  );
+}
+
+function TaskQuickAdd() {
+  const [opened, setOpened] = useState(false);
+  const definition = workflows.find((item) => item.formKey === "task.create")!;
+  if (!opened)
+    return (
+      <button type="button" onClick={() => setOpened(true)}>
+        Quick add task
+      </button>
+    );
+  return (
+    <section aria-label="Quick add task">
+      <CommandLoader
+        definition={definition}
+        revision={0}
+        initial={{ priority: "normal", isAllDay: false }}
+        returnTo="/tasks"
+      />
     </section>
   );
 }
@@ -375,6 +624,7 @@ function taskAttentionItem(item: components["schemas"]["TaskResponse"]): Attenti
           Task deadline: {item.dueAtUtc ?? "Not scheduled"} · {item.dueTimezone ?? "No time zone"}
         </p>
         <p>Completing this Task does not resolve its related issue or verify physical work.</p>
+        <TaskCompletion value={item} />
         <Link to={workUrl("task", item.id)}>Review Task and actions</Link>
       </>
     ),

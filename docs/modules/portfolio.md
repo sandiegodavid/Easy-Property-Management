@@ -18,6 +18,8 @@ Occupancy is an effective-dated timeline; availability is the operator's current
 
 Manual commands support changes, current-period correction and scheduled cancellation/reschedule/replacement. Source-owned periods cannot be silently rewritten by a manual action. Validate the complete resulting timeline for overlap and source authority before persistence. Keep cancelled/superseded periods as history.
 
+Capture one UTC instant and derive effective dates through each Property's IANA time zone. Space status distinguishes recorded availability from effective availability; a recorded available-on date becomes effectively available now on that local date. Status responses expose the instant, local date, source ownership and typed attention. Healthy Lease-owned status is source metadata rather than a conflict.
+
 ## Lease integration
 
 The Portfolio-owned `PortfolioSourceTimelineService` receives one complete `SourceTimelineChangeSet`: replacements, inserts, source identity, expected Space revision, UUID key, correlation and semantic request context. It validates and applies the timeline on the caller's transaction, advances the Space revision once and retains one operation result. Lease execution, close, void and renewal use this boundary rather than coordinating raw period writes independently.
@@ -28,6 +30,8 @@ The outer Lease operation also validates its own Lease revision. A contract end 
 
 `/api/properties` and child `/spaces` operations own inventory. `/api/spaces/{id}/status`, occupancy and availability routes own operational status. Inventory and status operations have separate read-only ID/key lookup routes. Property lists and status summaries return bounded source facts; the [Operator module](operator.md) composes contextual directories and owner views.
 
+Property filters combine ownership, lifecycle, occupancy, availability and attention with AND semantics; a multi-space Property matches an occupancy/availability filter when any active Space matches. Matching totals use the same predicates before the cursor, and page selection/hydration share one snapshot. `/api/portfolio/status-summary` returns active-inventory counts from one aggregate query under the owning read transaction, without loading full inventory or status histories.
+
 ## Code path for timeline work
 
 Read [source_timeline.py](../../application/apps/server/app/modules/portfolio/application/source_timeline.py), then the Lease service call sites and the Portfolio unit of work. Preserve source ownership, the independent revisions, complete pre-write validation and one transaction across both modules.
@@ -35,6 +39,8 @@ Read [source_timeline.py](../../application/apps/server/app/modules/portfolio/ap
 ## Browser workflow boundary
 
 Portfolio browser forms cover Property/Space inventory, lifecycle, ownership and manual status with source revision review and original receipts. Property/Owner directories and workspaces use Operator compositions; progressive setup never infers vacancy or fabricates local-operator owner identity. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
+
+PORT-003 is complete. Portfolio counts link to matching Property filters and disclose their captured instant and Space scope. Property detail exposes its source-owned status counts and Space drill-down; bounded directory previews display plain-language occupancy and availability with explicit status-review links. Space cards distinguish recorded intention from effective availability, show scheduled changes and source ownership, and link Lease-owned occupancy to Leasing. Archived Spaces retain history without manual status controls. Invalid available-later input stays editable through a typed OPS validation response.
 
 ## Implementation map
 
@@ -51,10 +57,11 @@ Persistence identities below are read from the current models. Column definition
 
 ## Validation
 
-The following executable specifications are the starting point for focused validation. This documentation consolidation did not rerun them or establish feature completion.
+Completion validation on October 12, 2026 passed 109 Portfolio/directory tests, nine Portfolio recovery tests and 13 focused browser tests. The [completed acceptance record](../archive/designs/PORT-003_DESIGN_COMPLETED_2026-10-12.md) records the validation matrix and repository check limitations. These executable specifications remain the starting point for regression validation.
 
 - [test_command_readiness.py](../../application/apps/server/app/modules/portfolio/tests/test_command_readiness.py).
 - [test_inventory_readiness.py](../../application/apps/server/app/modules/portfolio/tests/test_inventory_readiness.py).
 - [test_portfolio.py](../../application/apps/server/app/modules/portfolio/tests/test_portfolio.py).
+- [Portfolio browser acceptance](../../application/apps/web/tests/portfolio-status.spec.ts).
 
 Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).

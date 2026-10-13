@@ -137,7 +137,7 @@ A future Computer pilot would configure that endpoint in an OAuth-capable MCP cl
 
 ## Operator experience and application-specific evaluation
 
-This is a proposed fit with [AI-GOV-001](../active/AI-GOV-001_DESIGN.md), [MCP-001](../active/MCP-001_DESIGN.md), and [UI-001 D46](../active/UI-002_DESIGN_preliminary.md#d46-ui-002-add-connected-assistants-independently-of-built-in-ai), not a change to their accepted delivery scope.
+This is a proposed fit with [AI-GOV-001](../modules/ai-governance.md), [MCP-001](../active/MCP-001_DESIGN.md), and [UI-001 D46](../active/UI-002_DESIGN_preliminary.md#d46-ui-002-add-connected-assistants-independently-of-built-in-ai), not a change to their accepted delivery scope.
 
 - **Built-in AI:** a registered Perplexity cloud connection for eligible research actions, with its own API credential, data disclosure, test status, and limits. A local model may remain the default for private extraction; explicitly selected web search still sends its query to the cloud.
 - **Connected assistants:** a separate “Perplexity for Mac · Local MCP” connection with an app grant, capability-test result, last activity, pause/revoke, and proposal counts. No API credential is implied. Show a schedule only after a real scheduled workflow is verified.

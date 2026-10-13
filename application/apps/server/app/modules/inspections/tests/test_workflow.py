@@ -9,7 +9,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 from unittest.mock import patch
@@ -21,8 +21,18 @@ from app.bootstrap.api import create_app
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.files.application.service import FileService
+from app.modules.files.application.errors import FileError
 from app.modules.files.infrastructure.content_store import FilesystemContentStore
 from app.modules.files.infrastructure.sqlite_repository import SQLiteFileUnitOfWork
+from app.modules.files.infrastructure.file_link_reader import SQLiteFileLinkReader
+from app.modules.finance.application.deposit_service import DepositService
+from app.modules.finance.domain.deposit_models import (
+    DeductionCommand,
+    DepositAccountCreateCommand,
+    SettlementCreateCommand,
+)
+from app.modules.finance.infrastructure.deposit_unit_of_work import SQLiteDepositUnitOfWork
+from app.modules.finance.tests.commands import deposit_command
 from app.modules.inspections.application.file_links import ConditionObservationFileLinkValidator
 from app.modules.inspections.application.service import (
     AreaInput,
@@ -45,6 +55,7 @@ from app.modules.leases.infrastructure.unit_of_work import (
     SQLiteLeaseParticipationGuard,
     SQLiteLeaseUnitOfWork,
 )
+from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
 from app.modules.parties.application.service import SharedPartyFactory
 from app.modules.parties.infrastructure.unit_of_work import (
     SQLitePartyOperations,
@@ -56,6 +67,7 @@ from app.modules.portfolio.application.service import (
     PropertyCreateCommand,
 )
 from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
+from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
 from app.modules.portfolio.infrastructure.unit_of_work import (
     SQLitePortfolioLeaseOperations,
     SQLitePortfolioUnitOfWork,
@@ -304,6 +316,79 @@ class InspectionWorkflowTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertGreaterEqual(len(self.audit.history("condition_comparison")), 2)
 
+    def test_finalized_inspection_sources_require_explicit_finance_selection(self):
+        pre = self._finalize_pre()
+        post = self._terminate_and_create_post_report()
+        inspection_command(self.inspections, "acknowledge", post["id"], self._acknowledge_all(post))
+        post = inspection_command(self.inspections, "finalize", post["id"], confirmed=True)
+        comparisons = inspection_command(
+            self.inspections,
+            "save_comparisons",
+            self.lease["id"],
+            [
+                {
+                    "pre_observation_id": pre["areas"][0]["observations"][0]["id"],
+                    "post_observation_id": post["areas"][0]["observations"][0]["id"],
+                    "comparison_state": "possible_tenant_damage",
+                    "operator_notes": "Operator review, not a deduction decision",
+                }
+            ],
+        )
+        with sqlite3.connect(self.workspace.paths.database) as connection:
+            self.assertEqual(
+                connection.execute("SELECT COUNT(*) FROM security_deposit_deductions").fetchone()[
+                    0
+                ],
+                0,
+            )
+        deposits = DepositService(
+            SQLiteDepositUnitOfWork(
+                self.workspace.paths.database,
+                self.recorder,
+                SQLiteLeaseContextReader(),
+                SQLitePortfolioContextReader(),
+                SQLitePartyOperations(self.workspace.paths.database),
+                SQLiteInspectionContextReader(),
+                SQLiteFileLinkReader(),
+            ),
+            now=lambda: (
+                datetime.combine(
+                    date.fromisoformat(post["walkthroughOn"]), datetime.min.time(), UTC
+                )
+                + timedelta(hours=12)
+            ),
+        )
+        account = deposit_command(
+            deposits,
+            "create_account",
+            self.lease["id"],
+            DepositAccountCreateCommand(self.lease["terms"][0]["id"]),
+        )
+        settlement = deposit_command(
+            deposits,
+            "create_settlement",
+            account["id"],
+            SettlementCreateCommand(post["walkthroughOn"]),
+        )
+        deduction = deposit_command(
+            deposits,
+            "add_deduction",
+            settlement["id"],
+            DeductionCommand("damage", "1.00", "Reviewed damage", "Explicit operator decision"),
+        )
+        for kind, source_id in (
+            ("inspection_comparison", comparisons["comparisons"][0]["id"]),
+            ("inspection_observation", post["areas"][0]["observations"][0]["id"]),
+        ):
+            linked = deposit_command(
+                deposits, "add_deduction_source", deduction["id"], kind, source_id
+            )
+            self.assertEqual(linked["sourceId"], source_id)
+        detail = deposits.settlement(settlement["id"])
+        self.assertEqual(detail["inspectionWarnings"], [])
+        self.assertEqual(detail["status"], "draft")
+        self.assertEqual(len(detail["deductions"][0]["sources"]), 2)
+
     def test_context_reader_returns_inspection_facts_in_one_query_per_context(self):
         reader = SQLiteInspectionContextReader()
         draft = inspection_command(
@@ -452,6 +537,12 @@ class InspectionWorkflowTests(unittest.TestCase):
             self.inspections, "acknowledge", pre["id"], self._acknowledge_all(pre)
         )
         pre = inspection_command(self.inspections, "finalize", pre["id"], confirmed=True)
+        with self.assertRaises(FileError) as conflict:
+            self.files.archive_link(
+                evidence["links"][0]["id"], confirmed=True, reason="Incorrect association"
+            )
+        self.assertEqual(conflict.exception.code, "file_lifecycle_conflict")
+        self.assertIsNone(self.files.get(evidence["id"]).links[0]["archivedAt"])
         post = self._terminate_and_create_post_report()
         post = inspection_command(
             self.inspections, "acknowledge", post["id"], self._acknowledge_all(post)

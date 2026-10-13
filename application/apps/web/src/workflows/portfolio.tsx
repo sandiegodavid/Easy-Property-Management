@@ -9,6 +9,7 @@ import { CommandLinks, CommandLoader } from "./command";
 import { Facts, History, readResult, IdentityLookup } from "./reads";
 import { useState } from "react";
 import type { Choice } from "./fields";
+import { PortfolioStatusSummary, statusLabel } from "./portfolio-status";
 
 type Space = components["schemas"]["SpaceStatusResponse"];
 export function PortfolioEntry() {
@@ -20,6 +21,7 @@ export function PortfolioEntry() {
         Coverage prompts identify later lease and rent steps.
       </p>
       <Link to="/parties">Shared identities and tenants</Link>
+      <PortfolioStatusSummary />
     </section>
   );
 }
@@ -87,9 +89,28 @@ export function PortfolioRecord({ id }: { id: string }) {
         </article>
       ))}
       <h4>Spaces</h4>
-      {item.spaces.map((space) => (
-        <SpaceRecord key={space.id} space={space} propertyId={id} />
-      ))}
+      <section aria-label="Property occupancy and availability">
+        <h4>Active-space status summary</h4>
+        <Facts
+          value={item.statusSummary}
+          fields={[
+            "activeSpaceCount",
+            "occupiedCount",
+            "vacantCount",
+            "unknownOccupancyCount",
+            "availableNowCount",
+            "availableLaterCount",
+            "nearestAvailableOn",
+            "needsAttentionCount",
+          ]}
+        />
+        <a href="#property-spaces">Review source spaces</a>
+      </section>
+      <div id="property-spaces">
+        {item.spaces.map((space) => (
+          <SpaceRecord key={space.id} space={space} propertyId={id} />
+        ))}
+      </div>
       <History kind="property" id={id} />
     </section>
   );
@@ -104,16 +125,28 @@ function SpaceRecord({ space, propertyId }: { space: Space; propertyId: string }
         fields={["spaceKind", "status", "revision", "suiteOrFloor", "notes", "effectiveLocalDate"]}
       />
       <p>
-        Current occupancy: {space.currentOccupancy.occupancyStatus} · Source:{" "}
-        {space.currentOccupancy.sourceKind}
+        Current occupancy: {statusLabel(space.currentOccupancy.occupancyStatus)} · Source:{" "}
+        {statusLabel(space.currentOccupancy.sourceKind)}
       </p>
-      <Facts
-        value={space.availability}
-        fields={["effectiveAvailabilityStatus", "availabilityStatus", "availableOn", "sourceKind"]}
-      />
+      {space.currentOccupancy.sourceKind === "lease" && space.currentOccupancy.sourceId && (
+        <Link to={`/leases/${space.currentOccupancy.sourceId}`}>Review source lease</Link>
+      )}
+      <p>
+        Effective availability: {statusLabel(space.availability.effectiveStatus)} · Recorded
+        intention: {statusLabel(space.availability.recordedStatus)}
+      </p>
+      <Facts value={space.availability} fields={["availableOn", "note"]} />
+      <p>
+        Availability source: {statusLabel(space.availability.sourceKind)} · As of {space.asOf}
+      </p>
       {space.attentionReasons.map((reason, index) => (
-        <p key={index}>{reason.code}</p>
+        <p key={index}>{statusLabel(reason.resolution)}</p>
       ))}
+      {space.attentionReasons.length > 0 && space.status === "active" && (
+        <Link to={`/properties?workflow=portfolio.space.classify&target=${space.id}`}>
+          Review status for {space.displayName}
+        </Link>
+      )}
       <CommandLinks
         target={propertyId}
         child={space.id}
@@ -140,7 +173,7 @@ function SpaceRecord({ space, propertyId }: { space: Space; propertyId: string }
           title={`Status actions for ${space.displayName}`}
         />
       )}
-      {space.currentOccupancy.sourceKind === "manual" && (
+      {space.status === "active" && space.currentOccupancy.sourceKind === "manual" && (
         <CommandLinks
           target={space.id}
           child={space.currentOccupancy.id}
@@ -156,7 +189,7 @@ function SpaceRecord({ space, propertyId }: { space: Space; propertyId: string }
               value={period}
               fields={["occupancyStatus", "startsOn", "endsOn", "sourceKind", "note"]}
             />
-            {period.sourceKind === "manual" && (
+            {space.status === "active" && period.sourceKind === "manual" && (
               <CommandLinks
                 target={space.id}
                 child={period.id}

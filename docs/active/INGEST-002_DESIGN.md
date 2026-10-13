@@ -2,9 +2,11 @@
 
 ## Status and authority
 
-This is the confirmed backend/API and UI-handoff design for `INGEST-002`. It is based on [FEATURE_BACKLOG.md](../FEATURE_BACKLOG.md), [ARCHITECTURE.md](../ARCHITECTURE.md), [INGEST-001_DESIGN.md](INGEST-001_DESIGN.md), [AI-GOV-001_DESIGN.md](AI-GOV-001_DESIGN.md), [MAINT-001_DESIGN.md](MAINT-001_DESIGN.md), and [MAINT-004_DESIGN.md](MAINT-004_DESIGN.md), plus the current implementation.
+This is the confirmed backend/API and UI-handoff design for `INGEST-002`. It is based on [FEATURE_BACKLOG.md](../FEATURE_BACKLOG.md), [ARCHITECTURE.md](../ARCHITECTURE.md), the [current Intake guide](../modules/intake.md) and [retained-source design](../archive/designs/INGEST-001_DESIGN.md), the [current AI Governance foundation](../modules/ai-governance.md) and [historical extension contract](../archive/designs/AI-GOV-001_DESIGN.md), the [Maintenance guide](../modules/maintenance.md), plus the current implementation.
 
 The decisions under **Resolved contradictions and decisions** are authoritative for this feature and reconcile the ambiguities found during design. The required AI-GOV-001 contract changes and the INGEST-001 readiness gate are reflected in the upstream documents. No application code is included.
+
+Scope agreement, October 13, 2026: AI-GOV-001 completes the existing single-effect foundation and Settings/generic-review workflow. This feature retains the unfinished extensions: registered allowed approval modes and selected-mode history, link-only consequences, domain-owned dismissal, and synthetic proofs that each terminal consequence commits its official result, Intake attention and both audit chains atomically. These remain required before this feature is enabled; neither UI-001 nor AI-GOV-001 completion supplies them.
 
 ## Outcome
 

@@ -35,6 +35,7 @@ from app.modules.finance.domain.models import (
     RecordReceiptCommand,
     RentReceipt,
     SynchronizeExpectationsCommand,
+    VoidCommand,
 )
 from app.modules.finance.infrastructure.receipt_transaction_operations import (
     SQLiteReceiptTransactionOperations,
@@ -141,6 +142,30 @@ class _Service:
 
 
 class OwnerRentReportApiTests(unittest.TestCase):
+    def test_evidence_query_filter_parses_http_booleans(self):
+        calls = []
+
+        def listed(**filters):
+            calls.append(filters)
+            return {"items": [], "nextCursor": None}
+
+        app = FastAPI()
+        app.include_router(
+            build_router(
+                SimpleNamespace(list=listed),
+                SimpleNamespace(ready=True, error=None, can_write=True),
+            )
+        )
+        with TestClient(app) as client:
+            for text_value, expected in (("true", True), ("false", False)):
+                response = client.get(f"/api/owner-rent-reports?hasEvidence={text_value}")
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertIs(calls[-1]["has_evidence"], expected)
+            self.assertEqual(
+                client.get("/api/owner-rent-reports?hasEvidence=invalid").status_code, 422
+            )
+            self.assertEqual(len(calls), 2)
+
     def test_patch_translates_contract_fields_to_application_fields(self):
         service = _Service()
         app = FastAPI()
@@ -648,6 +673,15 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
         self.assertEqual(
             sum("COUNT(" in statement and "FILE_LINKS" in statement for statement in statements), 1
         )
+        self.assertLessEqual(len(statements), 6)
+        many = len(statements)
+        statements.clear()
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            self.service.list(page_size=1)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+        self.assertEqual(len(statements), many)
 
     def test_verification_adopts_existing_receipt_and_retries_idempotently(self):
         expectation = self._expectation()
@@ -741,6 +775,119 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
                 2,
             )
             validate_owner_accounting_schema(connection)
+
+    def test_verified_replacement_requires_exact_receipt_lineage(self):
+        expectation = self._expectation()
+        amount = expectation["expectedAmountMinor"]
+        prior = self._report_with_evidence(amount)
+        verified = owner_command(
+            self.service,
+            "verify",
+            prior["id"],
+            VerifyOwnerRentReportCommand(
+                True,
+                "Original evidence",
+                receipt_idempotency_key=str(uuid4()),
+                allocations=(ReceiptAllocationCommand(expectation["id"], amount),),
+            ),
+            str(uuid4()),
+        )
+        replacement = owner_command(
+            self.service,
+            "create",
+            OwnerRentReportCommand(
+                self.lease["id"],
+                self.owner_id,
+                prior["receivedOn"],
+                amount,
+                "cash",
+                str(uuid4()),
+                self.now.isoformat(),
+                replaces_report_id=prior["id"],
+            ),
+        )
+        source = Path(self.temp.name) / "replacement.txt"
+        source.write_text("Corrected statement", encoding="utf-8")
+        self.files.add(
+            source,
+            "replacement.txt",
+            "text/plain",
+            entity_type="owner_rent_report",
+            entity_id=replacement["id"],
+            purpose="owner_statement",
+        )
+        with self.assertRaises(OwnerReportConflictError):
+            owner_command(
+                self.service,
+                "verify",
+                replacement["id"],
+                VerifyOwnerRentReportCommand(
+                    True, "Cannot adopt predecessor", verified["verifiedReceiptId"]
+                ),
+                str(uuid4()),
+            )
+        rent_command(
+            self.finance,
+            "void_receipt",
+            verified["verifiedReceiptId"],
+            VoidCommand(True, "Correct source report"),
+        )
+        corrected = owner_command(
+            self.service,
+            "verify",
+            replacement["id"],
+            VerifyOwnerRentReportCommand(
+                True,
+                "Corrected evidence",
+                receipt_idempotency_key=str(uuid4()),
+                allocations=(ReceiptAllocationCommand(expectation["id"], amount),),
+                replaces_receipt_id=verified["verifiedReceiptId"],
+            ),
+            str(uuid4()),
+        )
+        old = self.service.detail(prior["id"])
+        new = self.service.detail(replacement["id"])
+        self.assertFalse(old["financiallyEffective"])
+        self.assertTrue(new["financiallyEffective"])
+        self.assertEqual(old["replacementReportId"], replacement["id"])
+        self.assertEqual(new["priorReportId"], prior["id"])
+        self.assertEqual(old["replacementReceiptId"], corrected["verifiedReceiptId"])
+        validate_latest_schema(self.database)
+        backups = BackupService(
+            self.workspace,
+            self.recorder,
+            lambda database: AuditRecorder(SQLiteAuditRepository(database)),
+        )
+        root = self.workspace.paths.root.parent
+        archive = backups.create_backup(
+            "a sufficiently long backup passphrase", output_path=root / "lineage.epm-backup"
+        )
+        restored = root / "restored-lineage"
+        backups.restore(archive.archive_path, "a sufficiently long backup passphrase", restored)
+        restored_database = restored / "database" / "property-management.sqlite"
+        validate_latest_schema(restored_database)
+        from app.platform.sqlite_engine import create_sqlite_engine
+
+        engine = create_sqlite_engine(restored_database)
+        try:
+            with (
+                self.service.unit_of_work.engine.connect() as source,
+                engine.connect() as destination,
+            ):
+                for table in (
+                    "owner_rent_reports",
+                    "owner_rent_report_operations",
+                    "rent_receipts",
+                    "rent_receipt_allocations",
+                    "file_records",
+                    "file_links",
+                ):
+                    self.assertEqual(
+                        source.exec_driver_sql(f"SELECT * FROM {table} ORDER BY id").all(),
+                        destination.exec_driver_sql(f"SELECT * FROM {table} ORDER BY id").all(),
+                    )
+        finally:
+            engine.dispose()
 
     def test_schema_validation_rejects_tampered_creation_history(self):
         expectation = self._expectation()

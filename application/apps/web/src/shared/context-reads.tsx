@@ -7,6 +7,7 @@ import { AsyncRegion } from "@epm/ui";
 import { useWorkspace } from "../app/workspace-gate";
 import { normalizeApiError } from "./mutations";
 import { SourceDetail } from "./source-detail";
+import { statusLabel } from "../workflows/portfolio-status";
 
 type Schema = components["schemas"];
 type Kind = "property" | "owner";
@@ -335,11 +336,17 @@ export function Directory({ kind }: { kind: Kind }) {
                   <ul>
                     {item.spaces.map((space) => (
                       <li key={space.id}>
-                        {space.displayName} · {space.occupancy} · {space.availability}
+                        {space.displayName} · {statusLabel(space.occupancy)} ·{" "}
+                        {statusLabel(space.availability)}
                         {space.needsAttention && " · Needs attention"}
                       </li>
                     ))}
                   </ul>
+                  {item.needsAttention && (
+                    <Link to={`/properties/${item.id}/units`}>
+                      Review status for {item.displayName}
+                    </Link>
+                  )}
                   {(item.ownerCount > item.owners.length ||
                     item.spaceCount > item.spaces.length) && (
                     <p>

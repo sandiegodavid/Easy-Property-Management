@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import type { components } from "@epm/contracts/generated";
 import { record } from "@epm/contracts/workflows";
+import axe from "axe-core";
 
 type Schema = components["schemas"];
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
@@ -135,6 +136,162 @@ test("identity contacts and Tenant preferences use their displayed source revisi
   expect(result.profile.doNotContact).toBe(true);
   expect(result.profile.revision).toBe(2);
   expect(result.partyRevision).toBe(2);
+});
+
+test("new Provider identity is created through the saved form and remains separate from Maintenance work", async ({
+  page,
+  request,
+}) => {
+  const name = `New Provider ${crypto.randomUUID()}`;
+  await page.goto("/providers?workflow=provider.create");
+  await page.getByLabel("Display name (required)", { exact: true }).fill(name);
+  await page
+    .getByRole("combobox", { name: "Selection status", exact: true })
+    .selectOption("preferred");
+  await saved(page, "Create provider");
+  const response = await request.get("/api/providers", { params: { search: name } });
+  expect(response.ok(), await response.text()).toBe(true);
+  const result = (await response.json()) as Schema["ProviderPageResponse"];
+  expect(result.items).toHaveLength(1);
+  const item = result.items[0];
+  expect(item.party.displayName).toBe(name);
+  expect(item.profile.selectionStatus).toBe("preferred");
+  await page.goto(`/providers/${item.party.id}/details`);
+  await expect(page.getByRole("region", { name: "Provider record", exact: true })).toContainText(
+    "Manually recorded prior work",
+  );
+});
+
+test("existing shared identity becomes a Provider without duplicating identity and keeps lifecycle history", async ({
+  page,
+  request,
+}) => {
+  const identity = await party(request, `Reusable Provider ${crypto.randomUUID()}`);
+  await page.goto("/providers");
+  await page.getByText("Use an existing identity", { exact: true }).click();
+  await page.getByLabel("Existing identity ID", { exact: true }).fill(identity.id);
+  await page.getByRole("button", { name: "Find identity", exact: true }).click();
+  await page.getByRole("button", { name: `Use ${identity.displayName}`, exact: true }).click();
+  await saved(page, "Use identity as provider");
+  const current = (await (
+    await request.get(`/api/providers/${identity.id}`)
+  ).json()) as Schema["ProviderResponse"];
+  expect(current.party.id).toBe(identity.id);
+  const invalid = await request.patch(`/api/providers/${identity.id}`, {
+    data: {
+      expectedRevision: current.profile.revision,
+      idempotencyKey: crypto.randomUUID(),
+      selectionStatus: "avoid",
+    },
+  });
+  expect(invalid.status()).toBe(400);
+  await page.goto(`/providers?workflow=provider.profile.patch&target=${identity.id}`);
+  await page.getByRole("combobox", { name: "Selection status", exact: true }).selectOption("avoid");
+  await page.getByLabel("Clear selection reason", { exact: true }).uncheck();
+  await page.getByLabel("Selection reason", { exact: true }).fill("Operator recorded concern");
+  await saved(page, "Edit provider profile");
+  await page.goto(`/providers?workflow=provider.archive&target=${identity.id}`);
+  await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
+  await saved(page, "Archive provider");
+  const retained = (await (
+    await request.get(`/api/parties/${identity.id}`)
+  ).json()) as Schema["app__modules__parties__api__router__PartyResponse"];
+  expect(retained.archivedAt).toBeNull();
+  expect(retained.id).toBe(identity.id);
+  expect(retained.revision).toBe(identity.revision);
+  await page.goto(`/providers/${identity.id}/details`);
+  await expect(page.getByRole("region", { name: "Provider record", exact: true })).toContainText(
+    "Operator recorded concern",
+  );
+  await page.getByText("Provider actions", { exact: true }).click();
+  await expect(page.getByRole("link", { name: "Edit provider profile", exact: true })).toHaveCount(
+    0,
+  );
+  await page.getByRole("link", { name: "Restore provider", exact: true }).click();
+  await saved(page, "Restore provider");
+  const restored = (await (
+    await request.get(`/api/providers/${identity.id}`)
+  ).json()) as Schema["ProviderResponse"];
+  expect(restored.profile.archivedAt).toBeNull();
+  expect(restored.profile.selectionStatus).toBe("avoid");
+  expect(restored.party.id).toBe(identity.id);
+});
+
+test("Provider search combines service area references and avoid state with accessible contextual review", async ({
+  page,
+  request,
+}) => {
+  const created = await provider(request, `Éclair Provider ${crypto.randomUUID()}`);
+  const id = created.profile.partyId;
+  let revision = created.profile.revision;
+  for (const [path, payload] of [
+    ["services", { displayName: "Electrical repair" }],
+    ["service-areas", { displayName: "Portland metro", countryCode: "US" }],
+    ["references", { referenceName: "Prior client", email: "prior@example.com" }],
+    ["work-history", { performedOn: "2026-01-01", summary: "Manual rewiring history" }],
+  ] as const) {
+    const response = await request.post(`/api/providers/${id}/${path}`, {
+      data: { ...payload, expectedRevision: revision, idempotencyKey: crypto.randomUUID() },
+    });
+    expect(response.status(), await response.text()).toBe(201);
+    revision = (
+      (await response.json()) as
+        | Schema["ServiceMutationResponse"]
+        | Schema["AreaMutationResponse"]
+        | Schema["ReferenceMutationResponse"]
+        | Schema["WorkMutationResponse"]
+    ).revision;
+  }
+  const patched = await request.patch(`/api/providers/${id}`, {
+    data: {
+      expectedRevision: revision,
+      idempotencyKey: crypto.randomUUID(),
+      selectionStatus: "avoid",
+      selectionReason: "Review before assignment",
+    },
+  });
+  expect(patched.ok(), await patched.text()).toBe(true);
+  await page.goto("/providers");
+  await page.getByLabel("Search Providers", { exact: true }).fill(created.party.displayName);
+  await page.getByLabel("Service", { exact: true }).fill("Electrical repair");
+  await page.getByLabel("Service area", { exact: true }).fill("Portland metro");
+  await page.getByLabel("Has reference", { exact: true }).check();
+  await page.getByRole("combobox", { name: "Selection status", exact: true }).selectOption("avoid");
+  await page.getByRole("button", { name: "Apply Provider filters", exact: true }).click();
+  await page
+    .getByRole("region", { name: "Provider directory", exact: true })
+    .getByRole("link", { name: created.party.displayName, exact: true })
+    .click();
+  await page.setViewportSize({ width: 390, height: 900 });
+  for (const theme of ["light", "dark"]) {
+    await page.goto("/settings");
+    await page
+      .getByRole("radio", { name: theme === "dark" ? "Dark" : "Light", exact: true })
+      .check();
+    await page.getByRole("button", { name: "Save preferences", exact: true }).click();
+    await expect(page.getByText("Preferences saved.")).toBeVisible();
+    await page.goto(`/providers/${id}/details`);
+    await expect(page.getByRole("region", { name: "Provider record", exact: true })).toContainText(
+      "Manually recorded prior work",
+    );
+    await page.evaluate(axe.source);
+    expect(
+      await page.evaluate(async () =>
+        (
+          await window.axe.run(document, {
+            runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+          })
+        ).violations.map((item) => item.id),
+      ),
+    ).toEqual([]);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+  }
+  const link = page.getByRole("link", { name: "Shared identity and contacts", exact: true });
+  await link.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`/parties\\?identity=${id}`));
 });
 
 test("provider profile and service history commit through their registered OPS forms", async ({
@@ -346,6 +503,153 @@ test("ownership replacement can create an inline owner without erasing interval 
   const prior = record(change.before).ownerships as unknown[];
   expect(prior.map(record).some((item) => item.ownerKind === "local_operator")).toBe(true);
   expect(current.propertyRevision).toBe(2);
+});
+
+test("manual reputation sources retain safe external pointers and contextual lifecycle history", async ({
+  page,
+  request,
+}) => {
+  const created = await provider(request, "Manual reputation Provider");
+  const id = created.profile.partyId;
+  let externalRequests = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).hostname === "reputation.example") externalRequests++;
+  });
+  for (const kind of ["google", "yelp", "angi", "other"]) {
+    await page.goto(`/providers?workflow=provider.reputation_link.add&target=${id}`);
+    await page
+      .getByRole("combobox", { name: "Source kind (required)", exact: true })
+      .selectOption(kind);
+    await page
+      .getByLabel("Url (required)", { exact: true })
+      .fill(`https://REPUTATION.example:443/${kind}_reviews`);
+    if (kind === "other")
+      await page.getByLabel("Source name", { exact: true }).fill("Local directory");
+    await page.getByLabel("Notes", { exact: true }).fill("Private reputation context");
+    await page.getByLabel("Last checked on", { exact: true }).fill("2025-01-02");
+    await saved(page, "Add reputation link");
+  }
+  const detail = (await (
+    await request.get(`/api/providers/${id}`)
+  ).json()) as Schema["ProviderResponse"];
+  expect(detail.reputationLinks).toHaveLength(4);
+  const google = detail.reputationLinks.find((item) => item.sourceKind === "google")!;
+  expect(google.url).toBe("https://reputation.example/google_reviews");
+  let historyReads = 0;
+  page.on("request", (request) => {
+    if (request.url().includes("/api/audit/events/provider_reputation_link/")) historyReads++;
+  });
+  await page.goto(`/providers/${id}/details`);
+  const section = page.getByRole("region", { name: "Reputation links", exact: true });
+  await expect(section).toContainText("not verified ratings or endorsements");
+  const external = section.getByRole("link", {
+    name: "Review google externally (new tab)",
+    exact: true,
+  });
+  await expect(external).toHaveAttribute("href", google.url);
+  await expect(external).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(external).toHaveAttribute("referrerpolicy", "no-referrer");
+  expect(historyReads).toBe(0);
+  expect(externalRequests).toBe(0);
+  await page.goto(
+    `/providers?workflow=provider.reputation_link.update&target=${id}&child=${google.id}`,
+  );
+  await page
+    .getByRole("textbox", { name: "Url", exact: true })
+    .fill("https://reputation.example/google_updated");
+  await page.getByRole("textbox", { name: "Notes", exact: true }).fill("Revised private context");
+  await saved(page, "Edit reputation link");
+  await page.goto(
+    `/providers?workflow=provider.reputation_link.archive&target=${id}&child=${google.id}`,
+  );
+  await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
+  await saved(page, "Archive reputation link");
+  await page.goto(`/providers/${id}/details`);
+  await expect(
+    section.getByRole("link", { name: "Review google externally (new tab)", exact: true }),
+  ).toHaveCount(0);
+  await page.getByLabel("Include archived contextual history", { exact: true }).check();
+  const historyRow = section
+    .locator(":scope > article")
+    .filter({ hasText: "https://reputation.example/google_updated" });
+  await expect(historyRow).toContainText("Revised private context");
+  await historyRow.getByText("History", { exact: true }).click();
+  await expect(historyRow.getByText("archived", { exact: true })).toBeVisible();
+  await historyRow.getByText("Resulting facts", { exact: true }).last().click();
+  await expect(historyRow).toContainText("https://reputation.example/google_reviews");
+  expect(externalRequests).toBe(0);
+  await page.goto(
+    `/providers?workflow=provider.reputation_link.restore&target=${id}&child=${google.id}`,
+  );
+  await saved(page, "Restore reputation link");
+  const restored = (await (
+    await request.get(`/api/providers/${id}`)
+  ).json()) as Schema["ProviderResponse"];
+  expect(restored.reputationLinks.find((item) => item.id === google.id)?.archivedAt).toBeNull();
+  expect(restored.profile.selectionStatus).toBe(created.profile.selectionStatus);
+  const summary = (await (
+    await request.get("/api/providers", { params: { search: created.party.displayName } })
+  ).json()) as Schema["ProviderPageResponse"];
+  expect(summary.items[0].reputationLinkCount).toBe(4);
+  expect(JSON.stringify(summary)).not.toContain("reputation.example");
+  expect(JSON.stringify(summary)).not.toContain("Private reputation context");
+});
+
+test("reputation edits reconcile a lost response and reject unsafe or duplicate pointers", async ({
+  page,
+  request,
+}) => {
+  const created = await provider(request, "Reputation retry Provider");
+  const id = created.profile.partyId;
+  const response = await request.post(`/api/providers/${id}/reputation-links`, {
+    data: {
+      sourceKind: "google",
+      url: "https://reputation.example/retry",
+      notes: "Original note",
+      expectedRevision: 1,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(response.status(), await response.text()).toBe(201);
+  const first = (await response.json()) as Schema["ReputationMutationResponse"];
+  for (const [payload, status] of [
+    [{ sourceKind: "google", url: "https://reputation.example/duplicate" }, 409],
+    [{ sourceKind: "yelp", url: "https://reputation.example/retry" }, 409],
+    [{ sourceKind: "other", url: "https://reputation.example/other" }, 422],
+    [{ sourceKind: "angi", url: "javascript:alert(1)" }, 422],
+  ] as const) {
+    const rejected = await request.post(`/api/providers/${id}/reputation-links`, {
+      data: {
+        ...payload,
+        expectedRevision: first.revision,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    });
+    expect(rejected.status(), await rejected.text()).toBe(status);
+  }
+  let writes = 0;
+  await page.route(`**/api/providers/${id}/reputation-links/${first.item.id}`, async (route) => {
+    if (route.request().method() === "PATCH") {
+      writes++;
+      await route.fetch();
+      await route.abort("failed");
+    } else await route.continue();
+  });
+  await page.goto(
+    `/providers?workflow=provider.reputation_link.update&target=${id}&child=${first.item.id}`,
+  );
+  await page.getByRole("textbox", { name: "Notes", exact: true }).fill("Updated note after review");
+  await page.getByRole("button", { name: "Save edit reputation link", exact: true }).click();
+  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+  expect(writes).toBe(1);
+  const current = (await (
+    await request.get(`/api/providers/${id}`)
+  ).json()) as Schema["ProviderResponse"];
+  expect(current.reputationLinks).toHaveLength(1);
+  expect(current.reputationLinks[0].id).toBe(first.item.id);
+  expect(current.reputationLinks[0].notes).toBe("Updated note after review");
+  expect(current.profile.revision).toBe(3);
 });
 
 test("Provider area, work, reference and reputation forms record independently owned children", async ({

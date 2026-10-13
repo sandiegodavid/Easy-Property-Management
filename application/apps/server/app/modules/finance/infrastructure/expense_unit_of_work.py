@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import sqlite3
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.files.application.ports import FileLinkReader, FileLinkWithFile
 from app.modules.finance.application.expense_ports import PartyExpenseOperations
 from app.modules.finance.application.commands import FinanceScope
-from app.modules.finance.domain.expense_models import Expense, ExpenseCategory, ExpenseRefund
+from app.modules.finance.domain.expense_models import (
+    Expense,
+    ExpenseCategory,
+    ExpenseRefund,
+    normalized_label,
+)
 from app.modules.finance.domain.models import FinanceConflictError
 from app.modules.finance.infrastructure.command_operations import SQLiteFinanceCommandTransaction
 from app.modules.finance.infrastructure.sqlalchemy_models import (
@@ -211,7 +216,16 @@ class _Transaction:
                 ExpenseModel.voided_at.is_(None),
             )
             .order_by(ExpenseModel.created_at, ExpenseModel.id)
+            .limit(10)
         )
+        if item.provider_party_id is not None:
+            query = query.where(ExpenseModel.provider_party_id == item.provider_party_id)
+        else:
+            query = query.where(
+                ExpenseModel.provider_party_id.is_(None),
+                func.trim(func.unicode_casefold(ExpenseModel.payee_name))
+                == normalized_label(item.payee_name),
+            )
         return [Expense(**dict(row)) for row in self.connection.execute(query).mappings()]
 
     def expense_projection(self, expenses, *, include_archived_evidence=False):

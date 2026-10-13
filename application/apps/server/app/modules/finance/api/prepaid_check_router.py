@@ -5,7 +5,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, status
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, field_validator
 
 from app.modules.finance.api.conflicts import FinanceConflictResponse
 
@@ -13,6 +13,7 @@ from app.platform.api_errors import domain_problem, workspace_unavailable
 
 from app.modules.finance.application.prepaid_check_service import PrepaidCheckService
 from app.modules.finance.domain.models import (
+    SAFE_MASKED_REFERENCE_PATTERN,
     FinanceConflictError,
     FinanceError,
     FinanceNotFoundError,
@@ -35,8 +36,13 @@ class CreateInput(CommandInput):
     payerPartyId: UUID
     receivedOn: date
     checkDatedOn: date
-    maskedReference: str | None = Field(None, max_length=80)
+    maskedReference: str | None = Field(None, max_length=80, pattern=SAFE_MASKED_REFERENCE_PATTERN)
     idempotencyKey: UUID
+
+    @field_validator("maskedReference", mode="before")
+    @classmethod
+    def normalize_reference(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
 
 class DepositInput(CommandInput):

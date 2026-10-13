@@ -277,6 +277,48 @@ def _previews(connection, facts, ids, label):
     return {key: (value, totals[key]) for key, value in items.items()}
 
 
+def portfolio_status_counts(connection, as_of):
+    """Aggregate active inventory in one snapshot without hydrating source rows."""
+    captured = as_of.astimezone(UTC).isoformat()
+    connection.connection.driver_connection.create_function(
+        "portfolio_local_day", 2, _local_day, deterministic=True
+    )
+    p, a = PropertyModel.__table__, SpaceAvailabilityModel.__table__
+    facts = SQLitePortfolioDirectoryReader._space_facts(captured)
+    sf = facts.c
+
+    def count(predicate, name):
+        return func.coalesce(func.sum(case((predicate, 1), else_=0)), 0).label(name)
+
+    row = (
+        connection.execute(
+            select(
+                func.count(func.distinct(p.c.id)).label("active_property_count"),
+                func.count(sf.id).label("active_space_count"),
+                count(sf.occupancy == "occupied", "occupied_count"),
+                count(sf.occupancy == "vacant", "vacant_count"),
+                count(sf.occupancy == "unknown", "unknown_occupancy_count"),
+                count(sf.availability == "available_now", "available_now_count"),
+                count(sf.availability == "available_on", "available_later_count"),
+                func.min(case((sf.availability == "available_on", a.c.available_on))).label(
+                    "nearest_available_on"
+                ),
+                count(sf.needs_attention, "needs_attention_space_count"),
+                func.count(func.distinct(case((sf.needs_attention, p.c.id)))).label(
+                    "needs_attention_property_count"
+                ),
+            )
+            .select_from(
+                p.outerjoin(facts, sf.property_id == p.c.id).outerjoin(a, a.c.space_id == sf.id)
+            )
+            .where(p.c.status == "active")
+        )
+        .mappings()
+        .one()
+    )
+    return dict(row)
+
+
 def _local_day(zone, instant):
     return datetime.fromisoformat(instant).astimezone(ZoneInfo(zone)).date().isoformat()
 

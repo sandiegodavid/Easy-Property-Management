@@ -1,12 +1,16 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CoverageLinks } from "../shared/coverage";
 import { Link } from "react-router-dom";
+import { communicationLocalTime } from "./communication-context";
+import { MoneyFacts } from "./money-presentation";
+import { QuoteComparison } from "./quote-context";
+import { WorkJournal } from "./work-journal";
 import { api } from "@epm/contracts";
 import { record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks, workflowUrl } from "./command";
 import { Facts, History, readResult } from "./reads";
+import { TaskOutcome } from "./task-controls";
 
 import { workUrl, type WorkKind } from "./work-links";
 export async function loadWorkRecord(
@@ -107,9 +111,11 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
           )}
           {kind === "task" && (
             <>
+              <TaskOutcome value={value} />
               <p>
                 Waiting preserves the original deadline and urgency. Reminder acknowledgement is not
-                Task completion.
+                Task completion. Setting waiting context again replaces whom or what is awaited;
+                rescheduling only changes or removes the follow-up date.
               </p>
               <Facts
                 value={value}
@@ -146,7 +152,7 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                         "task.cancel",
                         "task.reminder.add",
                         ...(value.isWaiting
-                          ? ["task.waiting.clear", "task.waiting.reschedule"]
+                          ? ["task.waiting.set", "task.waiting.clear", "task.waiting.reschedule"]
                           : ["task.waiting.set"]),
                       ]
                     : ["task.reopen"]
@@ -159,6 +165,10 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
           {kind === "communication" && (
             <>
               <p>This is a manual conversation record; nothing is sent.</p>
+              <p>
+                Recorded local occurrence: {communicationLocalTime(value)} ·{" "}
+                {scalar(value.occurredTimezone)}
+              </p>
               <Facts
                 value={value}
                 fields={[
@@ -181,6 +191,7 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
               {workChildren(value, "links").map((item) => (
                 <article key={scalar(item.id)}>
                   <RelatedLink kind={scalar(item.entityType)} id={scalar(item.entityId)} />
+                  <Facts value={item} fields={["propertyTimezoneSnapshot"]} />
                   <Facts value={item.context} fields={Object.keys(record(item.context))} />
                 </article>
               ))}
@@ -195,10 +206,11 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                 }
               />
               {workChildren(value, "followUpTasks").map((item) => (
-                <p key={scalar(item.id)}>
+                <div key={scalar(item.id)}>
                   <Link to={workUrl("task", scalar(item.id))}>{scalar(item.title)}</Link> ·{" "}
                   {scalar(item.status)}
-                </p>
+                  <Facts value={item} fields={["dueAtUtc", "dueTimezone"]} />
+                </div>
               ))}
               {(["supersedesCommunicationId", "supersededByCommunicationId"] as const).map(
                 (key) =>
@@ -225,11 +237,25 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                   "concernType",
                   "ownerDisplayNameSnapshot",
                   "propertyDisplayNameSnapshot",
+                  "spaceDisplayNameSnapshot",
+                  "leaseDisplaySnapshot",
+                  "tenantDisplayNameSnapshot",
                   "raisedAtUtc",
+                  "propertyTimezoneSnapshot",
+                  "observedOccupancyStatus",
+                  "observedAvailabilityStatus",
+                  "observedAvailableOn",
                   "resolutionSummary",
                   "dismissalReason",
                 ]}
               />
+              {value.status === "dismissed" && !record(value.successor).id && (
+                <p>
+                  <Link to={`${workflowUrl("owner_concern.create")}&replacesConcernId=${id}`}>
+                    Correct dismissed concern context
+                  </Link>
+                </p>
+              )}
               <Facts
                 value={value.currentSourceState}
                 fields={Object.keys(record(value.currentSourceState))}
@@ -277,6 +303,20 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                   {scalar(item.status)}
                 </p>
               ))}
+              <section aria-label="Recent concern conversations">
+                <p>
+                  {scalar(value.linkedCommunicationCount, "0")} retained conversation links; recent
+                  preview only.
+                </p>
+                {workChildren(value, "recentCommunications").map((item) => (
+                  <p key={scalar(item.id)}>
+                    <Link to={workUrl("communication", scalar(item.id))}>
+                      {scalar(item.subject)}
+                    </Link>{" "}
+                    · {scalar(item.status)}
+                  </p>
+                ))}
+              </section>
               {["predecessor", "successor"].map(
                 (key) =>
                   record(value[key]).id && (
@@ -342,7 +382,7 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
       </p>
       <Facts
         value={value.reporter}
-        fields={["role", "subjectKind", "partyId", "displayNameSnapshot", "currentPartyState"]}
+        fields={["role", "subjectKind", "partyId", "displayName", "currentPartyState"]}
       />
       <Facts
         value={value}
@@ -374,20 +414,29 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
                 "maintenance.follow_up.create",
                 "maintenance.journal.record",
               ]
-            : ["maintenance.issue.reopen"]
+            : ["maintenance.issue.reopen", "maintenance.journal.record"]
         }
       />
       {workChildren(value, "tasks").map((item) => (
-        <p key={scalar(item.id)}>
+        <div key={scalar(item.id)}>
           <Link to={workUrl("task", scalar(item.id))}>{scalar(item.title)}</Link> ·{" "}
           {scalar(item.status)}
-        </p>
+          <Facts value={item} fields={["dueAtUtc", "dueTimezone"]} />
+        </div>
       ))}
       {[
         [
           "appointments",
           "Appointments",
-          ["startsAtUtc", "endsAtUtc", "status", "purpose", "outcomeNote", "cancellationReason"],
+          [
+            "startsAtUtc",
+            "endsAtUtc",
+            "scheduledTimezone",
+            "status",
+            "purpose",
+            "outcomeNote",
+            "cancellationReason",
+          ],
           ["maintenance.appointment.update", "maintenance.appointment.finish"],
         ],
         [
@@ -402,6 +451,10 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
             "withdrawnAt",
             "earliestWorkStartOn",
             "estimatedWorkFinishOn",
+            "termsNotes",
+            "validThrough",
+            "withdrawalReason",
+            "replacesQuoteId",
             "currentPartyState",
             "currentProviderProfileState",
           ],
@@ -416,6 +469,11 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
             "endedAt",
             "instructions",
             "endReason",
+            "quoteId",
+            "providerSelectionStatusSnapshot",
+            "selectionReason",
+            "avoidOverrideReason",
+            "replacesAssignmentId",
             "currentPartyState",
             "currentProviderProfileState",
           ],
@@ -424,7 +482,16 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
         [
           "costContexts",
           "Cost context (not paid money)",
-          ["label", "contextKind", "amountMinor", "observedOn", "voidedAt", "sourceNote"],
+          [
+            "label",
+            "contextKind",
+            "amountMinor",
+            "observedOn",
+            "voidedAt",
+            "voidReason",
+            "sourceNote",
+            "replacesCostContextId",
+          ],
           ["maintenance.cost.void"],
         ],
         [
@@ -438,8 +505,38 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
           <h3>{String(title)}</h3>
           {workChildren(value, String(key)).map((item) => (
             <article key={scalar(item.id)}>
-              <Facts value={item} fields={fields as string[]} />
-              <EvidenceLinks items={workChildren(item, "files")} />
+              {key === "costContexts" ? (
+                <MoneyFacts value={item} fields={fields as string[]} />
+              ) : key === "quotes" ? (
+                <MoneyFacts value={item} fields={fields as string[]} />
+              ) : (
+                <Facts value={item} fields={fields as string[]} />
+              )}
+              {key === "quotes" && !!item.withdrawnAt && active && (
+                <Link
+                  to={`${workflowUrl("maintenance.quote.create", id)}&replacesQuoteId=${scalar(item.id)}`}
+                >
+                  Replace withdrawn quote
+                </Link>
+              )}
+              {key === "assignments" && !item.endedAt && active && (
+                <Link
+                  to={`${workflowUrl("maintenance.assignment.create", id)}&replacesAssignmentId=${scalar(item.id)}`}
+                >
+                  Review reassignment
+                </Link>
+              )}
+              {key === "costContexts" && !!item.voidedAt && active && (
+                <Link
+                  to={`${workflowUrl("maintenance.cost.create", id)}&replacesCostContextId=${scalar(item.id)}`}
+                >
+                  Replace cost context
+                </Link>
+              )}
+              <EvidenceLinks
+                items={workChildren(item, "files")}
+                issueId={key !== "expenseLinks" ? id : undefined}
+              />
               {key !== "expenseLinks" && (
                 <p>
                   <Link
@@ -470,7 +567,8 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
           ))}
         </section>
       ))}
-      <IssueJournal id={id} />
+      <WorkJournal id={id} />
+      <QuoteComparison id={id} active={active} />
       <p>
         <Link
           state={{ returnTo: workUrl("issue", id) }}
@@ -479,62 +577,8 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
           Attach issue evidence
         </Link>
       </p>
-      <EvidenceLinks items={workChildren(value, "files")} />
+      <EvidenceLinks items={workChildren(value, "files")} issueId={id} />
     </>
-  );
-}
-function IssueJournal({ id }: { id: string }) {
-  const { scope } = useWorkspace();
-  const [cursor, setCursor] = useState<string>();
-  const result = useQuery({
-    queryKey: scope.key("issue-journal", id, cursor),
-    queryFn: async ({ signal }) =>
-      readResult(
-        await api.GET("/api/maintenance-issues/{issue_id}/work-journal", {
-          signal,
-          params: { path: { issue_id: id }, query: { pageSize: 20, cursor } },
-        }),
-      ),
-  });
-  return (
-    <section aria-label="Work journal">
-      <h3>Work journal and physical verification</h3>
-      {result.isPending && <p role="status">Loading work journal…</p>}
-      {result.error && <p role="alert">Work journal unavailable: {result.error.message}</p>}
-      {result.data?.items.map((item) => (
-        <article key={item.id}>
-          <Facts
-            value={item}
-            fields={[
-              "summary",
-              "effectiveKind",
-              "sourceKind",
-              "occurredAtUtc",
-              "outcomeStatus",
-              "outcomeSummary",
-              "followUpRequired",
-              "operatorVerified",
-              "isEffective",
-              "correctionReason",
-            ]}
-          />
-          <EvidenceLinks items={item.files.map(record)} />
-          {item.isEffective && (
-            <p>
-              <Link
-                state={{ returnTo: workUrl("issue", id) }}
-                to={`${workflowUrl("file.upload")}&entityType=maintenance_work_journal_entry&entityId=${item.id}`}
-              >
-                Attach work evidence
-              </Link>
-            </p>
-          )}
-        </article>
-      ))}
-      {result.data?.nextCursor && (
-        <button onClick={() => setCursor(result.data.nextCursor!)}>Older work entries</button>
-      )}
-    </section>
   );
 }
 function TaskReminders({ id, active }: { id: string; active: boolean }) {
@@ -575,7 +619,7 @@ function TaskReminders({ id, active }: { id: string; active: boolean }) {
     </section>
   );
 }
-function EvidenceLinks({ items }: { items: Record<string, unknown>[] }) {
+function EvidenceLinks({ items, issueId }: { items: Record<string, unknown>[]; issueId?: string }) {
   return (
     <section aria-label="Evidence references">
       {items
@@ -586,6 +630,13 @@ function EvidenceLinks({ items }: { items: Record<string, unknown>[] }) {
               Review evidence metadata: {scalar(item.originalName)}
             </Link>
             {item.available === false && " · Content unavailable; opening disabled"}
+            {issueId && (
+              <Link
+                to={`/maintenance?workflow=file.link.archive&target=${scalar(item.id)}&issueId=${issueId}`}
+              >
+                Archive evidence association
+              </Link>
+            )}
           </p>
         ))}
     </section>

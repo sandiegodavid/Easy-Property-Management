@@ -152,6 +152,20 @@ class SourceDetailResponse(SourceSummaryResponse):
     duplicateCandidates: list[DuplicateCandidateResponse]
 
 
+class EvidenceDetailResponse(SourceSummaryResponse):
+    """Audited exact revision; source lifecycle fields remain current facts."""
+
+    revisionNumber: StrictInt = Field(ge=1)
+    revisionKind: Literal["submitted", "operator_correction", "transcript_revision"]
+    correctionReason: str | None
+    revisionCreatedAt: Timestamp
+    evidence: EvidenceResponse
+    attachments: list[AttachmentResponse]
+    attachmentsTruncated: StrictBool
+    history: list[EvidenceRevisionResponse]
+    historyTruncated: StrictBool
+
+
 class SourceMutationResponse(SourceSummaryResponse):
     operationId: UUID
 

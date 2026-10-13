@@ -7,7 +7,12 @@ from typing import Any, Protocol, TypeVar
 
 from app.modules.finance.application.commands import FinanceCommandTransaction
 
-from app.modules.finance.domain.expense_models import Expense, ExpenseCategory, ExpenseRefund
+from app.modules.finance.domain.expense_models import (
+    Expense,
+    ExpenseCategory,
+    ExpenseDuplicateReviewCommand,
+    ExpenseRefund,
+)
 
 Result = TypeVar("Result")
 
@@ -36,7 +41,9 @@ class ExpenseTransaction(Protocol):
     def expense(self, expense_id: str) -> Expense | None: ...
     def expense_by_key(self, idempotency_key: str) -> Expense | None: ...
     def expenses(self, **filters: object) -> list[Expense]: ...
-    def duplicate_expenses(self, item: Expense) -> list[Expense]: ...
+    def duplicate_expenses(
+        self, item: Expense | ExpenseDuplicateReviewCommand
+    ) -> list[Expense]: ...
     def expense_projection(
         self, expenses: list[Expense], *, include_archived_evidence: bool = False
     ) -> dict[str, object]: ...

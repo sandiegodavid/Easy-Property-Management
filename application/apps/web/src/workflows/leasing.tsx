@@ -9,6 +9,9 @@ import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks, CommandLoader } from "./command";
 import { Facts, History, readResult } from "./reads";
 import { InspectionList } from "./inspections";
+import { LeaseDocuments } from "./lease-documents";
+import { MoneyFacts } from "./money-presentation";
+import { statusLabel } from "./portfolio-status";
 
 type Lease = components["schemas"]["LeaseResponse"];
 export function LeasingWorkspace() {
@@ -167,6 +170,25 @@ export function LeaseRecord({ id }: { id: string }) {
         ]}
       />
       <Link to="/leasing">Return to Leasing</Link>
+      <section aria-label="Lease milestones">
+        <h3>Contract and physical occupancy</h3>
+        <Facts
+          value={item}
+          fields={[
+            "contractStartsOn",
+            "contractEndsOn",
+            "executedOn",
+            "occupancyStartsOn",
+            "actualMoveOutOn",
+            "endReason",
+          ]}
+        />
+        <p>
+          End dates are exclusive. Contract expiry or an accepted termination proposal does not
+          confirm physical move-out or make the Space available.
+        </p>
+        <LeaseSpaceContext spaceId={item.spaceId} />
+      </section>
       <CoverageLinks spaceId={item.spaceId} />
       <CommandLinks
         target={id}
@@ -220,7 +242,7 @@ export function LeaseRecord({ id }: { id: string }) {
       ))}
       <h3>Rent terms</h3>
       {item.terms.map((term) => (
-        <Facts
+        <MoneyFacts
           key={term.id}
           value={term}
           fields={[
@@ -271,17 +293,48 @@ export function LeaseRecord({ id }: { id: string }) {
           <Link to={`/money?leaseId=${id}`}>Review deposit settlement</Link>
         </section>
       ) : null}
-      <h3>Lease evidence</h3>
-      {item.files.length === 0 && <p>No current lease evidence.</p>}
-      {item.files.map((file) => (
-        <p key={file.linkId}>
-          {file.originalName} · {file.storageState}{" "}
-          {file.available && (
-            <a href={`/api/files/${file.id}/content`}>Download {file.originalName}</a>
-          )}
-        </p>
-      ))}
+      <LeaseDocuments leaseId={id} entityId={id} entityType="lease" files={item.files} />
       <History kind="lease" id={id} />
+    </section>
+  );
+}
+
+function LeaseSpaceContext({ spaceId }: { spaceId: string }) {
+  const { scope } = useWorkspace();
+  const space = useQuery({
+    queryKey: scope.key("lease-space-context", spaceId),
+    retry: false,
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/spaces/{space_id}/status", {
+          signal,
+          params: { path: { space_id: spaceId } },
+        }),
+      ),
+  });
+  return (
+    <section aria-label="Lease Space context">
+      {space.isPending && <p role="status">Loading Space status…</p>}
+      {space.error && (
+        <p role="alert">
+          Space status unavailable: {space.error.message}. Lease records remain available.
+        </p>
+      )}
+      {space.data && (
+        <>
+          <p>
+            {space.data.displayName} · Current occupancy:{" "}
+            {statusLabel(space.data.currentOccupancy.occupancyStatus)} · Availability:{" "}
+            {statusLabel(space.data.availability.effectiveStatus)}
+          </p>
+          <p>
+            Property-local date: {space.data.effectiveLocalDate} · As of {space.data.asOf}
+          </p>
+          <Link to={`/properties/${space.data.propertyId}/units`}>
+            Review Space occupancy and availability
+          </Link>
+        </>
+      )}
     </section>
   );
 }
@@ -310,9 +363,14 @@ function TerminationCases({ lease }: { lease: Lease }) {
             fields={[
               "status",
               "reason",
+              "noticeReceivedOn",
               "requestedTerminationOn",
               "expectedMoveOutOn",
               "agreedTerminationOn",
+              "acceptedOn",
+              "completedOn",
+              "tenantExplanation",
+              "contractClauseReference",
               "operatorNotes",
             ]}
           />
@@ -335,19 +393,33 @@ function TerminationCases({ lease }: { lease: Lease }) {
             />
           )}
           {item.proposals.map((p) => (
-            <Facts
+            <MoneyFacts
               key={p.id}
               value={p}
               fields={[
                 "id",
                 "status",
+                "proposalVersion",
                 "proposedTerminationOn",
                 "expectedMoveOutOn",
                 "rentResponsibilityEndsOn",
+                "terminationFeeMinor",
+                "currencyCode",
+                "feeWaived",
+                "replacementTenantCondition",
+                "accessArrangement",
                 "otherTerms",
+                "responseDueOn",
+                "decidedOn",
               ]}
             />
           ))}
+          <LeaseDocuments
+            leaseId={lease.id}
+            entityId={item.id}
+            entityType="lease_termination_case"
+            files={item.files}
+          />
         </article>
       ))}
     </section>

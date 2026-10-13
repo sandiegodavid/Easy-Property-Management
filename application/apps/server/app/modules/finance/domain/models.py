@@ -45,7 +45,8 @@ PAYMENT_METHOD_KINDS = frozenset(
         "other",
     }
 )
-_SAFE_MASKED_REFERENCE = re.compile(r"^(?:[A-Za-z][A-Za-z ]{0,59} )?[•*]{2,}(?:[ -]?[0-9]{1,4})?$")
+SAFE_MASKED_REFERENCE_PATTERN = r"^(?:[A-Za-z][A-Za-z ]{0,59} )?[•*]{2,}(?:[ -]?[0-9]{1,4})?$"
+_SAFE_MASKED_REFERENCE = re.compile(SAFE_MASKED_REFERENCE_PATTERN)
 
 
 def _date(value: str, label: str) -> str:

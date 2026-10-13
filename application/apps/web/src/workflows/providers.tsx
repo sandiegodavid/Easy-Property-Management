@@ -7,9 +7,12 @@ import { workflows, record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks, CommandLoader } from "./command";
 import { Facts, History, IdentityLookup, readResult } from "./reads";
+import { WorkJournal } from "./work-journal";
 import type { Choices } from "./fields";
 
-export function ProviderWorkspace() {
+type Category = components["schemas"]["app__modules__vendors__api__router__CategoryResponse"];
+
+export function ProviderWorkspace({ catalogOnly = false }: { catalogOnly?: boolean }) {
   const route = useParams();
   const [params, setParams] = useSearchParams();
   const definition = workflows.find((item) => item.formKey === params.get("workflow"));
@@ -154,7 +157,7 @@ export function ProviderWorkspace() {
     const item = provider.data;
     const active = !item.profile.archivedAt;
     return (
-      <section>
+      <section aria-label="Provider record">
         <h2>{item.party.displayName}</h2>
         <Link to="/providers">Provider directory</Link> ·{" "}
         <Link to={`/parties?identity=${target}`}>Shared identity and contacts</Link>
@@ -268,57 +271,78 @@ export function ProviderWorkspace() {
           target={target}
           active={active}
         />
+        <WorkJournal id={target} provider />
         <History kind="provider_profile" id={target} />
       </section>
     );
   }
   return (
     <>
-      <h2>Providers</h2>
+      <h2>{catalogOnly ? "Provider categories" : "Providers"}</h2>
       <p>
-        Shared identities across services, with recorded references, reputation and work history.
+        Categories organize the directory and later recommendations. Services describe specific
+        offerings or practice areas. Legal / Attorney is a category; legal engagements belong to
+        their own workflow, not Maintenance assignments.
       </p>
-      <Link to="/parties">Shared identities and tenants</Link>
+      {!catalogOnly && <Link to="/parties">Shared identities and tenants</Link>}
       <CommandLinks
-        keys={["provider.create", "provider.category.create"]}
-        title="Create Provider or category"
+        keys={
+          catalogOnly
+            ? ["provider.category.create"]
+            : ["provider.create", "provider.category.create"]
+        }
+        title={catalogOnly ? "Add category" : "Create Provider or category"}
       />
-      <details>
-        <summary>Use an existing identity</summary>
-        <IdentityLookup
-          onSelect={(id) => setParams({ workflow: "provider.designate", target: id })}
-        />
-      </details>
-      <ProviderDirectory />
-      <details>
+      {!catalogOnly && (
+        <details>
+          <summary>Use an existing identity</summary>
+          <IdentityLookup
+            onSelect={(id) => setParams({ workflow: "provider.designate", target: id })}
+          />
+        </details>
+      )}
+      {!catalogOnly && <ProviderDirectory categories={categories.data ?? []} />}
+      <details open={catalogOnly}>
         <summary>Category administration</summary>
         {categories.isPending && <p role="status">Loading categories…</p>}
         {categories.error && <p role="alert">{categories.error.message}</p>}
-        {categories.data?.map((category) => (
-          <article key={category.id}>
-            <h3>{category.displayName}</h3>
-            <Facts
-              value={category}
-              fields={[
-                "revision",
-                "description",
-                "displayOrder",
-                "effectiveProviderCount",
-                "archivedAt",
-                "archiveReason",
-              ]}
-            />
-            <CommandLinks
-              target={category.id}
-              keys={
-                category.archivedAt
-                  ? ["provider.category.restore"]
-                  : ["provider.category.patch", "provider.category.archive"]
-              }
-              title={`Category ${category.displayName}`}
-            />
-            <History kind="provider_category" id={category.id} />
-          </article>
+        {(["active", "archived"] as const).map((state) => (
+          <section
+            key={state}
+            aria-label={`${state === "active" ? "Active" : "Archived"} Provider categories`}
+          >
+            <h3>{state === "active" ? "Active categories" : "Archived categories"}</h3>
+            {categories.data
+              ?.filter((category) =>
+                state === "active" ? !category.archivedAt : !!category.archivedAt,
+              )
+              .map((category) => (
+                <article key={category.id}>
+                  <h4>{category.displayName}</h4>
+                  <Facts
+                    value={category}
+                    fields={[
+                      "revision",
+                      "description",
+                      "displayOrder",
+                      "effectiveProviderCount",
+                      "archivedAt",
+                      "archiveReason",
+                    ]}
+                  />
+                  <CommandLinks
+                    target={category.id}
+                    keys={
+                      category.archivedAt
+                        ? ["provider.category.restore"]
+                        : ["provider.category.patch", "provider.category.archive"]
+                    }
+                    title={`Category ${category.displayName}`}
+                  />
+                  <History kind="provider_category" id={category.id} />
+                </article>
+              ))}
+          </section>
         ))}
       </details>
     </>
@@ -341,8 +365,18 @@ function ProviderChildren({
   active: boolean;
 }) {
   return (
-    <section className="context-section">
+    <section className="context-section" aria-label={title}>
       <h3>{title}</h3>
+      {kind === "work_history" && (
+        <p>Manually recorded prior work. Maintenance owns issue-backed work journals.</p>
+      )}
+      {kind === "reputation_link" && (
+        <p>
+          These are manually recorded pointers, not verified ratings or endorsements. Last checked
+          records your review date. Opening a link visits an external site; saving and reading this
+          record do not contact it.
+        </p>
+      )}
       {active && (
         <CommandLinks
           target={target}
@@ -352,7 +386,38 @@ function ProviderChildren({
       )}
       {rows.map((row) => (
         <article key={row.id}>
-          <Facts value={row} fields={[...fields, "archivedAt"]} />
+          <Facts
+            value={row}
+            fields={[...fields, "archivedAt"]}
+            verbatim={kind === "reputation_link"}
+          />
+          {kind === "reputation_link" && (
+            <>
+              {!row.archivedAt && reputationUrl(row) && (
+                <a
+                  href={reputationUrl(row)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  referrerPolicy="no-referrer"
+                >
+                  Review {scalar(record(row).sourceName ?? record(row).sourceKind)} externally (new
+                  tab)
+                </a>
+              )}
+              <History
+                kind="provider_reputation_link"
+                id={row.id}
+                snapshotFields={[
+                  "sourceKind",
+                  "sourceName",
+                  "url",
+                  "notes",
+                  "lastCheckedOn",
+                  "archivedAt",
+                ]}
+              />
+            </>
+          )}
           {active && (
             <CommandLinks
               target={target}
@@ -371,7 +436,18 @@ function ProviderChildren({
   );
 }
 
-function ProviderDirectory() {
+function reputationUrl(row: unknown): string | undefined {
+  try {
+    const url = new URL(scalar(record(row).url));
+    return url.protocol === "https:" && !url.username && !url.password && !url.hash
+      ? url.href
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function ProviderDirectory({ categories }: { categories: Category[] }) {
   const { scope } = useWorkspace();
   const [params, setParams] = useSearchParams();
   const archive = params.get("archiveState"),
@@ -409,6 +485,7 @@ function ProviderDirectory() {
   });
   return (
     <section aria-label="Provider directory">
+      <p>Service and service-area filters match complete labels.</p>
       <form
         className="directory-filters"
         onSubmit={(event) => {
@@ -447,6 +524,23 @@ function ProviderDirectory() {
             <option value="">Any</option>
             <option value="categorized">Categorized</option>
             <option value="uncategorized">Uncategorized</option>
+          </select>
+        </label>
+        <label>
+          Category
+          <select
+            key={categories.length}
+            name="categoryId"
+            defaultValue={params.get("categoryId") ?? ""}
+          >
+            <option value="">Any category</option>
+            {categories
+              .filter((category) => !category.archivedAt)
+              .map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.displayName}
+                </option>
+              ))}
           </select>
         </label>
         <label>
@@ -513,7 +607,7 @@ function ProviderDirectory() {
               <p>{item.services.map((service) => service.displayName).join(", ")}</p>
               <p>{item.serviceAreas.map((area) => area.displayName).join(", ")}</p>
               <p>
-                {item.workHistoryCount} work records · {item.referenceCount} references ·{" "}
+                {item.workHistoryCount} manual work records · {item.referenceCount} references ·{" "}
                 {item.reputationLinkCount} reputation links
               </p>
             </article>
