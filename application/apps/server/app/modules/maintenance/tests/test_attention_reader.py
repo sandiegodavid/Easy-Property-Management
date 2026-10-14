@@ -259,6 +259,9 @@ def test_terminal_issue_excluded_but_its_active_task_and_scheduled_appointment_s
         appointment_result = reader.attention(connection, window("maintenance_appointment"))
         assert appointment_result.matching_total == 1
         assert appointment_result.candidates[0].reasons[0].code == "outcome_review"
+        parent = appointment_result.candidates[0].related_source
+        assert parent.kind == "maintenance_issue" and parent.id == UUID(identity(1))
+        assert parent.active is False
 
 
 def test_agenda_overlap_cross_midnight_future_and_elapsed_outcome_membership(database):

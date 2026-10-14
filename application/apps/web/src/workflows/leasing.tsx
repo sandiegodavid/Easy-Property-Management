@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CoverageLinks } from "../shared/coverage";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
+import { SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import { workflows, record, scalar } from "@epm/contracts/workflows";
 import type { components } from "@epm/contracts/generated";

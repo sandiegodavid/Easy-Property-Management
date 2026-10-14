@@ -24,7 +24,7 @@ Lease documents use registered File link policies and retain evidence history. C
 
 Start with Lease use cases and the Portfolio source-timeline port. Read [Inspections](inspections.md) for walkthrough attention, [Finance](finance.md) for explicit rent synchronization, and [Files](files.md) for document publication. Preserve independent authority and avoid implicit finance or inspection writes during contract changes.
 
-DASH-001's [lease attention reader](../../application/apps/server/app/modules/leases/infrastructure/attention_reader.py) supplies bounded review facts on the caller's read transaction using Portfolio-owned calendar/occupancy relations. An exercised renewal is not a confirmed successor; recorded move-out closes review. See the [Slice 6 validation matrix](../active/DASH-001_CONTRACT_EXAMPLES.md#slice-6-lease-review-attention) for eligibility, continuation and query bounds.
+DASH-001's [lease attention reader](../../application/apps/server/app/modules/leases/infrastructure/attention_reader.py) supplies bounded review facts on the caller's read transaction using Portfolio-owned calendar/occupancy relations. An exercised renewal is not a confirmed successor; recorded move-out closes review. See the [Slice 6 validation matrix](../archive/validation/DASH-001_CONTRACT_EXAMPLES_COMPLETED_2026-10-14.md#slice-6-lease-review-attention) for eligibility, continuation and query bounds.
 
 ## Browser workflow boundary
 

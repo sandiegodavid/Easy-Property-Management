@@ -8,6 +8,7 @@ import {
 
 const ready: Bootstrap = {
   contractVersion: 1,
+  serverTimeUtc: "2026-10-14T12:00:00Z",
   state: "ready",
   workspaceId: "00000000-0000-4000-8000-000000000001",
   runtimeEpoch: "00000000-0000-4000-8000-000000000002",

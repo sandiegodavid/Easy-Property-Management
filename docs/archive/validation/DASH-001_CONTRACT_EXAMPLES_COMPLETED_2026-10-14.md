@@ -1,4 +1,4 @@
-# DASH-001 contract examples
+# DASH-001 contract examples and acceptance evidence
 
 Delivered October 12, 2026. Strict models are in `operator/application/home_contracts.py`; owning-module `attention_ports.py` declarations accept a caller-owned transaction and neutral `platform/attention_reads.py` window. `operator/application/home_ports.py` defines the typed one-transaction composition boundary and required adapter bundle, including Portfolio scope/inventory/calendar and Finance's existing Money reader. Home capability stays unavailable pending adapters and composition.
 
@@ -254,7 +254,7 @@ Collection streams each supply at most `limit + 1` ordered candidates. Compositi
 | Query/continuation bounds | Mixed property-scoped composition: 58 Home SELECTs and 23 live SELECTs (81 combined), within 64/24/88 ceilings including marker, scope, label and Finance integrity reads. One collection page stays within 24. A fixed 1,000-Task dataset distributed across 1/10/50 properties uses 42 Home SELECTs. Equal boundaries across source kinds and page-size-one continuations have no gaps/duplicates; terminal fallback preserves exact totals. |
 | Scope/presentation | Explicit property scope excludes unlinked Tasks; communication follow-ups inherit their linked property without grouping; selected source labels and archived metadata remain source facts. Actionable children precede waiting children in bounded previews, and overflow retains an exact count/detail target. |
 
-Focused validation: 140 Home/source regression cases passed; all 16 composition cases passed after final updates, including database failure translation and captured-runtime propagation to Finance. Ruff lint and format checks passed for all 20 changed Python files, and diff-whitespace validation passed. Executable evidence: [test_home_composition.py](../../application/apps/server/app/modules/operator/tests/test_home_composition.py), existing Home contracts and source attention tests.
+Focused validation: 140 Home/source regression cases passed; all 16 composition cases passed after final updates, including database failure translation and captured-runtime propagation to Finance. Ruff lint and format checks passed for all 20 changed Python files, and diff-whitespace validation passed. Executable evidence: [test_home_composition.py](../../../application/apps/server/app/modules/operator/tests/test_home_composition.py), existing Home contracts and source attention tests.
 
 ## Slice 10 HTTP continuations and readiness
 
@@ -274,4 +274,111 @@ Bootstrap checks `operator.home` against the current complete adapter bundle. Mi
 | Query/bounds | Preview and collection limits are typed and bounded; page-size-one/two continuations produce no gaps or duplicate rows. Cursor validation adds no source-record queries. Integrated HTTP query and latency measurement remains Slice 11. |
 | Failures/readiness | Successful empty live attention has a real zero total; failed/missing action sources have unavailable sections without fabricated totals/cursors. Missing Money preserves action reads; missing scope context fails safely. Removing a required runtime adapter removes `operator.home` from bootstrap. |
 
-Focused validation: 46 new HTTP cases plus Home contracts/composition, Operator foundation and endpoint contract regressions passed (234 total). Ruff lint and format checks passed for all 11 changed Python files; diff-whitespace validation passed. Executable evidence: [test_home_api.py](../../application/apps/server/app/modules/operator/tests/test_home_api.py).
+Focused validation: 46 new HTTP cases plus Home contracts/composition, Operator foundation and endpoint contract regressions passed (234 total). Ruff lint and format checks passed for all 11 changed Python files; diff-whitespace validation passed. Executable evidence: [test_home_api.py](../../../application/apps/server/app/modules/operator/tests/test_home_api.py).
+
+## Slice 11 backend readiness and performance proof
+
+Delivered October 14, 2026. [test_home_performance.py](../../../application/apps/server/app/modules/operator/tests/test_home_performance.py) measures the complete three-route HTTP path on a real current-baseline SQLite workspace. Each portfolio size retains 1,000 open Tasks and 1,000 positive weekly rent expectations, distributed over 1, 10 or 50 properties with Los Angeles, Tokyo and UTC zones. Fixtures insert read-test source rows directly; the encrypted portability proof uses the separate owning-service fixture in `test_home_composition.py`.
+
+Measurements use macOS arm64, Python 3.14.8 and SQLite 3.53.4. Each route has ten sequential samples, including its first request at that portfolio size; p95 uses nearest rank. Worker wait measures dispatch-to-worker-entry; database snapshot duration measures the complete unit-of-work read, including connection acquisition, SQL fetching and application projection. HTTP duration includes FastAPI validation/serialization and the local ASGI test transport. These values provide the backend comparison baseline for Slice 18; browser rendering, TCP transport, sustained contention and machine cold boot are not measured here. Timing values are recorded as pytest/JUnit properties rather than unstable wall-clock assertions.
+
+| Properties | Initial / attention / page SELECTs | Initial p95 ms | Attention p95 ms | Page p95 ms | Initial worker wait p95 ms | Initial snapshot p95 ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 46 / 17 / 17 | 548.834 | 155.049 | 70.491 | 0.155 | 541.560 |
+| 10 | 46 / 17 / 17 | 386.202 | 64.995 | 164.360 | 0.067 | 385.328 |
+| 50 | 46 / 17 / 17 | 460.829 | 160.313 | 72.369 | 0.063 | 459.955 |
+
+First-request initial times at 1/10/50 properties were 548.834/289.076/359.424 ms. Attention/page worker waits were at most 0.081 ms p95; their snapshot p95 stayed below 164 ms. Needs action continuation pages use 17 SELECTs. Waiting/Upcoming/appointments/information-review pages use 7/13/3/4 SELECTs respectively at every size. A barrier makes the 50-property initial and live requests overlap inside their read transactions: 63 combined SELECTs and 866.800 ms for both responses. The mixed-source/grouped regression retains 58 initial and 23 live SELECTs (81 combined), including Finance integrity checks, source markers and hydration. All measured costs meet the 64/24/24 and 88 combined ceilings. Existing baseline indexes suffice for these cases; the measurements do not trigger snapshot implementation. Slice 18 retains the integrated latency decision.
+
+| Validation area | Focused evidence |
+| --- | --- |
+| Happy paths and bounds | Exact 2,000-row Needs action total at all three portfolio sizes; initial/live parity; every available section, maximum 100-row collection pages, at most limit-plus-one candidates per source and three child previews. SQL selection/counting remains source-owned. |
+| Invalid combinations and failure | HTTP query/cursor bounds and binding regressions; expected source failure makes the dependent collection unavailable without false zero; independent sections survive; unusable database reads fail the full request. |
+| Retry/read-only | Repeated endpoint reads do not add source/audit records. Frozen continuation retains exact totals with no overlap. Repeated timing samples measure the complete endpoint rather than one source adapter. |
+| Transaction/rollback | Parallel initial/live requests share identical captures/results and meet the combined budget; concurrent source writes cannot mix counts, rows or child status inside a response. Source rollback leaves attention unchanged. |
+| Persistence/schema | Current greenfield baseline used throughout; fixed query growth at 1/10/50 properties. Los Angeles midnight moves rent from Upcoming to Needs action while Tokyo is already due today, updating counts and rows together. No new cache or canonical table is introduced. |
+| Backup/restore/runtime | Encrypted backup reconstructs all Home sections at a fixed clock from supported source writes. The restored runtime/source marker rejects a pre-backup continuation; restart/runtime, source-change and expiry conflict regressions pass. |
+| Query/N+1 and latency | Assert endpoint ceilings and fixed initial/live/page SELECT counts; measure every collection and continuation, worker wait and read duration. Existing Task, rent, Maintenance, Lease, owner and Portfolio attention regressions remain passing. |
+
+Focused validation: 191 distinct tests passed across Home contracts/composition/API/money/coverage and all six core attention-reader modules, including three new performance/transition/parallel cases. The final three-case performance run passed after adding all-collection measurements. Ruff check and format checks passed for both changed Python files; diff-whitespace validation passed. This is backend readiness evidence; frontend acceptance remains in Slices 12–18.
+
+## Slice 12 asynchronous Home transport
+
+Delivered October 14, 2026. Bootstrap returns required `serverTimeUtc` from Operator's injected clock, normalized to UTC; this adds no write or database query. Generated OpenAPI/TypeScript contracts remain reproducible without a workspace. The browser validates the server-time fact before admission and selects the complete UTC calendar month from it, then stores explicit `fromOn`/`throughOn`, `horizonDays` and optional canonical `propertyId` in the Home URL.
+
+Full Home query keys contain workspace/runtime, property, horizon and money period. Independent live attention keys contain workspace/runtime and property only. Both use abort signals and the existing workspace-owned query client; no prior-scope placeholder data is applied. Typed response admission checks contract version and workspace/runtime/property scope. Missing `operator.home` disables both requests. Full/read and live/read captures stay separate; source failures preserve unavailable discriminants instead of fabricated zero counts.
+
+Focused backend validation covered 185 distinct Operator/Home HTTP/endpoint cases: 183 passed in the initial run and the two timestamp-sensitive bootstrap assertions passed in the four-case bootstrap rerun after correction. The new injected-clock test verifies offset-to-UTC normalization and unchanged audit counts. Frontend validation is recorded [once in the browser matrix](../../ui/validation.md#dash-001-slice-12-transport). Source persistence and encrypted portability proofs remain the existing Operator tests; this slice adds no durable table, receipt or cache. Slice 13 owns the full Home layout and refresh/loading presentation.
+
+## Slice 13 layout and latency boundary
+
+Delivered October 14, 2026. Home retains the generated contracts and independent full/live query captures. Shared read handling now consumes a cancellable ten-second deadline, exposes elapsed wait and per-query retry, coalesces repeated refresh while a query is running, and retains prior data on failed refresh. Timeout cancels the client request; it does not claim SQLite worker cancellation. No new persistence, snapshot cache or command is added.
+
+Appointment attention facts now include their owning issue ID and active state from the existing joined selection. The browser opens that issue's existing appointment context; no per-appointment lookup or query-count increase is introduced. Maintenance source, Home composition/performance and HTTP suites passed in two focused runs (35 and 62 cases, with shared Maintenance cases). These include encrypted restore, read-only behavior, snapshot consistency and the existing SELECT ceilings. Python lint/format checks passed. [The Slice 13 browser matrix](../../ui/validation.md#dash-001-slice-13-layout-and-latency) records the frontend evidence once; subsequent collection/action/freshness gates remain pending.
+
+## Slice 14 first-page cursors and collection navigation
+
+Delivered October 14, 2026. Available HTTP collection sections now emit `viewAllCursor`, a capture-bound first-page token whose `last` is null. A continuation retains the four-part final key. Both forms validate exact normalized filters, workspace/runtime, source marker and 15-minute lifetime within the same deferred transaction as selection. This allows View all to include the preview's first rows at its original instant, rather than skip them or silently take a fresh classification. Empty previews have a valid first-page token too. No extra SQL or durable state is introduced.
+
+The five browser routes `/home/collections/{collection}` are explicitly registered in static delivery. Their queries pass only collection/property/horizon/limit/cursor to the source endpoint; money dates remain URL/return context. Source returns validate local Home routes and runtime identity before restoring scroll. Each collection page replaces the preceding page, with clear 409 recovery; Restart clears the bound cursor. The complete collection browser matrix is [recorded once here](../../ui/validation.md#dash-001-slice-14-collections-and-return-navigation).
+
+| Backend validation | Result |
+| --- | --- |
+| First/next-page parity | Passed: preview first rows, totals and capture match a larger View all page after the clock advances; continuation rows do not overlap. Empty first-page cursor remains valid with no continuation. |
+| Binding/failure/read-only | Passed: existing version/key/filter/source/runtime/expiry, snapshot concurrency, partial failure and repeated read-only endpoint regressions. Nullable last-key admission preserves all other checks. |
+| Portability/schema | Passed: encrypted restore regenerates runtime-bound cursors and rejects the original token while reconstructing the same source facts. No canonical schema or compatibility migration. |
+| Bounds/delivery | Passed: existing 1/10/50-property, 1,000-Task/expectation query ceilings and candidate bounds; five registered deep links serve trusted assets, and an unknown collection route returns 404. |
+
+Focused backend validation: 146 Home HTTP/composition/contracts/performance/static-delivery cases passed, followed by 46 static-delivery cases after adding the unknown-route guard (147 distinct cases). Python Ruff checks passed for seven changed files; generated contracts and diff validation passed.
+
+## Slice 15 expanded source workflows and recovery
+
+Delivered October 14, 2026. `home-source-actions.tsx` consumes the eight registered `nextAction.kind`/source pairs above as navigation, not write authority. Expansions expose captured provenance/revision, related-source state, outstanding rent and bounded child reasons. Coverage labels include the area; appointment targets require the explicit owning issue and include `#appointment-{id}`. Opening an expansion does not fetch sensitive evidence or current detail. The owning page loads that context and determines permitted commands through its existing source API.
+
+`children` and nested reminder previews remain limited to three with exact `childCount`; they are not the complete action inventory. Issue/concern expansions link to the source Task directory filtered by `entityType` and `entityId`, with 25-row continuation pages. Each Task opens its current reminder actions; the existing 100-row reminder-history bound remains explicitly disclosed. No generic Home Complete, Dismiss or Snooze command is introduced.
+
+`SourceWorkflowLink` carries runtime-validated Home return/filter/scroll context through owning detail, child-directory paging, forms and result links without replacing the source workflow's own `returnTo`. Commands retain source-owned current revisions, confirmations, attempt keys, audit/evidence policies and immutable-result recovery. A stale Home capture never supplies permission to write. Reminder acknowledgement, appointment attendance and concern follow-up remain independent of parent resolution; report rejection is not a Finance receipt, and an open renewal option is not executed continuation.
+
+| Contract boundary | Focused evidence |
+| --- | --- |
+| Current state / failure | Concurrent Task mutation rejects the old revision while retaining input; explicit source review enables a new attempt. Unavailable issue detail withholds lifecycle controls and preserves Home return navigation. |
+| Retry / result identity | Interrupted Task completion and rent payment reconcile their original immutable results with one dispatch and no duplicate effect. Home adds no transaction or recovery protocol. |
+| Read / persistence bounds | Disclosure adds no source-detail requests or aggregate SELECTs; 26 explicit follow-ups traverse source pages as 25+1 without gaps. No new Home endpoint, canonical schema, cache or backup format. Existing source rollback/portability proofs remain authoritative; no new archive round trip was run. |
+
+Focused backend validation: **82 Home contract/API tests passed**. The **25-case packaged browser run**, including eight new workflow cases, and quality-check results are [recorded once in the Slice 15 browser matrix](../../ui/validation.md#dash-001-slice-15-source-workflows-and-recovery). Slice 17 delivers the subsequent automatic freshness/editor reconciliation boundary.
+
+## Slice 16 money, inventory and review drill-downs
+
+Delivered October 14, 2026. Money links use each existing `MoneyTarget` unchanged: `metric`, inclusive `fromOn`/`throughOn`, optional property scope and `propertyState=all`, plus the section's Finance `sourceRevision`. `/money?tab=reporting` opens `/api/money/sources` with those values; Finance owns contribution signs, exact amounts, cursor validation and 409 restart. No Home arithmetic constructs the reported total. Labels explicitly retain archived-property history and disclaim profit or owner entitlement.
+
+Inventory counts now include `viewAllCursor`. `/api/operator/home/inventory?occupancy=unknown&limit=50&cursor=…` returns typed `HomeInventoryResponse`: workspace/runtime/scope, `asOf`, source revision, active-only lifecycle, selected occupancy, exact `matchingTotal`, bounded `items` and `nextCursor`. Each item carries Property/Space IDs and names, occupancy, IANA zone and captured effective local date. Portfolio's existing `inventory_spaces()` supplies SQL count, stable `(property_id, space_id)` order and LIMIT before hydration, on the caller's read transaction. First-page cursors have null `last`; subsequent cursors retain both IDs. Existing metadata endpoints still reject null keys. Scope, occupancy, active policy, runtime, source marker and 15-minute expiry bind the token. Normal startup, reads and paging create no durable record.
+
+| Backend boundary | Focused evidence |
+| --- | --- |
+| Count/capture parity | Home unknown count and first page agree after the clock advances; vacant remains separately zero; pages expose source-local dates. |
+| Query/page bounds | One versus 101 contributing Spaces uses a fixed SELECT budget (at most six); 100+1 pages retain exact totals and capture without duplicate IDs. SQL applies LIMIT; existing Portfolio tests cover active/archive/overlap semantics and caller rollback. |
+| Invalid/failure/read-only | Typed occupancy/property/limit/extra-field rejection; missing property 404; malformed cursor 422; character/UTF-8-byte oversized cursor 413; changed occupancy/source 409; source failure 503 rather than a successful empty page. Repeated reads leave audit counts unchanged. |
+| Finance/portability | Each Home metric's captured Finance revision opens a contribution page with the same total. Existing encrypted Home restore reconstructs inventory facts while regenerating tokens; an original inventory token is rejected after runtime changes. No baseline or backup-format changes. |
+
+Focused backend validation: **189 distinct tests passed**: the 172-case Home/HTTP/composition/Finance/performance/Portfolio/static-delivery run, followed by 26 inventory/directory cases after adding UTF-8 cursor-byte checks (nine overlapping cases). Eleven new inventory endpoint cases cover the new read. Ruff check/format passed for all eleven changed Python files; generated contracts remain reproducible. The [Slice 16 browser matrix](../../ui/validation.md#dash-001-slice-16-money-inventory-and-review-drill-downs) records money, inventory, source-resolution and cross-zone presentation proof without duplicating it here. Slice 17 delivers the subsequent live-refresh behavior.
+
+## Slice 17 live attention refresh and protected interaction state
+
+Delivered October 14, 2026. The existing workspace-owned React Query key for live attention is the sole refresh channel: source command success invalidates it through the established query-client predicate, while Home adds visible-focus, visible minute and server-declared `nextTransitionAt` triggers. The transition delay is the earlier of the next transition and one minute; hidden documents do not poll, and visibility return uses a non-cancelling refetch so same-key triggers share the in-flight request. The browser does not infer source transitions or write a snapshot.
+
+`HomeRead.stale` derives from the live query's invalidated/elapsed freshness window. The zero-action assurance therefore requires an available, settled, non-stale live response. Home retains the displayed attention collection while a replacement introduces new preview rows, a higher count, or would remove an expanded disclosure; the staged result is announced with its exact current total. Selecting **Show updated list** replaces the one complete collection response. Source command recovery, dirty source forms and their current revisions remain outside Home.
+
+| Frontend boundary | Focused evidence |
+| --- | --- |
+| Transition / polling | A declared transition schedules exactly one live refetch at the frozen browser instant; a response without a transition receives the visible 60-second check. |
+| Focus / concurrency | Repeated focus events during one active attention request keep one request for that query key. Existing timeout/retry and late-scope cancellation tests remain authoritative. |
+| Interaction / assurance | An expanded row remains expanded while a staged response is held; new work is announced before replacement. In-flight, invalidated, timed-out and failed checks withhold all-clear language. |
+| Boundaries | No new HTTP operation, write, cache, snapshot or cron job is introduced. Existing workspace/runtime admission, source command invalidation and source-owned recovery remain unchanged. |
+
+Focused browser validation: **8 cases passed** in `home-layout.spec.ts`, including the two new transition/minute refresh cases. Packaged build, generated-contract reproducibility, lint, complete type checking and changed-file formatting passed. Global formatting remains blocked only by unchanged `demo/dataset.json` and `demo/README.md`.
+
+## Slice 18 integrated live-read gate
+
+Delivered October 14, 2026. Slice 18 adds no protocol, endpoint or persisted state. It records the acceptance decision against the existing live contracts: the operator’s source/action and collection responses remain authoritative; Home continues to apply only admitted workspace/runtime/scope results, and the existing source-command invalidation/recovery contracts remain in force.
+
+Ten sequential packaged, supported-local browser samples measured initial Home p95 **881 ms**, collection p95 **341 ms**, live-attention refresh p95 **334 ms** and in-app shell navigation feedback p95 **98 ms**. The focused 1/10/50-property backend performance suite also passed, retaining Slice 11 query/worker/read-duration ceilings. Because these measurements meet the one-second read and 100-ms shell targets, no bottleneck authorizes a cache: conditional Slices 19–20 are explicitly skipped. Optional independent cron remains post-MVP.

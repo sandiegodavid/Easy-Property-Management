@@ -73,6 +73,17 @@ def foundation():
         uow.engine.dispose()
 
 
+def test_bootstrap_exposes_injected_utc_clock_without_writing(foundation):
+    _, uow, service = foundation
+    service.now = lambda: datetime.fromisoformat("2028-03-01T00:30:00+01:00")
+    with uow.engine.connect() as connection:
+        before = connection.execute(text("SELECT count(*) FROM audit_events")).scalar_one()
+    result = BootstrapResponse.model_validate(service.bootstrap())
+    assert result.serverTimeUtc == datetime(2028, 2, 29, 23, 30, tzinfo=UTC)
+    with uow.engine.connect() as connection:
+        assert connection.execute(text("SELECT count(*) FROM audit_events")).scalar_one() == before
+
+
 def save(service, **changes):
     data = {
         "record_id": str(uuid4()),
@@ -734,7 +745,11 @@ def test_bootstrap_preserves_envelope_after_storage_read_failure(
             assert "Private storage" not in response.text
             assert client.get("/api/operator/preferences").status_code == ordinary_status
             assert app.state.workspace_runtime.ready
-        assert client.get("/api/operator/bootstrap").json() == original
+        recovered = client.get("/api/operator/bootstrap").json()
+        assert datetime.fromisoformat(recovered.pop("serverTimeUtc")) >= datetime.fromisoformat(
+            original.pop("serverTimeUtc")
+        )
+        assert recovered == original
 
 
 def test_bootstrap_does_not_hide_unexpected_read_errors(foundation):

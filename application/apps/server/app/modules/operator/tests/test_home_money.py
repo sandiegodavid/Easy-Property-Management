@@ -22,6 +22,8 @@ from app.modules.finance.tests.commands import prepaid_command, rent_command
 from app.platform.attention_reads import AttentionWindow
 from app.modules.tasks.infrastructure.transaction_operations import SQLiteTaskTransactionOperations
 from uuid import uuid4
+from dataclasses import replace
+from app.modules.finance.application.money_models import Metric
 
 NOW = datetime(2026, 10, 6, 12, tzinfo=UTC)
 
@@ -132,6 +134,12 @@ def test_home_reuses_exact_finance_metrics_drilldowns_and_caller_transaction(sou
             metric.target.from_on == query.from_on and metric.target.through_on == query.through_on
             for metric in result.metrics
         )
+        for metric in result.metrics:
+            page = fixture.reader.sources(
+                replace(fixture.query, source_revision=result.capture.source_revision),
+                Metric(metric.target.metric),
+            )
+            assert page.total == metric.amount
     finally:
         event.remove(engine, "before_cursor_execute", capture)
 

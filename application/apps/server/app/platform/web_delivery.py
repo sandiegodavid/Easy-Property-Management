@@ -24,6 +24,7 @@ SECURITY_HEADERS = {
 }
 ROOT_ROUTES = {
     "/home",
+    "/home/inventory",
     "/properties",
     "/owners",
     "/leasing",
@@ -36,6 +37,7 @@ ROOT_ROUTES = {
     "/money",
     "/settings",
 }
+HOME_COLLECTIONS = {"needs_action", "waiting", "upcoming", "appointments", "information_review"}
 SECTIONS = {
     "properties": {
         "overview",
@@ -124,6 +126,7 @@ def browser_route(path: str) -> bool:
         kind, identity, section = parts
         return (
             (kind in SECTIONS and _uuid(identity) and section in SECTIONS[kind])
+            or (kind == "home" and identity == "collections" and section in HOME_COLLECTIONS)
             or (kind == "ai" and identity == "review" and _uuid(section))
             or (kind == "maintenance" and identity == "issues" and _uuid(section))
             or (kind == "money" and identity == "deposit-settlements" and _uuid(section))

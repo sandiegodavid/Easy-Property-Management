@@ -7,6 +7,16 @@ test("Home explains aggregate availability and shared Task rows reach real sourc
   page,
   request,
 }) => {
+  await page.route("**/api/operator/bootstrap", async (route) => {
+    const response = await route.fetch();
+    const bootstrap = (await response.json()) as components["schemas"]["BootstrapResponse"];
+    await route.fulfill({
+      json: {
+        ...bootstrap,
+        capabilities: bootstrap.capabilities.filter((item) => item !== "operator.home"),
+      },
+    });
+  });
   const title = `Slice56 deadline ${crypto.randomUUID()}`;
   const response = await request.post("/api/tasks", {
     data: {

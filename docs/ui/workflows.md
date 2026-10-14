@@ -22,6 +22,6 @@ Each workflow uses the owning module's commands, revisions, confirmation rules a
 
 ## Home foundation and deferred work
 
-[Shared attention/calendar components](../../application/packages/ui/src/attention.tsx) provide source-supplied reasons, totals, timestamps, all-day dates and explicit timed zones through independent disclosures. Live Task deadlines/waiting directories consume them. [Home](../../application/apps/web/src/shared/home.tsx) remains an unavailable aggregate with useful Task links; [DASH-001](../active/DASH-001_DESIGN.md) supplies the live composition.
+[Shared attention/calendar components](../../application/packages/ui/src/attention.tsx) provide source-supplied reasons, totals, timestamps, all-day dates and explicit timed zones through independent disclosures. Live Task deadlines/waiting directories consume them. [Home](../../application/apps/web/src/shared/home.tsx) delivers bounded source-backed attention, agenda, coverage, money and inventory; [DASH-001](../archive/designs/DASH-001_DESIGN_COMPLETED_2026-10-14.md) records the accepted live composition.
 
 The installation currently has no registered production model adapters/actions/approval handlers; Settings and generic review infrastructure do not establish production generation/approval. [UI-002](../active/UI-002_DESIGN_preliminary.md) retains issue-proposal approval, assistant setup, legal/HOA and spreadsheet work. Owner statements/disbursements/fees retain their separate backlogs.

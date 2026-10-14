@@ -32,6 +32,7 @@ class CursorArguments(TypedDict):
     source_revision: str
     now: datetime
     sort_kind: NotRequired[str]
+    allow_start: NotRequired[bool]
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,7 @@ class ReadCursor:
     identity: tuple[str, str]
     source_revision: str
     as_of: str
-    last: tuple[str, str]
+    last: tuple[str, str] | None
 
     def encode(self):
         return (
@@ -64,6 +65,8 @@ class ReadCursor:
 
 
 def decode_cursor(value, **scope: Unpack[CursorArguments]):
+    if isinstance(value, str) and len(value.encode("utf-8")) > MAX_CURSOR_BYTES:
+        raise OperatorTooLarge("Collection cursor exceeds its size limit.")
     endpoint, filters, identity = scope["endpoint"], scope["filters"], scope["identity"]
     source_revision, now = scope["source_revision"], scope["now"]
     try:
@@ -79,11 +82,14 @@ def decode_cursor(value, **scope: Unpack[CursorArguments]):
             or data["version"] != 1
         ):
             raise ValueError()
-        if not isinstance(data["last"], list) or len(data["last"]) != CURSOR_KEY_PARTS:
-            raise ValueError()
-        last = tuple(data["last"])
-        _validate_sort(last[0], scope.get("sort_kind", "instant"))
-        identifier(last[1])
+        if data["last"] is None and scope.get("allow_start", False):
+            last = None
+        else:
+            if not isinstance(data["last"], list) or len(data["last"]) != CURSOR_KEY_PARTS:
+                raise ValueError()
+            last = tuple(data["last"])
+            _validate_sort(last[0], scope.get("sort_kind", "instant"))
+            identifier(last[1])
         captured = utc(data["asOf"])
         if data["endpoint"] != endpoint or canonical(data["filters"]) != canonical(filters):
             raise OperatorConflict("Restart this collection with the selected filters.")
@@ -103,6 +109,8 @@ def decode_cursor(value, **scope: Unpack[CursorArguments]):
 def _validate_sort(value, kind):
     if kind == "instant":
         utc(value)
+    elif kind == "identity":
+        identifier(value)
     elif kind != "label" or not isinstance(value, str) or len(value) > MAX_SORT_KEY:
         raise ValueError()
 
@@ -119,7 +127,7 @@ class AttentionCursor:
     identity: tuple[str, str]
     source_revision: str
     as_of: datetime
-    last: AttentionKey
+    last: AttentionKey | None
 
     def encode(self):
         return (
@@ -138,7 +146,9 @@ class AttentionCursor:
                             self.last.at.isoformat(),
                             self.last.source_kind,
                             self.last.source_id,
-                        ],
+                        ]
+                        if self.last is not None
+                        else None,
                     }
                 ).encode()
             )
@@ -186,7 +196,11 @@ def decode_attention_cursor(value, *, filters, identity, source_revision, now):
         captured = utc(data["asOf"])
         if data["endpoint"] != "home.items" or canonical(data["filters"]) != canonical(filters):
             raise OperatorConflict("Restart this collection with the selected filters.")
-        last = _attention_key(data["last"], filters["collection"], captured)
+        last = (
+            None
+            if data["last"] is None
+            else _attention_key(data["last"], filters["collection"], captured)
+        )
         if data["identity"] != list(identity) or data["sourceRevision"] != source_revision:
             raise OperatorConflict(
                 "The workspace or recorded sources changed. Refresh this collection."

@@ -2150,6 +2150,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/operator/home/inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inventory */
+        get: operations["getOperatorHomeInventory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/operator/home/items": {
         parameters: {
             query?: never;
@@ -5794,6 +5811,8 @@ export interface components {
              * @enum {string}
              */
             status: "available";
+            /** Viewallcursor */
+            viewAllCursor?: string | null;
             viewAllTarget: components["schemas"]["CollectionTarget"];
         };
         /** AvailableInventory */
@@ -5901,6 +5920,11 @@ export interface components {
              * Format: uuid
              */
             runtimeEpoch: string;
+            /**
+             * Servertimeutc
+             * Format: date-time
+             */
+            serverTimeUtc: string;
             /**
              * State
              * @enum {string}
@@ -10785,6 +10809,50 @@ export interface components {
         HomeErrorResponse: {
             detail: components["schemas"]["HomeProblem"];
         };
+        /** HomeInventoryResponse */
+        HomeInventoryResponse: {
+            /**
+             * Asof
+             * Format: date-time
+             */
+            asOf: string;
+            /**
+             * Contractversion
+             * @default 1
+             * @constant
+             */
+            contractVersion: 1;
+            /** Items */
+            items: components["schemas"]["InventorySpaceItem"][];
+            /** Matchingtotal */
+            matchingTotal: number;
+            /** Nextcursor */
+            nextCursor?: string | null;
+            /**
+             * Occupancy
+             * @enum {string}
+             */
+            occupancy: "vacant" | "unknown";
+            /**
+             * Propertystate
+             * @default active
+             * @constant
+             */
+            propertyState: "active";
+            /**
+             * Runtimeepoch
+             * Format: uuid
+             */
+            runtimeEpoch: string;
+            scope: components["schemas"]["HomeScope"];
+            /** Sourcerevision */
+            sourceRevision: string;
+            /**
+             * Workspaceid
+             * Format: uuid
+             */
+            workspaceId: string;
+        };
         /** HomeItem */
         HomeItem: {
             /**
@@ -11009,6 +11077,8 @@ export interface components {
             /** Count */
             count: number;
             target: components["schemas"]["InventoryTarget"];
+            /** Viewallcursor */
+            viewAllCursor?: string | null;
         };
         /** InventoryOperationReceipt */
         InventoryOperationReceipt: {
@@ -11054,6 +11124,35 @@ export interface components {
             expectedPropertyRevision: number;
             /** Idempotencykey */
             idempotencyKey: string;
+        };
+        /** InventorySpaceItem */
+        InventorySpaceItem: {
+            /**
+             * Effectivelocaldate
+             * Format: date
+             */
+            effectiveLocalDate: string;
+            /**
+             * Occupancy
+             * @enum {string}
+             */
+            occupancy: "vacant" | "unknown";
+            /**
+             * Propertyid
+             * Format: uuid
+             */
+            propertyId: string;
+            /** Propertyname */
+            propertyName: string;
+            /**
+             * Spaceid
+             * Format: uuid
+             */
+            spaceId: string;
+            /** Spacename */
+            spaceName: string;
+            /** Timezone */
+            timeZone: string;
         };
         /** InventoryTarget */
         InventoryTarget: {
@@ -28045,6 +28144,85 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["app__modules__operator__application__home_contracts__AttentionResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Content Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeErrorResponse"];
+                };
+            };
+        };
+    };
+    getOperatorHomeInventory: {
+        parameters: {
+            query: {
+                propertyId?: string | null;
+                occupancy: "vacant" | "unknown";
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeInventoryResponse"];
                 };
             };
             /** @description Local transport rejected. */

@@ -21,6 +21,7 @@ from app.modules.leases.application.attention_ports import LeaseAttentionReader
 from app.modules.owner_accounting.application.attention_ports import OwnerReportAttentionReader
 from app.modules.owner_management.application.attention_ports import OwnerConcernAttentionReader
 from app.modules.portfolio.application.attention_ports import PortfolioAttentionReader
+from app.modules.portfolio.application.attention_ports import InventorySpacePage
 from app.modules.operator.application.attention_ports import CoverageAttentionReader
 from app.platform.attention_reads import AttentionReader
 from app.modules.operator.domain.models import OperatorSectionUnavailable
@@ -97,6 +98,9 @@ class HomeReadTransaction(Protocol):
         self, facts: tuple[AttentionFact, ...], window: AttentionWindow
     ) -> tuple[AttentionFact, ...]: ...
     def inventory(self, window: AttentionWindow) -> InventoryFacts: ...
+    def inventory_spaces(
+        self, window: AttentionWindow, occupancy: str, *, after: tuple[str, str] | None
+    ) -> InventorySpacePage: ...
     def money(
         self, query: HomeQuery, window: AttentionWindow, *, identity: tuple[str, str]
     ) -> AvailableMoney: ...

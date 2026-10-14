@@ -15,6 +15,8 @@ from app.modules.operator.application.home_contracts import (
     HomeResponse,
     AttentionResponse,
     CollectionResponse,
+    InventoryQuery,
+    HomeInventoryResponse,
 )
 from app.modules.operator.application.home_service import HomeCompositionService
 from app.modules.operator.application.home_vocabulary import Collection
@@ -63,6 +65,12 @@ class CollectionInput(HorizonInput):
     cursor: str | None = Field(default=None, min_length=1, max_length=4096)
 
 
+class InventoryInput(ScopeInput):
+    occupancy: Literal["vacant", "unknown"]
+    limit: int = Field(default=50, ge=1, le=100)
+    cursor: str | None = Field(default=None, min_length=1, max_length=4096)
+
+
 class HomeProblem(Contract):
     code: str
     message: str
@@ -86,6 +94,24 @@ def _invoke(operation):
 
 
 def register_home(router, service: HomeCompositionService):
+    @router.get(
+        "/home/inventory",
+        response_model=HomeInventoryResponse,
+        operation_id="getOperatorHomeInventory",
+        responses=ERRORS,
+    )
+    def inventory(query: Annotated[InventoryInput, Query()]):
+        return _invoke(
+            lambda: service.inventory_items(
+                InventoryQuery(
+                    scope=query.scope(),
+                    occupancy=query.occupancy,
+                    limit=query.limit,
+                    cursor=query.cursor,
+                )
+            )
+        )
+
     @router.get(
         "/home", response_model=HomeResponse, operation_id="getOperatorHome", responses=ERRORS
     )

@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { MaintenanceFilters } from "./maintenance-context";
 import { MaintenanceEvidenceArchive } from "./maintenance-evidence";
 import { useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useParams, useSearchParams } from "react-router-dom";
+import { SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import { AttentionQueue, AttentionSection, type AttentionItem } from "@epm/ui";
 import type { components } from "@epm/contracts/generated";
@@ -64,6 +65,8 @@ export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
 
 function WorkDirectory({ kind }: { kind: WorkKind }) {
   const { scope } = useWorkspace();
+  const location = useLocation();
+  const navigationState: unknown = location.state;
   const [params, setParams] = useSearchParams();
   const status = params.get("status") ?? undefined;
   const cursor = params.get("cursor") ?? undefined;
@@ -280,7 +283,7 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
             if (value) next.set(key, value);
             else next.delete(key);
           }
-          setParams(next);
+          setParams(next, { state: navigationState });
         }}
       >
         <label>
@@ -523,7 +526,7 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
               onClick={() => {
                 const next = new URLSearchParams(params);
                 next.set("cursor", result.data.nextCursor!);
-                setParams(next);
+                setParams(next, { state: navigationState });
               }}
             >
               Next work page
@@ -534,7 +537,7 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
               onClick={() => {
                 const next = new URLSearchParams(params);
                 next.delete("cursor");
-                setParams(next);
+                setParams(next, { state: navigationState });
               }}
             >
               First work page

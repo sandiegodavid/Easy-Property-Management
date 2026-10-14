@@ -21,10 +21,12 @@ from app.modules.operator.application.home_contracts import (
     AttentionQuery,
     CollectionQuery,
     HomeScope,
+    InventoryQuery,
 )
 from app.modules.operator.application.home_service import HomeCompositionService
 from app.modules.operator.application.home_vocabulary import Collection, SourceKind
 from app.modules.operator.domain.models import (
+    OperatorConflict,
     OperatorSectionUnavailable,
     OperatorStorageFailure,
     OperatorUnavailable,
@@ -244,6 +246,11 @@ def test_encrypted_restore_reconstructs_the_same_complete_home(tmp_path):
         uow = SQLiteHomeUnitOfWork(fixture.db, compose_home_sources(), SQLiteAuditReadMarker())
         original = HomeCompositionService(uow, runtime=lambda: identity, now=lambda: NOW)
         before = original.home(home_query())
+        old_inventory_cursor = before.inventory.unknown.view_all_cursor
+        old_cursor = original.items(
+            CollectionQuery(collection="needs_action", limit=1)
+        ).result.next_cursor
+        assert old_cursor is not None
         validate_latest_schema(fixture.db)
         backup = BackupService(
             fixture.workspace,
@@ -264,9 +271,16 @@ def test_encrypted_restore_reconstructs_the_same_complete_home(tmp_path):
             compose_home_sources(),
             SQLiteAuditReadMarker(),
         )
-        after = HomeCompositionService(
+        restored_service = HomeCompositionService(
             restored_uow, runtime=lambda: new_identity, now=lambda: NOW
-        ).home(home_query())
+        )
+        after = restored_service.home(home_query())
+        with pytest.raises(OperatorConflict):
+            restored_service.inventory_items(
+                InventoryQuery(occupancy="unknown", cursor=old_inventory_cursor)
+            )
+        with pytest.raises(OperatorConflict):
+            restored_service.items(CollectionQuery(collection="needs_action", cursor=old_cursor))
         for collection in Collection:
             restored_section, original_section = (
                 getattr(after, collection.value),
@@ -276,16 +290,27 @@ def test_encrypted_restore_reconstructs_the_same_complete_home(tmp_path):
                 update={
                     "capture": original_section.capture.model_copy(
                         update={"source_revision": restored_section.capture.source_revision}
-                    )
+                    ),
+                    "view_all_cursor": restored_section.view_all_cursor,
+                    "next_cursor": restored_section.next_cursor,
                 }
             )
         for name in ("inventory", "money"):
             restored_section, original_section = getattr(after, name), getattr(before, name)
+            updates = {}
+            if name == "inventory":
+                updates = {
+                    kind: getattr(original_section, kind).model_copy(
+                        update={"view_all_cursor": getattr(restored_section, kind).view_all_cursor}
+                    )
+                    for kind in ("vacant", "unknown")
+                }
             assert restored_section == original_section.model_copy(
                 update={
                     "capture": original_section.capture.model_copy(
                         update={"source_revision": restored_section.capture.source_revision}
-                    )
+                    ),
+                    **updates,
                 }
             )
         assert after.source_revision != before.source_revision

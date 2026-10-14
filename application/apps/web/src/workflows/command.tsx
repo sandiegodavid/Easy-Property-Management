@@ -1,6 +1,7 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { useWatch } from "react-hook-form";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import {
   workflows,

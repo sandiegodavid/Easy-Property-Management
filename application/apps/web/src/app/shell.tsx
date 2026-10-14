@@ -35,6 +35,9 @@ import { MetadataSearch } from "../shared/search";
 import { CoveragePage, CoverageResume } from "../shared/coverage";
 import { AiDraftReview, AiGovernanceSettings } from "../workflows/ai-governance";
 import { Home } from "../shared/home";
+import { HomeCollectionPage } from "../shared/home-collection-page";
+import { HomeInventoryPage } from "../shared/home-inventory-page";
+import { HomeReturn } from "../shared/home-navigation";
 
 function LeasingPage() {
   const [params] = useSearchParams();
@@ -229,6 +232,7 @@ function Layout() {
             Search (Ctrl/⌘ K)
           </Link>
           <Link to="/settings/recovery">Unfinished forms</Link>
+          <HomeReturn />
         </header>
         {!scope.canWrite && <p>Workspace writes are unavailable.</p>}
         {(bootstrap.preferencesState !== "available" || !bootstrap.preferences) && (
@@ -248,6 +252,10 @@ export function ApplicationShell() {
       createRoutesFromElements(
         <Route element={<Layout />}>
           <Route index element={<Navigate to="/home" replace />} />
+          <Route element={<DestinationGuard id="home" />}>
+            <Route path="/home/collections/:collection" element={<HomeCollectionPage />} />
+            <Route path="/home/inventory" element={<HomeInventoryPage />} />
+          </Route>
           {destinations.map((item) => (
             <Route key={item.id} element={<DestinationGuard id={item.id} />}>
               <Route

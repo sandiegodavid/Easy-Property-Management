@@ -1,6 +1,6 @@
 # OWNER-004 — completed source acceptance, October 13, 2026
 
-The concern source workflow is complete; current behavior is consolidated in the [Owner Management guide](../../modules/owner-management.md). The [original design](OWNER-004_DESIGN.md) retains rationale. The operator explicitly confirmed keeping Home owner-action presentation in [DASH-001](../../active/DASH-001_DESIGN.md); Home remains gated there. No source lifecycle, schema migration or money authority was added.
+The concern source workflow is complete; current behavior is consolidated in the [Owner Management guide](../../modules/owner-management.md). The [original design](OWNER-004_DESIGN.md) retains rationale. The operator explicitly confirmed keeping Home owner-action presentation in [DASH-001](DASH-001_DESIGN_COMPLETED_2026-10-14.md); Home remains gated there. No source lifecycle, schema migration or money authority was added.
 
 ## Focused validation matrix
 

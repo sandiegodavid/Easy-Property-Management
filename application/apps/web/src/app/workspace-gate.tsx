@@ -16,6 +16,9 @@ async function loadBootstrap(signal: AbortSignal): Promise<Bootstrap> {
   const data = result.data;
   if (
     data.contractVersion !== 1 ||
+    typeof data.serverTimeUtc !== "string" ||
+    !Number.isFinite(Date.parse(data.serverTimeUtc)) ||
+    !/(Z|\+00:00)$/.test(data.serverTimeUtc) ||
     !["ready", "busy", "unavailable"].includes(data.state) ||
     typeof data.runtimeEpoch !== "string" ||
     typeof data.canWrite !== "boolean" ||

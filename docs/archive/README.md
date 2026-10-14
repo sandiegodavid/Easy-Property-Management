@@ -17,6 +17,8 @@ VEND-001's [October 12 acceptance record](designs/VEND-001_DESIGN_COMPLETED_2026
 
 ## Delivery and validation records
 
+DASH-001's [October 14 acceptance](designs/DASH-001_DESIGN_COMPLETED_2026-10-14.md) and [backend contract evidence](validation/DASH-001_CONTRACT_EXAMPLES_COMPLETED_2026-10-14.md) preserve completed Home delivery. Current behavior lives in the [Operator guide](../modules/operator.md); [browser evidence](../ui/validation.md#dash-001-slice-21-acceptance-handoff) records the handoff. Conditional snapshot Slices 19–20 were skipped by the local latency gate; independent cron remains post-MVP.
+
 VEND-002's [completed acceptance record](designs/VEND-002_DESIGN_COMPLETED_2026-10-12.md) covers manual reputation pointers and contextual lifecycle history. Current behavior is in the [Provider guide](../modules/providers.md).
 
 [implementation-plans](implementation-plans) contains the complete historical UI matrix, command-readiness plans and the prior architecture plan. [validation](validation) preserves dated feature test matrices. These records retain original evidence, counts and known gaps. No tests were rerun as part of documentation consolidation.
@@ -63,4 +65,4 @@ OPS-001's [October 13 acceptance](designs/OPS-001_DESIGN_COMPLETED_2026-10-13.md
 
 ## Completed core browser delivery
 
-The [final UI-001 design](designs/UI-001_DESIGN_COMPLETED_2026-10-12.md) and [final delivery matrix](implementation-plans/UI-001_IMPLEMENTATION_MATRIX_COMPLETED_2026-10-12.md) preserve the completed October 12 record separately from earlier partial snapshots. Current behavior lives in [UI guides](../ui/operator-experience.md) and [modules](../README.md#current-modules); remaining Home and extension work lives in DASH-001/UI-002.
+The [final UI-001 design](designs/UI-001_DESIGN_COMPLETED_2026-10-12.md) and [final delivery matrix](implementation-plans/UI-001_IMPLEMENTATION_MATRIX_COMPLETED_2026-10-12.md) preserve the completed October 12 record separately from earlier partial snapshots. Current behavior lives in [UI guides](../ui/operator-experience.md) and [modules](../README.md#current-modules); Home subsequently completed DASH-001 acceptance; extension work remains in UI-002.

@@ -331,6 +331,7 @@ class AvailableCollection(HomeContract):
     matching_total: StrictInt = Field(ge=0)
     items: tuple[HomeItem, ...] = Field(max_length=100)
     next_cursor: str | None = Field(default=None, min_length=1, max_length=4096)
+    view_all_cursor: str | None = Field(default=None, min_length=1, max_length=4096)
     view_all_target: CollectionTarget
 
     @model_validator(mode="after")
@@ -438,6 +439,38 @@ class InventoryTarget(HomeContract):
 class InventoryCount(HomeContract):
     count: StrictInt = Field(ge=0)
     target: InventoryTarget
+    view_all_cursor: str | None = Field(default=None, min_length=1, max_length=4096)
+
+
+class InventoryQuery(HomeContract):
+    scope: HomeScope = HomeScope()
+    occupancy: Literal["vacant", "unknown"]
+    limit: StrictInt = Field(default=50, ge=1, le=100)
+    cursor: str | None = Field(default=None, min_length=1, max_length=4096)
+
+
+class InventorySpaceItem(HomeContract):
+    property_id: UUID
+    property_name: str
+    space_id: UUID
+    space_name: str
+    occupancy: Literal["vacant", "unknown"]
+    time_zone: str
+    effective_local_date: date
+
+
+class HomeInventoryResponse(HomeContract):
+    contract_version: Literal[1] = 1
+    workspace_id: UUID
+    runtime_epoch: UUID
+    scope: HomeScope
+    as_of: datetime
+    source_revision: str
+    property_state: Literal["active"] = "active"
+    occupancy: Literal["vacant", "unknown"]
+    matching_total: StrictInt = Field(ge=0)
+    items: tuple[InventorySpaceItem, ...] = Field(max_length=100)
+    next_cursor: str | None = None
 
 
 class AvailableInventory(HomeContract):

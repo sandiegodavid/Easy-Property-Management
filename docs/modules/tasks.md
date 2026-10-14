@@ -53,7 +53,7 @@ Persistence identities below are read from the current models. Column definition
 
 ## Validation
 
-DASH-001's caller-transaction Task attention reader supplies SQL-filtered deadlines, waiting follow-ups and grouped reminder previews, including unlinked Tasks and retained archived context. Its source counts and SQL facts support the later Home composition; they do not replace the existing TASK-001 summary or enable Home on their own. See the [DASH delivery matrix](../active/DASH-001_CONTRACT_EXAMPLES.md#slice-3-task-reminder-and-waiting-facts) and [focused attention tests](../../application/apps/server/app/modules/tasks/tests/test_attention_reader.py).
+DASH-001's caller-transaction Task attention reader supplies SQL-filtered deadlines, waiting follow-ups and grouped reminder previews, including unlinked Tasks and retained archived context. Its source counts and SQL facts support the later Home composition; they do not replace the existing TASK-001 summary or enable Home on their own. See the [DASH delivery matrix](../archive/validation/DASH-001_CONTRACT_EXAMPLES_COMPLETED_2026-10-14.md#slice-3-task-reminder-and-waiting-facts) and [focused attention tests](../../application/apps/server/app/modules/tasks/tests/test_attention_reader.py).
 
 Completion validation on October 12, 2026 passed the complete Task backend directory (120 tests) and twelve focused Task browser cases in [work.spec.ts](../../application/apps/web/tests/work.spec.ts). The [completed TASK-001 acceptance record](../archive/designs/TASK-001_DESIGN_COMPLETED_2026-10-12.md) records coverage and repository check limitations. The following executable specifications remain the starting point for focused regression validation.
 

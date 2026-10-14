@@ -43,6 +43,7 @@ class RecoveryAction(Contract):
 
 class BootstrapResponse(Contract):
     contractVersion: StrictInt
+    serverTimeUtc: AwareDatetime
     state: Literal["ready", "busy", "unavailable"]
     workspaceId: UUID | None
     runtimeEpoch: UUID

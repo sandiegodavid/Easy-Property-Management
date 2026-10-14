@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { CoverageLinks } from "../shared/coverage";
-import { Link } from "react-router-dom";
+import { SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { communicationLocalTime } from "./communication-context";
 import { MoneyFacts } from "./money-presentation";
 import { QuoteComparison } from "./quote-context";
@@ -504,7 +504,10 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
         <section key={String(key)} aria-label={String(title)}>
           <h3>{String(title)}</h3>
           {workChildren(value, String(key)).map((item) => (
-            <article key={scalar(item.id)}>
+            <article
+              key={scalar(item.id)}
+              id={key === "appointments" ? `appointment-${scalar(item.id)}` : undefined}
+            >
               {key === "costContexts" ? (
                 <MoneyFacts value={item} fields={fields as string[]} />
               ) : key === "quotes" ? (
@@ -594,7 +597,7 @@ function TaskReminders({ id, active }: { id: string; active: boolean }) {
       ),
   });
   return (
-    <section aria-label="Task reminders">
+    <section aria-label="Task reminders" id="task-reminders">
       <h3>Reminders</h3>
       {result.error && <p role="alert">Reminders unavailable: {result.error.message}</p>}
       {result.data?.length === 100 && (

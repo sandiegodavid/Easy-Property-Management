@@ -112,6 +112,34 @@ def test_frozen_preview_to_collection_pagination_has_no_gaps(api):
     assert len(seen) == len(set(seen)) == 8
 
 
+def test_view_all_starts_at_the_preview_capture_and_includes_its_first_rows(api):
+    client, context, _ = api
+    fixtures.populate(context, 8)
+    preview = client.get(HOME + "/attention", params={"limit": 2}).json()
+    cursor = preview["needsAction"]["viewAllCursor"]
+    assert cursor_payload(cursor)["last"] is None
+    context[0].now = lambda: fixtures.NOW + timedelta(minutes=3)
+    first = items(client, limit=3, cursor=cursor)
+    assert first.status_code == 200, first.text
+    page = first.json()
+    assert page["asOf"] == preview["asOf"]
+    assert page["result"]["matchingTotal"] == 8
+    assert page["result"]["items"][:2] == preview["needsAction"]["items"]
+    following = items(client, limit=3, cursor=page["result"]["nextCursor"]).json()
+    assert following["asOf"] == preview["asOf"]
+    assert {item["key"] for item in page["result"]["items"]}.isdisjoint(
+        item["key"] for item in following["result"]["items"]
+    )
+
+
+def test_empty_view_all_has_a_valid_frozen_start_cursor(api):
+    preview = api[0].get(HOME + "/attention").json()
+    first = items(api[0], cursor=preview["needsAction"]["viewAllCursor"])
+    assert first.status_code == 200, first.text
+    assert first.json()["result"]["matchingTotal"] == 0
+    assert first.json()["result"]["nextCursor"] is None
+
+
 def test_coverage_composite_cursor_pages_the_same_captured_information(api):
     client, _, _ = api
     response = client.get(HOME + "/items", params={"collection": "information_review", "limit": 1})

@@ -2261,6 +2261,19 @@
             "title": "Status",
             "type": "string"
           },
+          "viewAllCursor": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewallcursor"
+          },
           "viewAllTarget": {
             "$ref": "#/components/schemas/CollectionTarget"
           }
@@ -2518,6 +2531,11 @@
             "title": "Runtimeepoch",
             "type": "string"
           },
+          "serverTimeUtc": {
+            "format": "date-time",
+            "title": "Servertimeutc",
+            "type": "string"
+          },
           "state": {
             "enum": [
               "ready",
@@ -2542,6 +2560,7 @@
         },
         "required": [
           "contractVersion",
+          "serverTimeUtc",
           "state",
           "workspaceId",
           "runtimeEpoch",
@@ -15727,6 +15746,89 @@
         "title": "HomeErrorResponse",
         "type": "object"
       },
+      "HomeInventoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "asOf": {
+            "format": "date-time",
+            "title": "Asof",
+            "type": "string"
+          },
+          "contractVersion": {
+            "const": 1,
+            "default": 1,
+            "title": "Contractversion",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InventorySpaceItem"
+            },
+            "maxItems": 100,
+            "title": "Items",
+            "type": "array"
+          },
+          "matchingTotal": {
+            "minimum": 0.0,
+            "title": "Matchingtotal",
+            "type": "integer"
+          },
+          "nextCursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nextcursor"
+          },
+          "occupancy": {
+            "enum": [
+              "vacant",
+              "unknown"
+            ],
+            "title": "Occupancy",
+            "type": "string"
+          },
+          "propertyState": {
+            "const": "active",
+            "default": "active",
+            "title": "Propertystate",
+            "type": "string"
+          },
+          "runtimeEpoch": {
+            "format": "uuid",
+            "title": "Runtimeepoch",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/HomeScope"
+          },
+          "sourceRevision": {
+            "title": "Sourcerevision",
+            "type": "string"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "title": "Workspaceid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "runtimeEpoch",
+          "scope",
+          "asOf",
+          "sourceRevision",
+          "occupancy",
+          "matchingTotal",
+          "items"
+        ],
+        "title": "HomeInventoryResponse",
+        "type": "object"
+      },
       "HomeItem": {
         "additionalProperties": false,
         "properties": {
@@ -16538,6 +16640,19 @@
           },
           "target": {
             "$ref": "#/components/schemas/InventoryTarget"
+          },
+          "viewAllCursor": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Viewallcursor"
           }
         },
         "required": [
@@ -16651,6 +16766,57 @@
           "idempotencyKey"
         ],
         "title": "InventoryRequest",
+        "type": "object"
+      },
+      "InventorySpaceItem": {
+        "additionalProperties": false,
+        "properties": {
+          "effectiveLocalDate": {
+            "format": "date",
+            "title": "Effectivelocaldate",
+            "type": "string"
+          },
+          "occupancy": {
+            "enum": [
+              "vacant",
+              "unknown"
+            ],
+            "title": "Occupancy",
+            "type": "string"
+          },
+          "propertyId": {
+            "format": "uuid",
+            "title": "Propertyid",
+            "type": "string"
+          },
+          "propertyName": {
+            "title": "Propertyname",
+            "type": "string"
+          },
+          "spaceId": {
+            "format": "uuid",
+            "title": "Spaceid",
+            "type": "string"
+          },
+          "spaceName": {
+            "title": "Spacename",
+            "type": "string"
+          },
+          "timeZone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "propertyId",
+          "propertyName",
+          "spaceId",
+          "spaceName",
+          "occupancy",
+          "timeZone",
+          "effectiveLocalDate"
+        ],
+        "title": "InventorySpaceItem",
         "type": "object"
       },
       "InventoryTarget": {
@@ -56262,6 +56428,149 @@
           }
         },
         "summary": "Attention",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
+    "/api/operator/home/inventory": {
+      "get": {
+        "operationId": "getOperatorHomeInventory",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "propertyId",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Propertyid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "occupancy",
+            "required": true,
+            "schema": {
+              "enum": [
+                "vacant",
+                "unknown"
+              ],
+              "title": "Occupancy",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeInventoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HomeErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Inventory",
         "tags": [
           "operator"
         ]

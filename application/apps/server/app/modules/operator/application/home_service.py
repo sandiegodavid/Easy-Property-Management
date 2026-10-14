@@ -3,6 +3,7 @@
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from app.modules.finance.application.money_models import MoneyError
 from app.modules.operator.application.home_contracts import (
@@ -20,6 +21,9 @@ from app.modules.operator.application.home_contracts import (
     AttentionQuery,
     CollectionQuery,
     CollectionResponse,
+    InventoryQuery,
+    InventorySpaceItem,
+    HomeInventoryResponse,
 )
 from app.modules.operator.application.home_ports import (
     HomeUnitOfWork,
@@ -31,7 +35,12 @@ from app.modules.operator.application.home_registry import COLLECTION_DEPENDENCI
 from app.modules.operator.application.home_vocabulary import Collection, SourceKind
 from app.modules.operator.domain.models import OperatorSectionUnavailable, OperatorUnavailable
 from app.platform.attention_reads import AttentionWindow, AttentionKey
-from app.modules.operator.application.cursors import AttentionCursor, decode_attention_cursor
+from app.modules.operator.application.cursors import (
+    AttentionCursor,
+    decode_attention_cursor,
+    ReadCursor,
+    decode_cursor,
+)
 
 
 @dataclass(frozen=True)
@@ -92,10 +101,16 @@ class HomeCompositionService:
                     vacant=InventoryCount(
                         count=inventory.vacant_count,
                         target=InventoryTarget(scope=query.scope, occupancy="vacant"),
+                        view_all_cursor=_inventory_cursor(
+                            query.scope, "vacant", identity, marker, instant
+                        ),
                     ),
                     unknown=InventoryCount(
                         count=inventory.unknown_count,
                         target=InventoryTarget(scope=query.scope, occupancy="unknown"),
+                        view_all_cursor=_inventory_cursor(
+                            query.scope, "unknown", identity, marker, instant
+                        ),
                     ),
                 )
             except HomeAdapterMissing:
@@ -159,6 +174,64 @@ class HomeCompositionService:
 
         return self.unit_of_work.read(read)
 
+    def inventory_items(self, query: InventoryQuery) -> HomeInventoryResponse:
+        identity, now = self._context()
+
+        def read(tx):
+            tx.validate_scope(query.scope)
+            marker = tx.source_marker()
+            instant, after = now, None
+            if query.cursor is not None:
+                cursor = decode_cursor(
+                    query.cursor,
+                    endpoint="home.inventory",
+                    filters=_inventory_filters(query.scope, query.occupancy),
+                    identity=(identity.workspace_id, identity.epoch),
+                    source_revision=marker,
+                    now=now,
+                    sort_kind="identity",
+                    allow_start=True,
+                )
+                instant, after = datetime.fromisoformat(cursor.as_of), cursor.last
+            try:
+                page = tx.inventory_spaces(
+                    AttentionWindow(
+                        instant, "needs_action", query.scope.property_id, limit=query.limit
+                    ),
+                    query.occupancy,
+                    after=after,
+                )
+            except OperatorSectionUnavailable as error:
+                raise OperatorUnavailable("Inventory source is unavailable.") from error
+            return HomeInventoryResponse(
+                workspace_id=UUID(identity.workspace_id),
+                runtime_epoch=UUID(identity.epoch),
+                scope=query.scope,
+                as_of=instant,
+                source_revision=marker,
+                occupancy=query.occupancy,
+                matching_total=page.matching_total,
+                items=tuple(
+                    InventorySpaceItem(
+                        property_id=item.property_id,
+                        property_name=item.property_name,
+                        space_id=item.space_id,
+                        space_name=item.space_name,
+                        occupancy=item.occupancy,
+                        time_zone=item.time_zone,
+                        effective_local_date=instant.astimezone(ZoneInfo(item.time_zone)).date(),
+                    )
+                    for item in page.items
+                ),
+                next_cursor=_inventory_cursor(
+                    query.scope, query.occupancy, identity, marker, instant, page.next_key
+                )
+                if page.next_key
+                else None,
+            )
+
+        return self.unit_of_work.read(read)
+
     def items(self, query: CollectionQuery) -> CollectionResponse:
         """Validate the HTTP continuation against the very snapshot it pages."""
         identity, now = self._context()
@@ -208,18 +281,32 @@ class HomeCompositionService:
 
     @staticmethod
     def _continued(composed, identity):
-        if composed.next_key is None:
+        if composed.result.status != "available":
             return composed
         section = composed.result
         target = section.view_all_target
-        cursor = AttentionCursor(
+        start = AttentionCursor(
             _filters(target.scope, target.collection, target.horizon_days),
             (identity.workspace_id, identity.epoch),
             section.capture.source_revision,
             section.capture.as_of,
-            composed.next_key,
+            None,
         ).encode()
-        return replace(composed, result=section.model_copy(update={"next_cursor": cursor}))
+        cursor = (
+            AttentionCursor(
+                _filters(target.scope, target.collection, target.horizon_days),
+                (identity.workspace_id, identity.epoch),
+                section.capture.source_revision,
+                section.capture.as_of,
+                composed.next_key,
+            ).encode()
+            if composed.next_key is not None
+            else None
+        )
+        return replace(
+            composed,
+            result=section.model_copy(update={"next_cursor": cursor, "view_all_cursor": start}),
+        )
 
     def collection(
         self,
@@ -357,3 +444,22 @@ def _filters(scope, collection, horizon):
         "collection": collection.value,
         "horizonDays": horizon,
     }
+
+
+def _inventory_filters(scope, occupancy):
+    return {
+        "scope": scope.model_dump(mode="json", by_alias=True),
+        "occupancy": occupancy,
+        "propertyState": "active",
+    }
+
+
+def _inventory_cursor(scope, occupancy, identity, marker, instant, last=None):
+    return ReadCursor(
+        "home.inventory",
+        _inventory_filters(scope, occupancy),
+        (identity.workspace_id, identity.epoch),
+        marker,
+        instant.isoformat(),
+        last,
+    ).encode()

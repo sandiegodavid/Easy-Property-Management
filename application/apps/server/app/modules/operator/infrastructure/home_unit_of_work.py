@@ -88,6 +88,18 @@ class SQLiteHomeReadTransaction:
             raise HomeAdapterMissing("Home inventory adapter is unavailable.")
         return self.sources.portfolio.inventory(self.connection, window.property_id, window.as_of)
 
+    def inventory_spaces(self, window, occupancy, *, after):
+        if not callable(getattr(self.sources.portfolio, "inventory_spaces", None)):
+            raise HomeAdapterMissing("Home inventory adapter is unavailable.")
+        return self.sources.portfolio.inventory_spaces(
+            self.connection,
+            window.property_id,
+            window.as_of,
+            occupancy,
+            limit=window.limit,
+            after=after,
+        )
+
     def hydrate_locations(self, facts, window):
         properties = tuple(dict.fromkeys(fact.property_id for fact in facts if fact.property_id))
         spaces = tuple(dict.fromkeys(fact.space_id for fact in facts if fact.space_id))

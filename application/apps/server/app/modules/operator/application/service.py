@@ -85,6 +85,7 @@ class OperatorService:
         ready = state == "ready"
         return {
             "contractVersion": 1,
+            "serverTimeUtc": self.instant().isoformat(),
             "state": state,
             "workspaceId": identity.workspace_id if identity.state == "ready" else None,
             "runtimeEpoch": identity.epoch,

@@ -23,6 +23,7 @@ from app.platform.attention_reads import (
     AttentionDate,
     AttentionChild,
     AttentionRelation,
+    AttentionSourceContext,
 )
 
 TASK_CODES = ("overdue", "due_today", "follow_up_due", "reminder_due", "undated")
@@ -370,6 +371,8 @@ class SQLiteMaintenanceAttentionReader:
         selection = (
             select(
                 a.c.id,
+                a.c.issue_id,
+                i.c.status.label("issue_status"),
                 i.c.summary.label("title"),
                 a.c.status,
                 i.c.revision,
@@ -472,5 +475,12 @@ def _fact(row, children, window):
         child_count=row["child_count"] if issue else 0,
         source_deadline=deadline,
         appointment_end=None if issue else datetime.fromisoformat(row["ends_at_utc"]),
+        related_source=None
+        if issue
+        else AttentionSourceContext(
+            "maintenance_issue",
+            UUID(row["issue_id"]),
+            row["issue_status"] in ("open", "in_progress"),
+        ),
         recorded_at=datetime.fromisoformat(row["recorded_at"]),
     )

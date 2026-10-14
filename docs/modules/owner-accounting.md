@@ -20,7 +20,7 @@ Pending reports can be patched. Verified/rejected records preserve the decision.
 
 `/api/owner-rent-reports` supplies create/edit/verify/reject/detail/list; `/api/owner-rent-report-operations/{key}` recovers committed results. Owner summaries count the linked receipt once. Statements, fees, distributable balances and disbursements are separate planned capabilities and are not computed by this report module.
 
-The [DASH-001 attention reader](../../application/apps/server/app/modules/owner_accounting/infrastructure/attention_reader.py) supplies bounded pending-verification facts on the caller's read transaction, retaining historical owner and Lease context without treating reports as income. See the [Slice 7 validation matrix](../active/DASH-001_CONTRACT_EXAMPLES.md#slice-7-owner-report-and-concern-attention).
+The [DASH-001 attention reader](../../application/apps/server/app/modules/owner_accounting/infrastructure/attention_reader.py) supplies bounded pending-verification facts on the caller's read transaction, retaining historical owner and Lease context without treating reports as income. See the [Slice 7 validation matrix](../archive/validation/DASH-001_CONTRACT_EXAMPLES_COMPLETED_2026-10-14.md#slice-7-owner-report-and-concern-attention).
 
 ## Browser workflow boundary
 

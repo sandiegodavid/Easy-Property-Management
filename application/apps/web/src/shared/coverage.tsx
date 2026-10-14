@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, useParams, useSearchParams } from "react-router-dom";
+import { SourceWorkflowLink as Link } from "./home-navigation";
 import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
@@ -36,6 +37,45 @@ const explain: Record<Area, string> = {
     "Review recorded issues explicitly. An empty issue list does not establish the absence of problems.",
 };
 const words = (value: string) => value.replaceAll("_", " ");
+
+function CoverageResolution({ current }: { current: Coverage }) {
+  const { scope } = useWorkspace();
+  const target = current.resolutionRoute;
+  const space = useQuery({
+    queryKey: scope.key("coverage-resolution-space", target?.entityId),
+    enabled: target?.entityType === "space" && target.section === "occupancy",
+    retry: false,
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/spaces/{space_id}/status", {
+          signal,
+          params: { path: { space_id: target!.entityId } },
+        }),
+      ),
+  });
+  if (!target) return <p>Source resolution context is unavailable.</p>;
+  if (target.section === "occupancy")
+    return (
+      <>
+        {space.error && (
+          <p role="alert">Current Space context unavailable: {space.error.message}</p>
+        )}
+        {space.isPending && <p role="status">Loading current Space context…</p>}
+        {space.data && (
+          <Link to={`/properties/${space.data.propertyId}/units`}>Open occupancy sources</Link>
+        )}
+      </>
+    );
+  const url =
+    target.section === "maintenance"
+      ? `/maintenance?propertyId=${target.entityId}`
+      : target.section === "lease" && current.leaseId
+        ? `/leases/${current.leaseId}`
+        : current.leaseId
+          ? `/money?tab=${target.section === "deposit" ? "deposits" : "rent"}&leaseId=${current.leaseId}`
+          : `/leasing?workflow=lease.create&spaceId=${target.entityId}`;
+  return <Link to={url}>Open {target.section} sources</Link>;
+}
 function ReviewEditor({
   current,
   recovered,
@@ -278,21 +318,7 @@ export function CoveragePanel({ kind, id, area }: { kind: Kind; id: string; area
           </p>
           <p>Last manual review: {current.lastManualReviewAt ?? "Not recorded"}</p>
           {current.leaseId && <Link to={`/leases/${current.leaseId}`}>Review lease source</Link>}
-          <Link
-            to={
-              area === "maintenance"
-                ? `/maintenance?propertyId=${id}`
-                : area === "occupancy"
-                  ? `/search?sourceType=space&sourceId=${id}`
-                  : area === "lease"
-                    ? `/leasing?spaceId=${id}`
-                    : current.leaseId
-                      ? `/money?leaseId=${current.leaseId}`
-                      : "/money"
-            }
-          >
-            Open {area} sources
-          </Link>
+          <CoverageResolution current={current} />
           {!editing && !resume && (
             <button disabled={!scope.canWrite} onClick={() => setEditing(true)}>
               Review {area} coverage

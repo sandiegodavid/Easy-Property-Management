@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
 import { record, scalar } from "@epm/contracts/workflows";
@@ -11,6 +12,8 @@ import { MoneyScope } from "./money";
 type Metric = components["schemas"]["Metric"];
 export function MoneyReporting() {
   const { scope } = useWorkspace();
+  const location = useLocation();
+  const navigationState: unknown = location.state;
   const [params, setParams] = useSearchParams();
   const fromOn = params.get("fromOn") ?? "",
     throughOn = params.get("throughOn") ?? "";
@@ -71,7 +74,7 @@ export function MoneyReporting() {
       accounts.data?.sourceRevision ??
       properties.data?.summary.sourceRevision;
     if (revision) next.set("sourceRevision", revision);
-    setParams(next);
+    setParams(next, { state: navigationState });
   }
   function metricTarget(value: Metric) {
     const next = new URLSearchParams(params);
@@ -111,7 +114,7 @@ export function MoneyReporting() {
           next.delete("cursor");
           next.delete("sourceRevision");
           next.delete("metric");
-          setParams(next);
+          setParams(next, { state: navigationState });
         }}
       >
         <label>
@@ -146,7 +149,7 @@ export function MoneyReporting() {
               next.delete("cursor");
               next.delete("sourceRevision");
               next.delete("metric");
-              setParams(next);
+              setParams(next, { state: navigationState });
               if (!cursor && !sourceRevision && !metric) void result.refetch();
             }}
           >
@@ -296,7 +299,7 @@ export function MoneyReporting() {
             next.delete("metric");
             next.delete("cursor");
             next.delete("sourceRevision");
-            setParams(next);
+            setParams(next, { state: navigationState });
           }}
         >
           Return to reporting totals

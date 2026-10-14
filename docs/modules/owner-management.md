@@ -16,7 +16,7 @@ Create/patch/lifecycle/follow-up commands share concern revision, key and immuta
 
 `/api/owner-concerns` supplies source workflows; ID/key operation endpoints provide recovery. General activity uses redacted policy and contextual history explains full decisions. [Operator](operator.md) composes owner views while this module retains source authority.
 
-The [DASH-001 attention reader](../../application/apps/server/app/modules/owner_management/infrastructure/attention_reader.py) classifies unresolved concerns from explicit owning follow-up operations, with bounded Task/reminder previews and retained owner context. Generic related Tasks do not establish waiting; terminal concerns do not terminalize their Tasks. See the [Slice 7 validation matrix](../active/DASH-001_CONTRACT_EXAMPLES.md#slice-7-owner-report-and-concern-attention).
+The [DASH-001 attention reader](../../application/apps/server/app/modules/owner_management/infrastructure/attention_reader.py) classifies unresolved concerns from explicit owning follow-up operations, with bounded Task/reminder previews and retained owner context. Generic related Tasks do not establish waiting; terminal concerns do not terminalize their Tasks. See the [Slice 7 validation matrix](../archive/validation/DASH-001_CONTRACT_EXAMPLES_COMPLETED_2026-10-14.md#slice-7-owner-report-and-concern-attention).
 
 ## Browser workflow boundary
 
@@ -28,7 +28,7 @@ Duplicate conflicts show up to 20 candidate drill-downs. An explicit separate re
 
 Detail separates stored source/occupancy/availability snapshots from current source facts. It shows originating/corrected conversation links, bounded recent conversations and independent Task follow-ups. Start, resolve, dismiss and reopen remain explicit source commands; required receipt recovery handles interrupted follow-up creation without another Task. Directory filters include Owner/Property/Space/Lease/Tenant, type and local raised range, with persistence-owned pagination and no row detail fan-out.
 
-OWNER-004's source workflow is complete. Home owner-action/concern presentation remains under [DASH-001](../active/DASH-001_DESIGN.md), as confirmed October 13, 2026; its existing attention reader is not a claim that Home browser presentation is delivered.
+OWNER-004's source workflow is complete. Home owner-action/concern presentation remains under [DASH-001](../archive/designs/DASH-001_DESIGN_COMPLETED_2026-10-14.md), as confirmed October 13, 2026; its existing attention reader is not a claim that Home browser presentation is delivered.
 
 ## Implementation map
 
