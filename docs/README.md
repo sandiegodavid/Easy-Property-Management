@@ -1,5 +1,7 @@
 # Developer documentation
 
+Operators should start with the separate [operator manual](../manual/README.md), which covers installation/setup and task-based use. This directory is the developer reference.
+
 ## Start here
 
 Read these in order for the whole project. Core UI-001 and DASH-001 Home delivery are complete; follow-up integrations remain active:
@@ -55,3 +57,5 @@ For a specific change, read its owning module, relevant shared platform contract
 When implementing a feature, update its module guide for verified behavior and keep the active design focused on the remaining difference. Update API/model/baseline/validators/generated contracts together where applicable. Record acceptance evidence in the active plan, then update backlog status. When acceptance is complete, archive the active feature design and link its outcome from the backlog to the current module guide.
 
 Keep shared rules in platform guides, domain policy in the owning module and status/dependencies in the backlog. Link exact code/schema/test entry points instead of duplicating every field or full API schema. Preserve necessary rationale/history in the archive, and extract unfinished obligations before archiving a plan. An unverified design-versus-code discrepancy belongs in active work/review; it must not be described as current capability.
+
+When an operator-facing route, action, setup command or capability changes, update the corresponding [manual chapter](../manual/README.md) and its [operation index](../manual/operation-index.md). Keep developer internals in these guides and operator task steps in the manual.

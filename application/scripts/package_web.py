@@ -40,7 +40,7 @@ def package() -> None:
             )
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(file, destination)
-        subprocess.run(
+        result = subprocess.run(
             [
                 "uv",
                 "build",
@@ -50,10 +50,12 @@ def package() -> None:
                 "--out-dir",
                 str(APPLICATION / "dist"),
             ],
-            check=True,
+            check=False,
             capture_output=True,
             text=True,
         )
+        if result.returncode:
+            raise SystemExit(result.stdout + result.stderr)
         print("Packaged public Vite assets into application/dist.")
 
 

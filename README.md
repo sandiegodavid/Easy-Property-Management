@@ -1,10 +1,15 @@
 # Easy Property Management
 
-Easy Property Management is a local-first, AI-assisted property-management application for independent landlords and managers with roughly 1–50 rentable spaces. The MVP serves only the United States: property addresses and spaces are US-based, property-local dates use US IANA time zones, and monetary workflows use USD. Its implemented backend covers portfolio, people, leases, inspections, maintenance, money, communications, tasks, retained evidence and optional AI governance. Core browser workflows are delivered; live Home aggregation and follow-up integrations remain planned; [the documentation index](docs/README.md) distinguishes current behavior from remaining work.
+Easy Property Management is a local-first, AI-assisted property-management application for independent landlords and managers with roughly 1–50 rentable spaces. The MVP serves only the United States: property addresses and spaces are US-based, property-local dates use US IANA time zones, and monetary workflows use USD. Its implemented backend covers portfolio, people, leases, inspections, maintenance, money, communications, tasks, retained evidence and optional AI governance. Core browser workflows and live Home aggregation are delivered; follow-up integrations remain planned; [the documentation index](docs/README.md) distinguishes current behavior from remaining work.
+
+## Operator manual
+
+Start with the [operator manual](manual/README.md) for installation/setup, daily use, every current workflow, backup/restore and troubleshooting. It is organized by operator task; developer/build details remain in this README and `docs/`.
 
 ## Repository layout
 
 ```text
+manual/         Operator installation, task guides, operation index and troubleshooting
 docs/           Developer index, current module/platform guides, active work, research and archive
 application/    FastAPI application, Alembic baseline, tests, and local configuration template
 ```
@@ -38,7 +43,7 @@ separate from the operator's live configuration.
 
 `application/apps/server` contains the FastAPI modules, current schema validation and tests. `application/apps/web` contains React workflows; `packages/ui` supplies shared components and `packages/contracts` supplies generated API contracts. A new workspace uses one current greenfield baseline.
 
-The current browser shell, workspace gate, recovery, contextual reads and Portfolio/identity/Provider/Lease/Inspection workflows are delivered. Remaining Money, Maintenance/coordination, search/coverage, AI controls and final interface acceptance are tracked in [browser validation](docs/ui/validation.md). The [visual demo](demo/operator-experience.html) includes design/future states and is not a capability inventory.
+The current browser shell, workspace gate, recovery, contextual reads, Portfolio/identity/Provider, Lease/Inspection, Money, Maintenance/coordination, search/coverage, manual Intake, capability-gated AI controls and live Home workflows are delivered. Their recorded acceptance is in [browser validation](docs/ui/validation.md). The [visual demo](demo/operator-experience.html) includes design/future states and is not a capability inventory.
 
 ## Local HTTP transport
 
@@ -75,6 +80,69 @@ Entry pages are not stored; hexadecimal fingerprint assets are immutable.
 External scripts/styles and relative `/api` calls work under the production CSP.
 
 Current frontend structure and shared-component behavior are documented in [frontend architecture](docs/ui/frontend-architecture.md). Run `npm run test:components` from `application/` for the isolated component fixture; it is excluded from the production build.
+
+## Production build and packaging instructions
+
+`app/web_build` is the **compiled React frontend inside the Python package**. Python code is packaged alongside it in the wheel; Python is not compiled into that directory. The packaging script uses a temporary staging tree, so a successful build does not create `application/apps/server/app/web_build` in the checkout.
+
+For deploying an already built wheel to a clean VM, use the [VM deployment guide](manual/deployment.md). It includes the currently required matching schema-resource bundle and installed-resource checks.
+
+### One-command wheel build
+
+After installing the project Python dependencies, run from the repository root:
+
+```bash
+./application/scripts/build_wheel.sh --install-deps
+```
+
+Subsequent builds can omit `--install-deps` when Node dependencies are already installed. The script works from any directory, runs frontend lint/format/type checks and generated-contract validation, builds React, packages the combined wheel and verifies its Python entry point, public assets and archive integrity. Output is printed as an absolute path under `application/dist/`. It does not install the wheel, stage assets into the running checkout, or open an operator workspace.
+
+Python discovery uses `EPM_PYTHON` when set, then `application/.venv/bin/python`, then `.venv/easy-property-management/bin/python`. Run `./application/scripts/build_wheel.sh --help` for prerequisites/options. The standalone wheel limitation and checkout asset-staging instructions below still apply.
+
+### Build the combined Python/frontend wheel
+
+Prerequisites: Python 3.12 or newer, Node.js 22.13 or newer with npm, and `uv` on PATH. Use a project Python environment with the backend dependencies installed. From the repository root:
+
+```bash
+cd application
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+export EPM_PYTHON="$PWD/.venv/bin/python"
+npm ci
+npm run check
+npm run package:web
+```
+
+The explicit `EPM_PYTHON` selects this environment; without it, Node scripts default to the repository's `.venv/easy-property-management/bin/python`.
+
+`package:web` checks generated contracts, builds Vite into `application/apps/web/dist`, validates the public assets, and packages them with the backend into `application/dist/easy_property_management-0.1.0-py3-none-any.whl` (the version comes from `application/pyproject.toml`). The wheel contains `app/web_build/index.html` and `app/web_build/assets/*` along with the Python modules. `npm run build` alone produces the frontend output and does not create the combined wheel.
+
+The packager calls `uv build --offline`, so its isolated build dependency (`setuptools>=68`) must already be cached. If the offline build reports a missing build dependency, run `uv build --wheel` once from `application/` with network access, then rerun `npm run package:web`. That first wheel only primes the build cache; distribute the final wheel produced by `package:web`, which includes the frontend.
+
+Inspect the final artifact without starting the app:
+
+```bash
+python -m zipfile -l dist/easy_property_management-0.1.0-py3-none-any.whl
+```
+
+Look for the `app/web_build/` entries. Adjust the filename if the project version changes. A backend-only build or editable Python install does not automatically include the Vite output.
+
+### Run the production frontend with the current checkout
+
+The current wheel is a combined backend/assets artifact, **not yet a standalone installer**. Workspace initialization/schema validation still locates `alembic.ini` and `database/sqlite-migrations` relative to the application checkout; the packager does not include them. Installing only the wheel into an unrelated environment therefore does not establish a working production workspace runtime.
+
+For the currently supported checkout-based runtime, retain the checkout, its Python environment and external workspace. After the successful packaging command above, copy the validated frontend build into the source package's generated asset directory. From `application/`, with the project environment active:
+
+```bash
+python scripts/stage_frontend.py
+python -m app --config "$PWD/config.local.json" workspace-status
+python -m app --config "$PWD/config.local.json" serve --port 8000
+```
+
+Open **http://127.0.0.1:8000/home**. FastAPI serves the frontend and API on the same origin; Vite and Node are not required while serving. Configure `config.local.json` first; for a new workspace, explicitly run `initialize-workspace` as described below. Stop the server before replacing generated assets and restart after rebuilding. Re-run the copy step for each frontend release; do not commit generated `web_build` files or put workspace data there.
+
+A clean wheel-only runtime needs a separate packaging change to include and locate its schema resources. The packaged-asset browser tests described above validate the frontend packaging boundary using the repository backend; they do not validate that missing standalone-install boundary.
 
 ## Frontend development checks
 
