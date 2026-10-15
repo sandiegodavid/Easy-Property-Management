@@ -1,6 +1,76 @@
 import { expect, test } from "@playwright/test";
 import type { components } from "@epm/contracts/generated";
 
+test("Settings and live workspace/backup status sit at the sidebar bottom", async ({ page }) => {
+  await page.route("**/api/workspace/backup-status", (route) =>
+    route.fulfill({ json: { lastSuccessAt: "2026-10-14T15:10:00Z", needsAttention: false } }),
+  );
+  await page.goto("/properties");
+  const footer = page.locator(".sidebar-footer");
+  await expect(footer.getByRole("link", { name: "Settings", exact: true })).toBeVisible();
+  await expect(footer).toContainText("Local workspace connected.");
+  await expect(footer).toContainText("Last backup");
+  await expect(footer.locator("time")).toHaveAttribute("datetime", "2026-10-14T15:10:00Z");
+  const more = await page.locator(".wide-nav").boundingBox();
+  const bottom = await footer.boundingBox();
+  expect(bottom!.y).toBeGreaterThanOrEqual(more!.y + more!.height);
+  expect(bottom!.y + bottom!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  await footer.getByRole("link", { name: "Settings", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(footer.getByRole("link", { name: "Settings", exact: true })).toBeVisible();
+});
+
+test("More appears only for overflow and reveals a scrollable remaining menu", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/properties");
+  const menu = page.locator(".wide-nav");
+  const primary = menu.getByRole("navigation", { name: "Primary navigation" });
+  await expect(primary.getByRole("link")).toHaveCount(7);
+  await expect(menu.locator(".more-destinations")).toHaveCount(0);
+
+  await page.setViewportSize({ width: 1280, height: 450 });
+  const more = menu.locator(".more-destinations");
+  await expect(more).toBeVisible();
+  const count = await primary.getByRole("link").count();
+  expect(count).toBeLessThan(7);
+  await more.locator("summary").focus();
+  await page.keyboard.press("Enter");
+  const remaining = more.getByRole("navigation", { name: "Hidden destinations" });
+  await expect(remaining.getByRole("link")).toHaveCount(7 - count);
+  expect(await remaining.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(
+    true,
+  );
+  const settings = await page.locator(".sidebar-footer").boundingBox();
+  const remainingBox = await remaining.boundingBox();
+  expect(remainingBox!.y + remainingBox!.height).toBeLessThanOrEqual(settings!.y);
+  await remaining.getByRole("link", { name: "Providers", exact: true }).click();
+  await expect(page).toHaveURL(/\/providers$/);
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(primary.getByRole("link")).toHaveCount(7);
+  await expect(menu.locator(".more-destinations")).toHaveCount(0);
+});
+
+test("sidebar distinguishes no backup, attention and unavailable status", async ({ page }) => {
+  for (const state of ["none", "attention", "unavailable"] as const) {
+    await page.route("**/api/workspace/backup-status", (route) =>
+      state === "unavailable"
+        ? route.fulfill({ status: 503, json: { detail: "Unavailable" } })
+        : route.fulfill({ json: { lastSuccessAt: null, needsAttention: state === "attention" } }),
+    );
+    await page.goto("/properties");
+    await expect(page.locator(".sidebar-status")).toContainText(
+      state === "none"
+        ? "No successful backup yet"
+        : state === "attention"
+          ? "Backup needs attention"
+          : "Backup status unavailable",
+    );
+    await page.unroute("**/api/workspace/backup-status");
+  }
+});
+
 test("preferences persist through reload, hiding and reordering keep contextual routes reachable", async ({
   page,
 }) => {

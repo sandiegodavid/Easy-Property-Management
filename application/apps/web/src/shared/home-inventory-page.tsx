@@ -2,6 +2,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { useWorkspace } from "../app/workspace-gate";
 import { HomeBackLink, HomeSourceLink, SourceWorkflowLink, useHomeScroll } from "./home-navigation";
 import { useHomeInventory } from "./home-transport";
+import { formatHomeTime } from "./home-time";
 
 function InventoryPage({ occupancy }: { occupancy: "vacant" | "unknown" }) {
   const [params, setParams] = useSearchParams(),
@@ -45,7 +46,8 @@ function InventoryPage({ occupancy }: { occupancy: "vacant" | "unknown" }) {
         read.value && (
           <>
             <p>
-              {read.value.matchingTotal} matching {occupancy} spaces · As of {read.value.asOf}
+              {read.value.matchingTotal} matching {occupancy} spaces · As of{" "}
+              <time dateTime={read.value.asOf}>{formatHomeTime(read.value.asOf)}</time>
             </p>
             {read.value.items.length === 0 && <p>No matching spaces at this capture.</p>}
             <ul>

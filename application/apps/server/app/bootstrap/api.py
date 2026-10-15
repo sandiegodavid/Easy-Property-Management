@@ -559,7 +559,7 @@ def create_app(  # noqa: C901, PLR0915
     app.state.ai_generation_service = ai_generation
     app.state.ai_configuration_service = ai_configuration
     app.state.ai_draft_review_service = ai_drafts
-    app.include_router(build_router(service, runtime))
+    app.include_router(build_router(service, runtime, backups))
     (
         operator,
         operator_directories,

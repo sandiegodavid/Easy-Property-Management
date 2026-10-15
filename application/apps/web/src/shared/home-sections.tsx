@@ -3,7 +3,10 @@ import type { components } from "@epm/contracts/generated";
 import { AsyncRegion, DisclosureList, DisclosureRow, type AsyncState } from "@epm/ui";
 import type { Attention, HomeRead, HomeFilters } from "./home-transport";
 import { collectionUrl, HomeSourceLink } from "./home-navigation";
-import { HomeSourceActions } from "./home-source-actions";
+import { HomeSourceActions, homeActionLabel } from "./home-source-actions";
+import { useHomeCardItems } from "./home-card-items";
+import { DisclosureHelp } from "./home-disclosure-help";
+import { formatHomeTime, formatHomeTemporal as temporal } from "./home-time";
 
 type Schema = components["schemas"];
 type Collection = Schema["AvailableCollection"] | Schema["UnavailableCollection"];
@@ -14,17 +17,13 @@ type Read = Pick<
 >;
 const label = (value: string) => value.replaceAll("_", " ");
 
-function temporal(fact: Schema["TemporalFact"]) {
-  if (fact.on) return `${fact.on} · All day · ${fact.timeZone}`;
-  return `${new Intl.DateTimeFormat("en-US", { timeZone: fact.timeZone, dateStyle: "medium", timeStyle: "short" }).format(new Date(fact.at!))} · ${fact.timeZone} · ${fact.at}`;
-}
-
 export function HomeRegion({
   title,
   capture,
   unavailable,
   read,
   stale = false,
+  headingAction,
   children,
 }: {
   title: string;
@@ -32,6 +31,7 @@ export function HomeRegion({
   unavailable?: string;
   read: Read;
   stale?: boolean;
+  headingAction?: ReactNode;
   children?: ReactNode;
 }) {
   const retry = (
@@ -59,9 +59,7 @@ export function HomeRegion({
     state = {
       kind: "stale",
       asOf: capture.asOf,
-      message:
-        read.message ??
-        "Updated attention is available. Showing the previous list until you choose to update it.",
+      message: `Stale — ${read.message ?? "Updated attention is available. Showing the previous list until you choose to update it."}`,
       recovery: retry,
     };
   else if (read.updating)
@@ -70,32 +68,29 @@ export function HomeRegion({
       asOf: capture.asOf,
       message:
         read.elapsed >= 2
-          ? `${wait} Showing information from ${capture.asOf}.`
-          : `Updating — showing information from ${capture.asOf}.`,
+          ? `${wait} Showing information from ${formatHomeTime(capture.asOf)}.`
+          : `Updating — showing information from ${formatHomeTime(capture.asOf)}.`,
     };
   else state = { kind: "success", asOf: capture.asOf };
   return (
     <div className="home-section">
-      <AsyncRegion title={title} state={state}>
-        <p className="ui-muted">
-          {read.updating ? "Checking" : read.kind === "failed" || stale ? "Stale" : "Checked"} ·{" "}
-          {capture?.readMode ?? "live"}
-          {capture?.checkedAt && (
-            <>
-              {" "}
-              · Checked at <time dateTime={capture.checkedAt}>{capture.checkedAt}</time>
-            </>
-          )}
-        </p>
+      <AsyncRegion
+        title={title}
+        headingAction={headingAction}
+        state={state}
+        formatTimestamp={formatHomeTime}
+        showCaptureTime={false}
+        footer={
+          capture && (
+            <p className="ui-muted home-capture">
+              {unavailable ? `Unavailable · ${capture.readMode} · ` : ""}As of{" "}
+              <time dateTime={capture.asOf}>{formatHomeTime(capture.asOf)}</time>
+            </p>
+          )
+        }
+      >
         {children}
       </AsyncRegion>
-      {unavailable && capture && (
-        <p className="ui-muted">
-          Unavailable · {capture.readMode} · As of{" "}
-          <time dateTime={capture.asOf}>{capture.asOf}</time>
-          {read.updating ? " · Updating" : ""}
-        </p>
-      )}
       {!capture && read.kind !== "failed" && (
         <div className="home-skeleton" aria-hidden="true">
           {[1, 2, 3, 4, 5].map((id) => (
@@ -110,9 +105,11 @@ export function HomeRegion({
 function HomeRow({
   item,
   onDisclosureChange,
+  calendar = false,
 }: {
   item: Schema["HomeItem"];
   onDisclosureChange?: (open: boolean) => void;
+  calendar?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const dates: [string, Schema["TemporalFact"] | null | undefined][] = [
@@ -128,13 +125,13 @@ function HomeRow({
           ? `${item.title} — ${label(item.source.area)} information`
           : item.title
       }
-      status={label(item.sourceStatus)}
+      actionLabel={calendar ? "View" : homeActionLabel(item)}
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
         onDisclosureChange?.(next);
       }}
-      summary={`${item.propertyName ?? "Workspace-level"}${item.spaceName ? ` / ${item.spaceName}` : ""}${item.propertyArchived ? " · Archived" : ""} · ${item.reasons.map((reason) => label(reason.code)).join(", ")}${when ? ` · ${temporal(when)}` : ""}`}
+      summary={`${item.propertyName ?? "Workspace-level"}${item.spaceName ? ` / ${item.spaceName}` : ""}${item.propertyArchived ? " · Archived" : ""}${calendar ? "" : ` · ${item.reasons.map((reason) => label(reason.code)).join(", ")}`}${when ? ` · ${temporal(when)}` : ""}`}
     >
       {() => (
         <>
@@ -142,7 +139,7 @@ function HomeRow({
             {item.reasons.map((reason, index) => (
               <li key={index}>
                 {label(reason.code)}
-                {reason.at || reason.on ? ` · ${reason.at ?? reason.on} · ${reason.timeZone}` : ""}
+                {reason.at || reason.on ? ` · ${temporal(reason)}` : ""}
               </li>
             ))}
           </ul>
@@ -169,6 +166,9 @@ export function HomeCollection({
   stale = false,
   filters,
   onDisclosureChange,
+  allItems = false,
+  showDisclosureHint = true,
+  showDisclosureHelp = false,
 }: {
   title: string;
   collection?: Collection;
@@ -178,10 +178,16 @@ export function HomeCollection({
   stale?: boolean;
   filters?: HomeFilters;
   onDisclosureChange?: (open: boolean) => void;
+  allItems?: boolean;
+  showDisclosureHint?: boolean;
+  showDisclosureHelp?: boolean;
 }) {
+  const extra = useHomeCardItems(collection, allItems);
+  const items = collection?.status === "available" ? [...collection.items, ...extra.items] : [];
   return (
     <HomeRegion
       title={title}
+      headingAction={showDisclosureHelp ? <DisclosureHelp /> : undefined}
       capture={collection?.capture}
       read={read}
       stale={stale}
@@ -196,23 +202,35 @@ export function HomeCollection({
             </HomeSourceLink>
           )}
           {urgent !== undefined && urgent > 0 && <p>{urgent} urgent items in this response.</p>}
-          {collection.items.length === 0 ? (
+          {items.length === 0 ? (
             <p>
               {assurance
                 ? "No immediate actions in recorded information."
                 : "No matching items in this displayed response."}
             </p>
           ) : (
-            <DisclosureList>
-              {collection.items.map((item) => (
-                <HomeRow key={item.key} item={item} onDisclosureChange={onDisclosureChange} />
+            <DisclosureList showHint={showDisclosureHint}>
+              {items.map((item) => (
+                <HomeRow
+                  key={item.key}
+                  item={item}
+                  onDisclosureChange={onDisclosureChange}
+                  calendar={collection.collection === "appointments"}
+                />
               ))}
             </DisclosureList>
           )}
-          {collection.matchingTotal > collection.items.length && (
+          {extra.loading && <p role="status">Loading remaining {title} items…</p>}
+          {extra.failed && (
+            <p role="alert">
+              Remaining items could not be loaded. Refresh Home to retry; the displayed items are
+              from the original capture.
+            </p>
+          )}
+          {collection.matchingTotal > items.length && (
             <p>
-              Showing {collection.items.length} of {collection.matchingTotal}. Open the source
-              workflows to review more records.
+              Showing {items.length} of {collection.matchingTotal}. Open the source workflows to
+              review more records.
             </p>
           )}
         </>
@@ -225,10 +243,14 @@ export function LiveAttention({
   read,
   fallback,
   filters,
+  allItems = false,
+  showDisclosureHint = true,
 }: {
   read: HomeRead<Attention>;
   fallback?: Collection;
   filters?: HomeFilters;
+  allItems?: boolean;
+  showDisclosureHint?: boolean;
 }) {
   const [shown, setShown] = useState(read.value);
   const [pending, setPending] = useState<Attention>();
@@ -298,6 +320,8 @@ export function LiveAttention({
         </div>
       )}
       <HomeCollection
+        allItems={allItems}
+        showDisclosureHint={showDisclosureHint}
         title="Needs action"
         filters={filters}
         read={read}
@@ -312,11 +336,6 @@ export function LiveAttention({
         }
         urgent={shown?.priorityTotals?.urgent}
       />
-      {next && (
-        <p className="ui-muted">
-          Live attention capture: {next.asOf}. Other sections retain their own capture times.
-        </p>
-      )}
     </>
   );
 }
@@ -328,11 +347,20 @@ const metrics = {
   netRecordedExpenses: "Net recorded expenses",
   operatingRemainder: "Rent less net expenses",
 };
-export function HomeSummaries({ value, read }: { value?: Schema["HomeResponse"]; read: Read }) {
+export function HomeSummaries({
+  value,
+  read,
+  filters,
+}: {
+  value?: Schema["HomeResponse"];
+  read: Read;
+  filters?: HomeFilters;
+}) {
   const money = value?.money,
     inventory = value?.inventory;
+  const moneyPeriod = money?.status === "available" ? money : filters;
   return (
-    <div className="home-supporting">
+    <>
       <HomeRegion
         title="Recorded money"
         read={read}
@@ -340,27 +368,32 @@ export function HomeSummaries({ value, read }: { value?: Schema["HomeResponse"];
         unavailable={money?.status === "unavailable" ? money.reasonCode : undefined}
       >
         {money?.status === "available" && (
-          <>
-            <p>
-              {money.fromOn} through {money.throughOn} · Recorded activity includes
-              archived-property history and may include future-dated entries.
-            </p>
-            <dl>
-              {money.metrics.map((metric) => (
-                <div key={metric.target.metric}>
-                  <dt>{metrics[metric.target.metric]}</dt>
-                  <dd>
-                    <HomeSourceLink
-                      to={`/money?${new URLSearchParams({ tab: "reporting", metric: metric.target.metric, fromOn: metric.target.fromOn, throughOn: metric.target.throughOn, propertyState: metric.target.propertyState, sourceRevision: money.capture.sourceRevision, ...(metric.target.scope.propertyId ? { propertyId: metric.target.scope.propertyId } : {}) })}`}
-                    >
-                      USD {metric.amount} — View {metrics[metric.target.metric]} sources
-                    </HomeSourceLink>
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <p>These totals do not establish profit or owner entitlement.</p>
-          </>
+          <dl>
+            {money.metrics.map((metric) => (
+              <div key={metric.target.metric}>
+                <dt>{metrics[metric.target.metric]}</dt>
+                <dd>
+                  <HomeSourceLink
+                    to={`/money?${new URLSearchParams({ tab: "reporting", metric: metric.target.metric, fromOn: metric.target.fromOn, throughOn: metric.target.throughOn, propertyState: metric.target.propertyState, sourceRevision: money.capture.sourceRevision, ...(metric.target.scope.propertyId ? { propertyId: metric.target.scope.propertyId } : {}) })}`}
+                  >
+                    USD {metric.amount} — View {metrics[metric.target.metric]} sources
+                  </HomeSourceLink>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {moneyPeriod && (
+          <p className="home-money-note">
+            Recorded money period: {moneyPeriod.fromOn} through {moneyPeriod.throughOn}.
+            {money?.status === "available" && (
+              <>
+                {" "}
+                Recorded activity includes archived-property history and may include future-dated
+                entries. These totals do not establish profit or owner entitlement.
+              </>
+            )}
+          </p>
         )}
       </HomeRegion>
       <HomeRegion
@@ -393,7 +426,7 @@ export function HomeSummaries({ value, read }: { value?: Schema["HomeResponse"];
           </>
         )}
       </HomeRegion>
-    </div>
+    </>
   );
 }
 

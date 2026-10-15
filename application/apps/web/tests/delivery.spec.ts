@@ -1,5 +1,24 @@
 import { expect, test } from "@playwright/test";
 
+test("an external link opens the public SPA and its same-origin bootstrap", async ({ page }) => {
+  await page.route("http://external.example/", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<a href="http://127.0.0.1:18744/properties">Open local app</a>',
+    }),
+  );
+  await page.goto("http://external.example/");
+  const navigation = page.waitForResponse(
+    (response) => response.url() === "http://127.0.0.1:18744/properties",
+  );
+  await page.getByRole("link", { name: "Open local app" }).click();
+  expect((await navigation).status()).toBe(200);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Easy Property Management");
+  await expect(
+    page.getByRole("status").filter({ hasText: "Local workspace connected." }),
+  ).toBeVisible();
+});
+
 test("wheel assets mount React on direct and deep links using the generated client", async ({
   page,
 }) => {

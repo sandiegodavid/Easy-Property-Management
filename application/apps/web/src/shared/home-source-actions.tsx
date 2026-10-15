@@ -1,5 +1,6 @@
 import type { components } from "@epm/contracts/generated";
 import { HomeSourceLink } from "./home-navigation";
+import { formatHomeTemporal } from "./home-time";
 
 type Schema = components["schemas"];
 type Source = Schema["SourceTarget"]["source"];
@@ -9,15 +10,19 @@ const words = (value: string) => value.replaceAll("_", " ");
 // Navigation adapters only. The owning page reloads current facts and decides
 // which commands are allowed; a Home capture never authorizes a mutation.
 const actions = {
-  review_task: "Review Task, waiting and reminders",
-  record_payment: "Review rent and record payment",
-  review_issue: "Review issue and follow-up actions",
-  review_report: "Review Owner report and verification",
-  review_concern: "Review Owner concern and follow-up",
-  review_lease: "Review lease and continuation",
-  review_appointment: "Review appointment and outcome",
-  review_coverage: "Review information and record review",
+  review_task: "View",
+  record_payment: "Record payment",
+  review_issue: "Review issue",
+  review_report: "Review report",
+  review_concern: "Review concern",
+  review_lease: "Review lease",
+  review_appointment: "View",
+  review_coverage: "Review coverage",
 } satisfies Record<Item["nextAction"]["kind"], string>;
+
+export function homeActionLabel(item: Item) {
+  return actions[item.nextAction.kind];
+}
 
 export function homeSourceUrl(source: Source): string | null {
   const id = encodeURIComponent(source.id);
@@ -50,7 +55,7 @@ function ChildActions({ child }: { child: Schema["ChildPreview"] }) {
         {child.reasons.map((reason, index) => (
           <li key={index}>
             {words(reason.code)}
-            {reason.at || reason.on ? ` · ${reason.at ?? reason.on} · ${reason.timeZone}` : ""}
+            {reason.at || reason.on ? ` · ${formatHomeTemporal(reason)}` : ""}
           </li>
         ))}
       </ul>
@@ -115,7 +120,7 @@ export function HomeSourceActions({ item }: { item: Item }) {
           <p>
             <HomeSourceLink to={url}>{actions[item.nextAction.kind]}</HomeSourceLink>
           </p>
-          <HomeSourceLink to={url}>Open {words(item.source.kind)} details</HomeSourceLink>
+          <HomeSourceLink to={url}>View {words(item.source.kind)} details</HomeSourceLink>
         </>
       ) : (
         <p>Source detail context is unavailable.</p>

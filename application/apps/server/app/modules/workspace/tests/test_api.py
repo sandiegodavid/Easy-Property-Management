@@ -46,6 +46,39 @@ class WorkspaceApiTests(unittest.TestCase):
     def test_bootstrap_composes_the_internal_intake_admission_port(self) -> None:
         self.assertTrue(callable(self.client.app.state.intake_admission.admit))
 
+    def test_sidebar_backup_status_is_bounded_and_read_only(self) -> None:
+        self.assertEqual(self.client.get("/api/workspace/backup-status").status_code, 503)
+        self.client.post("/api/workspace/initialize")
+        response = self.client.get("/api/workspace/backup-status")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"lastSuccessAt": None, "needsAttention": False})
+        with patch(
+            "app.modules.workspace.application.backup_service.BackupService.backup_status",
+            return_value={
+                "lastSuccessAt": "2026-10-14T15:10:00+00:00",
+                "lastFailure": None,
+                "lastRetentionFailure": {"reason": "private path"},
+                "history": [{"destination": "private path"}],
+            },
+        ):
+            response = self.client.get("/api/workspace/backup-status")
+        self.assertEqual(
+            response.json(),
+            {"lastSuccessAt": "2026-10-14T15:10:00Z", "needsAttention": True},
+        )
+
+    def test_sidebar_backup_status_sanitizes_read_failure(self) -> None:
+        from app.modules.workspace.application.backup_service import BackupError
+
+        self.client.post("/api/workspace/initialize")
+        with patch(
+            "app.modules.workspace.application.backup_service.BackupService.backup_status",
+            side_effect=BackupError("private filesystem details"),
+        ):
+            response = self.client.get("/api/workspace/backup-status")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json(), {"detail": "Backup status is unavailable."})
+
     def test_database_failure_returns_a_controlled_api_error(self) -> None:
         self.client.post("/api/workspace/initialize")
         with patch(

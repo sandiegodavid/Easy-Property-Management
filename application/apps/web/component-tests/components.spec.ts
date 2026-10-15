@@ -4,6 +4,47 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/component-tests/index.html");
 });
 
+test("disclosure actions hide by bar width without hiding status or collapse controls", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const container = page.getByTestId("action-disclosure-container");
+  const action = container.locator(".ui-summary-action");
+  const tooltip = container.getByRole("tooltip");
+  await container.evaluate((element) => {
+    element.style.width = "600px";
+  });
+  await expect(action).toBeVisible();
+  await container.locator(".ui-summary").hover();
+  await expect(tooltip).toBeHidden();
+  await container.evaluate((element) => {
+    element.style.width = "280px";
+  });
+  await expect(action).toBeHidden();
+  await container.locator(".ui-summary").hover();
+  await expect(tooltip).toHaveText("View");
+  await expect(tooltip).toBeVisible();
+  await expect(page.getByText("Review needed", { exact: true })).toBeVisible();
+  const summary = container.getByRole("button", { name: "Responsive action example", exact: true });
+  await expect(summary.locator(".ui-chevron")).toBeVisible();
+  await summary.focus();
+  await page.mouse.move(0, 0);
+  await expect(tooltip).toBeVisible();
+  await expect(summary).toHaveAccessibleDescription("View");
+  await page.keyboard.press("Escape");
+  await expect(tooltip).toBeHidden();
+  await page.keyboard.press("Enter");
+  await expect(summary).toHaveAttribute("aria-expanded", "true");
+  await expect(container.getByText("Responsive action details", { exact: true })).toBeVisible();
+  await page.keyboard.press("Space");
+  await expect(summary).toHaveAttribute("aria-expanded", "false");
+  await container.evaluate((element) => {
+    element.style.width = "600px";
+  });
+  await expect(action).toBeVisible();
+  await expect(tooltip).toBeHidden();
+});
+
 for (const theme of ["light", "dark"]) {
   test(`${theme}: full bar disclosure retains edits, isolates actions and restores focus`, async ({
     page,

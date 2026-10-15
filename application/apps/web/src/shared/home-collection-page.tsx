@@ -19,7 +19,7 @@ function CollectionPage({ collection }: { collection: (typeof collections)[numbe
   if (cursor) normalized.set("cursor", cursor);
   const query = normalized.toString();
   const read = useHomeItems(collection, filters, limit, cursor);
-  useHomeScroll(!!read.value);
+  useHomeScroll(!!read.value && !read.updating);
   useEffect(() => {
     if (params.toString() !== query) setParams(query, { replace: true, state: navigationState });
   }, [params, query, setParams, navigationState]);

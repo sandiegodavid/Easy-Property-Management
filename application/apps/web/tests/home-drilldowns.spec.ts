@@ -243,9 +243,7 @@ test("coverage resolves through the actual Space source and acknowledging review
   const home = await property(request);
   await page.goto(`/home/collections/information_review?propertyId=${home.id}`);
   await page.getByRole("button", { name: /occupancy information/ }).click();
-  await page
-    .getByRole("link", { name: "Review information and record review", exact: true })
-    .click();
+  await page.getByRole("link", { name: "Review coverage", exact: true }).click();
   await expect(
     page.getByText(/Unknown occupancy or availability needs source information/),
   ).toBeVisible();
@@ -264,7 +262,7 @@ test("coverage resolves through the actual Space source and acknowledging review
   ).toBeVisible();
 });
 
-test("cross-zone agenda retains local display, exact UTC instants and current owning context", async ({
+test("cross-zone agenda uses operator local time and retains source time-zone context", async ({
   page,
   request,
 }) => {
@@ -294,16 +292,17 @@ test("cross-zone agenda retains local display, exact UTC instants and current ow
   const agenda = page.getByRole("region", { name: "Calendar and appointments", exact: true });
   for (const home of homes) {
     const row = agenda.getByRole("button", { name: new RegExp(`Cross-zone ${home.id}`) });
-    const local = new Intl.DateTimeFormat("en-US", {
-      timeZone: home.timeZone,
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(starts));
+    const local = await page.evaluate(
+      (instant) =>
+        new Intl.DateTimeFormat(undefined, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(new Date(instant)),
+      starts,
+    );
     await expect(row).toContainText(local);
     await expect(row).toContainText(home.timeZone);
     await row.click();
   }
-  await expect(
-    agenda.getByRole("link", { name: "Review appointment and outcome", exact: true }),
-  ).toHaveCount(2);
+  await expect(agenda.getByRole("link", { name: "View", exact: true })).toHaveCount(2);
 });

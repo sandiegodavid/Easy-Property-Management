@@ -25,12 +25,12 @@ async function task(request: APIRequestContext) {
 }
 
 async function ready(page: Page) {
-  await expect(page.getByRole("region", { name: "Home summary", exact: true })).toContainText(
-    "captured at",
-  );
+  await expect(
+    page.getByRole("region", { name: "Recorded money", exact: true }).locator(".home-capture time"),
+  ).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Live Home attention", exact: true }),
-  ).toContainText("Checked at");
+  ).toContainText("As of");
 }
 
 test("Home live reads meet local p95 and shell-feedback gates without a snapshot cache", async ({
@@ -54,7 +54,9 @@ test("Home live reads meet local p95 and shell-feedback gates without a snapshot
     await expect(page).toHaveURL(/\/tasks$/);
     started = performance.now();
     await page.getByRole("link", { name: "Home", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Your day, in view", exact: true }),
+    ).toBeVisible();
     shell.push(performance.now() - started);
     await ready(page);
 
@@ -74,11 +76,11 @@ test("Home live reads meet local p95 and shell-feedback gates without a snapshot
         new URL(response.url()).pathname === "/api/operator/home/attention" &&
         response.status() === 200,
     );
-    await page.getByRole("button", { name: "Refresh Home", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await refreshed;
     await expect(
       page.getByRole("region", { name: "Live Home attention", exact: true }),
-    ).toContainText("Checked at");
+    ).toContainText("As of");
     refresh.push(performance.now() - started);
   }
 

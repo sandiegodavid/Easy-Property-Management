@@ -1,11 +1,16 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import openapiTS, { astToString } from "openapi-typescript";
 import { workflowContracts, workflowDispatch } from "./workflow-contracts.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const python = process.env.EPM_PYTHON ?? `${root}../.venv/easy-property-management/bin/python`;
+const python =
+  process.env.EPM_PYTHON ??
+  (existsSync(`${root}.venv/bin/python`)
+    ? `${root}.venv/bin/python`
+    : `${root}../.venv/easy-property-management/bin/python`);
 const schema = execFileSync(python, ["scripts/export_openapi.py"], {
   cwd: root,
   env: { ...process.env, PYTHONPATH: `${root}apps/server` },

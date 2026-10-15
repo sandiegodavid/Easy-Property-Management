@@ -47,9 +47,11 @@ test("View all keeps preview capture and exact total, bounds pages and preserves
   );
   const preview = page.getByRole("region", { name: "Needs action", exact: true });
   await expect(preview.getByRole("heading", { level: 4 })).toHaveText("55 recorded items");
-  const capture = await preview.locator("time").first().getAttribute("datetime");
+  const capture = await preview.locator(".home-capture time").getAttribute("datetime");
   const response = page.waitForResponse(
-    (result) => new URL(result.url()).pathname === "/api/operator/home/items",
+    (result) =>
+      new URL(result.url()).pathname === "/api/operator/home/items" &&
+      new URL(result.url()).searchParams.get("limit") === "50",
   );
   await preview.getByRole("link", { name: "View all Needs action (55)", exact: true }).click();
   const body = (await (await response).json()) as Schema["CollectionResponse"];
@@ -75,7 +77,7 @@ test("View all keeps preview capture and exact total, bounds pages and preserves
   const action = page.getByRole("region", { name: "Needs action", exact: true });
   const row = action.getByRole("button").nth(20);
   await row.click();
-  const source = action.getByRole("link", { name: "Open task details", exact: true });
+  const source = action.getByRole("link", { name: "View task details", exact: true });
   await source.scrollIntoViewIfNeeded();
   const returnUrl = page.url(),
     scroll = await page.evaluate(() => scrollY);
@@ -262,7 +264,7 @@ test("hidden destinations remain reachable from collection source links with a p
   const action = page.getByRole("region", { name: "Needs action", exact: true });
   await action.getByRole("button", { name: new RegExp(issue.summary) }).click();
   const returnUrl = page.url();
-  await action.getByRole("link", { name: "Open maintenance issue details" }).click();
+  await action.getByRole("link", { name: "View maintenance issue details" }).click();
   await expect(page.getByRole("heading", { name: issue.summary, exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Return to Home collection or preview" }).click();
   await expect(page).toHaveURL(returnUrl);

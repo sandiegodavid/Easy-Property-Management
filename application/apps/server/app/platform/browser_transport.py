@@ -10,6 +10,8 @@ from pydantic import BaseModel, ConfigDict
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from app.platform.web_delivery import accepts_html, browser_route
+
 LOCAL_CLIENT_HEADER = "x-epm-local-client"
 LOCAL_CLIENT_VALUE = "1"
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -96,7 +98,10 @@ class BrowserTransportMiddleware:
             if origin not in {current, *self.policy.development_origins}:
                 await problem("transport_origin_rejected")(scope, receive, send)
                 return
-        elif not absent_origin_allowed(scope["method"], headers):
+        elif not (
+            absent_origin_allowed(scope["method"], headers)
+            or entry_navigation_allowed(scope, headers)
+        ):
             await problem("transport_origin_required")(scope, receive, send)
             return
         if "access-control-request-method" in headers:
@@ -133,6 +138,17 @@ def request_headers(scope):
             raise ValueError("Duplicate request header.")
         result[name] = value.decode("latin-1")
     return result
+
+
+def entry_navigation_allowed(scope, headers):
+    """Allow opening public app HTML without granting cross-site API access."""
+    return (
+        scope["method"] in {"GET", "HEAD"}
+        and browser_route(scope["path"])
+        and accepts_html(scope["headers"])
+        and headers.get("sec-fetch-mode") in {None, "navigate"}
+        and headers.get("sec-fetch-dest") in {None, "document"}
+    )
 
 
 def absent_origin_allowed(method, headers):

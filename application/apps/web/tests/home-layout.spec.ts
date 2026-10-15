@@ -38,10 +38,55 @@ async function ready(page: Page) {
   await expect(page.getByRole("region", { name: "Recorded money", exact: true })).toContainText(
     "USD",
   );
-  await expect(page.getByRole("region", { name: "Needs action", exact: true })).toContainText(
-    "Checked at",
-  );
+  await expect(
+    page.getByRole("region", { name: "Live Home attention", exact: true }),
+  ).toContainText("As of");
 }
+
+test("day heading uses local date and truthful complete, partial and empty action counts", async ({
+  page,
+  request,
+}) => {
+  await page.clock.setFixedTime(new Date("2026-09-23T02:00:00Z"));
+  const task = await createTask(request, "Heading count fixture");
+  const data = await fixtures(request);
+  if (data.live.needsAction.status !== "available") throw new Error("Live fixture unavailable");
+  const item = data.live.needsAction.items.find((item) => item.source.id === task.id);
+  if (!item) throw new Error("Task missing from live fixture");
+  const items = [0, 1, 2].map((index) => ({
+    ...item,
+    key: `heading-${index}`,
+    propertyId:
+      index === 2 ? "00000000-0000-4000-8000-000000000002" : "00000000-0000-4000-8000-000000000001",
+  }));
+  for (const [total, expected] of [
+    [3, "3 items need action across 2 properties."],
+    [30, "30 items need action."],
+    [0, "No items need action in recorded information."],
+  ] as const) {
+    const response = structuredClone(data.live);
+    if (response.needsAction.status !== "available") throw new Error("Live fixture unavailable");
+    response.needsAction.items = total ? items : [];
+    response.needsAction.matchingTotal = total;
+    await page.route("**/api/operator/home/attention*", (route) =>
+      route.fulfill({ json: response }),
+    );
+    await page.goto("/home");
+    await expect(
+      page.getByRole("heading", { name: "Your day, in view", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Home", exact: true })).toHaveCount(0);
+    await expect(page.locator(".home-heading")).toContainText(expected);
+    const localDate = await page.evaluate(() =>
+      new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" }).format(
+        new Date(),
+      ),
+    );
+    await expect(page.locator(".home-eyebrow")).toHaveText(localDate);
+    await expect(page.locator(".home-eyebrow")).toHaveCSS("text-transform", "uppercase");
+    await page.unroute("**/api/operator/home/attention*");
+  }
+});
 
 test("Home renders every region, exact totals, keyboard source disclosure and both themes at narrow width", async ({
   page,
@@ -59,8 +104,11 @@ test("Home renders every region, exact totals, keyboard source disclosure and bo
     "Recorded money",
     "Inventory",
   ]) {
+    if (name === "Waiting" || name === "Upcoming" || name === "Needs action")
+      await page.getByRole("tab", { name, exact: true }).click();
     await expect(page.getByRole("region", { name, exact: true })).toBeVisible();
   }
+  await page.getByRole("tab", { name: "Needs action", exact: true }).click();
   const current = await fixtures(request);
   if (current.live.needsAction.status !== "available") throw new Error("Live fixture unavailable");
   const action = page.getByRole("region", { name: "Needs action", exact: true });
@@ -71,7 +119,7 @@ test("Home renders every region, exact totals, keyboard source disclosure and bo
   await row.focus();
   await page.keyboard.press("Enter");
   await expect(row).toHaveAttribute("aria-expanded", "true");
-  await expect(action.getByRole("link", { name: "Open task details" }).first()).toHaveAttribute(
+  await expect(action.getByRole("link", { name: "View task details" }).first()).toHaveAttribute(
     "href",
     new RegExp(task.id),
   );
@@ -147,7 +195,7 @@ test("agenda rows retain appointment time and reach the owning issue details", a
   const row = agenda.getByRole("button", { name: new RegExp(issue.summary) });
   await expect(row).toContainText("America/Los_Angeles");
   await row.click();
-  const source = agenda.getByRole("link", { name: "Open maintenance appointment details" });
+  const source = agenda.getByRole("link", { name: "View maintenance appointment details" });
   await expect(source).toHaveAttribute(
     "href",
     `/maintenance?record=issue&id=${issue.id}#appointment-${recorded.id}`,
@@ -192,6 +240,7 @@ test("independent section failures never fabricate counts or an all-clear", asyn
   await expect(page.getByRole("region", { name: "Inventory", exact: true })).toContainText(
     "Vacant spaces",
   );
+  await page.getByRole("tab", { name: "Waiting", exact: true }).click();
   await expect(page.getByRole("region", { name: "Waiting", exact: true })).toContainText(
     "recorded items",
   );
@@ -220,6 +269,7 @@ test("slow initial reads show bounded skeletons, delayed feedback and cancellabl
     await expect(action).toContainText("Loading Needs action");
     await expect(action.getByRole("heading", { level: 4 })).toHaveCount(0);
     await expect(page.locator(".home-skeleton")).toHaveCount(7);
+    await page.getByRole("button", { name: "Filters", exact: true }).click();
     await page.getByLabel("Money from", { exact: true }).fill("2026-09-01");
     await page.clock.runFor(2100);
     await expect(action).toContainText("Still loading Needs action (2 seconds)");
@@ -233,7 +283,7 @@ test("slow initial reads show bounded skeletons, delayed feedback and cancellabl
     expect(fullReads).toBe(1);
     await page.unroute("**/api/operator/home/attention?*");
     await page.getByRole("button", { name: "Retry Needs action", exact: true }).click();
-    await expect(action).toContainText("Checked at");
+    await expect(action).toContainText("recorded items");
     await expect(page.getByRole("region", { name: "Recorded money", exact: true })).toContainText(
       "timed out",
     );
@@ -274,13 +324,17 @@ test("refresh retains the original capture and form input on failure, and remove
   try {
     await ready(page);
     await expect(page.getByText("No immediate actions in recorded information.")).toBeVisible();
+    await page.getByRole("button", { name: "Filters", exact: true }).click();
     await page.getByLabel("Money from", { exact: true }).fill("2026-09-01");
     refreshing = true;
-    await page.getByRole("button", { name: "Refresh Home", exact: true }).click();
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(page.getByText("No immediate actions in recorded information.")).toHaveCount(0);
     const money = page.getByRole("region", { name: "Recorded money", exact: true });
     await expect(money).toContainText("Updating");
-    await expect(money).toContainText(data.full.money.capture.asOf);
+    await expect(money.locator(".home-capture time")).toHaveAttribute(
+      "datetime",
+      data.full.money.capture.asOf,
+    );
     pending.release();
     await expect(money).toContainText("Stale");
     await expect(money).toContainText("USD");
@@ -305,13 +359,14 @@ test("new attention remains announced with its exact total until the operator sh
   const updated = page.waitForResponse((response) =>
     response.url().includes("/api/operator/home/attention"),
   );
-  await page.getByRole("button", { name: "Refresh Home", exact: true }).click();
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
   await updated;
   await expect(page.getByText("New items need attention", { exact: false })).toBeVisible();
   const action = page.getByRole("region", { name: "Needs action", exact: true });
   await expect(action.getByRole("heading", { level: 4 })).toHaveText(
     `${before.live.needsAction.matchingTotal} recorded items`,
   );
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
   await page.getByLabel("Money from", { exact: true }).fill("2026-08-01");
   await expect(page.getByText("New items need attention", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Show updated list" }).click();

@@ -4934,6 +4934,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/workspace/backup-status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Backup Status */
+        get: operations["getWorkspaceBackupStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspace/initialize": {
         parameters: {
             query?: never;
@@ -5846,6 +5863,13 @@ export interface components {
              * Format: date
              */
             throughOn: string;
+        };
+        /** BackupStatusResponse */
+        BackupStatusResponse: {
+            /** Lastsuccessat */
+            lastSuccessAt: string | null;
+            /** Needsattention */
+            needsAttention: boolean;
         };
         /** Body_attachConditionEvidence */
         Body_attachConditionEvidence: {
@@ -37641,6 +37665,35 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+        };
+    };
+    getWorkspaceBackupStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupStatusResponse"];
                 };
             };
             /** @description Local transport rejected. */

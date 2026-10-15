@@ -8,6 +8,8 @@ TASK-001 completion on October 12, 2026 passed twelve focused Task browser cases
 
 ## Executable entry points
 
+October 15, 2026 visual refresh: **20 focused packaged browser cases and six shared component cases passed** across `shell.spec.ts`, `acceptance.spec.ts`, `home-layout.spec.ts` and the component suite. The SPA adopts the operator-experience reference's styling while retaining existing content, menus, preferences and workflows. Proof covers Light/Dark at 390/900/1440px, automated contrast, keyboard focus and 200% reflow, hidden/reordered destinations, saved/conflicted preferences, source-form commits and Home loading/refresh/disclosure behavior. Desktop Light/Dark and mobile screenshots were inspected. Build/contracts, lint, full type checking and changed-file formatting passed; the global format check still reports only the unchanged demo files.
+
 INSP-001 completion on October 12, 2026 verified 27 Inspection backend tests, 43 Finance regressions and 24 Lease/Inspection browser cases (23 passing in the suite followed by the corrected office case passing independently). Office template snapshots and narrow report review pass accessibility checks in both themes; selected evidence metadata retains archive reasons. The [completed acceptance record](../archive/designs/INSP-001_DESIGN_COMPLETED_2026-10-12.md) records the full validation matrix and check limitations.
 
 Paths below are relative to `application/apps/web/`. Packaged browser cases use real temporary workspaces for persistence/recovery. Mocked unavailable/partial states complement these cases; they do not prove commits. Shared component fixtures test disclosure, forms and recovery without claiming a live Home aggregate.

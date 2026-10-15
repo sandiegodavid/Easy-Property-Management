@@ -80,9 +80,7 @@ test("live attention starts independently, defaults use server month and navigat
   });
   try {
     await page.goto("/home");
-    await expect(page.getByRole("region", { name: "Live Home attention" })).toContainText(
-      "Checked at",
-    );
+    await expect(page.getByRole("region", { name: "Live Home attention" })).toContainText("As of");
     await expect(page.getByText("Loading Home summary…", { exact: true })).toBeVisible();
     await expect(page.getByLabel("Money from", { exact: true })).toHaveValue("2028-02-01");
     await expect(page.getByLabel("Money through", { exact: true })).toHaveValue("2028-02-29");
@@ -119,22 +117,23 @@ test("scope changes cancel old reads and discard a late summary", async ({ page,
     if (old) {
       oldStarted = true;
       await hold;
-    } else latestCapture = result.asOf;
+    } else latestCapture = result.money.capture.asOf;
     await route.fulfill({ json: result });
     if (old) oldFinished = true;
   });
   try {
     await page.goto(`/home?propertyId=${first.id}`);
     await expect.poll(() => oldStarted).toBe(true);
+    await page.getByRole("button", { name: "Filters", exact: true }).click();
     await page.getByLabel("Property ID", { exact: false }).fill(second.id);
-    await page.getByRole("button", { name: "Apply Home filters" }).click();
+    await page.getByRole("button", { name: "Apply filters" }).click();
     await expect.poll(() => latestCapture).not.toBe("");
-    const summary = page.getByRole("region", { name: "Home summary" });
-    await expect(summary).toContainText(latestCapture);
+    const summary = page.getByRole("region", { name: "Recorded money", exact: true });
+    await expect(summary.locator(".home-capture time")).toHaveAttribute("datetime", latestCapture);
     await expect.poll(() => cancelled.some((url) => url.includes(first.id))).toBe(true);
     release();
     await expect.poll(() => oldFinished).toBe(true);
-    await expect(summary).toContainText(latestCapture);
+    await expect(summary.locator(".home-capture time")).toHaveAttribute("datetime", latestCapture);
     await expect(page.getByLabel("Property ID", { exact: false })).toHaveValue(second.id);
   } finally {
     release();
@@ -175,9 +174,7 @@ test("missing readiness suppresses Home reads and runtime mismatches withhold re
   await expect(page.getByRole("region", { name: "Home summary" })).toContainText(
     "no longer matches",
   );
-  await expect(page.getByRole("region", { name: "Live Home attention" })).toContainText(
-    "Checked at",
-  );
+  await expect(page.getByRole("region", { name: "Live Home attention" })).toContainText("As of");
 });
 
 test("money and horizon changes restart only full Home while retaining live capture", async ({
@@ -191,10 +188,13 @@ test("money and horizon changes restart only full Home while retaining live capt
     if (path === "/api/operator/home/attention") liveReads += 1;
   });
   await page.goto("/home");
-  await expect(page.getByRole("region", { name: "Home summary" })).toContainText("captured at");
+  await expect(
+    page.getByRole("region", { name: "Recorded money", exact: true }).locator(".home-capture time"),
+  ).toBeVisible();
   const live = page.getByRole("region", { name: "Live Home attention" });
-  await expect(live).toContainText("Checked at");
+  await expect(live).toContainText("As of");
   const capture = await live.textContent();
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
   await page.getByLabel("Money from", { exact: true }).fill("2026-01-01");
   await page.getByLabel("Money through", { exact: true }).fill("2026-01-31");
   await page.getByLabel("Upcoming horizon").selectOption("30");
@@ -202,10 +202,12 @@ test("money and horizon changes restart only full Home while retaining live capt
     const url = new URL(response.url());
     return url.pathname === "/api/operator/home" && url.searchParams.get("horizonDays") === "30";
   });
-  await page.getByRole("button", { name: "Apply Home filters" }).click();
+  await page.getByRole("button", { name: "Apply filters" }).click();
   expect((await refreshed).ok()).toBe(true);
   await expect(page).toHaveURL(/horizonDays=30.*fromOn=2026-01-01.*throughOn=2026-01-31/);
-  await expect(page.getByRole("region", { name: "Home summary" })).toContainText("captured at");
+  await expect(
+    page.getByRole("region", { name: "Recorded money", exact: true }).locator(".home-capture time"),
+  ).toBeVisible();
   expect(fullReads).toBe(2);
   expect(liveReads).toBe(1);
   await expect(live).toHaveText(capture ?? "");

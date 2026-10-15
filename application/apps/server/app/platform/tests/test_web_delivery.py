@@ -90,6 +90,37 @@ def test_root_redirect_and_static_cache(client):
     assert client.head("/assets/style.css").content == b""
 
 
+def test_external_link_can_open_public_app_without_cross_site_api_access(client):
+    headers = {
+        "Accept": "text/html",
+        "Referer": "https://external.example/",
+        "Sec-Fetch-Site": "cross-site",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Dest": "document",
+    }
+    assert client.get("/properties", headers=headers).status_code == status.HTTP_200_OK
+    assert client.head("/properties", headers=headers).status_code == status.HTTP_200_OK
+    assert (
+        client.get("/api/operator/bootstrap", headers=headers).status_code
+        == status.HTTP_403_FORBIDDEN
+    )
+    assert client.post("/properties", headers=headers).status_code == status.HTTP_403_FORBIDDEN
+    assert (
+        client.get("/properties", headers={**headers, "Sec-Fetch-Mode": "cors"}).status_code
+        == status.HTTP_403_FORBIDDEN
+    )
+    assert (
+        client.get("/properties", headers={**headers, "Sec-Fetch-Dest": "iframe"}).status_code
+        == status.HTTP_403_FORBIDDEN
+    )
+    assert (
+        client.get(
+            "/properties", headers={**headers, "Origin": "https://external.example"}
+        ).status_code
+        == status.HTTP_403_FORBIDDEN
+    )
+
+
 @pytest.mark.parametrize(
     "path",
     [

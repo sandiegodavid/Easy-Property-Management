@@ -8,6 +8,8 @@ The current product is a local single-operator application with no app login or 
 
 CLI HTTP writes without Origin require `X-EPM-Local-Client: 1` and no browser Fetch Metadata/Referer. The marker is intent, not authentication, and never overrides a bad Origin. Browser requests use relative API paths and never add it.
 
+Opening a registered public SPA page from an external link is allowed for GET/HEAD requests accepting HTML without an Origin header. When supplied, Fetch Metadata must identify document navigation. This exception serves the public entry page only: API reads, writes, cross-site fetches, frames and explicit foreign Origins retain their rejection rules.
+
 ## Files and packaged content
 
 File paths/URLs are not public capabilities. Downloads verify recorded content, use safe attachment disposition and nosniff, and enforce owning links. Secrets, workspace files, environment files and source maps cannot enter the packaged public build. SPA fallback serves only registered supported HTML routes; unknown API paths/assets/follow-up routes cannot receive the app entry page.

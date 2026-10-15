@@ -49,22 +49,40 @@ export function AsyncRegion({
   title,
   state,
   children,
+  formatTimestamp,
+  showCaptureTime = true,
+  footer,
+  headingAction,
 }: {
   title: string;
   state: AsyncState;
   children?: ReactNode;
+  formatTimestamp?: (instant: string) => string;
+  showCaptureTime?: boolean;
+  footer?: ReactNode;
+  headingAction?: ReactNode;
 }) {
   const id = useId();
   const content = ["success", "refreshing", "stale", "partial"].includes(state.kind);
   return (
     <section className="ui-region" aria-labelledby={id}>
-      <h3 id={id}>{title}</h3>
+      {headingAction ? (
+        <div className="ui-region-heading">
+          <h3 id={id}>{title}</h3>
+          {headingAction}
+        </div>
+      ) : (
+        <h3 id={id}>{title}</h3>
+      )}
       <div role="status" aria-atomic="true">
         {state.kind === "success" ? "" : state.message}
       </div>
-      {"asOf" in state && state.asOf && (
+      {showCaptureTime && "asOf" in state && state.asOf && (
         <p className="ui-muted">
-          As of <time dateTime={state.asOf}>{state.asOf}</time>
+          As of{" "}
+          <time dateTime={state.asOf}>
+            {formatTimestamp ? formatTimestamp(state.asOf) : state.asOf}
+          </time>
         </p>
       )}
       <div aria-busy={state.kind === "loading" || state.kind === "refreshing"}>
@@ -72,6 +90,7 @@ export function AsyncRegion({
         {content && children}
       </div>
       {"recovery" in state && state.recovery}
+      {footer && <footer className="ui-region-footer">{footer}</footer>}
     </section>
   );
 }

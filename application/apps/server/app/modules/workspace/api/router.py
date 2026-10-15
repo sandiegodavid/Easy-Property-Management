@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
+from pydantic import AwareDatetime, BaseModel, ConfigDict
 
+from app.modules.workspace.application.backup_service import BackupError, BackupService
 from app.modules.workspace.application.runtime import WorkspaceRuntime
 from app.modules.workspace.application.service import (
     WorkspaceError,
@@ -12,7 +14,18 @@ from app.modules.workspace.application.service import (
 )
 
 
-def build_router(service: WorkspaceService, runtime: WorkspaceRuntime | None = None) -> APIRouter:
+class BackupStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    lastSuccessAt: AwareDatetime | None
+    needsAttention: bool
+
+
+def build_router(
+    service: WorkspaceService,
+    runtime: WorkspaceRuntime | None = None,
+    backups: BackupService | None = None,
+) -> APIRouter:
     router = APIRouter()
 
     def startup_error() -> WorkspaceError | None:
@@ -73,5 +86,22 @@ def build_router(service: WorkspaceService, runtime: WorkspaceRuntime | None = N
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(runtime.error)
                 )
         return {"path": str(service.paths.root), "manifest": manifest.to_dict()}
+
+    @router.get(
+        "/api/workspace/backup-status",
+        response_model=BackupStatusResponse,
+        operation_id="getWorkspaceBackupStatus",
+    )
+    def backup_status() -> BackupStatusResponse:
+        if startup_error() or not backups or (runtime and not runtime.ready):
+            raise HTTPException(status_code=503, detail="Backup status is unavailable.")
+        try:
+            current = backups.backup_status()
+        except BackupError as error:
+            raise HTTPException(status_code=503, detail="Backup status is unavailable.") from error
+        return BackupStatusResponse(
+            lastSuccessAt=current["lastSuccessAt"],
+            needsAttention=bool(current["lastFailure"] or current["lastRetentionFailure"]),
+        )
 
     return router

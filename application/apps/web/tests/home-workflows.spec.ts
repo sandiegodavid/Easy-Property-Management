@@ -84,9 +84,7 @@ test("Home Task actions reload current state, retain input on conflict, reconcil
   });
   const panel = await expanded(page, home.id, task.title);
   const homeUrl = page.url();
-  await panel
-    .getByRole("link", { name: "Review Task, waiting and reminders", exact: true })
-    .click();
+  await panel.getByRole("link", { name: "View", exact: true }).click();
   await action(page, "Complete task");
   await page.getByLabel("Outcome note", { exact: true }).fill("Confirmed by telephone");
   await page.getByLabel("I confirm this lifecycle change").check();
@@ -209,10 +207,11 @@ test("Home appointment opens its owning issue and records attendance without res
     },
   );
   const panel = await expanded(page, f.home.id, f.issue.summary, "appointments");
-  await expect(
-    panel.getByRole("link", { name: "Review appointment and outcome", exact: true }),
-  ).toHaveAttribute("href", new RegExp(`#appointment-${appointment.id}$`));
-  await panel.getByRole("link", { name: "Review appointment and outcome", exact: true }).click();
+  await expect(panel.getByRole("link", { name: "View", exact: true })).toHaveAttribute(
+    "href",
+    new RegExp(`#appointment-${appointment.id}$`),
+  );
+  await panel.getByRole("link", { name: "View", exact: true }).click();
   await page.getByText("Actions for Home appointment inspection", { exact: true }).click();
   await page.getByRole("link", { name: "Finish appointment", exact: true }).click();
   await page.getByLabel("I confirm this lifecycle change").check();
@@ -234,9 +233,7 @@ test("Home coverage action uses the source review receipt and preserves return c
   const home = await property(request);
   await page.goto(`/home/collections/information_review?propertyId=${home.id}`);
   await page.getByRole("button", { name: /maintenance/i }).click();
-  await page
-    .getByRole("link", { name: "Review information and record review", exact: true })
-    .click();
+  await page.getByRole("link", { name: "Review coverage", exact: true }).click();
   await page.getByRole("button", { name: "Review maintenance coverage", exact: true }).click();
   await page.getByLabel("Review reason").fill("Reviewed recorded maintenance responsibilities");
   await page.getByRole("button", { name: "Record review", exact: true }).click();
@@ -317,7 +314,7 @@ test("Home lease review opens the source and records a renewal without implying 
 }) => {
   const f = await leaseFixture(request, true);
   const panel = await expanded(page, f.home.id, `Lease ending ${f.endsOn}`);
-  await panel.getByRole("link", { name: "Review lease and continuation", exact: true }).click();
+  await panel.getByRole("link", { name: "Review lease", exact: true }).click();
   await expect(page.getByRole("region", { name: "Lease milestones", exact: true })).toContainText(
     f.endsOn,
   );
@@ -345,9 +342,7 @@ test("a failed current-source read offers no lifecycle commands and keeps Home r
       json: { detail: { code: "maintenance_unavailable", message: "Current issue unavailable" } },
     }),
   );
-  await panel
-    .getByRole("link", { name: "Review issue and follow-up actions", exact: true })
-    .click();
+  await panel.getByRole("link", { name: "Review issue", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Current issue unavailable");
   await expect(page.getByText("Actions", { exact: true })).toHaveCount(0);
   await page
@@ -370,7 +365,7 @@ test("Home payment uses current allocations and an interrupted response reconcil
   const row = response.result.items.find((item) => item.source.kind === "rent_expectation")!;
   expect(row).toBeTruthy();
   await page.getByRole("button", { name: new RegExp(row.title) }).click();
-  await page.getByRole("link", { name: "Review rent and record payment", exact: true }).click();
+  await page.getByRole("link", { name: "Record payment", exact: true }).click();
   await action(page, "Record rent receipt", "Rent ledger actions");
   await page.getByLabel("Received on (required)").fill(f.today);
   await page.getByLabel("Payment method kind (required)").selectOption("cash");
@@ -427,9 +422,7 @@ test("Home Owner review actions persist independently of Finance and linked foll
     raisedAtUtc: f.home.asOf,
   });
   let panel = await expanded(page, f.home.id, concern.summary);
-  await panel
-    .getByRole("link", { name: "Review Owner concern and follow-up", exact: true })
-    .click();
+  await panel.getByRole("link", { name: "Review concern", exact: true }).click();
   await action(page, "Create concern follow-up");
   await page.getByLabel("Title (required)").fill("Review Owner request");
   await save(page, "Create concern follow-up");
@@ -449,9 +442,7 @@ test("Home Owner review actions persist independently of Finance and linked foll
   if (rows.result.status !== "available") throw new Error("Unavailable source fixture");
   const row = rows.result.items.find((item) => item.source.id === report.id)!;
   panel = await expanded(page, f.home.id, row.title);
-  await panel
-    .getByRole("link", { name: "Review Owner report and verification", exact: true })
-    .click();
+  await panel.getByRole("link", { name: "Review report", exact: true }).click();
   await action(page, "Reject owner rent report");
   await page.getByLabel("Reason (required)").fill("Owner withdrew this claim");
   await page.getByLabel("I confirm this lifecycle change").check();

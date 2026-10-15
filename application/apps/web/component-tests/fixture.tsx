@@ -17,6 +17,7 @@ import "../src/style.css";
 
 function Fixture() {
   const [open, setOpen] = useState(false);
+  const [actionOpen, setActionOpen] = useState(false);
   const [dialog, setDialog] = useState(false);
   const [pending, setPending] = useState(false);
   const [result, setResult] = useState("");
@@ -54,6 +55,16 @@ function Fixture() {
           {() => <p>Other list instance</p>}
         </DisclosureRow>
       </DisclosureList>
+      <div data-testid="action-disclosure-container">
+        <DisclosureRow
+          title="Responsive action example"
+          actionLabel="View"
+          open={actionOpen}
+          onOpenChange={setActionOpen}
+        >
+          {() => <p>Responsive action details</p>}
+        </DisclosureRow>
+      </div>
       <ErrorSummary errors={[{ fieldId: "required-name", message: "Enter a name" }]} />
       <TextField
         id="required-name"

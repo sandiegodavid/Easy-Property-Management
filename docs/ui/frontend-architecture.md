@@ -24,6 +24,8 @@ Saved recovery is incomplete input, not an official draft. Byte evidence retains
 
 ## Interaction system
 
+The visual system follows the [operator-experience reference](../../demo/operator-experience.html): warm neutral canvas, Light/Dark surfaces, restrained teal accents, compact icon navigation, rounded panels and inset expanded details. Shared colors live in `packages/ui/src/tokens.css`, component surfaces in `packages/ui/src/components.css`, and application layout/forms in `apps/web/src/style.css`. Navigation icons are decorative; menu labels, ordering, capability gates and source content remain authoritative. Muted text is slightly darker than the reference to retain AA contrast on the selected-row surface.
+
 The entire non-editable summary bar is one accessible disclosure control. Click/keyboard activation toggles details below; inputs/buttons belong inside the expanded body. Preserve independent expansion and input when collapsed, and pause hidden work where the feature owns fetching/polling. Visible guidance explains toggling.
 
 Shared async regions distinguish loading, successful empty, unavailable, partial and retained stale results with original timestamps. Directories use server totals/cursors; section errors preserve other sections. Labeled fields, error summaries, confirmations, semantic tables, focus and announcements are shared primitives rather than domain policy.

@@ -1,3 +1,15 @@
+.ui-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .ui-region,
 .ui-directory,
 .ui-disclosures {
@@ -9,6 +21,16 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
+}
+.ui-region {
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.ui-region > h3 {
+  padding-bottom: 0.875rem;
+  border-bottom: 1px solid var(--border);
 }
 .ui-summary {
   display: flex;
@@ -23,9 +45,59 @@
   background: transparent;
   overflow-wrap: anywhere;
 }
+.ui-summary:hover,
+.ui-summary[aria-expanded="true"] {
+  background: var(--accent-soft);
+}
+.ui-summary[aria-expanded="true"] {
+  color: var(--accent);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
 .ui-summary-text {
   display: block;
   color: var(--muted);
+}
+.ui-region-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.ui-region-heading > h3 {
+  flex: 1;
+  min-width: 0;
+}
+.ui-disclosure--action {
+  container: disclosure-action / inline-size;
+}
+.ui-summary-action {
+  flex-shrink: 0;
+}
+.ui-summary-bar {
+  position: relative;
+}
+.ui-summary-tooltip {
+  display: none;
+  position: absolute;
+  inset-block-start: 100%;
+  inset-inline-end: var(--space-2);
+  z-index: 10;
+  max-width: calc(100% - 2 * var(--space-2));
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--type-small);
+  overflow-wrap: anywhere;
+}
+@container disclosure-action (max-width: 24rem) {
+  .ui-summary-action {
+    display: none;
+  }
+  .ui-summary-bar:not([data-tooltip-dismissed="true"]):is(:hover, :focus-within)
+    .ui-summary-tooltip {
+    display: block;
+  }
 }
 .ui-chevron {
   transition: transform var(--motion) ease;
@@ -35,6 +107,9 @@
 }
 .ui-disclosure > [role="region"] {
   padding: var(--space-3);
+  background: var(--canvas);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 0 var(--radius) var(--radius);
 }
 .ui-muted {
   color: var(--muted);
@@ -45,6 +120,16 @@
   padding: var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+}
+.ui-notice.ui-info,
+.ui-notice.ui-success {
+  background: var(--accent-soft);
+}
+.ui-notice.ui-warning {
+  background: var(--warning-soft);
+}
+.ui-notice.ui-danger {
+  background: var(--danger-soft);
 }
 .ui-info {
   color: var(--info);
@@ -68,8 +153,9 @@
   min-width: 0;
   box-sizing: border-box;
   color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--canvas);
+  border: 1px solid var(--control-border);
+  border-radius: 0.375rem;
   padding: var(--space-2);
 }
 .ui-field [aria-invalid="true"] {
@@ -117,6 +203,12 @@
   padding: var(--space-2);
   text-align: start;
   border-bottom: 1px solid var(--border);
+}
+.ui-table thead {
+  background: var(--accent-soft);
+}
+.ui-table tbody tr:hover {
+  background: var(--canvas);
 }
 .ui-table .ui-numeric {
   text-align: end;

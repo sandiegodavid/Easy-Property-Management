@@ -4,6 +4,9 @@ import { api } from "@epm/contracts";
 import { Page } from "@epm/ui";
 import { BootstrapFailure, queryClient, WorkspaceScope, type Bootstrap } from "./workspace-scope";
 
+const brandIcon = new URL("../assets/brand/logo.png", import.meta.url).href;
+const brandWordmark = new URL("../assets/brand/logo-text.png", import.meta.url).href;
+
 async function loadBootstrap(signal: AbortSignal): Promise<Bootstrap> {
   let result;
   try {
@@ -123,7 +126,15 @@ function Gate({ children }: { children: ReactNode }) {
 export function WorkspaceGate({ children }: { children: ReactNode }) {
   const [client] = useState(queryClient);
   return (
-    <Page title="Easy Property Management">
+    <Page
+      title="Easy Property Management"
+      brand={
+        <picture className="workspace-brand">
+          <source media="(max-width: 767px)" srcSet={brandIcon} />
+          <img src={brandWordmark} alt="Easy Property Management" width="2172" height="724" />
+        </picture>
+      }
+    >
       <QueryClientProvider client={client}>
         <Gate>{children}</Gate>
       </QueryClientProvider>

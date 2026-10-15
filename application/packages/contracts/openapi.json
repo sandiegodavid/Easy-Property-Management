@@ -2356,6 +2356,33 @@
         "title": "AvailableMoney",
         "type": "object"
       },
+      "BackupStatusResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "lastSuccessAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastsuccessat"
+          },
+          "needsAttention": {
+            "title": "Needsattention",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "lastSuccessAt",
+          "needsAttention"
+        ],
+        "title": "BackupStatusResponse",
+        "type": "object"
+      },
       "Body_attachConditionEvidence": {
         "properties": {
           "expected_revision": {
@@ -9685,6 +9712,7 @@
         "type": "object"
       },
       "DepositActivity": {
+        "additionalProperties": false,
         "properties": {
           "approved_settlement_count": {
             "title": "Approved Settlement Count",
@@ -10077,6 +10105,7 @@
         "type": "object"
       },
       "DepositObligations": {
+        "additionalProperties": false,
         "properties": {
           "account_count": {
             "title": "Account Count",
@@ -15098,6 +15127,7 @@
         "type": "object"
       },
       "Filters": {
+        "additionalProperties": false,
         "properties": {
           "from_on": {
             "title": "From On",
@@ -19952,6 +19982,7 @@
         "type": "string"
       },
       "MetricDescriptor": {
+        "additionalProperties": false,
         "properties": {
           "amount": {
             "title": "Amount",
@@ -20281,6 +20312,7 @@
         "type": "object"
       },
       "MoneySummary": {
+        "additionalProperties": false,
         "properties": {
           "as_of": {
             "title": "As Of",
@@ -20889,6 +20921,7 @@
         "type": "object"
       },
       "Operating": {
+        "additionalProperties": false,
         "properties": {
           "available": {
             "default": true,
@@ -30778,6 +30811,7 @@
         "type": "object"
       },
       "Scope": {
+        "additionalProperties": false,
         "properties": {
           "excluded_property_count": {
             "title": "Excluded Property Count",
@@ -71495,6 +71529,34 @@
           }
         },
         "summary": "Workspace Status"
+      }
+    },
+    "/api/workspace/backup-status": {
+      "get": {
+        "operationId": "getWorkspaceBackupStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          }
+        },
+        "summary": "Backup Status"
       }
     },
     "/api/workspace/initialize": {

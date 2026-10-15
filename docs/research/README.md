@@ -7,5 +7,7 @@ These are dated investigations and candidate approaches. They describe external 
 - [Meta Muse](META_MUSE_RESEARCH.md): reported agent/model distinction and proposed file exchange.
 - [Perplexity integration](PERPLEXITY_INTEGRATION_RESEARCH.md): feasibility, benefits and setup.
 - [Universal Reader](UNIVERSAL_READER_RESEARCH.md): experimental arbitrary-spreadsheet extraction with explicit reviewed import and independent parallel backlog.
+- [Hosted demo](HOSTED_DEMO_DESIGN.md): free/low-cost hosting and proposed isolated two-operator, multi-device access; not current hosted support.
+- [Hosting plan improvements](HOSTING_PLAN_IMPROVEMENTS.md): recommendations for cost, performance, operator experience, recovery and phased infrastructure adoption.
 
 Current optional AI boundaries are in [AI governance](../modules/ai-governance.md). Proposed domain/transport delivery is in [active designs](../active/README.md); scopes and dependencies remain in [the backlog](../FEATURE_BACKLOG.md).
