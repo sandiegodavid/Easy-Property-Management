@@ -57,8 +57,7 @@ test("progressive property creation commits through a registered form and links 
   request,
 }) => {
   await page.goto("/properties");
-  await page.getByText("Set up property", { exact: true }).click();
-  await page.getByRole("link", { name: "Create property", exact: true }).click();
+  await page.getByRole("button", { name: "Create property", exact: true }).click();
   await page
     .getByLabel("Display name (required)", { exact: true })
     .fill("Slice50 progressive home");
@@ -76,10 +75,8 @@ test("progressive property creation commits through a registered form and links 
   expect(created.spaces).toHaveLength(1);
   await page.getByRole("link", { name: "Return to current record" }).click();
   await page.getByRole("link", { name: "Slice50 progressive home", exact: true }).click();
-  await page.getByRole("link", { name: "details", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Property setup" })).toContainText(
-    "Local operator",
-  );
+  await page.getByRole("link", { name: "Property setup", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Property setup" })).toContainText("Configuration");
 });
 
 test("manual occupancy uses the independent Space revision and rejects foreign children", async ({

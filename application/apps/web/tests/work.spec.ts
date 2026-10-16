@@ -77,6 +77,19 @@ async function openAction(page: Page, key: string, id: string, child?: string) {
   await expect(page.getByRole("group", { name: "Requested change", exact: true })).toBeVisible();
 }
 
+test("issue detail has a top link back to Maintenance", async ({ page, request }) => {
+  const f = await issue(request);
+  await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
+  const detail = page.getByRole("region", { name: "Work record", exact: true });
+  const back = detail.getByRole("link", { name: "← Back to Maintenance", exact: true });
+  await expect(back).toHaveAttribute("href", "/maintenance");
+  const heading = detail.getByRole("heading", { level: 2 });
+  await expect(heading).toBeVisible();
+  expect((await back.boundingBox())!.y).toBeLessThan((await heading.boundingBox())!.y);
+  await back.click();
+  await expect(page).toHaveURL(/\/maintenance$/);
+});
+
 test("Task creation uses original recovery identity and saved forms survive reload", async ({
   page,
   request,

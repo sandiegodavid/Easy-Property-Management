@@ -89,6 +89,27 @@ async function schedule(request: APIRequestContext, f: Awaited<ReturnType<typeof
     },
   );
 }
+test("property-scoped Money shows a named link back to property details", async ({
+  page,
+  request,
+}) => {
+  const { property } = await fixture(request);
+  await page.goto(`/money?propertyId=${property.id}`);
+  const context = page.getByRole("region", { name: "Property context", exact: true });
+  await expect(context).toContainText(property.addressLine1);
+  const link = context.getByRole("link", {
+    name: property.displayName,
+    exact: true,
+  });
+  await expect(link).toHaveAttribute("href", `/properties/${property.id}/overview`);
+  await link.click();
+  await expect(
+    page.getByRole("heading", { name: property.displayName, exact: true }),
+  ).toBeVisible();
+  await page.goto("/money");
+  await expect(page.getByRole("region", { name: "Property context", exact: true })).toHaveCount(0);
+});
+
 async function save(page: Page, title: string) {
   await page.getByRole("button", { name: `Save ${title.toLowerCase()}`, exact: true }).click();
   await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
@@ -113,6 +134,88 @@ async function expense(request: APIRequestContext, f: Awaited<ReturnType<typeof 
     description: "Actual paid repair",
   });
 }
+test("Money lists present rent and expenses as readable cards", async ({ page, request }) => {
+  const f = await fixture(request);
+  await schedule(request, f);
+  const paidExpense = await expense(request, f);
+  await page.goto(`/money?tab=rent&leaseId=${f.lease.id}`);
+  await expect(
+    page
+      .getByRole("navigation", { name: "Money views" })
+      .getByRole("link", { name: "Rent", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  const rent = page
+    .getByRole("region", { name: "rent records", exact: true })
+    .getByRole("article")
+    .first();
+  await expect(rent.getByRole("heading", { name: "Rent due" })).toBeVisible();
+  await expect(rent.getByText("Expected", { exact: true })).toBeVisible();
+  await expect(rent.getByText("USD 1000.00", { exact: true }).first()).toBeVisible();
+  await expect(
+    rent.getByRole("link", { name: "Review amounts and receipt allocations" }),
+  ).toBeVisible();
+  await page.goto(`/money?tab=expenses&propertyId=${f.property.id}`);
+  const card = page
+    .getByRole("region", { name: "expenses records", exact: true })
+    .getByRole("article");
+  await expect(card.getByRole("heading", { name: "Plumber" })).toBeVisible();
+  await expect(card).toContainText(f.property.displayName);
+  await expect(card.getByText("USD 120.01", { exact: true }).first()).toBeVisible();
+  await expect(card.getByRole("link", { name: "Plumber", exact: true })).toHaveAttribute(
+    "href",
+    `/money?record=expense&id=${paidExpense.id}`,
+  );
+});
+
+test("Money groups the current page by named properties with one batch lookup", async ({
+  page,
+  request,
+}) => {
+  const first = await fixture(request),
+    second = await fixture(request);
+  for (const f of [first, second]) {
+    const synced = await schedule(request, f);
+    await expense(request, f);
+    await post(request, "/api/rent-receipts", {
+      expectedRevision: synced.rentLedgerRevision,
+      idempotencyKey: crypto.randomUUID(),
+      leaseId: f.lease.id,
+      receivedOn: f.today,
+      amountMinor: 100,
+      currencyCode: "USD",
+      paymentMethodKind: "cash",
+      allocations: [{ expectationId: synced.items[0].id, amountMinor: 100 }],
+    });
+  }
+  const lookups: string[] = [],
+    individualReads: string[] = [];
+  page.on("request", (entry) => {
+    const path = new URL(entry.url()).pathname;
+    if (path === "/api/money/property-contexts") lookups.push(entry.url());
+    if (/^\/api\/(properties|leases)\/[^/]+$/.test(path)) individualReads.push(entry.url());
+  });
+  for (const tab of ["rent", "expenses", "receipts"]) {
+    await page.goto(`/money?tab=${tab}`);
+    for (const f of [first, second]) {
+      const group = page.getByRole("region", { name: f.property.displayName, exact: true });
+      await expect(
+        group.getByRole("heading", { name: f.property.displayName, exact: true }),
+      ).toBeVisible();
+      await expect(group.getByRole("article").first()).toBeVisible();
+      await expect(
+        group.getByRole("link", { name: f.property.displayName, exact: true }),
+      ).toHaveAttribute("href", `/properties/${f.property.id}/overview`);
+    }
+    expect(lookups).toHaveLength(["rent", "expenses", "receipts"].indexOf(tab) + 1);
+    expect(individualReads).toHaveLength(0);
+  }
+  await page.goto("/money?tab=categories");
+  await expect(
+    page.getByRole("heading", { name: "Shared expense categories", exact: true }),
+  ).toBeVisible();
+  expect(lookups).toHaveLength(3);
+});
+
 async function ownerReport(
   request: APIRequestContext,
   f: Awaited<ReturnType<typeof fixture>>,

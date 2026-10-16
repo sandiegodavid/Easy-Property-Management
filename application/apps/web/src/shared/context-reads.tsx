@@ -12,6 +12,8 @@ import { statusLabel } from "../workflows/portfolio-status";
 import { PageAsOf } from "./page-as-of";
 import { leaseLastCoveredOn } from "./lease-dates";
 import { DisclosureHelp } from "./home-disclosure-help";
+import { readResult } from "../workflows/reads";
+import { propertyUnitsLabel } from "./property-labels";
 
 type Schema = components["schemas"];
 type Kind = "property" | "owner";
@@ -43,7 +45,13 @@ function Select({
   return (
     <div>
       <div className="filter-label">
-        <label htmlFor={id}>{name === "availability" ? "Leasing status" : label(name)}</label>
+        <label htmlFor={id}>
+          {name === "availability"
+            ? "Leasing status"
+            : name === "relationshipScope"
+              ? "Show relationships"
+              : label(name)}
+        </label>
         {name === "availability" && (
           <DisclosureHelp
             label="About leasing status"
@@ -73,34 +81,73 @@ function ReadError({ error, restart }: { error: Error; restart: () => void }) {
     </div>
   );
 }
+function ReviewCards({
+  items,
+  unitNames = {},
+  disableNotApplicable = false,
+}: {
+  items: Schema["CoverageResult"][];
+  unitNames?: Record<string, string>;
+  disableNotApplicable?: boolean;
+}) {
+  const priority = (item: Schema["CoverageResult"]) =>
+    item.state === "missing_required_information" ? 0 : item.state === "needs_review" ? 1 : 2;
+  return (
+    <ul className="directory-coverage-list" aria-label="Information review areas">
+      {[...items]
+        .sort((a, b) => priority(a) - priority(b))
+        .map((item) => {
+          const content = (
+            <>
+              <span className="directory-coverage-area">Review {label(item.area)}</span>
+              {unitNames[item.subjectId] && <span>{unitNames[item.subjectId]}</span>}
+              <span className="directory-coverage-state" data-state={item.state ?? "unavailable"}>
+                {label(item.state ?? "unavailable").replace(/^./, (character) =>
+                  character.toUpperCase(),
+                )}
+              </span>
+            </>
+          );
+          return (
+            <li key={`${item.subjectId}:${item.area}`}>
+              {disableNotApplicable && item.state === "not_applicable" ? (
+                <div className="directory-coverage-card">{content}</div>
+              ) : (
+                <Link
+                  className="directory-coverage-card"
+                  to={`/coverage/${item.subjectKind}/${item.subjectId}/${item.area}`}
+                >
+                  {content}
+                </Link>
+              )}
+            </li>
+          );
+        })}
+    </ul>
+  );
+}
 function CoveragePreview({ preview }: { preview: Schema["CoveragePreview"] }) {
   return (
-    <div>
+    <div className="directory-coverage">
+      {preview.viewAll.subjectKind !== "property" && <h4>Information review</h4>}
       {preview.availability === "unavailable" ? (
-        <p>Coverage unavailable.</p>
+        <p>Information review unavailable.</p>
       ) : (
         <>
-          <p>{preview.matchingTotal} coverage areas</p>
-          <ul>
-            {preview.items?.map((item) => (
-              <li key={`${item.subjectId}:${item.area}`}>
-                {label(item.area)}: {label(item.state ?? "unavailable")}
-                {"subjectKind" in item && (
-                  <Link to={`/coverage/${item.subjectKind}/${item.subjectId}/${item.area}`}>
-                    Review {item.area}
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ul>
-          {preview.hasMore && <p>Showing a bounded coverage preview.</p>}
+          <ReviewCards
+            items={preview.items ?? []}
+            disableNotApplicable={preview.viewAll.subjectKind === "property"}
+          />
+          {preview.hasMore && <p>Showing an information review preview.</p>}
         </>
       )}
-      <Link
-        to={`/${preview.viewAll.subjectKind === "property" ? "properties" : "owners"}/${preview.viewAll.subjectId}/overview?relationshipScope=${preview.viewAll.relationshipScope}#coverage`}
-      >
-        View coverage
-      </Link>
+      {preview.viewAll.subjectKind !== "property" && (
+        <Link
+          to={`/owners/${preview.viewAll.subjectId}/overview?relationshipScope=${preview.viewAll.relationshipScope}#coverage`}
+        >
+          View information review
+        </Link>
+      )}
     </div>
   );
 }
@@ -363,38 +410,70 @@ export function Directory({
                     {item.status} · {item.propertyType} · {item.inventoryLayout} ·{" "}
                     {item.ownershipContext}
                   </p>
-                  <p>
-                    Local date: {item.effectiveLocalDate} ({item.timeZone}) ·{" "}
-                    {item.needsAttention ? "Needs attention" : "No status attention"}
-                  </p>
-                  <p>
-                    {item.ownerCount} owners · {item.spaceCount} spaces
-                  </p>
-                  <ul>
-                    {item.owners.map((owner) => (
-                      <li key={owner.partyId}>
-                        <Link to={`/owners/${owner.partyId}/overview`}>{owner.displayName}</Link>
-                      </li>
-                    ))}
-                  </ul>
-                  <ul>
-                    {item.spaces.map((space) => (
-                      <li key={space.id}>
-                        {space.displayName} · {statusLabel(space.occupancy)} ·{" "}
-                        {statusLabel(space.availability)}
-                        {space.needsAttention && " · Needs attention"}
-                      </li>
-                    ))}
-                  </ul>
                   {item.needsAttention && (
-                    <Link to={`/properties/${item.id}/units`}>
-                      Review status for {item.displayName}
-                    </Link>
-                  )}
-                  {(item.ownerCount > item.owners.length ||
-                    item.spaceCount > item.spaces.length) && (
                     <p>
-                      Showing bounded owner and space previews. Open the workspace for all records.
+                      <span>Occupancy or leasing status needs review</span>{" "}
+                      <Link to={`/properties/${item.id}/units`}>
+                        Review status for {item.displayName}
+                      </Link>
+                    </p>
+                  )}
+                  <p>
+                    {item.ownerCount} {item.ownerCount === 1 ? "owner" : "owners"}
+                    {item.ownershipContext === "self_owned" && " · You"} · {item.spaceCount}{" "}
+                    {item.spaceCount === 1 ? "rental unit" : "rental units"}
+                  </p>
+                  <div className="property-card-recognition">
+                    <section aria-label="Owners">
+                      <h4>Owners</h4>
+                      <ul>
+                        {item.owners
+                          .filter(
+                            (owner) =>
+                              item.ownershipContext !== "self_owned" ||
+                              owner.ownerKind !== "local_operator",
+                          )
+                          .map((owner) => (
+                            <li key={owner.partyId ?? owner.ownerKind}>
+                              {owner.ownerKind === "local_operator" ? (
+                                item.ownershipContext !== "self_owned" && "You"
+                              ) : (
+                                <Link to={`/owners/${owner.partyId}/overview`}>
+                                  {owner.displayName}
+                                </Link>
+                              )}
+                            </li>
+                          ))}
+                        {item.ownerCount > item.owners.length && (
+                          <li>
+                            <Link to={`/properties/${item.id}/overview#relationships`}>
+                              +{item.ownerCount - item.owners.length} more{" "}
+                              {item.ownerCount - item.owners.length === 1 ? "owner" : "owners"}
+                            </Link>
+                          </li>
+                        )}
+                      </ul>
+                    </section>
+                    <section aria-label="Rental units">
+                      <h4>Rental units</h4>
+                      <ul>
+                        {item.spaces.map((space) => (
+                          <li key={space.id}>
+                            {space.displayName} · {statusLabel(space.occupancy)} ·{" "}
+                            {statusLabel(space.availability)}
+                            {space.availability === "available_on" && space.availableOn && (
+                              <> · {space.availableOn}</>
+                            )}
+                            {space.needsAttention && " · Needs attention"}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  </div>
+                  {item.spaceCount > item.spaces.length && (
+                    <p>
+                      Showing {item.spaces.length} of {item.spaceCount} rental units. Open the
+                      property for all rental units.
                     </p>
                   )}
                   <CoveragePreview preview={item.coverage} />
@@ -422,8 +501,6 @@ type ContextQuery = {
 };
 export function ContextNavigator({ kind }: { kind: Kind }) {
   const location = useLocation();
-  const { scope } = useWorkspace();
-  const [search, setSearch] = useState<string | null>(null);
   const base = kind === "property" ? "/properties" : "/owners";
   const state: unknown = location.state;
   const directory =
@@ -434,80 +511,10 @@ export function ContextNavigator({ kind }: { kind: Kind }) {
     (state.directory === base || state.directory.startsWith(`${base}?`))
       ? state.directory
       : base;
-  const result = useQuery({
-    queryKey: scope.key("context-switcher", kind, search),
-    enabled: search !== null,
-    queryFn: async ({ signal }) => {
-      const response =
-        kind === "property"
-          ? await api.GET("/api/operator/properties", {
-              signal,
-              params: { query: { q: search ?? "", limit: 50, status: "all" } },
-            })
-          : await api.GET("/api/operator/owners", {
-              signal,
-              params: {
-                query: {
-                  q: search ?? "",
-                  limit: 50,
-                  archiveState: "all",
-                  propertyState: "all",
-                  relationshipScope: "all",
-                },
-              },
-            });
-      if (!response.data) throw new ReadFailure(response.response.status, response.error);
-      return response.data;
-    },
-  });
-  if (kind === "property") {
-    return (
-      <p>
-        <Link to={directory}>← Back to Properties</Link>
-      </p>
-    );
-  }
   return (
-    <>
-      <Link to={directory}>All owners</Link>
-      <details>
-        <summary>Switch {kind}</summary>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            const value = new FormData(event.currentTarget).get("switchSearch");
-            setSearch(typeof value === "string" ? value : "");
-          }}
-        >
-          <label>
-            Find {kind}
-            <input name="switchSearch" maxLength={240} />
-          </label>
-          <button>Find records</button>
-        </form>
-        {result.isFetching && <p role="status">Finding records…</p>}
-        {result.error && <p role="alert">{result.error.message}</p>}
-        {result.data && (
-          <>
-            <p>
-              {result.data.matchingTotal} matches; showing up to 50. Refine the search for more.
-            </p>
-            <ul>
-              {result.data.items.map((item) => {
-                const id = "partyId" in item ? item.partyId : item.id;
-                return (
-                  <li key={id}>
-                    <Link state={{ directory }} to={`${base}/${id}/overview?relationshipScope=all`}>
-                      {item.displayName}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        )}
-      </details>
-    </>
+    <p>
+      <Link to={directory}>← Back to {kind === "property" ? "Properties" : "Owners"}</Link>
+    </p>
   );
 }
 async function readOverview(
@@ -575,24 +582,42 @@ function LeaseTenants({ lease }: { lease: Schema["LeaseItem"] }) {
     </>
   );
 }
-function SectionContents({ section }: { section: Section }) {
+function SectionContents({
+  section,
+  currentPropertyOwners = false,
+  propertyContext = false,
+  unitNames,
+}: {
+  section: Section;
+  currentPropertyOwners?: boolean;
+  propertyContext?: boolean;
+  unitNames?: Record<string, string>;
+}) {
+  if (section.kind === "coverage" && propertyContext) {
+    const items = section.items ?? [];
+    const needsReview = items.filter(
+      (item) => item.state === "needs_review" || item.state === "missing_required_information",
+    ).length;
+    return (
+      <>
+        <p>
+          {needsReview} {needsReview === 1 ? "item needs" : "items need"} review
+          {(section.matchingTotal ?? 0) > items.length ? " on this page" : ""}
+        </p>
+        <ReviewCards items={items} unitNames={unitNames} disableNotApplicable />
+        {!items.length && <p>No information review areas on this page.</p>}
+      </>
+    );
+  }
   if (section.kind === "money")
     return (
       section.summary && (
-        <>
-          <p>
-            Whole-property activity, not owner entitlement. Ownership does not establish financial
-            shares. Scheduled checks and pending owner reports are not received income.
+        <div className="property-money-summary">
+          <p className="property-money-period">
+            {section.summary.filters.from_on} through {section.summary.filters.through_on}
+            <span>{section.summary.currency_code} · Property-local business dates</span>
           </p>
-          <p>
-            {section.summary.filters.from_on} through {section.summary.filters.through_on} ·{" "}
-            {section.summary.currency_code} · Property-local business dates
-          </p>
-          <p>
-            Figures reflect current corrected records. Deposit obligations are current balances
-            across all recorded dates, separate from period activity.
-          </p>
-          <dl>
+          <dl className="property-money-metrics">
             {section.summary.metrics.map((metric) => (
               <div key={metric.metric}>
                 <dt>{label(metric.metric)}</dt>
@@ -602,19 +627,36 @@ function SectionContents({ section }: { section: Section }) {
               </div>
             ))}
           </dl>
+          <p className="property-money-note">
+            Whole-property activity, not owner entitlement. Ownership does not establish financial
+            shares. Scheduled checks and pending owner reports are not received income. Figures
+            reflect current corrected records. Deposit obligations are current balances across all
+            recorded dates, separate from period activity.
+          </p>
           <Link
             to={`/money?${new URLSearchParams({ [section.viewAll.subjectKind === "property" ? "propertyId" : "ownerId"]: section.viewAll.subjectId, fromOn: section.viewAll.fromOn ?? "", throughOn: section.viewAll.throughOn ?? "" })}`}
           >
             View money sources
           </Link>
-        </>
+        </div>
       )
     );
   return (
     <>
-      <p>{section.matchingTotal} matching records</p>
+      <p>
+        {currentPropertyOwners && section.kind === "relationships" ? (
+          <>
+            {section.matchingTotal} {section.matchingTotal === 1 ? "owner" : "owners"}
+            {section.matchingTotal === 1 &&
+              section.items?.some((item) => item.ownerKind === "local_operator") &&
+              " · You"}
+          </>
+        ) : (
+          `${section.matchingTotal} matching records`
+        )}
+      </p>
       {!section.items?.length && <p>No matching records on this page.</p>}
-      <ul>
+      <ul className="context-item-cards">
         {section.items?.map((item, index) => (
           <li key={"id" in item ? item.id : index}>
             {"displayName" in item && <strong>{item.displayName}</strong>}
@@ -629,10 +671,26 @@ function SectionContents({ section }: { section: Section }) {
               </p>
             )}
             {"ownerKind" in item && (
-              <p>
-                {item.ownerName ?? "Local operator"} · {item.propertyName} ·{" "}
-                {item.relationshipState} · {item.startsOn} to {item.endsOn ?? "ongoing"}
-              </p>
+              <>
+                <strong>
+                  {propertyContext ? (
+                    item.ownerKind === "local_operator" ? (
+                      "You"
+                    ) : item.partyId ? (
+                      <Link to={`/owners/${item.partyId}/overview`}>
+                        {item.ownerName ?? "Owner"}
+                      </Link>
+                    ) : (
+                      (item.ownerName ?? "Owner")
+                    )
+                  ) : (
+                    <Link to={`/properties/${item.propertyId}/overview`}>{item.propertyName}</Link>
+                  )}
+                </strong>
+                <p>
+                  {label(item.relationshipState)} · {item.startsOn} to {item.endsOn ?? "ongoing"}
+                </p>
+              </>
             )}
             {"occupancyStartsOn" in item && (
               <>
@@ -655,13 +713,15 @@ function SectionContents({ section }: { section: Section }) {
                 {item.followUpAtUtc && ` · Follow-up ${item.followUpAtUtc}`}
               </p>
             )}
-            {"target" in item && !("leaseKind" in item) && <SourceLink target={item.target} />}
+            {"target" in item && !("leaseKind" in item) && !("ownerKind" in item) && (
+              <SourceLink target={item.target} />
+            )}
             {"area" in item && (
               <p>
                 {item.area} · {item.availability} · {item.state ?? "State unavailable"} ·{" "}
                 {item.causes.join(", ")}
                 <Link to={`/coverage/${item.subjectKind}/${item.subjectId}/${item.area}`}>
-                  Review {item.area} coverage
+                  Review {item.area} information
                 </Link>
               </p>
             )}
@@ -676,14 +736,24 @@ function OverviewSection({
   kind,
   id,
   query,
+  unitNames,
+  unitsLabel = "Units",
 }: {
   initial: Section;
   kind: Kind;
   id: string;
   query: ContextQuery;
+  unitNames?: Record<string, string>;
+  unitsLabel?: string;
 }) {
   const { scope } = useWorkspace();
   const [page, setPage] = useState<{ cursor?: string } | null>(null);
+  const heading =
+    initial.kind === "coverage"
+      ? "Information review"
+      : initial.kind === "spaces"
+        ? unitsLabel
+        : label(initial.kind).replace(/^./, (character) => character.toUpperCase());
   const result = useQuery({
     queryKey: scope.key("overview-section", kind, id, query, initial.kind, page),
     enabled: page !== null,
@@ -691,11 +761,17 @@ function OverviewSection({
       readOverview(kind, id, { ...query, section: initial.kind, cursor: page?.cursor }, signal),
   });
   const section = page === null ? initial : result.data?.sections[initial.kind];
+  const showHeading = !(kind === "property" && initial.kind === "coverage");
   return (
-    <section id={initial.kind} aria-label={`${initial.kind} section`} className="context-section">
+    <section
+      id={initial.kind}
+      aria-label={`${initial.kind === "coverage" || initial.kind === "spaces" ? heading : initial.kind} section`}
+      className="context-section"
+    >
       {result.error ? (
         <>
-          <h3>{initial.kind}</h3>
+          {showHeading && <h3>{heading}</h3>}
+          {initial.kind === "money" && <MoneyPeriodFilter query={query} />}
           <ReadError
             error={result.error}
             restart={() => {
@@ -705,11 +781,17 @@ function OverviewSection({
           />
         </>
       ) : !section ? (
-        <p role="status">Loading {initial.kind}…</p>
+        <p role="status">Loading {heading.toLowerCase()}…</p>
       ) : (
         <>
           <AsyncRegion
-            title={section.kind}
+            title={heading}
+            showHeading={showHeading}
+            headingAction={
+              kind === "property" && section.kind === "relationships" ? (
+                <RelationshipCheckboxes value={query.relationshipScope} />
+              ) : undefined
+            }
             showCaptureTime={false}
             state={
               section.availability === "unavailable"
@@ -720,14 +802,19 @@ function OverviewSection({
                         ? "Choose an explicit period to read money activity."
                         : "This source is unavailable. Other sections remain independent.",
                     recovery: (
-                      <button
-                        onClick={() => {
-                          if (page === null || page.cursor) setPage({});
-                          else void result.refetch();
-                        }}
-                      >
-                        Retry section
-                      </button>
+                      <>
+                        {section.kind === "money" && <MoneyPeriodFilter query={query} />}
+                        {section.reasonCode !== "money_period_required" && (
+                          <button
+                            onClick={() => {
+                              if (page === null || page.cursor) setPage({});
+                              else void result.refetch();
+                            }}
+                          >
+                            Retry section
+                          </button>
+                        )}
+                      </>
                     ),
                   }
                 : {
@@ -737,23 +824,111 @@ function OverviewSection({
                   }
             }
           >
-            <SectionContents section={section} />
+            {section.kind === "money" && <MoneyPeriodFilter query={query} />}
+            <SectionContents
+              section={section}
+              currentPropertyOwners={kind === "property" && query.relationshipScope === "current"}
+              propertyContext={kind === "property"}
+              unitNames={unitNames}
+            />
           </AsyncRegion>
-          <p>Source: {section.sourceKind}</p>
+          {section.kind !== "coverage" && <p>Source: {section.sourceKind}</p>}
           {"nextCursor" in section && section.nextCursor && (
             <button onClick={() => setPage({ cursor: section.nextCursor ?? undefined })}>
-              Next {section.kind}
+              Next {heading.toLowerCase()}
             </button>
           )}
-          {page?.cursor && <button onClick={() => setPage({})}>First {section.kind}</button>}
+          {page?.cursor && (
+            <button onClick={() => setPage({})}>First {heading.toLowerCase()}</button>
+          )}
         </>
       )}
     </section>
   );
 }
+function RelationshipCheckboxes({ value }: { value: Scope }) {
+  const [params, setParams] = useSearchParams();
+  const navigationState: unknown = useLocation().state;
+  return (
+    <div className="relationship-filter" role="group" aria-label="Include relationships">
+      {(["current", "former"] as const).map((option) => (
+        <label key={option}>
+          <input
+            type="checkbox"
+            checked={value === "all" || value === option}
+            disabled={value === option}
+            onChange={() => {
+              const next = new URLSearchParams(params);
+              next.set(
+                "relationshipScope",
+                value === "all" ? (option === "current" ? "former" : "current") : "all",
+              );
+              next.delete("cursor");
+              setParams(next, { state: navigationState });
+            }}
+          />
+          {option === "current" ? "Current" : "Former"}
+        </label>
+      ))}
+    </div>
+  );
+}
+function MoneyPeriodFilter({ query }: { query: ContextQuery }) {
+  const [params, setParams] = useSearchParams();
+  const navigationState: unknown = useLocation().state;
+  const [error, setError] = useState("");
+  return (
+    <form
+      className="read-filters money-period-filter"
+      aria-label="Money period"
+      key={`${query.fromOn}:${query.throughOn}`}
+      onSubmit={(event) => {
+        event.preventDefault();
+        const values = new FormData(event.currentTarget);
+        const from = values.get("fromOn");
+        const through = values.get("throughOn");
+        if (typeof from !== "string" || typeof through !== "string" || from > through) {
+          setError("Money from must be on or before Money through.");
+          return;
+        }
+        setError("");
+        const next = new URLSearchParams(params);
+        next.set("fromOn", from);
+        next.set("throughOn", through);
+        next.delete("cursor");
+        setParams(next, { state: navigationState, preventScrollReset: true });
+      }}
+    >
+      <label>
+        Money from
+        <input type="date" name="fromOn" defaultValue={query.fromOn} required />
+      </label>
+      <label>
+        Money through
+        <input type="date" name="throughOn" defaultValue={query.throughOn} required />
+      </label>
+      <button>Apply money period</button>
+      {error && <p role="alert">{error}</p>}
+    </form>
+  );
+}
 export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: string }) {
   const { id = "" } = useParams();
   const { scope } = useWorkspace();
+  const property = useQuery({
+    queryKey: scope.key("portfolio-record", id),
+    enabled: kind === "property",
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/properties/{property_id}", {
+          signal,
+          params: { path: { property_id: id } },
+        }),
+      ),
+  });
+  const unitNames = Object.fromEntries(
+    (property.data?.spaces ?? []).map((unit) => [unit.id, unit.displayName]),
+  );
   const [params, setParams] = useSearchParams();
   const relationshipScope = choice(
     params.get("relationshipScope"),
@@ -776,42 +951,38 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
     properties: "properties",
   };
   const section = tabSections[tab];
-  const result = useQuery({
+  const result = useQuery<Schema["OverviewResponse"]>({
     queryKey: scope.key("overview", kind, id, query, section),
+    placeholderData: (previous: Schema["OverviewResponse"] | undefined) =>
+      previous?.subject.id === id && previous.subject.kind === kind ? previous : undefined,
     queryFn: ({ signal }) => readOverview(kind, id, { ...query, section }, signal),
   });
   return (
     <>
       {kind === "owner" && <h2>{tab}</h2>}
       <SourceDetail />
-      <form
-        key={params.toString()}
-        className="read-filters"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const values = new FormData(event.currentTarget);
-          const next = new URLSearchParams();
-          values.forEach((value, key) => {
-            if (typeof value === "string" && value) next.set(key, value);
-          });
-          setParams(next);
-        }}
-      >
-        <Select
-          name="relationshipScope"
-          value={relationshipScope}
-          options={["current", "former", "all"]}
-        />
-        <label>
-          Money from
-          <input type="date" name="fromOn" defaultValue={query.fromOn} />
-        </label>
-        <label>
-          Money through
-          <input type="date" name="throughOn" defaultValue={query.throughOn} />
-        </label>
-        <button>Apply context</button>
-      </form>
+      {kind === "owner" && (
+        <form
+          key={params.toString()}
+          className="read-filters"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const values = new FormData(event.currentTarget);
+            const next = new URLSearchParams(params);
+            values.forEach((value, key) => {
+              if (typeof value === "string" && value) next.set(key, value);
+            });
+            setParams(next);
+          }}
+        >
+          <Select
+            name="relationshipScope"
+            value={relationshipScope}
+            options={["current", "former", "all"]}
+          />
+          <button>Apply relationships</button>
+        </form>
+      )}
       {result.error ? (
         <ReadError
           error={result.error}
@@ -821,33 +992,92 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
         />
       ) : result.data ? (
         <>
-          {kind === "owner" && <h3>{result.data.subject.displayName}</h3>}
           {result.data.subject.kind === "property" ? (
-            <p>
-              {result.data.subject.addressLine1}, {result.data.subject.city},{" "}
-              {result.data.subject.countryCode} · {result.data.subject.timeZone} ·{" "}
-              {result.data.subject.status}
-            </p>
+            tab !== "details" && (
+              <p>
+                {result.data.subject.addressLine1}, {result.data.subject.city},{" "}
+                {result.data.subject.countryCode} · {result.data.subject.timeZone} ·{" "}
+                {result.data.subject.status}
+              </p>
+            )
           ) : (
             <p>
               {result.data.subject.partyKind} ·{" "}
               {result.data.subject.archived ? "Archived" : "Active"}
             </p>
           )}
-          <p>
-            Relationships: {result.data.relationshipScope}
-            {result.isFetching && " · Refreshing…"}
-          </p>
+          {result.isFetching && (
+            <span className="context-refresh-status" role="status">
+              Refreshing…
+            </span>
+          )}
           <PageAsOf asOf={result.data.asOf} />
-          {Object.values(result.data.sections).map((item) => (
-            <OverviewSection
-              key={`${kind}:${id}:${JSON.stringify(query)}:${item.kind}:${result.data?.sourceRevision}`}
-              initial={item}
-              kind={kind}
-              id={id}
-              query={query}
-            />
-          ))}
+          {kind === "property" && tab === "overview" && (
+            <div
+              className="property-overview-status"
+              role="region"
+              aria-label="Property status summary"
+            >
+              {property.data ? (
+                <>
+                  {property.data.inventoryLayout !== "office_suites" && property.data.spaces[0] ? (
+                    <p>
+                      Occupancy:{" "}
+                      {statusLabel(property.data.spaces[0].currentOccupancy.occupancyStatus)}
+                      {" · "}Leasing status:{" "}
+                      {statusLabel(property.data.spaces[0].availability.effectiveStatus)}
+                      {property.data.spaces[0].availability.effectiveStatus === "available_on" &&
+                        ` · ${property.data.spaces[0].availability.availableOn}`}
+                    </p>
+                  ) : (
+                    <p>
+                      {property.data.statusSummary.activeSpaceCount} active suites ·{" "}
+                      {property.data.statusSummary.occupiedCount} occupied ·{" "}
+                      {property.data.statusSummary.vacantCount} vacant ·{" "}
+                      {property.data.statusSummary.unknownOccupancyCount} need occupancy
+                      classification · {property.data.statusSummary.availableNowCount} open for
+                      leasing now · {property.data.statusSummary.availableLaterCount} open for
+                      leasing later
+                    </p>
+                  )}
+                  {property.data.statusSummary.needsAttentionCount > 0 && (
+                    <p className="ui-muted">Occupancy or leasing status needs review.</p>
+                  )}
+                </>
+              ) : (
+                <p role="status">
+                  {property.error ? "Property status unavailable." : "Loading property status…"}
+                </p>
+              )}
+            </div>
+          )}
+          {Object.values(result.data.sections)
+            .filter(
+              (item) =>
+                !(
+                  kind === "property" &&
+                  tab === "overview" &&
+                  ["spaces", "leases", "money", "maintenance", "communications"].includes(item.kind)
+                ),
+            )
+            .sort((a, b) =>
+              kind === "property"
+                ? Number(b.kind === "coverage") - Number(a.kind === "coverage")
+                : 0,
+            )
+            .map((item) => (
+              <OverviewSection
+                key={`${kind}:${id}:${JSON.stringify(query)}:${item.kind}:${result.data?.sourceRevision}`}
+                initial={item}
+                kind={kind}
+                id={id}
+                query={query}
+                unitNames={unitNames}
+                unitsLabel={
+                  property.data ? propertyUnitsLabel(property.data.inventoryLayout) : "Units"
+                }
+              />
+            ))}
         </>
       ) : (
         <p role="status">Loading workspace…</p>

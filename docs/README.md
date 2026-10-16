@@ -30,7 +30,7 @@ For a specific change, read its owning module, relevant shared platform contract
 | Coordination | [Tasks](modules/tasks.md), [Communications](modules/communications.md) | Deadlines, waiting, reminders and manual interaction history |
 | Source intake | [Intake](modules/intake.md) | Evidence envelope, provenance, deduplication and sensitive reads |
 | Optional AI | [AI governance](modules/ai-governance.md) | Configuration, registries, review and uncertain external effects |
-| Operator support | [Operator](modules/operator.md) | Composed reads, coverage, search, preferences and recovery |
+| Operator support | [Operator](modules/operator.md) | Composed reads, information review, search, preferences and recovery |
 | Browser interface | [Operator experience](ui/operator-experience.md), [Frontend architecture](ui/frontend-architecture.md) | [Workflows](ui/workflows.md), [validation](ui/validation.md), state and dispatch |
 
 ## Shared contracts
@@ -59,3 +59,5 @@ When implementing a feature, update its module guide for verified behavior and k
 Keep shared rules in platform guides, domain policy in the owning module and status/dependencies in the backlog. Link exact code/schema/test entry points instead of duplicating every field or full API schema. Preserve necessary rationale/history in the archive, and extract unfinished obligations before archiving a plan. An unverified design-versus-code discrepancy belongs in active work/review; it must not be described as current capability.
 
 When an operator-facing route, action, setup command or capability changes, update the corresponding [manual chapter](../manual/README.md) and its [operation index](../manual/operation-index.md). Keep developer internals in these guides and operator task steps in the manual.
+
+Use operator-facing feature names in current prose. For Information review, preserve internal `coverage` identifiers only when referring to code or contracts; follow the [terminology mapping](modules/operator.md#information-review-and-search).

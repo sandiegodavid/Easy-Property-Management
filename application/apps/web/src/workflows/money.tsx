@@ -54,11 +54,12 @@ export function MoneyWorkspace() {
   return (
     <section aria-label="Money workspace">
       <h2>Money</h2>
+      {params.get("propertyId") && <MoneyPropertyContext id={params.get("propertyId")!} />}
       <p>
         Recorded payments, paid expenses and held deposits are separate records. Scheduled checks
         and pending owner reports are not received income.
       </p>
-      <nav aria-label="Money views">
+      <nav className="property-status-tabs" aria-label="Money views">
         {tabs.map((item) => {
           const next = new URLSearchParams(params);
           next.set("tab", item);
@@ -66,7 +67,7 @@ export function MoneyWorkspace() {
           next.delete("metric");
           next.delete("sourceRevision");
           return (
-            <Link key={item} to={`/money?${next}`}>
+            <Link key={item} to={`/money?${next}`} aria-current={tab === item ? "page" : undefined}>
               {
                 {
                   rent: "Rent",
@@ -84,6 +85,44 @@ export function MoneyWorkspace() {
         })}
       </nav>
       {tab === "reporting" ? <MoneyReporting /> : <MoneyDirectory key={tab} tab={tab} />}
+    </section>
+  );
+}
+
+function MoneyPropertyContext({ id }: { id: string }) {
+  const { scope } = useWorkspace();
+  const property = useQuery({
+    queryKey: scope.key("portfolio-record", id),
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/properties/{property_id}", {
+          signal,
+          params: { path: { property_id: id } },
+        }),
+      ),
+  });
+  return (
+    <section className="money-property-context" aria-label="Property context">
+      <p className="money-property-label">Property</p>
+      {property.isPending && <p role="status">Loading property…</p>}
+      {property.error && (
+        <p role="alert">
+          Property details are unavailable.{" "}
+          <button type="button" onClick={() => void property.refetch()}>
+            Retry
+          </button>
+        </p>
+      )}
+      {property.data && (
+        <>
+          <h3>
+            <Link to={`/properties/${id}/overview`}>{property.data.displayName}</Link>
+          </h3>
+          <p>
+            {property.data.addressLine1}, {property.data.city}
+          </p>
+        </>
+      )}
     </section>
   );
 }
@@ -344,6 +383,52 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
     deposits: ["finance.deposit_account.create"],
     categories: ["finance.expense_category.create"],
   };
+  const items = (result.data?.items ?? []).map(record);
+  const propertyIds = [
+    ...new Set(
+      items.flatMap((item) => {
+        const id = item.propertyId ?? record(item.property).id ?? propertyId;
+        return typeof id === "string" ? [id] : [];
+      }),
+    ),
+  ].sort();
+  const leaseIds = [
+    ...new Set(
+      items.flatMap((item) =>
+        !item.propertyId &&
+        !record(item.property).id &&
+        !propertyId &&
+        typeof item.leaseId === "string"
+          ? [item.leaseId]
+          : [],
+      ),
+    ),
+  ].sort();
+  const contexts = useQuery({
+    queryKey: scope.key("money-property-contexts", propertyIds, leaseIds),
+    enabled: tab !== "categories" && propertyIds.length + leaseIds.length > 0,
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/money/property-contexts", {
+          signal,
+          params: { query: { propertyIds, leaseIds } },
+        }),
+      ),
+  });
+  const groups = new Map<string, Record<string, unknown>[]>();
+  for (const item of items) {
+    const group =
+      tab === "categories"
+        ? "categories"
+        : scalar(
+            item.propertyId ??
+              record(item.property).id ??
+              propertyId ??
+              contexts.data?.leaseProperties[scalar(item.leaseId)],
+            "unassigned",
+          );
+    groups.set(group, [...(groups.get(group) ?? []), item]);
+  }
   return (
     <section aria-label={`${tab} records`}>
       <MoneyScope />
@@ -516,90 +601,173 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
         </div>
       )}
       {result.data?.items.length === 0 && <p>No records match these filters.</p>}
-      {result.data?.items.map((value) => {
-        const item = record(value),
-          id = scalar(item.id);
-        return (
-          <article key={id}>
-            <Link to={moneyRecordUrl(kinds[tab], id)}>
-              {scalar(
-                item.displayName ?? item.payeeName ?? item.ownerDisplayNameSnapshot,
-                `${tab} record`,
-              )}{" "}
-              · {scalar(item.dueOn ?? item.paidOn ?? item.receivedOn ?? item.checkDatedOn)} ·{" "}
-              {scalar(item.status ?? item.lifecycleStatus ?? item.settlementStatus, "recorded")}
-            </Link>
-            <MoneyFacts
-              value={
-                tab === "expenses"
-                  ? {
-                      ...item,
-                      datePaid: item.paidOn,
-                      property: record(item.property).displayName,
-                      space: record(item.space).displayName ?? "Whole Property",
-                      category: record(item.category).displayName,
-                      paidTo: item.payeeName,
-                      paidBy:
-                        item.paidByKind === "party"
-                          ? `Party ${scalar(item.paidByPartyId)}`
-                          : "Local operator",
-                      evidence: Array.isArray(item.activeEvidence) ? item.activeEvidence.length : 0,
-                    }
-                  : item
-              }
-              labels={
-                tab === "rent"
-                  ? {
-                      expectedAmountMinor: "Expected",
-                      receivedAmountMinor: "Money received",
-                      outstandingAmountMinor: "Still due",
-                      timelinessStatus: "Needs attention",
-                      settlementStatus: "Settlement",
-                    }
-                  : undefined
-              }
-              fields={[
-                ...(tab === "expenses"
-                  ? [
-                      "datePaid",
-                      "property",
-                      "space",
-                      "category",
-                      "paidTo",
-                      "paidBy",
-                      "evidence",
-                      "lifecycleStatus",
-                    ]
-                  : []),
-                "expectedAmountMinor",
-                "receivedAmountMinor",
-                "outstandingAmountMinor",
-                "amountMinor",
-                "amount",
-                "activeReceivedAmount",
-                "activeRefundedAmount",
-                "settlementStatus",
-                "timelinessStatus",
-                "receiptLifecycleStatus",
-                "financiallyEffective",
-                ...(tab === "checks"
-                  ? ["depositEligibility", "reminderStatus", "checkDatedOn"]
-                  : []),
-                ...(tab === "expenses" ? ["activeRefundedAmount", "netAmount"] : []),
-              ]}
-            />
-            {tab === "rent" && (
-              <p>
-                Due date: {scalar(item.dueOn)} · Covered period: {scalar(item.periodStartsOn)} –{" "}
-                {scalar(item.periodEndsOn)}.{" "}
-                <Link to={moneyRecordUrl("expectation", id)}>
-                  Review amounts and receipt allocations
+      {[...groups].map(([groupId, records]) => (
+        <section
+          key={groupId}
+          className="money-property-group"
+          aria-label={
+            groupId === "categories"
+              ? "Shared expense categories"
+              : (contexts.data?.propertyNames[groupId] ??
+                scalar(record(records[0]?.property).displayName, "Property records"))
+          }
+        >
+          <header className="money-property-group-heading">
+            <h3>
+              {groupId === "categories" ? (
+                "Shared expense categories"
+              ) : groupId === "unassigned" ? (
+                contexts.isFetching ? (
+                  "Loading property…"
+                ) : (
+                  "Property unavailable"
+                )
+              ) : (
+                <Link to={`/properties/${groupId}/overview`}>
+                  {contexts.data?.propertyNames[groupId] ??
+                    scalar(
+                      record(records[0]?.property).displayName,
+                      contexts.isFetching ? "Loading property…" : "Property name unavailable",
+                    )}
                 </Link>
-              </p>
-            )}
-          </article>
-        );
-      })}
+              )}
+            </h3>
+            <span>
+              {records.length} {records.length === 1 ? "record" : "records"} on this page
+            </span>
+          </header>
+          {contexts.error && tab !== "categories" && (
+            <p role="status">
+              Property names could not be loaded.{" "}
+              <button type="button" onClick={() => void contexts.refetch()}>
+                Retry property names
+              </button>
+            </p>
+          )}
+          <div className="money-record-list">
+            {records.map((item) => {
+              const id = scalar(item.id),
+                status = scalar(
+                  item.status ?? item.lifecycleStatus ?? item.settlementStatus,
+                  tab === "categories" ? (item.archivedAt ? "archived" : "active") : "recorded",
+                ),
+                date = scalar(
+                  item.dueOn ?? item.paidOn ?? item.receivedOn ?? item.checkDatedOn,
+                  "",
+                );
+              return (
+                <article key={id} className="money-record-card">
+                  <header className="money-record-header">
+                    <h4>
+                      <Link to={moneyRecordUrl(kinds[tab], id)}>
+                        {scalar(
+                          item.displayName ?? item.payeeName ?? item.ownerDisplayNameSnapshot,
+                          {
+                            rent: "Rent due",
+                            receipts: "Rent received",
+                            expenses: "Expense",
+                            checks: "Scheduled check",
+                            reports: "Owner rent report",
+                            deposits: "Security deposit",
+                            categories: "Expense category",
+                          }[tab],
+                        )}
+                      </Link>
+                    </h4>
+                    <span className="money-record-status" data-status={status}>
+                      {status
+                        .replaceAll("_", " ")
+                        .replace(/^./, (character) => character.toUpperCase())}
+                    </span>
+                  </header>
+                  {date && (
+                    <p className="money-record-date">
+                      {tab === "rent"
+                        ? "Due"
+                        : tab === "expenses"
+                          ? "Paid"
+                          : tab === "checks"
+                            ? "Check dated"
+                            : "Received"}{" "}
+                      <time dateTime={date}>{date}</time>
+                    </p>
+                  )}
+                  <MoneyFacts
+                    value={
+                      tab === "expenses"
+                        ? {
+                            ...item,
+                            datePaid: item.paidOn,
+                            property: record(item.property).displayName,
+                            space: record(item.space).displayName ?? "Whole Property",
+                            category: record(item.category).displayName,
+                            paidTo: item.payeeName,
+                            paidBy:
+                              item.paidByKind === "party"
+                                ? `Party ${scalar(item.paidByPartyId)}`
+                                : "Local operator",
+                            evidence: Array.isArray(item.activeEvidence)
+                              ? item.activeEvidence.length
+                              : 0,
+                          }
+                        : item
+                    }
+                    labels={
+                      tab === "rent"
+                        ? {
+                            expectedAmountMinor: "Expected",
+                            receivedAmountMinor: "Money received",
+                            outstandingAmountMinor: "Still due",
+                            timelinessStatus: "Needs attention",
+                            settlementStatus: "Settlement",
+                          }
+                        : undefined
+                    }
+                    fields={[
+                      ...(tab === "expenses"
+                        ? [
+                            "datePaid",
+                            "property",
+                            "space",
+                            "category",
+                            "paidTo",
+                            "paidBy",
+                            "evidence",
+                            "lifecycleStatus",
+                          ]
+                        : []),
+                      "expectedAmountMinor",
+                      "receivedAmountMinor",
+                      "outstandingAmountMinor",
+                      "amountMinor",
+                      "amount",
+                      "activeReceivedAmount",
+                      "activeRefundedAmount",
+                      "settlementStatus",
+                      "timelinessStatus",
+                      "receiptLifecycleStatus",
+                      "financiallyEffective",
+                      ...(tab === "checks"
+                        ? ["depositEligibility", "reminderStatus", "checkDatedOn"]
+                        : []),
+                      ...(tab === "expenses" ? ["activeRefundedAmount", "netAmount"] : []),
+                    ]}
+                  />
+                  {tab === "rent" && (
+                    <p className="money-record-period">
+                      Due date: {scalar(item.dueOn)} · Covered period: {scalar(item.periodStartsOn)}{" "}
+                      – {scalar(item.periodEndsOn)}.{" "}
+                      <Link to={moneyRecordUrl("expectation", id)}>
+                        Review amounts and receipt allocations
+                      </Link>
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ))}
       {result.data?.nextCursor && (
         <button
           onClick={() => {
@@ -634,7 +802,9 @@ export function MoneyScope() {
         (key) =>
           params.get(key) && (
             <p key={key}>
-              {key}: {params.get(key)}{" "}
+              {key === "propertyId"
+                ? "Showing this property’s records."
+                : `${key}: ${params.get(key)}`}{" "}
               <button
                 onClick={() => {
                   const next = new URLSearchParams(params);

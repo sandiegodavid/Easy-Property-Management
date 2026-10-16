@@ -17,6 +17,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { useWorkspace } from "./workspace-gate";
+import { propertyUnitsLabel } from "../shared/property-labels";
 import { PageAsOfProvider } from "../shared/page-as-of";
 import {
   destinations,
@@ -196,12 +197,8 @@ function PropertiesPage() {
 }
 function PropertyDetails({ tab }: { tab: string }) {
   const { id = "" } = useParams();
-  return (
-    <>
-      <PortfolioRecord id={id} />
-      <ContextOverview kind="property" tab={tab} />
-    </>
-  );
+  if (tab === "units") return <PortfolioRecord id={id} view="spaces" />;
+  return <PortfolioRecord id={id} />;
 }
 function WorkflowPage({ kind }: { kind: "provider" | "identity" }) {
   const [params] = useSearchParams();
@@ -281,43 +278,68 @@ function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
         }),
       ),
   });
+  const owner = useQuery({
+    queryKey: scope.key("owner-identity", id),
+    enabled: kind === "owner",
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/parties/{party_id}", {
+          signal,
+          params: { path: { party_id: id } },
+        }),
+      ),
+  });
   const [params] = useSearchParams();
   const location = useLocation();
   const sections = kind === "property" ? propertySections : ownerSections;
   const navigationState: unknown = location.state;
   if (contextPath({ kind, id }) === "/home") return <Unavailable />;
   return (
-    <section>
-      {kind === "property" && <ContextNavigator key={`${kind}:${id}`} kind={kind} />}
-      <div className="directory-heading">
-        <h2>
-          {kind === "property" ? (property.data?.displayName ?? "Property") : "Owner workspace"}
-        </h2>
-        {kind === "property" && (
-          <button
-            type="button"
-            onClick={() => void navigate(`/money?propertyId=${encodeURIComponent(id)}`)}
-          >
-            View in Money
-          </button>
+    <section className={kind === "property" ? "property-workspace" : undefined}>
+      <div className={kind === "property" ? "property-workspace-header" : undefined}>
+        <ContextNavigator key={`${kind}:${id}`} kind={kind} />
+        <div className="directory-heading">
+          <h2>
+            {kind === "property"
+              ? (property.data?.displayName ?? "Property")
+              : (owner.data?.displayName ?? "Owner")}
+          </h2>
+          {kind === "property" && (
+            <button
+              type="button"
+              onClick={() => void navigate(`/money?propertyId=${encodeURIComponent(id)}`)}
+            >
+              View in Money
+            </button>
+          )}
+        </div>
+        <nav
+          className={kind === "property" ? "property-status-tabs property-context-tabs" : undefined}
+          aria-label={`${kind} sections`}
+        >
+          {sections.map((section) => (
+            <NavLink key={section} state={navigationState} to={`${section}?${params.toString()}`}>
+              {kind === "property" && section === "setup"
+                ? "Property setup"
+                : kind === "property" && section === "units"
+                  ? property.data
+                    ? propertyUnitsLabel(property.data.inventoryLayout)
+                    : "Units"
+                  : section}
+            </NavLink>
+          ))}
+        </nav>
+        {kind === "owner" && (
+          <Link to={`/money?ownerId=${encodeURIComponent(id)}`}>View in Money</Link>
         )}
       </div>
-      {kind === "owner" && <p>{id}</p>}
-      {kind === "owner" && <ContextNavigator key={`${kind}:${id}`} kind={kind} />}
-      <nav
-        className={kind === "property" ? "property-status-tabs property-context-tabs" : undefined}
-        aria-label={`${kind} sections`}
-      >
-        {sections.map((section) => (
-          <NavLink key={section} state={navigationState} to={`${section}?${params.toString()}`}>
-            {section}
-          </NavLink>
-        ))}
-      </nav>
-      {kind === "owner" && (
-        <Link to={`/money?ownerId=${encodeURIComponent(id)}`}>View in Money</Link>
+      {kind === "property" ? (
+        <div className="property-workspace-content" role="region" aria-label="Property content">
+          <Outlet />
+        </div>
+      ) : (
+        <Outlet />
       )}
-      <Outlet />
     </section>
   );
 }
@@ -494,7 +516,7 @@ export function ApplicationShell() {
                     key={section}
                     path={section}
                     element={
-                      kind === "property" && ["details", "units"].includes(section) ? (
+                      kind === "property" && ["setup", "units"].includes(section) ? (
                         <PropertyDetails tab={section} />
                       ) : section === "documents" ? (
                         <PendingPage title={section} />

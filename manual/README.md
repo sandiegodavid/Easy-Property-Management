@@ -26,11 +26,11 @@ The app records and helps you review property-management work. You remain respon
 1. Have the installer configure an external workspace and prove a backup/restore path.
 2. Set your preferred appearance and navigation.
 3. Enter client-owner and tenant identities, then properties and ownership relationships.
-4. Confirm each Space's occupancy and availability; unknown information requires review.
+4. Confirm each home's, office's or suite's occupancy and leasing status; unknown information requires review.
 5. Enter each lease, review it and explicitly execute it when appropriate.
 6. Separately preview/confirm the rent schedule and record actual rent/deposit receipts.
 7. Add providers, existing issues and follow-ups. Record useful conversations and evidence.
-8. Review Home and information coverage. Missing setup is not resolved by marking a Task complete.
+8. Review Home and Information review. Missing setup is not resolved by marking a Task complete.
 
 ## Available versus planned
 

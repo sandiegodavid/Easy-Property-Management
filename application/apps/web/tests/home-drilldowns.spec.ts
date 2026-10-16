@@ -243,23 +243,22 @@ test("coverage resolves through the actual Space source and acknowledging review
   const home = await property(request);
   await page.goto(`/home/collections/information_review?propertyId=${home.id}`);
   await page.getByRole("button", { name: /occupancy information/ }).click();
-  await page.getByRole("link", { name: "Review coverage", exact: true }).click();
-  await expect(
-    page.getByText(/Unknown occupancy or availability needs source information/),
-  ).toBeVisible();
-  const source = page.getByRole("link", { name: "Open occupancy sources", exact: true });
+  await page.getByRole("link", { name: "Review information", exact: true }).click();
+  await expect(page.getByText(/Review occupancy and leasing status\. If either/)).toBeVisible();
+  const source = page.getByRole("link", {
+    name: "Review occupancy and leasing status",
+    exact: true,
+  });
   await expect(source).toHaveAttribute("href", `/properties/${home.id}/units`);
-  await page.getByRole("button", { name: "Review occupancy coverage", exact: true }).click();
+  await page.getByRole("button", { name: "Add review note", exact: true }).click();
   await page.getByLabel("Review reason").fill("Acknowledged missing recorded classification");
   await page.getByRole("button", { name: "Record review", exact: true }).click();
   await expect(page.getByText(/Original review .*missing required information/)).toBeVisible();
-  await expect(page.getByRole("region", { name: "occupancy coverage", exact: true })).toContainText(
-    "missing required information",
-  );
-  await source.click();
   await expect(
-    page.getByRole("region", { name: "Property occupancy and leasing status", exact: true }),
-  ).toBeVisible();
+    page.getByRole("region", { name: "occupancy information review", exact: true }),
+  ).toContainText("missing required information");
+  await source.click();
+  await expect(page.getByRole("region", { name: "Property home", exact: true })).toBeVisible();
 });
 
 test("cross-zone agenda uses operator local time and retains source time-zone context", async ({

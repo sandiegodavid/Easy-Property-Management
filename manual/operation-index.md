@@ -15,7 +15,7 @@ Use this index for uncommon actions. Action names below are checked against the 
 | Save/resume unfinished form, check original result, retry original attempt, discard when permitted | [Recovery](daily-operation.md#save-resume-and-correct), [troubleshooting](troubleshooting.md) |
 | Show/hide/reorder navigation, Light/Dark, restore/save preferences | [Settings](settings-and-ai.md#appearance-and-navigation) |
 | Connection create/edit/enable/disable, credential set/clear, synthetic probe/uncertainty, model/action limits/redaction, global pause and draft review | [AI controls](settings-and-ai.md#built-in-ai-availability); only registered capabilities are available |
-| Review/acknowledge applicable coverage and required gaps | [Daily operation](daily-operation.md#read-home-correctly) |
+| Review recorded information and required gaps | [Daily operation](daily-operation.md#information-review) |
 | Preview/synchronize rent, allocation review, payment-method suggestion and financial correction | [Money](money.md) |
 | Inspect/download retained files, archive link history and reselect evidence | [Evidence](tasks-and-evidence.md#attach-inspect-and-archive-files) |
 | Configure backup destination, validate workspace, backup/alternate output, export, validate archive, restore/switch/relocate | [Data protection](data-and-recovery.md) |
@@ -24,7 +24,7 @@ Use this index for uncommon actions. Action names below are checked against the 
 
 ## Record actions
 
-### Properties and Spaces
+### Properties, homes, offices and suites
 
 [How to use these actions](portfolio-and-people.md)
 
@@ -33,13 +33,13 @@ Use this index for uncommon actions. Action names below are checked against the 
 - Archive property
 - Restore property
 - Change ownership
-- Add office suite
-- Edit space
-- Archive space
-- Restore space
+- Add suite
+- Edit home / office / suite
+- Archive home / office / suite
+- Restore home / office / suite
 - Change occupancy
-- Change availability
-- Classify space
+- Change leasing status
+- Classify home / office / suite
 - Cancel scheduled occupancy
 - Replace scheduled occupancy
 - Reschedule occupancy

@@ -315,6 +315,11 @@ class CommandRecoveryResponse(Contract):
     )
 
 
+class MoneyPropertyContextsResponse(Contract):
+    propertyNames: dict[str, str]
+    leaseProperties: dict[str, UUID]
+
+
 def build_router(service: FinanceService, runtime: WorkspaceRuntime):
     router = APIRouter(tags=["finance"], responses={409: {"model": FinanceConflictResponse}})
 
@@ -335,6 +340,22 @@ def build_router(service: FinanceService, runtime: WorkspaceRuntime):
             raise domain_problem(e, status_code=422, code="finance_validation") from e
         except FinanceError as e:
             raise domain_problem(e, status_code=400, code="finance_validation") from e
+
+    @router.get(
+        "/api/money/property-contexts",
+        response_model=MoneyPropertyContextsResponse,
+        operation_id="getMoneyPropertyContexts",
+    )
+    def property_contexts(
+        propertyIds: list[UUID] = Query(default=[], max_length=25),
+        leaseIds: list[UUID] = Query(default=[], max_length=25),
+    ):
+        ready()
+        return invoke(
+            lambda: service.money_property_contexts(
+                [str(value) for value in propertyIds], [str(value) for value in leaseIds]
+            )
+        )
 
     @router.post(
         "/api/leases/{lease_id}/rent-expectations/preview",

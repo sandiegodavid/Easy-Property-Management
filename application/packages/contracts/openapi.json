@@ -20275,6 +20275,32 @@
         "title": "MoneyMetric",
         "type": "object"
       },
+      "MoneyPropertyContextsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "leaseProperties": {
+            "additionalProperties": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Leaseproperties",
+            "type": "object"
+          },
+          "propertyNames": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Propertynames",
+            "type": "object"
+          }
+        },
+        "required": [
+          "propertyNames",
+          "leaseProperties"
+        ],
+        "title": "MoneyPropertyContextsResponse",
+        "type": "object"
+      },
       "MoneySection": {
         "additionalProperties": false,
         "properties": {
@@ -21602,13 +21628,29 @@
             "title": "Displayname",
             "type": "string"
           },
-          "partyId": {
-            "format": "uuid",
-            "title": "Partyid",
+          "ownerKind": {
+            "enum": [
+              "local_operator",
+              "client_owner"
+            ],
+            "title": "Ownerkind",
             "type": "string"
+          },
+          "partyId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partyid"
           }
         },
         "required": [
+          "ownerKind",
           "partyId",
           "displayName"
         ],
@@ -24707,7 +24749,7 @@
             "items": {
               "$ref": "#/components/schemas/OwnerPreview"
             },
-            "maxItems": 3,
+            "maxItems": 5,
             "title": "Owners",
             "type": "array"
           },
@@ -33475,6 +33517,18 @@
             "title": "Availability",
             "type": "string"
           },
+          "availableOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Availableon"
+          },
           "displayName": {
             "title": "Displayname",
             "type": "string"
@@ -33508,6 +33562,7 @@
           "revision",
           "occupancy",
           "availability",
+          "availableOn",
           "needsAttention"
         ],
         "title": "SpacePreview",
@@ -55754,6 +55809,89 @@
         "summary": "Properties",
         "tags": [
           "money"
+        ]
+      }
+    },
+    "/api/money/property-contexts": {
+      "get": {
+        "operationId": "getMoneyPropertyContexts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "propertyIds",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "maxItems": 25,
+              "title": "Propertyids",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "leaseIds",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "maxItems": 25,
+              "title": "Leaseids",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoneyPropertyContextsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinanceConflictResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Property Contexts",
+        "tags": [
+          "finance"
         ]
       }
     },

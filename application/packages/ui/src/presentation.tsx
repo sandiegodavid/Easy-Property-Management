@@ -53,6 +53,7 @@ export function AsyncRegion({
   showCaptureTime = true,
   footer,
   headingAction,
+  showHeading = true,
 }: {
   title: string;
   state: AsyncState;
@@ -61,12 +62,17 @@ export function AsyncRegion({
   showCaptureTime?: boolean;
   footer?: ReactNode;
   headingAction?: ReactNode;
+  showHeading?: boolean;
 }) {
   const id = useId();
   const content = ["success", "refreshing", "stale", "partial"].includes(state.kind);
   return (
-    <section className="ui-region" aria-labelledby={id}>
-      {headingAction ? (
+    <section
+      className="ui-region"
+      aria-labelledby={showHeading ? id : undefined}
+      aria-label={showHeading ? undefined : title}
+    >
+      {!showHeading ? null : headingAction ? (
         <div className="ui-region-heading">
           <h3 id={id}>{title}</h3>
           {headingAction}

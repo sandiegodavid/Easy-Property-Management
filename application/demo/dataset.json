@@ -10,6 +10,46 @@
       "key": "owner_2",
       "name": "Sam Rivera (Demo)",
       "email": "owner2@example.invalid"
+    },
+    {
+      "key": "owner_3",
+      "name": "Priya Shah (Demo)",
+      "email": "owner3@example.invalid"
+    },
+    {
+      "key": "owner_4",
+      "name": "Elena Torres (Demo)",
+      "email": "owner4@example.invalid"
+    },
+    {
+      "key": "owner_5",
+      "name": "Daniel Kim (Demo)",
+      "email": "owner5@example.invalid"
+    },
+    {
+      "key": "owner_6",
+      "name": "Sofia Ahmed (Demo)",
+      "email": "owner6@example.invalid"
+    },
+    {
+      "key": "owner_7",
+      "name": "Oliver Grant (Demo)",
+      "email": "owner7@example.invalid"
+    },
+    {
+      "key": "owner_8",
+      "name": "Grace Liu (Demo)",
+      "email": "owner8@example.invalid"
+    },
+    {
+      "key": "owner_9",
+      "name": "Noah Williams (Demo)",
+      "email": "owner9@example.invalid"
+    },
+    {
+      "key": "owner_10",
+      "name": "Isabel Santos (Demo)",
+      "email": "owner10@example.invalid"
     }
   ],
   "providers": [
@@ -135,6 +175,54 @@
     }
   ],
   "properties": [
+    {
+      "key": "shared-ten-owner-home",
+      "owner": "shared_ten_clients",
+      "coOwners": [
+        "owner_1",
+        "owner_2",
+        "owner_3",
+        "owner_4",
+        "owner_5",
+        "owner_6",
+        "owner_7",
+        "owner_8",
+        "owner_9",
+        "owner_10"
+      ],
+      "name": "Sequoia House — Ten Owners",
+      "address": "730 Demo Sequoia Way",
+      "type": "single_family_home",
+      "rentMinor": 0,
+      "tenants": [],
+      "vacant": true,
+      "notes": "Fictional vacant property co-owned by ten client owners, without local-operator ownership. Ownership shares are not inferred."
+    },
+    {
+      "key": "shared-operator-home",
+      "owner": "shared_operator",
+      "coOwners": ["operator", "owner_1", "owner_2"],
+      "name": "Alder House — Co-owned",
+      "address": "710 Demo Alder Way",
+      "type": "single_family_home",
+      "rentMinor": 0,
+      "tenants": [],
+      "vacant": true,
+      "leasingUnclassified": true,
+      "notes": "Fictional vacant property co-owned by the local operator, Morgan Chen and Sam Rivera. Leasing status is deliberately unclassified to demonstrate status review. Ownership shares are not inferred."
+    },
+    {
+      "key": "shared-client-home",
+      "owner": "shared_clients",
+      "coOwners": ["owner_1", "owner_2", "owner_3", "owner_4"],
+      "name": "Magnolia House — Four Owners",
+      "address": "720 Demo Magnolia Way",
+      "type": "single_family_home",
+      "rentMinor": 0,
+      "tenants": [],
+      "vacant": true,
+      "notes": "Fictional vacant property co-owned by four client owners, without local-operator ownership. Ownership shares are not inferred."
+    },
     {
       "key": "op-office-suites",
       "owner": "operator",

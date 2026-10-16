@@ -5,7 +5,7 @@
 ## Report and triage a repair
 
 1. Open **Maintenance → Report maintenance issue**.
-2. Select Property/optional Space, enter what happened, category, priority and report time.
+2. Select property and optional rental unit, enter what happened, category, priority and report time.
 3. Identify the reporter and role explicitly. Self-reported operator context differs from a client owner or tenant. Historical attribution may require a reason/confirmation.
 4. Review existing issues to avoid duplicates, then save.
 5. Correct reporter attribution through **Correct issue reporter** when needed; edit supported issue facts with the current record.
@@ -33,7 +33,7 @@ Use **Create issue follow-up** for a linked Task, then set who/what is awaited a
 
 ## Costs and paid expenses
 
-**Record cost context** retains an estimate or work-reported amount; void an erroneous context entry explicitly. Record actual paid spending in Money, then **Link paid expense** to the issue. Review the Property/Space match. Archive the association if it is incorrect; that does not void the Finance expense. Quotes, costs and paid expenses must not be counted as three payments.
+**Record cost context** retains an estimate or work-reported amount; void an erroneous context entry explicitly. Record actual paid spending in Money, then **Link paid expense** to the issue. Review the property and rental-unit match. Archive the association if it is incorrect; that does not void the Finance expense. Quotes, costs and paid expenses must not be counted as three payments.
 
 ## Resolve, cancel or reopen
 

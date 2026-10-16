@@ -1,6 +1,6 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { useWatch } from "react-hook-form";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import {
@@ -155,35 +155,60 @@ export function CommandLinks({
   target,
   child,
   title = "Actions",
+  labels = {},
+  collapsible = true,
+  asButtons = false,
 }: {
   keys: string[];
   target?: string;
   child?: string;
   title?: string;
+  labels?: Record<string, string>;
+  collapsible?: boolean;
+  asButtons?: boolean;
 }) {
   const { scope } = useWorkspace();
   const location = useLocation();
+  const navigate = useNavigate();
   if (!scope.canWrite) return <p>Workspace writes are unavailable.</p>;
-  return (
+  const actions = (
+    <nav aria-label={title} className={collapsible ? undefined : "workflow-actions-inline"}>
+      {keys.map((key) => {
+        const definition = workflows.find((item) => item.formKey === key);
+        return (
+          definition &&
+          (asButtons ? (
+            <button
+              key={key}
+              type="button"
+              onClick={() => {
+                void navigate(workflowUrl(key, target, child), {
+                  state: { returnTo: location.pathname + location.search },
+                });
+              }}
+            >
+              {labels[key] ?? definition.title}
+            </button>
+          ) : (
+            <Link
+              key={key}
+              to={workflowUrl(key, target, child)}
+              state={{ returnTo: location.pathname + location.search }}
+            >
+              {labels[key] ?? definition.title}
+            </Link>
+          ))
+        );
+      })}
+    </nav>
+  );
+  return collapsible ? (
     <details className="workflow-actions">
       <summary>{title}</summary>
-      <nav aria-label={title}>
-        {keys.map((key) => {
-          const definition = workflows.find((item) => item.formKey === key);
-          return (
-            definition && (
-              <Link
-                key={key}
-                to={workflowUrl(key, target, child)}
-                state={{ returnTo: location.pathname + location.search }}
-              >
-                {definition.title}
-              </Link>
-            )
-          );
-        })}
-      </nav>
+      {actions}
     </details>
+  ) : (
+    actions
   );
 }
 
@@ -568,7 +593,7 @@ function CommandEditor({
       ? String(record(location.state).returnTo)
       : (returnTo ??
         (definition.sourceKind === "property"
-          ? `/properties/${sourceId}/details`
+          ? `/properties/${sourceId}/setup`
           : definition.sourceKind === "space"
             ? `/properties?space=${sourceId}`
             : definition.sourceKind === "provider"
@@ -576,13 +601,8 @@ function CommandEditor({
               : definition.sourceKind === "party" || definition.sourceKind === "tenant"
                 ? `/parties?identity=${sourceId}`
                 : `/${definition.formKey.startsWith("provider.") ? "providers" : definition.formKey.startsWith("lease.") || definition.formKey.startsWith("inspection.") ? "leasing" : "properties"}`));
-  return (
-    <section aria-label={definition.title} className="command-editor">
-      <h2>{definition.title}</h2>
-      <p>
-        Review the displayed record and make an explicit change. Saved input is an unfinished form,
-        not an official record.
-      </p>
+  const commandStatus = (
+    <>
       <p>
         Displayed source revision: {scalar(values[revisionField], String(revision))}. This command
         retains its original revision and attempt identity.
@@ -590,6 +610,38 @@ function CommandEditor({
       <p role="status">
         Draft {state.draft} · Command {state.command}
       </p>
+    </>
+  );
+  return (
+    <section aria-label={definition.title} className="command-editor">
+      <h2>{definition.title}</h2>
+      <p>
+        {definition.formKey === "portfolio.space.classify"
+          ? "Add occupancy, leasing status, or both below. Save to apply your changes; saving an unfinished form does not update the property’s records."
+          : definition.formKey === "portfolio.availability.change"
+            ? "Choose whether the property is not open for leasing, open now, or open from a future date. For a future opening, enter the date. Add an optional note, then save."
+            : definition.formKey === "portfolio.occupancy.change"
+              ? "Choose the new occupancy status and when it takes effect in the property’s time zone. A future date schedules the change; it does not change today’s occupancy. Add an optional note, then save."
+              : definition.formKey === "portfolio.space.patch"
+                ? "Edit the details below, then save your changes. Saving an unfinished form does not update the property’s records."
+                : definition.formKey === "portfolio.space.archive"
+                  ? "Confirm that you want to archive this rental, then select Archive below. Saving an unfinished form does not archive it."
+                  : "Review the displayed record and make an explicit change. Saved input is an unfinished form, not an official record."}
+      </p>
+      {[
+        "portfolio.space.classify",
+        "portfolio.availability.change",
+        "portfolio.occupancy.change",
+        "portfolio.space.patch",
+        "portfolio.space.archive",
+      ].includes(definition.formKey) ? (
+        <details className="space-classification-recovery">
+          <summary>Form status and recovery details</summary>
+          {commandStatus}
+        </details>
+      ) : (
+        commandStatus
+      )}
       {(error ?? state.error) && <p role="alert">{error ?? state.error}</p>}
       {candidates.length > 0 && (
         <section aria-label="Possible duplicate identities">
@@ -894,7 +946,9 @@ function CommandEditor({
               type="submit"
               disabled={!scope.canWrite || selecting || canSubmit?.(values) === false}
             >
-              Save {definition.title.toLowerCase()}
+              {definition.formKey === "portfolio.space.archive"
+                ? definition.title
+                : `Save ${definition.title.toLowerCase()}`}
             </button>
             <button
               type="button"

@@ -33,7 +33,7 @@ Click anywhere on its non-editable summary bar, including the text or chevron. C
 | Calendar and appointments | Recorded Maintenance appointments. Completion of an appointment does not resolve the repair. |
 | Information review | Missing required information or review needs. Resolve the underlying record; acknowledgment cannot fill missing facts. |
 | Money | Recorded activity for the exact displayed inclusive dates, not bank balance, profit or owner entitlement. Open the metric's contributing records. |
-| Inventory | Active-property vacancy/unknown Spaces. Unknown occupancy is not vacant. |
+| Inventory | Vacant rental units and units with unknown occupancy in active properties. Unknown occupancy is not vacant. |
 
 Home includes unresolved obligations on archived properties. All-properties scope also includes Tasks without a property; a property filter excludes those unlinked Tasks. Current Home has a **Property ID** field rather than a name picker; prefer contextual links or use the identifier shown in the Property workspace. Apply Home filters after changing scope, horizon or money dates.
 
@@ -41,9 +41,11 @@ The default money period is the full calendar month selected from server UTC tim
 
 Home loads asynchronously. **Refresh Home** starts a read; use Retry for a failed section. Live attention checks run on entry, focus, changes, due transitions and periodically while visible. New work can display **New items need attention**; use the offered update action while preserving your current form. Older lists and unavailable sources must not be read as an all-clear. No Dashboard cron or closed-app alert service is installed.
 
-## Review information coverage
+## Information review
 
-1. Open the relevant Property/Owner workspace and its coverage or Information review link.
+Information review checks whether the app has enough recorded information for an area and whether it needs your review. It is not insurance or maintenance-service coverage. **Needs review** is an information prompt, not necessarily a property problem.
+
+1. In the relevant Property/Owner workspace, choose an area card or link such as **Review maintenance** or **Review occupancy**. The page is titled **Maintenance information review** or **Occupancy information review**. Property Overview places these cards above the detailed sections; items needing review appear first, and **Not applicable** property cards cannot be opened.
 2. Read the area, source facts and why it needs attention.
 3. Correct missing records in their owning workflow, then refresh the area.
 4. If manual review is requested, enter the allowed reason/date and submit the explicit review action.

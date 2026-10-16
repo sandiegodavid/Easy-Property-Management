@@ -325,6 +325,43 @@ class FinanceWorkflowTests(unittest.TestCase):
             ),
         )
 
+    def test_money_property_contexts_are_bounded_and_set_based(self):
+        engine = self.finance.unit_of_work.engine
+        with engine.connect() as connection:
+            property_id = connection.execute(text("SELECT id FROM properties")).scalar_one()
+        statements = []
+
+        def count(_connection, _cursor, statement, _parameters, _context, _many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", count)
+        try:
+            self.assertEqual(
+                self.finance.money_property_contexts([], []),
+                {
+                    "propertyNames": {},
+                    "leaseProperties": {},
+                },
+            )
+            self.assertEqual(len(statements), 0)
+            result = self.finance.money_property_contexts([property_id, str(uuid4())], [])
+            self.assertEqual(result["propertyNames"], {property_id: "Rent home"})
+            self.assertEqual(len(statements), 1)
+            statements.clear()
+            result = self.finance.money_property_contexts([], [self.lease["id"]] * 25)
+            self.assertEqual(result["propertyNames"], {property_id: "Rent home"})
+            self.assertEqual(result["leaseProperties"], {self.lease["id"]: property_id})
+            self.assertEqual(len(statements), 3)
+            statements.clear()
+            with self.assertRaises(FinanceError):
+                self.finance.money_property_contexts([property_id] * 26, [])
+            with self.assertRaises(FinanceError):
+                self.finance.money_property_contexts(["invalid"], [])
+            self.assertEqual(len(statements), 0)
+        finally:
+            event.remove(engine, "before_cursor_execute", count)
+
     def test_security_deposit_account_receipt_and_zero_settlement_lifecycle(self):
         term = self.lease["terms"][0]
         account = deposit_command(

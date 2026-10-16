@@ -17,7 +17,7 @@ const actions = {
   review_concern: "Review concern",
   review_lease: "Review lease",
   review_appointment: "View",
-  review_coverage: "Review coverage",
+  review_coverage: "Review information",
 } satisfies Record<Item["nextAction"]["kind"], string>;
 
 export function homeActionLabel(item: Item) {

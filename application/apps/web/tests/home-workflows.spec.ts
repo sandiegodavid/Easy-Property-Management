@@ -233,8 +233,8 @@ test("Home coverage action uses the source review receipt and preserves return c
   const home = await property(request);
   await page.goto(`/home/collections/information_review?propertyId=${home.id}`);
   await page.getByRole("button", { name: /maintenance/i }).click();
-  await page.getByRole("link", { name: "Review coverage", exact: true }).click();
-  await page.getByRole("button", { name: "Review maintenance coverage", exact: true }).click();
+  await page.getByRole("link", { name: "Review information", exact: true }).click();
+  await page.getByRole("button", { name: "Review maintenance information", exact: true }).click();
   await page.getByLabel("Review reason").fill("Reviewed recorded maintenance responsibilities");
   await page.getByRole("button", { name: "Record review", exact: true }).click();
   await expect(page.getByText(/Original review .*recorded/)).toBeVisible();

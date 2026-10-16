@@ -23,6 +23,8 @@ Result = TypeVar("Result")
 class LeaseContextReader(Protocol):
     """Transaction-aware lease and term facts for owning-module workflows."""
 
+    def lease_space_ids(self, connection: Any, lease_ids: Collection[str]) -> dict[str, str]: ...
+
     def lease_space_id(self, connection: Any, lease_id: str) -> str | None: ...
     def term_context(
         self, connection: Any, lease_id: str, term_id: str

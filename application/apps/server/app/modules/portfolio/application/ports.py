@@ -23,6 +23,8 @@ PropertyView = tuple[Property, list[PropertyOwnership], dict[str, Party], list[S
 class PortfolioContextReader(Protocol):
     """Transaction-aware property, space, and ownership context reads."""
 
+    def property_names(self, connection: Any, property_ids: Collection[str]) -> dict[str, str]: ...
+
     def context_for_space(self, connection: Any, space_id: str) -> dict[str, object] | None: ...
     def contexts_for_spaces(
         self, connection: Any, space_ids: Collection[str]

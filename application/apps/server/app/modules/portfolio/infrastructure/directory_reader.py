@@ -13,7 +13,10 @@ from sqlalchemy import and_, case, exists, func, literal, or_, select
 from app.modules.leases.application.participant_relations import LeaseParticipantRelations
 from app.modules.parties.application.identity_relations import PartyIdentityRelations
 from app.modules.portfolio.application.service import PortfolioError
-from app.modules.portfolio.application.directory_ports import RECOGNITION_PREVIEW_LIMIT
+from app.modules.portfolio.application.directory_ports import (
+    RECOGNITION_PREVIEW_LIMIT,
+    OWNER_RECOGNITION_PREVIEW_LIMIT,
+)
 from app.modules.portfolio.infrastructure.sqlalchemy_models import (
     PropertyModel,
     PropertyOwnershipModel,
@@ -204,6 +207,7 @@ class SQLitePortfolioDirectoryReader:
                 s.c.status_revision.label("revision"),
                 occupancy.label("occupancy"),
                 availability.label("availability"),
+                case((availability == "available_on", a.c.available_on)).label("available_on"),
                 or_(
                     occupancy == "unknown", availability == "unknown", current.c.current_count > 1
                 ).label("needs_attention"),
@@ -224,25 +228,34 @@ class SQLitePortfolioDirectoryReader:
         o, p = PropertyOwnershipModel.__table__, PropertyModel.__table__
         local_day = func.portfolio_local_day(p.c.time_zone, captured)
         facts = (
-            select(o.c.property_id, o.c.party_id, identities.c.display_name)
+            select(
+                o.c.property_id,
+                o.c.party_id,
+                o.c.owner_kind,
+                case(
+                    (o.c.owner_kind == "local_operator", "You"),
+                    else_=identities.c.display_name,
+                ).label("display_name"),
+            )
             .select_from(
-                o.join(p, o.c.property_id == p.c.id).join(
+                o.join(p, o.c.property_id == p.c.id).outerjoin(
                     identities, o.c.party_id == identities.c.party_id
                 )
             )
             .where(
                 o.c.property_id.in_(ids),
-                o.c.owner_kind == "client_owner",
                 o.c.starts_on <= local_day,
                 or_(o.c.ends_on.is_(None), o.c.ends_on > local_day),
             )
             .distinct()
             .subquery()
         )
-        return _previews(connection, facts, ids, "display_name")
+        return _previews(
+            connection, facts, ids, "display_name", limit=OWNER_RECOGNITION_PREVIEW_LIMIT
+        )
 
 
-def _previews(connection, facts, ids, label):
+def _previews(connection, facts, ids, label, *, limit=RECOGNITION_PREVIEW_LIMIT):
     if not ids:
         return {}
     identity = facts.c.id if "id" in facts.c else facts.c.party_id
@@ -263,7 +276,7 @@ def _previews(connection, facts, ids, label):
     items, totals = defaultdict(list), {}
     for row in connection.execute(
         select(ranked)
-        .where(ranked.c.position <= RECOGNITION_PREVIEW_LIMIT)
+        .where(ranked.c.position <= limit)
         .order_by(ranked.c.property_id, ranked.c.position)
     ).mappings():
         totals[row["property_id"]] = row["total"]

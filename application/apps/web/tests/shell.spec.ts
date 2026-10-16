@@ -1,6 +1,31 @@
 import { expect, test } from "@playwright/test";
 import type { components } from "@epm/contracts/generated";
 
+test("brand follows the selected appearance on desktop and mobile after reload", async ({
+  page,
+}) => {
+  await page.goto("/settings/navigation");
+  for (const appearance of ["Dark", "Light"] as const) {
+    await page.getByRole("radio", { name: appearance, exact: true }).check();
+    for (const reload of [false, true]) {
+      if (reload) await page.reload();
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        const brand = page.locator(".workspace-brand:visible img");
+        await expect(brand).toHaveCount(1);
+        await expect(brand).toBeVisible();
+        const asset = width < 768 ? "logo-4" : "logo-text-4";
+        await expect
+          .poll(() => brand.evaluate((image) => (image as HTMLImageElement).currentSrc))
+          .toMatch(new RegExp(`${asset}-${appearance.toLowerCase()}[^/]*\\.png$`));
+        await expect
+          .poll(() => brand.evaluate((image) => (image as HTMLImageElement).naturalWidth))
+          .toBeGreaterThan(0);
+      }
+    }
+  }
+});
+
 test("sidebar navigation keeps the viewport and shell position stable", async ({ page }) => {
   await page.goto("/properties");
   await expect(page.getByRole("heading", { name: "Properties", exact: true })).toBeVisible();
@@ -210,7 +235,7 @@ test("narrow navigation, keyboard operation, nested history and unsupported sect
   await expect(page).toHaveURL(/\/properties$/);
   await expect(page.locator(".narrow-nav")).not.toHaveAttribute("open", "");
   await page.goto("/properties/00000000-0000-4000-8000-000000000001/units");
-  await page.getByRole("link", { name: "details", exact: true }).click();
+  await page.getByRole("link", { name: "Property setup", exact: true }).click();
   await page.goBack();
   await expect(page).toHaveURL(/\/units$/);
   await page.reload();

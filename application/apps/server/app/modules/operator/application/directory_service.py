@@ -168,7 +168,12 @@ def _card(row):
         "effectiveLocalDate": row["effective_local_date"],
         "ownerCount": row["owner_count"],
         "owners": [
-            {"partyId": x["party_id"], "displayName": x["display_name"]} for x in row["owners"]
+            {
+                "ownerKind": x["owner_kind"],
+                "partyId": x["party_id"],
+                "displayName": x["display_name"],
+            }
+            for x in row["owners"]
         ],
         "spaceCount": row["space_count"],
         "spaces": [
@@ -178,6 +183,7 @@ def _card(row):
                 "revision": x["revision"],
                 "occupancy": x["occupancy"],
                 "availability": x["availability"],
+                "availableOn": x["available_on"],
                 "needsAttention": x["needs_attention"],
             }
             for x in row["spaces"]

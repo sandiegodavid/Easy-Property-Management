@@ -2014,6 +2014,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/money/property-contexts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Property Contexts */
+        get: operations["getMoneyPropertyContexts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/money/sources": {
         parameters: {
             query?: never;
@@ -12474,6 +12491,17 @@ export interface components {
             currency: "USD";
             target: components["schemas"]["MoneyTarget"];
         };
+        /** MoneyPropertyContextsResponse */
+        MoneyPropertyContextsResponse: {
+            /** Leaseproperties */
+            leaseProperties: {
+                [key: string]: string;
+            };
+            /** Propertynames */
+            propertyNames: {
+                [key: string]: string;
+            };
+        };
         /** MoneySection */
         MoneySection: {
             /**
@@ -12964,10 +12992,12 @@ export interface components {
             /** Displayname */
             displayName: string;
             /**
-             * Partyid
-             * Format: uuid
+             * Ownerkind
+             * @enum {string}
              */
-            partyId: string;
+            ownerKind: "local_operator" | "client_owner";
+            /** Partyid */
+            partyId: string | null;
         };
         /** OwnerQueryEcho */
         OwnerQueryEcho: {
@@ -16791,6 +16821,8 @@ export interface components {
              * @enum {string}
              */
             availability: "available_now" | "available_on" | "not_available" | "unknown";
+            /** Availableon */
+            availableOn: string | null;
             /** Displayname */
             displayName: string;
             /**
@@ -27834,6 +27866,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getMoneyPropertyContexts: {
+        parameters: {
+            query?: {
+                propertyIds?: string[];
+                leaseIds?: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MoneyPropertyContextsResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceConflictResponse"];
                 };
             };
             /** @description Validation Error */

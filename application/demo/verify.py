@@ -12,8 +12,8 @@ from app.modules.workspace.application.service import WorkspaceService
 from app.platform.testing_client import LocalApiClient
 
 EXPECTED = {
-    "properties": 11,
-    "spaces": 12,
+    "properties": 14,
+    "spaces": 15,
     "provider_profiles": 20,
     "leases": 9,
     "tenant_profiles": 12,
@@ -29,7 +29,7 @@ EXPECTED = {
     "tasks": 1,
 }
 OFFICE_SUITE_COUNT = 2
-VACANT_SPACE_COUNT = 3
+VACANT_SPACE_COUNT = 6
 
 
 def require(condition, message):
@@ -77,14 +77,41 @@ def read(client, path, **params):
     return response.json()
 
 
+def unclassified_leasing_check(client, row, space):
+    require(
+        any(reason["code"] == "availability_unknown" for reason in space["attentionReasons"]),
+        "Missing unclassified leasing attention reason",
+    )
+    review = read(client, "/api/operator/properties", needsAttention="true")
+    require(
+        any(item["id"] == row["id"] and item["needsAttention"] for item in review["items"]),
+        "Unclassified leasing must appear in the property status-review filter",
+    )
+
+
 def api_checks(client, catalog):
     vacant = 0
     leasing_statuses = Counter()
     for row in catalog["properties"]:
+        property_record = read(client, f"/api/properties/{row['id']}")
+        expected_owners = {
+            ("local_operator", None)
+            if owner == "operator"
+            else ("client_owner", catalog["owners"][owner])
+            for owner in row.get("coOwners", [row["owner"]])
+        }
+        actual_owners = {
+            (owner["ownerKind"], owner.get("partyId"))
+            for owner in property_record["ownerships"]
+            if owner.get("endsOn") is None
+        }
+        require(actual_owners == expected_owners, f"Ownership mismatch: {row['key']}")
         space = read(client, f"/api/spaces/{row['spaceId']}/status")
         vacant += space["currentOccupancy"]["occupancyStatus"] == "vacant"
         expected = (
-            "available_now"
+            "unknown"
+            if row.get("leasingUnclassified")
+            else "available_now"
             if row.get("vacant")
             else "available_on"
             if row.get("openForLeasingLater")
@@ -93,6 +120,8 @@ def api_checks(client, catalog):
         availability = space["availability"]
         require(availability["effectiveStatus"] == expected, f"Leasing status: {row['key']}")
         leasing_statuses[expected] += 1
+        if row.get("leasingUnclassified"):
+            unclassified_leasing_check(client, row, space)
         if expected == "available_on":
             opening = date.fromisoformat(catalog["asOf"]).replace(day=1) + timedelta(days=365)
             expected_opening = row.get("leasingAvailableOn") or opening.isoformat()
@@ -143,9 +172,10 @@ def api_checks(client, catalog):
         require(space["availability"]["effectiveStatus"] == "available_now", "Suite leasing")
         vacant += 1
         leasing_statuses["available_now"] += 1
-    require(vacant == VACANT_SPACE_COUNT, f"Expected three vacant spaces, found {vacant}")
+    require(vacant == VACANT_SPACE_COUNT, f"Expected six vacant spaces, found {vacant}")
     require(
-        leasing_statuses == {"not_available": 7, "available_on": 2, "available_now": 3},
+        leasing_statuses
+        == {"not_available": 7, "available_on": 2, "available_now": 5, "unknown": 1},
         f"Unexpected leasing mix: {dict(leasing_statuses)}",
     )
     late = read(client, "/api/rent-expectations", timelinessStatus="late")["items"]

@@ -4,14 +4,14 @@
 
 ## Create, review and execute a lease
 
-Before starting, confirm the Property/Space exists, participants have correct identities, and current occupancy/availability is accurate.
+Before starting, confirm the property and rental unit exist, participants have correct identities, and current occupancy and leasing status is accurate.
 
 1. Open **Leasing → Set up lease → Create lease draft**.
-2. Select the Space and residential/commercial type. Enter contractual dates, occupancy start and the terms the form requires.
+2. Select the rental unit and residential/commercial type. Enter contractual dates, occupancy start and the terms the form requires.
 3. Add lease participants with their effective participation dates. Correct or remove draft participants explicitly; review any removal confirmation.
 4. Review rent amount/cadence, deposit agreement and term dates. Use **Replace draft rent terms** for editable draft terms.
 5. Attach relevant lease documents through the document panel; wait for upload confirmation.
-6. Review the full draft and choose **Execute lease** when the actual contract should be recorded. Check both Lease and Space context if a conflict is reported.
+6. Review the full draft and choose **Execute lease** when the actual contract should be recorded. Check both lease and rental-unit context if a conflict is reported.
 7. Follow **Review rent setup** to preview and synchronize Finance expectations. Execution does not create rent/deposit receipts.
 
 A document upload is not execution or e-signing. Contract end and physical move-out are distinct facts. Opening an inspection failure must not conceal a recorded lease.

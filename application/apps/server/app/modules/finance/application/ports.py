@@ -79,6 +79,10 @@ class RecordedReceipt:
 
 
 class FinanceTransaction(Protocol):
+    def money_property_contexts(
+        self, property_ids: set[str], lease_ids: set[str]
+    ) -> tuple[dict[str, str], dict[str, str]]: ...
+
     commands: FinanceCommandTransaction
 
     def lease_term_snapshot(

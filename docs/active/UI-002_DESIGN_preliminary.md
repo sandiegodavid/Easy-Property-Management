@@ -4,7 +4,7 @@
 
 This preliminary design preserves the confirmed follow-up product decisions and technical handoffs moved from UI-001. It is the working design for UI-002, not an implementation-complete specification. Decision IDs and original validation scenario numbers remain stable. Dedicated domain designs own backend policy; [ARCHITECTURE.md](../ARCHITECTURE.md) governs the stack and trust boundaries. No domain scope changes are made by this split.
 
-UI-002 follows UI-001 and DASH-001. Its prerequisites are LEGAL-001, HOA-001, DATA-002, DATA-003, INGEST-002, and MCP-001. Deliver legal matters, HOA notices/shared repairs, Excel/Google Sheets intake, retained-evidence issue-proposal review, and connected-assistant setup/health. Extend existing workspaces, search, coverage, and Home through supported source contracts. DASH-003 retains the broader ingestion/voice/assistant attention dashboard scope.
+UI-002 follows UI-001 and DASH-001. Its prerequisites are LEGAL-001, HOA-001, DATA-002, DATA-003, INGEST-002, and MCP-001. Deliver legal matters, HOA notices/shared repairs, Excel/Google Sheets intake, retained-evidence issue-proposal review, and connected-assistant setup/health. Extend existing workspaces, search, information review, and Home through supported source contracts. DASH-003 retains the broader ingestion/voice/assistant attention dashboard scope.
 
 Reuse [UI-001's shell, navigation, components, accessibility, client architecture, and recovery contracts](../ui/frontend-architecture.md). Do not duplicate that specification or implement domain policy in the browser. Backend readiness and UI delivery registration must both permit a route. Unsupported deep links explain the missing capability and offer a safe return. Do not claim legal/HOA, import, or assistant coverage before its UI is delivered.
 
@@ -215,16 +215,16 @@ Use the shared disclosure, forms, error, recovery, and generated-client contract
 
 INGEST-002 review displays retained source evidence, proposed fields, operator edits, and provenance separately. Approval must use the domain-owned atomic operation and show its correlated outcomes. A proposal, chat approval, file delivery, or assistant grant never bypasses operator authorization within the application. Stale revisions preserve edits and offer source refresh/review; admission limits are not invented model token budgets.
 
-### Home, search, and coverage extensions
+### Home, search, and Information review extensions
 
-Register legal/HOA sources and typed contextual targets through their owning backend composition contracts. Show next actions and waiting context, preserving every source deadline and lifecycle. A shared repair has one explicit grouping identity and appears once on Home regardless of affected-unit count. Do not infer grouping from similar text. Extend bounded search/coverage only where backend contracts support it; failures remain unavailable, not empty or resolved.
+Register legal/HOA sources and typed contextual targets through their owning backend composition contracts. Show next actions and waiting context, preserving every source deadline and lifecycle. A shared repair has one explicit grouping identity and appears once on Home regardless of affected-unit count. Do not infer grouping from similar text. Extend bounded search and information review only where backend contracts support it; failures remain unavailable, not empty or resolved.
 
 ### Implementation sequence and readiness
 
 1. Verify UI-001, DASH-001, and all six backend prerequisites, including revision/idempotency, evidence and transaction contracts.
 2. Implement contextual legal/HOA routes and source-action adapters, then Excel/Sheets snapshot review and results using common import components.
 3. Add connected-assistant setup and governance/health, then INGEST-002 proposal review and outcome handlers.
-4. Register ready capabilities and extend Home/search/coverage through backend contracts.
+4. Register ready capabilities and extend Home, search and information review through backend contracts.
 5. Run real temporary-workspace integration, accessibility, failure/recovery, and UI-001 regression checks. Fixtures and simulated setup do not prove readiness.
 
 Before each workflow is enabled, verify initial/empty/unavailable/stale states, supported narrow layouts, keyboard operation, and a real critical read/write path. UI-002 remains a follow-up MVP slice; approval of this preliminary design does not make a domain capability ready.
@@ -280,7 +280,7 @@ Home says No actions due today, retaining counts for waiting, upcoming, and info
 
 - Exact source-linked grouping can compose existing records. Grouping across sources requires explicit stored relationships; DASH-001 must not infer case identity from similar text, addresses, or dates.
 - TASK-001's current summary implementation exposes overdue and due reminders, while its design also calls for today and next-seven-day buckets. Existing task date queries can contribute source data, but DASH-001 must reconcile the bounded Home contract and ordering with TASK-002 semantics.
-- UI-001 owns the Home shell, disclosure components, and source-action adapters. DASH-001 owns the complete Needs action, Waiting, Upcoming, appointments, coverage-gap, and source-backed total composition.
+- UI-001 owns the Home shell, disclosure components, and source-action adapters. DASH-001 owns the complete Needs action, Waiting, Upcoming, appointments, information-review gap, and source-backed total composition.
 
 | Required contract | Backlog owner | Minimum response behavior |
 | --- | --- | --- |

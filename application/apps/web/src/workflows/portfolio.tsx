@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { CoverageLinks } from "../shared/coverage";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
 import { workflows, scalar } from "@epm/contracts/workflows";
@@ -11,6 +10,7 @@ import { useState } from "react";
 import type { Choice } from "./fields";
 import { PortfolioStatusSummary, statusLabel } from "./portfolio-status";
 import { PageAsOf } from "../shared/page-as-of";
+import { propertyUnitsLabel, rentableUnitLabel } from "../shared/property-labels";
 
 type Space = components["schemas"]["SpaceStatusResponse"];
 export function PortfolioEntry() {
@@ -38,7 +38,7 @@ export function PropertyCreateButton() {
     </button>
   );
 }
-export function PortfolioRecord({ id }: { id: string }) {
+export function PortfolioRecord({ id, view = "setup" }: { id: string; view?: "setup" | "spaces" }) {
   const { scope } = useWorkspace();
   const result = useQuery({
     queryKey: scope.key("portfolio-record", id),
@@ -53,169 +53,305 @@ export function PortfolioRecord({ id }: { id: string }) {
   if (result.isPending) return <p role="status">Loading property setup…</p>;
   if (result.error) return <p role="alert">{result.error.message}</p>;
   const item = result.data;
-  return (
-    <section aria-label="Property setup" className="context-section">
-      <PageAsOf asOf={item.asOf} priority={1} />
-      <h3>Property setup and history</h3>
-      <Facts
-        value={item}
-        fields={[
-          "propertyType",
-          "inventoryLayout",
-          "status",
-          "propertyRevision",
-          "addressLine1",
-          "addressLine2",
-          "city",
-          "region",
-          "postalCode",
-          "countryCode",
-          "timeZone",
-          "notes",
-          "effectiveLocalDate",
-        ]}
-      />
-      <CommandLinks
-        target={id}
-        keys={
-          item.status === "archived"
-            ? ["portfolio.property.restore"]
-            : [
-                "portfolio.property.patch",
-                "portfolio.ownerships.replace",
-                ...(item.inventoryLayout === "office_suites" ? ["portfolio.space.create"] : []),
-                "portfolio.property.archive",
-              ]
-        }
-        title="Property actions"
-      />
-      <h4>Ownership intervals</h4>
-      {item.ownerships.map((owner) => (
-        <article key={owner.id}>
+  if (view === "spaces") {
+    const summary = item.statusSummary;
+    const unitLabel = propertyUnitsLabel(item.inventoryLayout);
+    return (
+      <section aria-label={`Property ${unitLabel.toLowerCase()}`} className="property-spaces">
+        <PageAsOf asOf={item.asOf} priority={1} />
+        <div className="property-spaces-intro">
           <p>
-            {owner.ownerKind === "local_operator" ? "Local operator" : owner.party?.displayName} ·{" "}
-            {owner.startsOn} through {owner.endsOn ?? "ongoing"}
+            {unitLabel === "Suites"
+              ? "Manage occupancy and leasing status for each suite."
+              : `Manage occupancy and leasing status for this ${unitLabel.toLowerCase()}.`}
           </p>
-          {owner.partyId && (
-            <Link to={`/parties?identity=${owner.partyId}`}>View owner identity</Link>
+          {item.status === "active" && item.inventoryLayout === "office_suites" && (
+            <CommandLinks
+              target={id}
+              keys={["portfolio.space.create"]}
+              title="Add suite"
+              labels={{ "portfolio.space.create": "Add suite" }}
+            />
           )}
-        </article>
-      ))}
-      <h4>Spaces</h4>
-      <section aria-label="Property occupancy and leasing status">
-        <h4>Active-space status summary</h4>
-        <Facts
-          value={item.statusSummary}
-          fields={[
-            "activeSpaceCount",
-            "occupiedCount",
-            "vacantCount",
-            "unknownOccupancyCount",
-            "availableNowCount",
-            "availableLaterCount",
-            "nearestAvailableOn",
-            "needsAttentionCount",
-          ]}
-        />
-        <a href="#property-spaces">Review source spaces</a>
+        </div>
+        <dl className="property-space-summary">
+          {[
+            [
+              unitLabel === "Suites" ? "Active suites" : `Active ${unitLabel.toLowerCase()}`,
+              summary.activeSpaceCount,
+            ],
+            ["Occupied", summary.occupiedCount],
+            ["Vacant", summary.vacantCount],
+            ["Needs classification", summary.unknownOccupancyCount],
+            ["Open for leasing now", summary.availableNowCount],
+            ["Open for leasing later", summary.availableLaterCount],
+          ].map(([name, count]) => (
+            <div key={name}>
+              <dt>{name}</dt>
+              <dd>{count}</dd>
+            </div>
+          ))}
+        </dl>
+        <div className="property-space-grid">
+          {item.spaces.map((space) => (
+            <SpaceRecord
+              key={space.id}
+              space={space}
+              propertyId={id}
+              allowSuiteLifecycle={item.inventoryLayout === "office_suites"}
+            />
+          ))}
+        </div>
+        {!item.spaces.length && <p>No {unitLabel.toLowerCase()} recorded.</p>}
       </section>
-      <div id="property-spaces">
-        {item.spaces.map((space) => (
-          <SpaceRecord key={space.id} space={space} propertyId={id} />
-        ))}
+    );
+  }
+  return (
+    <section aria-label="Property setup" className="context-section property-details">
+      <PageAsOf asOf={item.asOf} priority={1} />
+      <section className="property-details-panel" aria-label="Property information">
+        <h3>Configuration</h3>
+        <Facts value={item} fields={["propertyType", "inventoryLayout", "propertyRevision"]} />
+        {item.notes && <p className="property-details-notes">{item.notes}</p>}
+      </section>
+      <section
+        className="property-details-panel property-details-actions"
+        aria-label="Manage property"
+      >
+        <CommandLinks
+          target={id}
+          keys={
+            item.status === "archived"
+              ? ["portfolio.property.restore"]
+              : [
+                  "portfolio.property.patch",
+                  "portfolio.ownerships.replace",
+                  ...(item.inventoryLayout === "office_suites" ? ["portfolio.space.create"] : []),
+                  "portfolio.property.archive",
+                ]
+          }
+          title="Property actions"
+          labels={{ "portfolio.space.create": "Add suite" }}
+        />
+      </section>
+      <div className="property-details-panel">
+        <History kind="property" id={id} presentation="timeline" />
       </div>
-      <History kind="property" id={id} />
     </section>
   );
 }
-function SpaceRecord({ space, propertyId }: { space: Space; propertyId: string }) {
+function SpaceRecord({
+  space,
+  propertyId,
+  allowSuiteLifecycle,
+}: {
+  space: Space;
+  propertyId: string;
+  allowSuiteLifecycle: boolean;
+}) {
+  const { scope } = useWorkspace();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const unit = rentableUnitLabel(space.spaceKind);
+  const attentionLabels = {
+    availability_unknown: "Leasing status hasn’t been classified.",
+    occupancy_unknown: "Occupancy hasn’t been classified.",
+    source_conflict: "Status records conflict and need review.",
+    missing_status_record: "A required status record is missing.",
+  };
   return (
-    <article className="context-section">
-      <h4>{space.displayName}</h4>
-      <CoverageLinks propertyId={propertyId} spaceId={space.id} />
-      <Facts
-        value={space}
-        fields={["spaceKind", "status", "revision", "suiteOrFloor", "notes", "effectiveLocalDate"]}
-      />
-      <p>
-        Current occupancy: {statusLabel(space.currentOccupancy.occupancyStatus)} · Source:{" "}
-        {statusLabel(space.currentOccupancy.sourceKind)}
-      </p>
-      {space.currentOccupancy.sourceKind === "lease" && space.currentOccupancy.sourceId && (
-        <Link to={`/leases/${space.currentOccupancy.sourceId}`}>Review source lease</Link>
-      )}
-      <p>
-        Current leasing status: {statusLabel(space.availability.effectiveStatus)} · Recorded
-        intention: {statusLabel(space.availability.recordedStatus)}
-      </p>
-      <Facts value={space.availability} fields={["availableOn", "note"]} />
-      <p>Leasing status source: {statusLabel(space.availability.sourceKind)}</p>
-      {space.attentionReasons.map((reason, index) => (
-        <p key={index}>{statusLabel(reason.resolution)}</p>
-      ))}
-      {space.attentionReasons.length > 0 && space.status === "active" && (
-        <Link to={`/properties?workflow=portfolio.space.classify&target=${space.id}`}>
-          Review status for {space.displayName}
-        </Link>
-      )}
-      <CommandLinks
-        target={propertyId}
-        child={space.id}
-        keys={
-          space.status === "archived"
-            ? ["portfolio.space.restore"]
-            : ["portfolio.space.patch", "portfolio.space.archive"]
-        }
-        title={`Inventory actions for ${space.displayName}`}
-      />
-      {space.status === "active" && (
-        <Link to={`/leasing?workflow=lease.create&spaceId=${space.id}`}>
-          Start lease draft for {space.displayName}
-        </Link>
-      )}
-      {space.status === "active" && (
-        <CommandLinks
-          target={space.id}
-          keys={[
-            "portfolio.occupancy.change",
-            "portfolio.availability.change",
-            "portfolio.space.classify",
-          ]}
-          title={`Status actions for ${space.displayName}`}
-        />
-      )}
-      {space.status === "active" && space.currentOccupancy.sourceKind === "manual" && (
-        <CommandLinks
-          target={space.id}
-          child={space.currentOccupancy.id}
-          keys={["portfolio.occupancy.correct"]}
-          title={`Correct current occupancy for ${space.displayName}`}
-        />
-      )}
-      <details>
-        <summary>Scheduled occupancy and corrections</summary>
-        {space.scheduledOccupancyTimeline.map((period) => (
-          <article key={period.id}>
-            <Facts
-              value={period}
-              fields={["occupancyStatus", "startsOn", "endsOn", "sourceKind", "note"]}
-            />
-            {space.status === "active" && period.sourceKind === "manual" && (
+    <article className="property-space-card" aria-label={space.displayName}>
+      <header className="property-space-header">
+        <div>
+          <div className="property-space-title-row">
+            <h4>{space.displayName}</h4>
+            {space.status === "active" && (
+              <>
+                <button
+                  type="button"
+                  disabled={!scope.canWrite}
+                  onClick={() => {
+                    void navigate(workflowUrl("portfolio.space.patch", propertyId, space.id), {
+                      state: { returnTo: location.pathname + location.search },
+                    });
+                  }}
+                >
+                  Edit {unit}
+                </button>
+                <button
+                  type="button"
+                  disabled={!scope.canWrite}
+                  onClick={() => {
+                    void navigate(`/leasing?workflow=lease.create&spaceId=${space.id}`, {
+                      state: { returnTo: location.pathname + location.search },
+                    });
+                  }}
+                >
+                  Start lease draft
+                </button>
+              </>
+            )}
+          </div>
+          {(statusLabel(space.spaceKind).toLowerCase() !== space.displayName.toLowerCase() ||
+            space.suiteOrFloor) && (
+            <p>
+              {statusLabel(space.spaceKind)}
+              {space.suiteOrFloor && ` · ${space.suiteOrFloor}`}
+            </p>
+          )}
+        </div>
+        <span className="property-space-lifecycle">{statusLabel(space.status)}</span>
+      </header>
+      <dl className="property-space-status">
+        <div>
+          <dt>Occupancy</dt>
+          <dd>
+            {statusLabel(space.currentOccupancy.occupancyStatus)}
+            {space.currentOccupancy.sourceKind === "lease" && space.currentOccupancy.sourceId && (
+              <Link
+                className="property-space-lease"
+                to={`/leases/${space.currentOccupancy.sourceId}`}
+              >
+                View lease
+              </Link>
+            )}
+            {space.currentOccupancy.sourceKind === "lease" && (
+              <span className="property-space-note">Managed by lease</span>
+            )}
+            {space.status === "active" && space.currentOccupancy.sourceKind === "manual" && (
               <CommandLinks
+                collapsible={false}
+                asButtons
                 target={space.id}
-                child={period.id}
-                keys={[
-                  "portfolio.occupancy.cancel",
-                  "portfolio.occupancy.replace",
-                  "portfolio.occupancy.reschedule",
-                  "portfolio.occupancy.correct",
-                ]}
-                title={`Scheduled transition ${period.startsOn}`}
+                child={space.currentOccupancy.id}
+                keys={["portfolio.occupancy.change", "portfolio.occupancy.correct"]}
+                title="Occupancy actions"
+                labels={{ "portfolio.occupancy.correct": "Correct recorded occupancy" }}
               />
             )}
-          </article>
-        ))}
-      </details>
+          </dd>
+        </div>
+        <div>
+          <dt className="property-space-status-label">
+            Leasing status
+            {space.status === "active" && space.availability.sourceKind === "manual" && (
+              <button
+                type="button"
+                disabled={!scope.canWrite}
+                className="property-space-primary"
+                onClick={() => {
+                  void navigate(workflowUrl("portfolio.availability.change", space.id), {
+                    state: { returnTo: location.pathname + location.search },
+                  });
+                }}
+              >
+                Change leasing status
+              </button>
+            )}
+          </dt>
+          <dd>
+            {statusLabel(space.availability.effectiveStatus)}
+            {space.availability.effectiveStatus === "available_on" &&
+              space.availability.availableOn && (
+                <time className="property-space-date" dateTime={space.availability.availableOn}>
+                  {space.availability.availableOn}
+                </time>
+              )}
+            {space.availability.note && (
+              <span className="property-space-note">{space.availability.note}</span>
+            )}
+            {space.availability.recordedStatus !== space.availability.effectiveStatus && (
+              <span className="property-space-note">
+                Recorded leasing intention: {statusLabel(space.availability.recordedStatus)}
+              </span>
+            )}
+          </dd>
+        </div>
+      </dl>
+      {space.notes && <p className="property-space-note">{space.notes}</p>}
+      {space.attentionReasons.length > 0 && (
+        <div className="property-space-attention">
+          <strong>Needs review</strong>
+          <ul>
+            {space.attentionReasons.map((reason, index) => (
+              <li key={index}>{attentionLabels[reason.code]}</li>
+            ))}
+          </ul>
+          {space.status === "active" && (
+            <button
+              type="button"
+              disabled={!scope.canWrite}
+              className="property-space-primary"
+              onClick={() => {
+                void navigate(workflowUrl("portfolio.space.classify", space.id), {
+                  state: { returnTo: location.pathname + location.search },
+                });
+              }}
+            >
+              Review status for {space.displayName}
+            </button>
+          )}
+        </div>
+      )}
+      {allowSuiteLifecycle && space.spaceKind === "office_suite" && (
+        <div className="property-space-actions">
+          <CommandLinks
+            collapsible={false}
+            asButtons
+            target={propertyId}
+            child={space.id}
+            keys={
+              space.status === "archived"
+                ? ["portfolio.space.restore"]
+                : ["portfolio.space.archive"]
+            }
+            title={space.status === "archived" ? `Restore ${unit}` : `Archive ${unit}`}
+            labels={{
+              "portfolio.space.patch": `Edit ${unit}`,
+              "portfolio.space.archive": `Archive ${unit}`,
+              "portfolio.space.restore": `Restore ${unit}`,
+            }}
+          />
+        </div>
+      )}
+      {space.scheduledOccupancyTimeline.length > 0 && (
+        <section className="property-space-scheduled" aria-label="Scheduled occupancy">
+          <h5>Scheduled occupancy</h5>
+          {space.scheduledOccupancyTimeline.map((period) => (
+            <article key={period.id}>
+              <p>
+                <strong>{statusLabel(period.occupancyStatus)}</strong> from{" "}
+                <time dateTime={period.startsOn}>{period.startsOn}</time>
+                {period.endsOn && (
+                  <>
+                    {" "}
+                    until <time dateTime={period.endsOn}>{period.endsOn}</time>
+                  </>
+                )}
+              </p>
+              {period.note && <p className="property-space-note">{period.note}</p>}
+              {period.sourceKind === "lease" && (
+                <p className="property-space-note">Managed by lease</p>
+              )}
+              {space.status === "active" && period.sourceKind === "manual" && (
+                <CommandLinks
+                  collapsible={false}
+                  asButtons
+                  target={space.id}
+                  child={period.id}
+                  keys={[
+                    "portfolio.occupancy.cancel",
+                    "portfolio.occupancy.replace",
+                    "portfolio.occupancy.reschedule",
+                    "portfolio.occupancy.correct",
+                  ]}
+                  title={`Scheduled transition ${period.startsOn}`}
+                />
+              )}
+            </article>
+          ))}
+        </section>
+      )}
       <History kind="space" id={space.id} />
     </article>
   );
@@ -258,7 +394,19 @@ export function PortfolioCommand() {
             params: { path: { space_id: target! } },
           }),
         );
-        return { revision: space.revision, initial: {}, space, property: null };
+        const property = [
+          "portfolio.space.classify",
+          "portfolio.availability.change",
+          "portfolio.occupancy.change",
+        ].includes(definition.formKey)
+          ? readResult(
+              await api.GET("/api/properties/{property_id}", {
+                signal,
+                params: { path: { property_id: space.propertyId } },
+              }),
+            )
+          : null;
+        return { revision: space.revision, initial: {}, space, property };
       }
       const property = readResult(
         await api.GET("/api/properties/{property_id}", {
@@ -267,7 +415,8 @@ export function PortfolioCommand() {
         }),
       );
       if (child && !property.spaces.some((item) => item.id === child))
-        throw new Error("This space does not belong to the selected property.");
+        throw new Error("This rental does not belong to the selected property.");
+      const rental = property.spaces.find((item) => item.id === child);
       return {
         revision: property.propertyRevision,
         initial:
@@ -278,7 +427,13 @@ export function PortfolioCommand() {
                 city: property.city,
                 countryCode: property.countryCode,
               }
-            : {},
+            : definition?.formKey === "portfolio.space.patch" && rental
+              ? {
+                  displayName: rental.displayName,
+                  suiteOrFloor: rental.suiteOrFloor,
+                  notes: rental.notes,
+                }
+              : {},
         property,
         space: null,
       };
@@ -309,8 +464,141 @@ export function PortfolioCommand() {
     source.data?.property?.ownerships.flatMap((item) =>
       item.partyId && item.party ? [{ id: item.partyId, label: item.party.displayName }] : [],
     ) ?? [];
+  const classifying = definition.formKey === "portfolio.space.classify";
+  const changingLeasing = definition.formKey === "portfolio.availability.change";
+  const changingOccupancy = definition.formKey === "portfolio.occupancy.change";
+  const statusCommand = classifying || changingLeasing || changingOccupancy;
+  const editingRental = definition.formKey === "portfolio.space.patch";
+  const archivingRental = definition.formKey === "portfolio.space.archive";
+  const selectedUnit =
+    source.data?.space ?? source.data?.property?.spaces.find((item) => item.id === child);
+  const unit = selectedUnit ? rentableUnitLabel(selectedUnit.spaceKind) : "suite";
+  const unitCommandTitles: Record<string, string> = {
+    "portfolio.space.create": "Add suite",
+    "portfolio.space.patch": `Edit ${unit}`,
+    "portfolio.space.archive": `Archive ${unit}`,
+    "portfolio.space.restore": `Restore ${unit}`,
+    "portfolio.space.classify": `Classify ${unit}`,
+  };
+  const formDefinition =
+    changingLeasing || changingOccupancy
+      ? {
+          ...definition,
+          title: changingLeasing ? "Change leasing status" : definition.title,
+          schema: {
+            ...definition.schema,
+            properties: {
+              ...(changingLeasing
+                ? {
+                    availabilityStatus: definition.schema.properties!.availabilityStatus,
+                    availableOn: definition.schema.properties!.availableOn,
+                  }
+                : {
+                    occupancyStatus: definition.schema.properties!.occupancyStatus,
+                    effectiveOn: definition.schema.properties!.effectiveOn,
+                  }),
+              note: definition.schema.properties!.note,
+              ...definition.schema.properties,
+            },
+          },
+        }
+      : unitCommandTitles[definition.formKey]
+        ? { ...definition, title: unitCommandTitles[definition.formKey] }
+        : definition;
   return (
-    <>
+    <div
+      className={
+        statusCommand || editingRental || archivingRental
+          ? `space-status-command${archivingRental ? " space-archive-command space-status-single-form" : editingRental ? " space-edit-command space-status-single-form" : changingLeasing ? " space-leasing-command space-status-single-form" : changingOccupancy ? " space-occupancy-command space-status-single-form" : ""}`
+          : undefined
+      }
+    >
+      {(editingRental || archivingRental) && source.data?.property && selectedUnit && (
+        <>
+          <Link to={`/properties/${source.data.property.id}/units`}>
+            ← Back to {source.data.property.displayName}
+          </Link>
+          <section
+            className="space-classification-context"
+            aria-label="Selected property and rental"
+          >
+            <p className="space-classification-property">{source.data.property.displayName}</p>
+            <h2>{selectedUnit.displayName}</h2>
+            <dl>
+              <div>
+                <dt>Current lifecycle</dt>
+                <dd>{statusLabel(selectedUnit.status)}</dd>
+              </div>
+              <div>
+                <dt>Current occupancy</dt>
+                <dd>{statusLabel(selectedUnit.currentOccupancy.occupancyStatus)}</dd>
+              </div>
+              <div>
+                <dt>Current leasing status</dt>
+                <dd>{statusLabel(selectedUnit.availability.effectiveStatus)}</dd>
+              </div>
+            </dl>
+            {archivingRental ? (
+              <div className="space-archive-notice">
+                <h3>Retire this {unit}, not the property</h3>
+                <p>
+                  The property and its other suites remain active. Existing records and history are
+                  retained; archiving does not delete them.
+                </p>
+                <p>
+                  For temporary vacancy or a pause in leasing, change occupancy or leasing status
+                  instead. An occupied suite, a suite with scheduled occupancy changes, or the
+                  property’s last active suite cannot be archived.
+                </p>
+              </div>
+            ) : (
+              <p>
+                Update the name, suite or floor, and notes. Occupancy, leasing status and lease
+                records stay unchanged.
+              </p>
+            )}
+          </section>
+        </>
+      )}
+      {statusCommand && source.data?.space && (
+        <>
+          <Link to={`/properties/${source.data.space.propertyId}/units`}>
+            ← Back to {source.data.property?.displayName ?? "property"}
+          </Link>
+          <section
+            className="space-classification-context"
+            aria-label="Selected property and rental"
+          >
+            <p className="space-classification-property">{source.data.property?.displayName}</p>
+            <h2>{source.data.space.displayName}</h2>
+            <dl>
+              <div>
+                <dt>Current occupancy</dt>
+                <dd>{statusLabel(source.data.space.currentOccupancy.occupancyStatus)}</dd>
+              </div>
+              <div>
+                <dt>Current leasing status</dt>
+                <dd>{statusLabel(source.data.space.availability.effectiveStatus)}</dd>
+                {source.data.space.availability.effectiveStatus === "available_on" &&
+                  source.data.space.availability.availableOn && (
+                    <dd>
+                      <time dateTime={source.data.space.availability.availableOn}>
+                        {source.data.space.availability.availableOn}
+                      </time>
+                    </dd>
+                  )}
+              </div>
+            </dl>
+            <p>
+              {classifying
+                ? "Set only the information that needs classification. Leave an already classified status unchanged."
+                : changingOccupancy
+                  ? `Occupancy records whether this ${unit} is occupied or vacant. Changing it does not change leasing status or an existing lease. Lease-managed occupancy must be changed through Leasing.`
+                  : `Leasing status describes whether this ${unit} is open to a new tenancy. Changing it does not change occupancy or an existing lease.`}
+            </p>
+          </section>
+        </>
+      )}
       {definition.formKey === "portfolio.property.create" && (
         <>
           <Link to="/properties">← Back to Properties</Link>
@@ -320,18 +608,28 @@ export function PortfolioCommand() {
           </p>
         </>
       )}
-      <p>
-        Effective dates use the property time zone. Inventory uses the Property revision; manual
-        status uses the independent Space revision. Lease-owned occupancy must be changed through
-        Leasing.
-      </p>
+      {!statusCommand && !editingRental && !archivingRental && (
+        <p>
+          Effective dates use the property time zone. Inventory uses the Property revision; manual
+          status uses its own status revision. Lease-owned occupancy must be changed through
+          Leasing.
+        </p>
+      )}
       {source.data?.space && (
         <>
           <PageAsOf asOf={source.data.space.asOf} />
-          <Facts
-            value={source.data.space}
-            fields={["displayName", "effectiveLocalDate", "revision"]}
-          />
+          {!statusCommand && (
+            <Facts
+              value={source.data.space}
+              fields={["displayName", "effectiveLocalDate", "revision"]}
+            />
+          )}
+          {statusCommand && (
+            <p className="space-classification-date">
+              {classifying ? "Classification takes effect today" : "Property-local date"}:{" "}
+              {source.data.space.effectiveLocalDate} · {source.data.property?.timeZone}.
+            </p>
+          )}
         </>
       )}
       {["portfolio.property.create", "portfolio.ownerships.replace"].includes(
@@ -347,16 +645,20 @@ export function PortfolioCommand() {
         />
       )}
       <CommandLoader
-        definition={definition}
+        definition={formDefinition}
         sourceId={target}
         childId={child}
         revision={source.data?.revision ?? 0}
         initial={initial}
         choices={{ partyId: [...owners, ...identities] }}
         returnTo={
-          source.data?.space ? `/properties/${source.data.space.propertyId}/units` : undefined
+          source.data?.space
+            ? `/properties/${source.data.space.propertyId}/units`
+            : (editingRental || archivingRental) && source.data?.property
+              ? `/properties/${source.data.property.id}/units`
+              : undefined
         }
       />
-    </>
+    </div>
   );
 }

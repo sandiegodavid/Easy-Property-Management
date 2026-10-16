@@ -10,6 +10,8 @@ import { readResult } from "../workflows/reads";
 import { useRecoverableForm, RecoveryNavigation } from "./use-recoverable-form";
 import { mutation } from "./mutations";
 import type { Recovery } from "./recovery";
+import { formatHomeTime } from "./home-time";
+import { propertyUnitsLabel, rentableUnitLabel } from "./property-labels";
 
 type Coverage = components["schemas"]["CoverageResult"];
 type Area = Coverage["area"];
@@ -29,7 +31,7 @@ const projectReview = (values: ReviewValues) => ({
 });
 const explain: Record<Area, string> = {
   occupancy:
-    "Unknown occupancy or availability needs source information; acknowledging a review cannot fill that gap.",
+    "Review occupancy and leasing status. If either is unclassified or incorrect, follow the link below to update the property’s records.",
   lease:
     "Occupied rentals need an applicable lease and term. Review the lease source to resolve missing context.",
   rent: "Rent tracking needs a confirmed schedule for an executed lease. Relevant term changes require review or synchronization.",
@@ -38,6 +40,10 @@ const explain: Record<Area, string> = {
     "Review recorded issues explicitly. An empty issue list does not establish the absence of problems.",
 };
 const words = (value: string) => value.replaceAll("_", " ");
+const occupancyReasons: Partial<Record<Coverage["causes"][number], string>> = {
+  availability_unknown: "Leasing status hasn’t been classified.",
+  occupancy_unknown_or_conflicting: "Occupancy is unclassified or has conflicting records.",
+};
 
 function CoverageResolution({ current }: { current: Coverage }) {
   const { scope } = useWorkspace();
@@ -59,11 +65,19 @@ function CoverageResolution({ current }: { current: Coverage }) {
     return (
       <>
         {space.error && (
-          <p role="alert">Current Space context unavailable: {space.error.message}</p>
+          <p role="alert">Current property context unavailable: {space.error.message}</p>
         )}
-        {space.isPending && <p role="status">Loading current Space context…</p>}
+        {space.isPending && <p role="status">Loading current property context…</p>}
         {space.data && (
-          <Link to={`/properties/${space.data.propertyId}/units`}>Open occupancy sources</Link>
+          <Link
+            className="information-review-primary"
+            to={`/properties/${space.data.propertyId}/units`}
+          >
+            {current.causes.includes("availability_unknown") &&
+            !current.causes.includes("occupancy_unknown_or_conflicting")
+              ? "Set leasing status"
+              : "Review occupancy and leasing status"}
+          </Link>
         )}
       </>
     );
@@ -160,9 +174,16 @@ function ReviewEditor({
     state.command === "outcome_unknown" ||
     state.command === "committed";
   return (
-    <section aria-label="Coverage review">
+    <section className="information-review-editor" aria-label="Information review form">
       <h3>Review {current.area}</h3>
-      <p>Evidence revision: {displayed}</p>
+      <p className="information-review-intro">
+        Record your review of the information shown above. This does not change the underlying
+        records.
+      </p>
+      <details className="information-review-revision">
+        <summary>Source reference</summary>
+        <p>Evidence revision: {displayed}</p>
+      </details>
       {changed && (
         <p role="alert">
           Source information changed. Your review edits are retained. Review the latest facts before
@@ -254,7 +275,21 @@ function ReviewEditor({
     </section>
   );
 }
-export function CoveragePanel({ kind, id, area }: { kind: Kind; id: string; area: Area }) {
+export function CoveragePanel({
+  kind,
+  id,
+  area,
+  propertyName,
+  unitsLabel = "Home, Office, or Suites",
+  unitName = "rental",
+}: {
+  kind: Kind;
+  id: string;
+  area: Area;
+  propertyName?: string;
+  unitsLabel?: string;
+  unitName?: string;
+}) {
   const { scope } = useWorkspace();
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState(false);
@@ -293,38 +328,101 @@ export function CoveragePanel({ kind, id, area }: { kind: Kind; id: string; area
   });
   const current = result.data;
   return (
-    <section aria-label={`${area} coverage`}>
-      <h3>{area} coverage</h3>
-      <p>{explain[area]}</p>
+    <section className="information-review-panel" aria-label={`${words(area)} information review`}>
+      <header className="information-review-heading">
+        <div>
+          <h3>
+            {words(area).replace(/^./, (character) => character.toUpperCase())} information review
+          </h3>
+          <p>{explain[area]}</p>
+        </div>
+        <button onClick={() => void result.refetch()}>Refresh {words(area)} information</button>
+      </header>
+      {propertyName && <p className="information-review-property">{propertyName}</p>}
       {result.error ? (
         <p role="alert">{result.error.message}</p>
       ) : !current ? (
-        <p role="status">Loading coverage…</p>
+        <p role="status">Loading information review…</p>
       ) : current.availability === "unavailable" ? (
-        <p role="alert">Coverage source unavailable; no state can be inferred.</p>
+        <p role="alert">Information review source unavailable; no state can be inferred.</p>
       ) : (
-        <>
-          <p>
-            {words(current.state ?? "unavailable")} ·{" "}
-            {words(current.applicability ?? "unavailable")}
-          </p>
-          <ul>
-            {current.causes.map((cause) => (
-              <li key={cause}>{words(cause)}</li>
-            ))}
-          </ul>
-          {current.trigger && <p role="status">Review prompt: {words(current.trigger)}</p>}
+        <div className="information-review-grid">
+          <section className="information-review-card" aria-label="Current information">
+            <h4>Current information</h4>
+            <div className="information-review-badges">
+              <span
+                className="information-review-badge"
+                data-state={current.state ?? "unavailable"}
+              >
+                {words(current.state ?? "unavailable")}
+              </span>
+            </div>
+            {current.causes.length > 0 && (
+              <ul className="information-review-reasons">
+                {current.causes.map((cause) => (
+                  <li key={cause}>
+                    {area === "occupancy"
+                      ? (occupancyReasons[cause] ?? words(cause))
+                      : words(cause)}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {current.trigger && (
+              <p className="information-review-prompt" role="status">
+                Review prompt: {words(current.trigger)}
+              </p>
+            )}
+            <div className="information-review-sources">
+              <h4>{area === "occupancy" ? "Next step" : "Review the source records"}</h4>
+              {area === "occupancy" && (
+                <p>
+                  {current.causes.includes("availability_unknown") &&
+                  !current.causes.includes("occupancy_unknown_or_conflicting")
+                    ? `Choose whether this ${unitName} is not open for leasing, open now, or open from a future date.`
+                    : `Check whether this ${unitName} is occupied or vacant and whether it is open for leasing.`}{" "}
+                  Save any changes in the property’s {unitsLabel} tab, then return here and refresh.
+                </p>
+              )}
+              <CoverageResolution current={current} />
+              {current.leaseId && (
+                <Link to={`/leases/${current.leaseId}`}>Review lease source</Link>
+              )}
+            </div>
+          </section>
           <PageAsOf asOf={current.asOf} />
-          <p>Local date {current.effectiveLocalDate}</p>
-          <p>Last manual review: {current.lastManualReviewAt ?? "Not recorded"}</p>
-          {current.leaseId && <Link to={`/leases/${current.leaseId}`}>Review lease source</Link>}
-          <CoverageResolution current={current} />
-          {!editing && !resume && (
-            <button disabled={!scope.canWrite} onClick={() => setEditing(true)}>
-              Review {area} coverage
-            </button>
-          )}
-        </>
+          <section className="information-review-card" aria-label="Review details">
+            <h4>{area === "occupancy" ? "Review history" : "Review details"}</h4>
+            <dl className="information-review-facts">
+              <div>
+                <dt>Property-local date</dt>
+                <dd>{current.effectiveLocalDate ?? "Unavailable"}</dd>
+              </div>
+              <div>
+                <dt>Last manual review</dt>
+                <dd>
+                  {current.lastManualReviewAt ? (
+                    <time dateTime={current.lastManualReviewAt}>
+                      {formatHomeTime(current.lastManualReviewAt)}
+                    </time>
+                  ) : (
+                    "Not recorded"
+                  )}
+                </dd>
+              </div>
+            </dl>
+            <p className="information-review-intro">
+              {area === "occupancy"
+                ? "Optional: record that you checked this information. A review note does not change occupancy or leasing status, or resolve missing information."
+                : "Fix missing information in the source records first. Acknowledging a review does not fill required gaps."}
+            </p>
+            {!editing && !resume && (
+              <button disabled={!scope.canWrite} onClick={() => setEditing(true)}>
+                {area === "occupancy" ? "Add review note" : `Review ${words(area)} information`}
+              </button>
+            )}
+          </section>
+        </div>
       )}
       {current && (!resume || recovery.data) && (editing || resume) && (
         <ReviewEditor
@@ -335,7 +433,6 @@ export function CoveragePanel({ kind, id, area }: { kind: Kind; id: string; area
         />
       )}
       {recovery.error && <p role="alert">{recovery.error.message}</p>}
-      <button onClick={() => void result.refetch()}>Refresh {area} coverage</button>
       {resume && (
         <button
           onClick={() => {
@@ -353,17 +450,78 @@ export function CoveragePanel({ kind, id, area }: { kind: Kind; id: string; area
 
 export function CoverageLinks({ propertyId, spaceId }: { propertyId?: string; spaceId?: string }) {
   return (
-    <nav aria-label="Information coverage">
+    <nav aria-label="Information review">
       {propertyId && (
-        <Link to={`/coverage/property/${propertyId}/maintenance`}>Maintenance coverage</Link>
+        <Link to={`/coverage/property/${propertyId}/maintenance`}>
+          Maintenance information review
+        </Link>
       )}
       {spaceId &&
         (["occupancy", "lease", "rent", "deposit"] as const).map((area) => (
           <Link key={area} to={`/coverage/space/${spaceId}/${area}`}>
-            {words(area)} coverage
+            {words(area).replace(/^./, (character) => character.toUpperCase())} information review
           </Link>
         ))}
     </nav>
+  );
+}
+
+function ReviewPropertyPage({ kind, id, area }: { kind: Kind; id: string; area: Area }) {
+  const { scope } = useWorkspace();
+  const space = useQuery({
+    queryKey: scope.key("coverage-resolution-space", id),
+    enabled: kind === "space",
+    retry: false,
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/spaces/{space_id}/status", {
+          signal,
+          params: { path: { space_id: id } },
+        }),
+      ),
+  });
+  const propertyId = kind === "property" ? id : space.data?.propertyId;
+  const property = useQuery({
+    queryKey: scope.key("portfolio-record", propertyId),
+    enabled: !!propertyId,
+    retry: false,
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/properties/{property_id}", {
+          signal,
+          params: { path: { property_id: propertyId! } },
+        }),
+      ),
+  });
+  const back = propertyId ? (
+    <Link to={`/properties/${propertyId}/overview`}>
+      ← Back to {property.data?.displayName ?? "property"}
+    </Link>
+  ) : space.error ? (
+    <p role="alert">Property navigation unavailable: {space.error.message}</p>
+  ) : (
+    <p role="status">Loading property navigation…</p>
+  );
+  return (
+    <div className="information-review-page">
+      {back}
+      <CoveragePanel
+        kind={kind}
+        id={id}
+        area={area}
+        propertyName={property.data?.displayName}
+        unitsLabel={property.data ? propertyUnitsLabel(property.data.inventoryLayout) : undefined}
+        unitName={space.data ? rentableUnitLabel(space.data.spaceKind) : undefined}
+      />
+      <footer>
+        <p className="information-review-intro">
+          Check whether the app has enough recorded information and whether it needs your review.
+          This is not insurance or service coverage, continuous monitoring, or certification of
+          legal compliance. Needs review is an information prompt, not necessarily a property
+          problem.
+        </p>
+      </footer>
+    </div>
   );
 }
 
@@ -376,17 +534,8 @@ export function CoveragePage() {
     (kind !== "property" && kind !== "space") ||
     (selected === "maintenance") !== (kind === "property")
   )
-    return <p role="alert">This coverage subject and area combination is unavailable.</p>;
-  return (
-    <>
-      <h2>Information coverage</h2>
-      <p>
-        Coverage describes recorded responsibilities; it does not imply continuous monitoring or
-        legal compliance.
-      </p>
-      <CoveragePanel key={`${kind}:${id}:${area}`} kind={kind} id={id} area={selected} />
-    </>
-  );
+    return <p role="alert">This information review subject and area combination is unavailable.</p>;
+  return <ReviewPropertyPage key={`${kind}:${id}:${area}`} kind={kind} id={id} area={selected} />;
 }
 
 export function CoverageResume() {
@@ -402,7 +551,7 @@ export function CoverageResume() {
         }),
       );
       if (value.formKey !== "coverage.review")
-        throw new Error("This saved form is not a coverage review.");
+        throw new Error("This saved form is not an information review.");
       if (!["active", "outcome_unknown", "reconciled"].includes(value.status))
         throw new Error("This saved review is no longer reusable.");
       return value;

@@ -160,6 +160,9 @@ export function LeaseRecord({ id }: { id: string }) {
   const displayed = { ...item, leaseLastCoveredOn: leaseLastCoveredOn(item.contractEndsOn) };
   return (
     <section aria-label="Lease workspace">
+      <p>
+        <Link to="/leasing">← Back to Leasing</Link>
+      </p>
       <h2>{item.leaseKind} lease</h2>
       <Facts
         value={displayed}
@@ -174,7 +177,6 @@ export function LeaseRecord({ id }: { id: string }) {
           "notes",
         ]}
       />
-      <Link to="/leasing">Return to Leasing</Link>
       <section aria-label="Lease milestones">
         <h3>Contract and physical occupancy</h3>
         <Facts

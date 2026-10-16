@@ -29,6 +29,7 @@ from app.modules.operator.infrastructure.unit_of_work import (
 )
 from app.modules.parties.infrastructure.identity_relations import SQLitePartyIdentityRelations
 from app.modules.portfolio.application.service import (
+    AvailabilityCommand,
     PortfolioService,
     PropertyCreateCommand,
     OwnershipInput,
@@ -51,6 +52,7 @@ from app.modules.tasks.infrastructure.context_reader import SQLiteTaskContextRea
 from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork
 
 PREVIEW_LIMIT = 3
+OWNER_PREVIEW_LIMIT = 5
 TASK_COUNT = 15
 UNICODE_PROPERTIES = 4
 PAIR_COUNT = 2
@@ -169,6 +171,24 @@ def property_record(portfolio, name="Maple", ownerships=None, office=False):
     )
 
 
+def test_directory_shows_scheduled_leasing_date(directory):
+    _, portfolio, directories, _, _ = directory
+    item = property_record(portfolio)
+    preview = directories.properties()["items"][0]["spaces"][0]
+    space = portfolio.unit_of_work.get_space(preview["id"])
+    assert space.property_id == item.id
+    portfolio.change_availability(
+        space.id,
+        AvailabilityCommand("available_on", "2027-05-01"),
+        expected_revision=space.status_revision,
+        idempotency_key=str(uuid4()),
+    )
+    page = directories.properties(availability="available_on")
+    preview = page["items"][0]["spaces"][0]
+    assert preview["availability"] == "available_on"
+    assert preview["availableOn"] == "2027-05-01"
+
+
 def test_unicode_cursor_pages_have_no_gaps_and_matching_totals(directory):
     _, portfolio, directories, _, _ = directory
     for name in ("Éclair A", "Éclair B", "Straße", "STRASSE"):
@@ -218,9 +238,38 @@ def test_child_previews_are_bounded_but_counts_are_complete(directory):
         inventory_command(portfolio, "add_space", item.id, SpaceCreateCommand(f"Suite {index}"))
     card = directories.properties()["items"][0]
     assert card["ownerCount"] == OWNER_COUNT
-    assert len(card["owners"]) == PREVIEW_LIMIT
+    assert len(card["owners"]) == OWNER_PREVIEW_LIMIT
     assert card["spaceCount"] == SPACE_COUNT
     assert len(card["spaces"]) == PREVIEW_LIMIT
+
+
+def test_owner_counts_include_operator_and_client_owners(directory):
+    _, portfolio, directories, _, _ = directory
+    owners = [
+        portfolio.create_party(PartyCreateCommand("individual", f"Owner {index}"))
+        for index in range(4)
+    ]
+    property_record(portfolio, "Sole operator")
+    property_record(
+        portfolio,
+        "Mixed owners",
+        [OwnershipInput("local_operator")]
+        + [OwnershipInput("client_owner", owner.id) for owner in owners[:2]],
+    )
+    property_record(
+        portfolio, "Four owners", [OwnershipInput("client_owner", owner.id) for owner in owners]
+    )
+    cards = {card["displayName"]: card for card in directories.properties()["items"]}
+    sole = cards["Sole operator"]
+    assert sole["ownerCount"] == 1
+    assert sole["owners"] == [
+        {"ownerKind": "local_operator", "partyId": None, "displayName": "You"}
+    ]
+    mixed = cards["Mixed owners"]
+    assert mixed["ownerCount"] == 3
+    assert {owner["ownerKind"] for owner in mixed["owners"]} == {"local_operator", "client_owner"}
+    assert cards["Four owners"]["ownerCount"] == 4
+    assert len(cards["Four owners"]["owners"]) == 4
 
 
 def test_queries_and_hydration_stay_bounded_for_one_and_one_hundred(directory):

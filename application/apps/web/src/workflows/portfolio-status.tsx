@@ -40,8 +40,7 @@ export function PortfolioStatusSummary() {
           <PageAsOf asOf={result.data.asOf} priority={1} />
           <p>
             {result.data.activePropertyCount} active properties · {result.data.activeSpaceCount}{" "}
-            active spaces. Counts describe spaces; filtered property results include any matching
-            active space.
+            active rental units.
           </p>
           <nav className="property-status-tabs" aria-label="Property status filters">
             {[

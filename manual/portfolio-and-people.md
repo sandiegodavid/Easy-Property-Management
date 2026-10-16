@@ -7,23 +7,27 @@
 1. Open **Properties → Create property**.
 2. Enter the display name, supported property type and complete US address; review the derived property time zone.
 3. Review self-owned/client-owned context, then save. Add client-owner identities/relationships where applicable.
-4. Open the Property's **details** and **units** sections to review its Space and status.
-5. Record occupancy and availability through their distinct actions. Supply effective dates, reasons and confirmation as required; do not mark a property vacant merely because no lease was entered.
-6. Complete related lease, rent and deposit setup, then resolve applicable coverage gaps.
+4. Open the property's **Overview** for a summary. Use **Property setup** for configuration and **Home**, **Office** or **Suites** for rental status, depending on the property's layout.
+5. Record occupancy and leasing status through their distinct actions. Supply effective dates, reasons and confirmation as required; do not mark a property vacant merely because no lease was entered.
+6. Complete related lease, rent and deposit setup, then resolve missing information shown in Information review.
 
-Residential homes/condos/townhomes have one rentable Space per Property in the current model. Office properties can add office suites. Separate managed condo units may be separate Properties sharing a building address. Multi-unit apartment-building operations are outside this release.
+Residential homes/condos/townhomes have one rentable home per property in the current model. An office property can be rented as a whole office or as separate suites. The tab uses **Home**, **Office** or **Suites** accordingly; individual suite names remain visible. Separate managed condo units may be separate properties sharing a building address. Multi-unit apartment-building operations are outside this release.
+
+**Overview** shows the property address, compact occupancy/leasing status, review cards and Relationships. It also retains contextual Tasks, which have no dedicated property tab. Use **Home/Office/Suites**, **Leases**, **Money**, **Maintenance** and **Conversations** for their detailed records rather than looking for duplicate sections on Overview.
 
 ## Edit, classify and schedule changes
 
-Use **Edit property**, **Edit space**, **Classify space**, **Change occupancy** and **Change availability** in the owning record. Check the effective date and current status before saving. Scheduled occupancy has Cancel, Replace and Reschedule actions; corrections retain historical context/reasons. A lease-controlled timeline must use the Lease workflow rather than conflicting manual status.
+Use **Edit property** for the property record. In **Home**, **Office** or **Suites**, the corresponding **Edit home/office/suite** and **Start lease draft** buttons sit beside the rental name. Status actions and corrections appear beside the relevant occupancy or leasing information. Archive or Restore stays separate. **Scheduled occupancy** appears only when future changes exist, with Cancel, Replace, Reschedule and correction actions directly available. **History** is the only expandable section within each rental card. Check the effective date and current status before saving; corrections retain historical context and reasons. Occupancy marked **Managed by lease** must be changed through Leasing rather than conflicting manual status.
 
-Archive a Property/Space when its lifecycle permits; restore through the supported archived record action. Archiving retains history and can leave unresolved Home obligations. It is not deletion or proof that money is settled.
+For a single home or whole office, use **Archive property** in **Property setup** rather than archiving its only rental unit. In a multi-suite property, **Archive suite** retires an individual suite while the property remains active; the archived suite offers **Restore suite** when permitted. Temporary vacancy or a pause in leasing should use occupancy or leasing status instead. Archiving retains history and can leave unresolved Home obligations. It is not deletion or proof that money is settled.
 
 ## Owners and ownership
 
 Client owners use shared person/company identities. Create or select the identity, open the Property and choose **Change ownership**. Review the complete proposed relationship set/effective context before confirming; do not accidentally remove another retained relationship. Self-owned properties do not need a fabricated client-owner identity.
 
 **Owners** lists client owners. Open one to review related Properties, Leases, Maintenance, Money and Conversations. Use current/former relationship filtering as available. To change actual property facts, follow its Property/source link. Owner money describes related whole-property activity; the app does not infer shares or distributable entitlement.
+
+In a property's **Relationships** cards, select a client owner's name to open their workspace; **You** identifies local-operator ownership and has no profile link. In an owner's Relationships cards, select the property name to open that property.
 
 ## People, contacts and tenants
 

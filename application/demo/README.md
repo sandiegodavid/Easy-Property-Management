@@ -44,7 +44,7 @@ Run verification immediately after generation:
 .venv/bin/python demo/verify.py
 ```
 
-The verifier checks exact record counts, expense-group totals, provider links, funded deposits, executed leases, the vacancy and rent scenarios. It uses read-only SQL and real API reads, checks SQLite integrity and foreign keys, and validates the current application schema. It prints the result and saves `verification.json` in the sibling runtime directory.
+The verifier checks exact record counts, ownership membership (including co-ownership), expense-group totals, provider links, funded deposits, executed leases, the vacancy and rent scenarios. It uses read-only SQL and real API reads, checks SQLite integrity and foreign keys, and validates the current application schema. It prints the result and saves `verification.json` in the sibling runtime directory.
 
 Verification assumes the original scenario date and records. Manual edits or date rollover can change the expected results; see [Dates and repeatability](#dates-and-repeatability).
 
@@ -79,17 +79,20 @@ Open the corresponding loopback URL, for example `http://127.0.0.1:8002/properti
 
 ## Included scenarios
 
-| Group                 | Properties                                                      | Scenario/activity                                                                                                                            |
-| --------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Local operator        | 4: vacant cottage, rented home, rented office, two-suite office | 1 upcoming furnace issue/appointment, 2 communications, 12 expenses                                                                          |
-| Morgan Chen (Owner 1) | 2 rented homes                                                  | 1 unpaid rent expectation with follow-up Task, 1 communication, 8 expenses, 1 routine inspection appointment, 1 next-month rent prepayment   |
-| Sam Rivera (Owner 2)  | 5: three condo units, rented home, rented office                | 2 urgent maintenance issues, 3 competing quotes per issue, 3 communications, 1 condition inspection draft, 20 expenses, 1 repair appointment |
+| Group                                    | Properties                                                      | Scenario/activity                                                                                                                             |
+| ---------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local operator                           | 4: vacant cottage, rented home, rented office, two-suite office | 1 upcoming furnace issue/appointment, 2 communications, 12 expenses                                                                           |
+| Morgan Chen (Owner 1)                    | 2 rented homes                                                  | 1 unpaid rent expectation with follow-up Task, 1 communication, 8 expenses, 1 routine inspection appointment, 1 next-month rent prepayment    |
+| Sam Rivera (Owner 2)                     | 5: three condo units, rented home, rented office                | 2 urgent maintenance issues, 3 competing quotes per issue, 3 communications, 1 condition inspection draft, 20 expenses, 1 repair appointment  |
+| Local operator + Morgan + Sam            | Alder House — Co-owned                                          | Vacant home with three current owners; leasing status deliberately unclassified to demonstrate status review; no fabricated lease or expenses |
+| Morgan + Sam + Priya Shah + Elena Torres | Magnolia House — Four Owners                                    | Vacant home with four current client owners and no local-operator ownership; open for leasing now; no fabricated lease or expenses            |
 
 The generated workspace contains:
 
 | Record type                    |   Count |
 | ------------------------------ | ------: |
-| Properties / rentable Spaces   | 11 / 12 |
+| Properties / rentable Spaces   | 14 / 15 |
+| Client owner identities        |      10 |
 | Executed leases                |       9 |
 | Tenants / lease participants   | 12 / 12 |
 | Fully funded security deposits |       9 |
@@ -100,7 +103,9 @@ The generated workspace contains:
 | Quotes                         |       6 |
 | Condition reports              |       1 |
 
-Every occupied rental, including both rented offices, has monthly USD rent and an agreed deposit equal to one month's rent, with an actual deposit receipt. The vacant cottage and Harbor Offices' two vacant suites have no fabricated leases or deposits.
+Every occupied rental, including both rented offices, has monthly USD rent and an agreed deposit equal to one month's rent, with an actual deposit receipt. The vacant cottage, three co-owned homes and Harbor Offices' two vacant suites have no fabricated leases or deposits.
+
+Alder House has the local operator plus Morgan and Sam as owners. Magnolia House has Morgan, Sam, Priya and Elena as owners. Sequoia House — Ten Owners is a vacant home owned by all ten client owners, without local-operator ownership; it is open for leasing now and has no fabricated lease or expenses. Its directory card shows five owner names and a link to the remaining five. These are additional properties, not changes to the original expense groups. Ownership records do not imply equal percentage shares. Use a fresh workspace after this dataset change so the request journal and catalog describe the same scenarios.
 
 Leasing status is independent of occupancy: seven occupied properties are **Not open for leasing**; occupied Riverbend Condo 101 and Willow House — Prepaid are **Open for leasing later**. Willow House opens May 1, 2027; Riverbend Condo 101 opens at its current contract end. Vacant Cedar Cottage is **Open for leasing now**. These dates describe leasing intentions, not scheduled move-outs or lease termination.
 
@@ -110,7 +115,7 @@ All 20 providers have category assignments, service areas and links to property 
 
 Maple House has two tenants: Alex Morgan and Sam Patel. Spruce House is shared by three college students: Avery Lane, Maya Chen and Leo Bennett. Each household has one primary tenant and the remaining residents are co-tenants on the same lease. Rent and deposits are recorded per lease, not per resident. The other seven rented properties each have one tenant; office tenants are organizations.
 
-Harbor Offices is one property with two independently rentable spaces: Suite 100 and Suite 200. Both are vacant and open for leasing now. The demo therefore has 11 properties and 12 spaces; occupancy and leasing-status counts describe spaces.
+Harbor Offices is one property with two independently rentable spaces: Suite 100 and Suite 200. Both are vacant and open for leasing now. The demo therefore has 14 properties and 15 spaces; occupancy and leasing-status counts describe spaces. Five spaces are open for leasing now. Vacant Alder House — Co-owned deliberately has an unclassified leasing status: its property card shows **Occupancy or leasing status needs review**, and the **Review status** filter includes it. This is a status-information gap, not a Maintenance issue. Use a fresh workspace to see this scenario; an existing demo journal retains its original records.
 
 Office properties are included in the property totals. The three Riverbend condo properties share a building address but have distinct unit addresses and one rentable Space each. This follows the current model: residential properties have exactly one rentable Space; multiple office suites are supported, while a residential multi-Space building aggregate is not.
 

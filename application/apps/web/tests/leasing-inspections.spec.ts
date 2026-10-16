@@ -13,16 +13,24 @@ test("lease end shows the last covered day while preserving the stored exclusive
   const covered = `${boundary.slice(0, 4)}-04-30`;
   await page.goto(`/leases/${f.lease.id}/details`);
   const milestones = page.getByRole("region", { name: "Lease milestones", exact: true });
+  const back = page.getByRole("link", { name: "← Back to Leasing", exact: true });
+  await expect(back).toHaveAttribute("href", "/leasing");
+  const heading = page
+    .getByRole("region", { name: "Lease workspace", exact: true })
+    .getByRole("heading", { level: 2 });
+  expect((await back.boundingBox())!.y).toBeLessThan((await heading.boundingBox())!.y);
   await expect(
     milestones
       .locator(".workflow-facts > div")
       .filter({ has: page.getByText("Lease end (last covered day)", { exact: true }) }),
   ).toHaveText(`Lease end (last covered day)${covered}`);
   await expect(page.getByText("Last covered day", { exact: true })).toHaveCount(2);
+  await back.click();
+  await expect(page).toHaveURL(/\/leasing$/);
   await execute(request, f);
   for (const tab of ["overview", "leases"]) {
     await page.goto(`/properties/${f.property.id}/${tab}`);
-    const leases = page.getByRole("region", { name: "leases", exact: true });
+    const leases = page.getByRole("region", { name: "Leases", exact: true });
     await expect(leases).toContainText(`through ${covered}`);
     await expect(leases).not.toContainText(boundary);
   }

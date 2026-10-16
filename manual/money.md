@@ -43,7 +43,7 @@ Depositing here records your external action; the app does not deposit funds at 
 ## Paid expenses, refunds and categories
 
 1. Open **Expenses → Record paid expense**.
-2. Select Property/optional Space, paid date, amount, category, payee and who paid; link the provider when applicable.
+2. Select property and optional rental unit, paid date, amount, category, payee and who paid; link the provider when applicable.
 3. Record only confirmed paid spending. A quote, estimate or unpaid invoice is not an expense.
 4. Save, then attach evidence. A failed evidence upload leaves the paid expense recorded; retry only that upload.
 5. Edit allowed context, or void/replace the actual financial record with the required history/reason.

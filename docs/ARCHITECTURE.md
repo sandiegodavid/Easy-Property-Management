@@ -19,7 +19,7 @@ FastAPI · loopback transport policy · packaged web assets
     └─ OS credential store / host credentials, outside portable data
 ```
 
-The backend and core UI-001 browser workflows are implemented, including Money, Maintenance, Tasks/communications, search/coverage, manual Intake and capability-gated AI Settings/review. [Current UI guides](ui/operator-experience.md) describe behavior; [validation evidence](ui/validation.md) records completed packaged-browser and restart/restore acceptance. Home aggregation remains DASH-001 and legal/HOA, spreadsheet intake, issue-proposal review and assistant setup remain UI-002. The [product brief](PRODUCT_BRIEF.md) describes intended scope and the [backlog](FEATURE_BACKLOG.md) tracks delivery; production AI availability remains separately registered and gated.
+The backend and core UI-001 browser workflows are implemented, including Money, Maintenance, Tasks/communications, search and information review, manual Intake and capability-gated AI Settings/review. [Current UI guides](ui/operator-experience.md) describe behavior; [validation evidence](ui/validation.md) records completed packaged-browser and restart/restore acceptance. Home aggregation remains DASH-001 and legal/HOA, spreadsheet intake, issue-proposal review and assistant setup remain UI-002. The [product brief](PRODUCT_BRIEF.md) describes intended scope and the [backlog](FEATURE_BACKLOG.md) tracks delivery; production AI availability remains separately registered and gated.
 
 ## Ownership map
 
@@ -41,7 +41,7 @@ The backend and core UI-001 browser workflows are implemented, including Money, 
 | `communications` | Manual recorded interaction history and explicit context | [Communications](modules/communications.md) |
 | `intake` | Canonical retained source evidence, identity and revision lineage | [Intake](modules/intake.md) |
 | `ai_governance` | Provider-neutral configuration, governed generation/review infrastructure | [AI governance](modules/ai-governance.md) |
-| `operator` | Bounded source compositions, coverage, preferences and incomplete forms | [Operator](modules/operator.md) |
+| `operator` | Bounded source compositions, information review, preferences and incomplete forms | [Operator](modules/operator.md) |
 
 Navigation names differ from package boundaries. An Owners view can compose Portfolio, concerns, communication and whole-property money; it does not own those records. Documents and interactions are contextual. Home aggregation, legal/HOA cases, spreadsheet intake and connected-assistant transport are separate planned delivery, rather than existing modules hidden behind the navigation.
 

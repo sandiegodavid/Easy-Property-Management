@@ -47,7 +47,7 @@ SECTIONS = {
         "maintenance",
         "conversations",
         "documents",
-        "details",
+        "setup",
     },
     "owners": {
         "overview",

@@ -170,10 +170,17 @@ test("maintenance review commits a source-bound receipt and dirty forms resume",
 }) => {
   const item = await property(request, "Coverage54 resume");
   await page.goto(`/coverage/property/${item.id}/maintenance`);
-  await expect(page.getByRole("region", { name: "maintenance coverage" })).toContainText(
+  await expect(
+    page.getByRole("heading", { name: "Maintenance information review", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Maintenance information review", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/This is not insurance or service coverage/)).toBeVisible();
+  await expect(page.getByRole("region", { name: "maintenance information review" })).toContainText(
     "needs review",
   );
-  await page.getByRole("button", { name: "Review maintenance coverage" }).click();
+  await page.getByRole("button", { name: "Review maintenance information" }).click();
   await page.getByLabel("Review reason").fill("Checked maintenance records");
   const saving = page.waitForResponse(
     (response) =>
@@ -186,9 +193,122 @@ test("maintenance review commits a source-bound receipt and dirty forms resume",
   await expect(page.getByLabel("Review reason")).toHaveValue("Checked maintenance records");
   await page.getByRole("button", { name: "Record review" }).click();
   await expect(page.getByText(/Original review .*recorded/)).toBeVisible();
-  await expect(page.getByRole("region", { name: "maintenance coverage" })).toContainText(
-    "recorded · applicable",
-  );
+  const information = page.getByRole("region", { name: "Current information", exact: true });
+  await expect(information.locator(".information-review-badge")).toHaveText("recorded");
+  await expect(information.getByText("applicable", { exact: true })).toHaveCount(0);
+});
+
+test("information review cards fit all areas in both themes and narrow screens", async ({
+  page,
+  request,
+}, testInfo) => {
+  const item = await property(request, "Information review layout");
+  for (const theme of ["light", "dark"]) {
+    await page.goto("/settings");
+    await page
+      .getByRole("radio", { name: theme === "dark" ? "Dark" : "Light", exact: true })
+      .check();
+    await page.getByRole("button", { name: "Save preferences", exact: true }).click();
+    await expect(page.getByText("Preferences saved.")).toBeVisible();
+    for (const area of ["maintenance", "occupancy", "lease", "rent", "deposit"]) {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      const path = area === "maintenance" ? `property/${item.id}` : `space/${item.spaces[0].id}`;
+      await page.goto(`/coverage/${path}/${area}`);
+      const information = page.getByRole("region", { name: "Current information", exact: true });
+      const details = page.getByRole("region", { name: "Review details", exact: true });
+      await expect(information).toBeVisible();
+      await expect(details).toBeVisible();
+      await expect(information.getByText("applicable", { exact: true })).toHaveCount(0);
+      if (area === "lease" || area === "rent" || area === "deposit") {
+        await expect(information.getByText("not applicable", { exact: true })).toHaveCount(1);
+      }
+      const explanation = page.locator(".information-review-page > footer");
+      await expect(explanation).toContainText(
+        "Check whether the app has enough recorded information",
+      );
+      await expect(
+        page.getByRole("heading", { name: "Information review", exact: true }),
+      ).toHaveCount(0);
+      expect(
+        await explanation.evaluate((footer) =>
+          footer.previousElementSibling?.classList.contains("information-review-panel"),
+        ),
+      ).toBe(true);
+      const back = page.getByRole("link", { name: `← Back to ${item.displayName}`, exact: true });
+      await expect(back).toHaveAttribute("href", `/properties/${item.id}/overview`);
+      await expect(
+        page.locator(".information-review-panel > .information-review-property"),
+      ).toHaveText(item.displayName);
+      expect(
+        await page
+          .locator(".information-review-property")
+          .evaluate((name) =>
+            name.nextElementSibling?.classList.contains("information-review-grid"),
+          ),
+      ).toBe(true);
+      if (theme === "light") {
+        await back.click();
+        await expect(page).toHaveURL(new RegExp(`/properties/${item.id}/overview$`));
+        await page.goBack();
+        await expect(information).toBeVisible();
+      }
+      const left = await information.boundingBox();
+      const right = await details.boundingBox();
+      expect(right!.x).toBeGreaterThan(left!.x);
+      if (area === "maintenance") {
+        await page.screenshot({
+          path: testInfo.outputPath(`information-review-${theme}.png`),
+          fullPage: true,
+        });
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect
+        .poll(async () => (await details.boundingBox())!.y)
+        .toBeGreaterThan((await information.boundingBox())!.y);
+      await page
+        .getByRole("button", {
+          name: area === "occupancy" ? "Add review note" : `Review ${area} information`,
+          exact: true,
+        })
+        .click();
+      const editor = page.getByRole("region", { name: "Information review form", exact: true });
+      await expect(editor.getByLabel("Review reason")).toBeVisible();
+      await expect(editor.getByText("Evidence revision:", { exact: false })).not.toBeVisible();
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+        .toBe(true);
+    }
+  }
+});
+
+test("unclassified leasing status offers one clear next step", async ({ page, request }) => {
+  const item = await property(request, "Leasing status guidance");
+  const space = item.spaces[0];
+  const occupancy = await request.put(`/api/spaces/${space.id}/classification`, {
+    data: {
+      occupancy: { occupancyStatus: "vacant", effectiveOn: item.effectiveLocalDate },
+      expectedRevision: space.revision,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(occupancy.ok(), await occupancy.text()).toBe(true);
+  await page.goto(`/coverage/space/${space.id}/occupancy`);
+  const information = page.getByRole("region", { name: "Current information", exact: true });
+  await expect(
+    information.getByText("Leasing status hasn’t been classified.", { exact: true }),
+  ).toBeVisible();
+  await expect(information.getByRole("heading", { name: "Next step", exact: true })).toBeVisible();
+  await expect(
+    information.getByText(/Choose whether this home is not open for leasing/),
+  ).toBeVisible();
+  const action = information.getByRole("link", { name: "Set leasing status", exact: true });
+  await expect(action).toHaveAttribute("href", `/properties/${item.id}/units`);
+  const history = page.getByRole("region", { name: "Review details", exact: true });
+  await expect(history.getByRole("heading", { name: "Review history", exact: true })).toBeVisible();
+  await expect(history).toContainText("A review note does not change occupancy or leasing status");
+  await expect(history.getByRole("button", { name: "Add review note", exact: true })).toBeVisible();
+  await action.click();
+  await expect(page.getByRole("region", { name: "Property home", exact: true })).toBeVisible();
 });
 
 test("required gaps survive acknowledgment and non-applicability comes from sources", async ({
@@ -198,19 +318,23 @@ test("required gaps survive acknowledgment and non-applicability comes from sour
   const item = await property(request, "Coverage54 gaps");
   const space = item.spaces[0];
   await page.goto(`/coverage/space/${space.id}/occupancy`);
-  await expect(page.getByRole("region", { name: "occupancy coverage" })).toContainText(
+  await expect(page.getByRole("region", { name: "occupancy information review" })).toContainText(
     "missing required information",
   );
-  await page.getByRole("button", { name: "Review occupancy coverage" }).click();
+  await expect(
+    page.getByText("Leasing status hasn’t been classified.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/Save any changes in the property’s Home tab/)).toBeVisible();
+  await page.getByRole("button", { name: "Add review note" }).click();
   await expect(page.getByRole("option", { name: "Not applicable", exact: true })).toHaveCount(0);
   await page.getByLabel("Review reason").fill("Reviewed the unknown facts");
   await page.getByRole("button", { name: "Record review" }).click();
   await expect(page.getByText(/Original review .*missing required information/)).toBeVisible();
   await page.goto(`/coverage/space/${space.id}/lease`);
-  await expect(page.getByRole("region", { name: "lease coverage" })).toContainText(
+  await expect(page.getByRole("region", { name: "lease information review" })).toContainText(
     "not applicable",
   );
-  await page.getByRole("button", { name: "Review lease coverage" }).click();
+  await page.getByRole("button", { name: "Review lease information" }).click();
   await expect(page.getByRole("option", { name: "Not applicable", exact: true })).toHaveCount(1);
 });
 
@@ -220,10 +344,10 @@ test("source changes retain review text and require explicit revision review", a
 }) => {
   const item = await property(request, "Coverage54 stale");
   await page.goto(`/coverage/property/${item.id}/maintenance`);
-  await page.getByRole("button", { name: "Review maintenance coverage" }).click();
+  await page.getByRole("button", { name: "Review maintenance information" }).click();
   await page.getByLabel("Review reason").fill("Keep my review text");
   await issue(request, item.id);
-  await page.getByRole("button", { name: "Refresh maintenance coverage" }).click();
+  await page.getByRole("button", { name: "Refresh maintenance information" }).click();
   await expect(page.getByText(/Source information changed/)).toBeVisible();
   await expect(page.getByLabel("Review reason")).toHaveValue("Keep my review text");
   await expect(page.getByRole("button", { name: "Record review" })).toBeDisabled();
@@ -238,7 +362,7 @@ test("lost review response reconciles the original attempt after reload", async 
 }) => {
   const item = await property(request, "Coverage54 interruption");
   await page.goto(`/coverage/property/${item.id}/maintenance`);
-  await page.getByRole("button", { name: "Review maintenance coverage" }).click();
+  await page.getByRole("button", { name: "Review maintenance information" }).click();
   await page.getByLabel("Review reason").fill("Original interrupted review");
   let recoveryId = "";
   page.on("response", async (response) => {
@@ -284,8 +408,8 @@ test("coverage absence, membership failure and hidden destinations remain truthf
     }),
   );
   await page.goto(`/coverage/property/${item.id}/maintenance`);
-  await expect(page.getByText(/Coverage source unavailable/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Review maintenance coverage" })).toHaveCount(0);
+  await expect(page.getByText(/Information review source unavailable/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Review maintenance information" })).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -317,7 +441,7 @@ test("stale review admission preserves edits and blocks a new attempt", async ({
 }) => {
   const item = await property(request, "Coverage54 race");
   await page.goto(`/coverage/property/${item.id}/maintenance`);
-  await page.getByRole("button", { name: "Review maintenance coverage" }).click();
+  await page.getByRole("button", { name: "Review maintenance information" }).click();
   await page.getByLabel("Review reason").fill("Retain my stale review");
   await page.route("**/coverage/property/*/maintenance/reviews", async (route) => {
     await issue(request, item.id);
@@ -334,7 +458,7 @@ test("stale review admission preserves edits and blocks a new attempt", async ({
 test("a coverage outage preserves an open review form", async ({ page, request }) => {
   const item = await property(request, "Coverage54 dirty outage");
   await page.goto(`/coverage/property/${item.id}/maintenance`);
-  await page.getByRole("button", { name: "Review maintenance coverage" }).click();
+  await page.getByRole("button", { name: "Review maintenance information" }).click();
   await page.getByLabel("Review reason").fill("Retain this during an outage");
   await page.route(`**/api/operator/coverage/property/${item.id}/maintenance`, (route) =>
     route.fulfill({
@@ -349,8 +473,8 @@ test("a coverage outage preserves an open review form", async ({ page, request }
       },
     }),
   );
-  await page.getByRole("button", { name: "Refresh maintenance coverage" }).click();
-  await expect(page.getByText(/Coverage source unavailable/)).toBeVisible();
+  await page.getByRole("button", { name: "Refresh maintenance information" }).click();
+  await expect(page.getByText(/Information review source unavailable/)).toBeVisible();
   await expect(page.getByLabel("Review reason")).toHaveValue("Retain this during an outage");
   await expect(page.getByRole("button", { name: "Record review" })).toBeDisabled();
 });

@@ -55,7 +55,8 @@ class CoveragePreview(Contract):
 
 
 class OwnerPreview(Contract):
-    partyId: UUID
+    ownerKind: Literal["local_operator", "client_owner"]
+    partyId: UUID | None
     displayName: str
 
 
@@ -65,6 +66,7 @@ class SpacePreview(Contract):
     revision: StrictInt
     occupancy: Occupancy
     availability: Availability
+    availableOn: date | None
     needsAttention: StrictBool
 
 
@@ -85,7 +87,7 @@ class PropertyCard(Contract):
     needsAttention: StrictBool
     effectiveLocalDate: date
     ownerCount: StrictInt = Field(ge=0)
-    owners: list[OwnerPreview] = Field(max_length=3)
+    owners: list[OwnerPreview] = Field(max_length=5)
     spaceCount: StrictInt = Field(ge=0)
     spaces: list[SpacePreview] = Field(max_length=3)
     coverage: CoveragePreview

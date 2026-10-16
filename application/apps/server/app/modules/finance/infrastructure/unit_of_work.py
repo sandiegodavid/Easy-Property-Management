@@ -99,6 +99,21 @@ class _Tx:
         self.party_operations = party_operations
         self.task_operations = task_operations
 
+    def money_property_contexts(self, property_ids, lease_ids):
+        spaces = self.lease_operations.lease_space_ids(self.connection, lease_ids)
+        contexts = self.portfolio_operations.contexts_for_spaces(
+            self.connection, set(spaces.values())
+        )
+        lease_properties = {
+            lease_id: str(contexts[space_id]["property_id"])
+            for lease_id, space_id in spaces.items()
+            if space_id in contexts
+        }
+        names = self.portfolio_operations.property_names(
+            self.connection, property_ids | set(lease_properties.values())
+        )
+        return names, lease_properties
+
     def lease_term_snapshot(self, lease_id, term_id):
         context = self.lease_operations.term_context(self.connection, lease_id, term_id)
         return self._finance_snapshot(context, current_only=True)

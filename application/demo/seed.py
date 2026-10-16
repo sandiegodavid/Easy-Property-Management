@@ -111,9 +111,12 @@ class Seeder:
         space_names = item.get("spaceNames") or [
             item.get("unit", "Whole office" if item["type"] == "office" else "Whole home")
         ]
-        owner = {"ownerKind": "local_operator"}
-        if item["owner"] != "operator":
-            owner = {"ownerKind": "client_owner", "partyId": self.catalog["owners"][item["owner"]]}
+        ownerships = [
+            {"ownerKind": "local_operator"}
+            if owner == "operator"
+            else {"ownerKind": "client_owner", "partyId": self.catalog["owners"][owner]}
+            for owner in item.get("coOwners", [item["owner"]])
+        ]
         result = self.write(
             "/api/properties",
             {
@@ -131,7 +134,7 @@ class Seeder:
                 else "whole_office"
                 if item["type"] == "office"
                 else "single_space",
-                "ownerships": [owner],
+                "ownerships": ownerships,
                 "notes": item["notes"],
                 "spaces": [
                     {
@@ -159,6 +162,8 @@ class Seeder:
         self.catalog["properties"].append(record)
 
     def leasing_availability(self, item):
+        if item.get("leasingUnclassified"):
+            return {"availabilityStatus": "unknown"}
         if item.get("vacant"):
             return {"availabilityStatus": "available_now"}
         if item.get("openForLeasingLater"):

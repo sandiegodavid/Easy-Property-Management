@@ -13,6 +13,19 @@ from app.modules.portfolio.infrastructure.sqlalchemy_models import (
 
 
 class SQLitePortfolioContextReader:
+    def property_names(self, connection: Any, property_ids: Collection[str]) -> dict[str, str]:
+        ids = set(property_ids)
+        if not ids:
+            return {}
+        return {
+            row[0]: row[1]
+            for row in connection.execute(
+                select(PropertyModel.id, PropertyModel.display_name).where(
+                    PropertyModel.id.in_(ids)
+                )
+            )
+        }
+
     def context_for_space(self, connection: Any, space_id: str) -> dict[str, object] | None:
         space = (
             connection.execute(SpaceModel.__table__.select().where(SpaceModel.id == space_id))

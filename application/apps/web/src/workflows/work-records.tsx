@@ -78,13 +78,19 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
   const active = value && ["open", "in_progress"].includes(scalar(value.status));
   return (
     <section aria-label="Work record">
-      <Link
-        to={
-          kind === "task" ? "/tasks" : kind === "communication" ? "/conversations" : "/maintenance"
-        }
-      >
-        Return to work directory
-      </Link>
+      <p>
+        <Link
+          to={
+            kind === "task"
+              ? "/tasks"
+              : kind === "communication"
+                ? "/conversations"
+                : "/maintenance"
+          }
+        >
+          {kind === "issue" ? "← Back to Maintenance" : "Return to work directory"}
+        </Link>
+      </p>
       {result.isPending && <p role="status">Loading current record…</p>}
       {result.error && <p role="alert">Current record unavailable: {result.error.message}</p>}
       {value && (

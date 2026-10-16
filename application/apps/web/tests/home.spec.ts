@@ -3,6 +3,18 @@ import type { components } from "@epm/contracts/generated";
 
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
 
+test("available Home omits redundant footer guidance and fallback shortcuts", async ({ page }) => {
+  await page.goto("/home");
+  await expect(page.getByRole("tab", { name: "Needs action", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Task attention" })).toHaveCount(0);
+  await expect(page.getByText("Hiding a destination does not hide its obligations.")).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByText("Open Information review in the relevant Property or Owner workspace."),
+  ).toHaveCount(0);
+});
+
 test("Home explains aggregate availability and shared Task rows reach real source actions", async ({
   page,
   request,

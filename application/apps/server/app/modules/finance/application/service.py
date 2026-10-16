@@ -42,6 +42,19 @@ class FinanceService:
         self.unit_of_work = unit_of_work
         self.now = now
 
+    def money_property_contexts(self, property_ids: list[str], lease_ids: list[str]):
+        if len(property_ids) + len(lease_ids) > 25:
+            raise FinanceError("At most 25 property or lease references may be resolved.")
+        try:
+            properties = {str(UUID(value)) for value in property_ids}
+            leases = {str(UUID(value)) for value in lease_ids}
+        except (ValueError, TypeError, AttributeError) as error:
+            raise FinanceError("Property and lease references must be UUIDs.") from error
+        names, lease_properties = self.unit_of_work.read(
+            lambda tx: tx.money_property_contexts(properties, leases)
+        )
+        return {"propertyNames": names, "leaseProperties": lease_properties}
+
     def preview_schedule(self, lease_id, command: SynchronizeExpectationsCommand):
         instant = self.now()
 

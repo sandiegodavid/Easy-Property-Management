@@ -16,6 +16,17 @@ from app.modules.portfolio.infrastructure.sqlalchemy_models import SpaceModel
 
 
 class SQLiteLeaseContextReader:
+    def lease_space_ids(self, connection: Any, lease_ids: Collection[str]) -> dict[str, str]:
+        ids = set(lease_ids)
+        if not ids:
+            return {}
+        return {
+            row[0]: row[1]
+            for row in connection.execute(
+                select(LeaseModel.id, LeaseModel.space_id).where(LeaseModel.id.in_(ids))
+            )
+        }
+
     def lease_space_id(self, connection: Any, lease_id: str) -> str | None:
         return connection.execute(
             select(LeaseModel.space_id).where(LeaseModel.id == lease_id)

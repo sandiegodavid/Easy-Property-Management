@@ -4,8 +4,18 @@ import { api } from "@epm/contracts";
 import { Page } from "@epm/ui";
 import { BootstrapFailure, queryClient, WorkspaceScope, type Bootstrap } from "./workspace-scope";
 
-const brandIcon = new URL("../assets/brand/logo.png", import.meta.url).href;
-const brandWordmark = new URL("../assets/brand/logo-text.png", import.meta.url).href;
+const brandAssets = [
+  {
+    appearance: "light",
+    icon: new URL("../assets/brand/logo-4-light.png", import.meta.url).href,
+    wordmark: new URL("../assets/brand/logo-text-4-light.png", import.meta.url).href,
+  },
+  {
+    appearance: "dark",
+    icon: new URL("../assets/brand/logo-4-dark.png", import.meta.url).href,
+    wordmark: new URL("../assets/brand/logo-text-4-dark.png", import.meta.url).href,
+  },
+];
 
 async function loadBootstrap(signal: AbortSignal): Promise<Bootstrap> {
   let result;
@@ -129,10 +139,14 @@ export function WorkspaceGate({ children }: { children: ReactNode }) {
     <Page
       title="Easy Property Management"
       brand={
-        <picture className="workspace-brand">
-          <source media="(max-width: 767px)" srcSet={brandIcon} />
-          <img src={brandWordmark} alt="Easy Property Management" width="2172" height="724" />
-        </picture>
+        <>
+          {brandAssets.map(({ appearance, icon, wordmark }) => (
+            <picture key={appearance} className={`workspace-brand workspace-brand-${appearance}`}>
+              <source media="(max-width: 767px)" srcSet={icon} />
+              <img src={wordmark} alt="Easy Property Management" width="2172" height="724" />
+            </picture>
+          ))}
+        </>
       }
     >
       <QueryClientProvider client={client}>

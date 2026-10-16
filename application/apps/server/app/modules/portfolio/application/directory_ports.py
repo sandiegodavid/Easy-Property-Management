@@ -11,6 +11,7 @@ from app.modules.portfolio.application.service import PortfolioError
 MAX_DIRECTORY_TEXT = 240
 MAX_DIRECTORY_ITEMS = 100
 RECOGNITION_PREVIEW_LIMIT = 3
+OWNER_RECOGNITION_PREVIEW_LIMIT = 5
 
 
 @dataclass(frozen=True)

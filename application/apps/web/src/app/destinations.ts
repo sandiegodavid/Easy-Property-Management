@@ -72,7 +72,7 @@ export const propertySections = [
   "maintenance",
   "conversations",
   "documents",
-  "details",
+  "setup",
 ] as const;
 export const ownerSections = [
   "overview",

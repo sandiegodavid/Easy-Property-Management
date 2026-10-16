@@ -5,6 +5,7 @@ import { record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { normalizeApiError } from "../shared/mutations";
 import { label } from "./fields";
+import { formatHomeTime } from "../shared/home-time";
 
 export function readResult<T>(response: { data?: T; error?: unknown; response: Response }): T {
   if (!response.data)
@@ -46,10 +47,12 @@ export function History({
   kind,
   id,
   snapshotFields,
+  presentation,
 }: {
   kind: string;
   id: string;
   snapshotFields?: string[];
+  presentation?: "timeline";
 }) {
   const { scope } = useWorkspace();
   const [open, setOpen] = useState(false);
@@ -68,44 +71,73 @@ export function History({
     },
   });
   return (
-    <details onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <details
+      className={presentation === "timeline" ? "property-history" : undefined}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
       <summary>History</summary>
+      {presentation === "timeline" && open && (
+        <p className="property-history-intro">Recorded changes to this property, newest first.</p>
+      )}
       {result.isPending && open && <p role="status">Loading history…</p>}
       {result.error && <p role="alert">{result.error.message}</p>}
       {result.data?.map((event) => (
         <article key={scalar(event.id)}>
-          <Facts value={event} fields={["action", "occurredAt", "actorKind", "reason"]} />
-          {["before", "after"].map((phase) => (
-            <details key={phase}>
-              <summary>{phase === "before" ? "Prior facts" : "Resulting facts"}</summary>
-              <Facts
-                value={event[phase]}
-                verbatim={!!snapshotFields}
-                fields={Object.keys(record(event[phase])).filter((key) =>
-                  (
-                    snapshotFields ?? [
-                      "displayName",
-                      "status",
-                      "archivedAt",
-                      "archiveReason",
-                      "ownerKind",
-                      "startsOn",
-                      "endsOn",
-                      "effectiveOn",
-                      "ownershipContext",
-                      "occupancyStatus",
-                      "availabilityStatus",
-                      "note",
-                    ]
-                  ).includes(key),
-                )}
-              />
-              {Array.isArray(record(event[phase]).ownerships) &&
-                (record(event[phase]).ownerships as unknown[]).map((owner, index) => (
-                  <Facts key={index} value={owner} fields={["ownerKind", "startsOn", "endsOn"]} />
-                ))}
-            </details>
-          ))}
+          {presentation === "timeline" ? (
+            <>
+              <header className="property-history-event-heading">
+                <strong>{scalar(event.action).replaceAll("_", " ")}</strong>
+                <time dateTime={scalar(event.occurredAt)}>
+                  {formatHomeTime(scalar(event.occurredAt))}
+                </time>
+              </header>
+              <p className="property-history-actor">
+                {event.actorKind === "local_operator"
+                  ? "You"
+                  : label(scalar(event.actorKind).replaceAll("_", " "))}
+              </p>
+              {!!event.reason && (
+                <p className="property-history-reason">
+                  {scalar(event.reason).replaceAll("_", " ")}
+                </p>
+              )}
+            </>
+          ) : (
+            <Facts value={event} fields={["action", "occurredAt", "actorKind", "reason"]} />
+          )}
+          <div className={presentation === "timeline" ? "property-history-changes" : undefined}>
+            {["before", "after"].map((phase) => (
+              <details key={phase}>
+                <summary>{phase === "before" ? "Prior facts" : "Resulting facts"}</summary>
+                <Facts
+                  value={event[phase]}
+                  verbatim={!!snapshotFields}
+                  fields={Object.keys(record(event[phase])).filter((key) =>
+                    (
+                      snapshotFields ?? [
+                        "displayName",
+                        "status",
+                        "archivedAt",
+                        "archiveReason",
+                        "ownerKind",
+                        "startsOn",
+                        "endsOn",
+                        "effectiveOn",
+                        "ownershipContext",
+                        "occupancyStatus",
+                        "availabilityStatus",
+                        "note",
+                      ]
+                    ).includes(key),
+                  )}
+                />
+                {Array.isArray(record(event[phase]).ownerships) &&
+                  (record(event[phase]).ownerships as unknown[]).map((owner, index) => (
+                    <Facts key={index} value={owner} fields={["ownerKind", "startsOn", "endsOn"]} />
+                  ))}
+              </details>
+            ))}
+          </div>
         </article>
       ))}
       {result.data?.length === 0 && <p>No recorded history on this page.</p>}

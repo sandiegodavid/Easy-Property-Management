@@ -20,11 +20,11 @@ Forms, actions and navigation sit inside the expansion. Collapse preserves unfin
 
 Autosave exposes acknowledged saving/saved/failed/conflicted states. Conflicts preserve input for explicit current-source review. Lost responses retain the original key and reconcile before another dispatch. File recovery stores metadata/hash and requests matching byte reselection. Partial success identifies what committed: an attachment failure never invites re-entering a committed payment.
 
-## Availability, coverage and assurance
+## Availability, information review and assurance
 
 Loading, successful empty, unavailable, partial and retained stale results have distinct presentations. Failed money reads never show zero balances. Independent section failures preserve unaffected sections. Counts/timestamps/continuations and domain classifications come from the server. Unknown occupancy is not vacancy; no empty issue list proves a property is problem-free.
 
-Coverage distinguishes Recorded, Missing required information, Needs review and justified Not applicable. Each gap explains why it exists and links to its resolution. Manual acknowledgment retains review provenance and cannot fill a required gap. Relevant source changes require explicit renewed review; unrelated events do not invalidate all coverage. Waiting names the person/event and optional follow-up; undated waiting is visibly unscheduled. Source deadlines, urgency and independent reminders remain intact.
+Information review distinguishes Recorded, Missing required information, Needs review and justified Not applicable. Each gap explains why it exists and links to its resolution. Manual acknowledgment retains review provenance and cannot fill a required gap. Relevant source changes require explicit renewed review; unrelated events do not invalidate all information reviews. Waiting names the person/event and optional follow-up; undated waiting is visibly unscheduled. Source deadlines, urgency and independent reminders remain intact.
 
 ## Accessibility and local operation
 
