@@ -136,13 +136,25 @@
   ],
   "properties": [
     {
+      "key": "op-office-suites",
+      "owner": "operator",
+      "name": "Harbor Offices",
+      "address": "340 Demo Harbor Way",
+      "type": "office",
+      "spaceNames": ["Suite 100", "Suite 200"],
+      "rentMinor": 0,
+      "tenants": [],
+      "vacant": true,
+      "notes": "Fictional demonstration property with two independently rentable vacant office suites."
+    },
+    {
       "key": "op-vacant",
       "owner": "operator",
       "name": "Cedar Cottage \u2014 Vacant",
       "address": "110 Demo Cedar Lane",
       "type": "single_family_home",
       "rentMinor": 0,
-      "tenant": "",
+      "tenants": [],
       "notes": "Fictional demonstration property; all people and transactions are synthetic.",
       "vacant": true
     },
@@ -153,7 +165,7 @@
       "address": "220 Demo Maple Avenue",
       "type": "single_family_home",
       "rentMinor": 215000,
-      "tenant": "Alex Morgan (Demo)",
+      "tenants": ["Alex Morgan (Demo)", "Sam Patel (Demo)"],
       "notes": "Fictional demonstration property; all people and transactions are synthetic."
     },
     {
@@ -163,7 +175,7 @@
       "address": "330 Demo Commerce Way",
       "type": "office",
       "rentMinor": 280000,
-      "tenant": "Juniper Studio LLC (Demo)",
+      "tenants": ["Juniper Studio LLC (Demo)"],
       "notes": "Fictional demonstration property; all people and transactions are synthetic."
     },
     {
@@ -173,7 +185,7 @@
       "address": "410 Demo Birch Court",
       "type": "townhome",
       "rentMinor": 195000,
-      "tenant": "Taylor Reed (Demo)",
+      "tenants": ["Taylor Reed (Demo)"],
       "notes": "Fictional demonstration property; all people and transactions are synthetic.",
       "late": true
     },
@@ -181,10 +193,13 @@
       "key": "o1-prepaid",
       "owner": "owner_1",
       "name": "Willow House \u2014 Prepaid",
+      "openForLeasingLater": true,
+      "leasingAvailableOn": "2027-05-01",
+      "leaseEndsOn": "2027-05-01",
       "address": "420 Demo Willow Street",
       "type": "single_family_home",
       "rentMinor": 235000,
-      "tenant": "Jamie Brooks (Demo)",
+      "tenants": ["Jamie Brooks (Demo)"],
       "notes": "Fictional demonstration property; all people and transactions are synthetic.",
       "prepaid": true
     },
@@ -192,10 +207,11 @@
       "key": "o2-condo-101",
       "owner": "owner_2",
       "name": "Riverbend Condo 101",
+      "openForLeasingLater": true,
       "address": "500 Demo Riverbend Drive",
       "type": "condo",
       "rentMinor": 180000,
-      "tenant": "Jordan Ellis (Demo)",
+      "tenants": ["Jordan Ellis (Demo)"],
       "notes": "Fictional demonstration property; all people and transactions are synthetic. One independently managed condo unit in the shared Riverbend building.",
       "unit": "Unit 101"
     },
@@ -206,7 +222,7 @@
       "address": "500 Demo Riverbend Drive",
       "type": "condo",
       "rentMinor": 185000,
-      "tenant": "Casey Quinn (Demo)",
+      "tenants": ["Casey Quinn (Demo)"],
       "notes": "Fictional demonstration property; all people and transactions are synthetic. One independently managed condo unit in the shared Riverbend building.",
       "unit": "Unit 102"
     },
@@ -217,7 +233,7 @@
       "address": "500 Demo Riverbend Drive",
       "type": "condo",
       "rentMinor": 190000,
-      "tenant": "Riley Parker (Demo)",
+      "tenants": ["Riley Parker (Demo)"],
       "notes": "Fictional demonstration property; all people and transactions are synthetic. One independently managed condo unit in the shared Riverbend building.",
       "unit": "Unit 103"
     },
@@ -228,8 +244,8 @@
       "address": "610 Demo Spruce Road",
       "type": "single_family_home",
       "rentMinor": 260000,
-      "tenant": "Avery Lane (Demo)",
-      "notes": "Fictional demonstration property; all people and transactions are synthetic."
+      "tenants": ["Avery Lane (Demo)", "Maya Chen (Demo)", "Leo Bennett (Demo)"],
+      "notes": "Fictional demonstration property; all people and transactions are synthetic. Three college students share one residential lease."
     },
     {
       "key": "o2-office",
@@ -238,7 +254,7 @@
       "address": "620 Demo Business Avenue",
       "type": "office",
       "rentMinor": 320000,
-      "tenant": "Northlight Design LLC (Demo)",
+      "tenants": ["Northlight Design LLC (Demo)"],
       "notes": "Fictional demonstration property; all people and transactions are synthetic."
     }
   ],
@@ -268,16 +284,8 @@
       "description": "Tenant reports active cabinet leak; supply shut off pending plumber. Compare fixture replacement quotes.",
       "category": "plumbing",
       "priority": "urgent",
-      "quotes": [
-        480,
-        625,
-        790
-      ],
-      "providerIndexes": [
-        0,
-        1,
-        2
-      ],
+      "quotes": [480, 625, 790],
+      "providerIndexes": [0, 1, 2],
       "appointmentDays": 1
     },
     {
@@ -287,16 +295,8 @@
       "description": "No heat reported; arrange prompt assessment and compare repair options.",
       "category": "heating_cooling",
       "priority": "urgent",
-      "quotes": [
-        920,
-        1150,
-        1380
-      ],
-      "providerIndexes": [
-        3,
-        4,
-        5
-      ]
+      "quotes": [920, 1150, 1380],
+      "providerIndexes": [3, 4, 5]
     }
   ],
   "communications": [

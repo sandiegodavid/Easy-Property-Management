@@ -96,6 +96,14 @@ class RelationshipItem(Contract):
     target: EntityTarget
 
 
+class LeaseTenantItem(Contract):
+    partyId: UUID
+    displayName: str
+    participantRole: Literal["primary_tenant", "co_tenant", "business_signatory"]
+    startsOn: date
+    endsOn: date | None
+
+
 class LeaseItem(Contract):
     id: UUID
     propertyId: UUID
@@ -107,6 +115,8 @@ class LeaseItem(Contract):
     occupancyStartsOn: date
     actualMoveOutOn: date | None
     isCurrent: StrictBool
+    tenants: list[LeaseTenantItem] = Field(max_length=10)
+    tenantCount: StrictInt = Field(ge=0)
     target: EntityTarget
 
 

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { PageAsOf } from "../shared/page-as-of";
 import { MaintenanceFilters } from "./maintenance-context";
 import { MaintenanceEvidenceArchive } from "./maintenance-evidence";
 import { useState } from "react";
@@ -453,7 +454,7 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
           {"matchingTotal" in result.data && (
             <p>{String(result.data.matchingTotal)} matching follow-ups</p>
           )}
-          {"asOf" in result.data && <p>As of {String(result.data.asOf)}</p>}
+          {"asOf" in result.data && <PageAsOf asOf={String(result.data.asOf)} />}
           {result.data.items.length === 0 && (
             <p>
               No matching recorded items on this page. This does not establish that no problems
@@ -462,6 +463,7 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
           )}
           {follow && "asOf" in result.data && "matchingTotal" in result.data ? (
             <AttentionQueue
+              showCaptureTime={false}
               kind="waiting"
               asOf={String(result.data.asOf)}
               total={Number(result.data.matchingTotal)}
@@ -586,9 +588,10 @@ function TaskSummary() {
       {result.error && <p role="alert">Deadline summary unavailable: {result.error.message}</p>}
       {result.data && (
         <>
-          <p>As of {result.data.asOf}</p>
+          <PageAsOf asOf={result.data.asOf} priority={1} />
           {(["overdue", "today", "next7days"] as const).map((key) => (
             <AttentionSection
+              showCaptureTime={false}
               key={key}
               title={
                 key === "next7days"

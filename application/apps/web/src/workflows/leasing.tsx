@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { leaseLastCoveredOn } from "../shared/lease-dates";
 import { CoverageLinks } from "../shared/coverage";
 import { useParams, useSearchParams } from "react-router-dom";
 import { SourceWorkflowLink as Link } from "../shared/home-navigation";
@@ -13,6 +14,7 @@ import { InspectionList } from "./inspections";
 import { LeaseDocuments } from "./lease-documents";
 import { MoneyFacts } from "./money-presentation";
 import { statusLabel } from "./portfolio-status";
+import { PageAsOf } from "../shared/page-as-of";
 
 type Lease = components["schemas"]["LeaseResponse"];
 export function LeasingWorkspace() {
@@ -100,9 +102,10 @@ function LeaseDirectory() {
         </button>
       )}
       {leases.data && (
-        <p>
-          {leases.data.matchingTotal} matching leases · As of {leases.data.asOf}
-        </p>
+        <>
+          <PageAsOf asOf={leases.data.asOf} />
+          <p>{leases.data.matchingTotal} matching leases</p>
+        </>
       )}
       {leases.data?.items.length === 0 && <p>No leases match these filters.</p>}
       {leases.data?.items.map((lease) => (
@@ -154,16 +157,17 @@ export function LeaseRecord({ id }: { id: string }) {
   if (lease.isPending) return <p role="status">Loading lease…</p>;
   if (lease.error) return <p role="alert">{lease.error.message}</p>;
   const item = lease.data;
+  const displayed = { ...item, leaseLastCoveredOn: leaseLastCoveredOn(item.contractEndsOn) };
   return (
     <section aria-label="Lease workspace">
       <h2>{item.leaseKind} lease</h2>
       <Facts
-        value={item}
+        value={displayed}
         fields={[
           "status",
           "leaseRevision",
           "contractStartsOn",
-          "contractEndsOn",
+          "leaseLastCoveredOn",
           "occupancyStartsOn",
           "actualMoveOutOn",
           "occupancyState",
@@ -174,10 +178,10 @@ export function LeaseRecord({ id }: { id: string }) {
       <section aria-label="Lease milestones">
         <h3>Contract and physical occupancy</h3>
         <Facts
-          value={item}
+          value={displayed}
           fields={[
             "contractStartsOn",
-            "contractEndsOn",
+            "leaseLastCoveredOn",
             "executedOn",
             "occupancyStartsOn",
             "actualMoveOutOn",
@@ -185,8 +189,8 @@ export function LeaseRecord({ id }: { id: string }) {
           ]}
         />
         <p>
-          End dates are exclusive. Contract expiry or an accepted termination proposal does not
-          confirm physical move-out or make the Space available.
+          Lease end shows the last day covered by the contract. Contract expiry or an accepted
+          termination proposal does not confirm physical move-out or make the Space available.
         </p>
         <LeaseSpaceContext spaceId={item.spaceId} />
       </section>
@@ -227,8 +231,8 @@ export function LeaseRecord({ id }: { id: string }) {
       {item.participants.map((participant) => (
         <article key={participant.id}>
           <Facts
-            value={participant}
-            fields={["tenantPartyId", "participantRole", "startsOn", "endsOn", "notes"]}
+            value={{ ...participant, lastCoveredOn: leaseLastCoveredOn(participant.endsOn) }}
+            fields={["tenantPartyId", "participantRole", "startsOn", "lastCoveredOn", "notes"]}
           />
           <Link to={`/parties?identity=${participant.tenantPartyId}`}>Tenant identity</Link>
           {item.status === "draft" && (
@@ -245,10 +249,10 @@ export function LeaseRecord({ id }: { id: string }) {
       {item.terms.map((term) => (
         <MoneyFacts
           key={term.id}
-          value={term}
+          value={{ ...term, lastCoveredOn: leaseLastCoveredOn(term.endsOn) }}
           fields={[
             "effectiveOn",
-            "endsOn",
+            "lastCoveredOn",
             "baseRentMinor",
             "currencyCode",
             "paymentFrequency",
@@ -325,14 +329,12 @@ function LeaseSpaceContext({ spaceId }: { spaceId: string }) {
         <>
           <p>
             {space.data.displayName} · Current occupancy:{" "}
-            {statusLabel(space.data.currentOccupancy.occupancyStatus)} · Availability:{" "}
+            {statusLabel(space.data.currentOccupancy.occupancyStatus)} · Leasing status:{" "}
             {statusLabel(space.data.availability.effectiveStatus)}
           </p>
-          <p>
-            Property-local date: {space.data.effectiveLocalDate} · As of {space.data.asOf}
-          </p>
+          <p>Property-local date: {space.data.effectiveLocalDate}</p>
           <Link to={`/properties/${space.data.propertyId}/units`}>
-            Review Space occupancy and availability
+            Review Space occupancy and leasing status
           </Link>
         </>
       )}

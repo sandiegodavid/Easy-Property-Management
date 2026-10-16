@@ -3,6 +3,8 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
 import { useWorkspace } from "../app/workspace-gate";
 import { normalizeApiError } from "./mutations";
+import { PageAsOf } from "./page-as-of";
+import { leaseLastCoveredOn } from "./lease-dates";
 
 type Source = { title: string; facts: Record<string, string | number | null> };
 async function readSource(kind: string, id: string, signal: AbortSignal): Promise<Source> {
@@ -40,7 +42,7 @@ async function readSource(kind: string, id: string, signal: AbortSignal): Promis
           Status: item.status,
           Revision: item.leaseRevision,
           "Contract starts": item.contractStartsOn,
-          "Contract ends": item.contractEndsOn,
+          "Lease end (last covered day)": leaseLastCoveredOn(item.contractEndsOn),
           "Occupancy starts": item.occupancyStartsOn,
           "Actual move-out": item.actualMoveOutOn,
           Notes: item.notes,
@@ -156,6 +158,9 @@ export function SourceDetail() {
       )}
       {result.data && (
         <>
+          {typeof result.data.facts["As of"] === "string" && (
+            <PageAsOf asOf={result.data.facts["As of"]} priority={1} />
+          )}
           <h4>{result.data.title}</h4>
           {kind === "lease" && <Link to={`/leases/${id}/details`}>Open Lease workflow</Link>}
           {["task", "maintenance_issue", "communication", "owner_concern"].includes(kind) && (
@@ -166,12 +171,14 @@ export function SourceDetail() {
             </Link>
           )}
           <dl>
-            {Object.entries(result.data.facts).map(([name, value]) => (
-              <div key={name}>
-                <dt>{name}</dt>
-                <dd>{value ?? "Not recorded"}</dd>
-              </div>
-            ))}
+            {Object.entries(result.data.facts)
+              .filter(([name]) => name !== "As of")
+              .map(([name, value]) => (
+                <div key={name}>
+                  <dt>{name}</dt>
+                  <dd>{value ?? "Not recorded"}</dd>
+                </div>
+              ))}
           </dl>
         </>
       )}

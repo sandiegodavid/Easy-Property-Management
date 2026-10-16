@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { PageAsOf } from "../shared/page-as-of";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
@@ -195,10 +196,8 @@ export function IdentityWorkspace() {
           )}
           {results.data?.groups.tenants?.availability === "available" && (
             <>
-              <p>
-                {results.data.groups.tenants.matchingTotal} matching tenants · As of{" "}
-                {results.data.asOf}
-              </p>
+              <PageAsOf asOf={results.data.asOf} />
+              <p>{results.data.groups.tenants.matchingTotal} matching tenants</p>
               {results.data.groups.tenants.items?.map((item) => (
                 <p key={item.sourceId}>
                   <Link to={`/parties?identity=${item.sourceId}`}>{item.label}</Link> ·{" "}

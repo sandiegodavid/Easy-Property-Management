@@ -1,4 +1,5 @@
 import { fieldSchema, record, type RequestSchema } from "@epm/contracts/workflows";
+import { leasingStatusLabels } from "../shared/leasing-status";
 
 export type Choice = { id: string; label: string; revision?: number; historical?: boolean };
 export type Choices = Record<string, Choice[]>;
@@ -17,6 +18,15 @@ export function label(name: string) {
     ownerKind: "Ownership kind",
     partyKind: "Identity kind",
     effectiveOn: "Effective date",
+    availability: "Leasing status",
+    availabilityStatus: "Leasing status",
+    availableNowCount: "Open for leasing now count",
+    availableLaterCount: "Open for leasing later count",
+    availableOn: "Open for leasing on",
+    nearestAvailableOn: "Next leasing opening date",
+    leaseLastCoveredOn: "Lease end (last covered day)",
+    lastCoveredOn: "Last covered day",
+    contractEndsOn: "Contract end boundary (exclusive)",
   };
   return (
     overrides[name] ??
@@ -280,7 +290,8 @@ export function Fields({
                       {childShape.enum
                         ? childShape.enum.map((option) => (
                             <option key={option} value={option}>
-                              {String(option).replaceAll("_", " ")}
+                              {leasingStatusLabels[String(option)] ??
+                                String(option).replaceAll("_", " ")}
                             </option>
                           ))
                         : options?.map((option) => (

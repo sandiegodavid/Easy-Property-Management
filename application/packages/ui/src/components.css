@@ -20,7 +20,7 @@
   margin-block: var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface);
+  background: var(--row);
 }
 .ui-region {
   padding: 1.25rem;
@@ -45,7 +45,9 @@
   background: transparent;
   overflow-wrap: anywhere;
 }
-.ui-summary:hover,
+.ui-summary:hover {
+  background: var(--row-hover);
+}
 .ui-summary[aria-expanded="true"] {
   background: var(--accent-soft);
 }
@@ -127,6 +129,7 @@
 }
 .ui-notice.ui-warning {
   background: var(--warning-soft);
+  border-color: var(--warning-border);
 }
 .ui-notice.ui-danger {
   background: var(--danger-soft);

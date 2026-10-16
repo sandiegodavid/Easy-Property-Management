@@ -4,13 +4,18 @@ from datetime import UTC
 from sqlalchemy import and_, func, or_, select, literal
 
 from app.modules.leases.application.location_ports import LeaseLocationRelation
+from app.modules.leases.application.summary_ports import LEASE_TENANT_PREVIEW_LIMIT
 from app.modules.leases.infrastructure.sqlalchemy_models import LeaseModel, LeaseRenewalOptionModel
+from app.modules.leases.infrastructure.sqlalchemy_models import LeaseParticipantModel
+from app.modules.parties.application.identity_relations import PartyIdentityRelations
+from app.platform.context_reads import ReadPage
 from app.platform.sql_context_reads import bounded_page
 
 
 class SQLiteLeaseSummaryReader:
-    def __init__(self, locations: LeaseLocationRelation):
+    def __init__(self, locations: LeaseLocationRelation, parties: PartyIdentityRelations):
         self.locations = locations
+        self.parties = parties
 
     def references(self, properties):
         locations = self.locations.locations()
@@ -51,4 +56,54 @@ class SQLiteLeaseSummaryReader:
         )
         if not window.include_history:
             selection = selection.where(current)
-        return bounded_page(connection, selection, window, descending=True)
+        page = bounded_page(connection, selection, window, descending=True)
+        tenants = self._tenant_previews(connection, [row["id"] for row in page.items])
+        return ReadPage(
+            page.total,
+            [
+                {
+                    **row,
+                    "tenants": tenants.get(row["id"], []),
+                    "tenant_count": tenants[row["id"]][0]["total"] if row["id"] in tenants else 0,
+                }
+                for row in page.items
+            ],
+            page.next_key,
+        )
+
+    def _tenant_previews(self, connection, lease_ids):
+        if not lease_ids:
+            return {}
+        participant, parties = LeaseParticipantModel.__table__, self.parties.identities()
+        ranked = (
+            select(
+                participant.c.lease_id,
+                participant.c.tenant_party_id.label("party_id"),
+                parties.c.display_name,
+                participant.c.participant_role,
+                participant.c.starts_on,
+                participant.c.ends_on,
+                func.count().over(partition_by=participant.c.lease_id).label("total"),
+                func.row_number()
+                .over(
+                    partition_by=participant.c.lease_id,
+                    order_by=(participant.c.starts_on, participant.c.id),
+                )
+                .label("position"),
+            )
+            .join(parties, parties.c.party_id == participant.c.tenant_party_id)
+            .where(
+                participant.c.lease_id.in_(lease_ids),
+                participant.c.participant_role != "guarantor",
+            )
+            .subquery()
+        )
+        rows = connection.execute(
+            select(ranked)
+            .where(ranked.c.position <= LEASE_TENANT_PREVIEW_LIMIT)
+            .order_by(ranked.c.lease_id, ranked.c.position)
+        ).mappings()
+        result = {}
+        for row in rows:
+            result.setdefault(row["lease_id"], []).append(row)
+        return result

@@ -30,7 +30,9 @@ export function useRecoverableForm<T extends FieldValues>({
     controller.activate();
     return () => controller.dispose();
   }, [controller]);
-  const blocker = useBlocker(state.draft !== "saved" || state.command === "submitting");
+  const navigationBlocked =
+    !controller.isPristine && (state.draft !== "saved" || state.command === "submitting");
+  const blocker = useBlocker(navigationBlocked);
   useEffect(() => {
     return form.subscribe({
       formState: { values: true },
@@ -38,13 +40,13 @@ export function useRecoverableForm<T extends FieldValues>({
     });
   }, [controller, form, project]);
   useEffect(() => {
-    if (state.draft === "saved" && state.command !== "submitting") return;
+    if (!navigationBlocked) return;
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault();
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [state.draft, state.command]);
+  }, [navigationBlocked]);
   return { form, controller, state, blocker };
 }
 

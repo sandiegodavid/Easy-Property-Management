@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { PageAsOf } from "../shared/page-as-of";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
@@ -159,9 +160,10 @@ export function MoneyReporting() {
       )}
       {properties.data && !metric && (
         <>
+          <PageAsOf asOf={properties.data.summary.asOf} />
           <p>
-            As of {properties.data.summary.asOf} · {properties.data.matchingTotal} matching
-            properties · Property-local dates {fromOn} through {throughOn}
+            {properties.data.matchingTotal} matching properties · Property-local dates {fromOn}{" "}
+            through {throughOn}
           </p>
           {(["operating", "depositActivity", "depositObligations"] as const).map((name) => (
             <section key={name} aria-label={name}>
@@ -219,9 +221,9 @@ export function MoneyReporting() {
       )}
       {sources.data && metric && (
         <>
+          <PageAsOf asOf={sources.data.asOf} />
           <p>
-            As of {sources.data.asOf} · {sources.data.matchingTotal} source records · Backend total
-            USD {sources.data.total}
+            {sources.data.matchingTotal} source records · Backend total USD {sources.data.total}
           </p>
           {sources.data.items.map((item) => {
             const url =
@@ -248,9 +250,8 @@ export function MoneyReporting() {
       )}
       {accounts.data && metric === "recordedDepositObligation" && (
         <>
-          <p>
-            As of {accounts.data.asOf} · {accounts.data.matchingTotal} deposit accounts
-          </p>
+          <PageAsOf asOf={accounts.data.asOf} />
+          <p>{accounts.data.matchingTotal} deposit accounts</p>
           <MoneyFacts value={accounts.data.totals} fields={Object.keys(accounts.data.totals)} />
           {accounts.data.items.map((item) => (
             <article key={item.accountId}>

@@ -3,6 +3,47 @@ import type { components } from "@epm/contracts/generated";
 
 type Schema = components["schemas"];
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
+
+test.describe("page capture time", () => {
+  test.use({ timezoneId: "America/Los_Angeles" });
+
+  test("directories and overviews show one local capture in the top right", async ({
+    page,
+    request,
+  }) => {
+    const item = await property(request, "Local capture property");
+    const owner = item.ownerships[0].partyId;
+    for (const path of [
+      "/properties",
+      "/owners",
+      "/leasing",
+      `/properties/${item.id}/overview`,
+      `/owners/${owner}/overview`,
+    ]) {
+      await page.goto(path);
+      const capture = page.locator("#workspace-content .page-as-of");
+      await expect(capture).toHaveCount(1);
+      await expect(capture).toContainText("America/Los_Angeles");
+      const time = capture.locator("time");
+      const instant = await time.getAttribute("datetime");
+      expect(instant).toBeTruthy();
+      const expected = await page.evaluate((value) => {
+        return new Intl.DateTimeFormat(undefined, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(new Date(value!));
+      }, instant);
+      await expect(time).toContainText(expected);
+      await expect(page.locator("#workspace-content p").filter({ hasText: /^As of / })).toHaveCount(
+        1,
+      );
+      const position = await capture.boundingBox();
+      const content = await page.locator("#workspace-content").boundingBox();
+      expect(position!.y - content!.y).toBeLessThan(30);
+      expect(Math.abs(position!.x + position!.width - content!.x - content!.width)).toBeLessThan(2);
+    }
+  });
+});
 async function property(request: APIRequestContext, name: string, owners?: string[]) {
   const response = await request.post("/api/properties", {
     data: {
@@ -53,7 +94,8 @@ test("real directories recognize properties and owners, preserve filters and swi
   await expect(page.getByRole("region", { name: "relationships", exact: true })).toContainText(
     "current",
   );
-  await page.getByRole("link", { name: "All properties", exact: true }).click();
+  await expect(page.getByText("Switch property", { exact: true })).toHaveCount(0);
+  await page.getByRole("link", { name: "← Back to Properties", exact: true }).click();
   await expect(page).toHaveURL(/q=.*Slice49.*ownershipContext=managed_for_owner/);
   await page.goto(`/owners/${owner}/overview`);
   await expect(page.getByRole("region", { name: "properties", exact: true })).toContainText(
@@ -150,7 +192,9 @@ test("expired cursor retains filters; sparse pages keep totals and continuation"
   await page.getByRole("button", { name: "Next page", exact: true }).click();
   await expect(page.getByText(/This view changed or its continuation expired/)).toBeVisible();
   await page.getByRole("button", { name: "Refresh results" }).click();
-  await expect(page.getByLabel("Search", { exact: true })).toHaveValue("Sparse Slice49");
+  await expect(page.getByLabel("Property name or address", { exact: true })).toHaveValue(
+    "Sparse Slice49",
+  );
   await expect(page).not.toHaveURL(/cursor=/);
   await expect(page.getByText("1 matching properties", { exact: true })).toBeVisible();
   expect(calls).toBeLessThanOrEqual(4);

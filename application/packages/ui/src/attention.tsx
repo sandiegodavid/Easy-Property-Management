@@ -17,12 +17,14 @@ export function AttentionSection({
   total,
   asOf,
   emptyMessage,
+  showCaptureTime = true,
 }: {
   title: string;
   items: readonly AttentionItem[];
   total: number;
   asOf: string;
   emptyMessage: string;
+  showCaptureTime?: boolean;
 }) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   return (
@@ -30,7 +32,7 @@ export function AttentionSection({
       <h4>
         {title} · {total}
       </h4>
-      <p>As of {asOf}</p>
+      {showCaptureTime && <p>As of {asOf}</p>}
       {items.length === 0 ? (
         <p>{emptyMessage}</p>
       ) : (

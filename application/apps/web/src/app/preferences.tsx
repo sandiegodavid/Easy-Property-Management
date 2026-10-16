@@ -5,6 +5,7 @@ import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "./workspace-gate";
 import { defaultOrder, destination } from "./destinations";
 import { mutation, MutationFailure } from "../shared/mutations";
+import { applyAppearance, preferredAppearance } from "./theme";
 
 type Preferences = components["schemas"]["PreferenceResponse"];
 type Command = components["schemas"]["PreferenceInput"];
@@ -20,7 +21,10 @@ const PreferenceContext = createContext<ReturnType<typeof usePreferenceState> | 
 function usePreferenceState() {
   const { bootstrap, scope } = useWorkspace();
   const [saved, setSaved] = useState(bootstrap.preferences);
-  const [draft, setDraft] = useState(bootstrap.preferences ?? defaults);
+  const [draft, setDraft] = useState(() => {
+    const initial = bootstrap.preferences ?? defaults;
+    return { ...initial, appearance: preferredAppearance(initial.appearance) };
+  });
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
   const [conflict, setConflict] = useState(false);
@@ -31,7 +35,7 @@ function usePreferenceState() {
     saved !== null &&
     bootstrap.capabilities.includes("operator.preferences");
   useLayoutEffect(() => {
-    document.documentElement.dataset.theme = draft.appearance;
+    applyAppearance(draft.appearance);
   }, [draft.appearance]);
 
   async function save() {

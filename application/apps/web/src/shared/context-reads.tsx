@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
@@ -8,6 +9,9 @@ import { useWorkspace } from "../app/workspace-gate";
 import { normalizeApiError } from "./mutations";
 import { SourceDetail } from "./source-detail";
 import { statusLabel } from "../workflows/portfolio-status";
+import { PageAsOf } from "./page-as-of";
+import { leaseLastCoveredOn } from "./lease-dates";
+import { DisclosureHelp } from "./home-disclosure-help";
 
 type Schema = components["schemas"];
 type Kind = "property" | "owner";
@@ -35,17 +39,26 @@ function Select({
   value: string;
   options: readonly string[];
 }) {
+  const id = useId();
   return (
-    <label>
-      {label(name)}
-      <select name={name} defaultValue={value}>
+    <div>
+      <div className="filter-label">
+        <label htmlFor={id}>{name === "availability" ? "Leasing status" : label(name)}</label>
+        {name === "availability" && (
+          <DisclosureHelp
+            label="About leasing status"
+            text="Leasing status describes whether a property is open to a new tenancy, independent of current occupancy."
+          />
+        )}
+      </div>
+      <select key={value} id={id} name={name} defaultValue={value}>
         {options.map((option) => (
           <option key={option} value={option}>
-            {label(option) || "Any"}
+            {(name === "availability" ? statusLabel(option) : label(option)) || "Any"}
           </option>
         ))}
       </select>
-    </label>
+    </div>
   );
 }
 function ReadError({ error, restart }: { error: Error; restart: () => void }) {
@@ -57,21 +70,6 @@ function ReadError({ error, restart }: { error: Error; restart: () => void }) {
           : error.message}
       </p>
       <button onClick={restart}>Refresh results</button>
-    </div>
-  );
-}
-function Provenance({ asOf, revision }: { asOf: string; revision: string | null }) {
-  return (
-    <div>
-      <p>
-        As of <time dateTime={asOf}>{asOf}</time>
-      </p>
-      {revision && (
-        <details>
-          <summary>Read provenance</summary>
-          <p className="read-revision">Source revision: {revision}</p>
-        </details>
-      )}
     </div>
   );
 }
@@ -106,7 +104,15 @@ function CoveragePreview({ preview }: { preview: Schema["CoveragePreview"] }) {
     </div>
   );
 }
-export function Directory({ kind }: { kind: Kind }) {
+export function Directory({
+  kind,
+  headingAction,
+  beforeFilters,
+}: {
+  kind: Kind;
+  headingAction?: ReactNode;
+  beforeFilters?: ReactNode;
+}) {
   const location = useLocation();
   const { scope } = useWorkspace();
   const [params, setParams] = useSearchParams();
@@ -117,6 +123,22 @@ export function Directory({ kind }: { kind: Kind }) {
     "current",
   );
   const query = { q: params.get("q") ?? "", limit: 50, cursor: params.get("cursor") ?? undefined };
+  const filterKey = params.toString();
+  const [searchDraft, setSearchDraft] = useState({ key: filterKey, value: query.q });
+  const search = searchDraft.key === filterKey ? searchDraft.value : query.q;
+  const filterTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    return () => clearTimeout(filterTimer.current);
+  }, [params, kind]);
+  function applyFilters(form: HTMLFormElement, debounce = false) {
+    clearTimeout(filterTimer.current);
+    const next = new URLSearchParams();
+    new FormData(form).forEach((value, key) => {
+      if (typeof value === "string" && value) next.set(key, value);
+    });
+    if (debounce) filterTimer.current = setTimeout(() => setParams(next, { replace: true }), 300);
+    else setParams(next);
+  }
   const result = useQuery({
     queryKey: scope.key("directory", kind, params.toString()),
     queryFn: async ({ signal }) => {
@@ -182,23 +204,32 @@ export function Directory({ kind }: { kind: Kind }) {
   }
   return (
     <>
-      <h2>{kind === "property" ? "Properties" : "Owners"}</h2>
+      <div className="directory-heading">
+        <h2>{kind === "property" ? "Properties" : "Owners"}</h2>
+        {headingAction}
+      </div>
+      {beforeFilters}
       <form
-        key={params.toString()}
+        key={kind === "property" ? kind : params.toString()}
         className="read-filters"
+        onChange={(event) => {
+          if (kind === "property") {
+            applyFilters(event.currentTarget, event.target instanceof HTMLInputElement);
+          }
+        }}
         onSubmit={(event) => {
           event.preventDefault();
-          const values = new FormData(event.currentTarget);
-          const next = new URLSearchParams();
-          values.forEach((value, key) => {
-            if (typeof value === "string" && value) next.set(key, value);
-          });
-          setParams(next);
+          applyFilters(event.currentTarget);
         }}
       >
         <label>
-          Search
-          <input name="q" defaultValue={query.q} maxLength={240} />
+          {kind === "property" ? "Property name or address" : "Search"}
+          <input
+            name="q"
+            value={search}
+            onChange={(event) => setSearchDraft({ key: filterKey, value: event.target.value })}
+            maxLength={240}
+          />
         </label>
         <Select name="state" value={state} options={["active", "archived", "all"]} />
         {kind === "owner" ? (
@@ -238,7 +269,20 @@ export function Directory({ kind }: { kind: Kind }) {
             />
           </>
         )}
-        <button>Apply filters</button>
+        {kind === "owner" && <button>Apply filters</button>}
+        {kind === "property" && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.currentTarget.form?.reset();
+              clearTimeout(filterTimer.current);
+              setSearchDraft({ key: "", value: "" });
+              setParams({});
+            }}
+          >
+            Clear filters
+          </button>
+        )}
       </form>
       {result.error ? (
         <ReadError
@@ -254,7 +298,7 @@ export function Directory({ kind }: { kind: Kind }) {
             {result.data.matchingTotal} matching {kind === "property" ? "properties" : "owners"}
             {result.isFetching ? " · Refreshing…" : ""}
           </p>
-          <Provenance asOf={result.data.asOf} revision={result.data.sourceRevision} />
+          <PageAsOf asOf={result.data.asOf} />
           {!result.data.items.length && <p>No matching records on this page.</p>}
           <ul className="context-cards">
             {result.data.items.map((item) =>
@@ -416,9 +460,16 @@ export function ContextNavigator({ kind }: { kind: Kind }) {
       return response.data;
     },
   });
+  if (kind === "property") {
+    return (
+      <p>
+        <Link to={directory}>← Back to Properties</Link>
+      </p>
+    );
+  }
   return (
     <>
-      <Link to={directory}>All {kind === "property" ? "properties" : "owners"}</Link>
+      <Link to={directory}>All owners</Link>
       <details>
         <summary>Switch {kind}</summary>
         <form
@@ -491,6 +542,39 @@ function SourceLink({ target }: { target: Schema["EntityTarget"] }) {
     </Link>
   );
 }
+function LeaseTenants({ lease }: { lease: Schema["LeaseItem"] }) {
+  const tenants = Array.isArray(lease.tenants) ? lease.tenants : null;
+  return (
+    <>
+      {tenants ? (
+        <>
+          <p>Tenants{lease.tenantCount ? ` (${lease.tenantCount})` : ": None recorded"}</p>
+          {!!tenants.length && (
+            <ul>
+              {tenants.map((tenant, index) => (
+                <li key={`${tenant.partyId}:${index}`}>
+                  <Link to={`/parties?identity=${tenant.partyId}`}>{tenant.displayName}</Link>
+                  {" · "}
+                  {label(tenant.participantRole)} · {tenant.startsOn} through{" "}
+                  {leaseLastCoveredOn(tenant.endsOn) ?? "ongoing"}
+                </li>
+              ))}
+            </ul>
+          )}
+          {lease.tenantCount > tenants.length && (
+            <p>
+              Showing {tenants.length} of {lease.tenantCount} tenants. View the lease for all
+              participants.
+            </p>
+          )}
+        </>
+      ) : (
+        <p>Tenant details are unavailable here. View the lease to see its participants.</p>
+      )}
+      <Link to={`/leases/${lease.id}/details`}>View lease</Link>
+    </>
+  );
+}
 function SectionContents({ section }: { section: Section }) {
   if (section.kind === "money")
     return (
@@ -551,10 +635,13 @@ function SectionContents({ section }: { section: Section }) {
               </p>
             )}
             {"occupancyStartsOn" in item && (
-              <p>
-                {item.leaseKind} · Occupancy from {item.occupancyStartsOn} · Move-out{" "}
-                {item.actualMoveOutOn ?? "not recorded"}
-              </p>
+              <>
+                <p>
+                  {item.leaseKind} · Occupancy from {item.occupancyStartsOn} · Move-out{" "}
+                  {item.actualMoveOutOn ?? "not recorded"}
+                </p>
+                <LeaseTenants lease={item} />
+              </>
             )}
             {"occurredAtUtc" in item && (
               <p>
@@ -568,7 +655,7 @@ function SectionContents({ section }: { section: Section }) {
                 {item.followUpAtUtc && ` · Follow-up ${item.followUpAtUtc}`}
               </p>
             )}
-            {"target" in item && <SourceLink target={item.target} />}
+            {"target" in item && !("leaseKind" in item) && <SourceLink target={item.target} />}
             {"area" in item && (
               <p>
                 {item.area} · {item.availability} · {item.state ?? "State unavailable"} ·{" "}
@@ -623,6 +710,7 @@ function OverviewSection({
         <>
           <AsyncRegion
             title={section.kind}
+            showCaptureTime={false}
             state={
               section.availability === "unavailable"
                 ? {
@@ -652,7 +740,6 @@ function OverviewSection({
             <SectionContents section={section} />
           </AsyncRegion>
           <p>Source: {section.sourceKind}</p>
-          <Provenance asOf={section.asOf} revision={section.sourceRevision} />
           {"nextCursor" in section && section.nextCursor && (
             <button onClick={() => setPage({ cursor: section.nextCursor ?? undefined })}>
               Next {section.kind}
@@ -695,7 +782,7 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
   });
   return (
     <>
-      <h2>{tab}</h2>
+      {kind === "owner" && <h2>{tab}</h2>}
       <SourceDetail />
       <form
         key={params.toString()}
@@ -734,7 +821,7 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
         />
       ) : result.data ? (
         <>
-          <h3>{result.data.subject.displayName}</h3>
+          {kind === "owner" && <h3>{result.data.subject.displayName}</h3>}
           {result.data.subject.kind === "property" ? (
             <p>
               {result.data.subject.addressLine1}, {result.data.subject.city},{" "}
@@ -751,7 +838,7 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
             Relationships: {result.data.relationshipScope}
             {result.isFetching && " · Refreshing…"}
           </p>
-          <Provenance asOf={result.data.asOf} revision={result.data.sourceRevision} />
+          <PageAsOf asOf={result.data.asOf} />
           {Object.values(result.data.sections).map((item) => (
             <OverviewSection
               key={`${kind}:${id}:${JSON.stringify(query)}:${item.kind}:${result.data?.sourceRevision}`}

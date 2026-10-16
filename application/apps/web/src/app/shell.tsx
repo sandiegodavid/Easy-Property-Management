@@ -12,10 +12,12 @@ import {
   Outlet,
   Route,
   useLocation,
+  useNavigate,
   useParams,
   useSearchParams,
 } from "react-router-dom";
 import { useWorkspace } from "./workspace-gate";
+import { PageAsOfProvider } from "../shared/page-as-of";
 import {
   destinations,
   destination,
@@ -26,7 +28,12 @@ import {
 import { PreferencesProvider, PreferenceSettings, usePreferences } from "./preferences";
 import { RecoveryPage } from "../shared/recovery-page";
 import { Directory, ContextOverview, ContextNavigator } from "../shared/context-reads";
-import { PortfolioCommand, PortfolioEntry, PortfolioRecord } from "../workflows/portfolio";
+import {
+  PortfolioCommand,
+  PortfolioEntry,
+  PortfolioRecord,
+  PropertyCreateButton,
+} from "../workflows/portfolio";
 import { IdentityWorkspace } from "../workflows/identity";
 import { ProviderWorkspace } from "../workflows/providers";
 import { LeasingWorkspace } from "../workflows/leasing";
@@ -40,6 +47,7 @@ import { Home } from "../shared/home";
 import { HomeCollectionPage } from "../shared/home-collection-page";
 import { HomeInventoryPage } from "../shared/home-inventory-page";
 import { HomeReturn } from "../shared/home-navigation";
+import { readResult } from "../workflows/reads";
 
 function NavigationIcon({ kind }: { kind: (typeof destinations)[number]["icon"] }) {
   const paths = {
@@ -178,8 +186,11 @@ function PropertiesPage() {
     <PortfolioCommand key={params.toString()} />
   ) : (
     <>
-      <PortfolioEntry />
-      <Directory kind="property" />
+      <Directory
+        kind="property"
+        headingAction={<PropertyCreateButton />}
+        beforeFilters={<PortfolioEntry />}
+      />
     </>
   );
 }
@@ -256,7 +267,20 @@ function DestinationGuard({ id }: { id: string }) {
   );
 }
 function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
+  const navigate = useNavigate();
   const { id = "" } = useParams();
+  const { scope } = useWorkspace();
+  const property = useQuery({
+    queryKey: scope.key("portfolio-record", id),
+    enabled: kind === "property",
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/properties/{property_id}", {
+          signal,
+          params: { path: { property_id: id } },
+        }),
+      ),
+  });
   const [params] = useSearchParams();
   const location = useLocation();
   const sections = kind === "property" ? propertySections : ownerSections;
@@ -264,21 +288,35 @@ function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
   if (contextPath({ kind, id }) === "/home") return <Unavailable />;
   return (
     <section>
-      <h2>{kind === "property" ? "Property" : "Owner"} workspace</h2>
-      <p>{id}</p>
-      <ContextNavigator key={`${kind}:${id}`} kind={kind} />
-      <nav aria-label={`${kind} sections`}>
+      {kind === "property" && <ContextNavigator key={`${kind}:${id}`} kind={kind} />}
+      <div className="directory-heading">
+        <h2>
+          {kind === "property" ? (property.data?.displayName ?? "Property") : "Owner workspace"}
+        </h2>
+        {kind === "property" && (
+          <button
+            type="button"
+            onClick={() => void navigate(`/money?propertyId=${encodeURIComponent(id)}`)}
+          >
+            View in Money
+          </button>
+        )}
+      </div>
+      {kind === "owner" && <p>{id}</p>}
+      {kind === "owner" && <ContextNavigator key={`${kind}:${id}`} kind={kind} />}
+      <nav
+        className={kind === "property" ? "property-status-tabs property-context-tabs" : undefined}
+        aria-label={`${kind} sections`}
+      >
         {sections.map((section) => (
           <NavLink key={section} state={navigationState} to={`${section}?${params.toString()}`}>
             {section}
           </NavLink>
         ))}
       </nav>
-      <Link
-        to={`/money?${kind === "property" ? "propertyId" : "ownerId"}=${encodeURIComponent(id)}`}
-      >
-        View in Money
-      </Link>
+      {kind === "owner" && (
+        <Link to={`/money?ownerId=${encodeURIComponent(id)}`}>View in Money</Link>
+      )}
       <Outlet />
     </section>
   );
@@ -302,7 +340,7 @@ function Layout() {
   const content = useRef<HTMLElement>(null);
   useEffect(() => {
     if (drawer.current) drawer.current.open = false;
-    content.current?.focus();
+    content.current?.focus({ preventScroll: true });
     document.title = `${destination(location.pathname.split("/")[1] ?? "")?.label ?? "Workspace"} · Easy Property Management`;
   }, [location.pathname]);
   useEffect(() => {
@@ -381,7 +419,9 @@ function Layout() {
           <p>Appearance and navigation preferences are unavailable. Using display defaults.</p>
         )}
         <section id="workspace-content" tabIndex={-1} ref={content}>
-          <Outlet />
+          <PageAsOfProvider key={location.pathname}>
+            <Outlet />
+          </PageAsOfProvider>
         </section>
       </section>
     </div>

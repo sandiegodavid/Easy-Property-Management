@@ -55,6 +55,7 @@ export class RecoveryController {
   private snapshot: RecoverySnapshot;
   private listeners = new Set<() => void>();
   private payload: Record<string, unknown>;
+  private readonly initialPayload: string;
   private acknowledged: string;
   private pendingSave?: RecoveryInput;
   private pendingPrepare?: components["schemas"]["AttemptInput"];
@@ -73,7 +74,8 @@ export class RecoveryController {
     recovered?: Recovery,
     private readonly transport = recoveryApi,
   ) {
-    this.payload = JSON.parse(canonicalRequest(initial)) as Record<string, unknown>;
+    this.initialPayload = canonicalRequest(initial);
+    this.payload = JSON.parse(this.initialPayload) as Record<string, unknown>;
     this.acknowledged = recovered ? canonicalRequest(recovered.payload) : "";
     this.snapshot = {
       draft: recovered ? "saved" : "dirty",
@@ -88,6 +90,17 @@ export class RecoveryController {
   }
 
   getSnapshot = () => this.snapshot;
+  get isPristine() {
+    return (
+      !this.snapshot.record &&
+      this.snapshot.command === "editing" &&
+      !this.active &&
+      !this.pendingSave &&
+      !this.pendingPrepare &&
+      !this.pendingDiscard &&
+      canonicalRequest(this.payload) === this.initialPayload
+    );
+  }
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

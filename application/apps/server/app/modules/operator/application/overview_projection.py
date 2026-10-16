@@ -95,6 +95,15 @@ TARGETS = {
 
 def item_view(section, row):
     result = {_camel(key): row[key] for key in FIELDS[section]}
+    if section == "leases":
+        result["tenantCount"] = row["tenant_count"]
+        result["tenants"] = [
+            {
+                _camel(key): tenant[key]
+                for key in ("party_id", "display_name", "participant_role", "starts_on", "ends_on")
+            }
+            for tenant in row["tenants"]
+        ]
     target_id = row["property_id"] if section == "relationships" else row["id"]
     result["target"] = {"entityType": TARGETS[section], "entityId": target_id}
     return result

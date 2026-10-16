@@ -11769,6 +11769,10 @@ export interface components {
              */
             status: "draft" | "executed" | "ended" | "terminated" | "void";
             target: components["schemas"]["EntityTarget"];
+            /** Tenantcount */
+            tenantCount: number;
+            /** Tenants */
+            tenants: components["schemas"]["LeaseTenantItem"][];
         };
         /** LeaseMutationResponse */
         LeaseMutationResponse: {
@@ -12105,6 +12109,28 @@ export interface components {
              * @enum {string}
              */
             kind: "lease";
+        };
+        /** LeaseTenantItem */
+        LeaseTenantItem: {
+            /** Displayname */
+            displayName: string;
+            /** Endson */
+            endsOn: string | null;
+            /**
+             * Participantrole
+             * @enum {string}
+             */
+            participantRole: "primary_tenant" | "co_tenant" | "business_signatory";
+            /**
+             * Partyid
+             * Format: uuid
+             */
+            partyId: string;
+            /**
+             * Startson
+             * Format: date
+             */
+            startsOn: string;
         };
         /** LeaseTermResponse */
         LeaseTermResponse: {

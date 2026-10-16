@@ -86,7 +86,7 @@ def compose_operator(workspace, runtime, recorder, sources):
                 portfolio=SQLiteOwnerContextReader(SQLitePartyIdentityRelations()),
                 locations=locations,
                 lease_locations=lease_locations,
-                leases=SQLiteLeaseSummaryReader(lease_locations),
+                leases=SQLiteLeaseSummaryReader(lease_locations, SQLitePartyIdentityRelations()),
                 issues=SQLiteIssueSummaryReader(),
                 communications=SQLiteCommunicationSummaryReader(),
                 tasks=SQLiteTaskSummaryReader(),

@@ -4,6 +4,8 @@ from typing import Any, Protocol
 from sqlalchemy.sql.selectable import FromClause
 from app.platform.context_reads import ContextScope, ReadPage, ReadWindow
 
+LEASE_TENANT_PREVIEW_LIMIT = 10
+
 
 class LeaseSummaryReader(Protocol):
     def page(self, connection: Any, scope: ContextScope, window: ReadWindow) -> ReadPage: ...

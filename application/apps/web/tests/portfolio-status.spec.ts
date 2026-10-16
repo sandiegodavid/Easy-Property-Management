@@ -62,6 +62,29 @@ async function save(page: Page, title: string) {
   await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
 }
 
+test("Back to Properties leaves an untouched create form and protects edits", async ({ page }) => {
+  let propertyWrites = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/api/properties")
+      propertyWrites++;
+  });
+  await page.goto("/properties");
+  await page.getByRole("button", { name: "Create property", exact: true }).click();
+  await expect(page.getByRole("group", { name: "Requested change", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "← Back to Properties", exact: true }).click();
+  await expect(page).toHaveURL(/\/properties$/);
+  await expect(page.getByRole("heading", { name: "Properties", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Create property", exact: true }).click();
+  await page.getByLabel("Display name (required)", { exact: true }).fill("Unfinished property");
+  await page.getByRole("link", { name: "← Back to Properties", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Unfinished form" })).toBeVisible();
+  await page.getByRole("button", { name: "Keep editing", exact: true }).click();
+  await expect(page.getByLabel("Display name (required)", { exact: true })).toHaveValue(
+    "Unfinished property",
+  );
+  expect(propertyWrites).toBe(0);
+});
+
 test("unknown Space review classifies independent occupancy and future availability", async ({
   page,
   request,
@@ -70,7 +93,7 @@ test("unknown Space review classifies independent occupancy and future availabil
   const space = property.spaces[0];
   await page.goto(`/properties/${property.id}/units`);
   await expect(
-    page.getByRole("region", { name: "Property occupancy and availability" }),
+    page.getByRole("region", { name: "Property occupancy and leasing status" }),
   ).toContainText("Unknown occupancy count");
   await page
     .getByRole("link", { name: `Review status for ${space.displayName}`, exact: true })
@@ -82,30 +105,30 @@ test("unknown Space review classifies independent occupancy and future availabil
   await page
     .getByLabel("Effective date (required)", { exact: true })
     .fill(property.effectiveLocalDate);
-  await page.getByRole("button", { name: "Add availability", exact: true }).click();
+  await page.getByRole("button", { name: "Add leasing status", exact: true }).click();
   await page
-    .getByRole("combobox", { name: "Availability status (required)", exact: true })
+    .getByRole("combobox", { name: "Leasing status (required)", exact: true })
     .selectOption("available_on");
   await page.getByRole("button", { name: "Save classify space", exact: true }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   expect((await status(request, space.id)).revision).toBe(space.revision);
   const date = later(property.effectiveLocalDate, 3);
-  await page.getByLabel("Available on", { exact: true }).fill(date);
+  await page.getByLabel("Open for leasing on", { exact: true }).fill(date);
   await save(page, "Classify space");
   const current = await status(request, space.id);
   expect(current.currentOccupancy.occupancyStatus).toBe("vacant");
   expect(current.availability.effectiveStatus).toBe("available_on");
   await page.goto(`/properties/${property.id}/units`);
   const setup = page.getByRole("region", { name: "Property setup", exact: true });
-  await expect(setup).toContainText("Effective availability: Available later");
-  await expect(setup).toContainText("Recorded intention: Available later");
+  await expect(setup).toContainText("Current leasing status: Open for leasing later");
+  await expect(setup).toContainText("Recorded intention: Open for leasing later");
   await expect(setup).toContainText(date);
   await expect(
     setup.getByRole("link", { name: `Review status for ${space.displayName}`, exact: true }),
   ).toHaveCount(0);
   await action(page, "portfolio.availability.change", space.id);
   await page
-    .getByRole("combobox", { name: "Availability status (required)", exact: true })
+    .getByRole("combobox", { name: "Leasing status (required)", exact: true })
     .selectOption("not_available");
   await save(page, "Change availability");
   expect((await status(request, space.id)).currentOccupancy.occupancyStatus).toBe("vacant");
@@ -168,29 +191,62 @@ test("Portfolio summary drill-down and combined status filters use source facts"
   await classify(request, vacant, "vacant", "available_now");
   await classify(request, occupied, "occupied", "available_on");
   await page.goto("/properties?q=PORT003%20filter");
-  const summary = page.getByRole("region", { name: "Portfolio occupancy and availability" });
+  await expect(
+    page.locator(".directory-heading").getByRole("button", { name: "Create property" }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Property name or address", { exact: true })).toHaveValue(
+    "PORT003 filter",
+  );
+  await expect(page.getByText("Create a minimal property", { exact: false })).toHaveCount(0);
+  const tabs = page.getByRole("navigation", { name: "Property status filters" });
+  await expect(tabs.getByRole("link")).toHaveCount(6);
+  const summary = page.getByRole("region", { name: "Portfolio occupancy and leasing status" });
+  await page.getByRole("button", { name: "About leasing status" }).focus();
+  await expect(page.getByRole("tooltip")).toContainText("independent of current occupancy");
   const response = await request.get("/api/portfolio/status-summary");
   const totals = (await response.json()) as Schemas["PortfolioStatusSummaryResponse"];
+  await expect(summary.locator("p").filter({ hasText: "active properties" })).toHaveText(
+    `${totals.activePropertyCount} active properties · ${totals.activeSpaceCount} active spaces. Counts describe spaces; filtered property results include any matching active space.`,
+  );
   await expect(
-    summary.getByRole("link", { name: `Available now: ${totals.availableNowCount}`, exact: true }),
+    summary.getByRole("link", {
+      name: `Open for leasing now: ${totals.availableNowCount}`,
+      exact: true,
+    }),
   ).toBeVisible();
   await page
     .getByRole("combobox", { name: "ownership Context", exact: true })
     .selectOption("self_owned");
   await page.getByRole("combobox", { name: "occupancy", exact: true }).selectOption("vacant");
   await page
-    .getByRole("combobox", { name: "availability", exact: true })
+    .getByRole("combobox", { name: "Leasing status", exact: true })
     .selectOption("available_now");
   await page.getByRole("combobox", { name: "needs Attention", exact: true }).selectOption("false");
-  await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Apply filters", exact: true })).toHaveCount(0);
   await expect(page.getByText("1 matching properties", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: vacant.displayName, exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: occupied.displayName, exact: true })).toHaveCount(0);
   await summary
-    .getByRole("link", { name: `Available later: ${totals.availableLaterCount}`, exact: true })
+    .getByRole("link", {
+      name: `Open for leasing later: ${totals.availableLaterCount}`,
+      exact: true,
+    })
     .click();
   await expect(page).toHaveURL(/availability=available_on/);
+  await expect(page).toHaveURL(/q=PORT003\+filter/);
+  await expect(tabs.getByRole("link", { name: /^Open for leasing later:/ })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
   await expect(page.getByRole("link", { name: occupied.displayName, exact: true })).toBeVisible();
+  const search = page.getByRole("textbox", { name: "Property name or address", exact: true });
+  await search.fill(occupied.displayName);
+  await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe(occupied.displayName);
+  await expect(search).toBeFocused();
+  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await expect(page).toHaveURL(/\/properties$/);
+  await expect(search).toHaveValue("");
+  await expect(page.getByRole("combobox", { name: "Leasing status", exact: true })).toHaveValue("");
   await page.route("**/api/portfolio/status-summary", (route) =>
     route.fulfill({
       status: 503,
@@ -210,7 +266,7 @@ test("stale availability retains edits and an interrupted write reconciles its o
   const space = property.spaces[0];
   await action(page, "portfolio.availability.change", space.id);
   await page
-    .getByRole("combobox", { name: "Availability status (required)", exact: true })
+    .getByRole("combobox", { name: "Leasing status (required)", exact: true })
     .selectOption("available_now");
   const concurrent = await request.put(`/api/spaces/${space.id}/availability`, {
     data: {
@@ -223,7 +279,7 @@ test("stale availability retains edits and an interrupted write reconciles its o
   await page.getByRole("button", { name: "Save change availability", exact: true }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(
-    page.getByRole("combobox", { name: "Availability status (required)", exact: true }),
+    page.getByRole("combobox", { name: "Leasing status (required)", exact: true }),
   ).toHaveValue("available_now");
   await page.getByRole("button", { name: "Review current source", exact: true }).click();
   await page.getByRole("button", { name: "Keep my edits with this reviewed revision" }).click();

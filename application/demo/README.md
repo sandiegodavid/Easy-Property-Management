@@ -23,7 +23,7 @@ The npm tooling prefers this `application/.venv` environment when `EPM_PYTHON` i
 Choose a new, empty directory outside the repository:
 
 ```bash
-.venv/bin/python demo/seed.py --workspace "$HOME/Property-Management-Data/synthetic-demo"
+.venv/bin/python demo/seed.py --workspace "$HOME/Desktop/Property-Management-Data/synthetic-demo"
 ```
 
 The generator initializes the workspace and writes `demo/config.local.json` pointing to it. It also creates a sibling directory named `<workspace-name>-demo-runtime` containing the request journal, captured scenario date, runtime configuration and record catalog.
@@ -31,7 +31,7 @@ The generator initializes the workspace and writes `demo/config.local.json` poin
 For the example above:
 
 ```text
-Property-Management-Data/
+~/Desktop/Property-Management-Data/
 ├── synthetic-demo/                 Workspace database, files and manifest
 └── synthetic-demo-demo-runtime/    Generator journal, catalog and verification report
 ```
@@ -79,18 +79,19 @@ Open the corresponding loopback URL, for example `http://127.0.0.1:8002/properti
 
 ## Included scenarios
 
-| Group                 | Properties                                       | Scenario/activity                                                                                                                            |
-| --------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Local operator        | 3: vacant cottage, rented home, rented office    | 1 upcoming furnace issue/appointment, 2 communications, 12 expenses                                                                          |
-| Morgan Chen (Owner 1) | 2 rented homes                                   | 1 unpaid rent expectation with follow-up Task, 1 communication, 8 expenses, 1 routine inspection appointment, 1 next-month rent prepayment   |
-| Sam Rivera (Owner 2)  | 5: three condo units, rented home, rented office | 2 urgent maintenance issues, 3 competing quotes per issue, 3 communications, 1 condition inspection draft, 20 expenses, 1 repair appointment |
+| Group                 | Properties                                                      | Scenario/activity                                                                                                                            |
+| --------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local operator        | 4: vacant cottage, rented home, rented office, two-suite office | 1 upcoming furnace issue/appointment, 2 communications, 12 expenses                                                                          |
+| Morgan Chen (Owner 1) | 2 rented homes                                                  | 1 unpaid rent expectation with follow-up Task, 1 communication, 8 expenses, 1 routine inspection appointment, 1 next-month rent prepayment   |
+| Sam Rivera (Owner 2)  | 5: three condo units, rented home, rented office                | 2 urgent maintenance issues, 3 competing quotes per issue, 3 communications, 1 condition inspection draft, 20 expenses, 1 repair appointment |
 
 The generated workspace contains:
 
 | Record type                    |   Count |
 | ------------------------------ | ------: |
-| Properties / rentable Spaces   | 10 / 10 |
+| Properties / rentable Spaces   | 11 / 12 |
 | Executed leases                |       9 |
+| Tenants / lease participants   | 12 / 12 |
 | Fully funded security deposits |       9 |
 | Providers                      |      20 |
 | Paid expenses                  |      40 |
@@ -99,9 +100,17 @@ The generated workspace contains:
 | Quotes                         |       6 |
 | Condition reports              |       1 |
 
-Every occupied rental, including both offices, has monthly USD rent and an agreed deposit equal to one month's rent, with an actual deposit receipt. The vacant cottage has no fabricated lease or deposit.
+Every occupied rental, including both rented offices, has monthly USD rent and an agreed deposit equal to one month's rent, with an actual deposit receipt. The vacant cottage and Harbor Offices' two vacant suites have no fabricated leases or deposits.
+
+Leasing status is independent of occupancy: seven occupied properties are **Not open for leasing**; occupied Riverbend Condo 101 and Willow House — Prepaid are **Open for leasing later**. Willow House opens May 1, 2027; Riverbend Condo 101 opens at its current contract end. Vacant Cedar Cottage is **Open for leasing now**. These dates describe leasing intentions, not scheduled move-outs or lease termination.
+
+Willow House's lease, initial rent term and participant period end at the exclusive boundary May 1, 2027, making April 30 its last covered day. This aligns with its May 1 leasing opening without declaring an actual move-out. Generate a fresh demo to apply changed contract dates: existing executed leases cannot be edited or overwritten by a seed retry.
 
 All 20 providers have category assignments, service areas and links to property expenses. The seven categories cover plumbing, HVAC, electrical, landscaping, appliance repair, general maintenance and legal/attorney services.
+
+Maple House has two tenants: Alex Morgan and Sam Patel. Spruce House is shared by three college students: Avery Lane, Maya Chen and Leo Bennett. Each household has one primary tenant and the remaining residents are co-tenants on the same lease. Rent and deposits are recorded per lease, not per resident. The other seven rented properties each have one tenant; office tenants are organizations.
+
+Harbor Offices is one property with two independently rentable spaces: Suite 100 and Suite 200. Both are vacant and open for leasing now. The demo therefore has 11 properties and 12 spaces; occupancy and leasing-status counts describe spaces.
 
 Office properties are included in the property totals. The three Riverbend condo properties share a building address but have distinct unit addresses and one rentable Space each. This follows the current model: residential properties have exactly one rentable Space; multiple office suites are supported, while a residential multi-Space building aggregate is not.
 
@@ -123,7 +132,7 @@ Use `--local-config` to keep another demo or test fixture's launcher configurati
 
 ```bash
 .venv/bin/python demo/seed.py \
-  --workspace /absolute/path/to/new-demo \
+  --workspace "$HOME/Desktop/Property-Management-Data/new-demo" \
   --local-config /absolute/path/to/demo-config.json
 .venv/bin/python demo/verify.py --config /absolute/path/to/demo-config.json
 .venv/bin/python demo/serve.py --config /absolute/path/to/demo-config.json

@@ -108,6 +108,9 @@ class Seeder:
             self.catalog["providers"].append(result["party"]["id"])
 
     def property(self, item):
+        space_names = item.get("spaceNames") or [
+            item.get("unit", "Whole office" if item["type"] == "office" else "Whole home")
+        ]
         owner = {"ownerKind": "local_operator"}
         if item["owner"] != "operator":
             owner = {"ownerKind": "client_owner", "partyId": self.catalog["owners"][item["owner"]]}
@@ -123,40 +126,88 @@ class Seeder:
                 "postalCode": "97205",
                 "countryCode": "US",
                 "propertyType": item["type"],
+                "inventoryLayout": "office_suites"
+                if item.get("spaceNames")
+                else "whole_office"
+                if item["type"] == "office"
+                else "single_space",
                 "ownerships": [owner],
                 "notes": item["notes"],
                 "spaces": [
                     {
-                        "displayName": item.get(
-                            "unit", "Whole office" if item["type"] == "office" else "Whole home"
-                        ),
+                        "displayName": name,
                         "occupancy": {
                             "occupancyStatus": "vacant",
                             "effectiveOn": self.today.isoformat(),
                         },
-                        "availability": {"availabilityStatus": "available_now"},
+                        "availability": self.leasing_availability(item),
                     }
+                    for name in space_names
                 ],
             },
             label=item["key"],
         )
-        record = {**item, "id": result["id"], "spaceId": result["spaces"][0]["id"]}
+        record = {
+            **item,
+            "id": result["id"],
+            "spaceId": result["spaces"][0]["id"],
+            "spaceIds": [space["id"] for space in result["spaces"]],
+        }
         if not item.get("vacant"):
             self.lease(record)
+        self.update_leasing_status(record)
         self.catalog["properties"].append(record)
 
-    def lease(self, record):
-        tenant = self.write(
-            "/api/tenants",
-            {
-                "expectedRevision": 0,
-                "confirmedNewParty": True,
-                "partyKind": "organization" if record["type"] == "office" else "individual",
-                "displayName": record["tenant"],
-                "contacts": [{"methodKind": "email", "value": f"{record['key']}@example.invalid"}],
-            },
-            label=f"{record['key']}-tenant",
+    def leasing_availability(self, item):
+        if item.get("vacant"):
+            return {"availabilityStatus": "available_now"}
+        if item.get("openForLeasingLater"):
+            return {
+                "availabilityStatus": "available_on",
+                "availableOn": item.get("leasingAvailableOn")
+                or (self.start + timedelta(days=365)).isoformat(),
+            }
+        return {"availabilityStatus": "not_available"}
+
+    def update_leasing_status(self, record):
+        """Bring an older demo's availability up to date without changing its leases."""
+        desired = self.leasing_availability(record)
+        current = self.get(f"/api/spaces/{record['spaceId']}/status")
+        availability = current["availability"]
+        if availability["recordedStatus"] == desired["availabilityStatus"] and availability.get(
+            "availableOn"
+        ) == desired.get("availableOn"):
+            return
+        self.write(
+            f"/api/spaces/{record['spaceId']}/availability",
+            {**desired, "expectedRevision": current["revision"]},
+            method="put",
+            label=(
+                f"{record['key']}-leasing-status-{desired['availabilityStatus']}-"
+                f"{desired.get('availableOn', 'undated')}"
+            ),
         )
+
+    def lease(self, record):
+        tenants = [
+            self.write(
+                "/api/tenants",
+                {
+                    "expectedRevision": 0,
+                    "confirmedNewParty": True,
+                    "partyKind": "organization" if record["type"] == "office" else "individual",
+                    "displayName": name,
+                    "contacts": [
+                        {
+                            "methodKind": "email",
+                            "value": f"{record['key']}-tenant-{index + 1}@example.invalid",
+                        }
+                    ],
+                },
+                label=f"{record['key']}-tenant-{index + 1}",
+            )
+            for index, name in enumerate(record["tenants"])
+        ]
         draft = self.write(
             "/api/leases",
             {
@@ -164,7 +215,8 @@ class Seeder:
                 "spaceId": record["spaceId"],
                 "leaseKind": "commercial" if record["type"] == "office" else "residential",
                 "contractStartsOn": self.start.isoformat(),
-                "contractEndsOn": (self.start + timedelta(days=365)).isoformat(),
+                "contractEndsOn": record.get("leaseEndsOn")
+                or (self.start + timedelta(days=365)).isoformat(),
                 "occupancyStartsOn": self.today.isoformat(),
                 "initialTerm": {
                     "baseRentMinor": record["rentMinor"],
@@ -177,11 +229,19 @@ class Seeder:
                     {
                         "tenantPartyId": tenant["id"],
                         "participantRole": (
-                            "business_signatory" if record["type"] == "office" else "primary_tenant"
+                            "business_signatory"
+                            if record["type"] == "office"
+                            else "primary_tenant"
+                            if index == 0
+                            else "co_tenant"
                         ),
                     }
+                    for index, tenant in enumerate(tenants)
                 ],
-                "notes": "Synthetic lease; contract begins this month; move-in is demo day.",
+                "notes": (
+                    "Synthetic lease; contract begins this month; move-in is demo day. "
+                    f"{record['notes']}"
+                ),
             },
             label=f"{record['key']}-lease",
         )
@@ -197,7 +257,12 @@ class Seeder:
             },
             label=f"{record['key']}-execute",
         )
-        record.update(leaseId=draft["id"], tenantId=tenant["id"], termId=draft["terms"][0]["id"])
+        record.update(
+            leaseId=draft["id"],
+            tenantId=tenants[0]["id"],
+            tenantIds=[tenant["id"] for tenant in tenants],
+            termId=draft["terms"][0]["id"],
+        )
         self.money(record)
 
     def money(self, record):

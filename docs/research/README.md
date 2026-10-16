@@ -9,5 +9,6 @@ These are dated investigations and candidate approaches. They describe external 
 - [Universal Reader](UNIVERSAL_READER_RESEARCH.md): experimental arbitrary-spreadsheet extraction with explicit reviewed import and independent parallel backlog.
 - [Hosted demo](HOSTED_DEMO_DESIGN.md): free/low-cost hosting and proposed isolated two-operator, multi-device access; not current hosted support.
 - [Hosting plan improvements](HOSTING_PLAN_IMPROVEMENTS.md): recommendations for cost, performance, operator experience, recovery and phased infrastructure adoption.
+- [Oracle A1 deployment runbook](ORACLE_A1_DEPLOYMENT.md): ARM VM provisioning, private release installation, two isolated demo workspaces, backup/restore, and the prerequisite gate for public hosted access.
 
 Current optional AI boundaries are in [AI governance](../modules/ai-governance.md). Proposed domain/transport delivery is in [active designs](../active/README.md); scopes and dependencies remain in [the backlog](../FEATURE_BACKLOG.md).

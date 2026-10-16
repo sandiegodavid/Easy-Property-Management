@@ -258,7 +258,7 @@ test("coverage resolves through the actual Space source and acknowledging review
   );
   await source.click();
   await expect(
-    page.getByRole("region", { name: "Property occupancy and availability", exact: true }),
+    page.getByRole("region", { name: "Property occupancy and leasing status", exact: true }),
   ).toBeVisible();
 });
 

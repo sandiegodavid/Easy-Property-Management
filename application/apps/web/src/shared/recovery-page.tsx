@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PageAsOf } from "./page-as-of";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@epm/contracts";
 import { useWorkspace } from "../app/workspace-gate";
@@ -59,9 +60,8 @@ export function RecoveryPage() {
       {error && <p role="alert">{error}</p>}
       {records.data && (
         <>
-          <p>
-            {records.data.matchingTotal} forms · As of {records.data.asOf}
-          </p>
+          <PageAsOf asOf={records.data.asOf} />
+          <p>{records.data.matchingTotal} forms</p>
           {records.data.items.length === 0 && <p>No unfinished forms on this page.</p>}
           <ul>
             {records.data.items.map((record) => (

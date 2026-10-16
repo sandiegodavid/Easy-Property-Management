@@ -1,28 +1,41 @@
 import { useQuery } from "@tanstack/react-query";
 import { CoverageLinks } from "../shared/coverage";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
 import { workflows, scalar } from "@epm/contracts/workflows";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
-import { CommandLinks, CommandLoader } from "./command";
+import { CommandLinks, CommandLoader, workflowUrl } from "./command";
 import { Facts, History, readResult, IdentityLookup } from "./reads";
 import { useState } from "react";
 import type { Choice } from "./fields";
 import { PortfolioStatusSummary, statusLabel } from "./portfolio-status";
+import { PageAsOf } from "../shared/page-as-of";
 
 type Space = components["schemas"]["SpaceStatusResponse"];
 export function PortfolioEntry() {
   return (
     <section aria-label="Property setup">
-      <CommandLinks keys={["portfolio.property.create"]} title="Set up property" />
-      <p>
-        Create a minimal property, then record occupancy, availability, contacts and ownership.
-        Coverage prompts identify later lease and rent steps.
-      </p>
-      <Link to="/parties">Shared identities and tenants</Link>
       <PortfolioStatusSummary />
     </section>
+  );
+}
+export function PropertyCreateButton() {
+  const { scope } = useWorkspace();
+  const navigate = useNavigate();
+  const location = useLocation();
+  return (
+    <button
+      type="button"
+      disabled={!scope.canWrite}
+      onClick={() => {
+        void navigate(workflowUrl("portfolio.property.create"), {
+          state: { returnTo: location.pathname + location.search },
+        });
+      }}
+    >
+      Create property
+    </button>
   );
 }
 export function PortfolioRecord({ id }: { id: string }) {
@@ -42,7 +55,8 @@ export function PortfolioRecord({ id }: { id: string }) {
   const item = result.data;
   return (
     <section aria-label="Property setup" className="context-section">
-      <h3>{item.displayName}: setup and history</h3>
+      <PageAsOf asOf={item.asOf} priority={1} />
+      <h3>Property setup and history</h3>
       <Facts
         value={item}
         fields={[
@@ -58,7 +72,6 @@ export function PortfolioRecord({ id }: { id: string }) {
           "countryCode",
           "timeZone",
           "notes",
-          "asOf",
           "effectiveLocalDate",
         ]}
       />
@@ -89,7 +102,7 @@ export function PortfolioRecord({ id }: { id: string }) {
         </article>
       ))}
       <h4>Spaces</h4>
-      <section aria-label="Property occupancy and availability">
+      <section aria-label="Property occupancy and leasing status">
         <h4>Active-space status summary</h4>
         <Facts
           value={item.statusSummary}
@@ -132,13 +145,11 @@ function SpaceRecord({ space, propertyId }: { space: Space; propertyId: string }
         <Link to={`/leases/${space.currentOccupancy.sourceId}`}>Review source lease</Link>
       )}
       <p>
-        Effective availability: {statusLabel(space.availability.effectiveStatus)} · Recorded
+        Current leasing status: {statusLabel(space.availability.effectiveStatus)} · Recorded
         intention: {statusLabel(space.availability.recordedStatus)}
       </p>
       <Facts value={space.availability} fields={["availableOn", "note"]} />
-      <p>
-        Availability source: {statusLabel(space.availability.sourceKind)} · As of {space.asOf}
-      </p>
+      <p>Leasing status source: {statusLabel(space.availability.sourceKind)}</p>
       {space.attentionReasons.map((reason, index) => (
         <p key={index}>{statusLabel(reason.resolution)}</p>
       ))}
@@ -300,16 +311,28 @@ export function PortfolioCommand() {
     ) ?? [];
   return (
     <>
+      {definition.formKey === "portfolio.property.create" && (
+        <>
+          <Link to="/properties">← Back to Properties</Link>
+          <p>
+            Create a minimal property, then record occupancy, leasing status, contacts and
+            ownership. Coverage prompts identify later lease and rent steps.
+          </p>
+        </>
+      )}
       <p>
         Effective dates use the property time zone. Inventory uses the Property revision; manual
         status uses the independent Space revision. Lease-owned occupancy must be changed through
         Leasing.
       </p>
       {source.data?.space && (
-        <Facts
-          value={source.data.space}
-          fields={["displayName", "effectiveLocalDate", "revision", "asOf"]}
-        />
+        <>
+          <PageAsOf asOf={source.data.space.asOf} />
+          <Facts
+            value={source.data.space}
+            fields={["displayName", "effectiveLocalDate", "revision"]}
+          />
+        </>
       )}
       {["portfolio.property.create", "portfolio.ownerships.replace"].includes(
         definition.formKey,

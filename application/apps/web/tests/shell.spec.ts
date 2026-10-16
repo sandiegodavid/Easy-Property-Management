@@ -1,6 +1,22 @@
 import { expect, test } from "@playwright/test";
 import type { components } from "@epm/contracts/generated";
 
+test("sidebar navigation keeps the viewport and shell position stable", async ({ page }) => {
+  await page.goto("/properties");
+  await expect(page.getByRole("heading", { name: "Properties", exact: true })).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const initial = await page.locator(".ui-brand").boundingBox();
+  const nav = page.getByRole("navigation", { name: "Primary navigation" });
+  for (const name of ["Owners", "Leasing", "Properties"]) {
+    await nav.getByRole("link", { name, exact: true }).click();
+    await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+    await expect(page.locator("#workspace-content")).toBeFocused();
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    const current = await page.locator(".ui-brand").boundingBox();
+    expect(current).toEqual(initial);
+  }
+});
+
 test("Settings and live workspace/backup status sit at the sidebar bottom", async ({ page }) => {
   await page.route("**/api/workspace/backup-status", (route) =>
     route.fulfill({ json: { lastSuccessAt: "2026-10-14T15:10:00Z", needsAttention: false } }),
@@ -76,6 +92,9 @@ test("preferences persist through reload, hiding and reordering keep contextual 
 }) => {
   await page.goto("/settings/navigation");
   await page.getByRole("radio", { name: "Dark", exact: true }).check();
+  await page.reload();
+  await expect(page.getByRole("radio", { name: "Dark", exact: true })).toBeChecked();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.getByRole("checkbox", { name: "Owners", exact: true }).uncheck();
   await page.getByRole("button", { name: "Move Providers up", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");

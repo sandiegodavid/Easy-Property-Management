@@ -6,6 +6,7 @@ import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
 import { readResult } from "../workflows/reads";
 import { SourceDetail } from "./source-detail";
+import { PageAsOf } from "./page-as-of";
 
 type Group = components["schemas"]["SearchGroup"];
 type Target = components["schemas"]["SearchTarget"];
@@ -86,9 +87,8 @@ function SearchGroup({ initial, q, archived }: { initial: Group; q: string; arch
         </>
       ) : (
         <>
-          <p>
-            {group.matchingTotal} matches · As of {group.asOf}
-          </p>
+          <PageAsOf asOf={group.asOf} priority={1} />
+          <p>{group.matchingTotal} matches</p>
           {!group.items?.length && <p>No matching records on this page.</p>}
           <ul>
             {group.items?.map((hit) => (

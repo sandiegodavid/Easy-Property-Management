@@ -18417,6 +18417,19 @@
           },
           "target": {
             "$ref": "#/components/schemas/EntityTarget"
+          },
+          "tenantCount": {
+            "minimum": 0.0,
+            "title": "Tenantcount",
+            "type": "integer"
+          },
+          "tenants": {
+            "items": {
+              "$ref": "#/components/schemas/LeaseTenantItem"
+            },
+            "maxItems": 10,
+            "title": "Tenants",
+            "type": "array"
           }
         },
         "required": [
@@ -18430,6 +18443,8 @@
           "occupancyStartsOn",
           "actualMoveOutOn",
           "isCurrent",
+          "tenants",
+          "tenantCount",
           "target"
         ],
         "title": "LeaseItem",
@@ -19352,6 +19367,55 @@
           "kind"
         ],
         "title": "LeaseSource",
+        "type": "object"
+      },
+      "LeaseTenantItem": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "title": "Displayname",
+            "type": "string"
+          },
+          "endsOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endson"
+          },
+          "participantRole": {
+            "enum": [
+              "primary_tenant",
+              "co_tenant",
+              "business_signatory"
+            ],
+            "title": "Participantrole",
+            "type": "string"
+          },
+          "partyId": {
+            "format": "uuid",
+            "title": "Partyid",
+            "type": "string"
+          },
+          "startsOn": {
+            "format": "date",
+            "title": "Startson",
+            "type": "string"
+          }
+        },
+        "required": [
+          "partyId",
+          "displayName",
+          "participantRole",
+          "startsOn",
+          "endsOn"
+        ],
+        "title": "LeaseTenantItem",
         "type": "object"
       },
       "LeaseTermResponse": {

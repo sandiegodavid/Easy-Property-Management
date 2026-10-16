@@ -17,6 +17,7 @@ test("form navigation waits for acknowledged autosave and explicit discard", asy
   await page.getByRole("button", { name: "Save and leave" }).click();
   await expect(page.getByText("Navigation completed")).toBeVisible();
   await page.goto("/component-tests/recovery-form.html");
+  await page.getByLabel("Title", { exact: true }).fill("Discard this edit");
   await page.getByRole("link", { name: "Leave form" }).click();
   await page.getByRole("button", { name: "Discard and leave" }).click();
   await expect(page.getByText("Navigation completed")).toBeVisible();

@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import event, select
 from sqlalchemy.engine import Engine
 
 from app.modules.finance.tests import test_money_summary as fixtures
@@ -24,6 +24,7 @@ from app.modules.operator.infrastructure.unit_of_work import (
 from app.modules.operator.infrastructure.overview_sources import OverviewSources
 from app.modules.portfolio.infrastructure.directory_reader import SQLitePortfolioDirectoryReader
 from app.modules.portfolio.infrastructure.owner_context_reader import SQLiteOwnerContextReader
+from app.modules.portfolio.application.owner_read_ports import PortfolioSubject
 from app.modules.portfolio.infrastructure.location_relations import SQLitePortfolioLocationRelations
 from app.modules.portfolio.infrastructure.context_reader import SQLitePortfolioContextReader
 from app.modules.portfolio.application.service import PartyCreateCommand, OwnershipInput
@@ -33,6 +34,9 @@ from app.modules.leases.infrastructure.participant_relations import SQLiteLeaseP
 from app.modules.leases.infrastructure.location_relation import SQLiteLeaseLocationRelation
 from app.modules.leases.infrastructure.summary_reader import SQLiteLeaseSummaryReader
 from app.modules.leases.infrastructure.context_reader import SQLiteLeaseContextReader
+from app.modules.leases.application.summary_ports import LEASE_TENANT_PREVIEW_LIMIT
+from app.modules.leases.infrastructure.sqlalchemy_models import LeaseModel, LeaseParticipantModel
+from app.platform.context_reads import ContextScope, ReadWindow
 from app.modules.finance.infrastructure.money_context_reader import SQLiteMoneyContextReader
 from app.modules.finance.infrastructure.expense_context_reader import SQLiteExpenseContextReader
 from app.modules.maintenance.infrastructure.summary_reader import SQLiteIssueSummaryReader
@@ -78,6 +82,8 @@ from app.modules.operator.domain.models import OperatorConflict
 CONTEXT_COMMUNICATIONS = 2
 CONTEXT_TASKS = 2
 OVERVIEW_STATEMENT_BUDGET = 50
+LEASE_SUMMARY_STATEMENT_BUDGET = 3
+TENANT_PREVIEW_FIXTURE_COUNT = 12
 
 
 @pytest.fixture
@@ -218,7 +224,7 @@ def populated():
         SQLiteOwnerContextReader(SQLitePartyIdentityRelations()),
         locations,
         leases,
-        SQLiteLeaseSummaryReader(leases),
+        SQLiteLeaseSummaryReader(leases, SQLitePartyIdentityRelations()),
         SQLiteIssueSummaryReader(),
         SQLiteCommunicationSummaryReader(),
         SQLiteTaskSummaryReader(),
@@ -256,6 +262,9 @@ def test_filled_sections_match_source_money_and_exclude_sensitive_detail(populat
     sections = response["sections"]
     assert sections["leases"]["items"][0]["id"] == fixture.lease["id"]
     assert sections["leases"]["items"][0]["isCurrent"] is True
+    assert sections["leases"]["items"][0]["tenantCount"] == 1
+    assert sections["leases"]["items"][0]["tenants"][0]["displayName"] == "Tenant"
+    assert sections["leases"]["items"][0]["tenants"][0]["partyId"] == fixture.tenant["id"]
     assert sections["maintenance"]["items"][0]["id"] == issue["id"]
     assert sections["communications"]["matchingTotal"] == CONTEXT_COMMUNICATIONS
     assert communication["id"] in {item["id"] for item in sections["communications"]["items"]}
@@ -290,6 +299,93 @@ def test_filled_sections_match_source_money_and_exclude_sensitive_detail(populat
         directory.owners(text=fixture.tenant["displayName"])["matchingTotal"] == 0
     )  # Owner search does not index tenant narratives.
     validate_latest_schema(fixture.db)
+
+
+def test_lease_tenant_previews_are_bounded_and_batched(populated):
+    fixture, overview, *_ = populated
+    engine = overview.unit_of_work.engine
+    leases, participants = LeaseModel.__table__, LeaseParticipantModel.__table__
+    with engine.begin() as connection:
+        original = (
+            connection.execute(select(leases).where(leases.c.id == fixture.lease["id"]))
+            .mappings()
+            .one()
+        )
+        second_id = str(uuid4())
+        connection.execute(
+            leases.insert().values(
+                **{**original, "id": second_id, "status": "draft", "executed_on": None}
+            )
+        )
+        original_participant = (
+            connection.execute(
+                select(participants).where(participants.c.lease_id == fixture.lease["id"])
+            )
+            .mappings()
+            .one()
+        )
+        for index in range(TENANT_PREVIEW_FIXTURE_COUNT):
+            connection.execute(
+                participants.insert().values(
+                    **{
+                        **original_participant,
+                        "id": str(uuid4()),
+                        "lease_id": second_id,
+                        "starts_on": f"{2010 + index}-01-01",
+                        "ends_on": f"{2011 + index}-01-01",
+                        "notes": "Private participant note",
+                    }
+                )
+            )
+        connection.execute(
+            participants.insert().values(
+                **{
+                    **original_participant,
+                    "id": str(uuid4()),
+                    "lease_id": second_id,
+                    "participant_role": "guarantor",
+                }
+            )
+        )
+    locations = SQLiteLeaseLocationRelation(SQLitePortfolioLocationRelations())
+    reader = SQLiteLeaseSummaryReader(locations, SQLitePartyIdentityRelations())
+    statements = []
+
+    def count(*args):
+        statement = args[2]
+        if statement.lstrip().upper().startswith("SELECT"):
+            statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", count)
+    try:
+        with engine.connect() as connection:
+            properties = SQLiteOwnerContextReader(SQLitePartyIdentityRelations()).property_scope(
+                connection,
+                PortfolioSubject("property", fixture.property_id),
+                as_of=datetime(2026, 10, 6, 12, tzinfo=UTC),
+            )
+            scope = ContextScope(properties, properties)
+            counts = []
+            for limit in (1, LEASE_TENANT_PREVIEW_LIMIT):
+                statements.clear()
+                page = reader.page(
+                    connection,
+                    scope,
+                    ReadWindow(
+                        datetime(2026, 10, 6, 12, tzinfo=UTC), limit=limit, include_history=True
+                    ),
+                )
+                counts.append(len(statements))
+                assert len(statements) <= LEASE_SUMMARY_STATEMENT_BUDGET
+                if limit == LEASE_TENANT_PREVIEW_LIMIT:
+                    second = next(row for row in page.items if row["id"] == second_id)
+                    assert second["tenant_count"] == TENANT_PREVIEW_FIXTURE_COUNT
+                    assert len(second["tenants"]) == LEASE_TENANT_PREVIEW_LIMIT
+                    assert all(row["display_name"] == "Tenant" for row in second["tenants"])
+                    assert all(row["participant_role"] != "guarantor" for row in second["tenants"])
+            assert counts[0] == counts[1]
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
 
 
 def test_terminal_sources_only_appear_in_explicit_history(populated):

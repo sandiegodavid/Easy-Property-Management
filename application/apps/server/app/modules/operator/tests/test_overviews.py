@@ -63,7 +63,7 @@ def context(tmp_path):
         SQLiteOwnerContextReader(SQLitePartyIdentityRelations()),
         locations,
         leases,
-        SQLiteLeaseSummaryReader(leases),
+        SQLiteLeaseSummaryReader(leases, SQLitePartyIdentityRelations()),
         SQLiteIssueSummaryReader(),
         SQLiteCommunicationSummaryReader(),
         SQLiteTaskSummaryReader(),

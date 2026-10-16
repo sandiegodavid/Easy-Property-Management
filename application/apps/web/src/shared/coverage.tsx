@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PageAsOf } from "./page-as-of";
 import { useQuery } from "@tanstack/react-query";
 import { Navigate, useParams, useSearchParams } from "react-router-dom";
 import { SourceWorkflowLink as Link } from "./home-navigation";
@@ -313,9 +314,8 @@ export function CoveragePanel({ kind, id, area }: { kind: Kind; id: string; area
             ))}
           </ul>
           {current.trigger && <p role="status">Review prompt: {words(current.trigger)}</p>}
-          <p>
-            As of {current.asOf} · Local date {current.effectiveLocalDate}
-          </p>
+          <PageAsOf asOf={current.asOf} />
+          <p>Local date {current.effectiveLocalDate}</p>
           <p>Last manual review: {current.lastManualReviewAt ?? "Not recorded"}</p>
           {current.leaseId && <Link to={`/leases/${current.leaseId}`}>Review lease source</Link>}
           <CoverageResolution current={current} />

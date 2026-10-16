@@ -3,6 +3,8 @@
 import argparse
 import json
 import sqlite3
+from collections import Counter
+from datetime import date, timedelta
 from pathlib import Path
 
 from app.bootstrap.api import create_app
@@ -10,10 +12,12 @@ from app.modules.workspace.application.service import WorkspaceService
 from app.platform.testing_client import LocalApiClient
 
 EXPECTED = {
-    "properties": 10,
-    "spaces": 10,
+    "properties": 11,
+    "spaces": 12,
     "provider_profiles": 20,
     "leases": 9,
+    "tenant_profiles": 12,
+    "lease_participants": 12,
     "expenses": 40,
     "communications": 6,
     "maintenance_issues": 4,
@@ -24,6 +28,8 @@ EXPECTED = {
     "security_deposit_receipts": 9,
     "tasks": 1,
 }
+OFFICE_SUITE_COUNT = 2
+VACANT_SPACE_COUNT = 3
 
 
 def require(condition, message):
@@ -73,15 +79,75 @@ def read(client, path, **params):
 
 def api_checks(client, catalog):
     vacant = 0
+    leasing_statuses = Counter()
     for row in catalog["properties"]:
         space = read(client, f"/api/spaces/{row['spaceId']}/status")
         vacant += space["currentOccupancy"]["occupancyStatus"] == "vacant"
+        expected = (
+            "available_now"
+            if row.get("vacant")
+            else "available_on"
+            if row.get("openForLeasingLater")
+            else "not_available"
+        )
+        availability = space["availability"]
+        require(availability["effectiveStatus"] == expected, f"Leasing status: {row['key']}")
+        leasing_statuses[expected] += 1
+        if expected == "available_on":
+            opening = date.fromisoformat(catalog["asOf"]).replace(day=1) + timedelta(days=365)
+            expected_opening = row.get("leasingAvailableOn") or opening.isoformat()
+            require(availability["availableOn"] == expected_opening, "Leasing opening date")
+        if not row.get("vacant"):
+            require(space["currentOccupancy"]["occupancyStatus"] == "occupied", "Occupancy")
         if not row.get("leaseId"):
             continue
         lease = read(client, f"/api/leases/{row['leaseId']}")
         require(lease["status"] == "executed", f"Unexecuted demo Lease: {row['key']}")
+        if row.get("leaseEndsOn"):
+            require(lease["contractEndsOn"] == row["leaseEndsOn"], "Lease end date mismatch")
+            require(lease["terms"][0]["endsOn"] == row["leaseEndsOn"], "Term end date mismatch")
+            require(
+                all(item["endsOn"] == row["leaseEndsOn"] for item in lease["participants"]),
+                "Participant end date mismatch",
+            )
+        participants = lease["participants"]
+        require(
+            {item["tenantPartyId"] for item in participants} == set(row["tenantIds"]),
+            f"Tenant membership mismatch: {row['key']}",
+        )
+        require(len(participants) == len(row["tenants"]), f"Tenant count mismatch: {row['key']}")
+        expected_roles = {
+            party_id: "business_signatory"
+            if row["type"] == "office"
+            else "primary_tenant"
+            if index == 0
+            else "co_tenant"
+            for index, party_id in enumerate(row["tenantIds"])
+        }
+        require(
+            all(
+                item["participantRole"] == expected_roles[item["tenantPartyId"]]
+                for item in participants
+            ),
+            f"Tenant role mismatch: {row['key']}",
+        )
+        for party_id, name in zip(row["tenantIds"], row["tenants"], strict=True):
+            tenant = read(client, f"/api/tenants/{party_id}")
+            require(tenant["displayName"] == name, f"Tenant name mismatch: {row['key']}")
         require(lease["terms"][0]["agreedSecurityDepositMinor"] > 0, "Missing agreed deposit")
-    require(vacant == 1, f"Expected one vacancy, found {vacant}")
+    suites = next(row for row in catalog["properties"] if row["key"] == "op-office-suites")
+    require(len(suites["spaceIds"]) == OFFICE_SUITE_COUNT, "Harbor Offices must have two spaces")
+    for space_id in suites["spaceIds"][1:]:
+        space = read(client, f"/api/spaces/{space_id}/status")
+        require(space["currentOccupancy"]["occupancyStatus"] == "vacant", "Suite occupancy")
+        require(space["availability"]["effectiveStatus"] == "available_now", "Suite leasing")
+        vacant += 1
+        leasing_statuses["available_now"] += 1
+    require(vacant == VACANT_SPACE_COUNT, f"Expected three vacant spaces, found {vacant}")
+    require(
+        leasing_statuses == {"not_available": 7, "available_on": 2, "available_now": 3},
+        f"Unexpected leasing mix: {dict(leasing_statuses)}",
+    )
     late = read(client, "/api/rent-expectations", timelinessStatus="late")["items"]
     require(len(late) == 1, f"Expected one unpaid late rent, found {len(late)}")
     prepaid = next(row for row in catalog["properties"] if row.get("prepaid"))
@@ -93,7 +159,12 @@ def api_checks(client, catalog):
         ),
         "Missing prepaid future rent",
     )
-    return {"vacancies": vacant, "lateUnpaidRent": len(late), "prepaidRent": True}
+    return {
+        "vacancies": vacant,
+        "leasingStatuses": dict(leasing_statuses),
+        "lateUnpaidRent": len(late),
+        "prepaidRent": True,
+    }
 
 
 def main():

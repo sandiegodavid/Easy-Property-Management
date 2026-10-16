@@ -1,17 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
 import { useWorkspace } from "../app/workspace-gate";
 import { readResult } from "./reads";
+import { PageAsOf } from "../shared/page-as-of";
+import { leasingStatusLabels } from "../shared/leasing-status";
 
 export function statusLabel(value: string) {
   return (
     (
       {
         unknown: "Needs classification",
-        available_on: "Available later",
-        available_now: "Available now",
-        not_available: "Not available",
+        ...leasingStatusLabels,
         occupied: "Occupied",
         vacant: "Vacant",
         manual: "Recorded manually",
@@ -24,6 +24,7 @@ export function statusLabel(value: string) {
 
 export function PortfolioStatusSummary() {
   const { scope } = useWorkspace();
+  const [params] = useSearchParams();
   const result = useQuery({
     queryKey: scope.key("portfolio-status-summary"),
     retry: false,
@@ -31,20 +32,18 @@ export function PortfolioStatusSummary() {
       readResult(await api.GET("/api/portfolio/status-summary", { signal })),
   });
   return (
-    <section aria-label="Portfolio occupancy and availability">
-      <h3>Occupancy and availability</h3>
+    <section aria-label="Portfolio occupancy and leasing status">
       {result.isPending && <p role="status">Loading inventory status…</p>}
       {result.error && <p role="alert">Inventory status unavailable: {result.error.message}</p>}
       {result.data && (
         <>
+          <PageAsOf asOf={result.data.asOf} priority={1} />
           <p>
             {result.data.activePropertyCount} active properties · {result.data.activeSpaceCount}{" "}
-            active spaces · As of {result.data.asOf}
+            active spaces. Counts describe spaces; filtered property results include any matching
+            active space.
           </p>
-          <p>
-            Counts describe spaces; filtered property results include any matching active space.
-          </p>
-          <ul>
+          <nav className="property-status-tabs" aria-label="Property status filters">
             {[
               { label: "Occupied", count: result.data.occupiedCount, query: "occupancy=occupied" },
               { label: "Vacant", count: result.data.vacantCount, query: "occupancy=vacant" },
@@ -54,12 +53,12 @@ export function PortfolioStatusSummary() {
                 query: "occupancy=unknown",
               },
               {
-                label: "Available now",
+                label: "Open for leasing now",
                 count: result.data.availableNowCount,
                 query: "availability=available_now",
               },
               {
-                label: "Available later",
+                label: "Open for leasing later",
                 count: result.data.availableLaterCount,
                 query: "availability=available_on",
               },
@@ -68,16 +67,27 @@ export function PortfolioStatusSummary() {
                 count: result.data.needsAttentionSpaceCount,
                 query: "needsAttention=true",
               },
-            ].map((item) => (
-              <li key={item.query}>
-                <Link to={`/properties?${item.query}`}>
-                  {item.label}: {item.count}
+            ].map((item) => {
+              const [key, value] = item.query.split("=");
+              const selected = params.get(key) === value;
+              const next = new URLSearchParams(params);
+              for (const name of ["occupancy", "availability", "needsAttention", "cursor"])
+                next.delete(name);
+              next.set("state", "active");
+              if (!selected) next.set(key, value);
+              return (
+                <Link
+                  key={item.query}
+                  to={`/properties?${next.toString()}`}
+                  aria-current={selected ? "page" : undefined}
+                >
+                  {item.label}: <span>{item.count}</span>
                 </Link>
-              </li>
-            ))}
-          </ul>
+              );
+            })}
+          </nav>
           {result.data.nearestAvailableOn && (
-            <p>Nearest availability date: {result.data.nearestAvailableOn}</p>
+            <p>Next leasing opening date: {result.data.nearestAvailableOn}</p>
           )}
         </>
       )}

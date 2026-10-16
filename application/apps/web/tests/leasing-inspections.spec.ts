@@ -4,6 +4,87 @@ import axe from "axe-core";
 
 type Schemas = components["schemas"];
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
+test("lease end shows the last covered day while preserving the stored exclusive boundary", async ({
+  page,
+  request,
+}) => {
+  const boundary = `${new Date().getUTCFullYear() + 1}-05-01`;
+  const f = await fixture(request, false, false, boundary);
+  const covered = `${boundary.slice(0, 4)}-04-30`;
+  await page.goto(`/leases/${f.lease.id}/details`);
+  const milestones = page.getByRole("region", { name: "Lease milestones", exact: true });
+  await expect(
+    milestones
+      .locator(".workflow-facts > div")
+      .filter({ has: page.getByText("Lease end (last covered day)", { exact: true }) }),
+  ).toHaveText(`Lease end (last covered day)${covered}`);
+  await expect(page.getByText("Last covered day", { exact: true })).toHaveCount(2);
+  await execute(request, f);
+  for (const tab of ["overview", "leases"]) {
+    await page.goto(`/properties/${f.property.id}/${tab}`);
+    const leases = page.getByRole("region", { name: "leases", exact: true });
+    await expect(leases).toContainText(`through ${covered}`);
+    await expect(leases).not.toContainText(boundary);
+  }
+  const stored = await request.get(`/api/leases/${f.lease.id}`);
+  expect(((await stored.json()) as Schemas["LeaseResponse"]).contractEndsOn).toBe(boundary);
+});
+
+test("property leases show tenant names with direct identity and lease links", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  await execute(request, f);
+  await page.goto(`/properties/${f.property.id}/leases`);
+  const leases = page.getByRole("region", { name: "leases", exact: true });
+  await expect(leases.getByRole("link", { name: f.tenant.displayName, exact: true })).toBeVisible();
+  await expect(leases.getByRole("link", { name: "View lease", exact: true })).toHaveAttribute(
+    "href",
+    `/leases/${f.lease.id}/details`,
+  );
+  await leases.getByRole("link", { name: f.tenant.displayName, exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/parties\\?identity=${f.tenant.id}`));
+});
+
+test("property pages remain usable when tenant previews are unavailable", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  await execute(request, f);
+  await page.route(`**/api/operator/properties/${f.property.id}/overview*`, async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as Schemas["OverviewResponse"];
+    const sections = Object.fromEntries(
+      Object.entries(body.sections).map(([key, section]) => [
+        key,
+        section.kind === "leases"
+          ? {
+              ...section,
+              items: section.items?.map((item) =>
+                Object.fromEntries(
+                  Object.entries(item).filter(
+                    ([name]) => name !== "tenants" && name !== "tenantCount",
+                  ),
+                ),
+              ),
+            }
+          : section,
+      ]),
+    );
+    await route.fulfill({ json: { ...body, sections } });
+  });
+  for (const tab of ["overview", "leases"]) {
+    await page.goto(`/properties/${f.property.id}/${tab}`);
+    const leases = page.getByRole("region", { name: "leases", exact: true });
+    await expect(leases).toContainText("Tenant details are unavailable here.");
+    await expect(leases.getByRole("link", { name: "View lease", exact: true })).toBeVisible();
+    await expect(page.getByText("Unexpected Application Error!", { exact: true })).toHaveCount(0);
+    await expect(leases.getByText("Tenants: None recorded", { exact: true })).toHaveCount(0);
+  }
+});
+
 test("Lease documents resume with original bytes and reconcile one committed upload", async ({
   page,
   request,
@@ -177,7 +258,7 @@ test("commercial Lease execution and milestones support narrow keyboard review i
     ).toBe(true);
   }
   await page
-    .getByRole("link", { name: "Review Space occupancy and availability", exact: true })
+    .getByRole("link", { name: "Review Space occupancy and leasing status", exact: true })
     .click();
   await expect(page).toHaveURL(new RegExp(`/properties/${f.property.id}/units`));
 });
@@ -245,7 +326,12 @@ test("unavailable documents and Space context keep Lease facts visible without o
   ).toBeVisible();
 });
 
-async function fixture(request: APIRequestContext, futureOccupancy = false, commercial = false) {
+async function fixture(
+  request: APIRequestContext,
+  futureOccupancy = false,
+  commercial = false,
+  contractEndsOn?: string,
+) {
   expect((await request.post("/__test__/lease-clock", { data: { days: 0 } })).ok()).toBe(true);
   const propertyResponse = await request.post("/api/properties", {
     data: {
@@ -284,6 +370,7 @@ async function fixture(request: APIRequestContext, futureOccupancy = false, comm
       spaceId: property.spaces[0].id,
       leaseKind: commercial ? "commercial" : "residential",
       contractStartsOn: startsOn,
+      ...(contractEndsOn ? { contractEndsOn } : {}),
       occupancyStartsOn: startsOn,
       initialTerm: {
         baseRentMinor: 100000,
