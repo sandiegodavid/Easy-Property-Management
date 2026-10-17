@@ -441,6 +441,7 @@ test("property layout uses Home, Office, or Suites labels without developer word
     { label: "Suites", layout: "office_suites" as const, unit: "suite" },
   ];
   for (const item of cases) {
+    const unitTitle = `${item.unit[0].toUpperCase()}${item.unit.slice(1)}`;
     const property = await create(request, `Layout ${item.label}`, item.layout);
     await page.goto(`/properties/${property.id}/overview`);
     await expect(page.getByRole("region", { name: item.label, exact: true })).toHaveCount(0);
@@ -472,18 +473,28 @@ test("property layout uses Home, Office, or Suites labels without developer word
     ).toBeVisible();
     await expect(card.getByRole("link", { name: "Start lease draft", exact: true })).toHaveCount(0);
     await expect(card.getByText("More actions", { exact: true })).toHaveCount(0);
-    await expect(
-      card.getByRole("button", { name: `Archive ${item.unit}`, exact: true }),
-    ).toHaveCount(item.label === "Suites" ? 1 : 0);
+    const archiveAction = card.getByRole("button", {
+      name: `Archive ${unitTitle}`,
+      exact: true,
+    });
+    await expect(archiveAction).toHaveCount(item.label === "Suites" ? 1 : 0);
+    if (item.label === "Suites") {
+      const titleRow = card.locator(".property-space-title-row");
+      await expect(titleRow.getByRole("button", { name: "Start lease draft" })).toBeVisible();
+      await expect(archiveAction).toBeVisible();
+      const titleActions = await titleRow.locator("button").allTextContents();
+      expect(titleActions).toEqual([`Edit ${unitTitle}`, "Start lease draft", "Archive Suite"]);
+      await expect(archiveAction).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    }
     await expect(
       card.getByRole("button", { name: `Restore ${item.unit}`, exact: true }),
     ).toHaveCount(0);
     await expect(
       card
         .locator(".property-space-title-row")
-        .getByRole("button", { name: `Edit ${item.unit}`, exact: true }),
+        .getByRole("button", { name: `Edit ${unitTitle}`, exact: true }),
     ).toBeVisible();
-    await card.getByRole("button", { name: `Edit ${item.unit}`, exact: true }).click();
+    await card.getByRole("button", { name: `Edit ${unitTitle}`, exact: true }).click();
     await expect(
       page.getByRole("heading", { name: `Edit ${item.unit}`, exact: true }),
     ).toBeVisible();
@@ -491,7 +502,7 @@ test("property layout uses Home, Office, or Suites labels without developer word
       .getByRole("link", { name: `← Back to ${property.displayName}`, exact: true })
       .click();
     await expect(
-      card.getByRole("button", { name: `Edit ${item.unit}`, exact: true }),
+      card.getByRole("button", { name: `Edit ${unitTitle}`, exact: true }),
     ).toBeVisible();
     if (item.label === "Suites") {
       await rentals

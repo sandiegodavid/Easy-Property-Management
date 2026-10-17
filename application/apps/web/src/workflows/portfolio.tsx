@@ -155,6 +155,7 @@ function SpaceRecord({
   const navigate = useNavigate();
   const location = useLocation();
   const unit = rentableUnitLabel(space.spaceKind);
+  const unitTitle = `${unit[0].toUpperCase()}${unit.slice(1)}`;
   const attentionLabels = {
     availability_unknown: "Leasing status hasn’t been classified.",
     occupancy_unknown: "Occupancy hasn’t been classified.",
@@ -178,7 +179,7 @@ function SpaceRecord({
                     });
                   }}
                 >
-                  Edit {unit}
+                  Edit {unitTitle}
                 </button>
                 <button
                   type="button"
@@ -191,6 +192,17 @@ function SpaceRecord({
                 >
                   Start lease draft
                 </button>
+                {allowSuiteLifecycle && space.spaceKind === "office_suite" && (
+                  <CommandLinks
+                    collapsible={false}
+                    asButtons
+                    target={propertyId}
+                    child={space.id}
+                    keys={["portfolio.space.archive"]}
+                    title={`Actions for ${space.displayName}`}
+                    labels={{ "portfolio.space.archive": `Archive ${unitTitle}` }}
+                  />
+                )}
               </>
             )}
           </div>
@@ -295,22 +307,16 @@ function SpaceRecord({
           )}
         </div>
       )}
-      {allowSuiteLifecycle && space.spaceKind === "office_suite" && (
+      {allowSuiteLifecycle && space.spaceKind === "office_suite" && space.status === "archived" && (
         <div className="property-space-actions">
           <CommandLinks
             collapsible={false}
             asButtons
             target={propertyId}
             child={space.id}
-            keys={
-              space.status === "archived"
-                ? ["portfolio.space.restore"]
-                : ["portfolio.space.archive"]
-            }
-            title={space.status === "archived" ? `Restore ${unit}` : `Archive ${unit}`}
+            keys={["portfolio.space.restore"]}
+            title={`Restore ${unit}`}
             labels={{
-              "portfolio.space.patch": `Edit ${unit}`,
-              "portfolio.space.archive": `Archive ${unit}`,
               "portfolio.space.restore": `Restore ${unit}`,
             }}
           />

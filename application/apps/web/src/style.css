@@ -319,6 +319,17 @@
   font-size: var(--type-small);
   white-space: nowrap;
 }
+.property-space-title-row .workflow-actions-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0;
+  margin: 0;
+}
+.property-space-title-row .workflow-actions-inline button {
+  background: transparent;
+  color: var(--muted);
+}
 .property-space-header p {
   margin: 0.25rem 0 0;
   color: var(--muted);
