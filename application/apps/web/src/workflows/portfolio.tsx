@@ -110,30 +110,47 @@ export function PortfolioRecord({ id, view = "setup" }: { id: string; view?: "se
     <section aria-label="Property setup" className="context-section property-details">
       <PageAsOf asOf={item.asOf} priority={1} />
       <section className="property-details-panel" aria-label="Property information">
-        <h3>Configuration</h3>
+        <header className="property-setup-heading">
+          <h3>Property setup</h3>
+          {item.status !== "archived" && (
+            <CommandLinks
+              target={id}
+              keys={["portfolio.property.patch"]}
+              title="Edit property"
+              collapsible={false}
+              asButtons
+            />
+          )}
+        </header>
         <Facts value={item} fields={["propertyType", "inventoryLayout", "propertyRevision"]} />
         {item.notes && <p className="property-details-notes">{item.notes}</p>}
+        {item.status !== "archived" && (
+          <CommandLinks
+            target={id}
+            keys={[
+              "portfolio.ownerships.replace",
+              ...(item.inventoryLayout === "office_suites" ? ["portfolio.space.create"] : []),
+            ]}
+            title="Property actions"
+            labels={{ "portfolio.space.create": "Add suite" }}
+            collapsible={false}
+            asButtons
+          />
+        )}
       </section>
-      <section
-        className="property-details-panel property-details-actions"
-        aria-label="Manage property"
-      >
+      <div className="property-setup-lifecycle">
         <CommandLinks
           target={id}
-          keys={
+          keys={[
             item.status === "archived"
-              ? ["portfolio.property.restore"]
-              : [
-                  "portfolio.property.patch",
-                  "portfolio.ownerships.replace",
-                  ...(item.inventoryLayout === "office_suites" ? ["portfolio.space.create"] : []),
-                  "portfolio.property.archive",
-                ]
-          }
-          title="Property actions"
-          labels={{ "portfolio.space.create": "Add suite" }}
+              ? "portfolio.property.restore"
+              : "portfolio.property.archive",
+          ]}
+          title="Property lifecycle"
+          collapsible={false}
+          asButtons
         />
-      </section>
+      </div>
       <div className="property-details-panel">
         <History kind="property" id={id} presentation="timeline" />
       </div>

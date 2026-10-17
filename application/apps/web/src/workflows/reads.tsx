@@ -6,6 +6,36 @@ import { useWorkspace } from "../app/workspace-gate";
 import { normalizeApiError } from "../shared/mutations";
 import { label } from "./fields";
 import { formatHomeTime } from "../shared/home-time";
+import { leasingStatusLabels } from "../shared/leasing-status";
+
+function historyValue(key: string, value: unknown) {
+  if (value === null || value === undefined) return "Not recorded";
+  const text = scalar(value);
+  if (key === "availabilityStatus")
+    return leasingStatusLabels[text] ?? (text === "unknown" ? "Needs classification" : text);
+  if (key === "occupancyStatus") return text === "unknown" ? "Needs classification" : label(text);
+  return text.replaceAll("_", " ");
+}
+
+function historySummary(event: Record<string, unknown>) {
+  const before = record(event.before);
+  const after = record(event.after);
+  const changes = [
+    "displayName",
+    "status",
+    "occupancyStatus",
+    "availabilityStatus",
+    "availableOn",
+    "startsOn",
+    "endsOn",
+  ]
+    .filter((key) => key in before && key in after && before[key] !== after[key])
+    .map(
+      (key) =>
+        `${label(key)} changed from ${historyValue(key, before[key])} to ${historyValue(key, after[key])}.`,
+    );
+  return changes.length ? changes.join(" ") : label(scalar(event.action).replaceAll("_", " "));
+}
 
 export function readResult<T>(response: { data?: T; error?: unknown; response: Response }): T {
   if (!response.data)
@@ -36,7 +66,7 @@ export function Facts({
                   : "No"
                 : verbatim
                   ? scalar(values[key])
-                  : scalar(values[key]).replaceAll("_", " ")}
+                  : historyValue(key, values[key])}
           </dd>
         </div>
       ))}
@@ -55,6 +85,7 @@ export function History({
   presentation?: "timeline";
 }) {
   const { scope } = useWorkspace();
+  const timeline = presentation === "timeline" || kind === "space";
   const [open, setOpen] = useState(false);
   const [offset, setOffset] = useState(0);
   const result = useQuery({
@@ -72,21 +103,21 @@ export function History({
   });
   return (
     <details
-      className={presentation === "timeline" ? "property-history" : undefined}
+      className={timeline ? "property-history" : undefined}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
       <summary>History</summary>
-      {presentation === "timeline" && open && (
-        <p className="property-history-intro">Recorded changes to this property, newest first.</p>
+      {timeline && open && (
+        <p className="property-history-intro">Recorded changes, newest first.</p>
       )}
       {result.isPending && open && <p role="status">Loading history…</p>}
       {result.error && <p role="alert">{result.error.message}</p>}
       {result.data?.map((event) => (
         <article key={scalar(event.id)}>
-          {presentation === "timeline" ? (
+          {timeline ? (
             <>
               <header className="property-history-event-heading">
-                <strong>{scalar(event.action).replaceAll("_", " ")}</strong>
+                <strong>{historySummary(event)}</strong>
                 <time dateTime={scalar(event.occurredAt)}>
                   {formatHomeTime(scalar(event.occurredAt))}
                 </time>
@@ -105,10 +136,10 @@ export function History({
           ) : (
             <Facts value={event} fields={["action", "occurredAt", "actorKind", "reason"]} />
           )}
-          <div className={presentation === "timeline" ? "property-history-changes" : undefined}>
+          <div className={timeline ? "property-history-changes" : undefined}>
             {["before", "after"].map((phase) => (
               <details key={phase}>
-                <summary>{phase === "before" ? "Prior facts" : "Resulting facts"}</summary>
+                <summary>{phase === "before" ? "Before change" : "After change"}</summary>
                 <Facts
                   value={event[phase]}
                   verbatim={!!snapshotFields}
@@ -126,6 +157,7 @@ export function History({
                         "ownershipContext",
                         "occupancyStatus",
                         "availabilityStatus",
+                        "availableOn",
                         "note",
                       ]
                     ).includes(key),

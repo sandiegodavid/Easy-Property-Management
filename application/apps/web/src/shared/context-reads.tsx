@@ -14,6 +14,7 @@ import { leaseLastCoveredOn } from "./lease-dates";
 import { DisclosureHelp } from "./home-disclosure-help";
 import { readResult } from "../workflows/reads";
 import { propertyUnitsLabel } from "./property-labels";
+import { formatHomeTemporal } from "./home-time";
 
 type Schema = components["schemas"];
 type Kind = "property" | "owner";
@@ -427,23 +428,17 @@ export function Directory({
                     <section aria-label="Owners">
                       <h4>Owners</h4>
                       <ul>
-                        {item.owners
-                          .filter(
-                            (owner) =>
-                              item.ownershipContext !== "self_owned" ||
-                              owner.ownerKind !== "local_operator",
-                          )
-                          .map((owner) => (
-                            <li key={owner.partyId ?? owner.ownerKind}>
-                              {owner.ownerKind === "local_operator" ? (
-                                item.ownershipContext !== "self_owned" && "You"
-                              ) : (
-                                <Link to={`/owners/${owner.partyId}/overview`}>
-                                  {owner.displayName}
-                                </Link>
-                              )}
-                            </li>
-                          ))}
+                        {item.owners.map((owner) => (
+                          <li key={owner.partyId ?? owner.ownerKind}>
+                            {owner.ownerKind === "local_operator" ? (
+                              "You"
+                            ) : (
+                              <Link to={`/owners/${owner.partyId}/overview`}>
+                                {owner.displayName}
+                              </Link>
+                            )}
+                          </li>
+                        ))}
                         {item.ownerCount > item.owners.length && (
                           <li>
                             <Link to={`/properties/${item.id}/overview#relationships`}>
@@ -545,7 +540,9 @@ function SourceLink({ target }: { target: Schema["EntityTarget"] }) {
       : `?${next.toString()}#source-detail`;
   return (
     <Link to={to} state={state}>
-      View source {target.entityType} {target.entityId}
+      {target.entityType === "communication"
+        ? "View conversation"
+        : `View source ${target.entityType} ${target.entityId}`}
     </Link>
   );
 }
@@ -703,7 +700,10 @@ function SectionContents({
             )}
             {"occurredAtUtc" in item && (
               <p>
-                {item.channel} · {item.direction} · {item.occurredAtUtc} ({item.occurredTimezone})
+                {item.channel} · {item.direction} ·{" "}
+                <time dateTime={item.occurredAtUtc}>
+                  {formatHomeTemporal({ at: item.occurredAtUtc, timeZone: item.occurredTimezone })}
+                </time>
               </p>
             )}
             {"dueAtUtc" in item && (

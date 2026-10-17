@@ -1152,12 +1152,35 @@ test("Conversation draft, optional follow-up and correction retain separate orig
   const draft = await get<Schemas["CommunicationResponse"]>(request, `/api/communications/${id}`);
   expect(draft.status).toBe("draft");
   expect(draft.followUpTasks).toHaveLength(0);
-  await openAction(page, "communication.patch", id);
+  await page.goto(href);
+  const detail = page.getByRole("region", { name: "Work record", exact: true });
+  await expect(detail.getByRole("heading", { name: draft.subject, exact: true })).toBeVisible();
+  await expect(detail.getByRole("region", { name: "Message", exact: true })).toContainText(
+    draft.body,
+  );
+  await expect(detail).not.toContainText(id);
+  await expect(
+    detail.getByRole("link", { name: "← Back to Conversations", exact: true }),
+  ).toHaveAttribute("href", "/conversations");
+  await expect(detail.getByRole("list", { name: "Conversation participants" })).toContainText(
+    draft.participants[0].partyDisplayName,
+  );
+  expect(await detail.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(
+    "rgba(0, 0, 0, 0)",
+  );
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await detail.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+      true,
+    );
+  }
+  await page.getByRole("button", { name: "Edit conversation draft", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Body", exact: true })
     .fill("Draft clarified repair timing");
   await save(page, "Edit conversation draft");
-  await openAction(page, "communication.draft.record", id);
+  await page.goto(href);
+  await page.getByRole("button", { name: "Record conversation", exact: true }).click();
   await page.getByRole("button", { name: "Add follow up", exact: true }).click();
   await page.getByLabel("Title (required)").fill("Call plumber");
   await save(page, "Record conversation");
@@ -1166,7 +1189,11 @@ test("Conversation draft, optional follow-up and correction retain separate orig
     `/api/communications/${id}`,
   );
   expect(recorded.followUpTasks).toHaveLength(1);
-  await openAction(page, "communication.correct", id);
+  await page.goto(href);
+  await expect(detail.getByRole("region", { name: "Follow-up tasks", exact: true })).toContainText(
+    "Call plumber",
+  );
+  await page.getByRole("button", { name: "Correct recorded conversation", exact: true }).click();
   await page.getByLabel("Subject (required)").fill("Owner asked for tomorrow");
   await page.getByLabel("Correction reason (required)").fill("Correct timing");
   await save(page, "Correct recorded conversation");
@@ -1177,7 +1204,7 @@ test("Conversation draft, optional follow-up and correction retain separate orig
   await page.goto(`/conversations?record=communication&id=${id}`);
   await expect(page.getByRole("link", { name: "Conversation history" })).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Correct recorded conversation", exact: true }),
+    page.getByRole("button", { name: "Correct recorded conversation", exact: true }),
   ).toHaveCount(0);
   await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
   await expect(page.getByRole("link", { name: "All linked conversations" })).toBeVisible();
@@ -1231,7 +1258,14 @@ test("manual outbound contact selection and local-date timeline filters preserve
   expect(stored.participants[0].contactDisplayValue).toBe("owner@example.test");
   expect(stored.links[0].propertyTimezoneSnapshot).toBe("America/Los_Angeles");
   await page.goto(href);
-  await expect(page.getByText(/Recorded local occurrence:/)).toContainText("America/Los_Angeles");
+  const detail = page.getByRole("region", { name: "Work record", exact: true });
+  await expect(detail.locator(".conversation-detail-time")).toContainText("America/Los_Angeles");
+  await expect(detail.getByRole("list", { name: "Conversation participants" })).toContainText(
+    "owner@example.test",
+  );
+  await expect(detail.getByRole("region", { name: "Related records", exact: true })).toContainText(
+    "Related property",
+  );
   await page.goto(`/conversations?partyId=${ownerId}&propertyId=${f.property.id}`);
   await page.getByRole("combobox", { name: "Direction", exact: true }).selectOption("outbound");
   await page.getByRole("combobox", { name: "Channel", exact: true }).selectOption("email");

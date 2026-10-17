@@ -572,7 +572,7 @@ test("manual reputation sources retain safe external pointers and contextual lif
   await expect(historyRow).toContainText("Revised private context");
   await historyRow.getByText("History", { exact: true }).click();
   await expect(historyRow.getByText("archived", { exact: true })).toBeVisible();
-  await historyRow.getByText("Resulting facts", { exact: true }).last().click();
+  await historyRow.getByText("After change", { exact: true }).last().click();
   await expect(historyRow).toContainText("https://reputation.example/google_reviews");
   expect(externalRequests).toBe(0);
   await page.goto(

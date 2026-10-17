@@ -97,6 +97,30 @@ test("rental edit shows property context, current values and a responsive form",
   expect(updated.displayName).toBe("Suite 201 — East");
   expect(updated.currentOccupancy.occupancyStatus).toBe(rental.currentOccupancy.occupancyStatus);
   expect(updated.availability.effectiveStatus).toBe(rental.availability.effectiveStatus);
+  await page.goto(`/properties/${property.id}/units`);
+  const card = page.getByRole("article", { name: updated.displayName, exact: true });
+  await card.getByText("History", { exact: true }).click();
+  const change = card.getByRole("article").filter({
+    hasText: `Display name changed from ${rental.displayName} to ${updated.displayName}.`,
+  });
+  await expect(change).toBeVisible();
+  await expect(change.getByText("You", { exact: true })).toBeVisible();
+  await expect(change.locator("time")).toBeVisible();
+  const before = change
+    .locator("details")
+    .filter({ has: page.locator("summary", { hasText: "Before change" }) });
+  const after = change
+    .locator("details")
+    .filter({ has: page.locator("summary", { hasText: "After change" }) });
+  await expect(before).not.toHaveAttribute("open", "");
+  await expect(after).not.toHaveAttribute("open", "");
+  await before.locator("summary").click();
+  await after.locator("summary").click();
+  await expect(before.getByText(rental.displayName, { exact: true })).toBeVisible();
+  await expect(after.getByText(updated.displayName, { exact: true })).toBeVisible();
+  expect(await change.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(
+    "rgba(0, 0, 0, 0)",
+  );
 });
 
 test("archive suite explains its scope and confirms the change in both themes", async ({

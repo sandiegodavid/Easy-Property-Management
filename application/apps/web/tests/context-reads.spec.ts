@@ -259,6 +259,73 @@ async function property(request: APIRequestContext, name: string, owners?: (stri
   return (await response.json()) as Schema["PropertyMutationResponse"];
 }
 
+test("property conversations use local timestamps without displaying communication IDs", async ({
+  page,
+  request,
+}) => {
+  const item = await property(request, "Conversation timestamps");
+  const instant = "2026-10-01T18:30:00Z";
+  const response = await request.post("/api/communications", {
+    data: {
+      direction: "inbound",
+      channel: "phone",
+      subject: "Property update call",
+      body: "Recorded property discussion\nPlease confirm the next visit.",
+      occurredAtUtc: instant,
+      occurredTimezone: "America/Los_Angeles",
+      record: true,
+      participants: [{ partyId: item.ownerships[0].partyId, role: "sender" }],
+      links: [{ entityType: "property", entityId: item.id }],
+      expectedRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+  const communication = (await response.json()) as Schema["CommunicationReceiptResponse"];
+  await page.goto(`/properties/${item.id}/conversations?fromOn=2026-09-30&throughOn=2026-12-31`);
+  const localTime = await page.evaluate((at) => {
+    const formatter = new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+    const zone = formatter.resolvedOptions().timeZone;
+    return `${formatter.format(new Date(at))} · ${zone}${zone === "America/Los_Angeles" ? "" : " · Source time zone: America/Los_Angeles"}`;
+  }, instant);
+  const row = page.locator(".context-item-cards > li").filter({ hasText: "Property update call" });
+  await expect(row.locator("time")).toHaveText(localTime);
+  await expect(row).not.toContainText(communication.id);
+  await row.getByRole("link", { name: "View conversation", exact: true }).click();
+  const detail = page.getByRole("region", { name: "Source detail", exact: true });
+  await expect(
+    detail.getByRole("heading", { name: "Property update call", exact: true }),
+  ).toBeVisible();
+  await expect(detail).toContainText(localTime);
+  await expect(detail).not.toContainText(communication.id);
+  await expect(detail.getByRole("list", { name: "Conversation participants" })).toContainText(
+    `${item.displayName} owner`,
+  );
+  await expect(detail.getByRole("region", { name: "Message", exact: true })).toContainText(
+    "Please confirm the next visit.",
+  );
+  await expect(
+    detail.getByRole("link", { name: "View full conversation", exact: true }),
+  ).toHaveAttribute("href", `/conversations?record=communication&id=${communication.id}`);
+  expect(await detail.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(
+    "rgba(0, 0, 0, 0)",
+  );
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await detail.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+      true,
+    );
+  }
+  await detail.getByRole("link", { name: "Close conversation", exact: true }).click();
+  await expect(detail).toHaveCount(0);
+  await expect(page).toHaveURL(
+    `/properties/${item.id}/conversations?fromOn=2026-09-30&throughOn=2026-12-31`,
+  );
+});
+
 test("property cards show the scheduled leasing date", async ({ page, request }) => {
   const item = await property(request, "Scheduled leasing date");
   const directory = await request.get("/api/operator/properties?q=Scheduled%20leasing%20date");
@@ -304,7 +371,17 @@ test("property setup keeps configuration and actions without duplicating overvie
   await expect(
     page.getByRole("region", { name: "relationships section", exact: true }),
   ).toHaveCount(0);
-  await details.getByText("Property actions", { exact: true }).click();
+  await expect(details.locator("summary").filter({ hasText: "Property actions" })).toHaveCount(0);
+  const edit = details.getByRole("button", { name: "Edit property", exact: true });
+  await expect(edit).toBeVisible();
+  await expect(
+    details
+      .locator(".property-setup-heading")
+      .getByRole("button", { name: "Edit property", exact: true }),
+  ).toBeVisible();
+  await expect(
+    details.getByRole("button", { name: "Archive property", exact: true }),
+  ).toBeVisible();
   await expect(
     details.getByRole("navigation", { name: "Property actions", exact: true }),
   ).toBeVisible();
@@ -316,7 +393,7 @@ test("property setup keeps configuration and actions without duplicating overvie
   const history = details.locator(".property-history");
   const created = history
     .locator(":scope > article")
-    .filter({ has: page.getByText("created", { exact: true }) });
+    .filter({ has: page.getByText("Created", { exact: true }) });
   await expect(created).toHaveCount(1);
   const occurredAt = await created.locator("time").getAttribute("datetime");
   expect(occurredAt).toBeTruthy();
@@ -329,12 +406,14 @@ test("property setup keeps configuration and actions without duplicating overvie
   }, occurredAt);
   await expect(created.locator("time")).toHaveText(localTime);
   await expect(created.getByText("You", { exact: true })).toBeVisible();
-  await created.getByText("Resulting facts", { exact: true }).click();
+  await created.getByText("After change", { exact: true }).click();
   await expect(created.getByText("Details panels home", { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
+  await edit.click();
+  await expect(page).toHaveURL(new RegExp(`workflow=portfolio.property.patch&target=${item.id}`));
 });
 
 test("property owner counts include You and co-owners", async ({ page, request }) => {
@@ -351,7 +430,20 @@ test("property owner counts include You and co-owners", async ({ page, request }
   await expect(page.getByText("1 owner · You · 1 rental unit", { exact: true })).toBeVisible();
   await expect(page.getByText("3 owners · 1 rental unit", { exact: true })).toBeVisible();
   await expect(page.getByText("4 owners · 1 rental unit", { exact: true })).toBeVisible();
-  await expect(page.getByText("You", { exact: true })).toBeVisible();
+  const soleCard = page
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("heading", { name: "Ownership counts Sole", exact: true }) });
+  await expect(
+    soleCard.getByRole("region", { name: "Owners", exact: true }).getByText("You", { exact: true }),
+  ).toBeVisible();
+  const mixedCard = page
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("heading", { name: "Ownership counts Mixed", exact: true }) });
+  await expect(
+    mixedCard
+      .getByRole("region", { name: "Owners", exact: true })
+      .getByText("You", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("10 owners · 1 rental unit", { exact: true })).toBeVisible();
   const remaining = page.getByRole("link", { name: "+5 more owners", exact: true });
   await expect(remaining).toHaveAttribute("href", `/properties/${ten.id}/overview#relationships`);

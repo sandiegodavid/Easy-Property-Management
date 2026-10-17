@@ -1,12 +1,95 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
+import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
 import { normalizeApiError } from "./mutations";
 import { PageAsOf } from "./page-as-of";
 import { leaseLastCoveredOn } from "./lease-dates";
+import { formatHomeTemporal } from "./home-time";
 
-type Source = { title: string; facts: Record<string, string | number | null> };
+type Conversation = components["schemas"]["CommunicationResponse"];
+type Source = {
+  title: string;
+  facts: Record<string, string | number | null>;
+  conversation?: Conversation;
+};
+const readable = (value: string) =>
+  value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+
+type ConversationPresentation = {
+  id: string;
+  subject: string;
+  occurredAtUtc: string;
+  occurredTimezone: string;
+  channel: string;
+  direction: string;
+  status: string;
+  body: string;
+  participants: {
+    id: string;
+    role: string;
+    partyDisplayName: string;
+    contactDisplayValue?: string | null;
+  }[];
+};
+
+export function ConversationDetail({
+  item,
+  showTitle = true,
+  showFullLink = true,
+}: {
+  item: ConversationPresentation;
+  showTitle?: boolean;
+  showFullLink?: boolean;
+}) {
+  return (
+    <>
+      {showTitle && <h4 className="conversation-detail-subject">{item.subject}</h4>}
+      <p className="conversation-detail-time">
+        <time dateTime={item.occurredAtUtc}>
+          {formatHomeTemporal({ at: item.occurredAtUtc, timeZone: item.occurredTimezone })}
+        </time>
+      </p>
+      <dl className="conversation-detail-meta">
+        <div>
+          <dt>Channel</dt>
+          <dd>{readable(item.channel)}</dd>
+        </div>
+        <div>
+          <dt>Direction</dt>
+          <dd>{readable(item.direction)}</dd>
+        </div>
+        <div>
+          <dt>Status</dt>
+          <dd>{readable(item.status)}</dd>
+        </div>
+      </dl>
+      <ul className="conversation-detail-participants" aria-label="Conversation participants">
+        {item.participants.map((participant) => (
+          <li key={participant.id}>
+            <span>
+              {participant.role === "sender"
+                ? "From"
+                : participant.role === "recipient"
+                  ? "To"
+                  : readable(participant.role)}
+            </span>{" "}
+            <strong>{participant.partyDisplayName}</strong>
+            {participant.contactDisplayValue && <> · {participant.contactDisplayValue}</>}
+          </li>
+        ))}
+      </ul>
+      <section className="conversation-detail-message" aria-label="Message">
+        <h5>Message</h5>
+        <p>{item.body || "No message recorded."}</p>
+      </section>
+      {showFullLink && (
+        <Link to={`/conversations?record=communication&id=${item.id}`}>View full conversation</Link>
+      )}
+    </>
+  );
+}
 async function readSource(kind: string, id: string, signal: AbortSignal): Promise<Source> {
   function data<T>(response: { data?: T; error?: unknown; response: Response }): T {
     if (!response.data)
@@ -91,15 +174,8 @@ async function readSource(kind: string, id: string, signal: AbortSignal): Promis
       );
       return {
         title: item.subject,
-        facts: {
-          Status: item.status,
-          Revision: item.revision,
-          Channel: item.channel,
-          Direction: item.direction,
-          "Occurred at": item.occurredAtUtc,
-          "Time zone": item.occurredTimezone,
-          Body: item.body,
-        },
+        facts: {},
+        conversation: item,
       };
     }
     case "owner_concern": {
@@ -135,14 +211,22 @@ export function SourceDetail() {
   back.delete("sourceType");
   back.delete("sourceId");
   return (
-    <section id="source-detail" aria-label="Source detail" className="context-section">
-      <h3>Source detail</h3>
-      <p>
-        {kind} · {id}
-      </p>
-      <Link state={state} to={`?${back.toString()}`}>
-        Close source detail
-      </Link>
+    <section
+      id="source-detail"
+      aria-label="Source detail"
+      className={kind === "communication" ? "conversation-detail" : "context-section"}
+    >
+      <header className={kind === "communication" ? "conversation-detail-heading" : undefined}>
+        <h3>{kind === "communication" ? "Conversation detail" : "Source detail"}</h3>
+        {kind !== "communication" && (
+          <p>
+            {kind} · {id}
+          </p>
+        )}
+        <Link state={state} to={`?${back.toString()}`}>
+          {kind === "communication" ? "Close conversation" : "Close source detail"}
+        </Link>
+      </header>
       {result.isPending && <p role="status">Loading source…</p>}
       {result.error && (
         <div role="alert">
@@ -156,31 +240,35 @@ export function SourceDetail() {
           </button>
         </div>
       )}
-      {result.data && (
-        <>
-          {typeof result.data.facts["As of"] === "string" && (
-            <PageAsOf asOf={result.data.facts["As of"]} priority={1} />
-          )}
-          <h4>{result.data.title}</h4>
-          {kind === "lease" && <Link to={`/leases/${id}/details`}>Open Lease workflow</Link>}
-          {["task", "maintenance_issue", "communication", "owner_concern"].includes(kind) && (
-            <Link
-              to={`${kind === "task" ? "/tasks" : kind === "communication" ? "/conversations" : "/maintenance"}?record=${kind === "maintenance_issue" ? "issue" : kind === "owner_concern" ? "concern" : kind}&id=${id}`}
-            >
-              Open work workflow
-            </Link>
-          )}
-          <dl>
-            {Object.entries(result.data.facts)
-              .filter(([name]) => name !== "As of")
-              .map(([name, value]) => (
-                <div key={name}>
-                  <dt>{name}</dt>
-                  <dd>{value ?? "Not recorded"}</dd>
-                </div>
-              ))}
-          </dl>
-        </>
+      {result.data?.conversation ? (
+        <ConversationDetail item={result.data.conversation} />
+      ) : (
+        result.data && (
+          <>
+            {typeof result.data.facts["As of"] === "string" && (
+              <PageAsOf asOf={result.data.facts["As of"]} priority={1} />
+            )}
+            <h4>{result.data.title}</h4>
+            {kind === "lease" && <Link to={`/leases/${id}/details`}>Open Lease workflow</Link>}
+            {["task", "maintenance_issue", "communication", "owner_concern"].includes(kind) && (
+              <Link
+                to={`${kind === "task" ? "/tasks" : kind === "communication" ? "/conversations" : "/maintenance"}?record=${kind === "maintenance_issue" ? "issue" : kind === "owner_concern" ? "concern" : kind}&id=${id}`}
+              >
+                Open work workflow
+              </Link>
+            )}
+            <dl>
+              {Object.entries(result.data.facts)
+                .filter(([name]) => name !== "As of")
+                .map(([name, value]) => (
+                  <div key={name}>
+                    <dt>{name}</dt>
+                    <dd>{value ?? "Not recorded"}</dd>
+                  </div>
+                ))}
+            </dl>
+          </>
+        )
       )}
     </section>
   );

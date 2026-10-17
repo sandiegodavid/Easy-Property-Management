@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { CoverageLinks } from "../shared/coverage";
 import { SourceWorkflowLink as Link } from "../shared/home-navigation";
-import { communicationLocalTime } from "./communication-context";
+import { ConversationDetail } from "../shared/source-detail";
+import { formatHomeTime, formatHomeTemporal } from "../shared/home-time";
 import { MoneyFacts } from "./money-presentation";
 import { QuoteComparison } from "./quote-context";
 import { WorkJournal } from "./work-journal";
@@ -77,7 +78,10 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
   const value = result.data;
   const active = value && ["open", "in_progress"].includes(scalar(value.status));
   return (
-    <section aria-label="Work record">
+    <section
+      aria-label="Work record"
+      className={kind === "communication" ? "conversation-record" : undefined}
+    >
       <p>
         <Link
           to={
@@ -88,7 +92,11 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                 : "/maintenance"
           }
         >
-          {kind === "issue" ? "← Back to Maintenance" : "Return to work directory"}
+          {kind === "issue"
+            ? "← Back to Maintenance"
+            : kind === "communication"
+              ? "← Back to Conversations"
+              : "Return to work directory"}
         </Link>
       </p>
       {result.isPending && <p role="status">Loading current record…</p>}
@@ -97,7 +105,7 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
         <>
           <h2>{scalar(value.summary ?? value.subject ?? value.title)}</h2>
           {!!value.propertyId && <CoverageLinks propertyId={scalar(value.propertyId)} />}
-          <Facts value={value} fields={common} />
+          {kind !== "communication" && <Facts value={value} fields={common} />}
           {!!value.propertyId && (
             <p>
               <Link to={`/properties/${scalar(value.propertyId)}/maintenance`}>
@@ -170,65 +178,121 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
           )}
           {kind === "communication" && (
             <>
-              <p>This is a manual conversation record; nothing is sent.</p>
-              <p>
-                Recorded local occurrence: {communicationLocalTime(value)} ·{" "}
-                {scalar(value.occurredTimezone)}
+              <ConversationDetail
+                showTitle={false}
+                showFullLink={false}
+                item={{
+                  id,
+                  subject: scalar(value.subject),
+                  body: scalar(value.body, ""),
+                  occurredAtUtc: scalar(value.occurredAtUtc),
+                  occurredTimezone: scalar(value.occurredTimezone),
+                  channel: scalar(value.channel),
+                  direction: scalar(value.direction),
+                  status: scalar(value.status),
+                  participants: workChildren(value, "participants").map((item) => ({
+                    id: scalar(item.id),
+                    role: scalar(item.role),
+                    partyDisplayName: scalar(item.partyDisplayName),
+                    contactDisplayValue: scalar(item.contactDisplayValue, ""),
+                  })),
+                }}
+              />
+              {!!value.correctionReason && (
+                <p className="conversation-correction">
+                  <strong>Reason for correction:</strong> {scalar(value.correctionReason)}
+                </p>
+              )}
+              <p className="conversation-record-note">
+                This is a manual conversation record; nothing is sent.
               </p>
-              <Facts
-                value={value}
-                fields={[
-                  "direction",
-                  "channel",
-                  "subject",
-                  "body",
-                  "occurredAtUtc",
-                  "occurredTimezone",
-                  "correctionReason",
-                ]}
-              />
-              {workChildren(value, "participants").map((item) => (
-                <Facts
-                  key={scalar(item.id)}
-                  value={item}
-                  fields={["role", "partyDisplayName", "contactDisplayValue"]}
+              <section className="conversation-record-actions" aria-label="Conversation actions">
+                <CommandLinks
+                  target={id}
+                  collapsible={false}
+                  asButtons
+                  keys={
+                    value.status === "draft"
+                      ? ["communication.patch", "communication.draft.record"]
+                      : value.status === "recorded"
+                        ? ["communication.correct"]
+                        : []
+                  }
                 />
-              ))}
-              {workChildren(value, "links").map((item) => (
-                <article key={scalar(item.id)}>
-                  <RelatedLink kind={scalar(item.entityType)} id={scalar(item.entityId)} />
-                  <Facts value={item} fields={["propertyTimezoneSnapshot"]} />
-                  <Facts value={item.context} fields={Object.keys(record(item.context))} />
-                </article>
-              ))}
-              <CommandLinks
-                target={id}
-                keys={
-                  value.status === "draft"
-                    ? ["communication.patch", "communication.draft.record"]
-                    : value.status === "recorded"
-                      ? ["communication.correct"]
-                      : []
-                }
-              />
-              {workChildren(value, "followUpTasks").map((item) => (
-                <div key={scalar(item.id)}>
-                  <Link to={workUrl("task", scalar(item.id))}>{scalar(item.title)}</Link> ·{" "}
-                  {scalar(item.status)}
-                  <Facts value={item} fields={["dueAtUtc", "dueTimezone"]} />
-                </div>
-              ))}
+              </section>
+              {!!workChildren(value, "links").length && (
+                <section className="conversation-related" aria-label="Related records">
+                  <h3>Related records</h3>
+                  <ul>
+                    {workChildren(value, "links").map((item) => (
+                      <li key={scalar(item.id)}>
+                        <RelatedLink kind={scalar(item.entityType)} id={scalar(item.entityId)} />
+                        <Facts value={item} fields={["propertyTimezoneSnapshot"]} />
+                        <Facts value={item.context} fields={Object.keys(record(item.context))} />
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {!!workChildren(value, "followUpTasks").length && (
+                <section className="conversation-related" aria-label="Follow-up tasks">
+                  <h3>Follow-up tasks</h3>
+                  <ul>
+                    {workChildren(value, "followUpTasks").map((item) => (
+                      <li key={scalar(item.id)}>
+                        <Link to={workUrl("task", scalar(item.id))}>{scalar(item.title)}</Link> ·{" "}
+                        {scalar(item.status)}
+                        {!!item.dueAtUtc && (
+                          <p>
+                            {formatHomeTemporal({
+                              at: scalar(item.dueAtUtc),
+                              timeZone: scalar(item.dueTimezone, ""),
+                            })}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
               {(["supersedesCommunicationId", "supersededByCommunicationId"] as const).map(
                 (key) =>
                   value[key] && (
                     <p key={key}>
-                      {key}:{" "}
+                      {key === "supersedesCommunicationId"
+                        ? "Corrects an earlier record:"
+                        : "Replaced by a corrected record:"}{" "}
                       <Link to={workUrl("communication", scalar(value[key]))}>
                         Conversation history
                       </Link>
                     </p>
                   ),
               )}
+              <details className="conversation-record-details">
+                <summary>Record details</summary>
+                <Facts value={value} fields={["revision"]} />
+                <dl className="conversation-detail-meta">
+                  {["createdAt", "updatedAt", "recordedAt"].map(
+                    (key) =>
+                      !!value[key] && (
+                        <div key={key}>
+                          <dt>
+                            {key === "createdAt"
+                              ? "Created"
+                              : key === "updatedAt"
+                                ? "Last updated"
+                                : "Recorded"}
+                          </dt>
+                          <dd>
+                            <time dateTime={scalar(value[key])}>
+                              {formatHomeTime(scalar(value[key]))}
+                            </time>
+                          </dd>
+                        </div>
+                      ),
+                  )}
+                </dl>
+              </details>
             </>
           )}
           {kind === "concern" && (
@@ -363,6 +427,7 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
             </>
           )}
           <History
+            presentation={kind === "communication" ? "timeline" : undefined}
             kind={
               {
                 issue: "maintenance_issue",
