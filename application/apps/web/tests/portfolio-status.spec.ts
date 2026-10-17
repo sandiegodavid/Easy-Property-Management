@@ -66,9 +66,149 @@ async function action(page: Page, key: string, space: string, child?: string) {
   await expect(page.getByRole("group", { name: "Requested change", exact: true })).toBeVisible();
 }
 async function save(page: Page, title: string) {
-  await page.getByRole("button", { name: `Save ${title.toLowerCase()}`, exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: title === "Create property" ? title : `Save ${title.toLowerCase()}`,
+      exact: true,
+    })
+    .click();
   await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
 }
+
+test("property setup puts all actions on the top row without a repeated heading", async ({
+  page,
+  request,
+}) => {
+  const property = await create(request, "Setup action row", "office_suites");
+  const setupUrl = `/properties/${property.id}/setup`;
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(setupUrl);
+  const setup = page.getByRole("region", { name: "Property setup", exact: true });
+  const actions = setup.getByRole("navigation", { name: "Property actions", exact: true });
+  await expect(setup.getByRole("heading", { name: "Property setup", exact: true })).toHaveCount(0);
+  await expect(actions.getByRole("button")).toHaveText([
+    "Edit Property",
+    "Change ownership",
+    "Add Suite",
+    "Archive property",
+  ]);
+  const tops = await actions
+    .getByRole("button")
+    .evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().top));
+  expect(new Set(tops).size).toBe(1);
+  expect(
+    await actions
+      .getByRole("button", { name: "Archive property", exact: true })
+      .evaluate((button) => getComputedStyle(button).backgroundColor),
+  ).toBe("rgba(0, 0, 0, 0)");
+  for (const [name, command] of [
+    ["Edit Property", "portfolio.property.patch"],
+    ["Change ownership", "portfolio.ownerships.replace"],
+    ["Add Suite", "portfolio.space.create"],
+    ["Archive property", "portfolio.property.archive"],
+  ]) {
+    await actions.getByRole("button", { name, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`workflow=${command}&target=${property.id}`));
+    await page.goto(setupUrl);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await expect(actions.getByRole("button")).toHaveCount(4);
+});
+
+test("property edit groups and prefills details without changing ownership or rental status", async ({
+  page,
+  request,
+}, testInfo) => {
+  const property = await create(request, "Property edit context", "office_suites");
+  const response = await request.patch(`/api/properties/${property.id}`, {
+    data: {
+      expectedPropertyRevision: property.propertyRevision,
+      idempotencyKey: crypto.randomUUID(),
+      addressLine2: "North building",
+      notes: "Use the courtyard entrance.",
+    },
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+  const prior = (await response.json()) as Schemas["PropertyMutationResponse"];
+  for (const theme of ["light", "dark"] as const) {
+    await page.goto("/settings");
+    await page
+      .getByRole("radio", { name: theme === "dark" ? "Dark" : "Light", exact: true })
+      .check();
+    await page.getByRole("button", { name: "Save preferences", exact: true }).click();
+    await expect(page.getByText("Preferences saved.")).toBeVisible();
+    await action(page, "portfolio.property.patch", property.id);
+    const context = page.getByRole("region", { name: "Selected property", exact: true });
+    await expect(
+      context.getByRole("heading", { name: property.displayName, exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: `← Back to ${property.displayName}`, exact: true }),
+    ).toHaveAttribute("href", `/properties/${property.id}/setup`);
+    const editor = page.getByRole("region", { name: "Edit property", exact: true });
+    for (const name of ["Property name", "Address", "Notes"])
+      await expect(editor.getByRole("group", { name, exact: true })).toBeVisible();
+    for (const [name, value] of [
+      ["Display name", property.displayName],
+      ["Address line1", "10 Maple Street"],
+      ["Address line2", "North building"],
+      ["City", "Portland"],
+      ["Region", "OR"],
+      ["Postal code", "97201"],
+      ["Country code", "US"],
+      ["Notes", "Use the courtyard entrance."],
+    ]) {
+      await expect(editor.getByRole("textbox", { name, exact: true })).toHaveValue(value);
+    }
+    await expect(page.getByText(/Displayed source revision:/)).not.toBeVisible();
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+      await page.screenshot({
+        path: testInfo.outputPath(`property-edit-${theme}-${width}.png`),
+        fullPage: true,
+      });
+    }
+  }
+  await page
+    .getByRole("textbox", { name: "Display name", exact: true })
+    .fill("Updated property name");
+  await page.getByRole("textbox", { name: "Notes", exact: true }).fill("New entrance note.");
+  await save(page, "Edit property");
+  const updatedResponse = await request.get(`/api/properties/${property.id}`);
+  const updated = (await updatedResponse.json()) as Schemas["PropertyMutationResponse"];
+  expect(updated.displayName).toBe("Updated property name");
+  expect(updated.notes).toBe("New entrance note.");
+  expect(updated.addressLine2).toBe(prior.addressLine2);
+  expect(updated.region).toBe(prior.region);
+  expect(updated.postalCode).toBe(prior.postalCode);
+  expect(updated.ownerships).toEqual(prior.ownerships);
+  const rentalFacts = (item: Schemas["PropertyMutationResponse"]) =>
+    item.spaces.map((space) => ({
+      id: space.id,
+      revision: space.revision,
+      displayName: space.displayName,
+      status: space.status,
+      occupancy: space.currentOccupancy,
+      availability: space.availability,
+    }));
+  expect(rentalFacts(updated)).toEqual(rentalFacts(prior));
+  await action(page, "portfolio.property.patch", property.id);
+  await page.getByRole("textbox", { name: "Notes", exact: true }).fill("");
+  await page.getByRole("textbox", { name: "Address line2", exact: true }).fill("");
+  await save(page, "Edit property");
+  const clearedResponse = await request.get(`/api/properties/${property.id}`);
+  const cleared = (await clearedResponse.json()) as Schemas["PropertyMutationResponse"];
+  expect(cleared.notes).toBeNull();
+  expect(cleared.addressLine2).toBeNull();
+  expect(cleared.region).toBe("OR");
+  expect(cleared.postalCode).toBe("97201");
+});
 
 test("rental edit shows property context, current values and a responsive form", async ({
   page,
@@ -176,6 +316,96 @@ test("archive suite explains its scope and confirms the change in both themes", 
     expect((await status(request, rental.id)).status).toBe("archived");
     expect((await status(request, property.spaces[1].id)).status).toBe("active");
   }
+});
+
+test("guided property creation supports suites, co-owners and embedded identity lookup", async ({
+  page,
+  request,
+}, testInfo) => {
+  for (const theme of ["light", "dark"] as const) {
+    await page.goto("/settings");
+    await page
+      .getByRole("radio", { name: theme === "dark" ? "Dark" : "Light", exact: true })
+      .check();
+    await page.getByRole("button", { name: "Save preferences", exact: true }).click();
+    await expect(page.getByText("Preferences saved.")).toBeVisible();
+    await page.goto("/properties?workflow=portfolio.property.create");
+    await expect(
+      page
+        .getByRole("group", { name: "Owner 1", exact: true })
+        .getByRole("combobox", { name: "Owner", exact: true }),
+    ).toHaveValue("local_operator");
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+      await page.screenshot({
+        path: testInfo.outputPath(`property-create-${theme}-${width}.png`),
+        fullPage: true,
+      });
+    }
+  }
+  await page.getByLabel("Display name (required)", { exact: true }).fill("Guided office create");
+  await page.getByLabel("Address line1 (required)", { exact: true }).fill("22 Oak Street");
+  await page.getByLabel("City (required)", { exact: true }).fill("Portland");
+  await page.getByLabel("Country code (required)", { exact: true }).fill("US");
+  await page.getByLabel("Region", { exact: true }).fill("OR");
+  await page.getByLabel("Postal code", { exact: true }).fill("97201");
+  await page
+    .getByRole("combobox", { name: "Property type (required)", exact: true })
+    .selectOption("office");
+  await page
+    .getByRole("combobox", { name: "Rental layout", exact: true })
+    .selectOption("office_suites");
+  await page
+    .getByRole("group", { name: "Suite 1", exact: true })
+    .getByLabel("Display name (required)", { exact: true })
+    .fill("Suite A");
+  await page.getByRole("button", { name: "Add suite", exact: true }).click();
+  await page
+    .getByRole("group", { name: "Suite 2", exact: true })
+    .getByLabel("Display name (required)", { exact: true })
+    .fill("Suite B");
+  const partyResponse = await request.post("/api/parties", {
+    data: {
+      partyKind: "individual",
+      displayName: "Guided office co-owner",
+      expectedRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(partyResponse.ok(), await partyResponse.text()).toBe(true);
+  const party = (await partyResponse.json()) as Schemas["PartyMutationResponse"];
+  await page.getByRole("button", { name: "Add owner", exact: true }).click();
+  let writes = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/api/properties")
+      writes++;
+  });
+  await page.getByText("Find an existing owner identity", { exact: true }).click();
+  await page.getByLabel("Existing identity ID", { exact: true }).fill(party.id);
+  await page.getByRole("button", { name: "Find identity", exact: true }).click();
+  await page.getByRole("button", { name: `Use ${party.displayName}`, exact: true }).click();
+  expect(writes).toBe(0);
+  await expect(page.locator("form form")).toHaveCount(0);
+  await page
+    .getByRole("group", { name: "Owner 2", exact: true })
+    .getByRole("combobox", { name: "Existing identity", exact: true })
+    .selectOption(party.id);
+  await save(page, "Create property");
+  expect(writes).toBe(1);
+  const response = await request.get("/api/properties");
+  const rows =
+    (await response.json()) as Schemas["app__modules__portfolio__api__router__PropertyPageResponse"];
+  const created = rows.items.find((item) => item.displayName === "Guided office create")!;
+  expect(created.inventoryLayout).toBe("office_suites");
+  expect(created.spaces.map((item) => item.displayName).sort()).toEqual(["Suite A", "Suite B"]);
+  expect(created.ownerships.map((owner) => owner.ownerKind).sort()).toEqual([
+    "client_owner",
+    "local_operator",
+  ]);
+  expect(created.ownerships.some((owner) => owner.partyId === party.id)).toBe(true);
 });
 
 test("Back to Properties leaves an untouched create form and protects edits", async ({ page }) => {

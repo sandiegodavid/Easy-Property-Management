@@ -21,6 +21,8 @@ import { Facts, readResult } from "./reads";
 import { MoneyFacts } from "./money-presentation";
 import { OriginalWorkResult } from "./work-result";
 import { TaskCreateFields } from "./task-fields";
+import { PropertyEditFields } from "./property-edit-fields";
+import { PropertyCreateFields } from "./property-create-fields";
 
 export function workflowUrl(formKey: string, sourceId?: string, childId?: string) {
   const params = new URLSearchParams({ workflow: formKey });
@@ -616,17 +618,19 @@ function CommandEditor({
     <section aria-label={definition.title} className="command-editor">
       <h2>{definition.title}</h2>
       <p>
-        {definition.formKey === "portfolio.space.classify"
-          ? "Add occupancy, leasing status, or both below. Save to apply your changes; saving an unfinished form does not update the property’s records."
-          : definition.formKey === "portfolio.availability.change"
-            ? "Choose whether the property is not open for leasing, open now, or open from a future date. For a future opening, enter the date. Add an optional note, then save."
-            : definition.formKey === "portfolio.occupancy.change"
-              ? "Choose the new occupancy status and when it takes effect in the property’s time zone. A future date schedules the change; it does not change today’s occupancy. Add an optional note, then save."
-              : definition.formKey === "portfolio.space.patch"
-                ? "Edit the details below, then save your changes. Saving an unfinished form does not update the property’s records."
-                : definition.formKey === "portfolio.space.archive"
-                  ? "Confirm that you want to archive this rental, then select Archive below. Saving an unfinished form does not archive it."
-                  : "Review the displayed record and make an explicit change. Saved input is an unfinished form, not an official record."}
+        {definition.formKey === "portfolio.property.create"
+          ? "Start with the property name and address, choose its rental layout, and confirm the owners. Occupancy, leasing status and lease records can be added afterward."
+          : definition.formKey === "portfolio.space.classify"
+            ? "Add occupancy, leasing status, or both below. Save to apply your changes; saving an unfinished form does not update the property’s records."
+            : definition.formKey === "portfolio.availability.change"
+              ? "Choose whether the property is not open for leasing, open now, or open from a future date. For a future opening, enter the date. Add an optional note, then save."
+              : definition.formKey === "portfolio.occupancy.change"
+                ? "Choose the new occupancy status and when it takes effect in the property’s time zone. A future date schedules the change; it does not change today’s occupancy. Add an optional note, then save."
+                : ["portfolio.space.patch", "portfolio.property.patch"].includes(definition.formKey)
+                  ? "Edit the details below, then save your changes. Saving an unfinished form does not update the property’s records."
+                  : definition.formKey === "portfolio.space.archive"
+                    ? "Confirm that you want to archive this rental, then select Archive below. Saving an unfinished form does not archive it."
+                    : "Review the displayed record and make an explicit change. Saved input is an unfinished form, not an official record."}
       </p>
       {[
         "portfolio.space.classify",
@@ -634,6 +638,8 @@ function CommandEditor({
         "portfolio.occupancy.change",
         "portfolio.space.patch",
         "portfolio.space.archive",
+        "portfolio.property.patch",
+        "portfolio.property.create",
       ].includes(definition.formKey) ? (
         <details className="space-classification-recovery">
           <summary>Form status and recovery details</summary>
@@ -908,6 +914,21 @@ function CommandEditor({
               choices={choicesForValues?.(values) ?? choices}
               disabled={locked}
             />
+          ) : definition.formKey === "portfolio.property.create" ? (
+            <PropertyCreateFields
+              schema={definition.schema}
+              value={values}
+              onChange={(next) => form.setValue("data", next)}
+              choices={choicesForValues?.(values) ?? choices}
+              disabled={locked}
+            />
+          ) : definition.formKey === "portfolio.property.patch" ? (
+            <PropertyEditFields
+              schema={definition.schema}
+              value={values}
+              onChange={(next) => form.setValue("data", next)}
+              disabled={locked}
+            />
           ) : (
             <Fields
               schema={
@@ -946,7 +967,7 @@ function CommandEditor({
               type="submit"
               disabled={!scope.canWrite || selecting || canSubmit?.(values) === false}
             >
-              {definition.formKey === "portfolio.space.archive"
+              {["portfolio.space.archive", "portfolio.property.create"].includes(definition.formKey)
                 ? definition.title
                 : `Save ${definition.title.toLowerCase()}`}
             </button>

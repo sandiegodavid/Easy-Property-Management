@@ -47,8 +47,15 @@ async function provider(request: APIRequestContext, name: string) {
   return (await result.json()) as Schema["ProviderMutationResponse"];
 }
 async function saved(page: Page, title: string) {
-  await page.getByRole("button", { name: `Save ${title.toLowerCase()}`, exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: title === "Create property" ? title : `Save ${title.toLowerCase()}`,
+      exact: true,
+    })
+    .click();
   await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  if (!(await page.getByText("Draft saved · Command committed", { exact: true }).isVisible()))
+    await page.getByText("Form status and recovery details", { exact: true }).click();
   await expect(page.getByText("Draft saved · Command committed", { exact: true })).toBeVisible();
 }
 
@@ -76,7 +83,9 @@ test("progressive property creation commits through a registered form and links 
   await page.getByRole("link", { name: "Return to current record" }).click();
   await page.getByRole("link", { name: "Slice50 progressive home", exact: true }).click();
   await page.getByRole("link", { name: "Property setup", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Property setup" })).toContainText("Configuration");
+  await expect(
+    page.getByRole("region", { name: "Property information", exact: true }),
+  ).toContainText("single family home");
 });
 
 test("manual occupancy uses the independent Space revision and rejects foreign children", async ({

@@ -1286,15 +1286,8 @@ summary {
 .property-details-panel h3 {
   margin: 0 0 1rem;
 }
-.property-setup-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem 1rem;
+.property-setup-actions {
   margin-bottom: 1rem;
-}
-.property-setup-heading h3 {
-  margin: 0;
 }
 .property-details .workflow-actions-inline {
   display: flex;
@@ -1302,10 +1295,7 @@ summary {
   gap: 0.75rem;
   padding: 0;
 }
-.property-details-panel > .workflow-actions-inline {
-  margin-top: 1.25rem;
-}
-.property-setup-lifecycle button {
+.property-setup-actions[data-status="active"] button:last-child {
   background: transparent;
   color: var(--muted);
 }
@@ -1706,6 +1696,103 @@ a.directory-coverage-card:focus-visible {
   border-inline-start: 3px solid var(--warning-border);
   border-radius: 0.5rem;
   line-height: 1.6;
+}
+.property-edit-context {
+  margin-block: 1.5rem 0;
+  padding-block: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.property-edit-context h2 {
+  margin-block: 0.5rem;
+}
+.property-edit-context > p:last-child {
+  max-width: 75ch;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.property-edit-command .command-editor form > fieldset {
+  display: block;
+}
+.property-edit-groups {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 1.5rem;
+}
+.property-edit-group {
+  min-width: 0;
+  margin: 0;
+  padding: 1rem 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+}
+.property-edit-group:last-child {
+  grid-column: 1 / -1;
+}
+.property-edit-group:nth-child(2) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem 1rem;
+}
+.property-edit-group:nth-child(2) > .workflow-field:nth-of-type(-n + 2),
+.property-edit-hint {
+  grid-column: 1 / -1;
+}
+.property-edit-command .property-edit-group .workflow-field {
+  margin-block: 0.5rem;
+}
+.property-edit-command .property-edit-group textarea {
+  width: 100%;
+  max-width: none;
+}
+.property-edit-hint {
+  color: var(--muted);
+  font-size: var(--type-small);
+  margin: 0;
+}
+.property-create-command .command-editor form > fieldset > .property-create-section {
+  margin-top: 1.5rem;
+  padding: 1rem 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+.property-create-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1rem;
+}
+.property-create-layout label,
+.property-create-child > label {
+  display: grid;
+  gap: 0.5rem;
+}
+.property-create-command .property-create-child {
+  margin-block: 1rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-inline-start: 2px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+.property-create-child > button {
+  background: transparent;
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+.property-create-advanced {
+  margin-block: 1rem 0;
+}
+.property-create-advanced > summary {
+  color: var(--muted);
+}
+@media (max-width: 767px) {
+  .property-edit-groups,
+  .property-edit-group:nth-child(2) {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .space-archive-notice h3 {
   margin-top: 0;

@@ -183,8 +183,10 @@ export function History({
 
 export function IdentityLookup({
   onSelect,
+  embedded = false,
 }: {
   onSelect: (id: string, displayName: string) => void;
+  embedded?: boolean;
 }) {
   const [input, setInput] = useState("");
   const [selected, setSelected] = useState("");
@@ -200,6 +202,30 @@ export function IdentityLookup({
         }),
       ),
   });
+  const controls = (
+    <>
+      <label>
+        Existing identity ID
+        <input
+          required={!embedded}
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (embedded && event.key === "Enter") {
+              event.preventDefault();
+              setSelected(input);
+            }
+          }}
+        />
+      </label>
+      <button
+        type={embedded ? "button" : "submit"}
+        onClick={embedded ? () => setSelected(input) : undefined}
+      >
+        Find identity
+      </button>
+    </>
+  );
   return (
     <section aria-label="Find shared identity">
       <h3>Find shared identity</h3>
@@ -207,18 +233,18 @@ export function IdentityLookup({
         Use an identity already visible in a property, tenant or provider record. Review its name
         and active roles before selecting it.
       </p>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          setSelected(input);
-        }}
-      >
-        <label>
-          Existing identity ID
-          <input required value={input} onChange={(event) => setInput(event.target.value)} />
-        </label>
-        <button>Find identity</button>
-      </form>
+      {embedded ? (
+        <div>{controls}</div>
+      ) : (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            setSelected(input);
+          }}
+        >
+          {controls}
+        </form>
+      )}
       {party.isPending && selected && <p role="status">Finding identity…</p>}
       {party.error && <p role="alert">{party.error.message}</p>}
       {party.data && (
@@ -227,7 +253,7 @@ export function IdentityLookup({
             {party.data.displayName} · {party.data.archivedAt ? "Archived" : "Active"} ·{" "}
             {party.data.activeRoles?.join(", ") || "No active roles"}
           </p>
-          <button onClick={() => onSelect(party.data.id, party.data.displayName)}>
+          <button type="button" onClick={() => onSelect(party.data.id, party.data.displayName)}>
             Use {party.data.displayName}
           </button>
         </>

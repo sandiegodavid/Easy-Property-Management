@@ -372,12 +372,18 @@ test("property setup keeps configuration and actions without duplicating overvie
     page.getByRole("region", { name: "relationships section", exact: true }),
   ).toHaveCount(0);
   await expect(details.locator("summary").filter({ hasText: "Property actions" })).toHaveCount(0);
-  const edit = details.getByRole("button", { name: "Edit property", exact: true });
+  const edit = details.getByRole("button", { name: "Edit Property", exact: true });
   await expect(edit).toBeVisible();
   await expect(
     details
-      .locator(".property-setup-heading")
-      .getByRole("button", { name: "Edit property", exact: true }),
+      .locator(".property-setup-actions")
+      .getByRole("button", { name: "Edit Property", exact: true }),
+  ).toBeVisible();
+  await expect(details.getByRole("heading", { name: "Property setup", exact: true })).toHaveCount(
+    0,
+  );
+  await expect(
+    details.getByRole("button", { name: "Change ownership", exact: true }),
   ).toBeVisible();
   await expect(
     details.getByRole("button", { name: "Archive property", exact: true }),
