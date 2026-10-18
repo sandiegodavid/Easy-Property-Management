@@ -16,6 +16,7 @@ from app.modules.leases.domain.models import (
 from app.modules.leases.application.commands import LeaseCommandReceipt
 from app.modules.portfolio.application.source_timeline import SourceTimelineChangeSet
 from app.modules.portfolio.domain.models import Property, Space, SpaceOccupancyPeriod
+from app.modules.portfolio.application.ports import RentalLabel
 
 Result = TypeVar("Result")
 
@@ -50,6 +51,9 @@ class PortfolioLeaseOperations(Protocol):
     """Portfolio reads and occupancy writes inside a lease-owned transaction."""
 
     def space(self, connection: Any, space_id: str) -> Space | None: ...
+    def rental_labels(
+        self, connection: Any, space_ids: Collection[str]
+    ) -> dict[str, RentalLabel]: ...
     def property(self, connection: Any, property_id: str) -> Property | None: ...
     def occupancy_periods(self, connection: Any, space_id: str) -> list[SpaceOccupancyPeriod]: ...
     def source_timeline_operation(

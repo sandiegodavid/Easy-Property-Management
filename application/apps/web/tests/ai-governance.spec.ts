@@ -450,10 +450,10 @@ test("cloud setup records disclosure, keeps credentials write-only and never rep
     .getByRole("combobox")
     .nth(1)
     .selectOption("summary-v1");
-  await page.getByRole("button", { name: "Save connection" }).click();
+  await page.getByRole("button", { name: "Create connection" }).click();
   await expect(page.getByText(/The response was interrupted/)).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("button", { name: "Save connection" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Create connection" })).toBeDisabled();
   await page.getByRole("button", { name: "Check original command receipt" }).click();
   await expect(page.getByRole("button", { name: "Record cloud disclosure" })).toBeDisabled();
   expect(connectionRequests).toBe(1);

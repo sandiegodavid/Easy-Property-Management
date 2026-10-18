@@ -26,6 +26,9 @@ export function label(name: string) {
     nearestAvailableOn: "Next leasing opening date",
     leaseLastCoveredOn: "Lease end (last covered day)",
     lastCoveredOn: "Last covered day",
+    mailing_address: "Mailing address",
+    methodKind: "Contact type",
+    isPrimary: "Make primary for this contact type",
     contractEndsOn: "Contract end boundary (exclusive)",
   };
   return (
@@ -66,6 +69,7 @@ export function Fields({
   path = "",
   choices = {},
   disabled = false,
+  showChangeControls = true,
 }: {
   schema: RequestSchema;
   value: unknown;
@@ -73,6 +77,7 @@ export function Fields({
   path?: string;
   choices?: Choices;
   disabled?: boolean;
+  showChangeControls?: boolean;
 }) {
   const shape = fieldSchema(schema);
   if (shape.type !== "object") return null;
@@ -82,6 +87,7 @@ export function Fields({
       {Object.entries(shape.properties ?? {})
         .filter(
           ([key]) =>
+            !(key === "extension" && values.methodKind && values.methodKind !== "phone") &&
             !(
               path === "reporter" &&
               values.subjectKind !== "party" &&
@@ -99,10 +105,20 @@ export function Fields({
         .map(([key, child]) => {
           const current = values[key],
             childShape = fieldSchema(child),
-            name = /^[0-9a-f-]{36}$/.test(key) ? (childShape.title ?? label(key)) : label(key);
+            name =
+              key === "value" && values.methodKind === "mailing_address"
+                ? "Mailing address"
+                : key === "value" && values.methodKind === "email"
+                  ? "Email"
+                  : key === "value" && values.methodKind === "phone"
+                    ? "Phone number"
+                    : /^[0-9a-f-]{36}$/.test(key)
+                      ? (childShape.title ?? label(key))
+                      : label(key);
           const fieldPath = path ? `${path}.${key}` : key;
           const update = (next: unknown) => {
             const replacement = { ...values };
+            if (key === "methodKind" && next !== "phone") delete replacement.extension;
             if (path === "reporter") {
               if (key === "partyId" && next !== current) {
                 delete replacement.historicalSelectionConfirmed;
@@ -300,7 +316,9 @@ export function Fields({
                             </option>
                           ))}
                     </select>
-                  ) : childShape.maxLength && childShape.maxLength > 500 ? (
+                  ) : childShape.maxLength &&
+                    childShape.maxLength > 500 &&
+                    (key !== "value" || values.methodKind === "mailing_address") ? (
                     <textarea
                       disabled={disabled || current === null}
                       maxLength={childShape.maxLength}
@@ -334,7 +352,7 @@ export function Fields({
                   )}
                 </label>
               )}
-              {nullable && (
+              {showChangeControls && nullable && (
                 <label>
                   <input
                     type="checkbox"
@@ -345,11 +363,14 @@ export function Fields({
                   Clear {name.toLowerCase()}
                 </label>
               )}
-              {!shape.required?.includes(key) && current !== undefined && current !== null && (
-                <button type="button" disabled={disabled} onClick={() => update(undefined)}>
-                  Leave {name.toLowerCase()} unchanged / omit
-                </button>
-              )}
+              {showChangeControls &&
+                !shape.required?.includes(key) &&
+                current !== undefined &&
+                current !== null && (
+                  <button type="button" disabled={disabled} onClick={() => update(undefined)}>
+                    Leave {name.toLowerCase()} unchanged / omit
+                  </button>
+                )}
             </div>
           );
         })}

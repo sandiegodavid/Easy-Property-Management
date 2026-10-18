@@ -66,7 +66,12 @@ async function action(page: Page, title: string, group = "Actions") {
   await page.getByRole("link", { name: title, exact: true }).click();
 }
 async function save(page: Page, title: string) {
-  await page.getByRole("button", { name: `Save ${title.toLowerCase()}`, exact: true }).click();
+  await test.step(title, async () => {
+    await page
+      .getByRole("group", { name: "Form actions", exact: true })
+      .locator('button[type="submit"]')
+      .click();
+  });
   await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
 }
 
@@ -315,10 +320,17 @@ test("Home lease review opens the source and records a renewal without implying 
   const f = await leaseFixture(request, true);
   const panel = await expanded(page, f.home.id, `Lease ending ${f.endsOn}`);
   await panel.getByRole("link", { name: "Review lease", exact: true }).click();
+  const lastCoveredDay = new Date(`${f.endsOn}T12:00:00Z`);
+  lastCoveredDay.setUTCDate(lastCoveredDay.getUTCDate() - 1);
   await expect(page.getByRole("region", { name: "Lease milestones", exact: true })).toContainText(
-    f.endsOn,
+    new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" }).format(
+      lastCoveredDay,
+    ),
   );
-  await action(page, "Add renewal option", "Lease actions");
+  await page
+    .getByRole("navigation", { name: "Lease actions", exact: true })
+    .getByRole("link", { name: "Add renewal option", exact: true })
+    .click();
   await page.getByLabel("Proposed starts on (required)").fill(f.endsOn);
   await save(page, "Add renewal option");
   const current = await get<Schema["LeaseResponse"]>(request, `/api/leases/${f.lease.id}`);
@@ -377,7 +389,7 @@ test("Home payment uses current allocations and an interrupted response reconcil
     expect(result.ok(), await result.text()).toBe(true);
     await route.abort();
   });
-  await page.getByRole("button", { name: "Save record rent receipt", exact: true }).click();
+  await page.getByRole("button", { name: "Record rent receipt", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
   await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
   const receipts = await get<Schema["ReceiptPageResponse"]>(

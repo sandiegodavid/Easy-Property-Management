@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useWatch } from "react-hook-form";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { SourceWorkflowLink as Link } from "../shared/home-navigation";
@@ -23,6 +23,7 @@ import { OriginalWorkResult } from "./work-result";
 import { TaskCreateFields } from "./task-fields";
 import { PropertyEditFields } from "./property-edit-fields";
 import { PropertyCreateFields } from "./property-create-fields";
+import { OwnershipFields } from "./ownership-fields";
 
 export function workflowUrl(formKey: string, sourceId?: string, childId?: string) {
   const params = new URLSearchParams({ workflow: formKey });
@@ -46,7 +47,9 @@ export function workflowUrl(formKey: string, sourceId?: string, childId?: string
                   formKey.startsWith("inspection.") ||
                   formKey === "file.link.archive"
                 ? "leasing"
-                : "parties";
+                : formKey.startsWith("tenant.")
+                  ? "tenants"
+                  : "parties";
   return `/${family}?${params}`;
 }
 
@@ -216,6 +219,7 @@ export function CommandLinks({
 
 export function CommandLoader({
   definition,
+  propertyTimeZone,
   sourceId,
   childId,
   revision,
@@ -229,6 +233,7 @@ export function CommandLoader({
   canSubmit,
 }: {
   definition: Workflow;
+  propertyTimeZone?: string;
   sourceId?: string;
   childId?: string;
   revision: number;
@@ -280,6 +285,7 @@ export function CommandLoader({
     <CommandEditor
       key={`${scope.workspaceId}:${scope.runtimeEpoch}:${definition.formKey}:${sourceId}:${selectedChild}:${recoveryId}`}
       definition={definition}
+      propertyTimeZone={propertyTimeZone}
       sourceId={sourceId}
       childId={selectedChild}
       revision={revision}
@@ -298,6 +304,7 @@ export function CommandLoader({
 
 function CommandEditor({
   definition,
+  propertyTimeZone,
   sourceId,
   childId,
   revision,
@@ -312,6 +319,7 @@ function CommandEditor({
   canSubmit,
 }: {
   definition: Workflow;
+  propertyTimeZone?: string;
   sourceId?: string;
   childId?: string;
   revision: number;
@@ -335,6 +343,31 @@ function CommandEditor({
 }) {
   const { scope } = useWorkspace();
   const location = useLocation();
+  const navigate = useNavigate();
+  const addingContact = definition.formKey === "party.contact.add";
+  const editingContact = definition.formKey === "party.contact.update";
+  const removingContact = definition.formKey === "party.contact.archive";
+  const personEdit =
+    definition.formKey === "party.patch" || addingContact || editingContact || removingContact;
+  const hasContextNavigation =
+    ["portfolio.ownerships.replace", "portfolio.property.patch", "portfolio.space.patch"].includes(
+      definition.formKey,
+    ) || personEdit;
+  const commandTitle = addingContact
+    ? "Add contact details"
+    : editingContact
+      ? "Edit contact details"
+      : removingContact
+        ? "Remove contact details"
+        : definition.formKey === "party.patch"
+          ? "Edit name"
+          : definition.title;
+  const editSubject = /^Edit (.+)$/i.exec(commandTitle)?.[1];
+  const correctionSubject = /^Correct (.+)$/i.exec(commandTitle)?.[1];
+  const createsRecord =
+    /\.(create|add|record|admit|import|attach|upload|assign|designate|link)$/.test(
+      definition.formKey,
+    );
   const [id] = useState(() => recovered?.id ?? crypto.randomUUID());
   const [error, setError] = useState<string>();
   const [review, setReview] = useState<{
@@ -346,6 +379,7 @@ function CommandEditor({
   const [attachment, setAttachment] = useState<File>();
   const [intakeFiles, setIntakeFiles] = useState<File[]>([]);
   const [selecting, setSelecting] = useState(false);
+  const [addingOwner, setAddingOwner] = useState(false);
   const evidence =
     definition.formKey === "inspection.evidence.attach" || definition.formKey === "file.upload";
   const [removalConfirmed, setRemovalConfirmed] = useState(false);
@@ -367,7 +401,9 @@ function CommandEditor({
       toPayload(definition, record(clean(definition.schema, values.data)), childId),
     [definition, childId],
   );
-  const { form, controller, state, blocker } = useRecoverableForm({
+  const { form, controller, state, blocker } = useRecoverableForm<{
+    data: Record<string, unknown>;
+  }>({
     id,
     identity: {
       formKey: definition.formKey,
@@ -378,13 +414,26 @@ function CommandEditor({
     },
     initial: {
       data: recovered
-        ? toBody(definition, recovered.payload, undefined, sourceId)
+        ? {
+            ...(definition.formKey === "portfolio.property.create" ? { countryCode: "US" } : {}),
+            ...toBody(definition, recovered.payload, undefined, sourceId),
+          }
         : { ...initial, [revisionField]: revision },
     },
     recovered,
     project,
   });
   const values = useWatch({ control: form.control, name: "data" }) ?? {};
+  const savedPropertyId =
+    ["portfolio.property.create", "portfolio.property.patch"].includes(definition.formKey) &&
+    state.command === "committed"
+      ? scalar(record(state.record?.receipt?.result).targetId)
+      : "";
+  const savedPropertyTab = definition.formKey === "portfolio.property.patch" ? "setup" : "overview";
+  useEffect(() => {
+    if (savedPropertyId)
+      void navigate(`/properties/${savedPropertyId}/${savedPropertyTab}`, { replace: true });
+  }, [savedPropertyId, savedPropertyTab, navigate]);
   const locked =
     state.command === "submitting" ||
     state.command === "outcome_unknown" ||
@@ -600,9 +649,29 @@ function CommandEditor({
             ? `/properties?space=${sourceId}`
             : definition.sourceKind === "provider"
               ? `/providers/${sourceId}/details`
-              : definition.sourceKind === "party" || definition.sourceKind === "tenant"
-                ? `/parties?identity=${sourceId}`
-                : `/${definition.formKey.startsWith("provider.") ? "providers" : definition.formKey.startsWith("lease.") || definition.formKey.startsWith("inspection.") ? "leasing" : "properties"}`));
+              : definition.sourceKind === "tenant"
+                ? `/tenants?identity=${sourceId}`
+                : definition.sourceKind === "party"
+                  ? `/parties?identity=${sourceId}`
+                  : `/${definition.formKey.startsWith("provider.") ? "providers" : definition.formKey.startsWith("lease.") || definition.formKey.startsWith("inspection.") ? "leasing" : "properties"}`));
+  const currentSourceAction =
+    definition.sourceKind &&
+    state.command !== "outcome_unknown" &&
+    state.command !== "committed" &&
+    state.command !== "submitting" ? (
+      <button
+        type="button"
+        onClick={() => {
+          void action(readCurrent);
+        }}
+      >
+        {personEdit
+          ? "Check latest contact record"
+          : definition.formKey === "portfolio.ownerships.replace"
+            ? "Check latest property record"
+            : "Review current source"}
+      </button>
+    ) : null;
   const commandStatus = (
     <>
       <p>
@@ -612,35 +681,121 @@ function CommandEditor({
       <p role="status">
         Draft {state.draft} · Command {state.command}
       </p>
+      {currentSourceAction}
     </>
   );
+  const saveActions = (
+    <>
+      <button
+        type="submit"
+        disabled={!scope.canWrite || selecting || addingOwner || canSubmit?.(values) === false}
+      >
+        {createsRecord || definition.formKey === "portfolio.space.archive"
+          ? commandTitle
+          : editingContact
+            ? "Save contact details"
+            : removingContact
+              ? "Remove contact details"
+              : definition.formKey === "party.patch"
+                ? "Save name"
+                : definition.formKey === "portfolio.ownerships.replace"
+                  ? "Save ownership change"
+                  : editSubject
+                    ? `Save ${editSubject.toLowerCase()} changes`
+                    : correctionSubject
+                      ? `Save ${correctionSubject.toLowerCase()} correction`
+                      : `Save ${definition.title.toLowerCase()}`}
+      </button>
+      <button
+        type="button"
+        disabled={addingOwner}
+        onClick={() => {
+          void action(() => controller.flush());
+        }}
+      >
+        Save unfinished form
+      </button>
+    </>
+  );
+  const propertyCreateStatus =
+    state.command === "submitting"
+      ? "Creating property…"
+      : state.command === "committed"
+        ? "Property created successfully."
+        : null;
+  if (
+    definition.formKey === "portfolio.ownerships.replace" &&
+    state.command === "committed" &&
+    state.record?.receipt
+  )
+    return (
+      <section
+        className="command-editor ownership-confirmation"
+        aria-label="Ownership confirmation"
+      >
+        <p role="status" className="command-success">
+          Ownership updated successfully.
+        </p>
+        <OwnershipFields
+          mode="confirmation"
+          value={state.record.payload}
+          choices={choices}
+          disabled
+          onChange={() => undefined}
+          onAddingChange={() => undefined}
+        />
+      </section>
+    );
   return (
-    <section aria-label={definition.title} className="command-editor">
-      <h2>{definition.title}</h2>
+    <section aria-label={commandTitle} className="command-editor">
+      {(editSubject || correctionSubject || createsRecord) &&
+        !hasContextNavigation &&
+        definition.formKey !== "portfolio.property.create" && (
+          <Link to={back}>Return to current record</Link>
+        )}
+      <h2>{commandTitle}</h2>
       <p>
-        {definition.formKey === "portfolio.property.create"
-          ? "Start with the property name and address, choose its rental layout, and confirm the owners. Occupancy, leasing status and lease records can be added afterward."
-          : definition.formKey === "portfolio.space.classify"
-            ? "Add occupancy, leasing status, or both below. Save to apply your changes; saving an unfinished form does not update the property’s records."
-            : definition.formKey === "portfolio.availability.change"
-              ? "Choose whether the property is not open for leasing, open now, or open from a future date. For a future opening, enter the date. Add an optional note, then save."
-              : definition.formKey === "portfolio.occupancy.change"
-                ? "Choose the new occupancy status and when it takes effect in the property’s time zone. A future date schedules the change; it does not change today’s occupancy. Add an optional note, then save."
-                : ["portfolio.space.patch", "portfolio.property.patch"].includes(definition.formKey)
-                  ? "Edit the details below, then save your changes. Saving an unfinished form does not update the property’s records."
-                  : definition.formKey === "portfolio.space.archive"
-                    ? "Confirm that you want to archive this rental, then select Archive below. Saving an unfinished form does not archive it."
-                    : "Review the displayed record and make an explicit change. Saved input is an unfinished form, not an official record."}
+        {addingContact
+          ? "Choose email, phone number or mailing address, then enter the details. Add an optional label, such as Work or Mobile. The first contact of each type is automatically primary. These contact details are shared wherever this person or organization appears in the app."
+          : editingContact
+            ? "Update the contact details or make this the primary contact for its type. Saving a primary contact replaces the previous primary of that type. To switch away from a primary contact, make another contact of that type primary."
+            : removingContact
+              ? "Remove this contact from active use and retain its history. If it is primary and other contacts of the same type exist, make another primary first. Any role preferences that use this contact must be explicitly replaced or cleared below."
+              : definition.formKey === "party.patch"
+                ? "Update the name used throughout the app. Contact details and existing relationships stay unchanged."
+                : definition.formKey === "portfolio.ownerships.replace"
+                  ? "Review the complete owner list below, then save the ownership change. Saving an unfinished form keeps your input without changing ownership."
+                  : definition.formKey === "portfolio.property.create"
+                    ? "Start with the property name and address, choose its rental layout, and confirm the owners. Occupancy, leasing status and lease records can be added afterward."
+                    : definition.formKey === "portfolio.space.classify"
+                      ? "Add occupancy, leasing status, or both below. Save to apply your changes; saving an unfinished form does not update the property’s records."
+                      : definition.formKey === "portfolio.availability.change"
+                        ? "Choose whether the property is not open for leasing, open now, or open from a future date. For a future opening, enter the date. Add an optional note, then save."
+                        : definition.formKey === "portfolio.occupancy.change"
+                          ? "Choose the new occupancy status and when it takes effect in the property’s time zone. A future date schedules the change; it does not change today’s occupancy. Add an optional note, then save."
+                          : ["portfolio.space.patch", "portfolio.property.patch"].includes(
+                                definition.formKey,
+                              )
+                            ? "Edit the details below, then save your changes. Saving an unfinished form does not update the property’s records."
+                            : definition.formKey === "portfolio.space.archive"
+                              ? "Confirm that you want to archive this rental, then select Archive below. Saving an unfinished form does not archive it."
+                              : "Review the displayed record and make an explicit change. Saved input is an unfinished form, not an official record."}
       </p>
-      {[
-        "portfolio.space.classify",
-        "portfolio.availability.change",
-        "portfolio.occupancy.change",
-        "portfolio.space.patch",
-        "portfolio.space.archive",
-        "portfolio.property.patch",
-        "portfolio.property.create",
-      ].includes(definition.formKey) ? (
+      {definition.formKey === "portfolio.property.create" ? (
+        propertyCreateStatus && <p role="status">{propertyCreateStatus}</p>
+      ) : [
+          "portfolio.space.classify",
+          "portfolio.availability.change",
+          "portfolio.occupancy.change",
+          "portfolio.space.patch",
+          "portfolio.space.archive",
+          "portfolio.property.patch",
+          "portfolio.ownerships.replace",
+          "party.patch",
+          "party.contact.add",
+          "party.contact.update",
+          "party.contact.archive",
+        ].includes(definition.formKey) ? (
         <details className="space-classification-recovery">
           <summary>Form status and recovery details</summary>
           {commandStatus}
@@ -921,6 +1076,16 @@ function CommandEditor({
               onChange={(next) => form.setValue("data", next)}
               choices={choicesForValues?.(values) ?? choices}
               disabled={locked}
+              onAddingChange={setAddingOwner}
+            />
+          ) : definition.formKey === "portfolio.ownerships.replace" ? (
+            <OwnershipFields
+              timeZone={propertyTimeZone}
+              value={values}
+              onChange={(next) => form.setValue("data", next)}
+              choices={choices}
+              disabled={locked}
+              onAddingChange={setAddingOwner}
             />
           ) : definition.formKey === "portfolio.property.patch" ? (
             <PropertyEditFields
@@ -932,54 +1097,49 @@ function CommandEditor({
           ) : (
             <Fields
               schema={
-                evidence
+                addingContact || editingContact
                   ? {
                       ...definition.schema,
-                      properties: { purpose: definition.schema.properties!.purpose },
+                      properties: Object.fromEntries(
+                        ["methodKind", "value", "extension", "label", "isPrimary"]
+                          .filter((key) => !!definition.schema.properties?.[key])
+                          .map((key) => [key, definition.schema.properties![key]]),
+                      ),
                     }
-                  : definition.formKey.startsWith("intake.")
+                  : evidence
                     ? {
                         ...definition.schema,
-                        properties: Object.fromEntries(
-                          Object.entries(definition.schema.properties ?? {}).filter(
-                            ([key]) =>
-                              ![
-                                "expectedEvidenceRevisionId",
-                                "expectedStatus",
-                                "attachments",
-                              ].includes(key),
-                          ),
-                        ),
+                        properties: { purpose: definition.schema.properties!.purpose },
                       }
-                    : definition.schema
+                    : definition.formKey.startsWith("intake.")
+                      ? {
+                          ...definition.schema,
+                          properties: Object.fromEntries(
+                            Object.entries(definition.schema.properties ?? {}).filter(
+                              ([key]) =>
+                                ![
+                                  "expectedEvidenceRevisionId",
+                                  "expectedStatus",
+                                  "attachments",
+                                ].includes(key),
+                            ),
+                          ),
+                        }
+                      : definition.schema
               }
               value={values}
               onChange={(next) => form.setValue("data", record(next))}
               choices={choicesForValues?.(values) ?? choices}
               disabled={locked}
+              showChangeControls={!(addingContact || editingContact)}
             />
           )}
         </fieldset>
         {renderContext?.(values, locked, (next) => form.setValue("data", next))}
         {!locked && (
-          <>
-            <button
-              type="submit"
-              disabled={!scope.canWrite || selecting || canSubmit?.(values) === false}
-            >
-              {["portfolio.space.archive", "portfolio.property.create"].includes(definition.formKey)
-                ? definition.title
-                : `Save ${definition.title.toLowerCase()}`}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void action(() => controller.flush());
-              }}
-            >
-              Save unfinished form
-            </button>
-          </>
+          <div className="command-form-actions" role="group" aria-label="Form actions">
+            {saveActions}
+          </div>
         )}
       </form>
       {state.command === "outcome_unknown" && (
@@ -1016,18 +1176,6 @@ function CommandEditor({
           starting a new command.
         </p>
       )}
-      {definition.sourceKind &&
-        state.command !== "outcome_unknown" &&
-        state.command !== "committed" &&
-        state.command !== "submitting" && (
-          <button
-            onClick={() => {
-              void action(readCurrent);
-            }}
-          >
-            Review current source
-          </button>
-        )}
       {review && (
         <section aria-label="Current source review">
           <h3>Current source revision {review.revision}</h3>
@@ -1099,46 +1247,63 @@ function CommandEditor({
           </button>
         </section>
       )}
-      {state.record?.receipt && (
-        <section aria-label="Committed result">
-          <h3>Committed result</h3>
-          <p>Operation {state.record.receipt.receiptId}</p>
-          <FactsResult value={state.record.receipt.result} />
-          {definition.formKey.startsWith("intake.") && state.record.attemptKey && (
-            <OriginalIntakeResult attemptKey={state.record.attemptKey} />
-          )}
-          {(definition.formKey.startsWith("task.") ||
-            definition.formKey.startsWith("communication.") ||
-            definition.formKey.startsWith("maintenance.") ||
-            definition.formKey.startsWith("owner_concern.")) &&
-            state.record.attemptKey && (
-              <OriginalWorkResult
-                definition={definition}
-                attemptKey={state.record.attemptKey}
+      {state.record?.receipt &&
+        (personEdit ? (
+          <p role="status" className="command-success">
+            {addingContact
+              ? "Contact details added successfully."
+              : editingContact
+                ? "Contact details updated successfully."
+                : removingContact
+                  ? "Contact details removed successfully. History retained."
+                  : "Name changed successfully."}
+          </p>
+        ) : (
+          <section aria-label="Committed result">
+            <h3>Committed result</h3>
+            <p>Operation {state.record.receipt.receiptId}</p>
+            <FactsResult value={state.record.receipt.result} />
+            {definition.formKey.startsWith("intake.") && state.record.attemptKey && (
+              <OriginalIntakeResult attemptKey={state.record.attemptKey} />
+            )}
+            {(definition.formKey.startsWith("task.") ||
+              definition.formKey.startsWith("communication.") ||
+              definition.formKey.startsWith("maintenance.") ||
+              definition.formKey.startsWith("owner_concern.")) &&
+              state.record.attemptKey && (
+                <OriginalWorkResult
+                  definition={definition}
+                  attemptKey={state.record.attemptKey}
+                  operationId={state.record.receipt.receiptId}
+                  sourceId={sourceId}
+                />
+              )}
+            {(definition.formKey.startsWith("lease.") ||
+              definition.formKey.startsWith("inspection.")) && (
+              <OriginalWorkflowResult
+                family={definition.formKey.startsWith("lease.") ? "lease" : "inspection"}
                 operationId={state.record.receipt.receiptId}
-                sourceId={sourceId}
               />
             )}
-          {(definition.formKey.startsWith("lease.") ||
-            definition.formKey.startsWith("inspection.")) && (
-            <OriginalWorkflowResult
-              family={definition.formKey.startsWith("lease.") ? "lease" : "inspection"}
-              operationId={state.record.receipt.receiptId}
-            />
-          )}
-          {(definition.formKey.startsWith("finance.") ||
-            definition.formKey.startsWith("owner_rent_report.") ||
-            definition.formKey === "file.upload") &&
-            state.record.attemptKey && (
-              <OriginalMoneyResult
-                definition={definition}
-                attemptKey={state.record.attemptKey}
-                sourceId={sourceId}
-              />
-            )}
-        </section>
-      )}
-      <Link to={back}>Return to current record</Link>
+            {(definition.formKey.startsWith("finance.") ||
+              definition.formKey.startsWith("owner_rent_report.") ||
+              definition.formKey === "file.upload") &&
+              state.record.attemptKey && (
+                <OriginalMoneyResult
+                  definition={definition}
+                  attemptKey={state.record.attemptKey}
+                  sourceId={sourceId}
+                />
+              )}
+          </section>
+        ))}
+      {!hasContextNavigation &&
+        !editSubject &&
+        !correctionSubject &&
+        !createsRecord &&
+        definition.formKey !== "portfolio.property.create" && (
+          <Link to={back}>Return to current record</Link>
+        )}
       <RecoveryNavigation controller={controller} blocker={blocker} />
     </section>
   );

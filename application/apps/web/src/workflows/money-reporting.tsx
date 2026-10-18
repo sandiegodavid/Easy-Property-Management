@@ -1,3 +1,4 @@
+import { DynamicFilterForm } from "../shared/dynamic-filter-form";
 import { useQuery } from "@tanstack/react-query";
 import { PageAsOf } from "../shared/page-as-of";
 import { useLocation, useSearchParams } from "react-router-dom";
@@ -105,7 +106,7 @@ export function MoneyReporting() {
           whole-property reporting.
         </p>
       )}
-      <form
+      <DynamicFilterForm
         onSubmit={(event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
@@ -115,7 +116,7 @@ export function MoneyReporting() {
           next.delete("cursor");
           next.delete("sourceRevision");
           next.delete("metric");
-          setParams(next, { state: navigationState });
+          setParams(next, { state: navigationState, replace: true, preventScrollReset: true });
         }}
       >
         <label>
@@ -134,8 +135,7 @@ export function MoneyReporting() {
             <option value="archived">Archived</option>
           </select>
         </label>
-        <button>Show recorded totals</button>
-      </form>
+      </DynamicFilterForm>
       {!enabled && <p>Choose an explicit inclusive date range to load reporting.</p>}
       {result.isFetching && <p role="status">Loading money reporting…</p>}
       {result.error && (

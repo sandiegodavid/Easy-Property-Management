@@ -1,3 +1,4 @@
+import { DynamicFilterForm } from "./dynamic-filter-form";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AsyncRegion } from "@epm/ui";
@@ -107,9 +108,8 @@ function HomeTransport() {
         </section>
       </div>
       <div id="home-filters" hidden={!showFilters}>
-        <form
+        <DynamicFilterForm
           aria-label="Home filters"
-          key={normalized}
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
@@ -118,7 +118,10 @@ function HomeTransport() {
               const value = data.get(name);
               selected.set(name, typeof value === "string" ? value : "");
             }
-            setParams(homeParams(homeFilters(selected, bootstrap.serverTimeUtc)));
+            setParams(homeParams(homeFilters(selected, bootstrap.serverTimeUtc)), {
+              replace: true,
+              preventScrollReset: true,
+            });
           }}
         >
           <p id="home-money-filter-hint" className="ui-muted home-filter-explanation">
@@ -154,13 +157,12 @@ function HomeTransport() {
               aria-describedby="home-money-filter-hint"
             />
           </label>
-          <button type="submit">Apply filters</button>
-        </form>
+        </DynamicFilterForm>
       </div>
       <div className="home-grid">
         <div className="home-work">
           <div className="home-queue-header">
-            <div role="tablist" aria-label="Work queue" className="home-tabs">
+            <div role="tablist" aria-label="Work queue" className="page-tabs home-tabs">
               {tabs.map((title, index) => (
                 <button
                   key={title}

@@ -33,6 +33,7 @@ ROOT_ROUTES = {
     "/maintenance",
     "/providers",
     "/parties",
+    "/tenants",
     "/search",
     "/money",
     "/settings",

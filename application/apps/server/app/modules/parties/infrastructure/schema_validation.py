@@ -19,6 +19,7 @@ from app.modules.parties.application.service import (
     PartyPatchCommand,
     ContactMethodCommand,
     ContactReferenceResolution,
+    PartyValidationError,
 )
 from app.modules.parties.infrastructure.sqlalchemy_models import (
     PartyCommandOperationModel,
@@ -81,7 +82,7 @@ def validate_party_schema(connection):
         }:
             raise ValueError("Receipt history must be immutable.")
         validate_party_data(connection)
-    except (ValueError, KeyError, TypeError) as error:
+    except (ValueError, KeyError, TypeError, PartyValidationError) as error:
         raise MigrationSchemaError("Party command history is incompatible.") from error
 
 
@@ -110,12 +111,42 @@ def validate_party_data(connection):
         row["id"]: PartyContactMethod(**row)
         for row in connection.execute(select(PartyContactMethodModel.__table__)).mappings()
     }
+    primary_counts = {}
+    for contact in contacts.values():
+        _uuid(contact.id)
+        if contact.party_id not in parties:
+            raise ValueError("Contact owner does not exist.")
+        normalized = ContactMethodCommand(
+            contact.method_kind, contact.display_value, contact.extension, contact.label
+        )
+        if (
+            normalized.normalized_value != contact.normalized_value
+            or normalized.value != contact.display_value
+        ):
+            raise ValueError("Retained contact is not normalized.")
+        if type(contact.is_primary) is not bool or (
+            contact.status != "active" and contact.is_primary
+        ):
+            raise ValueError("Contact primary flag is invalid.")
+        if contact.status == "active":
+            key = (contact.party_id, contact.method_kind)
+            primary_counts[key] = primary_counts.get(key, 0) + int(contact.is_primary)
+    if any(count != 1 for count in primary_counts.values()):
+        raise ValueError("Each active contact type must have exactly one primary.")
     operations = (
         connection.execute(select(PartyCommandOperationModel.__table__).order_by(text("rowid")))
         .mappings()
         .all()
     )
     audits = connection.execute(text("SELECT * FROM audit_events ORDER BY rowid")).mappings().all()
+    latest_contacts = {
+        event["entity_id"]: json.loads(event["after_snapshot"])
+        for event in audits
+        if event["entity_type"] == "party_contact_method" and event["after_snapshot"]
+    }
+    for contact in contacts.values():
+        if latest_contacts.get(contact.id) != contact.to_audit_dict():
+            raise ValueError("Current contact differs from its retained audit history.")
     revisions = {}
     contact_results = {}
     for row in operations:
@@ -192,7 +223,8 @@ def validate_party_data(connection):
         ):
             raise ValueError("Receipt audit evidence differs.")
         if contact_command:
-            _contact_audits(row, identity, result, audits)
+            secondary = _contact_audits(row, identity, result, audits)
+            contact_results.update(secondary or {})
             contact_results[row["contact_method_id"]] = {
                 key: value
                 for key, value in result.items()
@@ -367,11 +399,18 @@ def _contact_result(row, identity, result, contacts):
         result["archivedAt"] is not None
     ):
         raise ValueError("Contact result lifecycle is invalid.")
-    if (
-        identity.action in {"contact_add", "contact_update"}
-        and asdict(command) != identity.payload["command"]
+    if type(result["isPrimary"]) is not bool or (
+        result["status"] != "active" and result["isPrimary"]
     ):
-        raise ValueError("Contact result differs from its command.")
+        raise ValueError("Contact result primary flag is invalid.")
+    if identity.action in {"contact_add", "contact_update"}:
+        expected = identity.payload["command"]
+        if {k: v for k, v in asdict(command).items() if k != "is_primary"} != {
+            k: v for k, v in expected.items() if k != "is_primary"
+        }:
+            raise ValueError("Contact result differs from its command.")
+        if expected["is_primary"] is True and not result["isPrimary"]:
+            raise ValueError("Primary selection was not applied.")
 
 
 def _contact_audits(row, identity, result, audits):
@@ -384,8 +423,13 @@ def _contact_audits(row, identity, result, audits):
         for a in events
         if a["entity_type"] == "party_contact_method" and a["entity_id"] == row["contact_method_id"]
     ]
+    secondary = [
+        a
+        for a in events
+        if a["entity_type"] == "party_contact_method" and a["entity_id"] != row["contact_method_id"]
+    ]
     if row["resulting_revision"] == row["expected_revision"]:
-        if party_events or contact_events:
+        if party_events or contact_events or secondary:
             raise ValueError("Unchanged contact command has mutation events.")
         return
     if len(party_events) != 1 or party_events[0]["action"] != "contact_changed":
@@ -438,17 +482,45 @@ def _contact_audits(row, identity, result, audits):
             "status": "archived",
             "archivedAt": row["created_at"],
             "updatedAt": row["created_at"],
+            "isPrimary": False,
         }
     ):
         raise ValueError("Contact archival history differs.")
     elif action == "restored" and (
         before["status"] != "archived"
         or after
-        != {**before, "status": "active", "archivedAt": None, "updatedAt": row["created_at"]}
+        != {
+            **before,
+            "status": "active",
+            "archivedAt": None,
+            "updatedAt": row["created_at"],
+            "isPrimary": after["isPrimary"],
+        }
     ):
         raise ValueError("Contact restore history differs.")
     elif action == "updated" and (before["status"] != "active" or after["status"] != "active"):
         raise ValueError("Contact edit history differs.")
+    secondary_results = {}
+    if len(secondary) > 1:
+        raise ValueError("A primary selection may replace only one prior primary.")
+    for event in secondary:
+        prior = json.loads(event["before_snapshot"])
+        revised = json.loads(event["after_snapshot"])
+        if (
+            not after["isPrimary"]
+            or action not in {"created", "updated"}
+            or event["action"] != "updated"
+            or event["reason"] != "party_contact_primary_changed"
+            or prior["partyId"] != row["party_id"]
+            or prior["methodKind"] != after["methodKind"]
+            or prior["isPrimary"] is not True
+            or prior["status"] != "active"
+            or revised != {**prior, "isPrimary": False, "updatedAt": row["created_at"]}
+        ):
+            raise ValueError("Primary-contact replacement audit differs.")
+        secondary_results[event["entity_id"]] = {
+            k: v for k, v in revised.items() if k != "normalizedValue"
+        }
     if identity.action == "contact_archive":
         for resolution in identity.payload["referenceResolutions"]:
             matching = [
@@ -473,3 +545,4 @@ def _contact_audits(row, identity, result, audits):
                 or revised["revision"] != prior["revision"] + 1
             ):
                 raise ValueError("Tenant resolution concurrency evidence differs.")
+    return secondary_results

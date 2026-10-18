@@ -1,3 +1,4 @@
+import { DynamicFilterForm } from "../shared/dynamic-filter-form";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -30,8 +31,10 @@ export function IntakeWorkspace() {
         Manual evidence is an unverified claim. Retaining or reviewing it does not send a message,
         create an issue, or establish that work occurred.
       </p>
-      <nav aria-label="Source views">
-        <Link to="/conversations?intake=true">Source directory</Link>
+      <nav className="page-tabs" aria-label="Source views">
+        <Link to="/conversations?intake=true" aria-current="page">
+          Source directory
+        </Link>
         <Link to="/conversations">Recorded conversations</Link>
       </nav>
       {params.has("workflow") ? (
@@ -103,7 +106,7 @@ function SourceDirectory() {
         keys={["intake.source.admit", "intake.source.import"]}
         title="Retain evidence"
       />
-      <form
+      <DynamicFilterForm
         className="read-filters"
         onSubmit={(event) => {
           event.preventDefault();
@@ -111,7 +114,7 @@ function SourceDirectory() {
           const next = new URLSearchParams({ intake: "true" });
           for (const [key, value] of data)
             if (typeof value === "string" && value) next.set(key, value);
-          setParams(next);
+          setParams(next, { replace: true, preventScrollReset: true });
         }}
       >
         {Object.entries(choices).map(([key, values]) => (
@@ -132,11 +135,15 @@ function SourceDirectory() {
               name={key}
               defaultValue={params.get(key) ?? ""}
               placeholder={key === "originSystem" ? undefined : "ISO timestamp with offset"}
+              pattern={
+                key === "originSystem"
+                  ? undefined
+                  : "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,6})?)?(Z|\\+\\d{2}:\\d{2}|-\\d{2}:\\d{2})"
+              }
             />
           </label>
         ))}
-        <button>Filter sources</button>
-      </form>
+      </DynamicFilterForm>
       {loaded.isPending && <p role="status">Loading retained sources…</p>}
       {loaded.error && (
         <>

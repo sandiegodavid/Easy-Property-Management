@@ -5,9 +5,8 @@ import { workflows, scalar } from "@epm/contracts/workflows";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks, CommandLoader, workflowUrl } from "./command";
-import { Facts, History, readResult, IdentityLookup } from "./reads";
+import { Facts, History, readResult } from "./reads";
 import { useState } from "react";
-import type { Choice } from "./fields";
 import { PortfolioStatusSummary, statusLabel } from "./portfolio-status";
 import { PageAsOf } from "../shared/page-as-of";
 import { propertyUnitsLabel, rentableUnitLabel } from "../shared/property-labels";
@@ -53,12 +52,18 @@ export function PortfolioRecord({ id, view = "setup" }: { id: string; view?: "se
   if (result.isPending) return <p role="status">Loading property setup…</p>;
   if (result.error) return <p role="alert">{result.error.message}</p>;
   const item = result.data;
+  const address = (
+    <p aria-label="Property address">
+      {item.addressLine1}, {item.city}, {item.countryCode} · {item.timeZone} · {item.status}
+    </p>
+  );
   if (view === "spaces") {
     const summary = item.statusSummary;
     const unitLabel = propertyUnitsLabel(item.inventoryLayout);
     return (
       <section aria-label={`Property ${unitLabel.toLowerCase()}`} className="property-spaces">
         <PageAsOf asOf={item.asOf} priority={1} />
+        {address}
         <div className="property-spaces-intro">
           <p>
             {unitLabel === "Suites"
@@ -109,6 +114,7 @@ export function PortfolioRecord({ id, view = "setup" }: { id: string; view?: "se
   return (
     <section aria-label="Property setup" className="context-section property-details">
       <PageAsOf asOf={item.asOf} priority={1} />
+      {address}
       <section className="property-details-panel" aria-label="Property information">
         <div className="property-setup-actions" data-status={item.status}>
           <CommandLinks
@@ -218,7 +224,21 @@ function SpaceRecord({
       </header>
       <dl className="property-space-status">
         <div>
-          <dt>Occupancy</dt>
+          <dt className="property-space-status-label">
+            Occupancy
+            {space.status === "active" && space.currentOccupancy.sourceKind === "manual" && (
+              <div className="property-space-occupancy-update">
+                <CommandLinks
+                  collapsible={false}
+                  asButtons
+                  target={space.id}
+                  keys={["portfolio.occupancy.change"]}
+                  title="Update occupancy"
+                  labels={{ "portfolio.occupancy.change": "Update occupancy" }}
+                />
+              </div>
+            )}
+          </dt>
           <dd>
             {statusLabel(space.currentOccupancy.occupancyStatus)}
             {space.currentOccupancy.sourceKind === "lease" && space.currentOccupancy.sourceId && (
@@ -233,15 +253,17 @@ function SpaceRecord({
               <span className="property-space-note">Managed by lease</span>
             )}
             {space.status === "active" && space.currentOccupancy.sourceKind === "manual" && (
-              <CommandLinks
-                collapsible={false}
-                asButtons
-                target={space.id}
-                child={space.currentOccupancy.id}
-                keys={["portfolio.occupancy.change", "portfolio.occupancy.correct"]}
-                title="Occupancy actions"
-                labels={{ "portfolio.occupancy.correct": "Correct recorded occupancy" }}
-              />
+              <div className="property-space-occupancy-correction">
+                <CommandLinks
+                  collapsible={false}
+                  asButtons
+                  target={space.id}
+                  child={space.currentOccupancy.id}
+                  keys={["portfolio.occupancy.correct"]}
+                  title="Correct an occupancy error"
+                  labels={{ "portfolio.occupancy.correct": "Correct an error" }}
+                />
+              </div>
             )}
           </dd>
         </div>
@@ -387,7 +409,6 @@ export function PortfolioCommand() {
     (definition?.childKey && recovery.data
       ? scalar(recovery.data.payload[definition.childKey])
       : undefined);
-  const [identities, setIdentities] = useState<Choice[]>([]);
   const [session] = useState(() => crypto.randomUUID());
   const source = useQuery({
     queryKey: scope.key("portfolio-command-source", session, definition?.sourceKind, target),
@@ -445,7 +466,21 @@ export function PortfolioCommand() {
                   suiteOrFloor: rental.suiteOrFloor,
                   notes: rental.notes,
                 }
-              : {},
+              : definition?.formKey === "portfolio.ownerships.replace"
+                ? {
+                    effectiveOn: property.effectiveLocalDate,
+                    ownerships: property.ownerships
+                      .filter(
+                        (item) =>
+                          item.startsOn <= property.effectiveLocalDate &&
+                          (!item.endsOn || item.endsOn > property.effectiveLocalDate),
+                      )
+                      .map((item) => ({
+                        ownerKind: item.ownerKind,
+                        ...(item.partyId ? { partyId: item.partyId } : {}),
+                      })),
+                  }
+                : {},
         property,
         space: null,
       };
@@ -460,7 +495,11 @@ export function PortfolioCommand() {
   if (source.error) return <p role="alert">{source.error.message}</p>;
   const initial: Record<string, unknown> =
     definition.formKey === "portfolio.property.create"
-      ? { propertyType: "single_family_home", ownerships: [{ ownerKind: "local_operator" }] }
+      ? {
+          countryCode: "US",
+          propertyType: "single_family_home",
+          ownerships: [{ ownerKind: "local_operator" }],
+        }
       : { ...source.data?.initial };
   if (definition.formKey === "portfolio.occupancy.correct") {
     const space = source.data?.space;
@@ -483,6 +522,7 @@ export function PortfolioCommand() {
   const editingRental = definition.formKey === "portfolio.space.patch";
   const editingProperty = definition.formKey === "portfolio.property.patch";
   const creatingProperty = definition.formKey === "portfolio.property.create";
+  const changingOwners = definition.formKey === "portfolio.ownerships.replace";
   const archivingRental = definition.formKey === "portfolio.space.archive";
   const selectedUnit =
     source.data?.space ?? source.data?.property?.spaces.find((item) => item.id === child);
@@ -522,13 +562,30 @@ export function PortfolioCommand() {
   return (
     <div
       className={
-        editingProperty || creatingProperty
-          ? `space-status-command property-edit-command${creatingProperty ? " property-create-command" : ""}`
-          : statusCommand || editingRental || archivingRental
-            ? `space-status-command${archivingRental ? " space-archive-command space-status-single-form" : editingRental ? " space-edit-command space-status-single-form" : changingLeasing ? " space-leasing-command space-status-single-form" : changingOccupancy ? " space-occupancy-command space-status-single-form" : ""}`
-            : undefined
+        changingOwners
+          ? "space-status-command ownership-command"
+          : editingProperty || creatingProperty
+            ? `space-status-command property-edit-command${creatingProperty ? " property-create-command" : ""}`
+            : statusCommand || editingRental || archivingRental
+              ? `space-status-command${archivingRental ? " space-archive-command space-status-single-form" : editingRental ? " space-edit-command space-status-single-form" : changingLeasing ? " space-leasing-command space-status-single-form" : changingOccupancy ? " space-occupancy-command space-status-single-form" : ""}`
+              : undefined
       }
     >
+      {changingOwners && source.data?.property && (
+        <>
+          <Link to={`/properties/${source.data.property.id}/setup`}>
+            ← Back to {source.data.property.displayName}
+          </Link>
+          <section className="property-edit-context" aria-label="Selected property">
+            <p className="space-classification-property">Changing ownership</p>
+            <h2>{source.data.property.displayName}</h2>
+            <p>
+              Choose the owners who should be recorded from the effective date. You can keep current
+              owners, select existing people by name, or add a new owner.
+            </p>
+          </section>
+        </>
+      )}
       {editingProperty && source.data?.property && (
         <>
           <Link to={`/properties/${source.data.property.id}/setup`}>
@@ -647,6 +704,7 @@ export function PortfolioCommand() {
         !editingRental &&
         !archivingRental &&
         !editingProperty &&
+        !changingOwners &&
         !creatingProperty && (
           <p>
             Effective dates use the property time zone. Inventory uses the Property revision; manual
@@ -671,27 +729,18 @@ export function PortfolioCommand() {
           )}
         </>
       )}
-      {definition.formKey === "portfolio.ownerships.replace" && (
-        <IdentityLookup
-          onSelect={(id, name) =>
-            setIdentities((current) => [
-              ...current.filter((item) => item.id !== id),
-              { id, label: name },
-            ])
-          }
-        />
-      )}
       <CommandLoader
         definition={formDefinition}
+        propertyTimeZone={source.data?.property?.timeZone}
         sourceId={target}
         childId={child}
         revision={source.data?.revision ?? 0}
         initial={initial}
-        choices={{ partyId: [...owners, ...identities] }}
+        choices={{ partyId: owners }}
         returnTo={
           source.data?.space
             ? `/properties/${source.data.space.propertyId}/units`
-            : editingProperty && source.data?.property
+            : (editingProperty || changingOwners) && source.data?.property
               ? `/properties/${source.data.property.id}/setup`
               : (editingRental || archivingRental) && source.data?.property
                 ? `/properties/${source.data.property.id}/units`

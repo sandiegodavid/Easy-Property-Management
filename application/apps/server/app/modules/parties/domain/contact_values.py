@@ -35,6 +35,20 @@ def normalize_contact_value(
     if not isinstance(value, str):
         raise ValueError("Contact value must be text.")
     display = unicodedata.normalize("NFKC", value).strip()
+    if method_kind == "mailing_address":
+        if extension is not None:
+            raise ValueError("Mailing addresses cannot have an extension.")
+        if (
+            not display
+            or len(display) > 1000
+            or any(
+                unicodedata.category(character) == "Cc" and character not in "\r\n\t"
+                for character in display
+            )
+        ):
+            raise ValueError("Mailing address must be nonblank text of at most 1,000 characters.")
+        display = "\n".join(" ".join(line.split()) for line in display.splitlines() if line.strip())
+        return display.casefold(), None, display
     if len(display) > 320:
         raise ValueError("Contact value must be at most 320 characters.")
     if method_kind == "email":

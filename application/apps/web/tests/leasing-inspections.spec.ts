@@ -4,6 +4,64 @@ import axe from "axe-core";
 
 type Schemas = components["schemas"];
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
+
+test("leasing directory shows named rentals with clear filters and responsive lease cards", async ({
+  page,
+  request,
+}, testInfo) => {
+  const year = new Date().getUTCFullYear() + 1;
+  const f = await fixture(request, false, false, `${year}-05-01`);
+  const reads: string[] = [];
+  page.on("request", (entry) => {
+    if (entry.url().includes("/api/leases/directory")) reads.push(entry.url());
+  });
+  await page.goto(`/leasing?propertyId=${f.property.id}`);
+  const directory = page.getByRole("region", { name: "Leasing", exact: true });
+  await expect(
+    directory.getByRole("button", { name: "Create lease draft", exact: true }),
+  ).toBeVisible();
+  await expect(directory.getByText("1 matching lease", { exact: true })).toBeVisible();
+  const card = directory.locator(".lease-directory-card");
+  await expect(card.getByRole("heading", { name: f.property.displayName })).toBeVisible();
+  await expect(card).toContainText(f.property.spaces[0].displayName);
+  await expect(card).toContainText(`Apr 30, ${year}`);
+  await expect(card).toContainText("Draft");
+  await expect(directory).not.toContainText(f.property.id);
+  await expect(directory).not.toContainText(f.lease.spaceId);
+  await expect(directory.getByText(/Record a draft, review and execute/)).toHaveCount(0);
+  expect(reads).toHaveLength(1);
+  expect(new URL(reads[0]).searchParams.get("limit")).toBe("25");
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((appearance) => {
+      document.documentElement.dataset.theme = appearance;
+    }, theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await directory.screenshot({ path: testInfo.outputPath(`leasing-${theme}-${width}.png`) });
+    }
+    await page.evaluate(axe.source);
+    const violations = await page.evaluate(async () =>
+      (
+        await window.axe.run(".lease-directory", {
+          runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+        })
+      ).violations.map((item) => item.id),
+    );
+    expect(violations).toEqual([]);
+  }
+  await directory.getByLabel("Lease status", { exact: true }).selectOption("ended");
+  await expect(
+    directory.getByRole("heading", { name: "No leases match these filters" }),
+  ).toBeVisible();
+  await directory.getByLabel("Lease status", { exact: true }).selectOption("draft");
+  await expect(directory.getByText("1 matching lease", { exact: true })).toBeVisible();
+  await card.click();
+  await expect(page).toHaveURL(new RegExp(`/leases/${f.lease.id}/details`));
+});
+
 test("lease end shows the last covered day while preserving the stored exclusive boundary", async ({
   page,
   request,
@@ -21,14 +79,14 @@ test("lease end shows the last covered day while preserving the stored exclusive
   expect((await back.boundingBox())!.y).toBeLessThan((await heading.boundingBox())!.y);
   await expect(
     milestones
-      .locator(".workflow-facts > div")
-      .filter({ has: page.getByText("Lease end (last covered day)", { exact: true }) }),
-  ).toHaveText(`Lease end (last covered day)${covered}`);
-  await expect(page.getByText("Last covered day", { exact: true })).toHaveCount(2);
+      .locator(".lease-detail-facts > div")
+      .filter({ has: page.getByText("Lease ends (last covered day)", { exact: true }) }),
+  ).toHaveText(`Lease ends (last covered day)Apr 30, ${boundary.slice(0, 4)}`);
+  await expect(page.getByText("Lease ends (last covered day)", { exact: true })).toHaveCount(1);
   await back.click();
   await expect(page).toHaveURL(/\/leasing$/);
   await execute(request, f);
-  for (const tab of ["overview", "leases"]) {
+  for (const tab of ["leases"]) {
     await page.goto(`/properties/${f.property.id}/${tab}`);
     const leases = page.getByRole("region", { name: "Leases", exact: true });
     await expect(leases).toContainText(`through ${covered}`);
@@ -45,14 +103,14 @@ test("property leases show tenant names with direct identity and lease links", a
   const f = await fixture(request);
   await execute(request, f);
   await page.goto(`/properties/${f.property.id}/leases`);
-  const leases = page.getByRole("region", { name: "leases", exact: true });
+  const leases = page.getByRole("region", { name: "Leases", exact: true });
   await expect(leases.getByRole("link", { name: f.tenant.displayName, exact: true })).toBeVisible();
   await expect(leases.getByRole("link", { name: "View lease", exact: true })).toHaveAttribute(
     "href",
     `/leases/${f.lease.id}/details`,
   );
   await leases.getByRole("link", { name: f.tenant.displayName, exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`/parties\\?identity=${f.tenant.id}`));
+  await expect(page).toHaveURL(new RegExp(`/tenants\\?identity=${f.tenant.id}`));
 });
 
 test("property pages remain usable when tenant previews are unavailable", async ({
@@ -119,7 +177,7 @@ test("Lease documents resume with original bytes and reconcile one committed upl
   await page.goto(
     `/money?workflow=file.upload&leaseId=${f.lease.id}&entityType=lease&entityId=${f.lease.id}&resume=${recovery.id}`,
   );
-  await page.getByRole("button", { name: "Save attach supporting evidence", exact: true }).click();
+  await page.getByRole("button", { name: "Attach supporting evidence", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Select the evidence file");
   await page.getByLabel("Evidence file (required)", { exact: true }).setInputFiles(attachment);
   let writes = 0;
@@ -130,7 +188,7 @@ test("Lease documents resume with original bytes and reconcile one committed upl
       await route.abort("failed");
     } else await route.continue();
   });
-  await page.getByRole("button", { name: "Save attach supporting evidence", exact: true }).click();
+  await page.getByRole("button", { name: "Attach supporting evidence", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Check original result", exact: true }),
   ).toBeVisible();
@@ -222,6 +280,104 @@ test("termination documents and full proposal context preserve truthful occupanc
   ).toBe(lease.id);
 });
 
+test("lease details organize names, dates, rent and actions without technical clutter", async ({
+  page,
+  request,
+}, testInfo) => {
+  const f = await fixture(request);
+  const other = await fixture(request);
+  const added = await request.post(`/api/leases/${f.lease.id}/participants`, {
+    data: {
+      tenantPartyId: other.tenant.id,
+      participantRole: "co_tenant",
+      expectedLeaseRevision: f.lease.leaseRevision,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(added.ok(), await added.text()).toBe(true);
+  f.lease = (await added.json()) as Schemas["LeaseMutationResponse"];
+  const nameReads: string[] = [];
+  page.on("request", (entry) => {
+    if (new URL(entry.url()).pathname === "/api/parties/names") nameReads.push(entry.url());
+  });
+  await page.goto(`/leases/${f.lease.id}/details`);
+  const workspace = page.getByRole("region", { name: "Lease workspace", exact: true });
+  await expect(
+    workspace.getByRole("heading", { name: "Residential lease", exact: true }),
+  ).toBeVisible();
+  await expect(
+    workspace.getByRole("link", { name: f.property.displayName, exact: true }),
+  ).toHaveAttribute("href", `/properties/${f.property.id}/overview`);
+  const participants = workspace.getByRole("region", { name: "Lease participants", exact: true });
+  for (const tenant of [f.tenant, other.tenant]) {
+    await expect(
+      participants.getByRole("link", { name: tenant.displayName, exact: true }),
+    ).toHaveAttribute("href", `/tenants?identity=${tenant.id}`);
+    await expect(workspace).not.toContainText(tenant.id);
+  }
+  expect(nameReads).toHaveLength(1);
+  expect(new URL(nameReads[0]).searchParams.getAll("ids")).toHaveLength(2);
+  await expect(workspace).not.toContainText(f.lease.id);
+  await expect(workspace.getByText("Lease revision", { exact: true })).toHaveCount(0);
+  await expect(workspace.getByText("Not recorded", { exact: true })).toHaveCount(0);
+  await expect(
+    workspace.getByRole("link", { name: "Record signed lease", exact: true }),
+  ).toBeVisible();
+  await expect(workspace.getByText("No fixed end date", { exact: true })).toBeVisible();
+  await expect(workspace.getByText("Rent schedule needs review.")).toHaveCount(0);
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset.theme = value;
+    }, theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await workspace.screenshot({
+        path: testInfo.outputPath(`lease-details-${theme}-${width}.png`),
+      });
+    }
+    await page.evaluate(axe.source);
+    const violations = await page.evaluate(async () =>
+      (
+        await window.axe.run(".lease-detail", {
+          runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+        })
+      ).violations.map((entry) => entry.id),
+    );
+    expect(violations).toEqual([]);
+  }
+  await execute(request, f);
+  await page.reload();
+  await expect(workspace.locator(".lease-detail-heading")).toContainText("Signed");
+  await expect(workspace.getByRole("link", { name: "Edit lease", exact: true })).toHaveCount(0);
+  await expect(
+    workspace.getByRole("link", { name: "Record lease end", exact: true }),
+  ).toBeVisible();
+  await workspace.getByRole("link", { name: "Record lease end", exact: true }).click();
+  await expect(page).toHaveURL(/workflow=lease.end/);
+});
+
+test("unavailable participant names do not hide lease facts or tenant links", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  await page.route("**/api/parties/names?*", (route) =>
+    route.fulfill({ status: 503, json: { detail: "Unavailable" } }),
+  );
+  await page.goto(`/leases/${f.lease.id}/details`);
+  const participants = page.getByRole("region", { name: "Lease participants", exact: true });
+  await expect(participants.getByRole("alert")).toContainText("Participant names are unavailable");
+  await expect(
+    participants.getByRole("link", { name: "View tenant details", exact: true }),
+  ).toHaveAttribute("href", `/tenants?identity=${f.tenant.id}`);
+  await expect(page.getByRole("region", { name: "Rent terms", exact: true })).toContainText(
+    "USD 1000.00",
+  );
+});
+
 test("commercial Lease execution and milestones support narrow keyboard review in both themes", async ({
   page,
   request,
@@ -244,7 +400,9 @@ test("commercial Lease execution and milestones support narrow keyboard review i
     await expect(page.getByText("Preferences saved.")).toBeVisible();
     await page.goto(`/leases/${f.lease.id}/details`);
     await expect(page.getByRole("region", { name: "Lease milestones", exact: true })).toContainText(
-      f.lease.occupancyStartsOn,
+      new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" }).format(
+        new Date(`${f.lease.occupancyStartsOn}T00:00:00Z`),
+      ),
     );
     await expect(
       page.getByRole("region", { name: "Lease inspections", exact: true }),
@@ -265,9 +423,7 @@ test("commercial Lease execution and milestones support narrow keyboard review i
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
   }
-  await page
-    .getByRole("link", { name: "Review Space occupancy and leasing status", exact: true })
-    .click();
+  await page.getByRole("link", { name: "View occupancy and leasing status", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/properties/${f.property.id}/units`));
 });
 
@@ -313,10 +469,12 @@ test("unavailable documents and Space context keep Lease facts visible without o
   );
   await page.goto(`/leases/${f.lease.id}/details`);
   await expect(
-    page.getByRole("region", { name: "Lease Space context", exact: true }).getByRole("alert"),
+    page.getByRole("region", { name: "Lease property", exact: true }).getByRole("alert"),
   ).toContainText("Lease records remain available");
   await expect(page.getByRole("region", { name: "Lease milestones", exact: true })).toContainText(
-    f.lease.contractStartsOn,
+    new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" }).format(
+      new Date(`${f.lease.contractStartsOn}T00:00:00Z`),
+    ),
   );
   const documents = page.getByRole("region", {
     name: `Lease documents ${f.lease.id}`,
@@ -400,7 +558,12 @@ async function fixture(
   return { property, tenant, lease, today };
 }
 async function save(page: Page, title: string) {
-  await page.getByRole("button", { name: `Save ${title.toLowerCase()}`, exact: true }).click();
+  await test.step(title, async () => {
+    await page
+      .getByRole("group", { name: "Form actions", exact: true })
+      .locator('button[type="submit"]')
+      .click();
+  });
   await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
 }
 async function execute(request: APIRequestContext, f: Awaited<ReturnType<typeof fixture>>) {
@@ -468,9 +631,11 @@ test("draft edits resume and execution uses independent Lease and Space revision
   expect(item.status).toBe("executed");
   expect(item.leaseRevision).toBe(f.lease.leaseRevision + 2);
   await page.goto(`/leases/${f.lease.id}/inspections`);
-  await expect(page.getByRole("region", { name: "Related rent setup" })).toContainText(
-    "Rent schedule needs review",
-  );
+  await expect(
+    page
+      .getByRole("region", { name: "Rent terms", exact: true })
+      .getByRole("link", { name: "View rent and deposits →", exact: true }),
+  ).toHaveAttribute("href", `/money?leaseId=${f.lease.id}`);
 });
 
 test("foreign lease children fail closed and incomplete drafts never dispatch", async ({
@@ -483,13 +648,13 @@ test("foreign lease children fail closed and incomplete drafts never dispatch", 
     `/leasing?workflow=lease.participant.update&target=${f.lease.id}&child=${other.lease.participants[0].id}`,
   );
   await expect(page.getByRole("alert")).toContainText("does not belong");
-  await expect(page.getByRole("button", { name: /Save edit lease participant/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Save lease participant changes/ })).toHaveCount(0);
   let dispatched = 0;
   page.on("request", (request) => {
     if (request.method() === "POST" && request.url().endsWith("/api/leases")) dispatched++;
   });
   await page.goto("/leasing?workflow=lease.create");
-  await page.getByRole("button", { name: "Save create lease draft", exact: true }).click();
+  await page.getByRole("button", { name: "Create lease draft", exact: true }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   expect(dispatched).toBe(0);
 });
@@ -1005,7 +1170,7 @@ test("inspection evidence resumes with original bytes and reconciles a lost resp
     await route.fetch();
     await route.abort("failed");
   });
-  await page.getByRole("button", { name: "Save attach inspection evidence", exact: true }).click();
+  await page.getByRole("button", { name: "Attach inspection evidence", exact: true }).click();
   await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
   await page.getByRole("button", { name: "Check original result" }).click();
   await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
@@ -1168,5 +1333,5 @@ test("inspection section failure preserves the committed Lease and unavailable e
   );
   await page.goto(`/leases/${f.lease.id}/details`);
   await expect(page.getByRole("alert")).toContainText("Lease result remains committed");
-  await expect(page.getByRole("region", { name: "Related rent setup" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Rent terms", exact: true })).toBeVisible();
 });

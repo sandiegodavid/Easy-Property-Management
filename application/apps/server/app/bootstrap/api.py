@@ -355,6 +355,7 @@ def create_app(  # noqa: C901, PLR0915
             recorder,
             (SQLiteTenantRoleActivityGuard(),),
             (owner_concern_guard,),
+            party_operations,
         ),
         party_reads=party_reads,
         time_zone_resolver=BundledAddressTimeZoneResolver(),

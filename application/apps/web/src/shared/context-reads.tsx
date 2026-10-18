@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { DynamicFilterForm } from "./dynamic-filter-form";
+import { useId, useState } from "react";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
@@ -174,18 +175,12 @@ export function Directory({
   const filterKey = params.toString();
   const [searchDraft, setSearchDraft] = useState({ key: filterKey, value: query.q });
   const search = searchDraft.key === filterKey ? searchDraft.value : query.q;
-  const filterTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => {
-    return () => clearTimeout(filterTimer.current);
-  }, [params, kind]);
-  function applyFilters(form: HTMLFormElement, debounce = false) {
-    clearTimeout(filterTimer.current);
+  function applyFilters(form: HTMLFormElement) {
     const next = new URLSearchParams();
     new FormData(form).forEach((value, key) => {
       if (typeof value === "string" && value) next.set(key, value);
     });
-    if (debounce) filterTimer.current = setTimeout(() => setParams(next, { replace: true }), 300);
-    else setParams(next);
+    setParams(next, { replace: true, preventScrollReset: true, state: location.state as unknown });
   }
   const result = useQuery({
     queryKey: scope.key("directory", kind, params.toString()),
@@ -257,14 +252,9 @@ export function Directory({
         {headingAction}
       </div>
       {beforeFilters}
-      <form
-        key={kind === "property" ? kind : params.toString()}
+      <DynamicFilterForm
+        key={kind}
         className="read-filters"
-        onChange={(event) => {
-          if (kind === "property") {
-            applyFilters(event.currentTarget, event.target instanceof HTMLInputElement);
-          }
-        }}
         onSubmit={(event) => {
           event.preventDefault();
           applyFilters(event.currentTarget);
@@ -317,21 +307,20 @@ export function Directory({
             />
           </>
         )}
-        {kind === "owner" && <button>Apply filters</button>}
+
         {kind === "property" && (
           <button
             type="button"
             onClick={(event) => {
               event.currentTarget.form?.reset();
-              clearTimeout(filterTimer.current);
               setSearchDraft({ key: "", value: "" });
-              setParams({});
+              setParams({}, { replace: true, preventScrollReset: true });
             }}
           >
             Clear filters
           </button>
         )}
-      </form>
+      </DynamicFilterForm>
       {result.error ? (
         <ReadError
           error={result.error}
@@ -557,7 +546,7 @@ function LeaseTenants({ lease }: { lease: Schema["LeaseItem"] }) {
             <ul>
               {tenants.map((tenant, index) => (
                 <li key={`${tenant.partyId}:${index}`}>
-                  <Link to={`/parties?identity=${tenant.partyId}`}>{tenant.displayName}</Link>
+                  <Link to={`/tenants?identity=${tenant.partyId}`}>{tenant.displayName}</Link>
                   {" · "}
                   {label(tenant.participantRole)} · {tenant.startsOn} through{" "}
                   {leaseLastCoveredOn(tenant.endsOn) ?? "ongoing"}
@@ -878,10 +867,9 @@ function MoneyPeriodFilter({ query }: { query: ContextQuery }) {
   const navigationState: unknown = useLocation().state;
   const [error, setError] = useState("");
   return (
-    <form
+    <DynamicFilterForm
       className="read-filters money-period-filter"
       aria-label="Money period"
-      key={`${query.fromOn}:${query.throughOn}`}
       onSubmit={(event) => {
         event.preventDefault();
         const values = new FormData(event.currentTarget);
@@ -896,7 +884,7 @@ function MoneyPeriodFilter({ query }: { query: ContextQuery }) {
         next.set("fromOn", from);
         next.set("throughOn", through);
         next.delete("cursor");
-        setParams(next, { state: navigationState, preventScrollReset: true });
+        setParams(next, { state: navigationState, preventScrollReset: true, replace: true });
       }}
     >
       <label>
@@ -907,9 +895,9 @@ function MoneyPeriodFilter({ query }: { query: ContextQuery }) {
         Money through
         <input type="date" name="throughOn" defaultValue={query.throughOn} required />
       </label>
-      <button>Apply money period</button>
+
       {error && <p role="alert">{error}</p>}
-    </form>
+    </DynamicFilterForm>
   );
 }
 export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: string }) {
@@ -962,8 +950,7 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
       {kind === "owner" && <h2>{tab}</h2>}
       <SourceDetail />
       {kind === "owner" && (
-        <form
-          key={params.toString()}
+        <DynamicFilterForm
           className="read-filters"
           onSubmit={(event) => {
             event.preventDefault();
@@ -972,7 +959,8 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
             values.forEach((value, key) => {
               if (typeof value === "string" && value) next.set(key, value);
             });
-            setParams(next);
+            next.delete("cursor");
+            setParams(next, { replace: true, preventScrollReset: true });
           }}
         >
           <Select
@@ -980,8 +968,7 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
             value={relationshipScope}
             options={["current", "former", "all"]}
           />
-          <button>Apply relationships</button>
-        </form>
+        </DynamicFilterForm>
       )}
       {result.error ? (
         <ReadError

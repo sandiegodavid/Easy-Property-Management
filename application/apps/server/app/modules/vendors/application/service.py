@@ -12,8 +12,9 @@ from app.modules.parties.application.service import (
     PartyCreateCommand,
     PartyFactory,
     SharedPartyFactory,
+    PartyConflictError,
+    prepare_contact_methods,
 )
-from app.modules.parties.domain.models import PartyContactMethod
 from app.modules.vendors.application.category_commands import (
     CategoryCommand,
     start_category,
@@ -377,8 +378,10 @@ class ProviderService:
             if replay := start(tx, identity):
                 return replay
             now = _now()
-            methods = [_new_contact("", command, now) for command in contacts]
-            _unique_contacts(methods)
+            try:
+                methods = prepare_contact_methods("", contacts, now)
+            except PartyConflictError as error:
+                raise ProviderLifecycleConflict(str(error)) from error
             candidates = tx.duplicate_party_ids(methods, 10)
             if candidates and confirmed_new_party is not True:
                 raise PossibleDuplicateParty(candidates)
@@ -1403,22 +1406,6 @@ def _assignment(party_id, category_id, now, idempotency_key, fingerprint=None):
     )
 
 
-def _new_contact(party_id, item, now):
-    return PartyContactMethod(
-        str(uuid4()),
-        party_id,
-        item.method_kind,
-        item.value,
-        item.normalized_value,
-        item.extension,
-        item.label,
-        "active",
-        now,
-        now,
-        None,
-    )
-
-
 def _profile(party_id, command, now):
     return ProviderProfile(
         party_id, command.selection_status, command.selection_reason, command.notes, now, now, None
@@ -1561,12 +1548,6 @@ def _unique_child(items, candidate, kind):
             getattr(item, "country_code", ""),
         ) == (candidate.normalized_name, getattr(candidate, "country_code", "")):
             raise ProviderLifecycleConflict("Active provider labels must be unique.")
-
-
-def _unique_contacts(items):
-    keys = [(item.method_kind, item.normalized_value, item.extension or "") for item in items]
-    if len(keys) != len(set(keys)):
-        raise ProviderLifecycleConflict("Active provider contact methods must be unique.")
 
 
 def _detail(record):

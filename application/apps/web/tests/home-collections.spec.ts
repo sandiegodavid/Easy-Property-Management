@@ -95,7 +95,6 @@ test("View all keeps preview capture and exact total, bounds pages and preserves
       new URL(result.url()).pathname === "/api/operator/home/items" &&
       new URL(result.url()).searchParams.get("limit") === "100",
   );
-  await page.getByRole("button", { name: "Apply collection filters" }).click();
   const all = (await (await maximum).json()) as Schema["CollectionResponse"];
   if (all.result.status !== "available") throw new Error("Collection unavailable");
   expect(all.result.items).toHaveLength(55);
@@ -131,14 +130,13 @@ test("one-row pages have no gaps and filter changes discard incompatible continu
   await expect.poll(() => keys.length).toBe(3);
   expect(new Set(keys)).toEqual(new Set(tasks.map((task) => `task:${task.id}`)));
   await expect(page.getByRole("link", { name: "Next collection page" })).toHaveCount(0);
-  await page.getByLabel("Upcoming horizon").selectOption("90");
   const changed = page.waitForResponse((result) => {
     const url = new URL(result.url());
     return (
       url.pathname === "/api/operator/home/items" && url.searchParams.get("horizonDays") === "90"
     );
   });
-  await page.getByRole("button", { name: "Apply collection filters" }).click();
+  await page.getByLabel("Upcoming horizon").selectOption("90");
   expect(new URL((await changed).url()).searchParams.has("cursor")).toBe(false);
   await expect(page).not.toHaveURL(/cursor=/);
   const continued = page.waitForResponse(
@@ -146,13 +144,12 @@ test("one-row pages have no gaps and filter changes discard incompatible continu
   );
   await page.getByRole("link", { name: "Next collection page" }).click();
   await continued;
-  await page.getByLabel("Property ID", { exact: false }).fill(other.property.id);
   const rescope = page.waitForResponse(
     (result) =>
       new URL(result.url()).pathname === "/api/operator/home/items" &&
       new URL(result.url()).searchParams.get("propertyId") === other.property.id,
   );
-  await page.getByRole("button", { name: "Apply collection filters" }).click();
+  await page.getByLabel("Property ID", { exact: false }).fill(other.property.id);
   expect(new URL((await rescope).url()).searchParams.has("cursor")).toBe(false);
   await expect(action.getByRole("heading", { level: 4 })).toHaveText("0 recorded items");
 });

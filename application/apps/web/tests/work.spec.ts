@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import type { components } from "@epm/contracts/generated";
+import axe from "axe-core";
 
 type Schemas = components["schemas"];
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
@@ -61,7 +62,12 @@ async function task(request: APIRequestContext) {
   });
 }
 async function save(page: Page, title: string) {
-  await page.getByRole("button", { name: `Save ${title.toLowerCase()}`, exact: true }).click();
+  await test.step(title, async () => {
+    await page
+      .getByRole("group", { name: "Form actions", exact: true })
+      .locator('button[type="submit"]')
+      .click();
+  });
   await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
   await expect(
     page.getByText("This is the original committed response.", { exact: true }),
@@ -76,6 +82,102 @@ async function openAction(page: Page, key: string, id: string, child?: string) {
   await page.goto(`/${family}?workflow=${key}&target=${id}${child ? `&child=${child}` : ""}`);
   await expect(page.getByRole("group", { name: "Requested change", exact: true })).toBeVisible();
 }
+
+test("maintenance directory organizes issues, named property search and secondary filters", async ({
+  page,
+  request,
+}, testInfo) => {
+  const f = await issue(request);
+  const reads: string[] = [];
+  const detailReads: string[] = [];
+  page.on("request", (entry) => {
+    const url = new URL(entry.url());
+    if (url.pathname === "/api/maintenance-issues") reads.push(entry.url());
+    else if (url.pathname.startsWith("/api/maintenance-issues/")) detailReads.push(entry.url());
+  });
+  await page.goto(`/maintenance?propertyId=${f.property.id}`);
+  const workspace = page.getByRole("region", { name: "Work workspace", exact: true });
+  await expect(workspace.getByRole("heading", { name: "Maintenance", exact: true })).toBeVisible();
+  await expect(
+    workspace.getByRole("button", { name: "Report maintenance issue", exact: true }),
+  ).toBeVisible();
+  await expect(workspace.getByRole("navigation", { name: "Work views" })).toHaveCount(0);
+  await expect(workspace.getByText(/Recording a conversation|retained attribution/)).toHaveCount(0);
+  const card = workspace.locator(".maintenance-issue-card");
+  await expect(card).toContainText(f.issue.summary);
+  await expect(card).toContainText(f.property.displayName);
+  await expect(card).toContainText("Urgent priority");
+  await expect(workspace.getByLabel("Property ID", { exact: true })).toHaveCount(0);
+  await expect(
+    workspace.getByRole("combobox", { name: "Reporter role", exact: true }),
+  ).toBeHidden();
+  expect(reads).toHaveLength(1);
+  expect(detailReads).toHaveLength(0);
+  expect(new URL(reads[0]).searchParams.get("pageSize")).toBe("25");
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset.theme = value;
+    }, theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await workspace.screenshot({
+        path: testInfo.outputPath(`maintenance-${theme}-${width}.png`),
+      });
+    }
+    await page.evaluate(axe.source);
+    const violations = await page.evaluate(async () =>
+      (
+        await window.axe.run(".maintenance-directory", {
+          runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+        })
+      ).violations.map((item) => item.id),
+    );
+    expect(violations).toEqual([]);
+  }
+  await workspace.getByRole("combobox", { name: "Status", exact: true }).selectOption("resolved");
+  await expect(
+    workspace.getByText("No maintenance issues match these filters.", { exact: true }),
+  ).toBeVisible();
+  await workspace.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await expect(page).toHaveURL(/\/maintenance$/);
+  await expect(workspace.getByRole("searchbox", { name: "Property", exact: true })).toHaveValue("");
+  await expect(workspace.getByRole("combobox", { name: "Status", exact: true })).toHaveValue("");
+  await workspace
+    .getByRole("searchbox", { name: "Property", exact: true })
+    .fill(f.property.displayName);
+  await workspace.getByRole("button", { name: f.property.displayName, exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`propertyId=${f.property.id}`));
+  await expect(card).toHaveCount(1);
+  await card.click();
+  await expect(page).toHaveURL(new RegExp(`record=issue&id=${f.issue.id}`));
+});
+
+test("maintenance directory can retry a failed read without losing its property filter", async ({
+  page,
+  request,
+}) => {
+  const f = await issue(request);
+  let attempts = 0;
+  await page.route("**/api/maintenance-issues?*", async (route) => {
+    attempts += 1;
+    if (attempts === 1)
+      await route.fulfill({ status: 503, json: { detail: "Temporarily unavailable" } });
+    else await route.continue();
+  });
+  await page.goto(`/maintenance?propertyId=${f.property.id}`);
+  const directory = page.getByRole("region", { name: "Work directory", exact: true });
+  await expect(directory.getByRole("alert")).toContainText("Records unavailable");
+  await expect(
+    directory.getByText("No maintenance issues match these filters.", { exact: true }),
+  ).toHaveCount(0);
+  await directory.getByRole("button", { name: "Retry loading issues", exact: true }).click();
+  await expect(directory.locator(".maintenance-issue-card")).toContainText(f.issue.summary);
+  expect(attempts).toBe(2);
+  await expect(page).toHaveURL(new RegExp(`propertyId=${f.property.id}`));
+});
 
 test("issue detail has a top link back to Maintenance", async ({ page, request }) => {
   const f = await issue(request);
@@ -95,6 +197,9 @@ test("Task creation uses original recovery identity and saved forms survive relo
   request,
 }) => {
   await page.goto("/tasks?workflow=task.create");
+  await expect(
+    page.getByRole("group", { name: "Form actions", exact: true }).getByRole("button"),
+  ).toHaveText(["Create task", "Save unfinished form"]);
   await page
     .getByLabel("Title (required)", { exact: true })
     .fill(`Browser task ${crypto.randomUUID()}`);
@@ -271,7 +376,6 @@ test("Task priority and due filters combine with context and preserve cursor pag
   const directory = page.getByRole("region", { name: "Work directory" });
   await directory.getByRole("combobox", { name: "Priority", exact: true }).selectOption("high");
   await directory.getByRole("combobox", { name: "Due period", exact: true }).selectOption("nodate");
-  await directory.getByRole("button", { name: "Apply work filters" }).click();
   await expect(directory.getByRole("link", { name: /^Filtered task / })).toHaveCount(25);
   await expect(directory).not.toContainText("Excluded");
   const seen = new Set(
@@ -292,7 +396,6 @@ test("Task priority and due filters combine with context and preserve cursor pag
   seen.add(last);
   expect(seen).toEqual(ids);
   await directory.getByRole("combobox", { name: "Priority", exact: true }).selectOption("normal");
-  await directory.getByRole("button", { name: "Apply work filters" }).click();
   expect(new URL(page.url()).searchParams.has("cursor")).toBe(false);
   await expect(directory.getByRole("link", { name: "Excluded normal task" })).toBeVisible();
   for (const due of ["overdue", "today", "next7days", ""]) {
@@ -305,7 +408,6 @@ test("Task priority and due filters combine with context and preserve cursor pag
         response.request().method() === "GET"
       );
     });
-    await directory.getByRole("button", { name: "Apply work filters" }).click();
     expect((await response).ok()).toBe(true);
   }
 });
@@ -457,7 +559,7 @@ test("Task edit stale source preserves edits and explicit source review", async 
     expectedRevision: original.revision,
     idempotencyKey: crypto.randomUUID(),
   });
-  await page.getByRole("button", { name: "Save edit task", exact: true }).click();
+  await page.getByRole("button", { name: "Save task changes", exact: true }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByLabel("Title", { exact: true })).toHaveValue("Retained edit");
   await page.getByRole("button", { name: "Review current source", exact: true }).click();
@@ -559,14 +661,13 @@ test("Party owner reporter correction preserves originating communication and re
   );
   expect(communication.participants[0].partyId).toBe(ownerId);
   await page.goto(`/maintenance?propertyId=${property.id}`);
+  await page.getByText("More filters", { exact: true }).click();
   await page.getByRole("combobox", { name: "Reporter role", exact: true }).selectOption("staff");
   await page
     .getByRole("combobox", { name: "Reporter subject", exact: true })
     .selectOption("local_operator");
-  await page.getByRole("button", { name: "Apply work filters", exact: true }).click();
   await expect(page.getByRole("link", { name: /Owner attribution workflow/ })).toBeVisible();
   await page.getByRole("combobox", { name: "Reporter role", exact: true }).selectOption("owner");
-  await page.getByRole("button", { name: "Apply work filters", exact: true }).click();
   await expect(page.getByRole("link", { name: /Owner attribution workflow/ })).toHaveCount(0);
 });
 
@@ -622,7 +723,7 @@ test("tenant reporter is rejected for a draft lease and accepted after explicit 
     (response) =>
       response.url().endsWith("/api/maintenance-issues") && response.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "Save report maintenance issue", exact: true }).click();
+  await page.getByRole("button", { name: "Report maintenance issue", exact: true }).click();
   const rejection = await rejected;
   expect(rejection.status(), await rejection.text()).toBe(409);
   expect(await rejection.text()).toContain("reporter_relationship");
@@ -716,7 +817,7 @@ test("archived owner selection requires historical confirmation and preserves th
   await expect(page.getByText(/Archived — backdated relationship/)).toBeVisible();
   await attribution.getByLabel("Historical selection confirmed", { exact: true }).check();
   await expect(
-    page.getByRole("button", { name: "Save correct issue reporter", exact: true }),
+    page.getByRole("button", { name: "Save issue reporter correction", exact: true }),
   ).toBeDisabled();
   await attribution
     .getByRole("textbox", { name: "Historical selection reason", exact: true })
@@ -881,15 +982,14 @@ test("appointment rescheduling and follow-up filtering preserve independent issu
     .getByRole("combobox", { name: "Issue category", exact: true })
     .selectOption("plumbing");
   await page.getByRole("combobox", { name: "Issue priority", exact: true }).selectOption("urgent");
+  await page.getByText("More filters", { exact: true }).click();
   await page
     .getByRole("combobox", { name: "Active follow-up Task", exact: true })
     .selectOption("true");
-  await page.getByRole("button", { name: "Apply work filters", exact: true }).click();
   await expect(page.getByRole("link", { name: new RegExp(f.issue.summary) }).first()).toBeVisible();
   await page
     .getByRole("combobox", { name: "Active follow-up Task", exact: true })
     .selectOption("false");
-  await page.getByRole("button", { name: "Apply work filters", exact: true }).click();
   await expect(page.getByRole("link", { name: new RegExp(f.issue.summary) })).toHaveCount(0);
   expect(
     (await get<Schemas["IssueResponse"]>(request, `/api/maintenance-issues/${f.issue.id}`)).status,
@@ -1028,7 +1128,7 @@ test("Journal correction retains evidence and reconciles a lost completion respo
     .click();
   await expect(page.getByLabel("Summary (required)")).toHaveValue("Initial completion observation");
   await expect(
-    page.getByRole("button", { name: "Save record work journal entry", exact: true }),
+    page.getByRole("button", { name: "Record work journal entry", exact: true }),
   ).toBeDisabled();
   await page.getByLabel("Summary (required)").fill("Verified partial outcome on recheck");
   await page
@@ -1048,7 +1148,7 @@ test("Journal correction retains evidence and reconciles a lost completion respo
     await route.fetch();
     await route.abort("failed");
   });
-  await page.getByRole("button", { name: "Save record work journal entry", exact: true }).click();
+  await page.getByRole("button", { name: "Record work journal entry", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
   await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
   expect(calls).toBe(1);
@@ -1117,7 +1217,7 @@ test("Journal pages are bounded and terminal history requires explicit confirmat
     .fill(new Date(Date.now() - 1000).toISOString());
   await page.getByLabel("Summary (required)").fill("Historical note after resolution");
   await expect(
-    page.getByRole("button", { name: "Save record work journal entry", exact: true }),
+    page.getByRole("button", { name: "Record work journal entry", exact: true }),
   ).toBeDisabled();
   await page.getByLabel("Historical entry confirmed", { exact: true }).check();
   await save(page, "Record work journal entry");
@@ -1277,10 +1377,8 @@ test("manual outbound contact selection and local-date timeline filters preserve
   }).format(occurred);
   await page.getByLabel("Occurred from (stored local date)").fill(localDate);
   await page.getByLabel("Occurred to (stored local date)").fill(localDate);
-  await page.getByRole("button", { name: "Apply work filters", exact: true }).click();
   await expect(page.getByRole("link", { name: /Already emailed owner/ })).toBeVisible();
   await page.getByRole("combobox", { name: "Direction", exact: true }).selectOption("inbound");
-  await page.getByRole("button", { name: "Apply work filters", exact: true }).click();
   await expect(page.getByRole("link", { name: /Already emailed owner/ })).toHaveCount(0);
 });
 
@@ -1313,7 +1411,7 @@ test("lost manual recording response recovers one communication and one follow-u
     original = (await (await route.fetch()).json()) as Schemas["CommunicationReceiptResponse"];
     await route.abort("failed");
   });
-  await page.getByRole("button", { name: "Save create conversation", exact: true }).click();
+  await page.getByRole("button", { name: "Create conversation", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
   await expect(
     page.getByText("This is the original committed response.", { exact: true }),
@@ -1450,7 +1548,7 @@ test("Provider quotes, assignment and ending remain independent of paid expenses
   await page.getByLabel("Received on (required)").fill(f.property.effectiveLocalDate);
   await page.getByLabel("Earliest work start on").first().fill(f.property.effectiveLocalDate);
   await expect(
-    page.getByRole("button", { name: "Save record provider quote", exact: true }),
+    page.getByRole("button", { name: "Record provider quote", exact: true }),
   ).toBeDisabled();
   await page.getByLabel("Estimated work finish on").first().fill(f.property.effectiveLocalDate);
   await save(page, "Record provider quote");
@@ -1558,7 +1656,7 @@ test("avoided Provider direct assignment and lost-response reassignment preserve
     await route.fetch();
     await route.abort("failed");
   });
-  await page.getByRole("button", { name: "Save assign provider", exact: true }).click();
+  await page.getByRole("button", { name: "Assign provider", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
   await expect(
     page.getByText("This is the original committed response.", { exact: true }),
@@ -1625,7 +1723,7 @@ test("Owner concern duplicate review requires an independent reason and never me
   await page.getByLabel("Summary (required)").fill("Independent owner request");
   await page.getByLabel("Description (required)").fill("A distinct rental question");
   await page.getByLabel("Raised at utc (required)").fill(property.asOf);
-  await page.getByRole("button", { name: "Save record owner concern", exact: true }).click();
+  await page.getByRole("button", { name: "Record owner concern", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Possible duplicate concerns", exact: true }),
   ).toBeVisible();
@@ -1635,7 +1733,7 @@ test("Owner concern duplicate review requires an independent reason and never me
   await page.getByRole("link", { name: "Start independent concern review", exact: true }).click();
   await page.getByRole("checkbox", { name: "Duplicate confirmed", exact: true }).check();
   await expect(
-    page.getByRole("button", { name: "Save record owner concern", exact: true }),
+    page.getByRole("button", { name: "Record owner concern", exact: true }),
   ).toBeDisabled();
   await page
     .getByRole("textbox", { name: "Duplicate reason", exact: true })
@@ -1699,7 +1797,7 @@ test("Archived Owner concern selection requires explicit backdated confirmation"
   ).toContainText("Archived — historical selection required");
   await page.getByRole("checkbox", { name: "Historical selection confirmed", exact: true }).check();
   await expect(
-    page.getByRole("button", { name: "Save record owner concern", exact: true }),
+    page.getByRole("button", { name: "Record owner concern", exact: true }),
   ).toBeDisabled();
   await page
     .getByRole("textbox", { name: "Historical selection reason", exact: true })
@@ -1730,7 +1828,7 @@ test("Vacancy concern requires a matching Space and retains observed status rath
   await page.getByLabel("Description (required)").fill("Current vacancy context only");
   await page.getByLabel("Raised at utc (required)").fill(property.asOf);
   await expect(
-    page.getByRole("button", { name: "Save record owner concern", exact: true }),
+    page.getByRole("button", { name: "Record owner concern", exact: true }),
   ).toBeDisabled();
   await page
     .getByRole("combobox", { name: "Space id", exact: true })
@@ -1810,7 +1908,7 @@ test("Lost concern follow-up recovers one Task while recorded conversation histo
     await route.fetch();
     await route.abort("failed");
   });
-  await page.getByRole("button", { name: "Save create concern follow-up", exact: true }).click();
+  await page.getByRole("button", { name: "Create concern follow-up", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
   await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
   expect(calls).toBe(1);

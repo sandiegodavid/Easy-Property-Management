@@ -10,8 +10,9 @@ from app.modules.parties.application.service import (
     PartyCreateCommand,
     PartyFactory,
     PartyValidationError,
+    PartyConflictError,
+    prepare_contact_methods,
 )
-from app.modules.parties.domain.models import PartyContactMethod
 from app.modules.tenants.application.ports import TenantTransaction, TenantUnitOfWork
 from app.modules.tenants.domain.models import TenantProfile
 
@@ -126,8 +127,10 @@ class TenantService:
             profile = TenantProfile(
                 party.id, None, command.do_not_contact, command.notes, now, now, None
             )
-            methods = [_method(party.id, item, now) for item in command.contacts]
-            _unique(methods)
+            try:
+                methods = prepare_contact_methods(party.id, command.contacts, now)
+            except PartyConflictError as error:
+                raise TenantConflictError(str(error)) from error
             duplicates = tx.duplicate_party_ids(methods, 10)
             if duplicates and not command.confirmed_new_party:
                 raise PossibleDuplicatePartyError(duplicates)
@@ -370,33 +373,6 @@ class TenantService:
             return self.unit_of_work.write(operation)
         except KeyError as error:
             raise TenantNotFoundError("Tenant was not found.") from error
-
-
-def _method(party_id, command, now):
-    return PartyContactMethod(
-        str(uuid4()),
-        party_id,
-        command.method_kind,
-        command.value,
-        command.normalized_value,
-        command.extension,
-        command.label,
-        "active",
-        now,
-        now,
-        None,
-    )
-
-
-def _unique(methods):
-    seen = set()
-    for item in methods:
-        if item.status != "active":
-            continue
-        key = (item.method_kind, item.normalized_value, item.extension or "")
-        if key in seen:
-            raise TenantConflictError("Active tenant contact methods must be unique.")
-        seen.add(key)
 
 
 def _require_active(profile):

@@ -111,7 +111,12 @@ test("property-scoped Money shows a named link back to property details", async 
 });
 
 async function save(page: Page, title: string) {
-  await page.getByRole("button", { name: `Save ${title.toLowerCase()}`, exact: true }).click();
+  await test.step(title, async () => {
+    await page
+      .getByRole("group", { name: "Form actions", exact: true })
+      .locator('button[type="submit"]')
+      .click();
+  });
   await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
   await expect(
     page.getByText("This is the original committed response.", { exact: true }),
@@ -302,7 +307,6 @@ test("paid Expense creation selects Property Space Provider and a Party payer wi
   await page.getByLabel("Date paid from", { exact: true }).fill(f.today);
   await page.getByLabel("Date paid to", { exact: true }).fill(f.today);
   await page.getByRole("combobox", { name: "Evidence", exact: true }).selectOption("false");
-  await page.getByRole("button", { name: "Apply Expense filters", exact: true }).click();
   const directory = page.getByRole("region", { name: "expenses records", exact: true });
   await expect(directory).toContainText("USD 101.03");
   await expect(directory).toContainText(f.property.displayName);
@@ -325,7 +329,7 @@ test("likely duplicate Expenses require explicit separate-payment review", async
   await page.getByLabel("Amount (required)").fill(item.amount);
   await page.getByLabel("Payee name", { exact: true }).fill(item.payeeName);
   await page.getByLabel("Description (required)").fill(item.description);
-  await page.getByRole("button", { name: "Save record paid expense", exact: true }).click();
+  await page.getByRole("button", { name: "Record paid expense", exact: true }).click();
   const candidates = page.getByRole("region", { name: "Possible duplicate expenses", exact: true });
   await expect(
     candidates.getByRole("link", { name: "Open existing expense", exact: true }),
@@ -574,7 +578,7 @@ for (const method of [
       await page.getByLabel("Masked reference", { exact: true }).fill("Check •••• 4321");
     if (method === "other") {
       await expect(
-        page.getByRole("button", { name: "Save record rent receipt", exact: true }),
+        page.getByRole("button", { name: "Record rent receipt", exact: true }),
       ).toBeDisabled();
       await page
         .getByLabel("Other payment method note", { exact: true })
@@ -641,7 +645,7 @@ test("prior actual method remains editable and replacement keeps its own origina
   await expect(page.getByLabel("Payment method label", { exact: true })).toHaveValue("");
   await page.getByLabel("Masked reference", { exact: true }).fill("4111111111111111");
   await expect(
-    page.getByRole("button", { name: "Save record rent receipt", exact: true }),
+    page.getByRole("button", { name: "Record rent receipt", exact: true }),
   ).toBeDisabled();
   await page.getByLabel("Masked reference", { exact: true }).fill("Transfer **** 9876");
   await page.getByLabel("Payment method label", { exact: true }).fill("Current transfer");
@@ -706,7 +710,7 @@ test("receipt totals prevent unmatched money and allocate one payment across two
   const totals = page.getByRole("region", { name: "Receipt allocation totals", exact: true });
   await expect(totals).toContainText("USD 500.00");
   await expect(
-    page.getByRole("button", { name: "Save record rent receipt", exact: true }),
+    page.getByRole("button", { name: "Record rent receipt", exact: true }),
   ).toBeDisabled();
   expect(
     (await get<Schemas["ReceiptPageResponse"]>(request, `/api/rent-receipts?leaseId=${f.lease.id}`))
@@ -728,7 +732,6 @@ test("receipt totals prevent unmatched money and allocate one payment across two
   expect(receipts.items[0].allocations).toHaveLength(2);
   await page.goto(`/money?tab=rent&leaseId=${f.lease.id}`);
   await page.getByRole("combobox", { name: "Settlement", exact: true }).selectOption("partial");
-  await page.getByRole("button", { name: "Apply rent filters", exact: true }).click();
   await expect(
     page
       .getByRole("region", { name: "rent records", exact: true })
@@ -883,7 +886,7 @@ test("lost expense response reconciles once and evidence failure leaves spending
     await route.fetch();
     await route.abort("failed");
   });
-  await page.getByRole("button", { name: "Save record paid expense", exact: true }).click();
+  await page.getByRole("button", { name: "Record paid expense", exact: true }).click();
   await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
   await page.goto("/settings/recovery");
   expect(recoveryId).toBeTruthy();
@@ -918,7 +921,7 @@ test("lost expense response reconciles once and evidence failure leaves spending
       },
     }),
   );
-  await page.getByRole("button", { name: "Save attach supporting evidence", exact: true }).click();
+  await page.getByRole("button", { name: "Attach supporting evidence", exact: true }).click();
   await expect(page.getByRole("alert").first()).toBeVisible();
   expect(
     (
@@ -1213,10 +1216,8 @@ test("Owner report evidence archival retains history but cannot remove the last 
   await page
     .getByRole("combobox", { name: "Linked receipt lifecycle", exact: true })
     .selectOption("active");
-  await page.getByRole("button", { name: "Apply owner-report filters", exact: true }).click();
   await expect(page.getByText("No records match these filters.", { exact: true })).toBeVisible();
   await page.getByRole("combobox", { name: "Report evidence", exact: true }).selectOption("true");
-  await page.getByRole("button", { name: "Apply owner-report filters", exact: true }).click();
   await expect(
     page.getByText("No records match these filters.", { exact: true }),
   ).not.toBeVisible();
@@ -1408,7 +1409,7 @@ test("deposit interest review uses exact cents and requires renewed approval for
   const review = page.getByRole("region", { name: "Simple interest review", exact: true });
   await expect(review).toContainText("30 days · Calculated interest: USD 4.11");
   await expect(
-    page.getByRole("button", { name: "Save add settlement credit", exact: true }),
+    page.getByRole("button", { name: "Add settlement credit", exact: true }),
   ).toBeDisabled();
   await review.getByRole("button", { name: "Use calculated interest", exact: true }).click();
   await review
@@ -1416,7 +1417,7 @@ test("deposit interest review uses exact cents and requires renewed approval for
     .click();
   await page.getByLabel("Annual rate basis points", { exact: true }).fill("600");
   await expect(
-    page.getByRole("button", { name: "Save add settlement credit", exact: true }),
+    page.getByRole("button", { name: "Add settlement credit", exact: true }),
   ).toBeDisabled();
   await expect(review).toContainText("USD 4.93");
   await page.getByLabel("Amount (required)").fill("5.00");
@@ -1489,7 +1490,7 @@ test("deposit Party selection reviews duplicate receipts and retains void replac
   });
   await expect(duplicate).toContainText("USD 400.00");
   await expect(
-    page.getByRole("button", { name: "Save record deposit receipt", exact: true }),
+    page.getByRole("button", { name: "Record deposit receipt", exact: true }),
   ).toBeDisabled();
   await duplicate
     .getByRole("button", { name: "Record separate deposit payment", exact: true })
@@ -1562,7 +1563,7 @@ test("deposit duplicate refunds require separate-payment review and preserve rep
     exact: true,
   });
   await expect(
-    page.getByRole("button", { name: "Save record deposit refund", exact: true }),
+    page.getByRole("button", { name: "Record deposit refund", exact: true }),
   ).toBeDisabled();
   await duplicate
     .getByRole("button", { name: "Record separate deposit payment", exact: true })
@@ -1593,7 +1594,6 @@ test("deposit duplicate refunds require separate-payment review and preserve rep
   await page
     .getByRole("combobox", { name: "Unresolved deposit balance", exact: true })
     .selectOption("true");
-  await page.getByRole("button", { name: "Apply deposit filters", exact: true }).click();
   await expect(page.getByRole("region", { name: "deposits records", exact: true })).toContainText(
     "USD 400.00",
   );
@@ -1919,12 +1919,10 @@ test("future check queue filters preserve eligibility and reminder context witho
   await page
     .getByRole("combobox", { name: "Deposit eligibility", exact: true })
     .selectOption("not_yet_eligible");
-  await page.getByRole("button", { name: "Apply check filters" }).click();
   await expect(page.locator(`a[href*="id=${check.id}"]`)).toBeVisible();
   await page
     .getByRole("combobox", { name: "Deposit eligibility", exact: true })
     .selectOption("eligible");
-  await page.getByRole("button", { name: "Apply check filters" }).click();
   await expect(page.locator(`a[href*="id=${check.id}"]`)).toHaveCount(0);
   expect(
     (await get<Schemas["ReceiptPageResponse"]>(request, `/api/rent-receipts?leaseId=${f.lease.id}`))
@@ -2142,7 +2140,6 @@ test("explicit-period reporting uses backend totals and source drill-down withou
   expect(summaries).toBe(0);
   await page.getByLabel("Reporting from (required)").fill(f.today);
   await page.getByLabel("Reporting through (required)").fill(f.today);
-  await page.getByRole("button", { name: "Show recorded totals" }).click();
   await expect(page.getByRole("region", { name: "operating", exact: true })).toContainText(
     "USD 120.01",
   );

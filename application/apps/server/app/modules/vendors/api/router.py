@@ -57,10 +57,11 @@ class PartyInput(Contract):
 
 
 class ContactInput(Contract):
-    methodKind: Literal["email", "phone"]
-    value: str = Field(min_length=1, max_length=320)
+    methodKind: Literal["email", "phone", "mailing_address"]
+    value: str = Field(min_length=1, max_length=1000)
     extension: str | None = Field(None, max_length=6)
     label: str | None = Field(None, max_length=80)
+    isPrimary: StrictBool | None = None
 
 
 class ProfileInput(Contract):
@@ -270,8 +271,9 @@ class PartyResponse(Contract):
 class ContactResponse(Contract):
     id: str
     partyId: str
-    methodKind: Literal["email", "phone"]
+    methodKind: Literal["email", "phone", "mailing_address"]
     displayValue: str
+    isPrimary: StrictBool
     extension: str | None
     label: str | None
     status: Literal["active", "archived"]
@@ -1041,7 +1043,9 @@ def _patch_profile(data):
 
 
 def _contact(data):
-    return ContactMethodCommand(data.methodKind, data.value, data.extension, data.label)
+    return ContactMethodCommand(
+        data.methodKind, data.value, data.extension, data.label, data.isPrimary
+    )
 
 
 def _reputation(data):

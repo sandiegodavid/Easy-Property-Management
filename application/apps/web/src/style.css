@@ -194,7 +194,37 @@
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
-.property-context-tabs > a[aria-current="page"] {
+.page-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 1rem;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  margin-block: 1rem;
+}
+.page-tabs > :is(a, button) {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.75rem 0.5rem;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.page-tabs > :is(a, button):not([aria-current="page"], [aria-selected="true"]):hover {
+  background: var(--row-hover);
+}
+.page-tabs > :is(a, button):focus-visible {
+  outline-offset: -3px;
+}
+.page-tabs > :is([aria-current="page"], [aria-selected="true"]) {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
   background: var(--accent-soft);
   font-weight: 600;
 }
@@ -429,6 +459,21 @@
   padding: 0.375rem 0.625rem;
   font-size: var(--type-small);
 }
+.property-space-occupancy-update .workflow-actions-inline {
+  margin: 0;
+}
+.property-space-occupancy-update button {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.property-space-occupancy-correction {
+  display: block;
+}
+.property-space-occupancy-correction button {
+  background: transparent;
+  color: var(--muted);
+  font-weight: 400;
+}
 .property-space-scheduled {
   margin-block: 1rem;
 }
@@ -529,7 +574,6 @@
   align-items: center;
   gap: 0.5rem;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--border);
   margin-bottom: 1rem;
 }
 .home-disclosure-help {
@@ -567,21 +611,6 @@
 }
 .home-disclosure-help:not([data-dismissed="true"]):is(:hover, :focus-within) > p {
   display: block;
-}
-.home-tabs {
-  display: flex;
-  gap: 1.25rem;
-}
-.home-tabs > button {
-  background: none;
-  border: 0;
-  border-radius: 0;
-  padding: 0.75rem 0;
-  color: var(--muted);
-}
-.home-tabs > button[aria-selected="true"] {
-  color: var(--accent);
-  box-shadow: inset 0 -2px var(--accent);
 }
 @media (min-width: 768px) {
   .home-grid .home-section {
@@ -1683,14 +1712,1120 @@ a.directory-coverage-card:focus-visible {
 .space-status-command .command-editor textarea {
   min-height: 6rem;
 }
-.space-status-command .command-editor form > button {
-  margin: 0 0.5rem 0.5rem 0;
+.ownership-command .command-editor form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
 }
-.space-status-command .command-editor form > button[type="submit"] {
-  background: var(--accent-soft);
-  color: var(--text);
+.ownership-command .command-editor form > fieldset {
+  flex-basis: 100%;
+  display: block;
+}
+.ownership-command .command-editor > button {
+  background: transparent;
+}
+.command-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  flex-basis: 100%;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.command-form-actions button {
+  margin: 0;
+}
+.command-form-actions button[type="submit"],
+.command-form-actions .command-primary-action {
+  background: var(--accent);
+  color: var(--surface);
   border-color: var(--accent);
   font-weight: 600;
+}
+.command-form-actions button[type="submit"]:hover:not(:disabled),
+.command-form-actions .command-primary-action:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.command-form-actions button[type="button"]:not(.command-primary-action) {
+  background: transparent;
+}
+.ownership-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-block: 1rem;
+}
+.ownership-add {
+  margin-block: 1.25rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.ownership-add-heading {
+  justify-content: space-between;
+}
+.ownership-add-heading h3,
+.ownership-add-heading button {
+  margin: 0;
+}
+.ownership-add-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding-block: 0.5rem 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.ownership-add-options button {
+  margin: 0;
+  background: transparent;
+}
+.ownership-add-options button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.ownership-add-actions {
+  justify-content: flex-end;
+  padding-top: 1rem;
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.ownership-add-actions button {
+  margin: 0;
+  background: var(--accent);
+  color: var(--surface);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.ownership-results-viewport {
+  block-size: min(30rem, 60svh);
+  overflow-y: auto;
+  overflow-anchor: none;
+  scrollbar-gutter: stable;
+  padding-inline: 0.25rem;
+}
+.ownership-results-viewport .ownership-search-results {
+  margin-block: 0;
+}
+.ownership-pagination span {
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+.ownership-date-heading,
+.ownership-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.ownership-search label {
+  flex: 1;
+  min-width: min(100%, 18rem);
+}
+.ownership-date-heading {
+  position: relative;
+  margin-bottom: 0.5rem;
+}
+.ownership-date-heading .home-disclosure-help {
+  position: static;
+  margin-inline-start: 0;
+}
+.ownership-date-heading .home-disclosure-help > p {
+  inset-inline-start: 0;
+  inset-inline-end: auto;
+}
+.ownership-effective-date input {
+  max-width: 18rem;
+}
+.ownership-owners {
+  margin: 1.5rem 0 0;
+  padding: 1.25rem 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.ownership-search label,
+.ownership-new-fields label {
+  display: grid;
+  gap: 0.5rem;
+}
+.ownership-search {
+  align-items: end;
+  margin-block: 1rem;
+}
+.ownership-new-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  align-items: end;
+  gap: 1rem;
+  flex-basis: 100%;
+}
+.ownership-selected,
+.ownership-search-results {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+.ownership-selected {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+  align-items: start;
+  gap: 1rem;
+}
+.ownership-selected > li {
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--row);
+}
+.ownership-selected > li:has(.owner-contact-fields) {
+  grid-column: 1 / -1;
+}
+.ownership-owner-heading,
+.ownership-search-results li,
+.ownership-add-heading,
+.ownership-add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.ownership-search-results li {
+  padding-block: 0.875rem;
+  border-bottom: 1px solid var(--border);
+}
+.ownership-owner-heading {
+  margin-bottom: 1rem;
+}
+.ownership-owner-heading button {
+  margin: 0;
+  font-size: var(--type-small);
+}
+.ownership-selected .owner-contact-details dl {
+  grid-template-columns: 1fr;
+}
+.provider-directory-page,
+.maintenance-directory,
+.lease-directory,
+.tenant-directory {
+  max-width: 76rem;
+}
+.maintenance-directory-heading,
+.maintenance-issue-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+}
+.maintenance-directory-heading {
+  margin-bottom: 1.5rem;
+}
+.maintenance-directory-heading h2,
+.maintenance-directory-heading .workflow-actions,
+.maintenance-directory-heading .workflow-actions-inline {
+  margin: 0;
+}
+.maintenance-directory-heading button {
+  margin: 0;
+  background: var(--accent);
+  color: var(--surface);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.maintenance-directory-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 1rem;
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+.maintenance-directory-filters label,
+.maintenance-property-filter {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.maintenance-directory-filters input,
+.maintenance-directory-filters select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+.maintenance-more-filters,
+.maintenance-date-hint {
+  grid-column: 1 / -1;
+}
+.maintenance-more-filters summary {
+  color: var(--accent);
+}
+.maintenance-filter-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.maintenance-date-hint,
+.maintenance-issue-reported {
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+.maintenance-clear-filters {
+  justify-self: start;
+  margin: 0;
+  font-size: var(--type-small);
+}
+.maintenance-property-results {
+  display: grid;
+  gap: 0.5rem;
+}
+.maintenance-property-results button {
+  text-align: left;
+  margin: 0;
+}
+.maintenance-issue-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+.maintenance-issue-card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  height: 100%;
+  padding: 1.25rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.maintenance-issue-card:hover {
+  background: var(--row-hover);
+  border-color: var(--accent);
+}
+.maintenance-issue-card h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.maintenance-issue-card p {
+  margin: 0;
+}
+.maintenance-issue-property {
+  font-weight: 600;
+}
+.maintenance-issue-status,
+.maintenance-issue-priority {
+  padding: 0.25rem 0.625rem;
+  background: var(--row);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  font-size: var(--type-small);
+}
+.issue-priority-urgent,
+.issue-priority-high {
+  color: var(--text);
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+}
+.maintenance-issue-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  font-size: var(--type-small);
+}
+.maintenance-issue-action {
+  margin-top: auto;
+  color: var(--accent);
+  font-size: var(--type-small);
+}
+.maintenance-directory-empty {
+  padding: 2rem 1.25rem;
+  text-align: center;
+  color: var(--muted);
+}
+.maintenance-directory-footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: var(--type-small);
+}
+.lease-directory-heading,
+.lease-directory-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+}
+.lease-directory-heading {
+  margin-bottom: 1.5rem;
+}
+.lease-directory-heading h2,
+.lease-directory-heading .workflow-actions,
+.lease-directory-heading .workflow-actions-inline {
+  margin: 0;
+}
+.lease-directory-heading button {
+  margin: 0;
+  background: var(--accent);
+  color: var(--surface);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.lease-directory-filters {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+.lease-directory-status-filter {
+  display: grid;
+  gap: 0.5rem;
+  min-width: min(100%, 15rem);
+  font-weight: 600;
+}
+.lease-detail {
+  max-width: 76rem;
+}
+.lease-detail-heading,
+.lease-detail-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+}
+.lease-detail-heading {
+  justify-content: flex-start;
+}
+.lease-detail-heading h2,
+.lease-detail-section-heading h3 {
+  margin: 0;
+}
+.lease-detail-context {
+  margin-block: 0.75rem 1.5rem;
+}
+.lease-detail-context p {
+  margin-block: 0 0.5rem;
+  font-size: 1.1rem;
+}
+.lease-detail-actions .workflow-actions-inline {
+  gap: 0.5rem;
+}
+.lease-detail-actions .workflow-actions-inline > a,
+.lease-participants .workflow-actions-inline > a {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--control-border);
+  border-radius: 0.4375rem;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+.lease-detail-actions .workflow-actions-inline > a:hover,
+.lease-participants .workflow-actions-inline > a:hover {
+  background: var(--accent-soft);
+}
+.lease-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-block: 1.5rem;
+}
+.lease-detail-panel {
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}
+.lease-detail-panel > h3 {
+  margin-top: 0;
+}
+.lease-detail-facts,
+.lease-detail-panel .workflow-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: 1.25rem;
+  margin-block: 1.25rem;
+}
+.lease-detail-facts dt,
+.lease-detail-note,
+.lease-participants > li > div p {
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+.lease-detail-facts dd {
+  margin: 0.375rem 0 0;
+  font-weight: 600;
+}
+.lease-detail-note {
+  line-height: 1.6;
+}
+.lease-detail-section,
+.lease-detail > section:not(.lease-detail-context),
+.lease-detail > details {
+  padding-block: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+.lease-detail-section > h3,
+.lease-detail > section > h3 {
+  margin-top: 0;
+}
+.lease-detail > details > summary,
+.lease-detail-section > details > summary {
+  font-weight: 600;
+}
+.lease-participants {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.lease-participants > li {
+  padding-block: 1rem;
+}
+.lease-participants > li + li {
+  border-top: 1px solid var(--border);
+}
+.lease-participants > li > div p {
+  margin-block: 0.375rem 0;
+}
+.lease-detail-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 767px) {
+  .lease-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.lease-directory-filters select,
+.lease-directory-filters p {
+  margin: 0;
+}
+.lease-directory-count,
+.lease-directory-rental,
+.lease-directory-card dt {
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+.lease-directory-count {
+  margin: 1.5rem 0 1rem;
+}
+.lease-directory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr));
+  gap: 1rem;
+  padding: 0;
+  list-style: none;
+}
+.lease-directory-card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  height: 100%;
+  padding: 1.25rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.lease-directory-card:hover {
+  background: var(--row-hover);
+  border-color: var(--accent);
+}
+.lease-directory-card h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.lease-directory-card p,
+.lease-directory-card dl,
+.lease-directory-card dd {
+  margin: 0;
+}
+.lease-directory-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.lease-directory-card dd {
+  margin-top: 0.25rem;
+}
+.lease-directory-status {
+  padding: 0.25rem 0.625rem;
+  color: var(--muted);
+  background: var(--row);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  font-size: var(--type-small);
+}
+.lease-status-executed {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.lease-directory-action {
+  margin-top: auto;
+  color: var(--accent);
+  font-size: var(--type-small);
+}
+.lease-directory-empty {
+  padding: 2rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  text-align: center;
+}
+.lease-directory-empty h3 {
+  margin-top: 0;
+}
+.lease-directory-empty p {
+  color: var(--muted);
+}
+.lease-directory-pagination {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.provider-directory-footer,
+.lease-directory-footer {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: var(--type-small);
+}
+.provider-directory-heading,
+.provider-card-heading,
+.tenant-directory-heading,
+.tenant-directory-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+}
+.provider-directory-heading,
+.tenant-directory-heading {
+  margin-bottom: 1.5rem;
+}
+.provider-directory-heading h2,
+.provider-directory-heading .workflow-actions-inline,
+.tenant-directory-heading h2,
+.tenant-directory-heading .workflow-actions,
+.tenant-directory-heading .workflow-actions-inline {
+  margin: 0;
+}
+.provider-directory-heading button,
+.tenant-directory-heading button {
+  margin: 0;
+  background: var(--accent);
+  color: var(--surface);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.tenant-directory-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem 2rem;
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+.tenant-directory-search {
+  display: grid;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+.tenant-directory-browse {
+  justify-self: start;
+  margin: 0;
+}
+.tenant-directory-search input {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+.tenant-directory-search > span,
+.tenant-directory-count {
+  color: var(--muted);
+  font-size: var(--type-small);
+  font-weight: 400;
+}
+.tenant-directory-archived {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.tenant-directory-archived input {
+  margin: 0;
+}
+.tenant-directory-count {
+  margin: 1.5rem 0 1rem;
+}
+.provider-directory-grid,
+.tenant-directory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+  padding: 0;
+  list-style: none;
+}
+.provider-directory-card,
+.tenant-directory-card {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1.5rem;
+  height: 100%;
+  padding: 1.25rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.provider-directory-card:hover,
+.tenant-directory-card:hover {
+  background: var(--row-hover);
+  border-color: var(--accent);
+}
+.provider-directory-card h3,
+.tenant-directory-card h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.provider-card-action,
+.tenant-directory-card-action {
+  color: var(--accent);
+  font-size: var(--type-small);
+}
+.provider-card-badge,
+.tenant-directory-badge {
+  padding: 0.25rem 0.625rem;
+  color: var(--muted);
+  background: var(--row);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  font-size: var(--type-small);
+}
+.provider-directory-empty,
+.tenant-directory-empty {
+  margin-top: 1.5rem;
+  padding: 2rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  text-align: center;
+}
+.provider-directory-empty h3,
+.tenant-directory-empty h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+.provider-directory-empty p,
+.tenant-directory-empty p {
+  margin: 0;
+  color: var(--muted);
+}
+.tenant-directory-empty button {
+  margin-top: 1rem;
+}
+.provider-directory-pagination,
+.tenant-directory-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+.provider-directory-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+  padding: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+}
+.provider-directory-filters label {
+  display: grid;
+  align-content: start;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.provider-directory-filters input:not([type="checkbox"]),
+.provider-directory-filters select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+}
+.provider-directory-filters label:has(input[type="checkbox"]) {
+  display: flex;
+  align-items: center;
+}
+.provider-more-filters,
+.provider-filter-hint {
+  grid-column: 1 / -1;
+}
+.provider-filter-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.provider-clear-filters {
+  justify-self: start;
+  margin: 0;
+}
+.provider-filter-hint,
+.provider-directory-count,
+.provider-card-categories,
+.provider-directory-card dt {
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+.provider-directory-count {
+  margin: 1.5rem 0 1rem;
+}
+.provider-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.provider-preference-preferred {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.provider-preference-avoid,
+.provider-card-caution {
+  color: var(--warning);
+  background: var(--warning-soft);
+  border-color: var(--warning-border);
+}
+.provider-card-caution {
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  font-size: var(--type-small);
+}
+.provider-directory-card p,
+.provider-directory-card dl,
+.provider-directory-card dd {
+  margin: 0;
+}
+.provider-directory-card dl {
+  display: grid;
+  gap: 1rem;
+}
+.provider-directory-card dd {
+  margin-top: 0.25rem;
+}
+.provider-card-action {
+  margin-top: auto;
+}
+@media (max-width: 767px) {
+  .tenant-directory-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.person-detail {
+  max-width: 76rem;
+}
+.person-edit-command {
+  max-width: 48rem;
+}
+.person-edit-context {
+  margin-block: 1.5rem;
+  color: var(--muted);
+}
+.person-edit-context strong {
+  color: var(--text);
+}
+.person-edit-command .command-editor {
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.person-edit-command .command-editor h2 {
+  margin-top: 0;
+}
+.person-edit-command .command-editor > p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.person-edit-command form > fieldset {
+  border: 0;
+  padding: 0;
+  margin-block: 1.5rem;
+}
+.person-edit-command form > fieldset > legend {
+  position: absolute;
+  clip-path: inset(50%);
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.person-edit-command .workflow-field label {
+  display: grid;
+  gap: 0.5rem;
+}
+.person-edit-command .command-form-actions {
+  margin-top: 1.5rem;
+}
+.person-edit-command .command-success,
+.ownership-command .command-success {
+  padding: 0.75rem 1rem;
+  border-inline-start: 3px solid var(--accent);
+  border-radius: 0.375rem;
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.ownership-command:has(.ownership-confirmation) .property-edit-context > p {
+  display: none;
+}
+.ownership-confirmation .command-success {
+  margin: 0;
+}
+.ownership-confirmed-contacts {
+  display: grid;
+  gap: 0.875rem;
+  margin: 0;
+}
+.person-detail-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-block: 1.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.person-detail-kind {
+  margin: 0 0 0.25rem;
+  color: var(--muted);
+}
+.person-detail-heading h2 {
+  margin: 0 0 0.75rem;
+  overflow-wrap: anywhere;
+}
+.person-detail-badges,
+.person-detail .workflow-actions-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+}
+.person-detail-badges span {
+  padding: 0.2rem 0.625rem;
+  border-radius: 1rem;
+  background: var(--accent-soft);
+  font-size: var(--type-small);
+}
+.person-detail-heading .workflow-actions-inline button:last-child {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.person-detail-intro,
+.person-detail-empty {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.person-detail-panel {
+  padding: 1.25rem 1.5rem;
+  margin-block: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.person-detail-panel h3 {
+  margin: 0 0 1rem;
+}
+.person-contact-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.person-contact-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  padding-block: 1rem;
+}
+.person-contact-row + .person-contact-row {
+  border-top: 1px solid var(--border);
+}
+.person-contact-value {
+  flex: 1;
+  min-width: min(100%, 16rem);
+  overflow-wrap: anywhere;
+}
+.person-contact-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+.person-contact-label span,
+.person-contact-value small {
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+.person-contact-value p,
+.person-detail-notes {
+  white-space: pre-line;
+  margin-block: 0.375rem 0;
+}
+.person-contact-row button {
+  margin: 0;
+  padding: 0.375rem 0.625rem;
+  font-size: var(--type-small);
+  background: transparent;
+}
+.person-contact-row button:last-child {
+  color: var(--muted);
+}
+.person-contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+.person-contact-label .person-contact-primary {
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.125rem 0.5rem;
+}
+.person-archived-contacts,
+.person-detail-history,
+.person-record-details {
+  padding-top: 1rem;
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.person-detail-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1rem;
+}
+.person-detail-facts dt {
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+.person-detail-facts dd {
+  margin: 0.375rem 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.ownership-selected-name,
+.ownership-search-results li > div {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ownership-selected span,
+.ownership-search-results span {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+.ownership-selected button,
+.ownership-add-heading button {
+  background: transparent;
+  color: var(--muted);
+}
+.ownership-add {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--row);
+}
+.ownership-add-heading {
+  justify-content: space-between;
+}
+.ownership-add-heading h3 {
+  margin: 0;
+}
+.ownership-add-actions {
+  margin-top: 1rem;
+}
+.owner-contact-details,
+.owner-contact-fields {
+  flex-basis: 100%;
+  min-width: 0;
+}
+.owner-contact-details dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 0.875rem;
+  margin-block: 0.5rem;
+}
+.owner-contact-details dt {
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+.owner-contact-details dd {
+  margin: 0.25rem 0 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.owner-contact-fields {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin-top: 1rem;
+  padding: 1rem 0 0;
+}
+.owner-contact-fields label {
+  display: grid;
+  gap: 0.5rem;
+}
+.owner-contact-entry {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  align-items: end;
+  gap: 0.75rem;
+  margin-block: 0.75rem;
+}
+.owner-contact-entry button {
+  justify-self: start;
+}
+.owner-contact-add-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-block: 1rem;
 }
 .space-status-single-form .command-editor form > fieldset {
   display: block;
@@ -1812,7 +2947,7 @@ a.directory-coverage-card:focus-visible {
 .space-archive-notice p:last-child {
   margin-bottom: 0;
 }
-.space-archive-command .command-editor form > button[type="submit"] {
+.space-archive-command .command-form-actions button[type="submit"] {
   background: var(--warning-soft);
   border-color: var(--warning-border);
 }

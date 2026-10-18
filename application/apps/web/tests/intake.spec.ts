@@ -23,7 +23,12 @@ async function input(page: Page, body: string) {
   await page.getByLabel("Occurred at utc (required)", { exact: true }).fill(occurred);
 }
 async function save(page: Page, action: string) {
-  await page.getByRole("button", { name: `Save ${action}`, exact: true }).click();
+  await test.step(action, async () => {
+    await page
+      .getByRole("group", { name: "Form actions", exact: true })
+      .locator('button[type="submit"]')
+      .click();
+  });
   await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
   await expect(
     page.getByText("This is the original committed response.", { exact: true }),
@@ -56,7 +61,7 @@ test("manual source admission resumes a saved draft and reconciles a lost respon
     expect(response.ok()).toBe(true);
     await route.abort("failed");
   });
-  await page.getByRole("button", { name: "Save retain source", exact: true }).click();
+  await page.getByRole("button", { name: "Retain source", exact: true }).click();
   await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
   await page.goto("/settings/recovery");
   await page.getByRole("link", { name: "Resume intake.source.admit", exact: true }).click();
@@ -230,7 +235,7 @@ test("a stale correction preserves edits and requires review of current source e
     },
   });
   expect(concurrent.ok(), await concurrent.text()).toBe(true);
-  await page.getByRole("button", { name: "Save correct source", exact: true }).click();
+  await page.getByRole("button", { name: "Save source correction", exact: true }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByLabel("Body (required)")).toHaveValue("My retained correction");
   await page.getByRole("button", { name: "Review current source", exact: true }).click();

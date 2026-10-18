@@ -16,8 +16,14 @@ from app.platform.metadata_search import SearchTerm
 
 
 @dataclass(frozen=True)
+class TenantBrowse:
+    include_archived: bool = False
+    text: str = ""
+
+
+@dataclass(frozen=True)
 class SearchQuery:
-    term: SearchTerm
+    term: SearchTerm | TenantBrowse
     limit: int = 10
     group: str | None = None
 
@@ -41,13 +47,22 @@ class OperatorSearchService:
         self.unit_of_work, self.runtime, self.now = unit_of_work, runtime, now
 
     def search(self, text, *, include_archived=False, limit=10, group=None, cursor=None):
-        identity = self.runtime()
-        if identity.state != "ready":
-            raise OperatorUnavailable("Open and validate the workspace before this operation.")
         try:
             query = SearchQuery(SearchTerm(text, include_archived), limit, group)
         except ValueError as error:
             raise OperatorError(str(error)) from error
+        return self._read(query, text, cursor)
+
+    def browse_tenants(self, *, include_archived=False, limit=20, cursor=None):
+        if type(include_archived) is not bool:
+            raise OperatorError("includeArchived must be a boolean.")
+        return self._read(SearchQuery(TenantBrowse(include_archived), limit, "tenants"), "", cursor)
+
+    def _read(self, query, text, cursor):
+        group, limit = query.group, query.limit
+        identity = self.runtime()
+        if identity.state != "ready":
+            raise OperatorUnavailable("Open and validate the workspace before this operation.")
         if cursor and group is None:
             raise OperatorError("A search continuation requires its group.")
         instant = self.now()
@@ -88,7 +103,7 @@ class OperatorSearchService:
                 "query": {
                     "q": text,
                     "normalizedQ": query.term.text,
-                    "includeArchived": include_archived,
+                    "includeArchived": query.term.include_archived,
                     "group": group,
                     "limit": limit,
                 },
@@ -112,7 +127,7 @@ def _group(tx, source, context):
         "sourceKind": source.source_kind,
         "asOf": window.as_of.isoformat(),
         "viewAll": {
-            "kind": "metadata_search",
+            "kind": "tenant_browse" if isinstance(query.term, TenantBrowse) else "metadata_search",
             "group": source.kind,
             "q": query.term.text,
             "includeArchived": query.term.include_archived,

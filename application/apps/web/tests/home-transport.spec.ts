@@ -126,7 +126,6 @@ test("scope changes cancel old reads and discard a late summary", async ({ page,
     await expect.poll(() => oldStarted).toBe(true);
     await page.getByRole("button", { name: "Filters", exact: true }).click();
     await page.getByLabel("Property ID", { exact: false }).fill(second.id);
-    await page.getByRole("button", { name: "Apply filters" }).click();
     await expect.poll(() => latestCapture).not.toBe("");
     const summary = page.getByRole("region", { name: "Recorded money", exact: true });
     await expect(summary.locator(".home-capture time")).toHaveAttribute("datetime", latestCapture);
@@ -197,12 +196,11 @@ test("money and horizon changes restart only full Home while retaining live capt
   await page.getByRole("button", { name: "Filters", exact: true }).click();
   await page.getByLabel("Money from", { exact: true }).fill("2026-01-01");
   await page.getByLabel("Money through", { exact: true }).fill("2026-01-31");
-  await page.getByLabel("Upcoming horizon").selectOption("30");
   const refreshed = page.waitForResponse((response) => {
     const url = new URL(response.url());
     return url.pathname === "/api/operator/home" && url.searchParams.get("horizonDays") === "30";
   });
-  await page.getByRole("button", { name: "Apply filters" }).click();
+  await page.getByLabel("Upcoming horizon").selectOption("30");
   expect((await refreshed).ok()).toBe(true);
   await expect(page).toHaveURL(/horizonDays=30.*fromOn=2026-01-01.*throughOn=2026-01-31/);
   await expect(

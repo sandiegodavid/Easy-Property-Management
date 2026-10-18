@@ -125,6 +125,43 @@ def test_bounded_party_selection_preserves_unicode_paging_and_archive_context(id
         assert response.json()["items"][0]["id"] == created[1]["id"]
 
 
+def test_batched_names_are_bounded_and_exclude_contact_details(identities):
+    _, service, _ = identities
+    item = create(service)
+    engine = service.party_reads.operations.engine
+    statements = []
+
+    def count(_connection, _cursor, sql, *_args):
+        if sql.lstrip().upper().startswith("SELECT"):
+            statements.append(sql)
+
+    event.listen(engine, "before_cursor_execute", count)
+    try:
+        assert service.names([item["id"], item["id"], str(uuid4())]) == [
+            {"id": item["id"], "displayName": item["displayName"]}
+        ]
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+    assert len(statements) <= 1
+    for ids in ([], [str(uuid4())] * 101, ["bad"], [None], "not-a-list"):
+        with pytest.raises(PartyValidationError):
+            service.names(ids)
+    app = FastAPI()
+    app.include_router(
+        build_router(
+            service,
+            PartyContactService(service.unit_of_work),
+            SimpleNamespace(ready=True, error=None, can_write=True),
+        )
+    )
+    with TestClient(app) as client:
+        response = client.get("/api/parties/names", params={"ids": item["id"]})
+        assert response.status_code == 200, response.text
+        assert response.json() == [{"id": item["id"], "displayName": item["displayName"]}]
+        for query in ([], [("ids", "bad")], [("ids", str(uuid4()))] * 101):
+            assert client.get("/api/parties/names", params=query).status_code == 422
+
+
 def test_original_receipts_replay_after_later_changes_and_recover(identities):
     workspace, service, _ = identities
     key = str(uuid4())

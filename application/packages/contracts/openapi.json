@@ -6547,6 +6547,17 @@
             ],
             "title": "Extension"
           },
+          "isPrimary": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isprimary"
+          },
           "label": {
             "anyOf": [
               {
@@ -6562,13 +6573,14 @@
           "methodKind": {
             "enum": [
               "email",
-              "phone"
+              "phone",
+              "mailing_address"
             ],
             "title": "Methodkind",
             "type": "string"
           },
           "value": {
-            "maxLength": 320,
+            "maxLength": 1000,
             "minLength": 1,
             "title": "Value",
             "type": "string"
@@ -6620,6 +6632,10 @@
             "title": "Id",
             "type": "string"
           },
+          "isPrimary": {
+            "title": "Isprimary",
+            "type": "boolean"
+          },
           "label": {
             "anyOf": [
               {
@@ -6634,7 +6650,8 @@
           "methodKind": {
             "enum": [
               "email",
-              "phone"
+              "phone",
+              "mailing_address"
             ],
             "title": "Methodkind",
             "type": "string"
@@ -6662,6 +6679,7 @@
           "partyId",
           "methodKind",
           "displayValue",
+          "isPrimary",
           "extension",
           "label",
           "status",
@@ -6697,6 +6715,17 @@
             "title": "Idempotencykey",
             "type": "string"
           },
+          "isPrimary": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isprimary"
+          },
           "label": {
             "anyOf": [
               {
@@ -6712,13 +6741,14 @@
           "methodKind": {
             "enum": [
               "email",
-              "phone"
+              "phone",
+              "mailing_address"
             ],
             "title": "Methodkind",
             "type": "string"
           },
           "value": {
-            "maxLength": 320,
+            "maxLength": 1000,
             "minLength": 1,
             "title": "Value",
             "type": "string"
@@ -6773,6 +6803,10 @@
             "title": "Id",
             "type": "string"
           },
+          "isPrimary": {
+            "title": "Isprimary",
+            "type": "boolean"
+          },
           "label": {
             "anyOf": [
               {
@@ -6787,7 +6821,8 @@
           "methodKind": {
             "enum": [
               "email",
-              "phone"
+              "phone",
+              "mailing_address"
             ],
             "title": "Methodkind",
             "type": "string"
@@ -6826,6 +6861,7 @@
           "partyId",
           "methodKind",
           "displayValue",
+          "isPrimary",
           "extension",
           "label",
           "status",
@@ -6853,6 +6889,17 @@
             ],
             "title": "Extension"
           },
+          "isPrimary": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isprimary"
+          },
           "label": {
             "anyOf": [
               {
@@ -6868,13 +6915,14 @@
           "methodKind": {
             "enum": [
               "email",
-              "phone"
+              "phone",
+              "mailing_address"
             ],
             "title": "Methodkind",
             "type": "string"
           },
           "value": {
-            "maxLength": 320,
+            "maxLength": 1000,
             "minLength": 1,
             "title": "Value",
             "type": "string"
@@ -18196,6 +18244,40 @@
             "title": "Leaserevision",
             "type": "integer"
           },
+          "propertyId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Propertyid"
+          },
+          "propertyName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Propertyname"
+          },
+          "rentalName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rentalname"
+          },
           "spaceId": {
             "format": "uuid",
             "title": "Spaceid",
@@ -18216,6 +18298,9 @@
         "required": [
           "id",
           "spaceId",
+          "propertyId",
+          "propertyName",
+          "rentalName",
           "leaseKind",
           "status",
           "contractStartsOn",
@@ -21418,6 +21503,67 @@
         "title": "OwnerCard",
         "type": "object"
       },
+      "OwnerContactRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "extension": {
+            "anyOf": [
+              {
+                "maxLength": 6,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extension"
+          },
+          "isPrimary": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isprimary"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "methodKind": {
+            "enum": [
+              "email",
+              "phone",
+              "mailing_address"
+            ],
+            "title": "Methodkind",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "methodKind",
+          "value"
+        ],
+        "title": "OwnerContactRequest",
+        "type": "object"
+      },
       "OwnerDirectoryPage": {
         "additionalProperties": false,
         "properties": {
@@ -23484,6 +23630,26 @@
         "title": "PartyMutationResponse",
         "type": "object"
       },
+      "PartyNameResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "title": "Displayname",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "displayName"
+        ],
+        "title": "PartyNameResponse",
+        "type": "object"
+      },
       "PartyPatchRequest": {
         "additionalProperties": false,
         "properties": {
@@ -23760,7 +23926,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 8,
+            "maxItems": 9,
             "title": "Destinationorder",
             "type": "array"
           },
@@ -23773,7 +23939,7 @@
             "items": {
               "type": "string"
             },
-            "maxItems": 6,
+            "maxItems": 7,
             "title": "Hiddendestinationids",
             "type": "array"
           },
@@ -31274,7 +31440,10 @@
             "type": "boolean"
           },
           "kind": {
-            "const": "metadata_search",
+            "enum": [
+              "metadata_search",
+              "tenant_browse"
+            ],
             "title": "Kind",
             "type": "string"
           },
@@ -43787,6 +43956,10 @@
             "title": "Id",
             "type": "string"
           },
+          "isPrimary": {
+            "title": "Isprimary",
+            "type": "boolean"
+          },
           "label": {
             "anyOf": [
               {
@@ -43801,7 +43974,8 @@
           "methodKind": {
             "enum": [
               "email",
-              "phone"
+              "phone",
+              "mailing_address"
             ],
             "title": "Methodkind",
             "type": "string"
@@ -43830,6 +44004,7 @@
           "partyId",
           "methodKind",
           "displayValue",
+          "isPrimary",
           "extension",
           "label",
           "status",
@@ -43971,6 +44146,14 @@
       "app__modules__portfolio__api__router__PartyRequest": {
         "additionalProperties": false,
         "properties": {
+          "contacts": {
+            "items": {
+              "$ref": "#/components/schemas/OwnerContactRequest"
+            },
+            "maxItems": 100,
+            "title": "Contacts",
+            "type": "array"
+          },
           "displayName": {
             "maxLength": 240,
             "minLength": 1,
@@ -44792,6 +44975,10 @@
             "title": "Id",
             "type": "string"
           },
+          "isPrimary": {
+            "title": "Isprimary",
+            "type": "boolean"
+          },
           "label": {
             "anyOf": [
               {
@@ -44806,7 +44993,8 @@
           "methodKind": {
             "enum": [
               "email",
-              "phone"
+              "phone",
+              "mailing_address"
             ],
             "title": "Methodkind",
             "type": "string"
@@ -44833,6 +45021,7 @@
           "partyId",
           "methodKind",
           "displayValue",
+          "isPrimary",
           "extension",
           "label",
           "status",
@@ -58314,6 +58503,88 @@
         ]
       }
     },
+    "/api/operator/tenants": {
+      "get": {
+        "operationId": "browseOperatorTenants",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "includeArchived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Includearchived",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 4096,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Browse Tenants",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
     "/api/owner-concerns": {
       "get": {
         "operationId": "list_owner_concerns",
@@ -60061,6 +60332,68 @@
           }
         },
         "summary": "Create Party",
+        "tags": [
+          "parties"
+        ]
+      }
+    },
+    "/api/parties/names": {
+      "get": {
+        "operationId": "getPartyNames",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ids",
+            "required": true,
+            "schema": {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "maxItems": 100,
+              "minItems": 1,
+              "title": "Ids",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PartyNameResponse"
+                  },
+                  "title": "Response Getpartynames",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Names",
         "tags": [
           "parties"
         ]

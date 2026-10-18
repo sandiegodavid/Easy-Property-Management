@@ -1,3 +1,4 @@
+import { DynamicFilterForm } from "../shared/dynamic-filter-form";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -6,7 +7,7 @@ import type { components } from "@epm/contracts/generated";
 import { workflows, record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks, CommandLoader } from "./command";
-import { Facts, History, IdentityLookup, readResult } from "./reads";
+import { Facts, History, readResult } from "./reads";
 import { WorkJournal } from "./work-journal";
 import type { Choices } from "./fields";
 
@@ -276,33 +277,42 @@ export function ProviderWorkspace({ catalogOnly = false }: { catalogOnly?: boole
       </section>
     );
   }
+  if (!catalogOnly)
+    return (
+      <section className="provider-directory-page" aria-label="Providers">
+        <header className="provider-directory-heading">
+          <h2>Providers</h2>
+          <CommandLinks
+            keys={["provider.create"]}
+            title="Provider actions"
+            asButtons
+            collapsible={false}
+          />
+        </header>
+        {categories.error && (
+          <p role="alert">
+            Provider categories are unavailable.{" "}
+            <button type="button" onClick={() => void categories.refetch()}>
+              Retry categories
+            </button>
+          </p>
+        )}
+        <ProviderDirectory categories={categories.data ?? []} />
+        <footer className="provider-directory-footer">
+          <Link to="/settings/provider-categories">Manage provider categories</Link>
+        </footer>
+      </section>
+    );
   return (
     <>
-      <h2>{catalogOnly ? "Provider categories" : "Providers"}</h2>
+      <h2>Provider categories</h2>
       <p>
         Categories organize the directory and later recommendations. Services describe specific
         offerings or practice areas. Legal / Attorney is a category; legal engagements belong to
         their own workflow, not Maintenance assignments.
       </p>
-      {!catalogOnly && <Link to="/parties">Shared identities and tenants</Link>}
-      <CommandLinks
-        keys={
-          catalogOnly
-            ? ["provider.category.create"]
-            : ["provider.create", "provider.category.create"]
-        }
-        title={catalogOnly ? "Add category" : "Create Provider or category"}
-      />
-      {!catalogOnly && (
-        <details>
-          <summary>Use an existing identity</summary>
-          <IdentityLookup
-            onSelect={(id) => setParams({ workflow: "provider.designate", target: id })}
-          />
-        </details>
-      )}
-      {!catalogOnly && <ProviderDirectory categories={categories.data ?? []} />}
-      <details open={catalogOnly}>
+      <CommandLinks keys={["provider.category.create"]} title="Add category" />
+      <details open>
         <summary>Category administration</summary>
         {categories.isPending && <p role="status">Loading categories…</p>}
         {categories.error && <p role="alert">{categories.error.message}</p>}
@@ -450,11 +460,13 @@ function reputationUrl(row: unknown): string | undefined {
 function ProviderDirectory({ categories }: { categories: Category[] }) {
   const { scope } = useWorkspace();
   const [params, setParams] = useSearchParams();
+  const [reset, setReset] = useState(0);
   const archive = params.get("archiveState"),
     selection = params.get("selectionStatus"),
     categoryState = params.get("categoryState");
   const result = useQuery({
     queryKey: scope.key("provider-directory", params.toString()),
+    retry: false,
     queryFn: async ({ signal }) =>
       readResult(
         await api.GET("/api/providers", {
@@ -485,45 +497,42 @@ function ProviderDirectory({ categories }: { categories: Category[] }) {
   });
   return (
     <section aria-label="Provider directory">
-      <p>Service and service-area filters match complete labels.</p>
-      <form
-        className="directory-filters"
+      <DynamicFilterForm
+        key={reset}
+        className="provider-directory-filters"
+        aria-label="Provider filters"
+        onReset={(event) => {
+          event.preventDefault();
+          setParams({}, { replace: true, preventScrollReset: true, flushSync: true });
+          setReset((value) => value + 1);
+        }}
         onSubmit={(event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
           const next = new URLSearchParams();
+          if (params.has("propertyId")) next.set("propertyId", params.get("propertyId")!);
           for (const [key, value] of data)
             if (typeof value === "string" && value) next.set(key, value);
-          setParams(next);
+          setParams(next, { replace: true, preventScrollReset: true });
         }}
       >
         <label>
-          Search Providers
-          <input name="q" defaultValue={params.get("q") ?? ""} maxLength={240} />
+          Search providers
+          <input
+            type="search"
+            name="q"
+            placeholder="Search by name"
+            defaultValue={params.get("q") ?? ""}
+            maxLength={240}
+          />
         </label>
         <label>
-          Archive state
-          <select name="archiveState" defaultValue={archive ?? "active"}>
-            <option value="active">Active</option>
-            <option value="archived">Archived</option>
-            <option value="all">All</option>
-          </select>
-        </label>
-        <label>
-          Selection status
+          Preference
           <select name="selectionStatus" defaultValue={selection ?? ""}>
             <option value="">Any</option>
             <option value="preferred">Preferred</option>
-            <option value="neutral">Neutral</option>
+            <option value="neutral">No preference</option>
             <option value="avoid">Avoid</option>
-          </select>
-        </label>
-        <label>
-          Category state
-          <select name="categoryState" defaultValue={categoryState ?? ""}>
-            <option value="">Any</option>
-            <option value="categorized">Categorized</option>
-            <option value="uncategorized">Uncategorized</option>
           </select>
         </label>
         <label>
@@ -543,30 +552,62 @@ function ProviderDirectory({ categories }: { categories: Category[] }) {
               ))}
           </select>
         </label>
-        <label>
-          Service
-          <input name="service" defaultValue={params.get("service") ?? ""} maxLength={160} />
-        </label>
-        <label>
-          Service area
-          <input
-            name="serviceArea"
-            defaultValue={params.get("serviceArea") ?? ""}
-            maxLength={160}
-          />
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            name="hasReference"
-            value="true"
-            defaultChecked={params.get("hasReference") === "true"}
-          />
-          Has reference
-        </label>
-        <button>Apply Provider filters</button>
-      </form>
-      {result.isPending && <p role="status">Loading Providers…</p>}
+        <details className="provider-more-filters">
+          <summary>More filters</summary>
+          <div className="provider-filter-details">
+            <label>
+              Show providers
+              <select name="archiveState" defaultValue={archive ?? "active"}>
+                <option value="active">Active</option>
+                <option value="archived">Archived</option>
+                <option value="all">Active and archived</option>
+              </select>
+            </label>
+            <label>
+              Category assignment
+              <select name="categoryState" defaultValue={categoryState ?? ""}>
+                <option value="">Any</option>
+                <option value="categorized">Has categories</option>
+                <option value="uncategorized">No categories</option>
+              </select>
+            </label>
+            <label>
+              Service
+              <input name="service" defaultValue={params.get("service") ?? ""} maxLength={160} />
+            </label>
+            <label>
+              Service area
+              <input
+                name="serviceArea"
+                defaultValue={params.get("serviceArea") ?? ""}
+                maxLength={160}
+              />
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                name="hasReference"
+                value="true"
+                defaultChecked={params.get("hasReference") === "true"}
+              />
+              Has references
+            </label>
+            <p className="provider-filter-hint">
+              Service and service area must match a complete recorded label.
+            </p>
+          </div>
+        </details>
+        {params.has("propertyId") && (
+          <p className="provider-filter-hint">
+            Limited to providers with recorded work for the selected property. Clear filters to see
+            other providers.
+          </p>
+        )}
+        <button type="reset" className="provider-clear-filters">
+          Clear filters
+        </button>
+      </DynamicFilterForm>
+      {result.isPending && <p role="status">Loading providers…</p>}
       {result.error && (
         <p role="alert">
           {result.error.message}
@@ -574,55 +615,107 @@ function ProviderDirectory({ categories }: { categories: Category[] }) {
             onClick={() => {
               const next = new URLSearchParams(params);
               next.delete("cursor");
-              setParams(next);
-              void result.refetch();
+              setParams(next, { preventScrollReset: true });
+              if (!params.has("cursor")) void result.refetch();
             }}
           >
-            Refresh Providers
+            Retry loading providers
           </button>
         </p>
       )}
       {result.data && (
         <>
-          <p>Showing {result.data.items.length} Providers on this bounded page.</p>
-          {result.data.items.length === 0 && <p>No matching Providers on this page.</p>}
-          {result.data.items.map((item) => (
-            <article className="context-section" key={item.party.id}>
-              <h3>
+          {result.data.items.length > 0 && (
+            <p className="provider-directory-count">
+              {result.data.items.length} {result.data.items.length === 1 ? "provider" : "providers"}{" "}
+              on this page
+            </p>
+          )}
+          {result.data.items.length === 0 && (
+            <div className="provider-directory-empty">
+              <h3>No providers found</h3>
+              <p>Try another search or clear the filters.</p>
+            </div>
+          )}
+          <ul className="provider-directory-grid">
+            {result.data.items.map((item) => (
+              <li key={item.party.id}>
                 <Link
+                  className="provider-directory-card"
+                  aria-label={item.party.displayName}
                   state={{ returnTo: `/providers?${params}` }}
                   to={`/providers/${item.party.id}/details`}
                 >
-                  {item.party.displayName}
+                  <div className="provider-card-heading">
+                    <h3>{item.party.displayName}</h3>
+                    <div className="provider-card-badges">
+                      {item.profile.archivedAt && (
+                        <span className="provider-card-badge">Archived</span>
+                      )}
+                      {item.profile.selectionStatus !== "neutral" && (
+                        <span
+                          className={`provider-card-badge provider-preference-${item.profile.selectionStatus}`}
+                        >
+                          {item.profile.selectionStatus === "preferred" ? "Preferred" : "Avoid"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <p className="provider-card-categories">
+                    {item.categories.map((category) => category.displayName).join(" · ") ||
+                      "No categories assigned"}
+                  </p>
+                  {(item.services.length > 0 || item.serviceAreas.length > 0) && (
+                    <dl>
+                      {item.services.length > 0 && (
+                        <div>
+                          <dt>Services</dt>
+                          <dd>{item.services.map((service) => service.displayName).join(", ")}</dd>
+                        </div>
+                      )}
+                      {item.serviceAreas.length > 0 && (
+                        <div>
+                          <dt>Service areas</dt>
+                          <dd>{item.serviceAreas.map((area) => area.displayName).join(", ")}</dd>
+                        </div>
+                      )}
+                    </dl>
+                  )}
+                  {item.profile.selectionStatus === "avoid" && item.profile.selectionReason && (
+                    <p className="provider-card-caution">{item.profile.selectionReason}</p>
+                  )}
+                  <span className="provider-card-action">
+                    View provider <span aria-hidden="true">→</span>
+                  </span>
                 </Link>
-              </h3>
-              <Facts
-                value={item.profile}
-                fields={["selectionStatus", "selectionReason", "archivedAt"]}
-              />
-              <p>
-                {item.categories.map((category) => category.displayName).join(", ") ||
-                  "Uncategorized"}
-              </p>
-              <p>{item.services.map((service) => service.displayName).join(", ")}</p>
-              <p>{item.serviceAreas.map((area) => area.displayName).join(", ")}</p>
-              <p>
-                {item.workHistoryCount} manual work records · {item.referenceCount} references ·{" "}
-                {item.reputationLinkCount} reputation links
-              </p>
-            </article>
-          ))}
-          {result.data.nextCursor && (
-            <button
-              onClick={() => {
-                const next = new URLSearchParams(params);
-                next.set("cursor", result.data?.nextCursor ?? "");
-                setParams(next);
-              }}
-            >
-              Next Providers
-            </button>
-          )}
+              </li>
+            ))}
+          </ul>
+          <nav className="provider-directory-pagination" aria-label="Provider pages">
+            {params.has("cursor") && (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = new URLSearchParams(params);
+                  next.delete("cursor");
+                  setParams(next, { preventScrollReset: true });
+                }}
+              >
+                Back to first page
+              </button>
+            )}
+            {result.data.nextCursor && (
+              <button
+                onClick={() => {
+                  const next = new URLSearchParams(params);
+                  next.set("cursor", result.data?.nextCursor ?? "");
+                  setParams(next, { preventScrollReset: true });
+                }}
+              >
+                Next Providers
+              </button>
+            )}
+          </nav>
         </>
       )}
     </section>

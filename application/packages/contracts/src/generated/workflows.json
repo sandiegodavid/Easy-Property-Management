@@ -10398,6 +10398,72 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "contacts": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "extension": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 6,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "title": "Extension"
+                            },
+                            "isPrimary": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "title": "Isprimary"
+                            },
+                            "label": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 80,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "title": "Label"
+                            },
+                            "methodKind": {
+                              "enum": [
+                                "email",
+                                "phone",
+                                "mailing_address"
+                              ],
+                              "title": "Methodkind",
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 1000,
+                              "minLength": 1,
+                              "title": "Value",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "methodKind",
+                            "value"
+                          ],
+                          "title": "OwnerContactRequest",
+                          "type": "object"
+                        },
+                        "maxItems": 100,
+                        "title": "Contacts",
+                        "type": "array"
+                      },
                       "displayName": {
                         "maxLength": 240,
                         "minLength": 1,
@@ -10943,6 +11009,72 @@
                   {
                     "additionalProperties": false,
                     "properties": {
+                      "contacts": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "extension": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 6,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "title": "Extension"
+                            },
+                            "isPrimary": {
+                              "anyOf": [
+                                {
+                                  "type": "boolean"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "title": "Isprimary"
+                            },
+                            "label": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 80,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ],
+                              "title": "Label"
+                            },
+                            "methodKind": {
+                              "enum": [
+                                "email",
+                                "phone",
+                                "mailing_address"
+                              ],
+                              "title": "Methodkind",
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 1000,
+                              "minLength": 1,
+                              "title": "Value",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "methodKind",
+                            "value"
+                          ],
+                          "title": "OwnerContactRequest",
+                          "type": "object"
+                        },
+                        "maxItems": 100,
+                        "title": "Contacts",
+                        "type": "array"
+                      },
                       "displayName": {
                         "maxLength": 240,
                         "minLength": 1,
@@ -11953,6 +12085,17 @@
                 ],
                 "title": "Extension"
               },
+              "isPrimary": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Isprimary"
+              },
               "label": {
                 "anyOf": [
                   {
@@ -11968,13 +12111,14 @@
               "methodKind": {
                 "enum": [
                   "email",
-                  "phone"
+                  "phone",
+                  "mailing_address"
                 ],
                 "title": "Methodkind",
                 "type": "string"
               },
               "value": {
-                "maxLength": 320,
+                "maxLength": 1000,
                 "minLength": 1,
                 "title": "Value",
                 "type": "string"
@@ -12164,6 +12308,17 @@
           "title": "Idempotencykey",
           "type": "string"
         },
+        "isPrimary": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Isprimary"
+        },
         "label": {
           "anyOf": [
             {
@@ -12179,13 +12334,14 @@
         "methodKind": {
           "enum": [
             "email",
-            "phone"
+            "phone",
+            "mailing_address"
           ],
           "title": "Methodkind",
           "type": "string"
         },
         "value": {
-          "maxLength": 320,
+          "maxLength": 1000,
           "minLength": 1,
           "title": "Value",
           "type": "string"
@@ -12235,6 +12391,17 @@
           "title": "Idempotencykey",
           "type": "string"
         },
+        "isPrimary": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Isprimary"
+        },
         "label": {
           "anyOf": [
             {
@@ -12250,13 +12417,14 @@
         "methodKind": {
           "enum": [
             "email",
-            "phone"
+            "phone",
+            "mailing_address"
           ],
           "title": "Methodkind",
           "type": "string"
         },
         "value": {
-          "maxLength": 320,
+          "maxLength": 1000,
           "minLength": 1,
           "title": "Value",
           "type": "string"
@@ -12427,6 +12595,17 @@
                 ],
                 "title": "Extension"
               },
+              "isPrimary": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Isprimary"
+              },
               "label": {
                 "anyOf": [
                   {
@@ -12442,13 +12621,14 @@
               "methodKind": {
                 "enum": [
                   "email",
-                  "phone"
+                  "phone",
+                  "mailing_address"
                 ],
                 "title": "Methodkind",
                 "type": "string"
               },
               "value": {
-                "maxLength": 320,
+                "maxLength": 1000,
                 "minLength": 1,
                 "title": "Value",
                 "type": "string"
@@ -12727,6 +12907,17 @@
                 ],
                 "title": "Extension"
               },
+              "isPrimary": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Isprimary"
+              },
               "label": {
                 "anyOf": [
                   {
@@ -12742,13 +12933,14 @@
               "methodKind": {
                 "enum": [
                   "email",
-                  "phone"
+                  "phone",
+                  "mailing_address"
                 ],
                 "title": "Methodkind",
                 "type": "string"
               },
               "value": {
-                "maxLength": 320,
+                "maxLength": 1000,
                 "minLength": 1,
                 "title": "Value",
                 "type": "string"

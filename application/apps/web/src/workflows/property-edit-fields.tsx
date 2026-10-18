@@ -20,7 +20,7 @@ export function PropertyEditFields({
         { title: "Property name", fields: ["displayName"] },
         {
           title: "Address",
-          fields: ["addressLine1", "addressLine2", "city", "region", "postalCode", "countryCode"],
+          fields: ["addressLine1", "addressLine2", "city", "region", "postalCode"],
         },
         { title: "Notes", fields: ["notes"] },
       ].map((group) => (
@@ -40,7 +40,7 @@ export function PropertyEditFields({
             return (
               <div key={key} className="workflow-field">
                 <label>
-                  {label(key)}
+                  {key === "region" ? "State" : label(key)}
                   {creating && schema.required?.includes(key) && " (required)"}
                   {key === "notes" ? (
                     <textarea
@@ -64,9 +64,6 @@ export function PropertyEditFields({
               </div>
             );
           })}
-          {group.title === "Address" && (
-            <p className="property-edit-hint">Use a two-letter country code, such as US.</p>
-          )}
         </fieldset>
       ))}
     </div>

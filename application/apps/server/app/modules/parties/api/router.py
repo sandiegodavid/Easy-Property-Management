@@ -33,11 +33,17 @@ class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class PartyNameResponse(Contract):
+    id: UUID
+    displayName: str
+
+
 class ContactRequest(Contract):
-    methodKind: Literal["email", "phone"]
-    value: str = Field(min_length=1, max_length=320)
+    methodKind: Literal["email", "phone", "mailing_address"]
+    value: str = Field(min_length=1, max_length=1000)
     extension: str | None = Field(None, max_length=6)
     label: str | None = Field(None, max_length=80)
+    isPrimary: StrictBool | None = None
 
 
 class ReferenceResolution(Contract):
@@ -68,8 +74,9 @@ class ArchiveRequest(Contract):
 class ContactResponse(Contract):
     id: UUID
     partyId: UUID
-    methodKind: Literal["email", "phone"]
+    methodKind: Literal["email", "phone", "mailing_address"]
     displayValue: str
+    isPrimary: StrictBool
     extension: str | None
     label: str | None
     status: Literal["active", "archived"]
@@ -235,6 +242,11 @@ def build_router(
             ) from error
         except PartyValidationError as error:
             raise HTTPException(400, str(error)) from error
+
+    @router.get("/names", response_model=list[PartyNameResponse], operation_id="getPartyNames")
+    def names(ids: list[UUID] = Query(min_length=1, max_length=100)):
+        ready()
+        return invoke(lambda: identity.names([str(value) for value in ids]))
 
     @router.get("/selection", response_model=PartySelectionPage, operation_id="selectParties")
     def selection(
@@ -434,4 +446,6 @@ def build_router(
 
 
 def _command(data: ContactRequest) -> ContactMethodCommand:
-    return ContactMethodCommand(data.methodKind, data.value, data.extension, data.label)
+    return ContactMethodCommand(
+        data.methodKind, data.value, data.extension, data.label, data.isPrimary
+    )

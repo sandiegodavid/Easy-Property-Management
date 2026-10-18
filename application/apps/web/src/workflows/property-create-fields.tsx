@@ -1,8 +1,7 @@
-import { useState } from "react";
 import { fieldSchema, record, scalar, type RequestSchema } from "@epm/contracts/workflows";
-import { Fields, type Choice, type Choices } from "./fields";
-import { IdentityLookup } from "./reads";
+import { Fields, type Choices } from "./fields";
 import { PropertyEditFields } from "./property-edit-fields";
+import { OwnershipFields } from "./ownership-fields";
 
 function subset(schema: RequestSchema, keys: string[]): RequestSchema {
   return {
@@ -19,24 +18,18 @@ export function PropertyCreateFields({
   onChange,
   choices,
   disabled,
+  onAddingChange,
 }: {
   schema: RequestSchema;
   value: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
   choices: Choices;
   disabled: boolean;
+  onAddingChange: (pending: boolean) => void;
 }) {
-  const [identities, setIdentities] = useState<Choice[]>([]);
-  const owners = Array.isArray(value.ownerships) ? value.ownerships.map(record) : [];
   const rentals = Array.isArray(value.spaces) ? value.spaces.map(record) : [];
   const suites = value.inventoryLayout === "office_suites";
   const rentalSchema = fieldSchema(schema.properties?.spaces ?? {}).items ?? {};
-  const ownerSchema = fieldSchema(schema.properties?.ownerships ?? {}).items ?? {};
-  const replaceOwner = (index: number, next: Record<string, unknown>) =>
-    onChange({
-      ...value,
-      ownerships: owners.map((owner, position) => (position === index ? next : owner)),
-    });
   return (
     <>
       <PropertyEditFields
@@ -179,73 +172,14 @@ export function PropertyCreateFields({
           </details>
         )}
       </fieldset>
-      <fieldset className="property-create-section">
-        <legend>Ownership</legend>
-        <p className="property-edit-hint">
-          Choose You for your own property, another owner for a managed property, or add multiple
-          owners for co-ownership. Ownership does not set financial shares.
-        </p>
-        {owners.map((owner, index) => (
-          <fieldset key={index} className="property-create-child">
-            <legend>Owner {index + 1}</legend>
-            <label>
-              Owner
-              <select
-                disabled={disabled}
-                value={scalar(owner.ownerKind, "local_operator")}
-                onChange={(event) => replaceOwner(index, { ownerKind: event.target.value })}
-              >
-                <option value="local_operator">You</option>
-                <option value="client_owner">Another owner</option>
-              </select>
-            </label>
-            {owner.ownerKind === "client_owner" && (
-              <Fields
-                schema={subset(fieldSchema(ownerSchema), ["partyId", "inlineParty"])}
-                value={owner}
-                choices={{ ...choices, partyId: [...(choices.partyId ?? []), ...identities] }}
-                disabled={disabled}
-                onChange={(next) => replaceOwner(index, record(next))}
-              />
-            )}
-            {owners.length > 1 && (
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() =>
-                  onChange({
-                    ...value,
-                    ownerships: owners.filter((_, position) => position !== index),
-                  })
-                }
-              >
-                Remove owner {index + 1}
-              </button>
-            )}
-          </fieldset>
-        ))}
-        <button
-          type="button"
-          disabled={disabled || owners.length >= 100}
-          onClick={() =>
-            onChange({ ...value, ownerships: [...owners, { ownerKind: "client_owner" }] })
-          }
-        >
-          Add owner
-        </button>
-        <details className="property-create-advanced">
-          <summary>Find an existing owner identity</summary>
-          <IdentityLookup
-            embedded
-            onSelect={(id, name) =>
-              setIdentities((current) => [
-                ...current.filter((item) => item.id !== id),
-                { id, label: name },
-              ])
-            }
-          />
-        </details>
-      </fieldset>
+      <OwnershipFields
+        mode="create"
+        value={value}
+        onChange={onChange}
+        choices={choices}
+        disabled={disabled}
+        onAddingChange={onAddingChange}
+      />
     </>
   );
 }

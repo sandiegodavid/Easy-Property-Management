@@ -20,6 +20,7 @@ from app.modules.parties.application.service import (
     PartyValidationError,
     PartyPatchCommand,
     PartyNotFoundError,
+    PartyCreateCommand,
     SharedPartyFactory,
 )
 from app.modules.parties.infrastructure.unit_of_work import (
@@ -567,6 +568,30 @@ def test_contact_retained_history_rejects_tampered_owner_evidence(identities):
 
 def test_encrypted_backup_preserves_contacts_resolutions_and_receipts(identities, tmp_path):
     workspace, identity, recorder = identities
+    postal = identity.create(
+        PartyCreateCommand("individual", "Owner with postal address"),
+        expected_revision=0,
+        idempotency_key=str(uuid4()),
+        contacts=(
+            ContactMethodCommand("email", "postal@example.test"),
+            ContactMethodCommand("phone", "5035550123"),
+            ContactMethodCommand("mailing_address", "10 Oak Street\nPortland OR 97201\nUS"),
+            ContactMethodCommand("mailing_address", "20 Pine Street\nPortland OR 97201\nUS"),
+        ),
+    )
+    contact_service = PartyContactService(identity.unit_of_work)
+    address = [
+        item
+        for item in contact_service.list(postal["id"])
+        if item["methodKind"] == "mailing_address"
+    ][1]
+    contact_service.update(
+        postal["id"],
+        address["id"],
+        ContactMethodCommand("mailing_address", address["displayValue"], is_primary=True),
+        expected_revision=1,
+        idempotency_key=str(uuid4()),
+    )
     _, tenant, old, replacement = _tenant(identities)
     result = PartyContactService(identity.unit_of_work).archive(
         tenant["id"],

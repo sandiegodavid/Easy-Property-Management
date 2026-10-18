@@ -47,22 +47,43 @@ async function provider(request: APIRequestContext, name: string) {
   return (await result.json()) as Schema["ProviderMutationResponse"];
 }
 async function saved(page: Page, title: string) {
-  await page
-    .getByRole("button", {
-      name: title === "Create property" ? title : `Save ${title.toLowerCase()}`,
-      exact: true,
-    })
-    .click();
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await test.step(title, async () => {
+    await page
+      .getByRole("group", { name: "Form actions", exact: true })
+      .locator('button[type="submit"]')
+      .click();
+  });
+  if (title === "Create property") {
+    await expect(page).toHaveURL(/\/properties\/[^/]+\/overview$/);
+    return;
+  }
+  if (title === "Name" || title === "Add contact") {
+    await expect(
+      page.getByText(
+        title === "Name" ? "Name changed successfully." : "Contact details added successfully.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(page.getByRole("region", { name: "Committed result" })).toHaveCount(0);
+    await expect(page.getByText(/^Operation /)).toHaveCount(0);
+    await expect(page.getByText(/^Result record /)).toHaveCount(0);
+  } else {
+    await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  }
   if (!(await page.getByText("Draft saved · Command committed", { exact: true }).isVisible()))
     await page.getByText("Form status and recovery details", { exact: true }).click();
   await expect(page.getByText("Draft saved · Command committed", { exact: true })).toBeVisible();
 }
 
-test("progressive property creation commits through a registered form and links to setup", async ({
-  page,
-  request,
-}) => {
+test("progressive property creation opens the new property overview", async ({ page, request }) => {
+  const savedCountries: unknown[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "PUT" &&
+      /^\/api\/operator\/recovery\/[^/]+$/.test(new URL(request.url()).pathname)
+    )
+      savedCountries.push(record(record(request.postDataJSON()).payload).countryCode);
+  });
   await page.goto("/properties");
   await page.getByRole("button", { name: "Create property", exact: true }).click();
   await page
@@ -70,18 +91,23 @@ test("progressive property creation commits through a registered form and links 
     .fill("Slice50 progressive home");
   await page.getByLabel("Address line1 (required)").fill("20 Maple Street");
   await page.getByLabel("City (required)").fill("Portland");
-  await page.getByLabel("Country code (required)").fill("US");
-  await page.getByLabel("Region", { exact: true }).fill("OR");
+  await expect(page.getByLabel(/Country code/)).toHaveCount(0);
+  await page.getByLabel("State", { exact: true }).fill("OR");
   await page.getByLabel("Postal code", { exact: true }).fill("97201");
-  await saved(page, "Create property");
+  await expect(page.getByText("Form status and recovery details", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Create property", exact: true }).click();
+  await expect(page).toHaveURL(/\/properties\/[^/]+\/overview$/);
+  expect(savedCountries.length).toBeGreaterThan(0);
+  expect(savedCountries.every((country) => country === "US")).toBe(true);
   const rows = await request.get("/api/properties");
   const result =
     (await rows.json()) as Schema["app__modules__portfolio__api__router__PropertyPageResponse"];
   const created = result.items.find((item) => item.displayName === "Slice50 progressive home")!;
+  expect(created.countryCode).toBe("US");
   expect(created.propertyRevision).toBe(1);
   expect(created.spaces).toHaveLength(1);
-  await page.getByRole("link", { name: "Return to current record" }).click();
-  await page.getByRole("link", { name: "Slice50 progressive home", exact: true }).click();
+  await expect(page).toHaveURL(`/properties/${created.id}/overview`);
+  await expect(page.getByRole("region", { name: "Unfinished form", exact: true })).toHaveCount(0);
   await page.getByRole("link", { name: "Property setup", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Property information", exact: true }),
@@ -117,24 +143,73 @@ test("manual occupancy uses the independent Space revision and rejects foreign c
     `/properties?workflow=portfolio.space.patch&target=${item.id}&child=${other.spaces[0].id}`,
   );
   await expect(page.getByRole("alert")).toContainText("does not belong");
-  await expect(page.getByRole("button", { name: /Save edit space/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Save space changes/ })).toHaveCount(0);
 });
 
 test("identity contacts and Tenant preferences use their displayed source revisions", async ({
   page,
   request,
-}) => {
+}, testInfo) => {
   const identity = await party(request, "Slice50 tenant identity");
   await page.goto(`/parties?workflow=party.contact.add&target=${identity.id}`);
-  await page.getByLabel("Method kind (required)").selectOption("email");
-  await page.getByLabel("Value (required)").fill("tenant50@example.com");
+  const back = page.getByRole("link", { name: `← Back to ${identity.displayName}`, exact: true });
+  await expect(back).toHaveAttribute("href", `/parties?identity=${identity.id}`);
+  await back.click();
+  await expect(
+    page.getByRole("heading", { name: identity.displayName, exact: true }),
+  ).toBeVisible();
+  await page.goto(`/parties?workflow=party.contact.add&target=${identity.id}`);
+  const editor = page.getByRole("region", { name: "Add contact details", exact: true });
+  await expect(editor.getByRole("heading", { name: "Add contact details" })).toBeVisible();
+  await expect(page.locator(".command-form-actions button")).toHaveText([
+    "Add contact details",
+    "Save unfinished form",
+  ]);
+  await expect(page.getByRole("link", { name: "Return to current record" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Check latest contact record" })).toBeHidden();
+  await expect(page.getByText("Identity and contact changes use", { exact: false })).toHaveCount(0);
+  await expect(page.getByLabel("Contact type (required)")).toHaveValue("email");
+  await expect(editor.getByRole("checkbox")).toHaveCount(1);
+  await expect(editor.getByLabel("Make primary for this contact type")).not.toBeChecked();
+  await expect(editor.locator(".workflow-field > label")).toHaveText([
+    /Contact type \(required\)/,
+    "Email (required)",
+    "Label",
+    "Make primary for this contact type",
+  ]);
+  await page.getByLabel("Contact type (required)").selectOption("phone");
+  await expect(page.getByLabel("Phone number (required)")).toBeVisible();
+  await expect(page.getByLabel("Extension", { exact: true })).toBeVisible();
+  await page.getByLabel("Contact type (required)").selectOption("mailing_address");
+  await expect(page.getByLabel("Mailing address (required)")).toHaveJSProperty(
+    "tagName",
+    "TEXTAREA",
+  );
+  await expect(page.getByLabel("Extension", { exact: true })).toHaveCount(0);
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((appearance) => {
+      document.documentElement.dataset.theme = appearance;
+    }, theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+      await editor.screenshot({ path: testInfo.outputPath(`contact-form-${theme}-${width}.png`) });
+    }
+  }
+  await page.getByLabel("Contact type (required)").selectOption("email");
+  await page.getByLabel("Email (required)").fill("tenant50@example.com");
   await saved(page, "Add contact");
-  await page.goto(`/parties?workflow=tenant.designate&target=${identity.id}`);
+  await page.goto(`/tenants?workflow=tenant.designate&target=${identity.id}`);
   await saved(page, "Use identity as tenant");
-  await page.goto(`/parties?identity=${identity.id}`);
+  await page.goto(`/tenants?identity=${identity.id}`);
   await expect(page.getByRole("heading", { name: "Tenant preferences" })).toBeVisible();
   await page.getByText("Tenant actions", { exact: true }).click();
   await page.getByRole("link", { name: "Edit tenant preferences" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`/tenants\\?workflow=tenant.profile.patch&target=${identity.id}`),
+  );
   await page.getByLabel("Do not contact", { exact: true }).check();
   await saved(page, "Edit tenant preferences");
   const tenant = await request.get(`/api/tenants/${identity.id}`);
@@ -142,6 +217,316 @@ test("identity contacts and Tenant preferences use their displayed source revisi
   expect(result.profile.doNotContact).toBe(true);
   expect(result.profile.revision).toBe(2);
   expect(result.partyRevision).toBe(2);
+});
+
+test("shared contacts allow multiple values per type, switch primary and retain removed history", async ({
+  page,
+  request,
+}) => {
+  const identity = await party(request, "Shared primary contacts");
+  const addUrl = `/parties?workflow=party.contact.add&target=${identity.id}`;
+  const values = [
+    { type: "email", field: "Email", entries: ["first@example.com", "second@example.com"] },
+    { type: "phone", field: "Phone number", entries: ["+15035550101", "+15035550102"] },
+    {
+      type: "mailing_address",
+      field: "Mailing address",
+      entries: ["1 Maple Street\nPortland, OR 97201", "2 Maple Street\nPortland, OR 97201"],
+    },
+  ];
+  for (const { type, field, entries } of values) {
+    for (const [index, value] of entries.entries()) {
+      await page.goto(addUrl);
+      await page.getByLabel("Contact type (required)").selectOption(type);
+      await page.getByLabel(`${field} (required)`, { exact: true }).fill(value);
+      await page.getByLabel("Label", { exact: true }).fill(`${type} ${index + 1}`);
+      await saved(page, "Add contact");
+      const row = page.locator(".person-contact-row").filter({ hasText: `${type} ${index + 1}` });
+      await expect(row).toContainText(value);
+      await expect(row.getByText("Primary", { exact: true })).toHaveCount(index === 0 ? 1 : 0);
+    }
+  }
+  for (const { type } of values) {
+    await page.goto(addUrl);
+    const first = page.locator(".person-contact-row").filter({ hasText: `${type} 1` });
+    const second = page.locator(".person-contact-row").filter({ hasText: `${type} 2` });
+    // Primary removal must use the archive command and fail until another is selected.
+    await first.getByRole("button", { name: "Remove", exact: true }).click();
+    await expect(
+      page.getByRole("link", { name: `← Back to ${identity.displayName}`, exact: true }),
+    ).toHaveAttribute("href", `/parties?identity=${identity.id}`);
+    await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
+    await page.getByRole("button", { name: "Remove contact details", exact: true }).click();
+    await expect(page.getByRole("alert")).toBeVisible();
+    await page.goto(addUrl);
+    await second.getByRole("link", { name: "Make primary", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Edit contact details", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Make primary for this contact type")).toBeChecked();
+    await page.getByRole("button", { name: "Save contact details", exact: true }).click();
+    await expect(
+      page.getByText("Contact details updated successfully.", { exact: true }),
+    ).toBeVisible();
+    await page.goto(addUrl);
+    await expect(second.getByText("Primary", { exact: true })).toBeVisible();
+    await expect(first.getByText("Primary", { exact: true })).toHaveCount(0);
+    await first.getByRole("button", { name: "Edit", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Edit contact details", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Label", { exact: true })).toHaveValue(`${type} 1`);
+    await page.getByLabel("Label", { exact: true }).fill(`${type} edited`);
+    await expect(page.getByLabel("Label", { exact: true })).toHaveValue(`${type} edited`);
+    await page.getByRole("button", { name: "Save contact details", exact: true }).click();
+    await expect(
+      page.getByText("Contact details updated successfully.", { exact: true }),
+    ).toBeVisible();
+    await page.goto(addUrl);
+    await page
+      .locator(".person-contact-row")
+      .filter({ hasText: `${type} edited` })
+      .getByRole("button", { name: "Remove", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Add resolve contact references entry" }),
+    ).toBeVisible();
+    await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
+    await page.getByRole("button", { name: "Remove contact details", exact: true }).click();
+    await expect(
+      page.getByText("Contact details removed successfully. History retained.", { exact: true }),
+    ).toBeVisible();
+    await page.goto(addUrl);
+    const list = page.getByRole("region", { name: "Contact details", exact: true });
+    await expect(
+      list.locator(":scope > ul > li").filter({ hasText: `${type} edited` }),
+    ).toHaveCount(0);
+    await list.getByText(/^Archived contacts/).click();
+    await expect(
+      list
+        .locator("details li")
+        .filter({ hasText: `${type} edited` })
+        .getByRole("button", { name: "Restore", exact: true }),
+    ).toBeVisible();
+    // The final active contact of a type can be removed even though it is primary.
+    await second.getByRole("button", { name: "Remove", exact: true }).click();
+    await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
+    await page.getByRole("button", { name: "Remove contact details", exact: true }).click();
+    await expect(
+      page.getByText("Contact details removed successfully. History retained.", { exact: true }),
+    ).toBeVisible();
+  }
+});
+
+test("shared contact primary edits recover interrupted results and preserve stale input", async ({
+  page,
+  request,
+}) => {
+  const identity = await party(request, "Recoverable primary contacts");
+  const addUrl = `/parties?workflow=party.contact.add&target=${identity.id}`;
+  for (const value of ["original@example.com", "replacement@example.com"]) {
+    await page.goto(addUrl);
+    await page.getByLabel("Email (required)").fill(value);
+    await saved(page, "Add contact");
+  }
+  await page.goto(addUrl);
+  await page
+    .locator(".person-contact-row")
+    .filter({ hasText: "replacement@example.com" })
+    .getByRole("link", { name: "Make primary", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Edit contact details", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Make primary for this contact type")).toBeChecked();
+  await page.getByLabel("Label", { exact: true }).fill("Retained primary edit");
+  await expect(page.getByLabel("Label", { exact: true })).toHaveValue("Retained primary edit");
+  await page.getByRole("button", { name: "Save unfinished form", exact: true }).click();
+  await page.getByText("Form status and recovery details", { exact: true }).click();
+  await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
+  const changed = await request.patch(`/api/parties/${identity.id}`, {
+    data: {
+      displayName: "Newer shared name",
+      expectedRevision: 3,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(changed.ok(), await changed.text()).toBe(true);
+  let writes = 0;
+  await page.route(`**/api/parties/${identity.id}/contact-methods/*`, async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    writes++;
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    expect(body.isPrimary).toBe(true);
+    expect(body.value).toBe("replacement@example.com");
+    expect(body.methodKind).toBe("email");
+    expect(body.label).toBe("Retained primary edit");
+    const response = await route.fetch();
+    expect(response.ok()).toBe(true);
+    await route.abort("failed");
+  });
+  await page.getByRole("button", { name: "Save contact details", exact: true }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  expect(writes).toBe(0);
+  await expect(page.getByLabel("Label", { exact: true })).toHaveValue("Retained primary edit");
+  await expect(page.getByLabel("Make primary for this contact type")).toBeChecked();
+  await page.getByRole("button", { name: "Check latest contact record", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Current source review" })).toContainText(
+    "Newer shared name",
+  );
+  await page
+    .getByRole("button", { name: "Keep my edits with this reviewed revision", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Save contact details", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Check original result", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await expect(
+    page.getByText("Contact details updated successfully.", { exact: true }),
+  ).toBeVisible();
+  expect(writes).toBe(1);
+  await page.goto(addUrl);
+  const active = page
+    .getByRole("region", { name: "Contact details", exact: true })
+    .locator(":scope > ul > li");
+  await expect(active).toHaveCount(2);
+  await expect(
+    active.filter({ hasText: "Retained primary edit" }).getByText("Primary", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    active.filter({ hasText: "original@example.com" }).getByText("Primary", { exact: true }),
+  ).toHaveCount(0);
+});
+
+test("provider directory presents services and preferences without identity or catalog clutter", async ({
+  page,
+  request,
+}, testInfo) => {
+  const term = `Directory ${crypto.randomUUID().slice(0, 8)}`;
+  const created = await provider(request, `Harbor Services ${term}`);
+  const other = await provider(request, `Cedar Repairs ${term}`);
+  const service = await request.post(`/api/providers/${created.party.id}/services`, {
+    data: {
+      displayName: "Plumbing repair",
+      expectedRevision: created.revision,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(service.ok(), await service.text()).toBe(true);
+  const current = (await service.json()) as Schema["ServiceMutationResponse"];
+  const preferred = await request.patch(`/api/providers/${created.party.id}`, {
+    data: {
+      selectionStatus: "preferred",
+      expectedRevision: current.revision,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(preferred.ok(), await preferred.text()).toBe(true);
+  const avoided = await request.patch(`/api/providers/${other.party.id}`, {
+    data: {
+      selectionStatus: "avoid",
+      selectionReason: "Review previous missed appointment before booking",
+      expectedRevision: other.revision,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(avoided.ok(), await avoided.text()).toBe(true);
+  const reads: string[] = [];
+  const extraReads: string[] = [];
+  page.on("request", (entry) => {
+    const path = new URL(entry.url()).pathname;
+    if (path === "/api/providers") reads.push(entry.url());
+    if (path.startsWith("/api/providers/") || path.startsWith("/api/audit/")) extraReads.push(path);
+  });
+  await page.goto(`/providers?q=${encodeURIComponent(term)}`);
+  const directory = page.getByRole("region", { name: "Providers", exact: true });
+  await expect(
+    directory.getByRole("button", { name: "Create provider", exact: true }),
+  ).toBeVisible();
+  await expect(directory.getByText("2 providers on this page", { exact: true })).toBeVisible();
+  const card = directory.getByRole("link", { name: created.party.displayName, exact: true });
+  await expect(card).toContainText("Plumbing repair");
+  await expect(card).toContainText("Preferred");
+  await expect(
+    directory.getByRole("link", { name: other.party.displayName, exact: true }),
+  ).toContainText("Review previous missed appointment before booking");
+  await expect(
+    directory.locator("p").filter({
+      hasText:
+        /Legal \/ Attorney|Shared identities|Use an existing identity|Category administration|manual work records/,
+    }),
+  ).toHaveCount(0);
+  expect(reads).toHaveLength(1);
+  expect(new URL(reads[0]).searchParams.get("limit")).toBe("50");
+  expect(extraReads).toHaveLength(0);
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset.theme = value;
+    }, theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await directory.screenshot({ path: testInfo.outputPath(`providers-${theme}-${width}.png`) });
+    }
+    await page.evaluate(axe.source);
+    const violations = await page.evaluate(async () =>
+      (
+        await window.axe.run(".provider-directory-page", {
+          runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+        })
+      ).violations.map((item) => item.id),
+    );
+    expect(violations).toEqual([]);
+  }
+  await directory.getByRole("combobox", { name: "Preference", exact: true }).selectOption("avoid");
+  await expect(directory.locator(".provider-directory-card")).toHaveCount(1);
+  await directory
+    .getByRole("combobox", { name: "Preference", exact: true })
+    .selectOption("neutral");
+  await expect(
+    directory.getByRole("heading", { name: "No providers found", exact: true }),
+  ).toBeVisible();
+  await directory.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await expect(
+    directory.getByRole("searchbox", { name: "Search providers", exact: true }),
+  ).toHaveValue("");
+  await expect(directory.getByRole("combobox", { name: "Preference", exact: true })).toHaveValue(
+    "",
+  );
+  await directory.getByRole("link", { name: "Manage provider categories", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings\/provider-categories$/);
+  await expect(
+    page.getByRole("heading", { name: "Provider categories", exact: true }),
+  ).toBeVisible();
+});
+
+test("provider directory distinguishes unavailable results from an empty search", async ({
+  page,
+}) => {
+  let attempts = 0;
+  await page.route("**/api/providers?*", async (route) => {
+    attempts += 1;
+    if (attempts === 1)
+      await route.fulfill({ status: 503, json: { detail: "Temporarily unavailable" } });
+    else await route.fulfill({ json: { items: [], nextCursor: null } });
+  });
+  await page.goto("/providers?q=MissingProvider");
+  const directory = page.getByRole("region", { name: "Provider directory", exact: true });
+  await expect(directory.getByRole("alert")).toBeVisible();
+  await expect(
+    directory.getByRole("heading", { name: "No providers found", exact: true }),
+  ).toHaveCount(0);
+  await directory.getByRole("button", { name: "Retry loading providers", exact: true }).click();
+  await expect(
+    directory.getByRole("heading", { name: "No providers found", exact: true }),
+  ).toBeVisible();
+  expect(attempts).toBe(2);
+  await expect(
+    directory.getByRole("searchbox", { name: "Search providers", exact: true }),
+  ).toHaveValue("MissingProvider");
 });
 
 test("new Provider identity is created through the saved form and remains separate from Maintenance work", async ({
@@ -173,11 +558,9 @@ test("existing shared identity becomes a Provider without duplicating identity a
   request,
 }) => {
   const identity = await party(request, `Reusable Provider ${crypto.randomUUID()}`);
-  await page.goto("/providers");
-  await page.getByText("Use an existing identity", { exact: true }).click();
-  await page.getByLabel("Existing identity ID", { exact: true }).fill(identity.id);
-  await page.getByRole("button", { name: "Find identity", exact: true }).click();
-  await page.getByRole("button", { name: `Use ${identity.displayName}`, exact: true }).click();
+  await page.goto(`/parties?identity=${identity.id}`);
+  await page.getByText("More actions", { exact: true }).click();
+  await page.getByRole("link", { name: "Add provider role", exact: true }).click();
   await saved(page, "Use identity as provider");
   const current = (await (
     await request.get(`/api/providers/${identity.id}`)
@@ -258,12 +641,12 @@ test("Provider search combines service area references and avoid state with acce
   });
   expect(patched.ok(), await patched.text()).toBe(true);
   await page.goto("/providers");
-  await page.getByLabel("Search Providers", { exact: true }).fill(created.party.displayName);
+  await page.getByLabel("Search providers", { exact: true }).fill(created.party.displayName);
+  await page.getByText("More filters", { exact: true }).click();
   await page.getByLabel("Service", { exact: true }).fill("Electrical repair");
   await page.getByLabel("Service area", { exact: true }).fill("Portland metro");
-  await page.getByLabel("Has reference", { exact: true }).check();
-  await page.getByRole("combobox", { name: "Selection status", exact: true }).selectOption("avoid");
-  await page.getByRole("button", { name: "Apply Provider filters", exact: true }).click();
+  await page.getByLabel("Has references", { exact: true }).check();
+  await page.getByRole("combobox", { name: "Preference", exact: true }).selectOption("avoid");
   await page
     .getByRole("region", { name: "Provider directory", exact: true })
     .getByRole("link", { name: created.party.displayName, exact: true })
@@ -328,15 +711,39 @@ test("provider profile and service history commit through their registered OPS f
 test("saved forms resume after reload with the original fields", async ({ page, request }) => {
   const identity = await party(request, "Slice50 resumable identity");
   await page.goto(`/parties?workflow=party.patch&target=${identity.id}`);
+  await expect(
+    page.getByRole("link", { name: `← Back to ${identity.displayName}`, exact: true }),
+  ).toHaveAttribute("href", `/parties?identity=${identity.id}`);
+  await expect(page.getByRole("heading", { name: "Edit name", exact: true })).toBeVisible();
+  await expect(page.locator(".command-form-actions button")).toHaveText([
+    "Save name",
+    "Save unfinished form",
+  ]);
+  await expect(
+    page.getByRole("button", { name: "Check latest contact record", exact: true }),
+  ).toBeHidden();
+  await expect(page.getByText("Identity and contact changes use", { exact: false })).toHaveCount(0);
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((appearance) => {
+      document.documentElement.dataset.theme = appearance;
+    }, theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+    }
+  }
   await page.getByLabel("Display name (required)").fill("Slice50 recovered identity");
   await page.getByRole("button", { name: "Save unfinished form" }).click();
+  await page.getByText("Form status and recovery details", { exact: true }).click();
   await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
   await page.goto("/settings/recovery");
   await page.getByRole("link", { name: "Resume party.patch", exact: true }).click();
   await expect(page.getByLabel("Display name (required)")).toHaveValue(
     "Slice50 recovered identity",
   );
-  await saved(page, "Edit identity");
+  await saved(page, "Name");
 });
 
 test("saved occupancy corrections recover their child context before timeline validation", async ({
@@ -364,12 +771,12 @@ test("archived Tenant profiles remain reachable for explicit restoration", async
   request,
 }) => {
   const identity = await party(request, "Slice50 archived Tenant");
-  await page.goto(`/parties?workflow=tenant.designate&target=${identity.id}`);
+  await page.goto(`/tenants?workflow=tenant.designate&target=${identity.id}`);
   await saved(page, "Use identity as tenant");
-  await page.goto(`/parties?workflow=tenant.archive&target=${identity.id}`);
+  await page.goto(`/tenants?workflow=tenant.archive&target=${identity.id}`);
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
   await saved(page, "Archive tenant");
-  await page.goto(`/parties?identity=${identity.id}`);
+  await page.goto(`/tenants?identity=${identity.id}`);
   await page.getByText("Tenant actions", { exact: true }).click();
   await page.getByRole("link", { name: "Restore tenant", exact: true }).click();
   await saved(page, "Restore tenant");
@@ -398,7 +805,7 @@ test("an interrupted committed response reconciles without duplicating the Provi
   });
   await page.goto(`/providers?workflow=provider.service.add&target=${id}`);
   await page.getByLabel("Display name (required)").fill("One retained service");
-  await page.getByRole("button", { name: "Save add service", exact: true }).click();
+  await page.getByRole("button", { name: "Add service", exact: true }).click();
   await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
   await page.getByRole("button", { name: "Check original result" }).click();
   await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
@@ -418,6 +825,7 @@ test("stale identity changes retain input without dispatching an official write"
   await page.goto(`/parties?workflow=party.patch&target=${identity.id}`);
   await page.getByLabel("Display name (required)").fill("My retained edits");
   await page.getByRole("button", { name: "Save unfinished form" }).click();
+  await page.getByText("Form status and recovery details", { exact: true }).click();
   await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
   const changed = await request.patch(`/api/parties/${identity.id}`, {
     data: {
@@ -431,18 +839,18 @@ test("stale identity changes retain input without dispatching an official write"
   page.on("request", (entry) => {
     if (entry.method() === "PATCH" && entry.url().endsWith(`/api/parties/${identity.id}`)) writes++;
   });
-  await page.getByRole("button", { name: "Save edit identity", exact: true }).click();
+  await page.getByRole("button", { name: "Save name", exact: true }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByLabel("Display name (required)")).toHaveValue("My retained edits");
   expect(writes).toBe(0);
-  await page.getByRole("button", { name: "Review current source" }).click();
+  await page.getByRole("button", { name: "Check latest contact record" }).click();
   await expect(page.getByRole("region", { name: "Current source review" })).toContainText(
     "Newer operator name",
   );
   await page.getByRole("button", { name: "Keep my edits with this reviewed revision" }).click();
   await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Display name (required)")).toHaveValue("My retained edits");
-  await saved(page, "Edit identity");
+  await saved(page, "Name");
   const response = await request.get(`/api/parties/${identity.id}`);
   const current =
     (await response.json()) as Schema["app__modules__parties__api__router__PartyResponse"];
@@ -467,7 +875,7 @@ test("category assignment and archive preserve effective counts and contextual r
   await page.getByLabel("Category id (required)").selectOption(category.id);
   await saved(page, "Assign category");
   await page.goto("/providers");
-  await page.getByText("Category administration", { exact: true }).click();
+  await page.getByRole("link", { name: "Manage provider categories", exact: true }).click();
   const section = page
     .getByRole("heading", { name: "Slice50 specialist", exact: true })
     .locator("..");
@@ -489,14 +897,13 @@ test("ownership replacement can create an inline owner without erasing interval 
 }) => {
   const created = await property(request, "Slice50 ownership home");
   await page.goto(`/properties?workflow=portfolio.ownerships.replace&target=${created.id}`);
-  await page.getByLabel("Effective date (required)").fill(created.effectiveLocalDate);
-  await page.getByRole("button", { name: "Add ownerships entry" }).click();
-  const owner = page.getByRole("group", { name: "Ownerships 1", exact: true });
-  await owner.getByLabel("Ownership kind (required)").selectOption("client_owner");
-  await owner.getByRole("button", { name: "Add create owner identity here" }).click();
-  await owner.getByLabel("Identity kind (required)").selectOption("individual");
-  await owner.getByLabel("Display name (required)").fill("Slice50 inline owner");
-  await saved(page, "Change ownership");
+  await page.getByLabel("Effective date", { exact: true }).fill(created.effectiveLocalDate);
+  await page.getByRole("button", { name: "Add owner", exact: true }).click();
+  await page.getByRole("button", { name: "Create a new owner", exact: true }).click();
+  await page.getByLabel("New owner name", { exact: true }).fill("Slice50 inline owner");
+  await page.getByRole("button", { name: "Add to owners", exact: true }).click();
+  await page.getByRole("button", { name: "Save ownership change", exact: true }).click();
+  await expect(page.getByText("Ownership updated successfully.", { exact: true })).toBeVisible();
   const response = await request.get(`/api/properties/${created.id}`);
   const current =
     (await response.json()) as Schema["app__modules__portfolio__api__router__PropertyResponse"];
@@ -645,7 +1052,7 @@ test("reputation edits reconcile a lost response and reject unsafe or duplicate 
     `/providers?workflow=provider.reputation_link.update&target=${id}&child=${first.item.id}`,
   );
   await page.getByRole("textbox", { name: "Notes", exact: true }).fill("Updated note after review");
-  await page.getByRole("button", { name: "Save edit reputation link", exact: true }).click();
+  await page.getByRole("button", { name: "Save reputation link changes", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
   await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
   expect(writes).toBe(1);

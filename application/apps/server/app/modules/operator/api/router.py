@@ -6,7 +6,13 @@ from uuid import UUID
 from fastapi import APIRouter, Query
 from pydantic import AwareDatetime, Field, StrictBool, StrictInt, model_validator
 
-from app.modules.operator.domain.models import Contract, OperatorError, source_identifier
+from app.modules.operator.domain.models import (
+    Contract,
+    OperatorError,
+    source_identifier,
+    DESTINATIONS,
+    CUSTOMIZABLE,
+)
 from app.modules.operator.application.command_forms import source_owns_fingerprint
 from app.platform.api_errors import domain_problem
 from app.modules.operator.application.directory_service import OperatorDirectoryService
@@ -73,8 +79,8 @@ class MutationInput(Contract):
 
 class PreferenceInput(MutationInput):
     appearance: Literal["light", "dark"]
-    destinationOrder: list[str] = Field(max_length=8)
-    hiddenDestinationIds: list[str] = Field(default_factory=list, max_length=6)
+    destinationOrder: list[str] = Field(max_length=len(DESTINATIONS))
+    hiddenDestinationIds: list[str] = Field(default_factory=list, max_length=len(CUSTOMIZABLE))
 
 
 class RecoveryInput(MutationInput):

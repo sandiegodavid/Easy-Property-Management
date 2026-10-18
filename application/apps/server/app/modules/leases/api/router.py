@@ -348,6 +348,9 @@ class LeaseOperationReceipt(Contract):
 class LeaseDirectoryItem(Contract):
     id: UUID
     spaceId: UUID
+    propertyId: UUID | None
+    propertyName: str | None
+    rentalName: str | None
     leaseKind: Literal["residential", "commercial"]
     status: Literal["draft", "executed", "ended", "terminated", "void"]
     contractStartsOn: date

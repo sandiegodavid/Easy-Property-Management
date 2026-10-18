@@ -2441,6 +2441,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/operator/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Browse Tenants */
+        get: operations["browseOperatorTenants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/owner-concerns": {
         parameters: {
             query?: never;
@@ -2695,6 +2712,23 @@ export interface paths {
         put?: never;
         /** Create Party */
         post: operations["createParty"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/parties/names": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Names */
+        get: operations["getPartyNames"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7365,13 +7399,15 @@ export interface components {
         ContactInput: {
             /** Extension */
             extension?: string | null;
+            /** Isprimary */
+            isPrimary?: boolean | null;
             /** Label */
             label?: string | null;
             /**
              * Methodkind
              * @enum {string}
              */
-            methodKind: "email" | "phone";
+            methodKind: "email" | "phone" | "mailing_address";
             /** Value */
             value: string;
         };
@@ -7390,13 +7426,15 @@ export interface components {
             extension: string | null;
             /** Id */
             id: string;
+            /** Isprimary */
+            isPrimary: boolean;
             /** Label */
             label: string | null;
             /**
              * Methodkind
              * @enum {string}
              */
-            methodKind: "email" | "phone";
+            methodKind: "email" | "phone" | "mailing_address";
             /** Partyid */
             partyId: string;
             /**
@@ -7421,13 +7459,15 @@ export interface components {
              * Format: uuid
              */
             idempotencyKey: string;
+            /** Isprimary */
+            isPrimary?: boolean | null;
             /** Label */
             label?: string | null;
             /**
              * Methodkind
              * @enum {string}
              */
-            methodKind: "email" | "phone";
+            methodKind: "email" | "phone" | "mailing_address";
             /** Value */
             value: string;
         };
@@ -7449,13 +7489,15 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Isprimary */
+            isPrimary: boolean;
             /** Label */
             label: string | null;
             /**
              * Methodkind
              * @enum {string}
              */
-            methodKind: "email" | "phone";
+            methodKind: "email" | "phone" | "mailing_address";
             /**
              * Operationid
              * Format: uuid
@@ -7483,13 +7525,15 @@ export interface components {
         ContactRequest: {
             /** Extension */
             extension?: string | null;
+            /** Isprimary */
+            isPrimary?: boolean | null;
             /** Label */
             label?: string | null;
             /**
              * Methodkind
              * @enum {string}
              */
-            methodKind: "email" | "phone";
+            methodKind: "email" | "phone" | "mailing_address";
             /** Value */
             value: string;
         };
@@ -11685,6 +11729,12 @@ export interface components {
             leaseKind: "residential" | "commercial";
             /** Leaserevision */
             leaseRevision: number;
+            /** Propertyid */
+            propertyId: string | null;
+            /** Propertyname */
+            propertyName: string | null;
+            /** Rentalname */
+            rentalName: string | null;
             /**
              * Spaceid
              * Format: uuid
@@ -12902,6 +12952,22 @@ export interface components {
             /** Propertycount */
             propertyCount: number;
         };
+        /** OwnerContactRequest */
+        OwnerContactRequest: {
+            /** Extension */
+            extension?: string | null;
+            /** Isprimary */
+            isPrimary?: boolean | null;
+            /** Label */
+            label?: string | null;
+            /**
+             * Methodkind
+             * @enum {string}
+             */
+            methodKind: "email" | "phone" | "mailing_address";
+            /** Value */
+            value: string;
+        };
         /** OwnerDirectoryPage */
         OwnerDirectoryPage: {
             /**
@@ -13605,6 +13671,16 @@ export interface components {
              * Format: date-time
              */
             updatedAt: string;
+        };
+        /** PartyNameResponse */
+        PartyNameResponse: {
+            /** Displayname */
+            displayName: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
         };
         /** PartyPatchRequest */
         PartyPatchRequest: {
@@ -16087,9 +16163,9 @@ export interface components {
             includeArchived: boolean;
             /**
              * Kind
-             * @constant
+             * @enum {string}
              */
-            kind: "metadata_search";
+            kind: "metadata_search" | "tenant_browse";
             /** Limit */
             limit: number;
             /** Q */
@@ -20348,13 +20424,15 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Isprimary */
+            isPrimary: boolean;
             /** Label */
             label: string | null;
             /**
              * Methodkind
              * @enum {string}
              */
-            methodKind: "email" | "phone";
+            methodKind: "email" | "phone" | "mailing_address";
             /**
              * Partyid
              * Format: uuid
@@ -20430,6 +20508,8 @@ export interface components {
         };
         /** PartyRequest */
         app__modules__portfolio__api__router__PartyRequest: {
+            /** Contacts */
+            contacts?: components["schemas"]["OwnerContactRequest"][];
             /** Displayname */
             displayName: string;
             /**
@@ -20741,13 +20821,15 @@ export interface components {
             extension: string | null;
             /** Id */
             id: string;
+            /** Isprimary */
+            isPrimary: boolean;
             /** Label */
             label: string | null;
             /**
              * Methodkind
              * @enum {string}
              */
-            methodKind: "email" | "phone";
+            methodKind: "email" | "phone" | "mailing_address";
             /** Partyid */
             partyId: string;
             /**
@@ -29160,6 +29242,48 @@ export interface operations {
             };
         };
     };
+    browseOperatorTenants: {
+        parameters: {
+            query?: {
+                includeArchived?: boolean;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_owner_concerns: {
         parameters: {
             query?: {
@@ -30184,6 +30308,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PartyConflictResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getPartyNames: {
+        parameters: {
+            query: {
+                ids: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartyNameResponse"][];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
                 };
             };
             /** @description Validation Error */

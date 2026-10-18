@@ -701,11 +701,14 @@ export function AiGovernanceSettings() {
                 </p>
               </fieldset>
             )}
-            <button
-              disabled={!writable || busy || !!pendingKey || !selectedAdapter || !modelIdentifier}
-            >
-              Save connection
-            </button>
+            <div className="command-form-actions" role="group" aria-label="Connection actions">
+              <button
+                type="submit"
+                disabled={!writable || busy || !!pendingKey || !selectedAdapter || !modelIdentifier}
+              >
+                Create connection
+              </button>
+            </div>
           </form>
         )}
         {externalKey && (
@@ -1325,20 +1328,23 @@ export function AiDraftReview() {
           />
         </label>
         {active && (
-          <>
+          <div className="command-form-actions" role="group" aria-label="Draft actions">
             <button
+              type="button"
+              className="command-primary-action"
               disabled={!writable || busy || !!attempt || !!parseError || !parsedPayload}
               onClick={() => void decide("edit", parsedPayload)}
             >
               Save draft edits
             </button>
             <button
+              type="button"
               disabled={!writable || busy || !!attempt}
               onClick={() => void decide("dismiss", null)}
             >
               Dismiss draft
             </button>
-          </>
+          </div>
         )}
         {draft.approvalAvailable && active && (
           <fieldset>

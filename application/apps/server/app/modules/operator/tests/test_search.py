@@ -40,6 +40,14 @@ from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.operator.infrastructure.unit_of_work import SQLiteOperatorUnitOfWork
 from app.modules.operator.application.ports import RuntimeIdentity
+from app.modules.parties.application.service import SharedPartyFactory
+from app.modules.parties.infrastructure.unit_of_work import (
+    SQLitePartyOperations,
+    SQLitePartyReadOperations,
+)
+from app.modules.tenants.application.service import TenantCreateCommand, TenantService
+from app.modules.tenants.infrastructure.unit_of_work import SQLiteTenantUnitOfWork
+from app.modules.leases.infrastructure.unit_of_work import SQLiteLeaseParticipationGuard
 
 PAGE_LIMIT = 50
 MANY_RECORDS = 100
@@ -307,12 +315,82 @@ def test_search_bounded_sql_counts_and_plans_with_many_distinct_results(context,
     assert any("property_ownerships_party_active" in detail for detail in plans)
 
 
+def test_tenant_browse_is_bounded_paginated_and_archived_opt_in(context, searching):
+    workspace, _, _, support, _, _ = context
+    parties = SQLitePartyOperations(workspace.paths.database)
+    tenants = TenantService(
+        SQLiteTenantUnitOfWork(
+            workspace.paths.database,
+            support.unit_of_work.recorder,
+            SQLiteLeaseParticipationGuard(),
+            parties,
+            SQLitePartyReadOperations(parties),
+        ),
+        SharedPartyFactory(),
+    )
+    try:
+        records = [
+            tenants.create(
+                TenantCreateCommand("individual", name),
+                expected_revision=0,
+                idempotency_key=str(uuid4()),
+            )
+            for name in ("Éclair A", "Éclair B", "Robin")
+        ]
+        tenants.archive(
+            records[-1]["id"],
+            confirmed=True,
+            expected_revision=records[-1]["revision"],
+            idempotency_key=str(uuid4()),
+        )
+        statements = []
+
+        def executed(_conn, _cur, sql, *_args):
+            if sql.lstrip().upper().startswith("SELECT"):
+                statements.append(sql)
+
+        event.listen(support.unit_of_work.engine, "before_cursor_execute", executed)
+        try:
+            first = searching.browse_tenants(limit=1)
+        finally:
+            event.remove(support.unit_of_work.engine, "before_cursor_execute", executed)
+        assert len(statements) <= SHARED_SELECTS + PER_GROUP_BUDGET
+        assert any("LIMIT" in sql for sql in statements)
+        SearchResponse.model_validate(first)
+        group = first["groups"]["tenants"]
+        second = searching.browse_tenants(limit=1, cursor=group["nextCursor"])
+        items = group["items"] + second["groups"]["tenants"]["items"]
+        assert [row["sourceId"] for row in items] == [row["id"] for row in records[:2]]
+        assert group["matchingTotal"] == 2
+        assert second["groups"]["tenants"]["nextCursor"] is None
+        assert (
+            searching.browse_tenants(include_archived=True)["groups"]["tenants"]["matchingTotal"]
+            == 3
+        )
+        with pytest.raises(OperatorConflict):
+            searching.browse_tenants(limit=1, include_archived=True, cursor=group["nextCursor"])
+        for limit in (0, 51, True):
+            with pytest.raises(OperatorError):
+                searching.browse_tenants(limit=limit)
+    finally:
+        tenants.unit_of_work.engine.dispose()
+        parties.engine.dispose()
+
+
 def test_http_contract_and_invalid_inputs(context, searching):
     _, portfolio, directories, support, overviews, _ = context
     owner_property(portfolio)
     app = FastAPI()
     app.include_router(build_router(support, directories, overviews, searching))
     with TestClient(app) as client:
+        browse = client.get("/api/operator/tenants?limit=20")
+        assert browse.status_code == HTTPStatus.OK, browse.text
+        assert set(browse.json()["groups"]) == {"tenants"}
+        for query in ("limit=0", "limit=51", "unexpected=true", "cursor=bad"):
+            assert (
+                client.get("/api/operator/tenants?" + query).status_code
+                == HTTPStatus.UNPROCESSABLE_ENTITY
+            )
         response = client.get("/api/operator/search?q=Home")
         assert response.status_code == HTTPStatus.OK, response.text
         assert set(response.json()["groups"]) == set(SEARCH_KINDS)

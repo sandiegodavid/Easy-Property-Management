@@ -2,6 +2,10 @@
 
 [Manual contents](README.md)
 
+## Find an issue
+
+The Maintenance page shows issue cards with property, status, priority and reported time. Select a card to review it. Filter by status, find a property by name, or choose a category or priority; results update automatically. **More filters** contains reporter, evidence, expense, follow-up and date filters. **Clear filters** returns to the full issue list. Owner concerns are a separate link below the results.
+
 ## Report and triage a repair
 
 1. Open **Maintenance → Report maintenance issue**.

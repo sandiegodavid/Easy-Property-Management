@@ -346,19 +346,29 @@ def upgrade() -> None:
         sa.Column("created_at", sa.String(), nullable=False),
         sa.Column("updated_at", sa.String(), nullable=False),
         sa.Column("archived_at", sa.String()),
-        sa.CheckConstraint("method_kind IN ('email', 'phone')"),
+        sa.CheckConstraint("method_kind IN ('email', 'phone', 'mailing_address')"),
         sa.CheckConstraint("status IN ('active', 'archived')"),
         sa.CheckConstraint("length(trim(display_value)) > 0"),
         sa.CheckConstraint(
             "(status = 'active' AND archived_at IS NULL) OR (status = 'archived' AND archived_at IS NOT NULL)"
         ),
         sa.CheckConstraint("method_kind = 'phone' OR extension IS NULL"),
+        sa.Column("is_primary", sa.Boolean(), nullable=False, server_default="0"),
+        sa.CheckConstraint("is_primary IN (0, 1)"),
+        sa.CheckConstraint("status = 'active' OR is_primary = 0"),
     )
     op.create_index(
         "party_contact_methods_party_status", "party_contact_methods", ["party_id", "status"]
     )
     op.execute(
         "CREATE UNIQUE INDEX party_contact_methods_one_active_value ON party_contact_methods(party_id, method_kind, normalized_value, coalesce(extension, '')) WHERE status = 'active'"
+    )
+    op.create_index(
+        "party_contact_methods_one_primary",
+        "party_contact_methods",
+        ["party_id", "method_kind"],
+        unique=True,
+        sqlite_where=sa.text("status = 'active' AND is_primary = 1"),
     )
     PartyCommandOperationModel.__table__.create(op.get_bind())
     _create_triggers(PARTY_COMMAND_TRIGGERS)

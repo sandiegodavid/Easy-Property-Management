@@ -18,18 +18,16 @@ export function LeaseDocuments({
   const title = entityType === "lease" ? "Lease documents" : "Termination documents";
   return (
     <section aria-label={`${title} ${entityId}`}>
-      <h3>{title}</h3>
-      <p>
-        Documents remain retained evidence. Uploading a document does not execute a Lease or accept
-        a termination agreement.
-      </p>
-      {scope.canWrite && (
-        <Link
-          to={`${workflowUrl("file.upload")}&${new URLSearchParams({ leaseId, entityType, entityId })}`}
-        >
-          {entityType === "lease" ? "Attach lease document" : "Attach termination document"}
-        </Link>
-      )}
+      <div className="lease-detail-section-heading">
+        <h3>{title}</h3>
+        {scope.canWrite && (
+          <Link
+            to={`${workflowUrl("file.upload")}&${new URLSearchParams({ leaseId, entityType, entityId })}`}
+          >
+            {entityType === "lease" ? "Attach lease document" : "Attach termination document"}
+          </Link>
+        )}
+      </div>
       {!files.length && <p>No current {title.toLowerCase()}.</p>}
       <ul>
         {files.map((file) => (

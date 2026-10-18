@@ -13,6 +13,7 @@ DESTINATIONS = (
     "home",
     "properties",
     "owners",
+    "renters",
     "leasing",
     "money",
     "maintenance",

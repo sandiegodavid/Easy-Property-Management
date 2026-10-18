@@ -7,11 +7,13 @@ from uuid import UUID
 from pydantic import Field, StrictBool, StrictInt
 
 from app.modules.operator.domain.models import Contract
+from app.modules.operator.application.identity_forms import ContactFields
 
 
 class InlineOwner(Contract):
     partyKind: Literal["individual", "organization"] | None = None
     displayName: str | None = Field(None, max_length=240)
+    contacts: list[ContactFields] | None = Field(None, max_length=100)
 
 
 class InventoryOwner(Contract):

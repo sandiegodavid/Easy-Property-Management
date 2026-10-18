@@ -1,3 +1,4 @@
+import { DynamicFilterForm } from "../shared/dynamic-filter-form";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
@@ -444,7 +445,7 @@ export function DepositEvidenceArchive() {
 export function DepositFilters() {
   const [params, setParams] = useSearchParams();
   return (
-    <form
+    <DynamicFilterForm
       className="directory-filters"
       onSubmit={(event) => {
         event.preventDefault();
@@ -456,7 +457,7 @@ export function DepositFilters() {
           else next.delete(key);
         }
         next.delete("cursor");
-        setParams(next);
+        setParams(next, { replace: true, preventScrollReset: true });
       }}
     >
       <label>
@@ -480,8 +481,7 @@ export function DepositFilters() {
           </select>
         </label>
       ))}
-      <button>Apply deposit filters</button>
-    </form>
+    </DynamicFilterForm>
   );
 }
 export function DeductionSourceReview({

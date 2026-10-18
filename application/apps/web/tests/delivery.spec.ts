@@ -27,12 +27,16 @@ test("wheel assets mount React on direct and deep links using the generated clie
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
   });
-  for (const path of ["/home", "/tasks", "/settings/recovery"]) {
+  for (const path of ["/home", "/tasks", "/tenants", "/parties", "/settings/recovery"]) {
     const response = await page.goto(path);
     expect(response?.status()).toBe(200);
     expect(response?.headers()["x-content-type-options"]).toBe("nosniff");
     expect(response?.headers()["content-security-policy"]).toContain("script-src 'self'");
     expect(response?.headers()["cache-control"]).toBe("no-store");
+    if (path === "/tenants" || path === "/parties") {
+      await expect(page).toHaveURL(/\/tenants$/);
+      await expect(page.getByRole("heading", { name: "Tenants", exact: true })).toBeVisible();
+    }
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Easy Property Management");
     await expect(
       page.getByRole("status").filter({ hasText: "Local workspace connected." }),

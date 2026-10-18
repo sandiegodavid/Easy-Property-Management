@@ -1,6 +1,7 @@
+import { DynamicFilterForm } from "../shared/dynamic-filter-form";
 import { useQuery } from "@tanstack/react-query";
 import { PageAsOf } from "../shared/page-as-of";
-import { MaintenanceFilters } from "./maintenance-context";
+import { MaintenanceFilters, MaintenancePropertyFilter } from "./maintenance-context";
 import { MaintenanceEvidenceArchive } from "./maintenance-evidence";
 import { useState } from "react";
 import { useLocation, useParams, useSearchParams } from "react-router-dom";
@@ -17,6 +18,7 @@ import { WorkCommand } from "./work-command";
 import { WorkRecord } from "./work-records";
 import { workUrl, type WorkKind } from "./work-links";
 import { IntakeWorkspace } from "./intake";
+import { formatHomeTime } from "../shared/home-time";
 
 export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
   const [params] = useSearchParams();
@@ -34,25 +36,54 @@ export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
   const tab = params.get("tab");
   const current = tab === "concerns" ? "concern" : tab === "conversations" ? "communication" : kind;
   return (
-    <section aria-label="Work workspace">
-      <h2>
-        {current === "task"
-          ? "Tasks"
-          : current === "communication"
-            ? "Conversations"
-            : "Maintenance and owner concerns"}
-      </h2>
-      <p>
-        Recording a conversation does not send a message. Completing a Task or appointment does not
-        resolve an issue or verify physical work.
-      </p>
-      <nav aria-label="Work views">
-        <Link to="/maintenance">Issues</Link>{" "}
-        <Link to="/maintenance?tab=concerns">Owner concerns</Link>{" "}
-        <Link to="/conversations">Conversations</Link>{" "}
-        <Link to="/conversations?intake=true">Retained source evidence</Link>{" "}
-        <Link to="/tasks">Tasks</Link>
-      </nav>
+    <section
+      aria-label="Work workspace"
+      className={current === "issue" ? "maintenance-directory" : undefined}
+    >
+      {current === "issue" ? (
+        <header className="maintenance-directory-heading">
+          <h2>Maintenance</h2>
+          <CommandLinks
+            keys={["maintenance.issue.create"]}
+            title="Maintenance actions"
+            asButtons
+            collapsible={false}
+          />
+        </header>
+      ) : (
+        <>
+          <h2>
+            {current === "task"
+              ? "Tasks"
+              : current === "communication"
+                ? "Conversations"
+                : "Maintenance and owner concerns"}
+          </h2>
+          <p>
+            Recording a conversation does not send a message. Completing a Task or appointment does
+            not resolve an issue or verify physical work.
+          </p>
+          <nav className="page-tabs" aria-label="Work views">
+            <Link to="/maintenance">Issues</Link>{" "}
+            <Link
+              to="/maintenance?tab=concerns"
+              aria-current={current === "concern" ? "page" : undefined}
+            >
+              Owner concerns
+            </Link>{" "}
+            <Link
+              to="/conversations"
+              aria-current={current === "communication" ? "page" : undefined}
+            >
+              Conversations
+            </Link>{" "}
+            <Link to="/conversations?intake=true">Retained source evidence</Link>{" "}
+            <Link to="/tasks" aria-current={current === "task" ? "page" : undefined}>
+              Tasks
+            </Link>
+          </nav>
+        </>
+      )}
       {current === "task" && (
         <>
           <TaskQuickAdd />
@@ -60,11 +91,17 @@ export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
         </>
       )}
       <WorkDirectory key={current} kind={current} />
+      {current === "issue" && (
+        <footer className="maintenance-directory-footer">
+          <Link to="/maintenance?tab=concerns">Owner concerns</Link>
+        </footer>
+      )}
     </section>
   );
 }
 
 function WorkDirectory({ kind }: { kind: WorkKind }) {
+  const [filterReset, setFilterReset] = useState(0);
   const { scope } = useWorkspace();
   const location = useLocation();
   const navigationState: unknown = location.state;
@@ -228,18 +265,38 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
         ];
   return (
     <section aria-label="Work directory">
-      <CommandLinks
-        keys={[
-          kind === "issue"
-            ? "maintenance.issue.create"
-            : kind === "concern"
+      {kind !== "issue" && (
+        <CommandLinks
+          keys={[
+            kind === "concern"
               ? "owner_concern.create"
               : kind === "communication"
                 ? "communication.create"
                 : "task.create",
-        ]}
-      />
-      <form
+          ]}
+        />
+      )}
+      <DynamicFilterForm
+        key={filterReset}
+        onReset={
+          kind === "issue"
+            ? (event) => {
+                event.preventDefault();
+                setParams(
+                  {},
+                  {
+                    state: navigationState,
+                    replace: true,
+                    preventScrollReset: true,
+                    flushSync: true,
+                  },
+                );
+                setFilterReset((value) => value + 1);
+              }
+            : undefined
+        }
+        className={kind === "issue" ? "maintenance-directory-filters" : undefined}
+        aria-label={kind === "issue" ? "Maintenance filters" : undefined}
         onSubmit={(event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
@@ -284,7 +341,7 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
             if (value) next.set(key, value);
             else next.delete(key);
           }
-          setParams(next, { state: navigationState });
+          setParams(next, { state: navigationState, replace: true, preventScrollReset: true });
         }}
       >
         <label>
@@ -292,11 +349,14 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
           <select name="status" defaultValue={status ?? ""}>
             <option value="">All statuses</option>
             {statuses.map((item) => (
-              <option key={item}>{item}</option>
+              <option key={item} value={item}>
+                {kind === "issue" ? workLabel(item) : item}
+              </option>
             ))}
           </select>
         </label>
-        {kind !== "task" && (
+        {kind === "issue" && <MaintenancePropertyFilter key={propertyId ?? "all"} />}
+        {kind !== "task" && kind !== "issue" && (
           <label>
             Property ID
             <input name="propertyId" defaultValue={propertyId} />
@@ -445,10 +505,18 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
             </label>
           </>
         )}
-        <button>Apply work filters</button>
-      </form>
-      {result.isPending && <p role="status">Loading work records…</p>}
+      </DynamicFilterForm>
+      {result.isPending && (
+        <p role="status">
+          {kind === "issue" ? "Loading maintenance issues…" : "Loading work records…"}
+        </p>
+      )}
       {result.error && <p role="alert">Records unavailable: {result.error.message}</p>}
+      {kind === "issue" && result.error && (
+        <button type="button" onClick={() => void result.refetch()}>
+          Retry loading issues
+        </button>
+      )}
       {result.data && (
         <>
           {"matchingTotal" in result.data && (
@@ -456,9 +524,15 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
           )}
           {"asOf" in result.data && <PageAsOf asOf={String(result.data.asOf)} />}
           {result.data.items.length === 0 && (
-            <p>
-              No matching recorded items on this page. This does not establish that no problems
-              exist.
+            <p className={kind === "issue" ? "maintenance-directory-empty" : undefined}>
+              {kind === "issue" ? (
+                "No maintenance issues match these filters."
+              ) : (
+                <>
+                  No matching recorded items on this page. This does not establish that no problems
+                  exist.
+                </>
+              )}
             </p>
           )}
           {follow && "asOf" in result.data && "matchingTotal" in result.data ? (
@@ -488,34 +562,57 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
               }))}
             />
           ) : (
-            <ul>
+            <ul className={kind === "issue" ? "maintenance-issue-grid" : undefined}>
               {result.data.items.map((item) => (
                 <li key={item.id}>
-                  <Link to={workUrl(kind, item.id)}>
-                    {scalar(record(item).summary ?? record(item).subject ?? record(item).title)}
-                  </Link>{" "}
-                  · {item.status}
-                  {"priority" in item && ` · ${item.priority}`}
-                  {kind === "issue" && (
-                    <p>
-                      Reported by {scalar(record(record(item).reporter).displayName)} ·{" "}
-                      {scalar(record(record(item).reporter).role)} (
-                      {scalar(record(record(item).reporter).subjectKind).replaceAll("_", " ")}) —
-                      retained attribution, not current relationship eligibility.
-                    </p>
-                  )}
-                  {kind === "task" && (
+                  {kind === "issue" && "reporter" in item ? (
+                    <Link className="maintenance-issue-card" to={workUrl("issue", item.id)}>
+                      <div className="maintenance-issue-card-heading">
+                        <h3>{item.summary}</h3>
+                        <span className={`maintenance-issue-status issue-status-${item.status}`}>
+                          {workLabel(item.status)}
+                        </span>
+                      </div>
+                      <p className="maintenance-issue-property">
+                        {item.property.displayName}
+                        {item.space ? ` · ${item.space.displayName}` : ""}
+                      </p>
+                      <div className="maintenance-issue-tags">
+                        <span
+                          className={`maintenance-issue-priority issue-priority-${item.priority}`}
+                        >
+                          {workLabel(item.priority)} priority
+                        </span>
+                        <span>{workLabel(item.category)}</span>
+                      </div>
+                      <p className="maintenance-issue-reported">
+                        Reported {formatHomeTime(item.reportedAtUtc)} · {item.reporter.displayName}
+                      </p>
+                      <span className="maintenance-issue-action">
+                        View issue <span aria-hidden="true">→</span>
+                      </span>
+                    </Link>
+                  ) : (
                     <>
-                      <TaskOutcome value={record(item)} />
-                      {["open", "in_progress"].includes(item.status) && (
-                        <details>
-                          <summary>Task details and completion</summary>
-                          <p>
-                            Task deadline: {scalar(record(item).dueAtUtc) || "No due date"} ·{" "}
-                            {scalar(record(item).dueTimezone)}
-                          </p>
-                          <TaskCompletion value={record(item)} />
-                        </details>
+                      <Link to={workUrl(kind, item.id)}>
+                        {scalar(record(item).summary ?? record(item).subject ?? record(item).title)}
+                      </Link>{" "}
+                      · {item.status}
+                      {"priority" in item && ` · ${item.priority}`}
+                      {kind === "task" && (
+                        <>
+                          <TaskOutcome value={record(item)} />
+                          {["open", "in_progress"].includes(item.status) && (
+                            <details>
+                              <summary>Task details and completion</summary>
+                              <p>
+                                Task deadline: {scalar(record(item).dueAtUtc) || "No due date"} ·{" "}
+                                {scalar(record(item).dueTimezone)}
+                              </p>
+                              <TaskCompletion value={record(item)} />
+                            </details>
+                          )}
+                        </>
                       )}
                     </>
                   )}
@@ -528,10 +625,10 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
               onClick={() => {
                 const next = new URLSearchParams(params);
                 next.set("cursor", result.data.nextCursor!);
-                setParams(next, { state: navigationState });
+                setParams(next, { state: navigationState, preventScrollReset: true });
               }}
             >
-              Next work page
+              {kind === "issue" ? "Next issues" : "Next work page"}
             </button>
           )}
           {cursor && (
@@ -539,16 +636,20 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
               onClick={() => {
                 const next = new URLSearchParams(params);
                 next.delete("cursor");
-                setParams(next, { state: navigationState });
+                setParams(next, { state: navigationState, preventScrollReset: true });
               }}
             >
-              First work page
+              {kind === "issue" ? "Back to first page" : "First work page"}
             </button>
           )}
         </>
       )}
     </section>
   );
+}
+
+function workLabel(value: string) {
+  return value.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
 }
 
 function TaskQuickAdd() {

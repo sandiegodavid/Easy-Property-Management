@@ -19,7 +19,11 @@ from pydantic import (
 
 from app.platform.api_errors import domain_problem, workspace_unavailable
 
-from app.modules.parties.application.service import PartyValidationError
+from app.modules.parties.application.service import (
+    ContactMethodCommand,
+    PartyValidationError,
+    PartyConflictError,
+)
 from app.modules.portfolio.application.ports import PortfolioConflictError
 from app.modules.portfolio.application.status_contracts import (
     ManualStatusConflictResponse,
@@ -53,9 +57,18 @@ class InventoryRequest(ContractModel):
     idempotencyKey: str = Field(min_length=1, max_length=200, pattern=r"^\S(?:.*\S)?$")
 
 
+class OwnerContactRequest(ContractModel):
+    methodKind: Literal["email", "phone", "mailing_address"]
+    value: str = Field(min_length=1, max_length=1000)
+    extension: str | None = Field(None, max_length=6)
+    label: str | None = Field(None, max_length=80)
+    isPrimary: StrictBool | None = None
+
+
 class PartyRequest(ContractModel):
     partyKind: Literal["individual", "organization"]
     displayName: str = Field(min_length=1, max_length=240)
+    contacts: list[OwnerContactRequest] = Field(default_factory=list, max_length=100)
 
 
 class OwnershipRequest(ContractModel):
@@ -369,6 +382,8 @@ def build_router(service: PortfolioService, runtime: WorkspaceRuntime) -> APIRou
             raise domain_problem(error, status_code=400, code="portfolio_validation") from error
         except PartyValidationError as error:
             raise domain_problem(error, status_code=400, code="portfolio_validation") from error
+        except PartyConflictError as error:
+            raise domain_problem(error, status_code=409, code="portfolio_conflict") from error
 
     @router.post(
         "/api/properties",
@@ -789,6 +804,18 @@ def _ownerships(items: list[OwnershipRequest]) -> tuple[OwnershipInput, ...]:
             item.ownerKind,
             None if item.partyId is None else str(item.partyId),
             None if item.inlineParty is None else _party(item.inlineParty),
+            tuple(
+                ContactMethodCommand(
+                    contact.methodKind,
+                    contact.value,
+                    contact.extension,
+                    contact.label,
+                    contact.isPrimary,
+                )
+                for contact in item.inlineParty.contacts
+            )
+            if item.inlineParty
+            else (),
         )
         for item in items
     )

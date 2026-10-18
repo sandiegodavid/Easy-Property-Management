@@ -160,13 +160,7 @@ test("applying a money period preserves the property scroll position while loadi
   await page.goto(`/properties/${item.id}/money?fromOn=2026-01-01&throughOn=2026-01-31`);
   const money = page.getByRole("region", { name: "Money", exact: true });
   await expect(money).toContainText("2026-01-01 through 2026-01-31");
-  await money.getByLabel("Money from").fill("2026-02-01");
-  await money.getByLabel("Money through").fill("2026-02-28");
-  const apply = money.getByRole("button", { name: "Apply money period" });
-  await apply.scrollIntoViewIfNeeded();
   const content = page.getByRole("region", { name: "Property content", exact: true });
-  const before = await content.evaluate((element) => element.scrollTop);
-  expect(before).toBeGreaterThan(0);
   let release!: () => void;
   const pending = new Promise<void>((resolve) => {
     release = resolve;
@@ -175,7 +169,10 @@ test("applying a money period preserves the property scroll position while loadi
     await pending;
     await route.continue();
   });
-  await apply.click();
+  await money.getByLabel("Money from").fill("2026-02-01");
+  await money.getByLabel("Money through").fill("2026-02-28");
+  const before = await content.evaluate((element) => element.scrollTop);
+  expect(before).toBeGreaterThan(0);
   await expect(page).toHaveURL(/fromOn=2026-02-01&throughOn=2026-02-28/);
   await expect(money).toContainText("2026-01-01 through 2026-01-31");
   expect(
@@ -186,7 +183,7 @@ test("applying a money period preserves the property scroll position while loadi
   expect(
     Math.abs((await content.evaluate((element) => element.scrollTop)) - before),
   ).toBeLessThanOrEqual(2);
-  await expect(apply).toBeInViewport();
+  await expect(money.getByLabel("Money through")).toBeInViewport();
 });
 
 test.describe("page capture time", () => {
@@ -629,7 +626,6 @@ test("independent task continuations and explicit whole-property money use compo
   await expect(money.getByRole("button", { name: "Retry section", exact: true })).toHaveCount(0);
   await money.getByLabel("Money from").fill("2026-01-01");
   await money.getByLabel("Money through").fill("2026-01-31");
-  await money.getByRole("button", { name: "Apply money period" }).click();
   await expect(page.getByText(/Whole-property activity, not owner entitlement/)).toBeVisible();
   await expect(page.getByRole("region", { name: "Money", exact: true })).toContainText(
     "2026-01-01 through 2026-01-31",
@@ -718,7 +714,6 @@ test("section failure never becomes an empty result and date errors retain input
     .click();
   await page.getByLabel("Money from").fill("2026-02-01");
   await page.getByLabel("Money through").fill("2026-01-01");
-  await page.getByRole("button", { name: "Apply money period" }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByLabel("Money from")).toHaveValue("2026-02-01");
   await page.setViewportSize({ width: 390, height: 844 });

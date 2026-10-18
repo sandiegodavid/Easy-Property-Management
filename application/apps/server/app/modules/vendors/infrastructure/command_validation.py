@@ -459,6 +459,7 @@ def _creation_audits(command, row, result, audits):
                 "method_kind": "methodKind",
                 "value": "displayValue",
                 "normalized_value": "normalizedValue",
+                "is_primary": "isPrimary",
                 "display_name": "displayName",
                 "country_code": "countryCode",
                 "performed_on": "performedOn",
@@ -472,7 +473,12 @@ def _creation_audits(command, row, result, audits):
                 or after["createdAt"] != row["created_at"]
                 or after["updatedAt"] != row["created_at"]
                 or after["archivedAt"] is not None
-                or any(after[names.get(key, key)] != value for key, value in requested.items())
+                or any(
+                    after[names.get(key, key)] != value
+                    for key, value in requested.items()
+                    if key != "is_primary"
+                )
+                or (requested.get("is_primary") is True and after.get("isPrimary") is not True)
             ):
                 raise ValueError("Initial child attribution differs.")
     assigned = [

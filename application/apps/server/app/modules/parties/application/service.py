@@ -68,9 +68,12 @@ class ContactMethodCommand:
     value: str
     extension: str | None = None
     label: str | None = None
+    is_primary: bool | None = None
     normalized_value: str = field(init=False)
 
     def __post_init__(self) -> None:
+        if self.is_primary is not None and type(self.is_primary) is not bool:
+            raise PartyValidationError("Primary contact selection must be a boolean.")
         try:
             normalized, extension, display = normalize_contact_value(
                 self.method_kind,
@@ -158,8 +161,11 @@ class PartyContactService:
             party = _required_party(tx, party_id)
             if party.archived_at is not None:
                 raise PartyConflictError("An archived party cannot receive contact methods.")
-            item = _contact(party_id, command, now)
-            _unique([*tx.methods(party_id), item])
+            methods = tx.methods(party_id)
+            item = _primary_selection(_contact(party_id, command, now), methods, command.is_primary)
+            proposed = _with_primary(methods, item)
+            _unique(proposed)
+            _demote_primary(tx, methods, proposed, now, correlation)
             tx.insert_method(item)
             return self._finish(tx, identity, party, None, item, now, correlation)
 
@@ -204,7 +210,13 @@ class PartyContactService:
                 extension=command.extension,
                 label=command.label,
             )
-            _unique([item for item in methods if item.id != method_id] + [updated])
+            if current.is_primary and current.method_kind != updated.method_kind:
+                _require_primary_replacement(current, methods)
+                updated = replace(updated, is_primary=False)
+            updated = _primary_selection(updated, methods, command.is_primary)
+            proposed = _with_primary(methods, updated)
+            _unique(proposed)
+            _demote_primary(tx, methods, proposed, now, correlation)
             if updated != current:
                 updated = replace(updated, updated_at=now)
                 tx.replace_method(updated)
@@ -268,6 +280,7 @@ class PartyContactService:
             current = _required_contact(methods, method_id)
             if current.status != "active":
                 raise PartyConflictError("Contact method is already archived.")
+            _require_primary_replacement(current, methods)
             for resolution in reference_resolutions:
                 if resolution.replacement_contact_method_id is not None and not any(
                     item.id == resolution.replacement_contact_method_id
@@ -285,7 +298,9 @@ class PartyContactService:
                 raise PartyValidationError(
                     "Reference resolutions include an unknown or unused role reference."
                 )
-            updated = replace(current, status="archived", archived_at=now, updated_at=now)
+            updated = replace(
+                current, status="archived", archived_at=now, updated_at=now, is_primary=False
+            )
             tx.replace_method(updated)
             return self._finish(tx, identity, party, current, updated, now, correlation)
 
@@ -311,7 +326,8 @@ class PartyContactService:
             if current.status != "archived":
                 raise PartyConflictError("Contact method is already active.")
             updated = replace(current, status="active", archived_at=None, updated_at=now)
-            _unique([item for item in methods if item.id != method_id] + [updated])
+            updated = _primary_selection(updated, methods, None)
+            _unique(_with_primary(methods, updated))
             tx.replace_method(updated)
             return self._finish(tx, identity, party, current, updated, now, correlation)
 
@@ -426,8 +442,7 @@ class PartyIdentityService:
         def write(tx):
             if replay := start_command(tx, identity):
                 return replay
-            provisional = [_contact("", item, now) for item in contacts]
-            _unique(provisional)
+            provisional = prepare_contact_methods("", contacts, now)
             candidates = tx.duplicate_party_ids(provisional, 10)
             if candidates and confirmed_new_party is not True:
                 raise PossibleDuplicatePartyError(candidates)
@@ -500,6 +515,17 @@ class PartyIdentityService:
             "items": [item.identity_snapshot() for item in rows[:limit]],
             "nextCursor": rows[limit - 1].id if len(rows) > limit else None,
         }
+
+    def names(self, party_ids: list[str]) -> list[dict[str, str]]:
+        if not isinstance(party_ids, list) or not 1 <= len(party_ids) <= 100:
+            raise PartyValidationError("Select between 1 and 100 people.")
+        try:
+            if any(not isinstance(value, str) or str(UUID(value)) != value for value in party_ids):
+                raise ValueError
+        except (ValueError, TypeError, AttributeError) as error:
+            raise PartyValidationError("Person identifiers must be canonical UUIDs.") from error
+        rows = self.party_reads.parties(list(dict.fromkeys(party_ids)))
+        return [{"id": item.id, "displayName": item.display_name} for item in rows.values()]
 
     def active_roles(self, party_id: str) -> list[str]:
         return sorted(
@@ -639,18 +665,116 @@ def _contact(party_id: str, command: ContactMethodCommand, now: str) -> PartyCon
         created_at=now,
         updated_at=now,
         archived_at=None,
+        is_primary=command.is_primary is True,
     )
 
 
 def _unique(methods: list[PartyContactMethod]) -> None:
     seen: set[tuple[str, str, str]] = set()
+    primary_counts: dict[str, int] = {}
     for item in methods:
         if item.status != "active":
             continue
+        primary_counts.setdefault(item.method_kind, 0)
+        primary_counts[item.method_kind] += int(item.is_primary)
         key = (item.method_kind, item.normalized_value, item.extension or "")
         if key in seen:
             raise PartyConflictError("Active party contact methods must be unique.")
         seen.add(key)
+    if any(count != 1 for count in primary_counts.values()):
+        raise PartyConflictError("Choose exactly one primary contact for each contact type.")
+
+
+def _require_primary_replacement(
+    current: PartyContactMethod, methods: list[PartyContactMethod]
+) -> None:
+    if current.is_primary and any(
+        item.id != current.id
+        and item.status == "active"
+        and item.method_kind == current.method_kind
+        for item in methods
+    ):
+        raise PartyConflictError(
+            "Choose another primary contact of this type before removing or changing this contact's type."
+        )
+
+
+def _primary_selection(
+    item: PartyContactMethod, methods: list[PartyContactMethod], requested: bool | None
+) -> PartyContactMethod:
+    others = [
+        method
+        for method in methods
+        if method.id != item.id
+        and method.status == "active"
+        and method.method_kind == item.method_kind
+    ]
+    primary = item.is_primary if requested is None else requested
+    if not others:
+        primary = True
+    elif item.is_primary and requested is False:
+        raise PartyConflictError("Choose another primary contact of this type first.")
+    return replace(item, is_primary=primary)
+
+
+def _with_primary(
+    methods: list[PartyContactMethod], selected: PartyContactMethod
+) -> list[PartyContactMethod]:
+    return [
+        replace(item, is_primary=False)
+        if selected.is_primary
+        and item.status == "active"
+        and item.method_kind == selected.method_kind
+        else item
+        for item in methods
+        if item.id != selected.id
+    ] + [selected]
+
+
+def _demote_primary(
+    tx: PartyTransaction,
+    before: list[PartyContactMethod],
+    after: list[PartyContactMethod],
+    now: str,
+    correlation: str,
+) -> None:
+    previous = {item.id: item for item in before}
+    for item in after:
+        old = previous.get(item.id)
+        if old and old.is_primary and not item.is_primary:
+            revised = replace(item, updated_at=now)
+            tx.replace_method(revised)
+            tx.record_change(
+                entity_type="party_contact_method",
+                entity_id=item.id,
+                action="updated",
+                before=old.to_audit_dict(),
+                after=revised.to_audit_dict(),
+                reason="party_contact_primary_changed",
+                correlation_id=correlation,
+            )
+
+
+def prepare_contact_methods(
+    party_id: str, commands: tuple[ContactMethodCommand, ...], timestamp: str
+) -> list[PartyContactMethod]:
+    """Prepare normalized contacts for an owning transaction without writing."""
+    if (
+        not isinstance(commands, tuple)
+        or len(commands) > 100
+        or not all(isinstance(item, ContactMethodCommand) for item in commands)
+    ):
+        raise PartyValidationError("At most 100 valid contact methods are allowed.")
+    methods = [_contact(party_id, command, timestamp) for command in commands]
+    for kind in {item.method_kind for item in methods}:
+        group = [item for item in methods if item.method_kind == kind]
+        if not any(item.is_primary for item in group):
+            methods = [
+                replace(item, is_primary=True) if item.id == group[0].id else item
+                for item in methods
+            ]
+    _unique(methods)
+    return methods
 
 
 def _required_contact(methods: list[PartyContactMethod], method_id: str) -> PartyContactMethod:

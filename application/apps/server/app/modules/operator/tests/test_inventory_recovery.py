@@ -163,7 +163,18 @@ def test_all_nine_commands_original_receipts_and_later_replay(ready):
                 "ownerships": [
                     {
                         "ownerKind": "client_owner",
-                        "inlineParty": {"partyKind": "individual", "displayName": "Inline Owner"},
+                        "inlineParty": {
+                            "partyKind": "individual",
+                            "displayName": "Inline Owner",
+                            "contacts": [
+                                {"methodKind": "email", "value": "Owner@Example.test"},
+                                {"methodKind": "phone", "value": "503-555-0199"},
+                                {
+                                    "methodKind": "mailing_address",
+                                    "value": "10  Oak St\nPortland OR 97201\nUS",
+                                },
+                            ],
+                        },
                     }
                 ],
             },

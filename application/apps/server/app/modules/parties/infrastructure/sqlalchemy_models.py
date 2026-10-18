@@ -1,6 +1,15 @@
 """SQLAlchemy metadata for the shared party identity."""
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.platform.sqlalchemy_models import LocalBase
@@ -92,16 +101,26 @@ class PartyContactMethodModel(LocalBase):
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
     archived_at: Mapped[str | None] = mapped_column(String)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="0")
 
     __table_args__ = (
-        CheckConstraint("method_kind IN ('email', 'phone')"),
+        CheckConstraint("method_kind IN ('email', 'phone', 'mailing_address')"),
         CheckConstraint("status IN ('active', 'archived')"),
         CheckConstraint("length(trim(display_value)) > 0"),
         CheckConstraint(
             "(status = 'active' AND archived_at IS NULL) OR (status = 'archived' AND archived_at IS NOT NULL)"
         ),
         CheckConstraint("method_kind = 'phone' OR extension IS NULL"),
+        CheckConstraint("is_primary IN (0, 1)"),
+        CheckConstraint("status = 'active' OR is_primary = 0"),
         Index("party_contact_methods_party_status", "party_id", "status"),
+        Index(
+            "party_contact_methods_one_primary",
+            "party_id",
+            "method_kind",
+            unique=True,
+            sqlite_where=text("status = 'active' AND is_primary = 1"),
+        ),
         Index(
             "party_contact_methods_one_active_value",
             "party_id",

@@ -11,7 +11,12 @@ async function catalog(request: APIRequestContext) {
   return (await response.json()) as Category[];
 }
 async function save(page: Page, name: string) {
-  await page.getByRole("button", { name: `Save ${name}`, exact: true }).click();
+  await test.step(name, async () => {
+    await page
+      .getByRole("group", { name: "Form actions", exact: true })
+      .locator('button[type="submit"]')
+      .click();
+  });
   await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
 }
 
@@ -62,7 +67,6 @@ test("Settings manages categories separately from Services, retains assignments 
   });
   await page.goto("/providers");
   await page.getByRole("combobox", { name: "Category", exact: true }).selectOption(custom.id);
-  await page.getByRole("button", { name: "Apply Provider filters", exact: true }).click();
   await expect(
     page.getByRole("link", { name: "Categorized legal provider", exact: true }),
   ).toBeVisible();
@@ -118,7 +122,12 @@ test("Settings manages categories separately from Services, retains assignments 
   await expect(
     page.getByRole("link", { name: "Categorized legal provider", exact: true }),
   ).toHaveCount(0);
-  await expect(page.getByRole("article").getByText("Uncategorized", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("article")
+      .filter({ has: page.getByRole("link", { name: "Unclassified provider", exact: true }) })
+      .getByText("Uncategorized", { exact: true }),
+  ).toBeVisible();
 });
 
 test("a lost category response recovers its original receipt without duplicating the catalog", async ({
@@ -135,7 +144,7 @@ test("a lost category response recovers its original receipt without duplicating
     expect(response.ok()).toBe(true);
     return route.abort();
   });
-  await page.getByRole("button", { name: "Save create provider category", exact: true }).click();
+  await page.getByRole("button", { name: "Create provider category", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Check original result", exact: true }),
   ).toBeVisible();

@@ -451,13 +451,16 @@ def test_strict_api_and_success(foundation):
             "/api/operator/preferences",
             json={
                 "appearance": "dark",
-                "destinationOrder": ["money"],
+                "destinationOrder": list(DESTINATIONS),
+                "hiddenDestinationIds": list(DESTINATIONS[1:-1]),
                 "expectedRevision": 0,
                 "idempotencyKey": str(uuid4()),
             },
         )
         assert response.status_code == 200, response.text
         assert response.json()["destinationOrder"][0] == "home"
+        assert response.json()["destinationOrder"][2:4] == ["owners", "renters"]
+        assert len(response.json()["hiddenDestinationIds"]) == len(DESTINATIONS) - 2
         assert response.json()["operationId"]
         response = client.put(
             "/api/operator/recovery/" + str(uuid4()),

@@ -13,10 +13,11 @@ class IdentityForm(Contract):
 
 
 class ContactFields(Contract):
-    methodKind: Literal["email", "phone"] | None = None
-    value: str | None = Field(None, max_length=320)
+    methodKind: Literal["email", "phone", "mailing_address"] | None = None
+    value: str | None = Field(None, max_length=1000)
     extension: str | None = Field(None, max_length=6)
     label: str | None = Field(None, max_length=80)
+    isPrimary: StrictBool | None = None
 
 
 class PartyCreateForm(Contract):

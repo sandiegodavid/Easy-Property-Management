@@ -24,7 +24,11 @@ from app.modules.operator.domain.models import OperatorError
 
 def contact(payload):
     return ContactMethodCommand(
-        payload["methodKind"], payload["value"], payload.get("extension"), payload.get("label")
+        payload["methodKind"],
+        payload["value"],
+        payload.get("extension"),
+        payload.get("label"),
+        payload.get("isPrimary"),
     )
 
 

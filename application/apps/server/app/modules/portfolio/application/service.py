@@ -13,9 +13,11 @@ from zoneinfo import ZoneInfo
 
 from app.modules.parties.application.ports import PartyReadOperations
 from app.modules.parties.application.service import (
+    ContactMethodCommand,
     PartyCreateCommand,
     PartyFactory,
     SharedPartyFactory,
+    prepare_contact_methods,
 )
 from app.modules.portfolio.application.ports import (
     AddressTimeZoneResolver,
@@ -60,8 +62,18 @@ class OwnershipInput:
     owner_kind: str
     party_id: str | None = None
     inline_party: "PartyCreateCommand | None" = None
+    inline_contacts: tuple[ContactMethodCommand, ...] = ()
 
     def __post_init__(self) -> None:
+        if (
+            not isinstance(self.inline_contacts, tuple)
+            or len(self.inline_contacts) > 100
+            or not all(isinstance(item, ContactMethodCommand) for item in self.inline_contacts)
+            or (self.inline_contacts and self.inline_party is None)
+        ):
+            raise PortfolioError(
+                "Contact methods require a new inline owner and are limited to 100."
+            )
         if self.owner_kind not in {"local_operator", "client_owner"}:
             raise PortfolioError("Ownership kind must be local_operator or client_owner.")
         if self.owner_kind == "local_operator" and (
@@ -2501,7 +2513,9 @@ class PortfolioService:
         for item in ownerships:
             if item.inline_party is not None:
                 party = self.party_factory.create(item.inline_party, now)
+                methods = prepare_contact_methods(party.id, item.inline_contacts, now)
                 transaction.insert_party(party)
+                transaction.insert_party_contacts(methods)
                 transaction.record_change(
                     entity_type="party",
                     entity_id=party.id,
@@ -2511,7 +2525,19 @@ class PortfolioService:
                     reason="party_created",
                     correlation_id=correlation_id,
                 )
-                resolved.append(replace(item, party_id=party.id, inline_party=None))
+                for method in methods:
+                    transaction.record_change(
+                        entity_type="party_contact_method",
+                        entity_id=method.id,
+                        action="created",
+                        before=None,
+                        after=method.to_audit_dict(),
+                        reason="party_contact_created",
+                        correlation_id=correlation_id,
+                    )
+                resolved.append(
+                    replace(item, party_id=party.id, inline_party=None, inline_contacts=())
+                )
             elif item.party_id is not None:
                 party = transaction.get_party(item.party_id)
                 if party is None or party.archived_at is not None:

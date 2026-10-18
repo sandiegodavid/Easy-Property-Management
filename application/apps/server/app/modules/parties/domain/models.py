@@ -40,12 +40,14 @@ class PartyContactMethod:
     created_at: str
     updated_at: str
     archived_at: str | None
+    is_primary: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
             "id": self.id,
             "partyId": self.party_id,
             "methodKind": self.method_kind,
+            "isPrimary": self.is_primary,
             "displayValue": self.display_value,
             "extension": self.extension,
             "label": self.label,

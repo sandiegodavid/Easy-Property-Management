@@ -1,3 +1,4 @@
+import { DynamicFilterForm } from "../shared/dynamic-filter-form";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@epm/contracts";
@@ -103,7 +104,7 @@ export function CheckContext({
 export function CheckFilters() {
   const [params, setParams] = useSearchParams();
   return (
-    <form
+    <DynamicFilterForm
       className="directory-filters"
       aria-label="Prepaid check filters"
       onSubmit={(event) => {
@@ -117,7 +118,7 @@ export function CheckFilters() {
           else next.delete(key);
         }
         next.delete("cursor");
-        setParams(next);
+        setParams(next, { replace: true, preventScrollReset: true });
       }}
     >
       <p>
@@ -154,7 +155,6 @@ export function CheckFilters() {
           <input name={key} maxLength={36} defaultValue={params.get(key) ?? ""} />
         </label>
       ))}
-      <button>Apply check filters</button>
-    </form>
+    </DynamicFilterForm>
   );
 }

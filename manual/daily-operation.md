@@ -13,11 +13,11 @@
 
 ## Navigate and find records
 
-Properties and Owners open directories. Search/filter, open the intended record, then use contextual sections for its related information. Main navigation returns to a portfolio destination; contextual links preserve the selected Property/Owner. Check visible filters before recording anything.
+Properties and Owners open directories. **Tenants**, directly below Owners by default, opens the people and tenant directory for residential and office tenants and their shared contact details. Search/filter, open the intended record, then use contextual sections for its related information. Main navigation returns to a portfolio destination; contextual links preserve the selected Property/Owner. Check visible filters before recording anything.
 
 Home and Settings remain available. Hidden destinations are under **More**. Use **Search (Ctrl/⌘ K)** for supported record metadata; it does not search every attachment or raw source message. Include archived records when needed. If a continuation expires or recorded sources change, use the offered Restart while retaining filters.
 
-Tasks and Conversations are available through contextual links and work navigation. For direct access, replace `/home` in your local URL with `/tasks`, `/conversations`, `/maintenance?tab=concerns`, `/parties` or `/settings/recovery` as appropriate.
+Tasks and Conversations are available through contextual links and work navigation. For direct access, replace `/home` in your local URL with `/tasks`, `/conversations`, `/maintenance?tab=concerns`, `/tenants` or `/settings/recovery` as appropriate.
 
 ## Expand an item
 
@@ -35,7 +35,7 @@ Click anywhere on its non-editable summary bar, including the text or chevron. C
 | Money | Recorded activity for the exact displayed inclusive dates, not bank balance, profit or owner entitlement. Open the metric's contributing records. |
 | Inventory | Vacant rental units and units with unknown occupancy in active properties. Unknown occupancy is not vacant. |
 
-Home includes unresolved obligations on archived properties. All-properties scope also includes Tasks without a property; a property filter excludes those unlinked Tasks. Current Home has a **Property ID** field rather than a name picker; prefer contextual links or use the identifier shown in the Property workspace. Apply Home filters after changing scope, horizon or money dates.
+Home includes unresolved obligations on archived properties. All-properties scope also includes Tasks without a property; a property filter excludes those unlinked Tasks. Current Home has a **Property ID** field rather than a name picker; prefer contextual links or use the identifier shown in the Property workspace. Home and directory filters apply automatically: choices update immediately, and typed values and dates update after a short pause. There is no Apply or Search button. Correct an invalid date range or incomplete record ID to apply those filters.
 
 The default money period is the full calendar month selected from server UTC time; it is not month-to-date. Property business dates use their stored time zones. Cross-zone appointments show their zone. Different sections may have different captured times.
 

@@ -18,6 +18,7 @@ from app.modules.portfolio.infrastructure.inventory_recovery_reader import (
     SQLiteInventoryRecoveryReader,
 )
 from app.platform.command_recovery import CommandRecoveryReader
+from app.modules.parties.application.service import ContactMethodCommand, PartyValidationError
 
 
 def owners(items):
@@ -30,6 +31,16 @@ def owners(items):
             PartyCreateCommand(item["inlineParty"]["partyKind"], item["inlineParty"]["displayName"])
             if item.get("inlineParty") is not None
             else None,
+            tuple(
+                ContactMethodCommand(
+                    contact["methodKind"],
+                    contact["value"],
+                    contact.get("extension"),
+                    contact.get("label"),
+                    contact.get("isPrimary"),
+                )
+                for contact in (item.get("inlineParty") or {}).get("contacts", [])
+            ),
         )
         for item in items
     )
@@ -59,7 +70,7 @@ def initial_space(payload):
 def inventory_fingerprint(action, source_id, payload, key):
     try:
         return _inventory_fingerprint(action, source_id, payload, key)
-    except (PortfolioError, KeyError, TypeError, ValueError) as error:
+    except (PortfolioError, PartyValidationError, KeyError, TypeError, ValueError) as error:
         raise OperatorError("Complete a valid Portfolio inventory command.") from error
 
 

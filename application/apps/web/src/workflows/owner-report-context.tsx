@@ -1,3 +1,4 @@
+import { DynamicFilterForm } from "../shared/dynamic-filter-form";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
@@ -183,7 +184,7 @@ export function OwnerReportContext({
 export function OwnerReportFilters() {
   const [params, setParams] = useSearchParams();
   return (
-    <form
+    <DynamicFilterForm
       className="directory-filters"
       onSubmit={(event) => {
         event.preventDefault();
@@ -201,7 +202,7 @@ export function OwnerReportFilters() {
           else next.delete(key);
         }
         next.delete("cursor");
-        setParams(next);
+        setParams(next, { replace: true, preventScrollReset: true });
       }}
     >
       <label>
@@ -240,7 +241,6 @@ export function OwnerReportFilters() {
         Received to
         <input type="date" name="receivedTo" defaultValue={params.get("receivedTo") ?? ""} />
       </label>
-      <button>Apply owner-report filters</button>
-    </form>
+    </DynamicFilterForm>
   );
 }

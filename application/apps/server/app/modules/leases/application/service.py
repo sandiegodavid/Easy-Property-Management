@@ -427,6 +427,9 @@ class LeaseService:
             {
                 "id": row["id"],
                 "spaceId": row["space_id"],
+                "propertyId": row.get("property_id"),
+                "propertyName": row.get("property_name"),
+                "rentalName": row.get("rental_name"),
                 "leaseKind": row["lease_kind"],
                 "status": row["status"],
                 "contractStartsOn": row["contract_starts_on"],

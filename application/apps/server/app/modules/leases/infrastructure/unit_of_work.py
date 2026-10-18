@@ -142,7 +142,22 @@ class SQLiteLeaseUnitOfWork:
                 .mappings()
                 .all()
             )
-            return [dict(row) for row in rows], total
+            labels = self.portfolio_operations.rental_labels(
+                connection, {row["space_id"] for row in rows[:limit]}
+            )
+            return [
+                dict(row)
+                | (
+                    {
+                        "property_id": labels[row["space_id"]].property_id,
+                        "property_name": labels[row["space_id"]].property_name,
+                        "rental_name": labels[row["space_id"]].rental_name,
+                    }
+                    if row["space_id"] in labels
+                    else {}
+                )
+                for row in rows
+            ], total
 
     def lease_views(
         self,

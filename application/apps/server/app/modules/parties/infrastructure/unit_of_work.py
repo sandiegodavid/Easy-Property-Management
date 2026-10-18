@@ -124,6 +124,7 @@ class SQLitePartyOperations(PartyTransactionOperations):
         connection.execute(PartyContactMethodModel.__table__.insert().values(**method.__dict__))
 
     def duplicate_party_ids(self, connection, methods, limit):
+        methods = [item for item in methods if item.method_kind != "mailing_address"]
         if not methods:
             return []
         clauses = [
@@ -285,6 +286,7 @@ class _Transaction:
         return [PartyContactMethod(**dict(row)) for row in rows]
 
     def duplicate_party_ids(self, methods, limit):
+        methods = [item for item in methods if item.method_kind != "mailing_address"]
         if not methods:
             return []
         clauses = [

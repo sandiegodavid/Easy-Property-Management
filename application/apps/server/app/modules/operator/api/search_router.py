@@ -31,6 +31,12 @@ class SearchInput(Contract):
         return self
 
 
+class TenantBrowseInput(Contract):
+    includeArchived: bool = False
+    limit: int = Field(20, ge=1, le=50)
+    cursor: str | None = Field(None, max_length=4096)
+
+
 class SearchTarget(Contract):
     entityType: EntityKind
     entityId: UUID
@@ -52,7 +58,7 @@ class SearchHit(Contract):
 
 
 class SearchViewAll(Contract):
-    kind: Literal["metadata_search"]
+    kind: Literal["metadata_search", "tenant_browse"]
     group: SearchKind
     q: str
     includeArchived: StrictBool
@@ -119,6 +125,14 @@ class SearchResponse(Contract):
 
 
 def register_search(router, service, invoke):
+    @router.get("/tenants", response_model=SearchResponse, operation_id="browseOperatorTenants")
+    def browse_tenants(query: Annotated[TenantBrowseInput, Query()]):
+        return invoke(
+            lambda: service.browse_tenants(
+                include_archived=query.includeArchived, limit=query.limit, cursor=query.cursor
+            )
+        )
+
     @router.get("/search", response_model=SearchResponse, operation_id="searchOperatorMetadata")
     def search(query: Annotated[SearchInput, Query()]):
         return invoke(

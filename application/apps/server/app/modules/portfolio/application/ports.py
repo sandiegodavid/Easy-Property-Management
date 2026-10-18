@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Collection
 from datetime import datetime
+from dataclasses import dataclass
 from typing import Any, Literal, Protocol, TypeVar
 
 from app.modules.portfolio.domain.models import (
@@ -14,10 +15,18 @@ from app.modules.portfolio.domain.models import (
     SpaceAvailability,
     SpaceOccupancyPeriod,
 )
+from app.modules.parties.domain.models import PartyContactMethod
 
 Result = TypeVar("Result")
 
 PropertyView = tuple[Property, list[PropertyOwnership], dict[str, Party], list[Space]]
+
+
+@dataclass(frozen=True)
+class RentalLabel:
+    property_id: str
+    property_name: str
+    rental_name: str
 
 
 class PortfolioContextReader(Protocol):
@@ -101,6 +110,7 @@ class PortfolioTransaction(Protocol):
     def party_role_conflicts(self, party_id: str) -> list[str]: ...
     def property_archive_conflicts(self, property_id: str) -> list[str]: ...
     def insert_party(self, party: Party) -> None: ...
+    def insert_party_contacts(self, contacts: list[PartyContactMethod]) -> None: ...
     def replace_party(self, party: Party) -> None: ...
     def insert_property(self, property: Property) -> None: ...
     def replace_property(self, property: Property) -> None: ...

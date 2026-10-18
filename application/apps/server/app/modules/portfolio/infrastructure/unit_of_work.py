@@ -13,11 +13,15 @@ from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.parties.infrastructure.sqlalchemy_models import PartyModel
+from app.modules.parties.application.ports import PartyTransactionOperations
+from app.modules.parties.domain.models import PartyContactMethod
+from app.modules.parties.infrastructure.unit_of_work import SQLitePartyOperations
 from app.modules.portfolio.application.ports import (
     PartyRoleActivityGuard,
     PortfolioConflictError,
     PortfolioTransaction,
     PropertyArchiveGuard,
+    RentalLabel,
 )
 from app.modules.portfolio.application.source_timeline import (
     PortfolioSourceTimelineService,
@@ -91,11 +95,13 @@ class SQLitePortfolioUnitOfWork:
         recorder: AuditRecorder,
         party_role_guards: tuple[PartyRoleActivityGuard, ...] = (),
         property_archive_guards: tuple[PropertyArchiveGuard, ...] = (),
+        party_operations: PartyTransactionOperations | None = None,
     ) -> None:
         self.engine = create_sqlite_engine(database)
         self.recorder = recorder
         self.party_role_guards = party_role_guards
         self.property_archive_guards = property_archive_guards
+        self.party_operations = party_operations or SQLitePartyOperations(database)
 
     def write(self, operation: Callable[[PortfolioTransaction], Result]) -> Result:
         try:
@@ -106,6 +112,7 @@ class SQLitePortfolioUnitOfWork:
                         self.recorder,
                         self.party_role_guards,
                         self.property_archive_guards,
+                        self.party_operations,
                     )
                 )
         except OperationalError as error:
@@ -125,6 +132,7 @@ class SQLitePortfolioUnitOfWork:
                         self.recorder,
                         self.party_role_guards,
                         self.property_archive_guards,
+                        self.party_operations,
                     )
                 )
 
@@ -269,6 +277,24 @@ class SQLitePortfolioLeaseOperations:
         )
         return Space(**dict(row)) if row else None
 
+    def rental_labels(self, connection, space_ids):
+        if not space_ids:
+            return {}
+        rows = connection.execute(
+            select(
+                SpaceModel.id,
+                SpaceModel.display_name.label("rental_name"),
+                PropertyModel.id.label("property_id"),
+                PropertyModel.display_name.label("property_name"),
+            )
+            .join(PropertyModel, SpaceModel.property_id == PropertyModel.id)
+            .where(SpaceModel.id.in_(space_ids))
+        ).mappings()
+        return {
+            row["id"]: RentalLabel(row["property_id"], row["property_name"], row["rental_name"])
+            for row in rows
+        }
+
     def property(self, connection, property_id):
         row = (
             connection.execute(
@@ -375,11 +401,13 @@ class _SQLitePortfolioTransaction:
         recorder: AuditRecorder,
         role_guards: tuple[PartyRoleActivityGuard, ...],
         property_archive_guards: tuple[PropertyArchiveGuard, ...] = (),
+        party_operations: PartyTransactionOperations | None = None,
     ) -> None:
         self.connection = connection
         self.recorder = recorder
         self.role_guards = role_guards
         self.property_archive_guards = property_archive_guards
+        self.party_operations = party_operations
 
     def get_property(self, property_id: str) -> Property | None:
         row = (
@@ -759,6 +787,12 @@ class _SQLitePortfolioTransaction:
 
     def insert_party(self, party: Party) -> None:
         self.connection.execute(PartyModel.__table__.insert().values(**party.__dict__))
+
+    def insert_party_contacts(self, contacts: list[PartyContactMethod]) -> None:
+        if contacts and self.party_operations is None:
+            raise RuntimeError("Shared party operations are required for owner contacts.")
+        for contact in contacts:
+            self.party_operations.insert_method(self.connection, contact)
 
     def replace_party(self, party: Party) -> None:
         self.connection.execute(

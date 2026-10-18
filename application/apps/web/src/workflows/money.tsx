@@ -1,3 +1,4 @@
+import { DynamicFilterForm } from "../shared/dynamic-filter-form";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
@@ -59,7 +60,7 @@ export function MoneyWorkspace() {
         Recorded payments, paid expenses and held deposits are separate records. Scheduled checks
         and pending owner reports are not received income.
       </p>
-      <nav className="property-status-tabs" aria-label="Money views">
+      <nav className="page-tabs" aria-label="Money views">
         {tabs.map((item) => {
           const next = new URLSearchParams(params);
           next.set("tab", item);
@@ -437,7 +438,7 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
       {tab === "checks" && <CheckFilters />}
       {tab === "reports" && <OwnerReportFilters />}
       {tab === "receipts" && (
-        <form
+        <DynamicFilterForm
           className="directory-filters"
           onSubmit={(event) => {
             event.preventDefault();
@@ -454,7 +455,7 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
               else next.delete(key);
             }
             next.delete("cursor");
-            setParams(next);
+            setParams(next, { replace: true, preventScrollReset: true });
           }}
         >
           <label>
@@ -485,11 +486,10 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
               defaultValue={params.get("replacesReceiptId") ?? ""}
             />
           </label>
-          <button>Apply receipt filters</button>
-        </form>
+        </DynamicFilterForm>
       )}
       {tab === "rent" && (
-        <form
+        <DynamicFilterForm
           className="directory-filters"
           onSubmit={(event) => {
             event.preventDefault();
@@ -501,7 +501,7 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
               else next.delete(key);
             }
             next.delete("cursor");
-            setParams(next);
+            setParams(next, { replace: true, preventScrollReset: true });
           }}
         >
           <label>
@@ -534,8 +534,7 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
             Due to
             <input type="date" name="dueTo" defaultValue={params.get("dueTo") ?? ""} />
           </label>
-          <button>Apply rent filters</button>
-        </form>
+        </DynamicFilterForm>
       )}
       {tab === "receipts" && propertyId && !leaseId && (
         <p>

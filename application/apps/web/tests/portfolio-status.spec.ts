@@ -66,14 +66,444 @@ async function action(page: Page, key: string, space: string, child?: string) {
   await expect(page.getByRole("group", { name: "Requested change", exact: true })).toBeVisible();
 }
 async function save(page: Page, title: string) {
-  await page
-    .getByRole("button", {
-      name: title === "Create property" ? title : `Save ${title.toLowerCase()}`,
-      exact: true,
-    })
-    .click();
+  await test.step(title, async () => {
+    await page
+      .getByRole("group", { name: "Form actions", exact: true })
+      .locator('button[type="submit"]')
+      .click();
+  });
+  if (["Create property", "Edit property"].includes(title)) {
+    const tab = title === "Edit property" ? "setup" : "overview";
+    await expect(page).toHaveURL(new RegExp(`/properties/[^/]+/${tab}$`));
+    return;
+  }
   await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
 }
+
+test("ownership changes use named owner search and property-local date help", async ({
+  page,
+  request,
+}, testInfo) => {
+  const property = await create(request, "Ownership form office", "office_suites");
+  const response = await request.post("/api/parties", {
+    data: {
+      partyKind: "individual",
+      displayName: "Ownership search Morgan",
+      contacts: [
+        { methodKind: "email", value: "morgan@example.test" },
+        { methodKind: "phone", value: "503-555-0199", label: "Mobile" },
+        { methodKind: "mailing_address", value: "10 Oak St\nPortland OR 97201\nUS" },
+      ],
+      expectedRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+  const party = (await response.json()) as Schemas["PartyMutationResponse"];
+  await page.goto(`/properties?workflow=portfolio.ownerships.replace&target=${property.id}`);
+  await expect(
+    page.getByRole("link", { name: `← Back to ${property.displayName}`, exact: true }),
+  ).toHaveAttribute("href", `/properties/${property.id}/setup`);
+  await expect(page.getByLabel("Effective date", { exact: true })).toHaveValue(
+    property.effectiveLocalDate,
+  );
+  await page
+    .getByRole("button", { name: "How the ownership effective date works", exact: true })
+    .focus();
+  await expect(page.getByRole("tooltip")).toContainText("America/Los_Angeles");
+  await expect(page.getByText("Inventory uses", { exact: false })).toHaveCount(0);
+  await expect(page.getByLabel("Existing identity ID", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Back to property", exact: true })).toHaveCount(0);
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((appearance) => {
+      document.documentElement.dataset.theme = appearance;
+    }, theme);
+    const contrast = await page
+      .getByRole("button", { name: "Save ownership change", exact: true })
+      .evaluate((button) => {
+        const style = getComputedStyle(button);
+        const luminance = (color: string) => {
+          const channels = color
+            .match(/\d+/g)!
+            .slice(0, 3)
+            .map((channel) => {
+              const value = Number(channel) / 255;
+              return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+            });
+          return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+        };
+        const values = [luminance(style.color), luminance(style.backgroundColor)];
+        return (Math.max(...values) + 0.05) / (Math.min(...values) + 0.05);
+      });
+    expect(contrast).toBeGreaterThanOrEqual(4.5);
+  }
+  await expect(
+    page.getByRole("button", { name: "Check latest property record", exact: true }),
+  ).toBeHidden();
+  await expect(page.locator(".command-form-actions button")).toHaveText([
+    "Save ownership change",
+    "Save unfinished form",
+  ]);
+  await page.getByRole("button", { name: "Add owner", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Save ownership change", exact: true }),
+  ).toBeDisabled();
+  await page.getByLabel("Find an owner by name", { exact: true }).fill(party.displayName);
+  await expect(page.getByRole("button", { name: "Search", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: `Add ${party.displayName}`, exact: true }).click();
+  await expect(page.locator(".ownership-selected")).toContainText(party.displayName);
+  await expect(page.locator(".owner-contact-details")).toContainText("morgan@example.test");
+  await expect(page.locator(".owner-contact-details")).toContainText("503-555-0199");
+  await expect(page.locator(".owner-contact-details")).toContainText("10 Oak St");
+  await expect(page.getByRole("region", { name: "Add an owner", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Add owner", exact: true }).click();
+  await page.getByRole("button", { name: "Create a new owner", exact: true }).click();
+  await page.getByLabel("New owner name", { exact: true }).fill("Unsaved new owner");
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((appearance) => {
+      document.documentElement.dataset.theme = appearance;
+    }, theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+      await page
+        .getByRole("region", { name: "Add an owner", exact: true })
+        .screenshot({ path: testInfo.outputPath(`add-owner-${theme}-${width}.png`) });
+    }
+  }
+  await page.getByRole("button", { name: "Add to owners", exact: true }).click();
+  await expect(page.locator(".ownership-selected")).toContainText("Unsaved new owner");
+  await page.getByRole("button", { name: "Remove Unsaved new owner", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Save ownership change", exact: true }),
+  ).toBeEnabled();
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+  }
+  await page.getByRole("button", { name: "Save ownership change", exact: true }).click();
+  await expect(page.getByText("Ownership updated successfully.", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Ownership confirmation", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".ownership-command form")).toHaveCount(0);
+  const confirmation = page.getByRole("region", { name: "Ownership confirmation", exact: true });
+  await expect(confirmation.locator(".ownership-selected > li")).toHaveCount(2);
+  await expect(confirmation).toContainText("You");
+  await expect(confirmation).toContainText(party.displayName);
+  await expect(confirmation).toContainText("morgan@example.test");
+  await expect(confirmation.locator("input, select, textarea, button")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Save ownership change", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add owner", exact: true })).toHaveCount(0);
+  await expect(page.getByText("Form status and recovery details", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Changing ownership", { exact: true })).toBeHidden();
+  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toHaveCount(0);
+  await expect(page.getByText(/^Operation /)).toHaveCount(0);
+  await expect(page.getByText(/^Result record /)).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: `← Back to ${property.displayName}`, exact: true }),
+  ).toHaveCount(1);
+  await page
+    .getByRole("region", { name: "Ownership confirmation", exact: true })
+    .screenshot({ path: testInfo.outputPath("ownership-confirmation.png") });
+  const updated = await request.get(`/api/properties/${property.id}`);
+  expect(updated.ok()).toBe(true);
+  const result = (await updated.json()) as Schemas["PropertyMutationResponse"];
+  expect(result.ownerships.some((item) => item.partyId === party.id && item.endsOn === null)).toBe(
+    true,
+  );
+});
+
+test("ownership confirmation waits for a known result after an interrupted save", async ({
+  page,
+  request,
+}) => {
+  const property = await create(request, "Recoverable ownership confirmation");
+  await page.goto(`/properties?workflow=portfolio.ownerships.replace&target=${property.id}`);
+  await page.getByRole("button", { name: "Add owner", exact: true }).click();
+  await page.getByRole("button", { name: "Create a new owner", exact: true }).click();
+  await page.getByLabel("New owner name", { exact: true }).fill("Confirmation owner");
+  await page.getByRole("button", { name: "Add to owners", exact: true }).click();
+  await page
+    .getByLabel("Effective date", { exact: true })
+    .fill(later(property.effectiveLocalDate, 7));
+  let writes = 0;
+  await page.route(`**/api/properties/${property.id}/ownerships`, async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    writes++;
+    const response = await route.fetch();
+    expect(response.ok()).toBe(true);
+    await route.abort("failed");
+  });
+  await page.getByRole("button", { name: "Save ownership change", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Check original result", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".ownership-command form")).toHaveCount(1);
+  await expect(
+    page.getByRole("region", { name: "Ownership confirmation", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Ownership confirmation", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".ownership-command form")).toHaveCount(0);
+  await expect(
+    page.getByRole("region", { name: "Ownership confirmation", exact: true }),
+  ).toContainText("Confirmation owner");
+  await expect(
+    page
+      .getByRole("region", { name: "Ownership confirmation", exact: true })
+      .locator(".ownership-selected > li"),
+  ).toHaveCount(2);
+  expect(writes).toBe(1);
+});
+
+test("new owner contacts save with ownership and remain visible after reopening", async ({
+  page,
+  request,
+}, testInfo) => {
+  const property = await create(request, "Owner contact office", "office_suites");
+  await page.goto(`/properties?workflow=portfolio.ownerships.replace&target=${property.id}`);
+  await page.getByRole("button", { name: "Add owner", exact: true }).click();
+  await page.getByRole("button", { name: "Create a new owner", exact: true }).click();
+  await page.getByLabel("New owner name", { exact: true }).fill("Morgan with contacts");
+  await page.getByRole("button", { name: "Add email", exact: true }).click();
+  await page.getByLabel("Email", { exact: true }).fill("owner-ui@example.test");
+  await page.getByRole("button", { name: "Add phone number", exact: true }).click();
+  await page.getByLabel("Phone number", { exact: true }).fill("503-555-0199");
+  await page.getByRole("button", { name: "Add phone number", exact: true }).click();
+  await page.getByLabel("Phone number", { exact: true }).nth(1).fill("503-555-0188");
+  await page
+    .getByLabel("Mailing address", { exact: true })
+    .fill("10 Oak St\nPortland OR 97201\nUS");
+  await page.getByRole("button", { name: "Add to owners", exact: true }).click();
+  await expect(page.getByLabel("Email", { exact: true })).toHaveValue("owner-ui@example.test");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  await page.getByRole("button", { name: "Save ownership change", exact: true }).click();
+  await expect(page.getByText("Ownership updated successfully.", { exact: true })).toBeVisible();
+  const confirmation = page.getByRole("region", { name: "Ownership confirmation", exact: true });
+  await expect(confirmation.locator(".ownership-selected > li")).toHaveCount(2);
+  await expect(confirmation).toContainText("Morgan with contacts");
+  await expect(confirmation).toContainText("owner-ui@example.test");
+  await expect(confirmation.locator("input, select, textarea, button")).toHaveCount(0);
+  await page.goto(`/properties?workflow=portfolio.ownerships.replace&target=${property.id}`);
+  await expect(page.locator(".owner-contact-details")).toContainText("owner-ui@example.test");
+  await expect(page.locator(".owner-contact-details")).toContainText("503-555-0199");
+  await expect(page.locator(".owner-contact-details")).toContainText("503-555-0188");
+  await expect(page.locator(".owner-contact-details")).toContainText("10 Oak St");
+  await expect(
+    page.getByRole("link", { name: "Manage contact details", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".ownership-selected > li")).toHaveCount(2);
+  await page.getByRole("link", { name: "Manage contact details", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Morgan with contacts", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Shared identities and tenants", exact: true }),
+  ).toHaveCount(0);
+  const contacts = page.getByRole("region", { name: "Contact details", exact: true });
+  await expect(contacts).toContainText("owner-ui@example.test");
+  await expect(contacts).toContainText("503-555-0199");
+  await expect(contacts).toContainText("10 Oak St");
+  await expect(page.getByText("Record details", { exact: true })).toBeVisible();
+  await expect(page.getByText("Revision", { exact: true })).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Add contact details", exact: true }),
+  ).toBeVisible();
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((appearance) => {
+      document.documentElement.dataset.theme = appearance;
+    }, theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+      await page.screenshot({
+        path: testInfo.outputPath(`owner-details-${theme}-${width}.png`),
+        fullPage: true,
+      });
+    }
+  }
+  await page.evaluate(axe.source);
+  expect(
+    await page.evaluate(async () =>
+      (
+        await window.axe.run(document, {
+          runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+        })
+      ).violations.map((item) => item.id),
+    ),
+  ).toEqual([]);
+  await page.getByRole("link", { name: "← Back to change ownership", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`portfolio.ownerships.replace&target=${property.id}`));
+});
+
+test("owner browsing is opt-in and paginates ten results at a time", async ({ page, request }) => {
+  const property = await create(request, "Paged ownership search");
+  const people = Array.from({ length: 12 }, (_, index) => ({
+    id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    displayName: `Paged Owner ${index + 1}`,
+    partyKind: "individual",
+    revision: 1,
+    archivedAt: null,
+    createdAt: "2026-01-01T00:00:00Z",
+    updatedAt: "2026-01-01T00:00:00Z",
+  }));
+  const calls: URL[] = [];
+  let releaseNextPage: () => void = () => undefined;
+  const nextPageReady = new Promise<void>((resolve) => {
+    releaseNextPage = resolve;
+  });
+  await page.route("**/api/parties/selection?*", async (route) => {
+    const url = new URL(route.request().url());
+    calls.push(url);
+    const search = url.searchParams.get("search");
+    const offset = url.searchParams.get("cursor") ? 10 : 0;
+    if (offset) await nextPageReady;
+    const matches = search
+      ? people.filter((person) => person.displayName.includes(search))
+      : people;
+    await route.fulfill({
+      json: {
+        items: matches.slice(offset, offset + 10),
+        nextCursor: matches.length > offset + 10 ? people[9].id : null,
+      },
+    });
+  });
+  await page.goto(`/properties?workflow=portfolio.ownerships.replace&target=${property.id}`);
+  await page.getByRole("button", { name: "Add owner", exact: true }).click();
+  await expect(page.locator(".ownership-search-results")).toHaveCount(0);
+  expect(calls).toHaveLength(0);
+  await page.getByRole("button", { name: "Browse owners", exact: true }).click();
+  await expect(page.locator(".ownership-search-results li")).toHaveCount(10);
+  const pages = page.getByRole("navigation", { name: "Owner search pages", exact: true });
+  await expect(pages.getByRole("button", { name: "Previous", exact: true })).toBeDisabled();
+  await pages.scrollIntoViewIfNeeded();
+  const position = await pages.evaluate((nav) => ({
+    top: nav.getBoundingClientRect().top,
+    scroll: window.scrollY,
+  }));
+  const results = page.getByRole("region", { name: "Matching owners", exact: true });
+  const originalHeight = await results.evaluate(
+    (element) => element.getBoundingClientRect().height,
+  );
+  await pages.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(results).toHaveAttribute("aria-busy", "true");
+  expect(await results.evaluate((element) => element.getBoundingClientRect().height)).toBe(
+    originalHeight,
+  );
+  expect(await pages.evaluate((nav) => nav.getBoundingClientRect().top)).toBeCloseTo(
+    position.top,
+    0,
+  );
+  expect(await page.evaluate(() => window.scrollY)).toBe(position.scroll);
+  releaseNextPage();
+  await expect(page.locator(".ownership-search-results li")).toHaveCount(2);
+  await expect(pages).toContainText("11–12");
+  expect(await results.evaluate((element) => element.getBoundingClientRect().height)).toBe(
+    originalHeight,
+  );
+  expect(await pages.evaluate((nav) => nav.getBoundingClientRect().top)).toBeCloseTo(
+    position.top,
+    0,
+  );
+  expect(await page.evaluate(() => window.scrollY)).toBe(position.scroll);
+  await expect(pages.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
+  await pages.getByRole("button", { name: "Previous", exact: true }).click();
+  await expect(page.locator(".ownership-search-results li")).toHaveCount(10);
+  await page.getByLabel("Find an owner by name", { exact: true }).fill("Paged Owner 12");
+  await expect(page.locator(".ownership-search-results li")).toHaveCount(1);
+  await expect(pages).toContainText("1–1");
+  expect(calls.every((url) => url.searchParams.get("limit") === "10")).toBe(true);
+  await expect(page.getByRole("button", { name: "Hide results", exact: true })).toHaveCount(0);
+  await page.getByLabel("Find an owner by name", { exact: true }).fill("");
+  await expect(page.locator(".ownership-search-results")).toHaveCount(0);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Save ownership change", exact: true }),
+  ).toBeEnabled();
+});
+
+test("owner live search debounces typing and never shows stale matches", async ({
+  page,
+  request,
+}) => {
+  const property = await create(request, "Live ownership search");
+  let releaseOld: () => void = () => undefined;
+  const oldReady = new Promise<void>((resolve) => {
+    releaseOld = resolve;
+  });
+  const calls: string[] = [];
+  await page.route("**/api/parties/selection?*", async (route) => {
+    const search = new URL(route.request().url()).searchParams.get("search") ?? "";
+    calls.push(search);
+    if (search === "Old") await oldReady;
+    await route.fulfill({
+      json: {
+        items: [
+          {
+            id: "00000000-0000-4000-8000-000000000099",
+            partyKind: "individual",
+            displayName: `${search} owner`,
+            revision: 1,
+            archivedAt: null,
+            createdAt: "2026-01-01T00:00:00Z",
+            updatedAt: "2026-01-01T00:00:00Z",
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+  });
+  await page.goto(`/properties?workflow=portfolio.ownerships.replace&target=${property.id}`);
+  await page.getByRole("button", { name: "Add owner", exact: true }).click();
+  const input = page.getByLabel("Find an owner by name", { exact: true });
+  await input.fill("Old");
+  await expect.poll(() => calls).toEqual(["Old"]);
+  await input.fill("");
+  await input.pressSequentially("New", { delay: 20 });
+  await expect(page.getByRole("button", { name: "Add New owner", exact: true })).toBeVisible();
+  releaseOld();
+  await expect(page.getByRole("button", { name: "Add Old owner", exact: true })).toHaveCount(0);
+  expect(calls).toEqual(["Old", "New"]);
+  await input.fill("");
+  await expect(page.getByRole("region", { name: "Matching owners", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Save ownership change", exact: true }),
+  ).toBeEnabled();
+});
+
+test("property units and setup show the address consistently with other detail tabs", async ({
+  page,
+  request,
+}) => {
+  const property = await create(request, "Property address tabs", "office_suites");
+  const address = `${property.addressLine1}, ${property.city}, ${property.countryCode} · ${property.timeZone} · ${property.status}`;
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const tab of ["units", "setup"]) {
+      await page.goto(`/properties/${property.id}/${tab}`);
+      await expect(page.getByLabel("Property address", { exact: true })).toHaveText(address);
+      await expect(page.getByText(address, { exact: true })).toHaveCount(1);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true);
+    }
+  }
+});
 
 test("property setup puts all actions on the top row without a repeated heading", async ({
   page,
@@ -156,14 +586,22 @@ test("property edit groups and prefills details without changing ownership or re
       ["Address line1", "10 Maple Street"],
       ["Address line2", "North building"],
       ["City", "Portland"],
-      ["Region", "OR"],
+      ["State", "OR"],
       ["Postal code", "97201"],
-      ["Country code", "US"],
       ["Notes", "Use the courtyard entrance."],
     ]) {
       await expect(editor.getByRole("textbox", { name, exact: true })).toHaveValue(value);
     }
     await expect(page.getByText(/Displayed source revision:/)).not.toBeVisible();
+    await expect(editor.getByLabel("Region", { exact: true })).toHaveCount(0);
+    await expect(editor.getByLabel(/Country code/)).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Return to current record", exact: true }),
+    ).toHaveCount(0);
+    await expect(editor.locator(".command-form-actions").getByRole("button")).toHaveText([
+      "Save property changes",
+      "Save unfinished form",
+    ]);
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       expect(
@@ -180,6 +618,7 @@ test("property edit groups and prefills details without changing ownership or re
     .fill("Updated property name");
   await page.getByRole("textbox", { name: "Notes", exact: true }).fill("New entrance note.");
   await save(page, "Edit property");
+  await expect(page).toHaveURL(`/properties/${property.id}/setup`);
   const updatedResponse = await request.get(`/api/properties/${property.id}`);
   const updated = (await updatedResponse.json()) as Schemas["PropertyMutationResponse"];
   expect(updated.displayName).toBe("Updated property name");
@@ -187,6 +626,7 @@ test("property edit groups and prefills details without changing ownership or re
   expect(updated.addressLine2).toBe(prior.addressLine2);
   expect(updated.region).toBe(prior.region);
   expect(updated.postalCode).toBe(prior.postalCode);
+  expect(updated.countryCode).toBe("US");
   expect(updated.ownerships).toEqual(prior.ownerships);
   const rentalFacts = (item: Schemas["PropertyMutationResponse"]) =>
     item.spaces.map((space) => ({
@@ -208,6 +648,36 @@ test("property edit groups and prefills details without changing ownership or re
   expect(cleared.addressLine2).toBeNull();
   expect(cleared.region).toBe("OR");
   expect(cleared.postalCode).toBe("97201");
+});
+
+test("interrupted property edit returns to setup only after reconciliation", async ({
+  page,
+  request,
+}) => {
+  const property = await create(request, "Interrupted property edit");
+  await action(page, "portfolio.property.patch", property.id);
+  await page
+    .getByRole("textbox", { name: "Display name", exact: true })
+    .fill("Saved property edit");
+  let writes = 0;
+  await page.route(`**/api/properties/${property.id}`, async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    writes += 1;
+    const response = await route.fetch();
+    expect(response.ok()).toBe(true);
+    await route.abort("failed");
+  });
+  await page.getByRole("button", { name: "Save property changes", exact: true }).click();
+  await expect(
+    page.getByText("The outcome is unresolved. Check the original receipt before continuing."),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/workflow=portfolio.property.patch/);
+  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await expect(page).toHaveURL(`/properties/${property.id}/setup`);
+  expect(writes).toBe(1);
+  const response = await request.get(`/api/properties/${property.id}`);
+  const updated = (await response.json()) as Schemas["PropertyMutationResponse"];
+  expect(updated.displayName).toBe("Saved property edit");
 });
 
 test("rental edit shows property context, current values and a responsive form", async ({
@@ -318,7 +788,7 @@ test("archive suite explains its scope and confirms the change in both themes", 
   }
 });
 
-test("guided property creation supports suites, co-owners and embedded identity lookup", async ({
+test("guided property creation supports suites, co-owners and shared owner search", async ({
   page,
   request,
 }, testInfo) => {
@@ -330,11 +800,14 @@ test("guided property creation supports suites, co-owners and embedded identity 
     await page.getByRole("button", { name: "Save preferences", exact: true }).click();
     await expect(page.getByText("Preferences saved.")).toBeVisible();
     await page.goto("/properties?workflow=portfolio.property.create");
-    await expect(
-      page
-        .getByRole("group", { name: "Owner 1", exact: true })
-        .getByRole("combobox", { name: "Owner", exact: true }),
-    ).toHaveValue("local_operator");
+    const ownership = page.locator("fieldset.ownership-owners");
+    await expect(ownership.getByText("You", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Effective date", { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel(/Country code/)).toHaveCount(0);
+    await expect(page.getByLabel("Region", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Form status and recovery details", { exact: true })).toHaveCount(
+      0,
+    );
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       expect(
@@ -349,8 +822,7 @@ test("guided property creation supports suites, co-owners and embedded identity 
   await page.getByLabel("Display name (required)", { exact: true }).fill("Guided office create");
   await page.getByLabel("Address line1 (required)", { exact: true }).fill("22 Oak Street");
   await page.getByLabel("City (required)", { exact: true }).fill("Portland");
-  await page.getByLabel("Country code (required)", { exact: true }).fill("US");
-  await page.getByLabel("Region", { exact: true }).fill("OR");
+  await page.getByLabel("State", { exact: true }).fill("OR");
   await page.getByLabel("Postal code", { exact: true }).fill("97201");
   await page
     .getByRole("combobox", { name: "Property type (required)", exact: true })
@@ -378,27 +850,34 @@ test("guided property creation supports suites, co-owners and embedded identity 
   expect(partyResponse.ok(), await partyResponse.text()).toBe(true);
   const party = (await partyResponse.json()) as Schemas["PartyMutationResponse"];
   await page.getByRole("button", { name: "Add owner", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Create property", exact: true })).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Save unfinished form", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("region", { name: "Add an owner", exact: true })
+    .getByRole("button", { name: "Cancel", exact: true })
+    .click();
+  await expect(page.getByRole("button", { name: "Create property", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Add owner", exact: true }).click();
   let writes = 0;
   page.on("request", (request) => {
     if (request.method() === "POST" && new URL(request.url()).pathname === "/api/properties")
       writes++;
   });
-  await page.getByText("Find an existing owner identity", { exact: true }).click();
-  await page.getByLabel("Existing identity ID", { exact: true }).fill(party.id);
-  await page.getByRole("button", { name: "Find identity", exact: true }).click();
-  await page.getByRole("button", { name: `Use ${party.displayName}`, exact: true }).click();
+  await page.getByLabel("Find an owner by name", { exact: true }).fill(party.displayName);
+  await page.getByRole("button", { name: `Add ${party.displayName}`, exact: true }).click();
   expect(writes).toBe(0);
   await expect(page.locator("form form")).toHaveCount(0);
-  await page
-    .getByRole("group", { name: "Owner 2", exact: true })
-    .getByRole("combobox", { name: "Existing identity", exact: true })
-    .selectOption(party.id);
+  await expect(page.getByRole("button", { name: "Create property", exact: true })).toBeEnabled();
   await save(page, "Create property");
   expect(writes).toBe(1);
   const response = await request.get("/api/properties");
   const rows =
     (await response.json()) as Schemas["app__modules__portfolio__api__router__PropertyPageResponse"];
   const created = rows.items.find((item) => item.displayName === "Guided office create")!;
+  expect(created.countryCode).toBe("US");
+  expect(created.region).toBe("OR");
   expect(created.inventoryLayout).toBe("office_suites");
   expect(created.spaces.map((item) => item.displayName).sort()).toEqual(["Suite A", "Suite B"]);
   expect(created.ownerships.map((owner) => owner.ownerKind).sort()).toEqual([
@@ -406,6 +885,136 @@ test("guided property creation supports suites, co-owners and embedded identity 
     "local_operator",
   ]);
   expect(created.ownerships.some((owner) => owner.partyId === party.id)).toBe(true);
+});
+
+test("US property drafts retain the shared owner form through recovery", async ({
+  page,
+  request,
+}) => {
+  let propertyWrites = 0;
+  page.on("request", (outgoing) => {
+    if (outgoing.method() === "POST" && new URL(outgoing.url()).pathname === "/api/properties")
+      propertyWrites++;
+  });
+  await page.goto("/properties?workflow=portfolio.property.create");
+  await page.getByLabel("Display name (required)", { exact: true }).fill("Recovered US property");
+  await page.getByLabel("Address line1 (required)", { exact: true }).fill("45 Cedar Street");
+  await page.getByLabel("City (required)", { exact: true }).fill("Portland");
+  await page.getByLabel("State", { exact: true }).fill("OR");
+  await page.getByLabel("Postal code", { exact: true }).fill("97201");
+  await page.getByRole("button", { name: "Add owner", exact: true }).click();
+  await page.getByRole("button", { name: "Create a new owner", exact: true }).click();
+  await page.getByLabel("New owner name", { exact: true }).fill("Recovered new owner");
+  await page.getByRole("button", { name: "Add to owners", exact: true }).click();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.request().method() === "PUT" &&
+        /\/api\/operator\/recovery\/[^/]+$/.test(new URL(response.url()).pathname) &&
+        response.ok(),
+    ),
+    page.getByRole("button", { name: "Save unfinished form", exact: true }).click(),
+  ]);
+  const recovery = await request.get("/api/operator/recovery?limit=100");
+  const records = (await recovery.json()) as Schemas["RecoveryPage"];
+  const candidates = records.items.filter(
+    (item) => item.formKey === "portfolio.property.create" && item.status === "active",
+  );
+  let recoveryId: string | undefined;
+  for (const candidate of candidates) {
+    const response = await request.get(`/api/operator/recovery/${candidate.id}`);
+    const saved = (await response.json()) as {
+      id: string;
+      payload: { countryCode?: string; displayName?: string };
+    };
+    if (saved.payload.displayName === "Recovered US property") {
+      expect(saved.payload.countryCode).toBe("US");
+      recoveryId = saved.id;
+    }
+  }
+  expect(recoveryId).toBeTruthy();
+  expect(propertyWrites).toBe(0);
+  await page.goto(`/properties?workflow=portfolio.property.create&resume=${recoveryId}`);
+  await expect(page.getByLabel("State", { exact: true })).toHaveValue("OR");
+  await expect(page.getByLabel("New owner name", { exact: true })).toHaveValue(
+    "Recovered new owner",
+  );
+  await expect(page.getByLabel(/Country code/)).toHaveCount(0);
+  await expect(page.getByText("Form status and recovery details", { exact: true })).toHaveCount(0);
+  await save(page, "Create property");
+  expect(propertyWrites).toBe(1);
+});
+
+test("property autosave keeps inputs stationary and focused", async ({ page }) => {
+  await page.goto("/properties?workflow=portfolio.property.create");
+  const name = page.getByLabel("Display name (required)", { exact: true });
+  await expect(name).toBeVisible();
+  let releaseSave!: () => void;
+  const saveGate = new Promise<void>((resolve) => {
+    releaseSave = resolve;
+  });
+  let saving!: () => void;
+  const saveStarted = new Promise<void>((resolve) => {
+    saving = resolve;
+  });
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      /\/api\/operator\/recovery\/[^/]+$/.test(new URL(response.url()).pathname) &&
+      response.ok(),
+  );
+  await page.route("**/api/operator/recovery/*", async (route) => {
+    if (route.request().method() === "PUT") {
+      saving();
+      await saveGate;
+    }
+    await route.continue();
+  });
+  await name.fill("Stationary property form");
+  const beforeSave = await name.boundingBox();
+  await saveStarted;
+  try {
+    await expect(name).toBeFocused();
+    expect((await name.boundingBox())?.y).toBe(beforeSave?.y);
+    await expect(page.getByText(/^(Saving unfinished form…|Unfinished form saved\.)$/)).toHaveCount(
+      0,
+    );
+  } finally {
+    releaseSave();
+  }
+  await saved;
+  await expect(name).toBeFocused();
+  await expect(name).toHaveValue("Stationary property form");
+  expect((await name.boundingBox())?.y).toBe(beforeSave?.y);
+});
+
+test("interrupted property creation opens its original property only after reconciliation", async ({
+  page,
+}) => {
+  await page.goto("/properties?workflow=portfolio.property.create");
+  await page.getByLabel("Display name (required)", { exact: true }).fill("Interrupted create");
+  await page.getByLabel("Address line1 (required)").fill("55 Oak Street");
+  await page.getByLabel("City (required)").fill("Portland");
+  await page.getByLabel("State", { exact: true }).fill("OR");
+  await page.getByLabel("Postal code", { exact: true }).fill("97201");
+  let writes = 0;
+  let createdId = "";
+  await page.route("**/api/properties", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    writes++;
+    const response = await route.fetch();
+    expect(response.ok(), await response.text()).toBe(true);
+    createdId = ((await response.json()) as { id: string }).id;
+    await route.abort("failed");
+  });
+  await page.getByRole("button", { name: "Create property", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Check original result", exact: true }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/workflow=portfolio.property.create/);
+  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await expect(page).toHaveURL(`/properties/${createdId}/overview`);
+  expect(writes).toBe(1);
 });
 
 test("Back to Properties leaves an untouched create form and protects edits", async ({ page }) => {
@@ -617,7 +1226,7 @@ test("unknown Space review classifies independent occupancy and future availabil
   );
   await expect(card.getByText("Details and sources", { exact: true })).toHaveCount(0);
   await expect(card.getByText("Recorded leasing intention:", { exact: false })).toHaveCount(0);
-  await expect(card.getByText("Correct recorded occupancy", { exact: true })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Correct an error", exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("space-card-desktop.png"), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect

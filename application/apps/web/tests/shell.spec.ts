@@ -32,9 +32,15 @@ test("sidebar navigation keeps the viewport and shell position stable", async ({
   await page.evaluate(() => window.scrollTo(0, 0));
   const initial = await page.locator(".ui-brand").boundingBox();
   const nav = page.getByRole("navigation", { name: "Primary navigation" });
-  for (const name of ["Owners", "Leasing", "Properties"]) {
+  const labels = await nav.getByRole("link").allTextContents();
+  expect(labels.indexOf("Tenants")).toBe(labels.indexOf("Owners") + 1);
+  await expect(nav.getByRole("link", { name: "Tenants", exact: true })).toHaveAttribute(
+    "href",
+    "/tenants",
+  );
+  for (const name of ["Owners", "Tenants", "Leasing", "Properties"]) {
     await nav.getByRole("link", { name, exact: true }).click();
-    await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name, level: 2, exact: true })).toBeVisible();
     await expect(page.locator("#workspace-content")).toBeFocused();
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
     const current = await page.locator(".ui-brand").boundingBox();
@@ -67,18 +73,18 @@ test("More appears only for overflow and reveals a scrollable remaining menu", a
   await page.goto("/properties");
   const menu = page.locator(".wide-nav");
   const primary = menu.getByRole("navigation", { name: "Primary navigation" });
-  await expect(primary.getByRole("link")).toHaveCount(7);
+  await expect(primary.getByRole("link")).toHaveCount(8);
   await expect(menu.locator(".more-destinations")).toHaveCount(0);
 
   await page.setViewportSize({ width: 1280, height: 450 });
   const more = menu.locator(".more-destinations");
   await expect(more).toBeVisible();
   const count = await primary.getByRole("link").count();
-  expect(count).toBeLessThan(7);
+  expect(count).toBeLessThan(8);
   await more.locator("summary").focus();
   await page.keyboard.press("Enter");
   const remaining = more.getByRole("navigation", { name: "Hidden destinations" });
-  await expect(remaining.getByRole("link")).toHaveCount(7 - count);
+  await expect(remaining.getByRole("link")).toHaveCount(8 - count);
   expect(await remaining.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(
     true,
   );
@@ -89,7 +95,7 @@ test("More appears only for overflow and reveals a scrollable remaining menu", a
   await expect(page).toHaveURL(/\/providers$/);
 
   await page.setViewportSize({ width: 1280, height: 900 });
-  await expect(primary.getByRole("link")).toHaveCount(7);
+  await expect(primary.getByRole("link")).toHaveCount(8);
   await expect(menu.locator(".more-destinations")).toHaveCount(0);
 });
 
@@ -127,7 +133,10 @@ test("preferences persist through reload, hiding and reordering keep contextual 
   await expect(page.getByText("Preferences saved.")).toBeVisible();
   await page.reload();
   await expect(page.getByRole("radio", { name: "Dark", exact: true })).toBeChecked();
-  await expect(page.locator("fieldset ol li").nth(4)).toContainText("Providers");
+  const order = await page.locator("fieldset ol li").allTextContents();
+  expect(order.findIndex((text) => text.includes("Providers"))).toBe(
+    order.findIndex((text) => text.includes("Maintenance")) - 1,
+  );
   await expect(
     page
       .getByRole("navigation", { name: "Primary navigation" })

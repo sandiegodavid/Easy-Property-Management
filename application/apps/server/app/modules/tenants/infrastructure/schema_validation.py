@@ -27,6 +27,7 @@ def validate_tenant_schema(connection) -> None:
             "method_kind",
             "display_value",
             "normalized_value",
+            "is_primary",
             "extension",
             "label",
             "status",
@@ -53,7 +54,10 @@ def validate_tenant_schema(connection) -> None:
                 item["name"] in nullable[table]
             ):
                 raise MigrationSchemaError("TEN-001 schema is incompatible.")
-            if item["name"] in {"do_not_contact", "revision"}:
+            if item["name"] == "is_primary":
+                if str(item["type"]).upper() != "BOOLEAN":
+                    raise MigrationSchemaError("Contact primary flag is incompatible.")
+            elif item["name"] in {"do_not_contact", "revision"}:
                 if "INT" not in str(item["type"]).upper():
                     raise MigrationSchemaError("TEN-001 schema is incompatible.")
             elif (
@@ -64,6 +68,7 @@ def validate_tenant_schema(connection) -> None:
         "tenant_profiles": {"tenant_profiles_active_name": (("archived_at",), False)},
         "party_contact_methods": {
             "party_contact_methods_party_status": (("party_id", "status"), False),
+            "party_contact_methods_one_primary": (("party_id", "method_kind"), True),
         },
     }
     for table, required in expected_indexes.items():
@@ -102,14 +107,23 @@ def validate_tenant_schema(connection) -> None:
     if checks != {
         "tenant_profiles": {"do_not_contactin(0,1)", "typeof(revision)='integer'andrevision>=1"},
         "party_contact_methods": {
-            "method_kindin('email','phone')",
+            "method_kindin('email','phone','mailing_address')",
             "statusin('active','archived')",
             "length(trim(display_value))>0",
             "(status='active'andarchived_atisnull)or(status='archived'andarchived_atisnotnull)",
             "method_kind='phone'orextensionisnull",
+            "is_primaryin(0,1)",
+            "status='active'oris_primary=0",
         },
     }:
         raise MigrationSchemaError("TEN-001 check constraints are incompatible.")
+    address_index = connection.exec_driver_sql(
+        "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'party_contact_methods_one_primary'"
+    ).scalar_one_or_none()
+    if "where status = 'active' and is_primary = 1".replace(" ", "") not in _normalise_sql(
+        address_index or ""
+    ):
+        raise MigrationSchemaError("Primary-contact uniqueness is incompatible.")
     row = connection.exec_driver_sql(
         "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'party_contact_methods_one_active_value'"
     ).scalar_one_or_none()

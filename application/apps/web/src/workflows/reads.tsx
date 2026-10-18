@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@epm/contracts";
 import { record, scalar } from "@epm/contracts/workflows";
@@ -190,10 +190,21 @@ export function IdentityLookup({
 }) {
   const [input, setInput] = useState("");
   const [selected, setSelected] = useState("");
+  const current = input.trim();
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSelected(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(current)
+          ? current
+          : "",
+      );
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [current]);
   const { scope } = useWorkspace();
   const party = useQuery({
     queryKey: scope.key("identity-lookup", selected),
-    enabled: !!selected,
+    enabled: !!selected && selected === current,
     queryFn: async ({ signal }) =>
       readResult(
         await api.GET("/api/parties/{party_id}", {
@@ -207,23 +218,15 @@ export function IdentityLookup({
       <label>
         Existing identity ID
         <input
-          required={!embedded}
           value={input}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
             if (embedded && event.key === "Enter") {
               event.preventDefault();
-              setSelected(input);
             }
           }}
         />
       </label>
-      <button
-        type={embedded ? "button" : "submit"}
-        onClick={embedded ? () => setSelected(input) : undefined}
-      >
-        Find identity
-      </button>
     </>
   );
   return (
@@ -233,21 +236,10 @@ export function IdentityLookup({
         Use an identity already visible in a property, tenant or provider record. Review its name
         and active roles before selecting it.
       </p>
-      {embedded ? (
-        <div>{controls}</div>
-      ) : (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            setSelected(input);
-          }}
-        >
-          {controls}
-        </form>
-      )}
-      {party.isPending && selected && <p role="status">Finding identity…</p>}
-      {party.error && <p role="alert">{party.error.message}</p>}
-      {party.data && (
+      <div>{controls}</div>
+      {party.isFetching && selected === current && <p role="status">Finding identity…</p>}
+      {party.error && selected === current && <p role="alert">{party.error.message}</p>}
+      {party.data && selected === current && (
         <>
           <p>
             {party.data.displayName} · {party.data.archivedAt ? "Archived" : "Active"} ·{" "}

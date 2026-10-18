@@ -17,6 +17,14 @@ export const destinations = [
     fixed: false,
   },
   {
+    id: "renters",
+    label: "Tenants",
+    route: "/tenants",
+    icon: "people",
+    capability: "operator.context-overviews",
+    fixed: false,
+  },
+  {
     id: "leasing",
     label: "Leasing",
     route: "/leasing",

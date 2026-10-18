@@ -1,3 +1,4 @@
+import { DynamicFilterForm } from "./dynamic-filter-form";
 import { useEffect } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { useWorkspace } from "../app/workspace-gate";
@@ -40,8 +41,7 @@ function CollectionPage({ collection }: { collection: (typeof collections)[numbe
         Scope: {filters.propertyId ?? "All properties"} · Horizon: {filters.horizonDays} days. Each
         page uses the capture shown below.
       </p>
-      <form
-        key={query}
+      <DynamicFilterForm
         aria-label="Collection filters"
         onSubmit={(event) => {
           event.preventDefault();
@@ -52,7 +52,11 @@ function CollectionPage({ collection }: { collection: (typeof collections)[numbe
             changed.set(key, typeof value === "string" ? value : "");
           }
           changed.delete("cursor");
-          setParams(changed, { state: navigationState });
+          setParams(changed, {
+            state: navigationState,
+            replace: true,
+            preventScrollReset: true,
+          });
         }}
       >
         <label>
@@ -71,8 +75,7 @@ function CollectionPage({ collection }: { collection: (typeof collections)[numbe
           Page size
           <input type="number" name="limit" defaultValue={limit} min={1} max={100} required />
         </label>
-        <button>Apply collection filters</button>
-      </form>
+      </DynamicFilterForm>
       <button disabled={read.updating} onClick={restart}>
         Restart collection with current filters
       </button>

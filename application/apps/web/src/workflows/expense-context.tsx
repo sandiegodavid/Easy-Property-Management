@@ -1,3 +1,4 @@
+import { DynamicFilterForm } from "../shared/dynamic-filter-form";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@epm/contracts";
@@ -311,7 +312,7 @@ export function ExpenseFilters() {
     "hasEvidence",
   ];
   return (
-    <form
+    <DynamicFilterForm
       className="directory-filters"
       onSubmit={(event) => {
         event.preventDefault();
@@ -323,7 +324,7 @@ export function ExpenseFilters() {
           else next.delete(key);
         }
         next.delete("cursor");
-        setParams(next);
+        setParams(next, { replace: true, preventScrollReset: true });
       }}
     >
       {[
@@ -361,7 +362,6 @@ export function ExpenseFilters() {
           <option value="false">No active evidence</option>
         </select>
       </label>
-      <button>Apply Expense filters</button>
-    </form>
+    </DynamicFilterForm>
   );
 }

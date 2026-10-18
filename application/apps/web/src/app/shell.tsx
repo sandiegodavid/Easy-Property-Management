@@ -207,6 +207,20 @@ function WorkflowPage({ kind }: { kind: "provider" | "identity" }) {
   return kind === "provider" ? <ProviderWorkspace key={key} /> : <IdentityWorkspace key={key} />;
 }
 
+function SharedIdentityPage() {
+  const [params] = useSearchParams();
+  const location = useLocation();
+  return params.has("identity") || params.get("workflow")?.startsWith("party.") ? (
+    <WorkflowPage kind="identity" />
+  ) : (
+    <Navigate
+      to={{ pathname: "/tenants", search: location.search }}
+      replace
+      state={location.state as unknown}
+    />
+  );
+}
+
 function PendingPage({ title }: { title: string }) {
   const [params, setParams] = useSearchParams();
   return (
@@ -313,10 +327,7 @@ function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
             </button>
           )}
         </div>
-        <nav
-          className={kind === "property" ? "property-status-tabs property-context-tabs" : undefined}
-          aria-label={`${kind} sections`}
-        >
+        <nav className="page-tabs" aria-label={`${kind} sections`}>
           {sections.map((section) => (
             <NavLink key={section} state={navigationState} to={`${section}?${params.toString()}`}>
               {kind === "property" && section === "setup"
@@ -363,7 +374,7 @@ function Layout() {
   useEffect(() => {
     if (drawer.current) drawer.current.open = false;
     content.current?.focus({ preventScroll: true });
-    document.title = `${destination(location.pathname.split("/")[1] ?? "")?.label ?? "Workspace"} · Easy Property Management`;
+    document.title = `${destinations.find((item) => item.route === location.pathname)?.label ?? destination(location.pathname.split("/")[1] ?? "")?.label ?? "Workspace"} · Easy Property Management`;
   }, [location.pathname]);
   useEffect(() => {
     function shortcut(event: KeyboardEvent) {
@@ -473,6 +484,8 @@ export function ApplicationShell() {
                     <PropertiesPage />
                   ) : item.id === "owners" ? (
                     <Directory kind="owner" />
+                  ) : item.id === "renters" ? (
+                    <WorkflowPage kind="identity" />
                   ) : item.id === "providers" ? (
                     <WorkflowPage kind="provider" />
                   ) : item.id === "leasing" ? (
@@ -533,7 +546,9 @@ export function ApplicationShell() {
             <Route path="providers/:id" element={<WorkflowPage kind="provider" />} />
             <Route path="providers/:id/:section" element={<WorkflowPage kind="provider" />} />
           </Route>
-          <Route path="parties" element={<WorkflowPage kind="identity" />} />
+          <Route element={<DestinationGuard id="renters" />}>
+            <Route path="parties" element={<SharedIdentityPage />} />
+          </Route>
           <Route element={<DestinationGuard id="leasing" />}>
             <Route path="leases/:id" element={<LeasingPage />} />
             <Route path="leases/:id/:section" element={<LeasingPage />} />

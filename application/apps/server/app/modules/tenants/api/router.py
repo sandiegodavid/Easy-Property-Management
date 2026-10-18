@@ -26,10 +26,11 @@ class Contract(BaseModel):
 
 
 class ContactRequest(Contract):
-    methodKind: Literal["email", "phone"]
-    value: str = Field(min_length=1, max_length=320)
+    methodKind: Literal["email", "phone", "mailing_address"]
+    value: str = Field(min_length=1, max_length=1000)
     extension: str | None = Field(None, max_length=6)
     label: str | None = Field(None, max_length=80)
+    isPrimary: StrictBool | None = None
 
 
 class ConcurrencyRequest(Contract):
@@ -86,8 +87,9 @@ class TenantProfileResponse(Contract):
 class ContactMethodResponse(Contract):
     id: str
     partyId: str
-    methodKind: Literal["email", "phone"]
+    methodKind: Literal["email", "phone", "mailing_address"]
     displayValue: str
+    isPrimary: StrictBool
     extension: str | None
     label: str | None
     status: Literal["active", "archived"]
@@ -181,7 +183,7 @@ def build_router(service: TenantService, runtime: WorkspaceRuntime) -> APIRouter
                     display_name=data.displayName,
                     contacts=tuple(
                         ContactMethodCommand(
-                            item.methodKind, item.value, item.extension, item.label
+                            item.methodKind, item.value, item.extension, item.label, item.isPrimary
                         )
                         for item in data.contacts
                     ),

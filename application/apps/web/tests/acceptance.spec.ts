@@ -67,7 +67,7 @@ for (const width of [390, 900, 1440]) {
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       ).toBe(true);
-      const save = page.getByRole("button", { name: "Save edit task", exact: true });
+      const save = page.getByRole("button", { name: "Save task changes", exact: true });
       await save.focus();
       await page.keyboard.press("Enter");
       await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();

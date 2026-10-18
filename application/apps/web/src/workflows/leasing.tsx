@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { leaseLastCoveredOn } from "../shared/lease-dates";
-import { CoverageLinks } from "../shared/coverage";
 import { useParams, useSearchParams } from "react-router-dom";
 import { SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
@@ -13,7 +12,6 @@ import { Facts, History, readResult } from "./reads";
 import { InspectionList } from "./inspections";
 import { LeaseDocuments } from "./lease-documents";
 import { MoneyFacts } from "./money-presentation";
-import { statusLabel } from "./portfolio-status";
 import { PageAsOf } from "../shared/page-as-of";
 
 type Lease = components["schemas"]["LeaseResponse"];
@@ -47,46 +45,49 @@ function LeaseDirectory() {
     },
   });
   return (
-    <section aria-label="Leasing">
-      <h2>Leasing</h2>
-      <CommandLinks keys={["lease.create"]} title="Set up lease" />
-      <p>
-        Record a draft, review and execute it, then review rent setup and related inspections as
-        separate steps.
-      </p>
-      <label>
-        Lease status
-        <select
-          value={status ?? ""}
-          onChange={(event) => {
-            const next = new URLSearchParams(params);
-            next.delete("cursor");
-            if (event.target.value) next.set("status", event.target.value);
-            else next.delete("status");
-            setParams(next);
-          }}
-        >
-          <option value="">All statuses</option>
-          {["draft", "executed", "ended", "terminated", "void"].map((value) => (
-            <option key={value}>{value}</option>
-          ))}
-        </select>
-      </label>
-      {propertyId && (
-        <p>
-          Property filter: {propertyId}{" "}
-          <button
-            onClick={() => {
+    <section aria-label="Leasing" className="lease-directory">
+      <header className="lease-directory-heading">
+        <h2>Leasing</h2>
+        <CommandLinks keys={["lease.create"]} title="Lease actions" asButtons collapsible={false} />
+      </header>
+      <div className="lease-directory-filters">
+        <div className="lease-directory-status-filter">
+          <label htmlFor="lease-status-filter">Lease status</label>
+          <select
+            id="lease-status-filter"
+            value={status ?? ""}
+            onChange={(event) => {
               const next = new URLSearchParams(params);
-              next.delete("propertyId");
               next.delete("cursor");
-              setParams(next);
+              if (event.target.value) next.set("status", event.target.value);
+              else next.delete("status");
+              setParams(next, { replace: true, preventScrollReset: true });
             }}
           >
-            Remove property filter
-          </button>
-        </p>
-      )}
+            <option value="">All statuses</option>
+            {["draft", "executed", "ended", "terminated", "void"].map((value) => (
+              <option key={value} value={value}>
+                {leaseStatusLabel(value)}
+              </option>
+            ))}
+          </select>
+        </div>
+        {propertyId && (
+          <p>
+            Showing leases for one property.{" "}
+            <button
+              onClick={() => {
+                const next = new URLSearchParams(params);
+                next.delete("propertyId");
+                next.delete("cursor");
+                setParams(next, { preventScrollReset: true });
+              }}
+            >
+              Remove property filter
+            </button>
+          </p>
+        )}
+      </div>
       {leases.isPending && <p role="status">Loading leases…</p>}
       {leases.error && <p role="alert">{leases.error.message}</p>}
       {leases.error instanceof DirectoryContinuationConflict && (
@@ -94,56 +95,124 @@ function LeaseDirectory() {
           onClick={() => {
             const next = new URLSearchParams(params);
             next.delete("cursor");
-            setParams(next);
+            setParams(next, { preventScrollReset: true });
             if (!cursor) void leases.refetch();
           }}
         >
           Restart Lease directory with these filters
         </button>
       )}
+      {leases.error && !(leases.error instanceof DirectoryContinuationConflict) && (
+        <button type="button" onClick={() => void leases.refetch()}>
+          Retry loading leases
+        </button>
+      )}
       {leases.data && (
         <>
           <PageAsOf asOf={leases.data.asOf} />
-          <p>{leases.data.matchingTotal} matching leases</p>
+          <p className="lease-directory-count">
+            {leases.data.matchingTotal} matching{" "}
+            {leases.data.matchingTotal === 1 ? "lease" : "leases"}
+          </p>
         </>
       )}
-      {leases.data?.items.length === 0 && <p>No leases match these filters.</p>}
-      {leases.data?.items.map((lease) => (
-        <article key={lease.id}>
-          <Link to={`/leases/${lease.id}/details`}>
-            {lease.leaseKind} lease · {lease.contractStartsOn} · {lease.status}
-          </Link>
-          <p>Space {lease.spaceId}</p>
-        </article>
-      ))}
-      {leases.data?.nextCursor && (
-        <button
-          onClick={() => {
-            const next = new URLSearchParams(params);
-            next.set("cursor", leases.data.nextCursor!);
-            setParams(next);
-          }}
-        >
-          Next lease page
-        </button>
+      {leases.data?.items.length === 0 && (
+        <div className="lease-directory-empty">
+          <h3>No leases match these filters</h3>
+          <p>
+            {status || propertyId
+              ? "Choose another status or remove the property filter."
+              : "Create a lease draft to get started."}
+          </p>
+        </div>
       )}
-      {cursor && (
-        <button
-          onClick={() => {
-            const next = new URLSearchParams(params);
-            next.delete("cursor");
-            setParams(next);
-          }}
-        >
-          First lease page
-        </button>
-      )}
-      <Link to="/leasing?templates=true">Inspection templates</Link>
+      <ul className="lease-directory-grid">
+        {leases.data?.items.map((lease) => (
+          <li key={lease.id}>
+            <Link className="lease-directory-card" to={`/leases/${lease.id}/details`}>
+              <div className="lease-directory-card-heading">
+                <h3>{lease.propertyName ?? "Property unavailable"}</h3>
+                <span className={`lease-directory-status lease-status-${lease.status}`}>
+                  {leaseStatusLabel(lease.status)}
+                </span>
+              </div>
+              <p className="lease-directory-rental">
+                {lease.rentalName ?? "Rental details unavailable"} ·{" "}
+                {lease.leaseKind === "commercial" ? "Commercial" : "Residential"}
+              </p>
+              <dl>
+                <div>
+                  <dt>Starts</dt>
+                  <dd>{leaseDate(lease.contractStartsOn)}</dd>
+                </div>
+                <div>
+                  <dt>Last covered day</dt>
+                  <dd>
+                    {lease.contractEndsOn
+                      ? leaseDate(leaseLastCoveredOn(lease.contractEndsOn)!)
+                      : "No fixed end date"}
+                  </dd>
+                </div>
+              </dl>
+              <span className="lease-directory-action">
+                View lease <span aria-hidden="true">→</span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <nav className="lease-directory-pagination" aria-label="Lease pages">
+        {leases.data?.nextCursor && (
+          <button
+            onClick={() => {
+              const next = new URLSearchParams(params);
+              next.set("cursor", leases.data.nextCursor!);
+              setParams(next, { preventScrollReset: true });
+            }}
+          >
+            Next lease page
+          </button>
+        )}
+        {cursor && (
+          <button
+            onClick={() => {
+              const next = new URLSearchParams(params);
+              next.delete("cursor");
+              setParams(next, { preventScrollReset: true });
+            }}
+          >
+            First lease page
+          </button>
+        )}
+      </nav>
+      <footer className="lease-directory-footer">
+        <Link to="/leasing?templates=true">Manage inspection templates</Link>
+      </footer>
     </section>
   );
 }
 
 class DirectoryContinuationConflict extends Error {}
+
+function leaseStatusLabel(value: string) {
+  return (
+    (
+      {
+        draft: "Draft",
+        executed: "Signed",
+        ended: "Ended",
+        terminated: "Terminated",
+        void: "Voided",
+      } as Record<string, string>
+    )[value] ?? value
+  );
+}
+
+function leaseDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" }).format(
+    new Date(`${value}T00:00:00Z`),
+  );
+}
 
 export function LeaseRecord({ id }: { id: string }) {
   const { scope } = useWorkspace();
@@ -157,136 +226,156 @@ export function LeaseRecord({ id }: { id: string }) {
   if (lease.isPending) return <p role="status">Loading lease…</p>;
   if (lease.error) return <p role="alert">{lease.error.message}</p>;
   const item = lease.data;
-  const displayed = { ...item, leaseLastCoveredOn: leaseLastCoveredOn(item.contractEndsOn) };
+  const lastDay = leaseLastCoveredOn(item.contractEndsOn);
   return (
-    <section aria-label="Lease workspace">
+    <section aria-label="Lease workspace" className="lease-detail">
       <p>
         <Link to="/leasing">← Back to Leasing</Link>
       </p>
-      <h2>{item.leaseKind} lease</h2>
-      <Facts
-        value={displayed}
-        fields={[
-          "status",
-          "leaseRevision",
-          "contractStartsOn",
-          "leaseLastCoveredOn",
-          "occupancyStartsOn",
-          "actualMoveOutOn",
-          "occupancyState",
-          "notes",
-        ]}
-      />
-      <section aria-label="Lease milestones">
-        <h3>Contract and physical occupancy</h3>
-        <Facts
-          value={displayed}
-          fields={[
-            "contractStartsOn",
-            "leaseLastCoveredOn",
-            "executedOn",
-            "occupancyStartsOn",
-            "actualMoveOutOn",
-            "endReason",
-          ]}
+      <header className="lease-detail-heading">
+        <h2>{item.leaseKind === "commercial" ? "Commercial" : "Residential"} lease</h2>
+        <span className={`lease-directory-status lease-status-${item.status}`}>
+          {leaseStatusLabel(item.status)}
+        </span>
+      </header>
+      <LeaseSpaceContext spaceId={item.spaceId} />
+      <div className="lease-detail-actions">
+        <CommandLinks
+          target={id}
+          keys={
+            item.status === "draft"
+              ? ["lease.patch", "lease.term.replace", "lease.participant.add", "lease.execute"]
+              : item.status === "executed"
+                ? [
+                    "lease.end",
+                    ...(item.occupancyState === "scheduled" ? ["lease.void"] : []),
+                    "lease.renewal.add",
+                    "lease.termination.create",
+                  ]
+                : []
+          }
+          title="Lease actions"
+          labels={{
+            "lease.execute": "Record signed lease",
+            "lease.patch": "Edit lease",
+            "lease.term.replace": "Change rent terms",
+            "lease.participant.add": "Add participant",
+            "lease.end": "Record lease end",
+          }}
+          collapsible={false}
         />
-        <p>
-          Lease end shows the last day covered by the contract. Contract expiry or an accepted
-          termination proposal does not confirm physical move-out or make the Space available.
-        </p>
-        <LeaseSpaceContext spaceId={item.spaceId} />
-      </section>
-      <CoverageLinks spaceId={item.spaceId} />
-      <CommandLinks
-        target={id}
-        keys={
-          item.status === "draft"
-            ? ["lease.patch", "lease.term.replace", "lease.participant.add", "lease.execute"]
-            : item.status === "executed"
-              ? [
-                  "lease.end",
-                  ...(item.occupancyState === "scheduled" ? ["lease.void"] : []),
-                  "lease.renewal.add",
-                  "lease.termination.create",
-                ]
-              : []
-        }
-        title="Lease actions"
-      />
+      </div>
       {item.status === "draft" && (
-        <p>
-          Review participants, contract dates and rent terms before confirming execution. Execution
-          changes the Space occupancy timeline as well as this Lease.
+        <p className="lease-detail-note">
+          Review the tenants, dates and rent terms before recording the signed lease. This also
+          updates the rental's occupancy timeline.
         </p>
       )}
-      {item.status === "executed" && (
-        <section aria-label="Related rent setup">
-          <h3>Lease recorded</h3>
-          <p>
-            Rent schedule needs review. Execution does not synchronize rent or create a deposit
-            account.
+      <div className="lease-detail-grid">
+        <section aria-label="Lease milestones" className="lease-detail-panel">
+          <h3>Dates and occupancy</h3>
+          <dl className="lease-detail-facts">
+            {[
+              ["Lease starts", leaseDate(item.contractStartsOn)],
+              ["Lease ends (last covered day)", lastDay ? leaseDate(lastDay) : "No fixed end date"],
+              ["Occupancy starts", leaseDate(item.occupancyStartsOn)],
+              ...(item.executedOn ? [["Signed on", leaseDate(item.executedOn)]] : []),
+              ...(item.actualMoveOutOn ? [["Moved out", leaseDate(item.actualMoveOutOn)]] : []),
+              ...(item.endReason ? [["End reason", item.endReason.replaceAll("_", " ")]] : []),
+            ].map(([name, value]) => (
+              <div key={name}>
+                <dt>{name}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="lease-detail-note">
+            The end date is the last covered day. Record physical move-out separately; contract
+            expiry does not make the rental vacant.
           </p>
-          <Link to={`/money?leaseId=${id}`}>Review rent setup</Link>
+        </section>
+        <section aria-label="Rent terms" className="lease-detail-panel">
+          <div className="lease-detail-section-heading">
+            <h3>Rent terms</h3>
+            <Link to={`/money?leaseId=${id}`}>View rent and deposits →</Link>
+          </div>
+          {!item.terms.length && <p>No rent terms recorded.</p>}
+          {item.terms.map((term) => (
+            <MoneyFacts
+              key={term.id}
+              value={{
+                ...term,
+                effectiveOn: leaseDate(term.effectiveOn),
+                paymentDueDay:
+                  term.paymentFrequency === "monthly" && term.paymentDueDay !== null
+                    ? `Day ${term.paymentDueDay} of each month`
+                    : term.paymentDueDay,
+                lastCoveredOn: term.endsOn
+                  ? leaseDate(leaseLastCoveredOn(term.endsOn)!)
+                  : "Ongoing",
+              }}
+              labels={{
+                effectiveOn: "Applies from",
+                lastCoveredOn: "Through",
+                baseRentMinor: "Rent",
+                paymentFrequency: "Frequency",
+                paymentDueDay: "Due day",
+                agreedSecurityDepositMinor: "Agreed security deposit",
+              }}
+              fields={[
+                "effectiveOn",
+                "lastCoveredOn",
+                "baseRentMinor",
+                "paymentFrequency",
+                "paymentDueDay",
+                "agreedSecurityDepositMinor",
+              ]}
+            />
+          ))}
+        </section>
+      </div>
+      <LeaseParticipants lease={item} />
+      {item.notes && (
+        <section className="lease-detail-section" aria-label="Lease notes">
+          <h3>Notes</h3>
+          <p className="lease-detail-text">{item.notes}</p>
         </section>
       )}
-      <h3>Participants</h3>
-      {item.participants.map((participant) => (
-        <article key={participant.id}>
-          <Facts
-            value={{ ...participant, lastCoveredOn: leaseLastCoveredOn(participant.endsOn) }}
-            fields={["tenantPartyId", "participantRole", "startsOn", "lastCoveredOn", "notes"]}
-          />
-          <Link to={`/parties?identity=${participant.tenantPartyId}`}>Tenant identity</Link>
-          {item.status === "draft" && (
-            <CommandLinks
-              target={id}
-              child={participant.id}
-              keys={["lease.participant.update", "lease.participant.remove"]}
-              title={`Participant actions ${participant.tenantPartyId}`}
+      <details className="lease-detail-section" open={item.renewalOptions.length > 0}>
+        <summary>
+          Renewal options{item.renewalOptions.length ? ` (${item.renewalOptions.length})` : ""}
+        </summary>
+        {!item.renewalOptions.length && <p>No renewal options recorded.</p>}
+        {item.renewalOptions.map((option) => (
+          <article key={option.id}>
+            <Facts
+              value={{
+                ...option,
+                proposedStartsOn: leaseDate(option.proposedStartsOn),
+                proposedLastCoveredOn: option.proposedEndsOn
+                  ? leaseDate(leaseLastCoveredOn(option.proposedEndsOn)!)
+                  : "No fixed end date",
+              }}
+              fields={[
+                "status",
+                "proposedStartsOn",
+                "proposedLastCoveredOn",
+                "noticeDueOn",
+                "responseDueOn",
+                "notes",
+              ]}
             />
-          )}
-        </article>
-      ))}
-      <h3>Rent terms</h3>
-      {item.terms.map((term) => (
-        <MoneyFacts
-          key={term.id}
-          value={{ ...term, lastCoveredOn: leaseLastCoveredOn(term.endsOn) }}
-          fields={[
-            "effectiveOn",
-            "lastCoveredOn",
-            "baseRentMinor",
-            "currencyCode",
-            "paymentFrequency",
-            "paymentDueDay",
-            "agreedSecurityDepositMinor",
-          ]}
-        />
-      ))}
-      <h3>Renewal options</h3>
-      {item.renewalOptions.map((option) => (
-        <article key={option.id}>
-          <Facts
-            value={option}
-            fields={[
-              "status",
-              "proposedStartsOn",
-              "proposedEndsOn",
-              "noticeDueOn",
-              "responseDueOn",
-              "notes",
-            ]}
-          />
-          {item.status === "executed" && option.status === "open" && (
-            <CommandLinks
-              target={id}
-              child={option.id}
-              keys={["lease.renewal.update", "lease.renewal.decide"]}
-              title={`Renewal ${option.proposedStartsOn}`}
-            />
-          )}
-        </article>
-      ))}
+            {item.status === "executed" && option.status === "open" && (
+              <CommandLinks
+                target={id}
+                child={option.id}
+                keys={["lease.renewal.update", "lease.renewal.decide"]}
+                title={`Renewal ${option.proposedStartsOn}`}
+              />
+            )}
+          </article>
+        ))}
+      </details>
       <TerminationCases lease={item} />
       <InspectionList lease={item} />
       {item.status === "ended" || item.status === "terminated" ? (
@@ -301,7 +390,75 @@ export function LeaseRecord({ id }: { id: string }) {
         </section>
       ) : null}
       <LeaseDocuments leaseId={id} entityId={id} entityType="lease" files={item.files} />
-      <History kind="lease" id={id} />
+      <History kind="lease" id={id} presentation="timeline" />
+    </section>
+  );
+}
+
+function LeaseParticipants({ lease }: { lease: Lease }) {
+  const { scope } = useWorkspace();
+  const ids = [...new Set(lease.participants.map((item) => item.tenantPartyId))].sort();
+  const names = useQuery({
+    queryKey: scope.key("lease-participant-names", ids.join(",")),
+    enabled: ids.length > 0,
+    retry: false,
+    queryFn: async ({ signal }) => {
+      const rows: components["schemas"]["PartyNameResponse"][] = [];
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        rows.push(
+          ...readResult(
+            await api.GET("/api/parties/names", {
+              signal,
+              params: { query: { ids: ids.slice(offset, offset + 100) } },
+            }),
+          ),
+        );
+      }
+      return new Map(rows.map((item) => [item.id, item.displayName]));
+    },
+  });
+  return (
+    <section className="lease-detail-section" aria-label="Lease participants">
+      <h3>Tenants and other participants</h3>
+      {names.error && (
+        <p role="alert">Participant names are unavailable. You can still open tenant details.</p>
+      )}
+      {!lease.participants.length && <p>No participants added yet.</p>}
+      <ul className="lease-participants">
+        {lease.participants.map((item) => (
+          <li key={item.id}>
+            <div className="lease-detail-section-heading">
+              <div>
+                <Link to={`/tenants?identity=${item.tenantPartyId}`}>
+                  {names.data?.get(item.tenantPartyId) ??
+                    (names.isPending ? "Loading name…" : "View tenant details")}
+                </Link>
+                <p>{item.participantRole.replaceAll("_", " ")}</p>
+              </div>
+              {lease.status === "draft" && (
+                <CommandLinks
+                  target={lease.id}
+                  child={item.id}
+                  keys={["lease.participant.update", "lease.participant.remove"]}
+                  labels={{
+                    "lease.participant.update": "Edit participant",
+                    "lease.participant.remove": "Remove participant",
+                  }}
+                  title={`Participant actions for ${names.data?.get(item.tenantPartyId) ?? "tenant"}`}
+                  collapsible={false}
+                />
+              )}
+            </div>
+            <p className="lease-detail-note">
+              From {leaseDate(item.startsOn)}
+              {item.endsOn
+                ? ` through ${leaseDate(leaseLastCoveredOn(item.endsOn)!)}`
+                : " · Ongoing"}
+            </p>
+            {item.notes && <p className="lease-detail-text">{item.notes}</p>}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -319,24 +476,35 @@ function LeaseSpaceContext({ spaceId }: { spaceId: string }) {
         }),
       ),
   });
+  const propertyId = space.data?.propertyId;
+  const property = useQuery({
+    queryKey: scope.key("portfolio-record", propertyId),
+    enabled: !!propertyId,
+    retry: false,
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/properties/{property_id}", {
+          signal,
+          params: { path: { property_id: propertyId! } },
+        }),
+      ),
+  });
   return (
-    <section aria-label="Lease Space context">
-      {space.isPending && <p role="status">Loading Space status…</p>}
+    <section aria-label="Lease property" className="lease-detail-context">
+      {space.isPending && <p role="status">Loading property…</p>}
       {space.error && (
-        <p role="alert">
-          Space status unavailable: {space.error.message}. Lease records remain available.
-        </p>
+        <p role="alert">Property information is unavailable. Lease records remain available.</p>
       )}
       {space.data && (
         <>
           <p>
-            {space.data.displayName} · Current occupancy:{" "}
-            {statusLabel(space.data.currentOccupancy.occupancyStatus)} · Leasing status:{" "}
-            {statusLabel(space.data.availability.effectiveStatus)}
+            <Link to={`/properties/${space.data.propertyId}/overview`}>
+              {property.data?.displayName ?? "View property"}
+            </Link>{" "}
+            · {space.data.displayName}
           </p>
-          <p>Property-local date: {space.data.effectiveLocalDate}</p>
           <Link to={`/properties/${space.data.propertyId}/units`}>
-            Review Space occupancy and leasing status
+            View occupancy and leasing status
           </Link>
         </>
       )}
@@ -357,76 +525,80 @@ function TerminationCases({ lease }: { lease: Lease }) {
       ),
   });
   return (
-    <section aria-label="Termination requests">
-      <h3>Termination requests</h3>
-      {cases.isPending && <p role="status">Loading termination requests…</p>}
-      {cases.error && <p role="alert">{cases.error.message}</p>}
-      {cases.data?.map((item) => (
-        <article key={item.id}>
-          <Facts
-            value={item}
-            fields={[
-              "status",
-              "reason",
-              "noticeReceivedOn",
-              "requestedTerminationOn",
-              "expectedMoveOutOn",
-              "agreedTerminationOn",
-              "acceptedOn",
-              "completedOn",
-              "tenantExplanation",
-              "contractClauseReference",
-              "operatorNotes",
-            ]}
-          />
-          {lease.status === "executed" && (
-            <CommandLinks
-              target={lease.id}
-              child={item.id}
-              keys={
-                item.status === "accepted"
-                  ? ["lease.termination.complete", "lease.terminate"]
-                  : ["requested", "under_review", "proposed"].includes(item.status)
-                    ? [
-                        "lease.termination.proposal.add",
-                        "lease.termination.proposal.accept",
-                        "lease.termination.transition",
-                      ]
-                    : []
-              }
-              title={`Termination actions ${item.requestedTerminationOn}`}
-            />
-          )}
-          {item.proposals.map((p) => (
-            <MoneyFacts
-              key={p.id}
-              value={p}
+    <section aria-label="Termination requests" className="lease-detail-section">
+      <details open={cases.isPending || !!cases.error || !!cases.data?.length}>
+        <summary>
+          Early termination requests{cases.data?.length ? ` (${cases.data.length})` : ""}
+        </summary>
+        {cases.isPending && <p role="status">Loading termination requests…</p>}
+        {cases.error && <p role="alert">{cases.error.message}</p>}
+        {cases.data?.length === 0 && <p>No early termination requests recorded.</p>}
+        {cases.data?.map((item) => (
+          <article key={item.id}>
+            <Facts
+              value={item}
               fields={[
-                "id",
                 "status",
-                "proposalVersion",
-                "proposedTerminationOn",
+                "reason",
+                "noticeReceivedOn",
+                "requestedTerminationOn",
                 "expectedMoveOutOn",
-                "rentResponsibilityEndsOn",
-                "terminationFeeMinor",
-                "currencyCode",
-                "feeWaived",
-                "replacementTenantCondition",
-                "accessArrangement",
-                "otherTerms",
-                "responseDueOn",
-                "decidedOn",
+                "agreedTerminationOn",
+                "acceptedOn",
+                "completedOn",
+                "tenantExplanation",
+                "contractClauseReference",
+                "operatorNotes",
               ]}
             />
-          ))}
-          <LeaseDocuments
-            leaseId={lease.id}
-            entityId={item.id}
-            entityType="lease_termination_case"
-            files={item.files}
-          />
-        </article>
-      ))}
+            {lease.status === "executed" && (
+              <CommandLinks
+                target={lease.id}
+                child={item.id}
+                keys={
+                  item.status === "accepted"
+                    ? ["lease.termination.complete", "lease.terminate"]
+                    : ["requested", "under_review", "proposed"].includes(item.status)
+                      ? [
+                          "lease.termination.proposal.add",
+                          "lease.termination.proposal.accept",
+                          "lease.termination.transition",
+                        ]
+                      : []
+                }
+                title={`Termination actions ${item.requestedTerminationOn}`}
+              />
+            )}
+            {item.proposals.map((p) => (
+              <MoneyFacts
+                key={p.id}
+                value={p}
+                fields={[
+                  "status",
+                  "proposalVersion",
+                  "proposedTerminationOn",
+                  "expectedMoveOutOn",
+                  "rentResponsibilityEndsOn",
+                  "terminationFeeMinor",
+                  "currencyCode",
+                  "feeWaived",
+                  "replacementTenantCondition",
+                  "accessArrangement",
+                  "otherTerms",
+                  "responseDueOn",
+                  "decidedOn",
+                ]}
+              />
+            ))}
+            <LeaseDocuments
+              leaseId={lease.id}
+              entityId={item.id}
+              entityType="lease_termination_case"
+              files={item.files}
+            />
+          </article>
+        ))}
+      </details>
     </section>
   );
 }

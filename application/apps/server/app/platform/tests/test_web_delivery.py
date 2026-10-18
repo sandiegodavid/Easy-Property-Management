@@ -50,6 +50,7 @@ def client(tmp_path, build):
         "/home/collections/information_review",
         "/properties",
         "/parties",
+        "/tenants",
         f"/properties/{ID}/units",
         f"/properties/{ID}/setup",
         f"/owners/{ID}/money",

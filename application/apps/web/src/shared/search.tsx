@@ -18,7 +18,7 @@ export function searchTarget(target: Target) {
     case "owner":
       return `/owners/${id}/overview`;
     case "tenant":
-      return `/parties?identity=${id}`;
+      return `/tenants?identity=${id}`;
     case "lease":
       return `/leases/${id}`;
     case "task":
@@ -133,7 +133,11 @@ export function MetadataSearch() {
   useEffect(() => {
     if (input === q) return;
     const timer = setTimeout(
-      () => setParams({ q: input, includeArchived: String(archived) }, { replace: true }),
+      () =>
+        setParams(
+          { q: input, includeArchived: String(archived) },
+          { replace: true, preventScrollReset: true },
+        ),
       250,
     );
     return () => clearTimeout(timer);
@@ -164,7 +168,12 @@ export function MetadataSearch() {
         <input
           type="checkbox"
           checked={archived}
-          onChange={(event) => setParams({ q, includeArchived: String(event.target.checked) })}
+          onChange={(event) =>
+            setParams(
+              { q: input, includeArchived: String(event.target.checked) },
+              { replace: true, preventScrollReset: true },
+            )
+          }
         />
         Include archived records
       </label>
