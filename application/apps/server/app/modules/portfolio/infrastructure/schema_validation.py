@@ -54,13 +54,14 @@ def validate_portfolio_schema(connection) -> None:
                 "id",
                 "property_id",
                 "owner_kind",
+                "share_basis_points",
                 "party_id",
                 "starts_on",
                 "ends_on",
                 "created_at",
                 "ended_at",
             },
-            {"party_id", "ends_on", "ended_at"},
+            {"party_id", "ends_on", "ended_at", "share_basis_points"},
         ),
         "spaces": (
             {
@@ -249,6 +250,7 @@ def _validate_columns(inspector, expected_columns) -> None:
                 "status_revision",
                 "result_revision",
                 "property_revision",
+                "share_basis_points",
             }:
                 if "INT" not in str(column["type"]).upper():
                     raise MigrationSchemaError(
@@ -379,6 +381,7 @@ def _validate_checks(inspector, expected_columns) -> None:
             "owner_kindin('local_operator','client_owner')",
             "(owner_kind='local_operator'andparty_idisnull)or(owner_kind='client_owner'andparty_idisnotnull)",
             "ends_onisnullorends_on>=starts_on",
+            "share_basis_pointsisnullor(typeof(share_basis_points)='integer'andshare_basis_pointsbetween1and10000)",
         },
         "spaces": {
             "space_kindin('whole_home','whole_office','office_suite')",

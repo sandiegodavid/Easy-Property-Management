@@ -7,6 +7,7 @@ from sqlalchemy import and_, case, exists, func, literal, or_, select
 
 from app.modules.parties.application.identity_relations import PartyIdentityRelations
 from app.modules.portfolio.application.directory_ports import RECOGNITION_PREVIEW_LIMIT
+from app.modules.portfolio.domain.models import ownership_share_percent
 from app.modules.portfolio.infrastructure.directory_reader import (
     SQLitePortfolioDirectoryReader,
     _local_day,
@@ -185,6 +186,7 @@ class SQLiteOwnerContextReader:
                 o.c.property_id,
                 p.c.display_name.label("property_name"),
                 o.c.owner_kind,
+                o.c.share_basis_points,
                 o.c.party_id,
                 party.c.display_name.label("owner_name"),
                 o.c.starts_on,
@@ -199,7 +201,18 @@ class SQLiteOwnerContextReader:
             )
             .where(*predicates)
         )
-        return bounded_page(connection, selection, window, descending=True)
+        page = bounded_page(connection, selection, window, descending=True)
+        return ReadPage(
+            page.total,
+            [
+                {
+                    **{key: value for key, value in row.items() if key != "share_basis_points"},
+                    "share_percent": ownership_share_percent(row["share_basis_points"]),
+                }
+                for row in page.items
+            ],
+            page.next_key,
+        )
 
     def spaces(self, connection, subject, window):
         self._prepare(connection)

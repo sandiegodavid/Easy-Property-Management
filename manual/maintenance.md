@@ -6,6 +6,8 @@
 
 The Maintenance page shows issue cards with property, status, priority and reported time. Select a card to review it. Filter by status, find a property by name, or choose a category or priority; results update automatically. **More filters** contains reporter, evidence, expense, follow-up and date filters. **Clear filters** returns to the full issue list. Owner concerns are a separate link below the results.
 
+Issue details show the property name, description, status, priority and reporter first. Use the main buttons to edit, start, resolve, cancel or reopen an issue. **More issue actions** contains scheduling, provider, cost, follow-up and work-entry commands. Empty related sections stay collapsed; photos, conversations and change history remain available below. Reported times use your browser's local time zone.
+
 ## Report and triage a repair
 
 1. Open **Maintenance → Report maintenance issue**.

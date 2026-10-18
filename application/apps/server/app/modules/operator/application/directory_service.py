@@ -172,6 +172,7 @@ def _card(row):
                 "ownerKind": x["owner_kind"],
                 "partyId": x["party_id"],
                 "displayName": x["display_name"],
+                "sharePercent": x["share_percent"],
             }
             for x in row["owners"]
         ],

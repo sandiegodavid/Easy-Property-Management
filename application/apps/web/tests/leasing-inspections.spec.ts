@@ -203,7 +203,7 @@ test("Lease documents resume with original bytes and reconcile one committed upl
   page.on("request", (request) => {
     if (/\/api\/files\/[0-9a-f-]{36}$/.test(new URL(request.url()).pathname)) metadataReads++;
   });
-  await page.getByRole("link", { name: "Return to current record", exact: true }).click();
+  await page.locator(".parent-back-link").click();
   await expect(page).toHaveURL(new RegExp(`/leases/${f.lease.id}/details`));
   await expect(
     documents.getByRole("link", { name: "Download signed-lease.txt", exact: true }),
@@ -267,7 +267,7 @@ test("termination documents and full proposal context preserve truthful occupanc
     buffer: Buffer.from("Voluntarily supplied relocation evidence"),
   });
   await save(page, "Attach supporting evidence");
-  await page.getByRole("link", { name: "Return to current record", exact: true }).click();
+  await page.locator(".parent-back-link").click();
   await expect(requests).toContainText("relocation.txt");
   const leaseResponse = await request.get(`/api/leases/${f.lease.id}`);
   const lease = (await leaseResponse.json()) as Schemas["LeaseResponse"];

@@ -110,6 +110,56 @@ test("property-scoped Money shows a named link back to property details", async 
   await expect(page.getByRole("region", { name: "Property context", exact: true })).toHaveCount(0);
 });
 
+test("lease-filtered Money shows its property even without money records", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  await page.goto(`/money?leaseId=${f.lease.id}`);
+  const context = page.getByRole("region", { name: "Property context", exact: true });
+  await expect(
+    context.getByRole("link", { name: f.property.displayName, exact: true }),
+  ).toHaveAttribute("href", `/properties/${f.property.id}/overview`);
+  await expect(context).toContainText(f.property.addressLine1);
+  await expect(page.getByText("Showing this lease’s records.", { exact: false })).toBeVisible();
+  await expect(page.getByText(`leaseId: ${f.lease.id}`, { exact: false })).toHaveCount(0);
+  await page
+    .getByRole("navigation", { name: "Money views" })
+    .getByRole("link", { name: "Received rent", exact: true })
+    .click();
+  await expect(
+    context.getByRole("link", { name: f.property.displayName, exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Remove lease filter", exact: true }).click();
+  await expect(context).toHaveCount(0);
+});
+
+test("lease-filtered Money can retry unavailable property context without clearing its lease", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  let unavailable = true;
+  await page.route("**/api/money/property-contexts?*", (route) =>
+    unavailable
+      ? route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Unavailable" }),
+        })
+      : route.continue(),
+  );
+  await page.goto(`/money?leaseId=${f.lease.id}`);
+  const context = page.getByRole("region", { name: "Property context", exact: true });
+  await expect(context.getByRole("alert")).toContainText("could not be loaded");
+  unavailable = false;
+  await context.getByRole("button", { name: "Retry", exact: true }).click();
+  await expect(
+    context.getByRole("link", { name: f.property.displayName, exact: true }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`leaseId=${f.lease.id}`));
+});
+
 async function save(page: Page, title: string) {
   await test.step(title, async () => {
     await page

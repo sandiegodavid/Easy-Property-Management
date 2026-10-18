@@ -1,5 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import {
+  ParentBackLink,
+  SourceWorkflowLink as Link,
+  useSourceNavigationState,
+} from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import { workflows, scalar } from "@epm/contracts/workflows";
 import type { components } from "@epm/contracts/generated";
@@ -20,6 +25,7 @@ export function PortfolioEntry() {
   );
 }
 export function PropertyCreateButton() {
+  const navigationState = useSourceNavigationState();
   const { scope } = useWorkspace();
   const navigate = useNavigate();
   const location = useLocation();
@@ -29,7 +35,10 @@ export function PropertyCreateButton() {
       disabled={!scope.canWrite}
       onClick={() => {
         void navigate(workflowUrl("portfolio.property.create"), {
-          state: { returnTo: location.pathname + location.search },
+          state: navigationState(
+            { returnTo: location.pathname + location.search },
+            workflowUrl("portfolio.property.create"),
+          ),
         });
       }}
     >
@@ -573,9 +582,9 @@ export function PortfolioCommand() {
     >
       {changingOwners && source.data?.property && (
         <>
-          <Link to={`/properties/${source.data.property.id}/setup`}>
+          <ParentBackLink to={`/properties/${source.data.property.id}/setup`}>
             ← Back to {source.data.property.displayName}
-          </Link>
+          </ParentBackLink>
           <section className="property-edit-context" aria-label="Selected property">
             <p className="space-classification-property">Changing ownership</p>
             <h2>{source.data.property.displayName}</h2>
@@ -588,9 +597,9 @@ export function PortfolioCommand() {
       )}
       {editingProperty && source.data?.property && (
         <>
-          <Link to={`/properties/${source.data.property.id}/setup`}>
+          <ParentBackLink to={`/properties/${source.data.property.id}/setup`}>
             ← Back to {source.data.property.displayName}
-          </Link>
+          </ParentBackLink>
           <section className="property-edit-context" aria-label="Selected property">
             <p className="space-classification-property">Editing property</p>
             <h2>{source.data.property.displayName}</h2>
@@ -613,9 +622,9 @@ export function PortfolioCommand() {
       )}
       {(editingRental || archivingRental) && source.data?.property && selectedUnit && (
         <>
-          <Link to={`/properties/${source.data.property.id}/units`}>
+          <ParentBackLink to={`/properties/${source.data.property.id}/units`}>
             ← Back to {source.data.property.displayName}
-          </Link>
+          </ParentBackLink>
           <section
             className="space-classification-context"
             aria-label="Selected property and rental"
@@ -660,9 +669,9 @@ export function PortfolioCommand() {
       )}
       {statusCommand && source.data?.space && (
         <>
-          <Link to={`/properties/${source.data.space.propertyId}/units`}>
+          <ParentBackLink to={`/properties/${source.data.space.propertyId}/units`}>
             ← Back to {source.data.property?.displayName ?? "property"}
-          </Link>
+          </ParentBackLink>
           <section
             className="space-classification-context"
             aria-label="Selected property and rental"
@@ -698,7 +707,7 @@ export function PortfolioCommand() {
         </>
       )}
       {definition.formKey === "portfolio.property.create" && (
-        <Link to="/properties">← Back to Properties</Link>
+        <ParentBackLink to="/properties">← Back to Properties</ParentBackLink>
       )}
       {!statusCommand &&
         !editingRental &&

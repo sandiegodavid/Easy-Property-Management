@@ -1,7 +1,8 @@
 import { DynamicFilterForm } from "../shared/dynamic-filter-form";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
+import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
 import { workflows, record, scalar } from "@epm/contracts/workflows";
@@ -130,11 +131,6 @@ export function ProviderWorkspace({ catalogOnly = false }: { catalogOnly?: boole
       )?.revision;
     return (
       <>
-        <p>
-          Profile, child and assignment changes use the Provider revision. Categories have their own
-          revision. Category assignment does not create an engagement. Reputation links record
-          external references, not verified endorsements.
-        </p>
         <CommandLoader
           definition={definition}
           sourceId={target}
@@ -147,20 +143,36 @@ export function ProviderWorkspace({ catalogOnly = false }: { catalogOnly?: boole
                 : (provider.data?.profile.revision ?? 0)
           }
           initial={initial}
+          returnTo={
+            definition.formKey.startsWith("provider.category.")
+              ? "/settings/provider-categories"
+              : target
+                ? `/providers/${target}/details`
+                : "/providers"
+          }
           choices={choices}
         />
       </>
     );
   }
   if (target) {
-    if (provider.isPending) return <p role="status">Loading Provider…</p>;
-    if (provider.error) return <p role="alert">{provider.error.message}</p>;
+    if (provider.isPending || provider.error)
+      return (
+        <>
+          <ParentBackLink to="/providers">← Back to Providers</ParentBackLink>
+          {provider.error ? (
+            <p role="alert">{provider.error.message}</p>
+          ) : (
+            <p role="status">Loading Provider…</p>
+          )}
+        </>
+      );
     const item = provider.data;
     const active = !item.profile.archivedAt;
     return (
       <section aria-label="Provider record">
+        <ParentBackLink to="/providers">← Back to Providers</ParentBackLink>
         <h2>{item.party.displayName}</h2>
-        <Link to="/providers">Provider directory</Link> ·{" "}
         <Link to={`/parties?identity=${target}`}>Shared identity and contacts</Link>
         <Facts
           value={item.profile}

@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
@@ -1100,10 +1101,21 @@ export function AiDraftReview() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const attempt = recovery.current;
-  if (detail.isPending) return <p role="status">Loading AI draft…</p>;
-  if (detail.error) return <ApiError error={detail.error} />;
+  if (detail.isPending || detail.error)
+    return (
+      <>
+        <ParentBackLink to="/settings/ai">← Back to AI assistance</ParentBackLink>
+        {detail.error ? <ApiError error={detail.error} /> : <p role="status">Loading AI draft…</p>}
+      </>
+    );
   const draft = detail.data;
-  if (!draft) return <p role="alert">AI draft is unavailable.</p>;
+  if (!draft)
+    return (
+      <>
+        <ParentBackLink to="/settings/ai">← Back to AI assistance</ParentBackLink>
+        <p role="alert">AI draft is unavailable.</p>
+      </>
+    );
   const active = draft.status === "proposed" || draft.status === "edited";
   const reviewedSource = reviewedVersion === draft.version;
   const displayedPayload = payload ?? json(draft.draftPayload);
@@ -1227,7 +1239,7 @@ export function AiDraftReview() {
   return (
     <main>
       <p>
-        <Link to="/settings/ai">AI assistance settings</Link>
+        <ParentBackLink to="/settings/ai">← Back to AI assistance</ParentBackLink>
       </p>
       <h2>Review AI draft</h2>
       <p>

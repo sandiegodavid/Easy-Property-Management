@@ -46,6 +46,7 @@ from app.modules.portfolio.domain.models import (
     SpaceOccupancyPeriod,
     active_on,
     ownership_context,
+    validate_ownership_shares,
 )
 
 
@@ -63,8 +64,15 @@ class OwnershipInput:
     party_id: str | None = None
     inline_party: "PartyCreateCommand | None" = None
     inline_contacts: tuple[ContactMethodCommand, ...] = ()
+    share_basis_points: int | None = None
 
     def __post_init__(self) -> None:
+        if self.share_basis_points is not None and (
+            type(self.share_basis_points) is not int or not 1 <= self.share_basis_points <= 10000
+        ):
+            raise PortfolioError(
+                "Ownership share must be greater than 0% and at most 100%, with at most two decimal places."
+            )
         if (
             not isinstance(self.inline_contacts, tuple)
             or len(self.inline_contacts) > 100
@@ -1246,8 +1254,11 @@ class PortfolioService:
                     "Ownership changes cannot replace an existing change on the same date."
                 )
             prior_snapshot = [item.to_dict() for item in existing]
-            if sorted((item.owner_kind, item.party_id or "") for item in existing) == sorted(
-                (item.owner_kind, item.party_id or "") for item in resolved_inputs
+            if sorted(
+                (item.owner_kind, item.party_id or "", item.share_basis_points) for item in existing
+            ) == sorted(
+                (item.owner_kind, item.party_id or "", item.share_basis_points)
+                for item in resolved_inputs
             ):
                 return existing
             for item in existing:
@@ -2297,6 +2308,7 @@ class PortfolioService:
                 property_id=property_id,
                 owner_kind=item.owner_kind,
                 party_id=item.party_id,
+                share_basis_points=item.share_basis_points,
                 starts_on=starts_on,
                 ends_on=None,
                 created_at=now,
@@ -2611,6 +2623,10 @@ def _validate_ownerships(items: tuple[OwnershipInput, ...]) -> None:
         raise PortfolioError("At least one ownership relationship is required.")
     if not all(isinstance(item, OwnershipInput) for item in items):
         raise PortfolioError("Each ownership relationship must be a valid ownership input.")
+    try:
+        validate_ownership_shares([item.share_basis_points for item in items])
+    except ValueError as error:
+        raise PortfolioError(str(error)) from error
     local = [item for item in items if item.owner_kind == "local_operator"]
     clients = [
         item.party_id

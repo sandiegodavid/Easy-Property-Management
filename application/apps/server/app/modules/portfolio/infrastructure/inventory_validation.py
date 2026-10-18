@@ -17,7 +17,12 @@ from app.modules.portfolio.application.inventory_commands import (
     inventory_state,
     receipt_audit,
 )
-from app.modules.portfolio.domain.models import Property, PropertyOwnership, Space
+from app.modules.portfolio.domain.models import (
+    Property,
+    PropertyOwnership,
+    Space,
+    validate_ownership_shares,
+)
 from app.modules.portfolio.infrastructure.inventory_triggers import INVENTORY_TRIGGERS
 from app.modules.portfolio.infrastructure.sqlalchemy_models import PortfolioInventoryOperationModel
 from app.platform.migration_errors import MigrationSchemaError
@@ -134,7 +139,22 @@ def _history(connection):
         spaces.setdefault(item.property_id, []).append(item)
     for row in connection.exec_driver_sql("SELECT * FROM property_ownerships").mappings():
         item = PropertyOwnership(**dict(row))
+        if item.share_basis_points is not None and (
+            type(item.share_basis_points) is not int or not 1 <= item.share_basis_points <= 10000
+        ):
+            raise ValueError("Invalid retained ownership share.")
         ownerships.setdefault(item.property_id, []).append(item)
+    for items in ownerships.values():
+        for day in {
+            value for item in items for value in (item.starts_on, item.ends_on) if value is not None
+        }:
+            validate_ownership_shares(
+                [
+                    item.share_basis_points
+                    for item in items
+                    if item.starts_on <= day and (item.ends_on is None or day < item.ends_on)
+                ]
+            )
     audits, effects, business = {}, {}, {}
     for event in connection.exec_driver_sql(
         "SELECT * FROM audit_events WHERE entity_type IN ('portfolio_inventory_operation', 'property', 'space', 'property_ownership')"

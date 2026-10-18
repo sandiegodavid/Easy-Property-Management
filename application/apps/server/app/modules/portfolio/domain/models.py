@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal
 
 from app.modules.parties.domain.models import Party
 
@@ -60,6 +61,7 @@ class PropertyOwnership:
     ends_on: str | None
     created_at: str
     ended_at: str | None
+    share_basis_points: int | None = None
 
     def to_dict(self, party: Party | None = None) -> dict[str, object]:
         return {
@@ -72,7 +74,30 @@ class PropertyOwnership:
             "endsOn": self.ends_on,
             "createdAt": self.created_at,
             "endedAt": self.ended_at,
+            "sharePercent": ownership_share_percent(self.share_basis_points),
         }
+
+
+def ownership_share_percent(value: int | None) -> str | None:
+    return None if value is None else format(Decimal(value) / 100, ".2f")
+
+
+def validate_ownership_shares(values: list[int | None]) -> None:
+    if any(
+        value is not None and (type(value) is not int or not 1 <= value <= 10000)
+        for value in values
+    ):
+        raise ValueError(
+            "Ownership shares must be greater than 0% and at most 100%, with at most two decimal places."
+        )
+    total = sum(value for value in values if value is not None)
+    if values and all(value is not None for value in values):
+        if total != 10000:
+            raise ValueError("Recorded ownership shares must total 100% when every share is known.")
+    elif total >= 10000:
+        raise ValueError(
+            "Known ownership shares must leave a portion for owners whose shares are not recorded."
+        )
 
 
 @dataclass(frozen=True)

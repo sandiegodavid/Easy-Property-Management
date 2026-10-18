@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { SourceWorkflowLink as Link } from "../shared/home-navigation";
+import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import { record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
@@ -190,8 +190,17 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
     queryKey: scope.key("money-record", kind, id),
     queryFn: ({ signal }) => loadMoneyRecord(kind, id, signal),
   });
-  if (query.isPending) return <p role="status">Loading money record…</p>;
-  if (query.error) return <p role="alert">{query.error.message}</p>;
+  if (query.isPending || query.error)
+    return (
+      <>
+        <ParentBackLink to="/money">← Back to Money</ParentBackLink>
+        {query.error ? (
+          <p role="alert">{query.error.message}</p>
+        ) : (
+          <p role="status">Loading money record…</p>
+        )}
+      </>
+    );
   const item = query.data,
     leaseId = scalar(item.leaseId),
     accountId = kind === "deposit" ? id : scalar(item.accountId);
@@ -222,8 +231,8 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
           : [];
   return (
     <section aria-label="Money record">
+      <ParentBackLink to="/money">← Back to Money</ParentBackLink>
       <h2>{label(kind)} record</h2>
-      <Link to="/money">Return to Money</Link>
       <MoneyFacts value={item} fields={detailFields} />
       {kind === "check" && <CheckContext check={item} />}
       {kind === "expense" && (

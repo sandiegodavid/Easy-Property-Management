@@ -24,8 +24,8 @@ function InventoryPage({ occupancy }: { occupancy: "vacant" | "unknown" }) {
   if (read.value?.nextCursor) next.set("cursor", read.value.nextCursor);
   return (
     <section aria-label="Home inventory spaces">
-      <h2>{occupancy === "vacant" ? "Vacant spaces" : "Unknown occupancy"}</h2>
       <HomeBackLink fallback="/home">Return Home</HomeBackLink>
+      <h2>{occupancy === "vacant" ? "Vacant spaces" : "Unknown occupancy"}</h2>
       <p>
         Active Properties and Spaces only. Counts describe recorded occupancy, not availability or
         verified physical condition. Unknown occupancy never counts as vacant.

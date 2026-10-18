@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import { workflows, record, scalar, type Workflow } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
@@ -378,6 +379,13 @@ export function WorkCommand() {
     id: scalar(item.partyId),
     label: scalar(item.partyDisplayName),
   }));
+  const parentTarget = target
+    ? workUrl(sourceKind(definition), target)
+    : definition.formKey.startsWith("task.")
+      ? "/tasks"
+      : definition.formKey.startsWith("communication.")
+        ? "/conversations"
+        : "/maintenance";
   const choices = {
     ...context.choices,
     ...(identities.length || contextualParty.length
@@ -386,6 +394,7 @@ export function WorkCommand() {
   };
   return (
     <>
+      <ParentBackLink to={parentTarget} />
       {loaded.error && (
         <p role="alert">
           Current source unavailable. Only the original attempt can be reconciled or replayed; no
@@ -418,6 +427,7 @@ export function WorkCommand() {
         />
       )}
       <CommandLoader
+        showParentLink={false}
         definition={definition}
         sourceId={target}
         childId={child}
@@ -511,15 +521,7 @@ export function WorkCommand() {
             <ConcernContext values={values} source={context.value} />
           ) : null
         }
-        returnTo={
-          target
-            ? workUrl(sourceKind(definition), target)
-            : definition.formKey.startsWith("task.")
-              ? "/tasks"
-              : definition.formKey.startsWith("communication.")
-                ? "/conversations"
-                : "/maintenance"
-        }
+        returnTo={parentTarget}
         reviewSource={
           definition.sourceKind
             ? async () => {

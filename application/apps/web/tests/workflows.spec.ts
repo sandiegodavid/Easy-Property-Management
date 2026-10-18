@@ -205,8 +205,57 @@ test("identity contacts and Tenant preferences use their displayed source revisi
   await saved(page, "Use identity as tenant");
   await page.goto(`/tenants?identity=${identity.id}`);
   await expect(page.getByRole("heading", { name: "Tenant preferences" })).toBeVisible();
-  await page.getByText("Tenant actions", { exact: true }).click();
-  await page.getByRole("link", { name: "Edit tenant preferences" }).click();
+  const contacts = page.getByRole("region", { name: "Contact details", exact: true });
+  const preferences = page.getByRole("region", { name: "Tenant preferences", exact: true });
+  await expect(
+    contacts.getByRole("button", { name: "Add contact details", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("More actions", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Archive person or organization", exact: true }),
+  ).toHaveCount(0);
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((appearance) => {
+      document.documentElement.dataset.theme = appearance;
+    }, theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const [panel, title, action] of [
+        [contacts, "Contact details", "Add contact details"],
+        [preferences, "Tenant preferences", "Edit tenant preferences"],
+      ] as const) {
+        const heading = await panel
+          .getByRole("heading", { name: title, exact: true })
+          .boundingBox();
+        const button = await panel.getByRole("button", { name: action, exact: true }).boundingBox();
+        if (width === 1280)
+          expect(
+            Math.abs(heading!.y + heading!.height / 2 - button!.y - button!.height / 2),
+          ).toBeLessThan(2);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await page
+        .locator(".person-detail")
+        .screenshot({ path: testInfo.outputPath(`tenant-details-${theme}-${width}.png`) });
+    }
+    await page.evaluate(axe.source);
+    expect(
+      await page.evaluate(async () =>
+        (
+          await window.axe.run(".person-detail", {
+            runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
+          })
+        ).violations.map((item) => item.id),
+      ),
+    ).toEqual([]);
+  }
+  const archive = page.getByRole("button", { name: "Archive tenant", exact: true });
+  expect((await archive.boundingBox())!.y).toBeGreaterThan(
+    (await preferences.boundingBox())!.y + (await preferences.boundingBox())!.height,
+  );
+  await preferences.getByRole("button", { name: "Edit tenant preferences", exact: true }).click();
   await expect(page).toHaveURL(
     new RegExp(`/tenants\\?workflow=tenant.profile.patch&target=${identity.id}`),
   );
@@ -777,8 +826,7 @@ test("archived Tenant profiles remain reachable for explicit restoration", async
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
   await saved(page, "Archive tenant");
   await page.goto(`/tenants?identity=${identity.id}`);
-  await page.getByText("Tenant actions", { exact: true }).click();
-  await page.getByRole("link", { name: "Restore tenant", exact: true }).click();
+  await page.getByRole("button", { name: "Restore tenant", exact: true }).click();
   await saved(page, "Restore tenant");
   const response = await request.get(`/api/tenants/${identity.id}`);
   const current = (await response.json()) as Schema["TenantResponse"];

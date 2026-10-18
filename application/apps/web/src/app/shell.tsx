@@ -47,7 +47,13 @@ import { AiDraftReview, AiGovernanceSettings } from "../workflows/ai-governance"
 import { Home } from "../shared/home";
 import { HomeCollectionPage } from "../shared/home-collection-page";
 import { HomeInventoryPage } from "../shared/home-inventory-page";
-import { HomeReturn } from "../shared/home-navigation";
+import {
+  DirectoryParentReturn,
+  HomeReturn,
+  ParentBackLink,
+  useParentScroll,
+  useSourceNavigationState,
+} from "../shared/home-navigation";
 import { readResult } from "../workflows/reads";
 
 function NavigationIcon({ kind }: { kind: (typeof destinations)[number]["icon"] }) {
@@ -278,6 +284,7 @@ function DestinationGuard({ id }: { id: string }) {
   );
 }
 function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
+  const sourceNavigationState = useSourceNavigationState();
   const navigate = useNavigate();
   const { id = "" } = useParams();
   const { scope } = useWorkspace();
@@ -321,7 +328,14 @@ function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
           {kind === "property" && (
             <button
               type="button"
-              onClick={() => void navigate(`/money?propertyId=${encodeURIComponent(id)}`)}
+              onClick={() =>
+                void navigate(`/money?propertyId=${encodeURIComponent(id)}`, {
+                  state: sourceNavigationState(
+                    undefined,
+                    `/money?propertyId=${encodeURIComponent(id)}`,
+                  ),
+                })
+              }
             >
               View in Money
             </button>
@@ -355,6 +369,7 @@ function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
   );
 }
 function Layout() {
+  useParentScroll();
   const { bootstrap, scope } = useWorkspace();
   const backup = useQuery({
     queryKey: scope.key("sidebar-backup-status"),
@@ -453,6 +468,12 @@ function Layout() {
         )}
         <section id="workspace-content" tabIndex={-1} ref={content}>
           <PageAsOfProvider key={location.pathname}>
+            <DirectoryParentReturn />
+            {location.pathname.startsWith("/settings/") &&
+              !new URLSearchParams(location.search).has("workflow") && (
+                <ParentBackLink to="/settings">← Back to Settings</ParentBackLink>
+              )}
+            {location.pathname === "/search" && <ParentBackLink to="/home" />}
             <Outlet />
           </PageAsOfProvider>
         </section>

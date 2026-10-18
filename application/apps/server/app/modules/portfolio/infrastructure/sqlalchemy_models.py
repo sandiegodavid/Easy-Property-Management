@@ -1,6 +1,6 @@
 """SQLAlchemy metadata for PORT-001."""
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, String, text
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.platform.sqlalchemy_models import LocalBase
@@ -89,12 +89,16 @@ class PropertyOwnershipModel(LocalBase):
     ends_on: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     ended_at: Mapped[str | None] = mapped_column(String)
+    share_basis_points: Mapped[int | None] = mapped_column(Integer)
     __table_args__ = (
         CheckConstraint("owner_kind IN ('local_operator', 'client_owner')"),
         CheckConstraint(
             "(owner_kind = 'local_operator' AND party_id IS NULL) OR (owner_kind = 'client_owner' AND party_id IS NOT NULL)"
         ),
         CheckConstraint("ends_on IS NULL OR ends_on >= starts_on"),
+        CheckConstraint(
+            "share_basis_points IS NULL OR (typeof(share_basis_points) = 'integer' AND share_basis_points BETWEEN 1 AND 10000)"
+        ),
         Index("property_ownerships_property_active", "property_id", "ends_on"),
         Index("property_ownerships_party_active", "party_id", "ends_on"),
         Index(

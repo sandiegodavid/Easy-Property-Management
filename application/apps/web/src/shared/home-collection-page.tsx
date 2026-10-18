@@ -35,8 +35,8 @@ function CollectionPage({ collection }: { collection: (typeof collections)[numbe
     next.set("cursor", read.value.result.nextCursor);
   return (
     <section aria-label="Home collection page">
-      <h2>{collectionTitles[collection]}</h2>
       <HomeBackLink fallback={`/home?${homeParams(filters)}`}>Return Home</HomeBackLink>
+      <h2>{collectionTitles[collection]}</h2>
       <p>
         Scope: {filters.propertyId ?? "All properties"} · Horizon: {filters.horizonDays} days. Each
         page uses the capture shown below.

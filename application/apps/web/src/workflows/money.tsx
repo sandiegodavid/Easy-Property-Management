@@ -1,6 +1,7 @@
 import { DynamicFilterForm } from "../shared/dynamic-filter-form";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
+import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import { record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
@@ -55,7 +56,11 @@ export function MoneyWorkspace() {
   return (
     <section aria-label="Money workspace">
       <h2>Money</h2>
-      {params.get("propertyId") && <MoneyPropertyContext id={params.get("propertyId")!} />}
+      {params.get("propertyId") ? (
+        <MoneyPropertyContext id={params.get("propertyId")!} />
+      ) : params.get("leaseId") ? (
+        <MoneyLeasePropertyContext leaseId={params.get("leaseId")!} />
+      ) : null}
       <p>
         Recorded payments, paid expenses and held deposits are separate records. Scheduled checks
         and pending owner reports are not received income.
@@ -86,6 +91,38 @@ export function MoneyWorkspace() {
         })}
       </nav>
       {tab === "reporting" ? <MoneyReporting /> : <MoneyDirectory key={tab} tab={tab} />}
+    </section>
+  );
+}
+
+function MoneyLeasePropertyContext({ leaseId }: { leaseId: string }) {
+  const { scope } = useWorkspace();
+  const context = useQuery({
+    queryKey: scope.key("money-property-contexts", [], [leaseId]),
+    retry: false,
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/money/property-contexts", {
+          signal,
+          params: { query: { leaseIds: [leaseId] } },
+        }),
+      ),
+  });
+  const propertyId = context.data?.leaseProperties[leaseId];
+  if (propertyId) return <MoneyPropertyContext id={propertyId} />;
+  return (
+    <section className="money-property-context" aria-label="Property context">
+      <p className="money-property-label">Property</p>
+      {context.isPending ? (
+        <p role="status">Loading property…</p>
+      ) : (
+        <p role="alert">
+          The property for this lease could not be loaded.{" "}
+          <button type="button" onClick={() => void context.refetch()}>
+            Retry
+          </button>
+        </p>
+      )}
     </section>
   );
 }
@@ -139,8 +176,8 @@ function FileMetadata({ id }: { id: string }) {
   });
   return (
     <section aria-label="Evidence metadata">
+      <ParentBackLink to="/money">← Back to Money</ParentBackLink>
       <h2>Evidence metadata and history</h2>
-      <Link to="/money">Return to Money</Link>
       {file.isPending && <p role="status">Loading retained evidence…</p>}
       {file.error && <p role="alert">{file.error.message}</p>}
       {file.data && (
@@ -803,7 +840,9 @@ export function MoneyScope() {
             <p key={key}>
               {key === "propertyId"
                 ? "Showing this property’s records."
-                : `${key}: ${params.get(key)}`}{" "}
+                : key === "leaseId"
+                  ? "Showing this lease’s records."
+                  : `${key}: ${params.get(key)}`}{" "}
               <button
                 onClick={() => {
                   const next = new URLSearchParams(params);

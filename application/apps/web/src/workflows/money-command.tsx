@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
+import { ParentBackLink } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
 import { workflows, record, scalar, type Workflow } from "@epm/contracts/workflows";
@@ -528,6 +529,23 @@ export function MoneyCommand() {
       initial.allocations = [{}];
     }
   }
+  const parentTarget =
+    definition.formKey === "file.upload" && leaseId
+      ? `/leases/${leaseId}/details`
+      : definition.sourceKind === "lease"
+        ? `/money?leaseId=${target}`
+        : target
+          ? moneyRecordUrl(
+              definition.sourceKind === "expense"
+                ? "expense"
+                : definition.sourceKind === "owner_rent_report"
+                  ? "report"
+                  : definition.sourceKind === "security_deposit_account"
+                    ? "deposit"
+                    : "category",
+              target,
+            )
+          : "/money";
   const editor = verification
     ? {
         ...definition,
@@ -545,6 +563,7 @@ export function MoneyCommand() {
     : definition;
   return (
     <>
+      <ParentBackLink to={parentTarget} />
       <MoneyFacts
         value={selected ?? state.value}
         fields={[
@@ -598,6 +617,7 @@ export function MoneyCommand() {
       </p>
       {(!verification || selectedMode) && (
         <CommandLoader
+          showParentLink={false}
           key={`${session}:${selectedMode}`}
           definition={editor}
           sourceId={target}
@@ -797,27 +817,9 @@ export function MoneyCommand() {
               throw new Error("Select a record's evidence action first.");
             return Promise.resolve();
           }}
-          returnTo={
-            definition.formKey === "file.upload" && leaseId
-              ? `/leases/${leaseId}/details`
-              : definition.sourceKind === "lease"
-                ? `/money?leaseId=${target}`
-                : target
-                  ? moneyRecordUrl(
-                      definition.sourceKind === "expense"
-                        ? "expense"
-                        : definition.sourceKind === "owner_rent_report"
-                          ? "report"
-                          : definition.sourceKind === "security_deposit_account"
-                            ? "deposit"
-                            : "category",
-                      target,
-                    )
-                  : "/money"
-          }
+          returnTo={parentTarget}
         />
       )}
-      <Link to="/money">Money workspace</Link>
     </>
   );
 }

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { leaseLastCoveredOn } from "../shared/lease-dates";
 import { useParams, useSearchParams } from "react-router-dom";
-import { SourceWorkflowLink as Link } from "../shared/home-navigation";
+import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import { workflows, record, scalar } from "@epm/contracts/workflows";
 import type { components } from "@epm/contracts/generated";
@@ -223,14 +223,23 @@ export function LeaseRecord({ id }: { id: string }) {
         await api.GET("/api/leases/{lease_id}", { signal, params: { path: { lease_id: id } } }),
       ),
   });
-  if (lease.isPending) return <p role="status">Loading lease…</p>;
-  if (lease.error) return <p role="alert">{lease.error.message}</p>;
+  if (lease.isPending || lease.error)
+    return (
+      <>
+        <ParentBackLink to="/leasing">← Back to Leasing</ParentBackLink>
+        {lease.error ? (
+          <p role="alert">{lease.error.message}</p>
+        ) : (
+          <p role="status">Loading lease…</p>
+        )}
+      </>
+    );
   const item = lease.data;
   const lastDay = leaseLastCoveredOn(item.contractEndsOn);
   return (
     <section aria-label="Lease workspace" className="lease-detail">
       <p>
-        <Link to="/leasing">← Back to Leasing</Link>
+        <ParentBackLink to="/leasing">← Back to Leasing</ParentBackLink>
       </p>
       <header className="lease-detail-heading">
         <h2>{item.leaseKind === "commercial" ? "Commercial" : "Residential"} lease</h2>

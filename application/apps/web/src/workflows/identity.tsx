@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
+import { ParentBackLink } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import { workflows } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
@@ -113,9 +114,9 @@ export function IdentityWorkspace() {
       <div className={personEdit ? "person-edit-command" : undefined}>
         {personEdit && party.data ? (
           <>
-            <Link to={`/parties?identity=${party.data.id}`}>
+            <ParentBackLink to={`/parties?identity=${party.data.id}`}>
               ← Back to {party.data.displayName}
-            </Link>
+            </ParentBackLink>
             <p className="person-edit-context">
               {addingContact
                 ? "Adding contact details for "

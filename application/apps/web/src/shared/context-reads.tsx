@@ -2,7 +2,8 @@ import { DynamicFilterForm } from "./dynamic-filter-form";
 import { useId, useState } from "react";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useParams, useSearchParams } from "react-router-dom";
+import { ParentBackLink, SourceWorkflowLink as Link } from "./home-navigation";
 import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
 import { AsyncRegion } from "@epm/ui";
@@ -497,7 +498,9 @@ export function ContextNavigator({ kind }: { kind: Kind }) {
       : base;
   return (
     <p>
-      <Link to={directory}>← Back to {kind === "property" ? "Properties" : "Owners"}</Link>
+      <ParentBackLink to={directory}>
+        ← Back to {kind === "property" ? "Properties" : "Owners"}
+      </ParentBackLink>
     </p>
   );
 }

@@ -192,6 +192,82 @@ test("issue detail has a top link back to Maintenance", async ({ page, request }
   await expect(page).toHaveURL(/\/maintenance$/);
 });
 
+test("issue details prioritize description, named property and grouped actions", async ({
+  page,
+  request,
+}, testInfo) => {
+  const f = await issue(request);
+  await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
+  const detail = page.getByRole("region", { name: "Work record", exact: true });
+  await expect(
+    detail.getByRole("link", { name: f.property.displayName, exact: true }),
+  ).toBeVisible();
+  await expect(detail.locator(".issue-detail-description")).toHaveText("Water under sink");
+  await expect(detail.locator(".issue-detail-facts")).toContainText("You · manager");
+  await expect(detail.locator(".issue-detail-facts")).not.toContainText("Revision");
+  await expect(
+    detail
+      .getByRole("navigation", { name: "Issue actions", exact: true })
+      .getByRole("link", { name: "Start work", exact: true }),
+  ).toBeVisible();
+  await expect(detail.getByText("Not recorded", { exact: true })).toHaveCount(0);
+  await expect(
+    detail.locator("summary", { hasText: "Appointments · None recorded" }),
+  ).toBeVisible();
+  await expect(detail.getByText(f.issue.id, { exact: true })).toHaveCount(0);
+  for (const theme of ["light", "dark"]) {
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await page.screenshot({
+        path: testInfo.outputPath(`issue-${theme}-${width}.png`),
+        fullPage: true,
+      });
+      await page.evaluate(axe.source);
+      const violations = await page.evaluate(
+        async () =>
+          (
+            await window.axe.run(".issue-detail", {
+              runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
+            })
+          ).violations,
+      );
+      expect(violations).toEqual([]);
+    }
+  }
+  await detail.getByText("More issue actions", { exact: true }).click();
+  await expect(
+    detail.getByRole("link", { name: "Schedule appointment", exact: true }),
+  ).toBeVisible();
+  await detail
+    .getByRole("navigation", { name: "Issue actions", exact: true })
+    .getByRole("link", { name: "Edit issue", exact: true })
+    .click();
+  await expect(page).toHaveURL(/workflow=maintenance.issue.patch/);
+});
+
+test("issue facts and actions stay available when the property name cannot load", async ({
+  page,
+  request,
+}) => {
+  const f = await issue(request);
+  await page.route(`**/api/properties/${f.property.id}`, (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: "Temporarily unavailable" }),
+    }),
+  );
+  await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
+  const detail = page.getByRole("region", { name: "Work record", exact: true });
+  await expect(detail.getByText("Property name unavailable", { exact: false })).toBeVisible();
+  await expect(detail.locator(".issue-detail-description")).toHaveText("Water under sink");
+  await expect(detail.getByRole("link", { name: "Edit issue", exact: true })).toBeVisible();
+});
+
 test("Task creation uses original recovery identity and saved forms survive reload", async ({
   page,
   request,
@@ -589,8 +665,8 @@ test("Issue creation records attribution and related Property, not physical veri
   await save(page, "Report maintenance issue");
   await page.getByRole("link", { name: "Open current work record" }).click();
   await expect(page.getByRole("heading", { name: "Browser sink leak" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Property context" })).toBeVisible();
-  await expect(page.getByText("local operator", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: property.displayName, exact: true })).toBeVisible();
+  await expect(page.locator(".issue-detail-facts")).toContainText("You");
 });
 
 test("Party owner reporter correction preserves originating communication and reporter filters", async ({
@@ -620,7 +696,7 @@ test("Party owner reporter correction preserves originating communication and re
   await save(page, "Report maintenance issue");
   await page.getByRole("link", { name: "Open current work record" }).click();
   const issueId = new URL(page.url()).searchParams.get("id")!;
-  await expect(page.getByText(owner.displayName, { exact: true })).toBeVisible();
+  await expect(page.locator(".issue-detail-facts")).toContainText(owner.displayName);
   await page.getByRole("link", { name: "Record linked conversation", exact: true }).click();
   await expect(page.getByLabel("Existing identity (required)")).toHaveValue(ownerId);
   await expect(page.getByLabel("Role (required)")).toHaveValue("reporter");
@@ -1558,6 +1634,7 @@ test("Provider quotes, assignment and ending remain independent of paid expenses
   );
   await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
   const comparison = page.getByRole("region", { name: "Quote comparison", exact: true });
+  await page.getByText("Compare provider quotes", { exact: true }).click();
   await expect(comparison).toContainText("USD 100.00");
   await comparison
     .getByRole("link", { name: "Review assignment for Sink repair quote", exact: true })

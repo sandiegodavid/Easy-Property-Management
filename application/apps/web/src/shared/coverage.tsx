@@ -2,7 +2,7 @@ import { useState } from "react";
 import { PageAsOf } from "./page-as-of";
 import { useQuery } from "@tanstack/react-query";
 import { Navigate, useParams, useSearchParams } from "react-router-dom";
-import { SourceWorkflowLink as Link } from "./home-navigation";
+import { ParentBackLink, SourceWorkflowLink as Link } from "./home-navigation";
 import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
@@ -494,9 +494,9 @@ function ReviewPropertyPage({ kind, id, area }: { kind: Kind; id: string; area: 
       ),
   });
   const back = propertyId ? (
-    <Link to={`/properties/${propertyId}/overview`}>
+    <ParentBackLink to={`/properties/${propertyId}/overview`}>
       ← Back to {property.data?.displayName ?? "property"}
-    </Link>
+    </ParentBackLink>
   ) : space.error ? (
     <p role="alert">Property navigation unavailable: {space.error.message}</p>
   ) : (

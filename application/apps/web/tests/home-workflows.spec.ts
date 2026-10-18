@@ -123,7 +123,7 @@ test("Home Task actions reload current state, retain input on conflict, reconcil
   expect(current.status).toBe("completed");
   expect(current.outcomeNote).toBe("Confirmed by telephone");
   expect(current.revision).toBe(task.revision + 2);
-  await page.getByRole("link", { name: "Return to current record", exact: true }).click();
+  await page.locator(".parent-back-link").click();
   await expect(page.getByRole("heading", { name: task.title, exact: true })).toBeVisible();
   await page
     .getByRole("link", { name: "Return to Home collection or preview", exact: true })

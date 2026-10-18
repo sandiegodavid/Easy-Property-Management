@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { api } from "@epm/contracts";
-import { scalar } from "@epm/contracts/workflows";
+import { record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { Facts, readResult } from "./reads";
 import { workflowUrl } from "./command";
 import { workUrl } from "./work-links";
 import { communicationLocalTime } from "./communication-context";
+import { formatHomeTime } from "../shared/home-time";
 
 export function journalProblem(values: Record<string, unknown>, terminal: boolean) {
   const correction = values.entryKind === "correction";
@@ -95,18 +96,28 @@ export function WorkJournal({ id, provider = false }: { id: string; provider?: b
           ? "Issue-backed work — Maintenance history"
           : "Work journal and physical verification"}
       </h3>
-      <p>
-        Quoted dates are planned; occurrences are actual recorded facts. Recorded
-        assignment-to-work-start is not Provider response time. Manual Provider prior-work notes
-        remain separate.
-      </p>
+      {provider && (
+        <p>
+          Quoted dates are planned; occurrences are actual recorded facts. Recorded
+          assignment-to-work-start is not Provider response time. Manual Provider prior-work notes
+          remain separate.
+        </p>
+      )}
       {result.isPending && <p role="status">Loading work journal…</p>}
       {result.error && <p role="alert">Work journal unavailable: {result.error.message}</p>}
       {result.data?.items.length === 0 && <p>No work entries on this page.</p>}
       {result.data?.items.map((item) => (
         <article key={item.id}>
           <Facts
-            value={item}
+            value={
+              provider
+                ? item
+                : {
+                    ...item,
+                    occurredAtUtc: communicationLocalTime(item),
+                    recordedAtUtc: formatHomeTime(item.recordedAtUtc),
+                  }
+            }
             fields={[
               "summary",
               "effectiveKind",
@@ -128,9 +139,15 @@ export function WorkJournal({ id, provider = false }: { id: string; provider?: b
               "quotedEarliestWorkStartOn",
               "quotedEstimatedWorkFinishOn",
               "recordedAssignmentToWorkStartSeconds",
-            ]}
+            ].filter(
+              (field) =>
+                provider ||
+                (!field.endsWith("Id") &&
+                  field !== "occurredTimezone" &&
+                  record(item)[field] != null),
+            )}
           />
-          <p>Recorded local occurrence: {communicationLocalTime(item)}</p>
+          {provider && <p>Recorded local occurrence: {communicationLocalTime(item)}</p>}
           {!item.isEffective && (
             <p>Superseded factual entry; retained for context, not current completion.</p>
           )}

@@ -1,6 +1,11 @@
 @import "@epm/ui/tokens.css";
 @import "@epm/ui/components.css";
 
+.parent-back-link {
+  display: inline-block;
+  margin-bottom: 1rem;
+}
+
 .information-review-page {
   max-width: 76rem;
 }
@@ -2668,6 +2673,29 @@ a.directory-coverage-card:focus-visible {
 .person-detail-panel h3 {
   margin: 0 0 1rem;
 }
+.person-detail-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+.person-detail-section-heading h3 {
+  margin: 0;
+}
+.person-detail-section-heading button {
+  margin: 0;
+}
+.person-tenant-lifecycle {
+  margin-block: 1rem;
+}
+.person-tenant-lifecycle button {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--border);
+  margin: 0;
+}
 .person-contact-list {
   padding: 0;
   margin: 0;
@@ -3028,4 +3056,63 @@ form[aria-label="Home filters"] select {
   aside a {
     min-height: 2.75rem;
   }
+}
+.issue-detail {
+  max-width: 76rem;
+}
+.issue-detail-property {
+  margin-top: -0.4rem;
+}
+.issue-detail-summary {
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}
+.issue-detail-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: 1rem;
+  margin: 0;
+}
+.issue-detail-facts dt {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.issue-detail-facts dd {
+  margin: 0.3rem 0 0;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.issue-detail-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-bottom: 0;
+}
+.issue-detail-actions {
+  margin-block: 1rem;
+}
+.issue-detail-actions .workflow-actions-inline > a {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  text-decoration: none;
+}
+.issue-detail-section {
+  border-top: 1px solid var(--border);
+  padding-block: 1rem;
+}
+.issue-detail-section > details > summary,
+details.issue-detail-section > summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+.issue-detail-section article + article {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+  margin-top: 1rem;
+}
+.issue-detail-note {
+  color: var(--muted);
+  font-size: 0.9rem;
 }

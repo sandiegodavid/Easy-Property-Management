@@ -8,6 +8,7 @@ import { useWorkspace } from "../app/workspace-gate";
 import { Link, useSearchParams } from "react-router-dom";
 import { CommandLoader } from "./command";
 import { readResult } from "./reads";
+import { ParentBackLink } from "../shared/home-navigation";
 import { moneyRecordUrl } from "./money-records";
 
 export function ExpenseContext({
@@ -272,6 +273,7 @@ export function ExpenseEvidenceArchive() {
   const link = result.data;
   return (
     <>
+      <ParentBackLink to={`/money?record=${report ? "report" : "expense"}&id=${link.entityId}`} />
       {link.archivedAt && (
         <p>
           This association is already archived. Its history remains retained; reconcile the original
@@ -283,6 +285,7 @@ export function ExpenseEvidenceArchive() {
         verified Owner report must retain at least one available evidence link.
       </p>
       <CommandLoader
+        showParentLink={false}
         definition={workflows.find((item) => item.formKey === "file.link.archive")!}
         sourceId={target}
         revision={link.revision}

@@ -58,6 +58,7 @@ class OwnerPreview(Contract):
     ownerKind: Literal["local_operator", "client_owner"]
     partyId: UUID | None
     displayName: str
+    sharePercent: str | None
 
 
 class SpacePreview(Contract):

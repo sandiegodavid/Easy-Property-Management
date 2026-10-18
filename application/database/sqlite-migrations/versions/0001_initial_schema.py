@@ -437,11 +437,15 @@ def upgrade() -> None:
         sa.Column("ends_on", sa.String()),
         sa.Column("created_at", sa.String(), nullable=False),
         sa.Column("ended_at", sa.String()),
+        sa.Column("share_basis_points", sa.Integer()),
         sa.CheckConstraint("owner_kind IN ('local_operator', 'client_owner')"),
         sa.CheckConstraint(
             "(owner_kind = 'local_operator' AND party_id IS NULL) OR (owner_kind = 'client_owner' AND party_id IS NOT NULL)"
         ),
         sa.CheckConstraint("ends_on IS NULL OR ends_on >= starts_on"),
+        sa.CheckConstraint(
+            "share_basis_points IS NULL OR (typeof(share_basis_points) = 'integer' AND share_basis_points BETWEEN 1 AND 10000)"
+        ),
     )
     op.create_index(
         "property_ownerships_property_active", "property_ownerships", ["property_id", "ends_on"]

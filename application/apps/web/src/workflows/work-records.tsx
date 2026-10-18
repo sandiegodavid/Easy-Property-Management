@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { CoverageLinks } from "../shared/coverage";
-import { SourceWorkflowLink as Link } from "../shared/home-navigation";
+import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { ConversationDetail } from "../shared/source-detail";
 import { formatHomeTime, formatHomeTemporal } from "../shared/home-time";
 import { MoneyFacts } from "./money-presentation";
@@ -80,33 +80,45 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
   return (
     <section
       aria-label="Work record"
-      className={kind === "communication" ? "conversation-record" : undefined}
+      className={
+        kind === "communication"
+          ? "conversation-record"
+          : kind === "issue"
+            ? "issue-detail"
+            : undefined
+      }
     >
       <p>
-        <Link
+        <ParentBackLink
           to={
             kind === "task"
               ? "/tasks"
               : kind === "communication"
                 ? "/conversations"
-                : "/maintenance"
+                : kind === "concern"
+                  ? "/maintenance?tab=concerns"
+                  : "/maintenance"
           }
         >
           {kind === "issue"
             ? "← Back to Maintenance"
             : kind === "communication"
               ? "← Back to Conversations"
-              : "Return to work directory"}
-        </Link>
+              : kind === "task"
+                ? "← Back to Tasks"
+                : "← Back to Owner concerns"}
+        </ParentBackLink>
       </p>
       {result.isPending && <p role="status">Loading current record…</p>}
       {result.error && <p role="alert">Current record unavailable: {result.error.message}</p>}
       {value && (
         <>
           <h2>{scalar(value.summary ?? value.subject ?? value.title)}</h2>
-          {!!value.propertyId && <CoverageLinks propertyId={scalar(value.propertyId)} />}
-          {kind !== "communication" && <Facts value={value} fields={common} />}
-          {!!value.propertyId && (
+          {!!value.propertyId && kind !== "issue" && (
+            <CoverageLinks propertyId={scalar(value.propertyId)} />
+          )}
+          {kind !== "communication" && kind !== "issue" && <Facts value={value} fields={common} />}
+          {!!value.propertyId && kind !== "issue" && (
             <p>
               <Link to={`/properties/${scalar(value.propertyId)}/maintenance`}>
                 Property context
@@ -403,31 +415,39 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
           {kind === "issue" && <IssueDetails value={value} active={!!active} />}
           {(kind === "issue" || kind === "concern") && (
             <>
-              <Link
-                to={`/conversations?entityType=${kind === "issue" ? "maintenance_issue" : "owner_concern"}&entityId=${id}`}
+              <section
+                className={kind === "issue" ? "issue-detail-section" : undefined}
+                aria-label="Linked conversations"
               >
-                All linked conversations
-              </Link>
-              <p>
+                {kind === "issue" && <h3>Conversations</h3>}
                 <Link
-                  to={`${workflowUrl("communication.create")}&entityType=${kind === "issue" ? "maintenance_issue" : "owner_concern"}&entityId=${id}`}
+                  to={`/conversations?entityType=${kind === "issue" ? "maintenance_issue" : "owner_concern"}&entityId=${id}`}
                 >
-                  Record linked conversation
+                  All linked conversations
                 </Link>
-              </p>
-              {workChildren(
-                value,
-                kind === "issue" ? "communications" : "recentCommunications",
-              ).map((item) => (
-                <p key={scalar(item.id)}>
-                  <Link to={workUrl("communication", scalar(item.id))}>{scalar(item.subject)}</Link>{" "}
-                  · {scalar(item.status)}
+                <p>
+                  <Link
+                    to={`${workflowUrl("communication.create")}&entityType=${kind === "issue" ? "maintenance_issue" : "owner_concern"}&entityId=${id}`}
+                  >
+                    Record linked conversation
+                  </Link>
                 </p>
-              ))}
+                {workChildren(
+                  value,
+                  kind === "issue" ? "communications" : "recentCommunications",
+                ).map((item) => (
+                  <p key={scalar(item.id)}>
+                    <Link to={workUrl("communication", scalar(item.id))}>
+                      {scalar(item.subject)}
+                    </Link>{" "}
+                    · {scalar(item.status)}
+                  </p>
+                ))}
+              </section>
             </>
           )}
           <History
-            presentation={kind === "communication" ? "timeline" : undefined}
+            presentation={kind === "communication" || kind === "issue" ? "timeline" : undefined}
             kind={
               {
                 issue: "maintenance_issue",
@@ -445,49 +465,99 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
 }
 function IssueDetails({ value, active }: { value: Record<string, unknown>; active: boolean }) {
   const id = scalar(value.id);
+  const reporter = record(value.reporter);
   return (
     <>
-      <p>
-        Appointment attendance, reported completion, physical verification and issue resolution are
-        independent facts. Cost context is not a paid expense.
-      </p>
-      <Facts
-        value={value.reporter}
-        fields={["role", "subjectKind", "partyId", "displayName", "currentPartyState"]}
-      />
-      <Facts
-        value={value}
-        fields={[
-          "reportedAtUtc",
-          "reportedTimezone",
-          "resolutionSummary",
-          "cancellationReason",
-          "activeCompletionEvidenceCount",
-        ]}
-      />
-      <CommandLinks
-        target={id}
-        keys={
-          active
-            ? [
-                "maintenance.issue.patch",
-                "maintenance.reporter.correct",
-                ...(value.status === "open"
-                  ? ["maintenance.issue.start"]
-                  : ["maintenance.issue.return_to_open"]),
-                "maintenance.issue.resolve",
-                "maintenance.issue.cancel",
-                "maintenance.appointment.create",
-                "maintenance.quote.create",
-                "maintenance.assignment.create",
-                "maintenance.cost.create",
-                "maintenance.expense.link",
-                "maintenance.follow_up.create",
-                "maintenance.journal.record",
-              ]
-            : ["maintenance.issue.reopen", "maintenance.journal.record"]
-        }
-      />
+      <IssueProperty propertyId={scalar(value.propertyId)} />
+      <div className="issue-detail-summary">
+        <dl className="issue-detail-facts">
+          <div>
+            <dt>Status</dt>
+            <dd>{scalar(value.status).replaceAll("_", " ")}</dd>
+          </div>
+          <div>
+            <dt>Priority</dt>
+            <dd>{scalar(value.priority)}</dd>
+          </div>
+          <div>
+            <dt>Category</dt>
+            <dd>
+              {scalar(value.category).replaceAll("_", " ")}
+              {value.categoryDetail ? ` · ${scalar(value.categoryDetail)}` : ""}
+            </dd>
+          </div>
+          <div>
+            <dt>Reported</dt>
+            <dd>{formatHomeTime(scalar(value.reportedAtUtc))}</dd>
+          </div>
+          <div>
+            <dt>Reported by</dt>
+            <dd>
+              {reporter.subjectKind === "local_operator"
+                ? "You"
+                : scalar(reporter.displayName, "Name unavailable")}
+              {reporter.role ? ` · ${scalar(reporter.role)}` : ""}
+            </dd>
+          </div>
+        </dl>
+        <p className="issue-detail-description">{scalar(value.description)}</p>
+        {!!value.resolutionSummary && (
+          <p>
+            <strong>Resolution:</strong> {scalar(value.resolutionSummary)}
+          </p>
+        )}
+        {!!value.cancellationReason && (
+          <p>
+            <strong>Cancellation reason:</strong> {scalar(value.cancellationReason)}
+          </p>
+        )}
+      </div>
+      <div className="issue-detail-actions">
+        <CommandLinks
+          target={id}
+          title="Issue actions"
+          collapsible={false}
+          labels={{
+            "maintenance.issue.patch": "Edit issue",
+            "maintenance.issue.start": "Start work",
+            "maintenance.issue.return_to_open": "Return to open",
+            "maintenance.issue.resolve": "Resolve issue",
+            "maintenance.issue.cancel": "Cancel issue",
+            "maintenance.issue.reopen": "Reopen issue",
+          }}
+          keys={
+            active
+              ? [
+                  "maintenance.issue.patch",
+                  ...(value.status === "open"
+                    ? ["maintenance.issue.start"]
+                    : ["maintenance.issue.return_to_open"]),
+                  "maintenance.issue.resolve",
+                  "maintenance.issue.cancel",
+                ]
+              : ["maintenance.issue.reopen"]
+          }
+        />
+        <CommandLinks
+          target={id}
+          title="More issue actions"
+          keys={
+            active
+              ? [
+                  "maintenance.reporter.correct",
+                  "maintenance.appointment.create",
+                  "maintenance.quote.create",
+                  "maintenance.assignment.create",
+                  "maintenance.cost.create",
+                  "maintenance.expense.link",
+                  "maintenance.follow_up.create",
+                  "maintenance.journal.record",
+                ]
+              : ["maintenance.journal.record"]
+          }
+        />
+      </div>
+      {!!workChildren(value, "tasks").length && <h3>Follow-up tasks</h3>}
       {workChildren(value, "tasks").map((item) => (
         <div key={scalar(item.id)}>
           <Link to={workUrl("task", scalar(item.id))}>{scalar(item.title)}</Link> ·{" "}
@@ -552,7 +622,7 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
         ],
         [
           "costContexts",
-          "Cost context (not paid money)",
+          "Estimates and cost notes",
           [
             "label",
             "contextKind",
@@ -567,92 +637,163 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
         ],
         [
           "expenseLinks",
-          "Paid expense associations",
+          "Linked paid expenses",
           ["expenseId", "archivedAt", "archiveReason"],
           ["maintenance.expense.archive"],
         ],
       ].map(([key, title, fields, actions]) => (
-        <section key={String(key)} aria-label={String(title)}>
-          <h3>{String(title)}</h3>
-          {workChildren(value, String(key)).map((item) => (
-            <article
-              key={scalar(item.id)}
-              id={key === "appointments" ? `appointment-${scalar(item.id)}` : undefined}
-            >
-              {key === "costContexts" ? (
-                <MoneyFacts value={item} fields={fields as string[]} />
-              ) : key === "quotes" ? (
-                <MoneyFacts value={item} fields={fields as string[]} />
-              ) : (
-                <Facts value={item} fields={fields as string[]} />
-              )}
-              {key === "quotes" && !!item.withdrawnAt && active && (
-                <Link
-                  to={`${workflowUrl("maintenance.quote.create", id)}&replacesQuoteId=${scalar(item.id)}`}
-                >
-                  Replace withdrawn quote
-                </Link>
-              )}
-              {key === "assignments" && !item.endedAt && active && (
-                <Link
-                  to={`${workflowUrl("maintenance.assignment.create", id)}&replacesAssignmentId=${scalar(item.id)}`}
-                >
-                  Review reassignment
-                </Link>
-              )}
-              {key === "costContexts" && !!item.voidedAt && active && (
-                <Link
-                  to={`${workflowUrl("maintenance.cost.create", id)}&replacesCostContextId=${scalar(item.id)}`}
-                >
-                  Replace cost context
-                </Link>
-              )}
-              <EvidenceLinks
-                items={workChildren(item, "files")}
-                issueId={key !== "expenseLinks" ? id : undefined}
-              />
-              {key !== "expenseLinks" && (
-                <p>
-                  <Link
-                    state={{ returnTo: workUrl("issue", id) }}
-                    to={`${workflowUrl("file.upload")}&entityType=${key === "appointments" ? "maintenance_appointment" : key === "quotes" ? "maintenance_quote" : key === "assignments" ? "maintenance_assignment" : "maintenance_cost_context"}&entityId=${scalar(item.id)}&purpose=${key === "appointments" ? "appointment_document" : "supporting_document"}`}
-                  >
-                    Attach supporting document
-                  </Link>
-                </p>
-              )}
-              {key === "expenseLinks" && (
-                <Link to={`/money?record=expense&id=${scalar(item.expenseId)}`}>Paid expense</Link>
-              )}
-              {active &&
-                !item.archivedAt &&
-                !item.voidedAt &&
-                !item.withdrawnAt &&
-                !item.endedAt &&
-                (key !== "appointments" || item.status === "scheduled") && (
-                  <CommandLinks
-                    target={id}
-                    child={scalar(item.id)}
-                    keys={actions as string[]}
-                    title={`Actions for ${scalar(item.label ?? item.purpose ?? item.providerDisplayNameSnapshot ?? item.id)}`}
+        <section key={String(key)} aria-label={String(title)} className="issue-detail-section">
+          <details open={workChildren(value, String(key)).length > 0}>
+            <summary>
+              {String(title)}
+              {workChildren(value, String(key)).length
+                ? ` (${workChildren(value, String(key)).length})`
+                : " · None recorded"}
+            </summary>
+            {workChildren(value, String(key)).map((item) => (
+              <article
+                key={scalar(item.id)}
+                id={key === "appointments" ? `appointment-${scalar(item.id)}` : undefined}
+              >
+                {key === "costContexts" ? (
+                  <MoneyFacts
+                    value={item}
+                    fields={(fields as string[]).filter(
+                      (field) => item[field] != null && !field.endsWith("Id"),
+                    )}
+                  />
+                ) : key === "quotes" ? (
+                  <MoneyFacts
+                    value={item}
+                    fields={(fields as string[]).filter(
+                      (field) => item[field] != null && !field.endsWith("Id"),
+                    )}
+                  />
+                ) : (
+                  <Facts
+                    value={Object.fromEntries(
+                      Object.entries(item).map(([field, data]) => [
+                        field,
+                        field.endsWith("AtUtc") || field.endsWith("At")
+                          ? data
+                            ? formatHomeTime(scalar(data))
+                            : data
+                          : data,
+                      ]),
+                    )}
+                    fields={(fields as string[]).filter(
+                      (field) => item[field] != null && !field.endsWith("Id"),
+                    )}
                   />
                 )}
-            </article>
-          ))}
+                {key === "quotes" && !!item.withdrawnAt && active && (
+                  <Link
+                    to={`${workflowUrl("maintenance.quote.create", id)}&replacesQuoteId=${scalar(item.id)}`}
+                  >
+                    Replace withdrawn quote
+                  </Link>
+                )}
+                {key === "assignments" && !item.endedAt && active && (
+                  <Link
+                    to={`${workflowUrl("maintenance.assignment.create", id)}&replacesAssignmentId=${scalar(item.id)}`}
+                  >
+                    Review reassignment
+                  </Link>
+                )}
+                {key === "costContexts" && !!item.voidedAt && active && (
+                  <Link
+                    to={`${workflowUrl("maintenance.cost.create", id)}&replacesCostContextId=${scalar(item.id)}`}
+                  >
+                    Replace cost context
+                  </Link>
+                )}
+                <EvidenceLinks
+                  items={workChildren(item, "files")}
+                  issueId={key !== "expenseLinks" ? id : undefined}
+                />
+                {key !== "expenseLinks" && (
+                  <p>
+                    <Link
+                      state={{ returnTo: workUrl("issue", id) }}
+                      to={`${workflowUrl("file.upload")}&entityType=${key === "appointments" ? "maintenance_appointment" : key === "quotes" ? "maintenance_quote" : key === "assignments" ? "maintenance_assignment" : "maintenance_cost_context"}&entityId=${scalar(item.id)}&purpose=${key === "appointments" ? "appointment_document" : "supporting_document"}`}
+                    >
+                      Attach supporting document
+                    </Link>
+                  </p>
+                )}
+                {key === "expenseLinks" && (
+                  <Link to={`/money?record=expense&id=${scalar(item.expenseId)}`}>
+                    Paid expense
+                  </Link>
+                )}
+                {active &&
+                  !item.archivedAt &&
+                  !item.voidedAt &&
+                  !item.withdrawnAt &&
+                  !item.endedAt &&
+                  (key !== "appointments" || item.status === "scheduled") && (
+                    <CommandLinks
+                      target={id}
+                      child={scalar(item.id)}
+                      keys={actions as string[]}
+                      title={`Actions for ${scalar(item.label ?? item.purpose ?? item.providerDisplayNameSnapshot ?? item.id)}`}
+                    />
+                  )}
+              </article>
+            ))}
+          </details>
         </section>
       ))}
-      <WorkJournal id={id} />
-      <QuoteComparison id={id} active={active} />
-      <p>
-        <Link
-          state={{ returnTo: workUrl("issue", id) }}
-          to={`${workflowUrl("file.upload")}&entityType=maintenance_issue&entityId=${id}`}
-        >
-          Attach issue evidence
-        </Link>
+      <section className="issue-detail-section">
+        <WorkJournal id={id} />
+      </section>
+      <details className="issue-detail-section">
+        <summary>Compare provider quotes</summary>
+        <QuoteComparison id={id} active={active} />
+      </details>
+      <section className="issue-detail-section" aria-label="Issue evidence">
+        <h3>Photos and documents</h3>
+        <p>
+          <Link
+            state={{ returnTo: workUrl("issue", id) }}
+            to={`${workflowUrl("file.upload")}&entityType=maintenance_issue&entityId=${id}`}
+          >
+            Attach issue evidence
+          </Link>
+        </p>
+        <EvidenceLinks items={workChildren(value, "files")} issueId={id} />
+        {!workChildren(value, "files").some((item) => !item.archivedAt) && (
+          <p>No issue evidence attached.</p>
+        )}
+      </section>
+      <p className="issue-detail-note">
+        Recording an appointment or completed work does not resolve this issue. Estimates and quotes
+        are not paid expenses.
       </p>
-      <EvidenceLinks items={workChildren(value, "files")} issueId={id} />
     </>
+  );
+}
+function IssueProperty({ propertyId }: { propertyId: string }) {
+  const { scope } = useWorkspace();
+  const property = useQuery({
+    queryKey: scope.key("portfolio-record", propertyId),
+    enabled: !!propertyId,
+    retry: false,
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/properties/{property_id}", {
+          signal,
+          params: { path: { property_id: propertyId } },
+        }),
+      ),
+  });
+  return (
+    <p className="issue-detail-property">
+      <Link to={`/properties/${propertyId}/maintenance`}>
+        {property.data?.displayName ?? "View property maintenance"}
+      </Link>
+      {property.error && <span role="status"> · Property name unavailable</span>}
+    </p>
   );
 }
 function TaskReminders({ id, active }: { id: string; active: boolean }) {

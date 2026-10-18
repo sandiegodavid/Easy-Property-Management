@@ -24,6 +24,7 @@ FIELDS = {
         "property_id",
         "property_name",
         "owner_kind",
+        "share_percent",
         "party_id",
         "owner_name",
         "starts_on",

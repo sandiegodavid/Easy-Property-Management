@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useWatch } from "react-hook-form";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { SourceWorkflowLink as Link } from "../shared/home-navigation";
+import {
+  ParentBackLink,
+  SourceWorkflowLink as Link,
+  useSourceNavigationState,
+} from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import {
   workflows,
@@ -175,6 +179,7 @@ export function CommandLinks({
   const { scope } = useWorkspace();
   const location = useLocation();
   const navigate = useNavigate();
+  const navigationState = useSourceNavigationState();
   if (!scope.canWrite) return <p>Workspace writes are unavailable.</p>;
   const actions = (
     <nav aria-label={title} className={collapsible ? undefined : "workflow-actions-inline"}>
@@ -188,7 +193,10 @@ export function CommandLinks({
               type="button"
               onClick={() => {
                 void navigate(workflowUrl(key, target, child), {
-                  state: { returnTo: location.pathname + location.search },
+                  state: navigationState(
+                    { returnTo: location.pathname + location.search },
+                    workflowUrl(key, target, child),
+                  ),
                 });
               }}
             >
@@ -227,6 +235,7 @@ export function CommandLoader({
   choices = {},
   choicesForValues,
   returnTo,
+  showParentLink = true,
   reviewSource,
   checkSource,
   renderContext,
@@ -241,6 +250,7 @@ export function CommandLoader({
   choices?: Choices;
   choicesForValues?: (values: Record<string, unknown>) => Choices;
   returnTo?: string;
+  showParentLink?: boolean;
   reviewSource?: () => Promise<{
     revision: number;
     value: unknown;
@@ -294,6 +304,7 @@ export function CommandLoader({
       choicesForValues={choicesForValues}
       recovered={recovery.data}
       returnTo={returnTo}
+      showParentLink={showParentLink}
       reviewSource={reviewSource}
       checkSource={checkSource}
       renderContext={renderContext}
@@ -313,6 +324,7 @@ function CommandEditor({
   choicesForValues,
   recovered,
   returnTo,
+  showParentLink,
   reviewSource,
   checkSource,
   renderContext,
@@ -328,6 +340,7 @@ function CommandEditor({
   choicesForValues?: (values: Record<string, unknown>) => Choices;
   recovered?: Recovery;
   returnTo?: string;
+  showParentLink: boolean;
   reviewSource?: () => Promise<{
     revision: number;
     value: unknown;
@@ -350,9 +363,16 @@ function CommandEditor({
   const personEdit =
     definition.formKey === "party.patch" || addingContact || editingContact || removingContact;
   const hasContextNavigation =
-    ["portfolio.ownerships.replace", "portfolio.property.patch", "portfolio.space.patch"].includes(
-      definition.formKey,
-    ) || personEdit;
+    [
+      "portfolio.ownerships.replace",
+      "portfolio.property.patch",
+      "portfolio.space.patch",
+      "portfolio.property.create",
+      "portfolio.space.archive",
+      "portfolio.space.classify",
+      "portfolio.availability.change",
+      "portfolio.occupancy.change",
+    ].includes(definition.formKey) || personEdit;
   const commandTitle = addingContact
     ? "Add contact details"
     : editingContact
@@ -748,11 +768,7 @@ function CommandEditor({
     );
   return (
     <section aria-label={commandTitle} className="command-editor">
-      {(editSubject || correctionSubject || createsRecord) &&
-        !hasContextNavigation &&
-        definition.formKey !== "portfolio.property.create" && (
-          <Link to={back}>Return to current record</Link>
-        )}
+      {showParentLink && !hasContextNavigation && <ParentBackLink to={back} />}
       <h2>{commandTitle}</h2>
       <p>
         {addingContact
@@ -1297,13 +1313,6 @@ function CommandEditor({
               )}
           </section>
         ))}
-      {!hasContextNavigation &&
-        !editSubject &&
-        !correctionSubject &&
-        !createsRecord &&
-        definition.formKey !== "portfolio.property.create" && (
-          <Link to={back}>Return to current record</Link>
-        )}
       <RecoveryNavigation controller={controller} blocker={blocker} />
     </section>
   );

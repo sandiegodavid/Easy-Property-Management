@@ -1,6 +1,7 @@
 """Bounded incomplete Portfolio inventory inputs; not domain commands."""
 
 from datetime import date
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -20,6 +21,7 @@ class InventoryOwner(Contract):
     ownerKind: Literal["local_operator", "client_owner"] | None = None
     partyId: UUID | None = None
     inlineParty: InlineOwner | None = None
+    sharePercent: Decimal | None = Field(None, gt=0, le=100, max_digits=5, decimal_places=2)
 
 
 class InitialOccupancy(Contract):

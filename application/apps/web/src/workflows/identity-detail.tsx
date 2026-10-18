@@ -1,7 +1,7 @@
 import { useLocation } from "react-router-dom";
 import type { components } from "@epm/contracts/generated";
 import { record } from "@epm/contracts/workflows";
-import { SourceWorkflowLink as Link } from "../shared/home-navigation";
+import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { formatHomeTime } from "../shared/home-time";
 import { CommandLinks, workflowUrl } from "./command";
 import { useWorkspace } from "../app/workspace-gate";
@@ -79,12 +79,24 @@ function ContactRow({
   );
 }
 
-export function ContactList({ party }: { party: Person }) {
+export function ContactList({ party, allowAdd = false }: { party: Person; allowAdd?: boolean }) {
   const active = party.contactMethods?.filter((contact) => contact.status === "active") ?? [];
   const archived = party.contactMethods?.filter((contact) => contact.status === "archived") ?? [];
   return (
     <section className="person-detail-panel" aria-label="Contact details">
-      <h3>Contact details</h3>
+      <header className="person-detail-section-heading">
+        <h3>Contact details</h3>
+        {allowAdd && !party.archivedAt && (
+          <CommandLinks
+            target={party.id}
+            keys={["party.contact.add"]}
+            labels={{ "party.contact.add": "Add contact details" }}
+            title="Add contact"
+            asButtons
+            collapsible={false}
+          />
+        )}
+      </header>
       <p>
         Keep multiple emails, phone numbers and mailing addresses. Each type has one primary
         contact. To remove a primary contact with alternatives, make another contact of that type
@@ -135,6 +147,7 @@ export function IdentityDetail({
   tenantError?: string;
 }) {
   const location = useLocation();
+  const tenantPage = location.pathname === "/tenants";
   const state = record(location.state);
   const back =
     typeof state.returnTo === "string" &&
@@ -148,13 +161,13 @@ export function IdentityDetail({
   );
   return (
     <section className="person-detail" aria-label="Person or organization details">
-      <Link to={back}>
+      <ParentBackLink to={back}>
         {back.startsWith("/properties?")
           ? "← Back to change ownership"
           : back.startsWith("/tenants")
             ? "← Back to Tenants"
             : "← Back to people"}
-      </Link>
+      </ParentBackLink>
       <header className="person-detail-heading">
         <div>
           <p className="person-detail-kind">
@@ -170,7 +183,7 @@ export function IdentityDetail({
         </div>
         <CommandLinks
           target={party.id}
-          keys={party.archivedAt ? ["party.restore"] : ["party.patch", "party.contact.add"]}
+          keys={party.archivedAt ? ["party.restore"] : ["party.patch"]}
           labels={{
             "party.patch": "Edit name",
             "party.contact.add": "Add contact details",
@@ -185,12 +198,27 @@ export function IdentityDetail({
         Names and contact details are shared wherever this person or organization appears in the
         app.
       </p>
-      <ContactList party={party} />
+      <ContactList party={party} allowAdd />
       {tenantLoading && <p role="status">Loading tenant preferences…</p>}
       {tenantError && <p role="alert">{tenantError}</p>}
       {tenant && (
         <section className="person-detail-panel" aria-label="Tenant preferences">
-          <h3>Tenant preferences</h3>
+          <header className="person-detail-section-heading">
+            <h3>Tenant preferences</h3>
+            {!tenant.profile.archivedAt && (
+              <CommandLinks
+                target={party.id}
+                keys={["tenant.profile.patch"]}
+                title="Edit tenant preferences"
+                asButtons
+                collapsible={false}
+              />
+            )}
+          </header>
+          <p className="person-detail-intro">
+            Choose which contact to use for tenant matters. Notes can include preferred contact
+            times and time zone, communication channel, language or accessibility needs.
+          </p>
           <dl className="person-detail-facts">
             <div>
               <dt>Preferred contact</dt>
@@ -210,19 +238,21 @@ export function IdentityDetail({
             </div>
           </dl>
           {tenant.profile.notes && <p className="person-detail-notes">{tenant.profile.notes}</p>}
-          <CommandLinks
-            target={party.id}
-            keys={
-              tenant.profile.archivedAt
-                ? ["tenant.restore"]
-                : ["tenant.profile.patch", "tenant.archive"]
-            }
-            title="Tenant actions"
-          />
           <History kind="tenant_profile" id={party.id} presentation="timeline" />
         </section>
       )}
-      {!party.archivedAt && (
+      {tenant && (
+        <div className="person-tenant-lifecycle">
+          <CommandLinks
+            target={party.id}
+            keys={tenant.profile.archivedAt ? ["tenant.restore"] : ["tenant.archive"]}
+            title="Tenant lifecycle"
+            asButtons
+            collapsible={false}
+          />
+        </div>
+      )}
+      {!party.archivedAt && !tenantPage && (
         <section className="person-detail-more">
           <CommandLinks
             target={party.id}

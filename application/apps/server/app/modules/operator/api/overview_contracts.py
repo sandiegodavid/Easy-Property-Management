@@ -88,6 +88,7 @@ class RelationshipItem(Contract):
     propertyId: UUID
     propertyName: str
     ownerKind: Literal["client_owner", "local_operator"]
+    sharePercent: str | None
     partyId: UUID | None
     ownerName: str | None
     startsOn: date

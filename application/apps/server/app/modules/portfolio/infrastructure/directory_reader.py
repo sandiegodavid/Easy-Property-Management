@@ -13,6 +13,7 @@ from sqlalchemy import and_, case, exists, func, literal, or_, select
 from app.modules.leases.application.participant_relations import LeaseParticipantRelations
 from app.modules.parties.application.identity_relations import PartyIdentityRelations
 from app.modules.portfolio.application.service import PortfolioError
+from app.modules.portfolio.domain.models import ownership_share_percent
 from app.modules.portfolio.application.directory_ports import (
     RECOGNITION_PREVIEW_LIMIT,
     OWNER_RECOGNITION_PREVIEW_LIMIT,
@@ -232,6 +233,7 @@ class SQLitePortfolioDirectoryReader:
                 o.c.property_id,
                 o.c.party_id,
                 o.c.owner_kind,
+                o.c.share_basis_points,
                 case(
                     (o.c.owner_kind == "local_operator", "You"),
                     else_=identities.c.display_name,
@@ -250,9 +252,13 @@ class SQLitePortfolioDirectoryReader:
             .distinct()
             .subquery()
         )
-        return _previews(
+        previews = _previews(
             connection, facts, ids, "display_name", limit=OWNER_RECOGNITION_PREVIEW_LIMIT
         )
+        for owners, _ in previews.values():
+            for owner in owners:
+                owner["share_percent"] = ownership_share_percent(owner.pop("share_basis_points"))
+        return previews
 
 
 def _previews(connection, facts, ids, label, *, limit=RECOGNITION_PREVIEW_LIMIT):

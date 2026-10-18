@@ -664,6 +664,7 @@ function TaskQuickAdd() {
   return (
     <section aria-label="Quick add task">
       <CommandLoader
+        showParentLink={false}
         definition={definition}
         revision={0}
         initial={{ priority: "normal", isAllDay: false }}

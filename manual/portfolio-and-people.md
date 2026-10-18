@@ -37,6 +37,8 @@ You can keep multiple emails, phone numbers and mailing addresses for each perso
 
 These contacts and primary choices are shared across owner, tenant and provider roles. A role's explicitly preferred contact remains a separate choice; primary changes do not replace it. Removing a preferred contact may require choosing a replacement or clearing that role preference.
 
+On a tenant's detail page, **Add contact details** is beside **Contact details**, and **Edit tenant preferences** is beside **Tenant preferences**. Preferences include the contact to use and whether contact is allowed; notes can describe preferred contact times/time zone, communication channel, language or accessibility needs. **Archive tenant** below preferences archives the tenant role, not the shared person or organization.
+
 Open **Tenants**, or `/tenants`. Tenant profiles and tenant actions use this path. Shared names and contact details used by owners, tenants and providers open their person record under `/parties`.
 
 1. Search tenants by name (at least two characters), or choose **Browse tenants** to list tenants alphabetically, 20 per page. Search results update automatically; **Next tenants** continues either list. Select a tenant card to open their details. **Include archived tenants** adds historical records and starts again at the first page.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -75,6 +76,7 @@ class OwnershipRequest(ContractModel):
     ownerKind: Literal["local_operator", "client_owner"]
     partyId: UUID | None = None
     inlineParty: PartyRequest | None = None
+    sharePercent: Decimal | None = Field(None, gt=0, le=100, max_digits=5, decimal_places=2)
 
     @model_validator(mode="after")
     def validate_party_reference(self) -> "OwnershipRequest":
@@ -255,6 +257,7 @@ class OwnershipResponse(ContractModel):
     endsOn: date | None
     createdAt: AwareDatetime
     endedAt: AwareDatetime | None
+    sharePercent: str | None
 
 
 class PropertyResponse(ContractModel):
@@ -816,6 +819,7 @@ def _ownerships(items: list[OwnershipRequest]) -> tuple[OwnershipInput, ...]:
             )
             if item.inlineParty
             else (),
+            share_basis_points=None if item.sharePercent is None else int(item.sharePercent * 100),
         )
         for item in items
     )

@@ -5,6 +5,7 @@ import { record, workflows } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLoader } from "./command";
 import { readResult } from "./reads";
+import { ParentBackLink } from "../shared/home-navigation";
 
 export function MaintenanceEvidenceArchive() {
   const [params] = useSearchParams();
@@ -62,6 +63,7 @@ export function MaintenanceEvidenceArchive() {
   if (link.error) return <p role="alert">{link.error.message}</p>;
   return (
     <>
+      <ParentBackLink to={`/maintenance?record=issue&id=${issueId}`} />
       <p>
         Archive only this evidence association. The issue, child record, file bytes and contextual
         reason remain retained. This does not resolve a repair or erase evidence history.
@@ -73,6 +75,7 @@ export function MaintenanceEvidenceArchive() {
         </p>
       )}
       <CommandLoader
+        showParentLink={false}
         definition={workflows.find((item) => item.formKey === "file.link.archive")!}
         sourceId={target}
         revision={link.data.revision}

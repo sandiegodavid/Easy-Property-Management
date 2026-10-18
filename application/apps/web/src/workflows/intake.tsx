@@ -1,7 +1,8 @@
 import { DynamicFilterForm } from "../shared/dynamic-filter-form";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
+import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
 import { workflows } from "@epm/contracts/workflows";
@@ -24,19 +25,31 @@ async function detail(id: string, signal?: AbortSignal): Promise<Source> {
 
 export function IntakeWorkspace() {
   const [params] = useSearchParams();
+  const back = new URLSearchParams(params);
+  back.delete("source");
   return (
     <section aria-label="Retained Intake sources">
-      <h2>Retained source evidence</h2>
-      <p>
-        Manual evidence is an unverified claim. Retaining or reviewing it does not send a message,
-        create an issue, or establish that work occurred.
-      </p>
-      <nav className="page-tabs" aria-label="Source views">
-        <Link to="/conversations?intake=true" aria-current="page">
-          Source directory
-        </Link>
-        <Link to="/conversations">Recorded conversations</Link>
-      </nav>
+      {!params.has("source") && !params.has("workflow") && (
+        <ParentBackLink to="/conversations">← Back to Conversations</ParentBackLink>
+      )}
+      {params.has("source") && !params.has("workflow") && (
+        <ParentBackLink to={`/conversations?${back}`}>← Back to source directory</ParentBackLink>
+      )}
+      {!params.has("workflow") && (
+        <>
+          <h2>Retained source evidence</h2>
+          <p>
+            Manual evidence is an unverified claim. Retaining or reviewing it does not send a
+            message, create an issue, or establish that work occurred.
+          </p>
+          <nav className="page-tabs" aria-label="Source views">
+            <Link to="/conversations?intake=true" aria-current="page">
+              Source directory
+            </Link>
+            <Link to="/conversations">Recorded conversations</Link>
+          </nav>
+        </>
+      )}
       {params.has("workflow") ? (
         <IntakeCommand key={params.toString()} />
       ) : params.has("source") ? (
@@ -214,15 +227,12 @@ function SourceDirectory() {
 function SourceDetail({ id }: { id: string }) {
   const { scope } = useWorkspace();
   const [revisionId, setRevisionId] = useState<string | null>(null);
-  const [params] = useSearchParams();
   const loaded = useQuery({
     queryKey: scope.key("intake-sensitive-detail", id),
     queryFn: ({ signal }) => detail(id, signal),
     retry: false,
     gcTime: 0,
   });
-  const back = new URLSearchParams(params);
-  back.delete("source");
   if (loaded.isPending) return <p role="status">Authorizing audited evidence read…</p>;
   if (loaded.error)
     return (
@@ -237,7 +247,6 @@ function SourceDetail({ id }: { id: string }) {
   const item = loaded.data;
   return (
     <section aria-label="Source evidence detail">
-      <Link to={`/conversations?${back}`}>Return to source directory</Link>
       <Facts
         value={item}
         fields={[

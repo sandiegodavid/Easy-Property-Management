@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
+import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import { record, workflows, type Workflow } from "@epm/contracts/workflows";
 import type { components } from "@epm/contracts/generated";
@@ -78,8 +79,8 @@ function TemplateDirectory() {
   });
   return (
     <section aria-label="Inspection templates">
+      <ParentBackLink to="/leasing">← Back to Leasing</ParentBackLink>
       <h2>Inspection templates</h2>
-      <Link to="/leasing">Return to Leasing</Link>
       <CommandLinks keys={["inspection.template.create"]} title="Template actions" />
       {templates.isPending && <p role="status">Loading templates…</p>}
       {templates.error && <p role="alert">{templates.error.message}</p>}
@@ -117,13 +118,24 @@ function ReportRecord({ id }: { id: string }) {
         }),
       ),
   });
-  if (report.isPending) return <p role="status">Loading inspection…</p>;
-  if (report.error) return <p role="alert">{report.error.message}</p>;
+  if (report.isPending || report.error)
+    return (
+      <>
+        <ParentBackLink to="/leasing">← Back to Leasing</ParentBackLink>
+        {report.error ? (
+          <p role="alert">{report.error.message}</p>
+        ) : (
+          <p role="status">Loading inspection…</p>
+        )}
+      </>
+    );
   const item = report.data;
   return (
     <section aria-label="Inspection report">
+      <ParentBackLink to={`/leases/${item.leaseId}/inspections`}>
+        ← Back to lease inspections
+      </ParentBackLink>
       <h2>{item.reportKind.replaceAll("_", " ")} inspection</h2>
-      <Link to={`/leases/${item.leaseId}/inspections`}>Return to Lease inspections</Link>
       <Facts
         value={item}
         fields={[
@@ -261,6 +273,7 @@ function EvidenceArchive() {
     );
   return (
     <>
+      <ParentBackLink to={`/inspections/${report.id}`} />
       <p>
         Archiving removes this association from current evidence. The file, reason and history
         remain retained.
@@ -269,6 +282,7 @@ function EvidenceArchive() {
         definition={workflows.find((item) => item.formKey === "file.link.archive")!}
         sourceId={target}
         revision={link.revision}
+        showParentLink={false}
         returnTo={`/inspections/${report.id}`}
         reviewSource={async () => {
           const current = readResult(
@@ -503,6 +517,7 @@ function InspectionCommand() {
   };
   return (
     <>
+      <ParentBackLink to={item.returnTo} />
       {templates.error && (
         <p role="alert">Template choices are unavailable: {templates.error.message}</p>
       )}
@@ -526,6 +541,7 @@ function InspectionCommand() {
         </>
       )}
       <CommandLoader
+        showParentLink={false}
         definition={{ ...definition, schema: item.schema }}
         sourceId={target}
         revision={item.revision}

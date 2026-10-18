@@ -15,6 +15,8 @@
 
 Properties and Owners open directories. **Tenants**, directly below Owners by default, opens the people and tenant directory for residential and office tenants and their shared contact details. Search/filter, open the intended record, then use contextual sections for its related information. Main navigation returns to a portfolio destination; contextual links preserve the selected Property/Owner. Check visible filters before recording anything.
 
+Use the **← Back to …** link at the top of a detail or form page to return to its parent. When you arrived from a filtered list or a property, it returns to that context and restores your list position. A directly opened link returns to the normal parent instead. The first page opened from a sidebar menu does not need a back link.
+
 Home and Settings remain available. Hidden destinations are under **More**. Use **Search (Ctrl/⌘ K)** for supported record metadata; it does not search every attachment or raw source message. Include archived records when needed. If a continuation expires or recorded sources change, use the offered Restart while retaining filters.
 
 Tasks and Conversations are available through contextual links and work navigation. For direct access, replace `/home` in your local URL with `/tasks`, `/conversations`, `/maintenance?tab=concerns`, `/tenants` or `/settings/recovery` as appropriate.

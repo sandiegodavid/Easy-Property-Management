@@ -8,6 +8,7 @@ import { useWorkspace } from "../app/workspace-gate";
 import { readResult } from "./reads";
 import { cents, MoneyFacts } from "./money-presentation";
 import { moneyRecordUrl } from "./money-records";
+import { ParentBackLink } from "../shared/home-navigation";
 import { CommandLoader } from "./command";
 
 function minor(value: unknown) {
@@ -422,6 +423,7 @@ export function DepositEvidenceArchive() {
     return <p>This association is already archived. Its file and history remain retained.</p>;
   return (
     <>
+      <ParentBackLink to={moneyRecordUrl("settlement", settlementId)} />
       <p>
         Archive only this evidence association. The file, deposit records and contextual reason
         remain retained.
@@ -430,6 +432,7 @@ export function DepositEvidenceArchive() {
         definition={workflows.find((item) => item.formKey === "file.link.archive")!}
         sourceId={target}
         revision={context.data.revision}
+        showParentLink={false}
         returnTo={moneyRecordUrl("settlement", settlementId)}
         reviewSource={async () => {
           const current = readResult(
