@@ -1,6 +1,7 @@
 """SQLite transaction adapter for tenant profiles and creation."""
 
 from collections.abc import Callable
+import json
 from typing import Any, TypeVar
 
 from sqlalchemy import select
@@ -10,6 +11,7 @@ from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.parties.application.ports import PartyReadOperations, PartyTransactionOperations
 from app.modules.tenants.application.ports import LeaseParticipationGuard, TenantTransaction
 from app.modules.tenants.domain.models import TenantProfile
+from app.modules.parties.domain.official_ids import official_ids, stored_ids
 from app.modules.tenants.infrastructure.sqlalchemy_models import (
     TenantProfileModel,
     TenantCommandOperationModel,
@@ -161,6 +163,7 @@ def _profile(row):
         row.updated_at,
         row.archived_at,
         row.revision,
+        official_ids(json.loads(row.official_ids_json)),
     )
 
 
@@ -174,11 +177,17 @@ def _profile_mapping(row):
         row["updated_at"],
         row["archived_at"],
         row["revision"],
+        official_ids(json.loads(row["official_ids_json"])),
     )
 
 
 def _profile_values(item):
-    return {**item.__dict__, "do_not_contact": int(item.do_not_contact)}
+    values = {**item.__dict__, "do_not_contact": int(item.do_not_contact)}
+    values.pop("official_ids")
+    values["official_ids_json"] = json.dumps(
+        stored_ids(item.official_ids), sort_keys=True, separators=(",", ":")
+    )
+    return values
 
 
 class SQLiteTenantRoleActivityGuard:
@@ -208,6 +217,15 @@ class SQLiteTenantRoleSummaryReader:
 
 
 class SQLiteTenantProfileAvailability:
+    def without_official_id(self, connection, party_ids):
+        if not party_ids:
+            return set()
+        rows = connection.execute(
+            TenantProfileModel.__table__.select().where(TenantProfileModel.party_id.in_(party_ids))
+        ).mappings()
+        recorded = {row["party_id"] for row in rows if _profile_mapping(row).official_ids}
+        return set(party_ids) - recorded
+
     def is_active(self, connection, party_id):
         row = (
             connection.execute(

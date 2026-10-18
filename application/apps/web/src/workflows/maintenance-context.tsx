@@ -28,6 +28,25 @@ export function MaintenanceContext({
         }),
       ),
   });
+  if (formKey === "maintenance.issue.create")
+    return (
+      <div className="maintenance-create-note" role="note" aria-label="Reporting guidance">
+        {property.data && (
+          <p>
+            {property.data.displayName} · {property.data.timeZone}
+          </p>
+        )}
+        {property.error && (
+          <p role="alert">
+            Property details are unavailable. Check your property selection before saving.
+          </p>
+        )}
+        <p>
+          Reported times are checked in the property’s time zone. Urgent priority records the issue;
+          it does not contact emergency services.
+        </p>
+      </div>
+    );
   return (
     <section aria-label="Maintenance command review">
       <h3>Review the physical issue and independent records</h3>

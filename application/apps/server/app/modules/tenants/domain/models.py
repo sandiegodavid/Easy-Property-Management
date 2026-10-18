@@ -1,6 +1,7 @@
 """Portable tenant contact values."""
 
 from dataclasses import dataclass
+from app.modules.parties.domain.official_ids import OfficialId
 
 
 @dataclass(frozen=True)
@@ -13,6 +14,7 @@ class TenantProfile:
     updated_at: str
     archived_at: str | None
     revision: int = 1
+    official_ids: tuple[OfficialId, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -24,4 +26,5 @@ class TenantProfile:
             "updatedAt": self.updated_at,
             "archivedAt": self.archived_at,
             "revision": self.revision,
+            "officialIds": [item.to_dict() for item in self.official_ids],
         }

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from app.modules.parties.domain.models import Party
 
@@ -80,6 +80,26 @@ class PropertyOwnership:
 
 def ownership_share_percent(value: int | None) -> str | None:
     return None if value is None else format(Decimal(value) / 100, ".2f")
+
+
+def ownership_share_basis_points(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (str, int, float, Decimal)):
+        raise ValueError("Ownership percentage must be a number or null.")
+    try:
+        percentage = Decimal(str(value))
+        if (
+            not percentage.is_finite()
+            or not 0 < percentage <= 100
+            or percentage * 100 != (percentage * 100).to_integral_value()
+        ):
+            raise ValueError(
+                "Ownership percentage must be greater than 0 through 100 with at most two decimal places."
+            )
+        return int(percentage * 100)
+    except InvalidOperation as error:
+        raise ValueError("Invalid ownership percentage.") from error
 
 
 def validate_ownership_shares(values: list[int | None]) -> None:

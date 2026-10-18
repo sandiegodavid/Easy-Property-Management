@@ -11,7 +11,7 @@ class ProviderActivitySnapshotPolicy(DefaultAuditSnapshotPolicy):
         presented = super().redact(snapshot)
         if presented is None:
             return None
-        for field in ("selectionReason", "notes", "outcomeNotes", "email", "phone"):
+        for field in ("selectionReason", "notes", "outcomeNotes", "email", "phone", "officialIds"):
             if field in presented:
                 presented[field] = "[redacted]"
         return presented

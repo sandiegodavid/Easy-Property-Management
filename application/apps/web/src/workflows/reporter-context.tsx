@@ -78,27 +78,18 @@ export function ReporterContext({
   });
   const problem = reporterProblem(values);
   return (
-    <section aria-label="Reporter attribution review">
-      <h3>Who reported this issue?</h3>
-      <Facts
-        value={source.reporter}
-        fields={["role", "subjectKind", "partyId", "displayName", "currentPartyState"]}
-      />
+    <section aria-label="Reporter attribution review" className="maintenance-create-section">
+      <h3>Reporter details</h3>
+      {Object.keys(record(source.reporter)).length > 0 && (
+        <Facts
+          value={source.reporter}
+          fields={["role", "subjectKind", "partyId", "displayName", "currentPartyState"]}
+        />
+      )}
       <p>
-        Attribution is a contextual assertion, not a global Party or authorization role.
-        Manager/staff use Local operator; owner may use a Party or eligible self-owner Local
-        operator. Tenant requires a Party with eligible lease occupancy and participation.
-      </p>
-      <p>
-        The server validates relationships on the Property-local reported date, not today. For a
-        Space issue the tenant must occupy that exact Space; a Property issue permits participation
-        in any of its Spaces. Draft/void leases and dates outside occupancy or end-exclusive
-        participant boundaries are not eligible.
-      </p>
-      <p>
-        Reported instant used for validation: {scalar(source.reportedAtUtc ?? values.reportedAtUtc)}{" "}
-        · {scalar(source.reportedTimezone, "Property IANA time zone")}. A correction keeps the
-        original report date and does not rewrite linked Communications, Tasks or evidence.
+        For a manager or staff report, choose Local operator. For an owner or tenant, select the
+        person who reported the issue. Their relationship to the property is checked on the reported
+        date.
       </p>
       {reporter.subjectKind === "party" && (
         <>
@@ -163,11 +154,6 @@ export function ReporterContext({
         </>
       )}
       {problem && <p role="alert">{problem}</p>}
-      <p>
-        Reporter identity and historical/correction reasons are sensitive contextual history,
-        redacted from general activity. Communication participants are separate: a Party reporter
-        can be explicitly prefilled, but Local operator never creates a fake Party.
-      </p>
     </section>
   );
 }

@@ -914,6 +914,11 @@ class MaintenanceService:
                     "Avoided provider assignment requires confirmation and a reason.",
                     "avoid_override_required",
                 )
+            if not provider["has_official_id"]:
+                raise MaintenanceConflictError(
+                    "Record at least one official ID for this provider before assigning maintenance work. Only masked details are needed.",
+                    "provider_official_id_required",
+                )
             if (
                 provider["selection_status"] != "avoid"
                 and command.avoid_override_reason is not None

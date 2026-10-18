@@ -15,6 +15,7 @@ from app.modules.parties.application.service import (
 )
 from app.modules.tenants.application.ports import TenantTransaction, TenantUnitOfWork
 from app.modules.tenants.domain.models import TenantProfile
+from app.modules.parties.domain.official_ids import OfficialId, official_ids, official_ids_from_api
 
 from app.modules.tenants.application.commands import TenantCommand, finish, start
 from app.modules.tenants.application.errors import (
@@ -42,6 +43,7 @@ class TenantCreateCommand:
     notes: str | None = None
     do_not_contact: bool = False
     confirmed_new_party: bool = False
+    official_ids: tuple[OfficialId, ...] = ()
 
     def __post_init__(self):
         try:
@@ -59,6 +61,7 @@ class TenantCreateCommand:
         object.__setattr__(self, "party_kind", party.party_kind)
         object.__setattr__(self, "display_name", party.display_name)
         object.__setattr__(self, "notes", _optional(self.notes, "Notes", 4000))
+        object.__setattr__(self, "official_ids", _ids(self.official_ids))
 
 
 @dataclass(frozen=True)
@@ -66,11 +69,17 @@ class TenantProfilePatchCommand:
     preferred_contact_method_id: object = _UNSET
     do_not_contact: object = _UNSET
     notes: object = _UNSET
+    official_ids: object = _UNSET
 
     def __post_init__(self) -> None:
         if all(
             value is _UNSET
-            for value in (self.preferred_contact_method_id, self.do_not_contact, self.notes)
+            for value in (
+                self.preferred_contact_method_id,
+                self.do_not_contact,
+                self.notes,
+                self.official_ids,
+            )
         ):
             raise TenantError("At least one tenant profile field must be supplied.")
         if self.do_not_contact is not _UNSET and not isinstance(self.do_not_contact, bool):
@@ -90,6 +99,8 @@ class TenantProfilePatchCommand:
                 raise TenantError("Preferred contact method must be a canonical UUID.") from error
         if self.notes is not _UNSET:
             object.__setattr__(self, "notes", _optional(self.notes, "Notes", 4000))
+        if self.official_ids is not _UNSET:
+            object.__setattr__(self, "official_ids", _ids(self.official_ids))
 
     @classmethod
     def from_mapping(cls, values: dict[str, object]) -> "TenantProfilePatchCommand":
@@ -97,6 +108,7 @@ class TenantProfilePatchCommand:
             preferred_contact_method_id=values.get("preferredContactMethodId", _UNSET),
             do_not_contact=values.get("doNotContact", _UNSET),
             notes=values.get("notes", _UNSET),
+            official_ids=_api_ids(values["officialIds"]) if "officialIds" in values else _UNSET,
         )
 
 
@@ -125,7 +137,14 @@ class TenantService:
             except PartyValidationError as error:
                 raise TenantError(str(error)) from error
             profile = TenantProfile(
-                party.id, None, command.do_not_contact, command.notes, now, now, None
+                party.id,
+                None,
+                command.do_not_contact,
+                command.notes,
+                now,
+                now,
+                None,
+                official_ids=command.official_ids,
             )
             try:
                 methods = prepare_contact_methods(party.id, command.contacts, now)
@@ -239,7 +258,11 @@ class TenantService:
         if not isinstance(command, TenantProfilePatchCommand):
             raise TenantError("A valid tenant profile patch is required.")
         now, correlation = _now(), str(uuid4())
-        payload = {name: value for name, value in command.__dict__.items() if value is not _UNSET}
+        payload = {
+            name: value
+            for name, value in asdict(command).items()
+            if getattr(command, name) is not _UNSET
+        }
         identity = TenantCommand("patch", party_id, expected_revision, idempotency_key, payload)
 
         def write(tx: TenantTransaction):
@@ -268,6 +291,9 @@ class TenantService:
                 if command.do_not_contact is _UNSET
                 else command.do_not_contact,
                 notes=profile.notes if command.notes is _UNSET else command.notes,
+                official_ids=profile.official_ids
+                if command.official_ids is _UNSET
+                else command.official_ids,
             )
             if updated == profile:
                 return finish(
@@ -402,3 +428,19 @@ def _optional(value, label, limit):
     if not isinstance(value, str) or not (text := value.strip()) or len(text) > limit:
         raise TenantError(f"{label} must contain 1 to {limit} characters.")
     return text
+
+
+def _ids(values):
+    try:
+        return official_ids(values)
+    except (ValueError, TypeError, KeyError) as error:
+        raise TenantError(str(error)) from error
+
+
+def _api_ids(values):
+    try:
+        return official_ids_from_api(values)
+    except (ValueError, TypeError, KeyError, AttributeError) as error:
+        raise TenantError(
+            "Enter valid masked official ID details; never a full ID number."
+        ) from error

@@ -193,7 +193,7 @@ test("Lease documents resume with original bytes and reconcile one committed upl
     page.getByRole("button", { name: "Check original result", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(writes).toBe(1);
   const response = await request.get(`/api/leases/${f.lease.id}`);
   const lease = (await response.json()) as Schemas["LeaseResponse"];
@@ -390,7 +390,7 @@ test("commercial Lease execution and milestones support narrow keyboard review i
   const submit = page.getByRole("button", { name: "Save execute lease", exact: true });
   await submit.focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   for (const theme of ["light", "dark"]) {
     await page.goto("/settings");
     await page
@@ -519,6 +519,7 @@ async function fixture(
     data: {
       partyKind: "individual",
       displayName: `Slice51 tenant ${crypto.randomUUID()}`,
+      officialIds: [{ documentType: "passport", issuingCountry: "US", lastFour: "TEST" }],
       expectedRevision: 0,
       idempotencyKey: crypto.randomUUID(),
     },
@@ -564,7 +565,7 @@ async function save(page: Page, title: string) {
       .locator('button[type="submit"]')
       .click();
   });
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
 }
 async function execute(request: APIRequestContext, f: Awaited<ReturnType<typeof fixture>>) {
   const response = await request.post(`/api/leases/${f.lease.id}/execute`, {
@@ -672,7 +673,9 @@ test("a complete Lease draft is created through its saved command contract", asy
   await page.getByLabel("Tenant party id (required)").fill(f.tenant.id);
   await page.getByLabel("Participant role (required)").selectOption("primary_tenant");
   await save(page, "Create lease draft");
-  await page.getByRole("link", { name: "Open committed Lease and related setup" }).click();
+  await page
+    .getByRole("link", { name: /^(Open committed Lease and related setup|Back to lease)$/ })
+    .click();
   await expect(page.getByRole("region", { name: "Lease workspace" })).toContainText("USD 1234.56");
 });
 
@@ -775,15 +778,15 @@ test("removed participants resume original-result recovery without another remov
   await page.goto("/settings/recovery");
   await page.getByRole("link", { name: "Resume lease.participant.remove", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result" })).toContainText(
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toContainText(
     receipt!.operationId,
   );
   await expect(
-    page.getByRole("link", { name: "Open committed Lease and related setup" }),
+    page.getByRole("link", { name: /^(Open committed Lease and related setup|Back to lease)$/ }),
   ).toBeVisible();
   expect(calls).toBe(1);
   await page.reload();
-  await expect(page.getByRole("region", { name: "Committed result" })).toContainText(
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toContainText(
     receipt!.operationId,
   );
   expect(calls).toBe(1);
@@ -1173,7 +1176,7 @@ test("inspection evidence resumes with original bytes and reconciles a lost resp
   await page.getByRole("button", { name: "Attach inspection evidence", exact: true }).click();
   await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
   await page.getByRole("button", { name: "Check original result" }).click();
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(calls).toBe(1);
   const retained = await request.get(`/api/condition-observations/${observation.id}/report`);
   const item = (await retained.json()) as Schemas["ReportResponse"];

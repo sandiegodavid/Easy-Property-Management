@@ -8444,6 +8444,14 @@
             ],
             "title": "Notes"
           },
+          "officialIds": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderOfficialIdInput"
+            },
+            "maxItems": 10,
+            "title": "Officialids",
+            "type": "array"
+          },
           "party": {
             "$ref": "#/components/schemas/PartyInput"
           },
@@ -10428,6 +10436,14 @@
               }
             ],
             "title": "Notes"
+          },
+          "officialIds": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderOfficialIdInput"
+            },
+            "maxItems": 10,
+            "title": "Officialids",
+            "type": "array"
           },
           "selectionReason": {
             "anyOf": [
@@ -21095,6 +21111,63 @@
         "title": "OccupancyRequest",
         "type": "object"
       },
+      "OfficialIdRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "documentType": {
+            "enum": [
+              "passport",
+              "drivers_license",
+              "state_id",
+              "national_id",
+              "business_registration"
+            ],
+            "title": "Documenttype",
+            "type": "string"
+          },
+          "expiresOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expireson"
+          },
+          "issuingCountry": {
+            "pattern": "^[A-Z]{2}$",
+            "title": "Issuingcountry",
+            "type": "string"
+          },
+          "issuingRegion": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z0-9-]{1,10}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issuingregion"
+          },
+          "lastFour": {
+            "pattern": "^[A-Za-z0-9]{4}$",
+            "title": "Lastfour",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issuingCountry",
+          "lastFour",
+          "documentType"
+        ],
+        "title": "OfficialIdRequest",
+        "type": "object"
+      },
       "Operating": {
         "additionalProperties": false,
         "properties": {
@@ -21793,12 +21866,24 @@
               }
             ],
             "title": "Partyid"
+          },
+          "sharePercent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sharepercent"
           }
         },
         "required": [
           "ownerKind",
           "partyId",
-          "displayName"
+          "displayName",
+          "sharePercent"
         ],
         "title": "OwnerPreview",
         "type": "object"
@@ -23097,6 +23182,22 @@
               }
             ],
             "title": "Partyid"
+          },
+          "sharePercent": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sharepercent"
           }
         },
         "required": [
@@ -23177,6 +23278,17 @@
             "title": "Propertyid",
             "type": "string"
           },
+          "sharePercent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sharepercent"
+          },
           "startsOn": {
             "format": "date",
             "title": "Startson",
@@ -23192,7 +23304,8 @@
           "startsOn",
           "endsOn",
           "createdAt",
-          "endedAt"
+          "endedAt",
+          "sharePercent"
         ],
         "title": "OwnershipResponse",
         "type": "object"
@@ -24617,6 +24730,14 @@
             ],
             "title": "Notes"
           },
+          "officialIds": {
+            "items": {
+              "$ref": "#/components/schemas/OfficialIdRequest"
+            },
+            "maxItems": 10,
+            "title": "Officialids",
+            "type": "array"
+          },
           "operationId": {
             "format": "uuid",
             "title": "Operationid",
@@ -24659,6 +24780,7 @@
           "createdAt",
           "updatedAt",
           "archivedAt",
+          "officialIds",
           "operationId"
         ],
         "title": "ProfileMutationResponse",
@@ -24688,6 +24810,14 @@
               }
             ],
             "title": "Notes"
+          },
+          "officialIds": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderOfficialIdInput"
+            },
+            "maxItems": 10,
+            "title": "Officialids",
+            "type": "array"
           },
           "selectionReason": {
             "anyOf": [
@@ -24755,6 +24885,14 @@
             ],
             "title": "Notes"
           },
+          "officialIds": {
+            "items": {
+              "$ref": "#/components/schemas/OfficialIdRequest"
+            },
+            "maxItems": 10,
+            "title": "Officialids",
+            "type": "array"
+          },
           "preferredContactMethodId": {
             "anyOf": [
               {
@@ -24806,6 +24944,14 @@
             ],
             "title": "Notes"
           },
+          "officialIds": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderOfficialIdInput"
+            },
+            "maxItems": 10,
+            "title": "Officialids",
+            "type": "array"
+          },
           "partyId": {
             "format": "uuid",
             "title": "Partyid",
@@ -24848,6 +24994,7 @@
           "selectionStatus",
           "selectionReason",
           "notes",
+          "officialIds",
           "createdAt",
           "updatedAt",
           "archivedAt"
@@ -26316,6 +26463,76 @@
           "operationId"
         ],
         "title": "ProviderMutationResponse",
+        "type": "object"
+      },
+      "ProviderOfficialIdInput": {
+        "additionalProperties": false,
+        "properties": {
+          "documentNumber": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9 ./_-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Documentnumber"
+          },
+          "documentType": {
+            "enum": [
+              "license",
+              "passport",
+              "drivers_license",
+              "state_id",
+              "national_id",
+              "business_registration"
+            ],
+            "title": "Documenttype",
+            "type": "string"
+          },
+          "expiresOn": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expireson"
+          },
+          "issuingCountry": {
+            "pattern": "^[A-Z]{2}$",
+            "title": "Issuingcountry",
+            "type": "string"
+          },
+          "issuingRegion": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z0-9-]{1,10}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issuingregion"
+          },
+          "lastFour": {
+            "pattern": "^[A-Za-z0-9]{4}$",
+            "title": "Lastfour",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issuingCountry",
+          "lastFour",
+          "documentType"
+        ],
+        "title": "ProviderOfficialIdInput",
         "type": "object"
       },
       "ProviderPageResponse": {
@@ -29043,6 +29260,17 @@
             "title": "Relationshipstate",
             "type": "string"
           },
+          "sharePercent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sharepercent"
+          },
           "startsOn": {
             "format": "date",
             "title": "Startson",
@@ -29057,6 +29285,7 @@
           "propertyId",
           "propertyName",
           "ownerKind",
+          "sharePercent",
           "partyId",
           "ownerName",
           "startsOn",
@@ -36448,6 +36677,14 @@
             ],
             "title": "Notes"
           },
+          "officialIds": {
+            "items": {
+              "$ref": "#/components/schemas/OfficialIdRequest"
+            },
+            "maxItems": 10,
+            "title": "Officialids",
+            "type": "array"
+          },
           "partyKind": {
             "enum": [
               "individual",
@@ -36660,6 +36897,14 @@
             ],
             "title": "Notes"
           },
+          "officialIds": {
+            "items": {
+              "$ref": "#/components/schemas/OfficialIdRequest"
+            },
+            "maxItems": 10,
+            "title": "Officialids",
+            "type": "array"
+          },
           "partyId": {
             "format": "uuid",
             "title": "Partyid",
@@ -36696,7 +36941,8 @@
           "notes",
           "createdAt",
           "updatedAt",
-          "archivedAt"
+          "archivedAt",
+          "officialIds"
         ],
         "title": "TenantProfileResponse",
         "type": "object"

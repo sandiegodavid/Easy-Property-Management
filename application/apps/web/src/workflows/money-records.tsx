@@ -9,6 +9,7 @@ import { History, readResult } from "./reads";
 export { MoneyFacts } from "./money-presentation";
 import { MoneyFacts } from "./money-presentation";
 import { CheckContext } from "./check-context";
+import { RentExpectationDetail } from "./rent-expectation-detail";
 
 export type MoneyKind =
   | "expectation"
@@ -230,10 +231,17 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
                 : []
           : [];
   return (
-    <section aria-label="Money record">
+    <section
+      aria-label="Money record"
+      className={kind === "expectation" ? "rent-detail" : undefined}
+    >
       <ParentBackLink to="/money">← Back to Money</ParentBackLink>
-      <h2>{label(kind)} record</h2>
-      <MoneyFacts value={item} fields={detailFields} />
+      <h2>{kind === "expectation" ? "Rent due" : `${label(kind)} record`}</h2>
+      {kind === "expectation" ? (
+        <RentExpectationDetail item={item} />
+      ) : (
+        <MoneyFacts value={item} fields={detailFields} />
+      )}
       {kind === "check" && <CheckContext check={item} />}
       {kind === "expense" && (
         <MoneyFacts
@@ -249,18 +257,29 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
           fields={["property", "space", "category", "paidBy"]}
         />
       )}
-      {kind === "expectation" && (
-        <p>
-          Settlement describes allocations. Timeliness uses the Property local date, with no hidden
-          grace period. Late or missed is an operator record, not a legal determination.
-        </p>
-      )}
-      {leaseId && <Link to={`/leases/${leaseId}/details`}>Owning Lease</Link>}
-      {!!item.propertyId && (
-        <Link to={`/properties/${scalar(item.propertyId)}/money`}>Property money context</Link>
+      {(leaseId || !!item.propertyId) && (
+        <nav aria-label="Related money records">
+          {leaseId && <Link to={`/leases/${leaseId}/details`}>View lease</Link>}
+          {!!item.propertyId && (
+            <Link to={`/properties/${scalar(item.propertyId)}/money`}>View property money</Link>
+          )}
+        </nav>
       )}
       {rentActions.length > 0 && !item.voidedAt && (
-        <CommandLinks keys={rentActions} target={leaseId} child={id} title="Rent ledger actions" />
+        <CommandLinks
+          keys={rentActions}
+          target={leaseId}
+          child={id}
+          title="Rent ledger actions"
+          collapsible={kind !== "expectation"}
+          asButtons={kind === "expectation"}
+          labels={{
+            "finance.rent_receipt.create": "Record payment",
+            "finance.prepaid_check.create": "Record prepaid check",
+            "finance.rent_expectation.void": "Void rent expectation",
+            "finance.rent_expectation.timeliness_review": "Review payment timing",
+          }}
+        />
       )}
       {kind === "expense" && !item.voidedAt && (
         <CommandLinks

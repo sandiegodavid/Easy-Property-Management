@@ -6,11 +6,13 @@ import { api } from "@epm/contracts";
 import { workflows } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLoader } from "./command";
+import { useSaveCompletion } from "./saved-command";
 import { readResult } from "./reads";
 import { ContactList, IdentityDetail } from "./identity-detail";
 import { TenantDirectory } from "./tenant-directory";
 
 export function IdentityWorkspace() {
+  const { completed, onSaved } = useSaveCompletion();
   const [params] = useSearchParams();
   const id = params.get("identity"),
     definition = workflows.find((item) => item.formKey === params.get("workflow"));
@@ -102,6 +104,7 @@ export function IdentityWorkspace() {
                   notes: tenant.data?.profile.notes,
                   doNotContact: tenant.data?.profile.doNotContact,
                   preferredContactMethodId: tenant.data?.profile.preferredContactMethodId,
+                  officialIds: tenant.data?.profile.officialIds ?? [],
                 }
               : {};
     if (definition.formKey === "party.contact.archive") initial.referenceResolutions = [];
@@ -112,31 +115,40 @@ export function IdentityWorkspace() {
     const personEdit = editingName || addingContact || editingContact || removingContact;
     return (
       <div className={personEdit ? "person-edit-command" : undefined}>
-        {personEdit && party.data ? (
-          <>
-            <ParentBackLink to={`/parties?identity=${party.data.id}`}>
-              ← Back to {party.data.displayName}
-            </ParentBackLink>
-            <p className="person-edit-context">
-              {addingContact
-                ? "Adding contact details for "
-                : editingContact
-                  ? "Editing contact details for "
-                  : removingContact
-                    ? "Removing contact details for "
-                    : "Changing the name for "}
-              <strong>{party.data.displayName}</strong>
+        {!completed &&
+          (personEdit && party.data ? (
+            <>
+              <ParentBackLink to={`/parties?identity=${party.data.id}`}>
+                ← Back to {party.data.displayName}
+              </ParentBackLink>
+              <p className="person-edit-context">
+                {addingContact
+                  ? "Adding contact details for "
+                  : editingContact
+                    ? "Editing contact details for "
+                    : removingContact
+                      ? "Removing contact details for "
+                      : "Changing the name for "}
+                <strong>{party.data.displayName}</strong>
+              </p>
+              {(editingContact || removingContact) && contact && <p>{contact.displayValue}</p>}
+            </>
+          ) : (
+            <p>
+              Identity and contact changes use the Party revision. Tenant preferences and lifecycle
+              use the separate Tenant revision. Archiving a preferred contact requires an explicit
+              replacement or clear decision for each owning role.
             </p>
-            {(editingContact || removingContact) && contact && <p>{contact.displayValue}</p>}
-          </>
-        ) : (
+          ))}
+        {!completed && definition.formKey === "tenant.profile.patch" && (
           <p>
-            Identity and contact changes use the Party revision. Tenant preferences and lifecycle
-            use the separate Tenant revision. Archiving a preferred contact requires an explicit
-            replacement or clear decision for each owning role.
+            Official IDs are required before lease execution, not to save a tenant profile. Enter
+            only the last four letters or digits. Do not enter full document numbers or upload
+            scans.
           </p>
         )}
         <CommandLoader
+          onSaved={onSaved}
           definition={definition}
           sourceId={target}
           childId={child}
@@ -156,7 +168,7 @@ export function IdentityWorkspace() {
                 .map((item) => ({ id: item.id, label: item.displayValue })) ?? [],
           }}
         />
-        {addingContact && party.data && (
+        {!completed && addingContact && party.data && (
           <>
             {contacts.error && <p role="alert">{contacts.error.message}</p>}
             <ContactList party={contacts.data ?? party.data} />

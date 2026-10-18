@@ -74,10 +74,11 @@ async function save(page: Page, title: string) {
   });
   if (["Create property", "Edit property"].includes(title)) {
     const tab = title === "Edit property" ? "setup" : "overview";
+    await page.getByRole("link", { name: "Back to property", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/properties/[^/]+/${tab}$`));
     return;
   }
-  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
 }
 
 test("ownership changes use named owner search and property-local date help", async ({
@@ -103,7 +104,7 @@ test("ownership changes use named owner search and property-local date help", as
   await page.goto(`/properties?workflow=portfolio.ownerships.replace&target=${property.id}`);
   await expect(
     page.getByRole("link", { name: `← Back to ${property.displayName}`, exact: true }),
-  ).toHaveAttribute("href", `/properties/${property.id}/setup`);
+  ).toHaveAttribute("href", `/properties/${property.id}/overview`);
   await expect(page.getByLabel("Effective date", { exact: true })).toHaveValue(
     property.effectiveLocalDate,
   );
@@ -186,16 +187,20 @@ test("ownership changes use named owner search and property-local date help", as
     ).toBe(true);
   }
   await page.getByRole("button", { name: "Save ownership change", exact: true }).click();
-  await expect(page.getByText("Ownership updated successfully.", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: "Ownership confirmation", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ownership updated", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Ownership updated", exact: true })).toBeVisible();
   await expect(page.locator(".ownership-command form")).toHaveCount(0);
-  const confirmation = page.getByRole("region", { name: "Ownership confirmation", exact: true });
-  await expect(confirmation.locator(".ownership-selected > li")).toHaveCount(2);
+  const confirmation = page.getByRole("region", { name: "Ownership updated", exact: true });
+  await expect(
+    confirmation
+      .getByRole("region", { name: "Owners", exact: true })
+      .locator(":scope > .saved-item-entry"),
+  ).toHaveCount(2);
   await expect(confirmation).toContainText("You");
   await expect(confirmation).toContainText(party.displayName);
-  await expect(confirmation).toContainText("morgan@example.test");
+  await expect(
+    confirmation.getByRole("link", { name: "Back to property", exact: true }),
+  ).toHaveAttribute("href", `/properties/${property.id}/overview`);
   await expect(confirmation.locator("input, select, textarea, button")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Save ownership change", exact: true }),
@@ -208,9 +213,9 @@ test("ownership changes use named owner search and property-local date help", as
   await expect(page.getByText(/^Result record /)).toHaveCount(0);
   await expect(
     page.getByRole("link", { name: `← Back to ${property.displayName}`, exact: true }),
-  ).toHaveCount(1);
+  ).toHaveCount(0);
   await page
-    .getByRole("region", { name: "Ownership confirmation", exact: true })
+    .getByRole("region", { name: "Ownership updated", exact: true })
     .screenshot({ path: testInfo.outputPath("ownership-confirmation.png") });
   const updated = await request.get(`/api/properties/${property.id}`);
   expect(updated.ok()).toBe(true);
@@ -230,9 +235,7 @@ test("ownership confirmation waits for a known result after an interrupted save"
   await page.getByRole("button", { name: "Create a new owner", exact: true }).click();
   await page.getByLabel("New owner name", { exact: true }).fill("Confirmation owner");
   await page.getByRole("button", { name: "Add to owners", exact: true }).click();
-  await page
-    .getByLabel("Effective date", { exact: true })
-    .fill(later(property.effectiveLocalDate, 7));
+  await page.getByLabel("Effective date", { exact: true }).fill(property.effectiveLocalDate);
   let writes = 0;
   await page.route(`**/api/properties/${property.id}/ownerships`, async (route) => {
     if (route.request().method() !== "PUT") return route.continue();
@@ -246,21 +249,18 @@ test("ownership confirmation waits for a known result after an interrupted save"
     page.getByRole("button", { name: "Check original result", exact: true }),
   ).toBeVisible();
   await expect(page.locator(".ownership-command form")).toHaveCount(1);
-  await expect(
-    page.getByRole("region", { name: "Ownership confirmation", exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Ownership updated", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
-  await expect(
-    page.getByRole("region", { name: "Ownership confirmation", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Ownership updated", exact: true })).toBeVisible();
   await expect(page.locator(".ownership-command form")).toHaveCount(0);
-  await expect(
-    page.getByRole("region", { name: "Ownership confirmation", exact: true }),
-  ).toContainText("Confirmation owner");
+  await expect(page.getByRole("region", { name: "Ownership updated", exact: true })).toContainText(
+    "Confirmation owner",
+  );
   await expect(
     page
-      .getByRole("region", { name: "Ownership confirmation", exact: true })
-      .locator(".ownership-selected > li"),
+      .getByRole("region", { name: "Ownership updated", exact: true })
+      .getByRole("region", { name: "Owners", exact: true })
+      .locator(":scope > .saved-item-entry"),
   ).toHaveCount(2);
   expect(writes).toBe(1);
 });
@@ -290,11 +290,17 @@ test("new owner contacts save with ownership and remain visible after reopening"
     true,
   );
   await page.getByRole("button", { name: "Save ownership change", exact: true }).click();
-  await expect(page.getByText("Ownership updated successfully.", { exact: true })).toBeVisible();
-  const confirmation = page.getByRole("region", { name: "Ownership confirmation", exact: true });
-  await expect(confirmation.locator(".ownership-selected > li")).toHaveCount(2);
+  await expect(page.getByRole("heading", { name: "Ownership updated", exact: true })).toBeVisible();
+  const confirmation = page.getByRole("region", { name: "Ownership updated", exact: true });
+  await expect(
+    confirmation
+      .getByRole("region", { name: "Owners", exact: true })
+      .locator(":scope > .saved-item-entry"),
+  ).toHaveCount(2);
   await expect(confirmation).toContainText("Morgan with contacts");
-  await expect(confirmation).toContainText("owner-ui@example.test");
+  await expect(
+    confirmation.getByRole("link", { name: "Back to property", exact: true }),
+  ).toHaveAttribute("href", `/properties/${property.id}/overview`);
   await expect(confirmation.locator("input, select, textarea, button")).toHaveCount(0);
   await page.goto(`/properties?workflow=portfolio.ownerships.replace&target=${property.id}`);
   await expect(page.locator(".owner-contact-details")).toContainText("owner-ui@example.test");
@@ -486,18 +492,34 @@ test("owner live search debounces typing and never shows stale matches", async (
   ).toBeEnabled();
 });
 
-test("property units and setup show the address consistently with other detail tabs", async ({
+test("property tabs show one address below the name in the shared header", async ({
   page,
   request,
 }) => {
   const property = await create(request, "Property address tabs", "office_suites");
-  const address = `${property.addressLine1}, ${property.city}, ${property.countryCode} · ${property.timeZone} · ${property.status}`;
+  const address = [
+    property.addressLine1,
+    property.addressLine2,
+    property.city,
+    property.region,
+    property.postalCode,
+  ]
+    .filter(Boolean)
+    .join(", ");
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const tab of ["units", "setup"]) {
+    for (const tab of ["overview", "units", "setup", "money", "maintenance", "conversations"]) {
       await page.goto(`/properties/${property.id}/${tab}`);
       await expect(page.getByLabel("Property address", { exact: true })).toHaveText(address);
       await expect(page.getByText(address, { exact: true })).toHaveCount(1);
+      await expect(
+        page.locator(".property-workspace-header").getByLabel("Property address", { exact: true }),
+      ).toBeVisible();
+      expect(
+        (await page
+          .getByRole("heading", { name: property.displayName, exact: true })
+          .boundingBox())!.y,
+      ).toBeLessThan((await page.getByLabel("Property address", { exact: true }).boundingBox())!.y);
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       ).toBe(true);
@@ -518,7 +540,6 @@ test("property setup puts all actions on the top row without a repeated heading"
   await expect(setup.getByRole("heading", { name: "Property setup", exact: true })).toHaveCount(0);
   await expect(actions.getByRole("button")).toHaveText([
     "Edit Property",
-    "Change ownership",
     "Add Suite",
     "Archive property",
   ]);
@@ -533,7 +554,6 @@ test("property setup puts all actions on the top row without a repeated heading"
   ).toBe("rgba(0, 0, 0, 0)");
   for (const [name, command] of [
     ["Edit Property", "portfolio.property.patch"],
-    ["Change ownership", "portfolio.ownerships.replace"],
     ["Add Suite", "portfolio.space.create"],
     ["Archive property", "portfolio.property.archive"],
   ]) {
@@ -545,7 +565,23 @@ test("property setup puts all actions on the top row without a repeated heading"
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
-  await expect(actions.getByRole("button")).toHaveCount(4);
+  await expect(actions.getByRole("button")).toHaveCount(3);
+  await expect(setup.getByRole("button", { name: "Change ownership", exact: true })).toHaveCount(0);
+  await page.goto(`/properties/${property.id}/overview`);
+  const owners = page.getByRole("region", { name: "Owners", exact: true });
+  const change = owners.getByRole("button", { name: "Change ownership", exact: true });
+  await expect(change).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  expect(
+    Math.abs(
+      (await owners.getByRole("heading", { name: "Owners", exact: true }).boundingBox())!.y -
+        (await change.boundingBox())!.y,
+    ),
+  ).toBeLessThan(20);
+  await change.click();
+  await expect(page).toHaveURL(
+    new RegExp(`workflow=portfolio.ownerships.replace&target=${property.id}`),
+  );
 });
 
 test("property edit groups and prefills details without changing ownership or rental status", async ({
@@ -673,6 +709,7 @@ test("interrupted property edit returns to setup only after reconciliation", asy
   ).toBeVisible();
   await expect(page).toHaveURL(/workflow=portfolio.property.patch/);
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("link", { name: "Back to property", exact: true }).click();
   await expect(page).toHaveURL(`/properties/${property.id}/setup`);
   expect(writes).toBe(1);
   const response = await request.get(`/api/properties/${property.id}`);
@@ -782,7 +819,7 @@ test("archive suite explains its scope and confirms the change in both themes", 
       .getByRole("checkbox", { name: "I confirm this lifecycle change", exact: true })
       .check();
     await page.getByRole("button", { name: "Archive suite", exact: true }).click();
-    await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+    await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
     expect((await status(request, rental.id)).status).toBe("archived");
     expect((await status(request, property.spaces[1].id)).status).toBe("active");
   }
@@ -1013,6 +1050,7 @@ test("interrupted property creation opens its original property only after recon
   ).toBeVisible();
   await expect(page).toHaveURL(/workflow=portfolio.property.create/);
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("link", { name: "Back to property", exact: true }).click();
   await expect(page).toHaveURL(`/properties/${createdId}/overview`);
   expect(writes).toBe(1);
 });
@@ -1548,7 +1586,7 @@ test("stale availability retains edits and an interrupted write reconciles its o
   ).toBeVisible();
   const committed = await status(request, space.id);
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect((await status(request, space.id)).revision).toBe(committed.revision);
   expect(writes).toBe(1);
 });

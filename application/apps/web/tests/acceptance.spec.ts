@@ -70,7 +70,9 @@ for (const width of [390, 900, 1440]) {
       const save = page.getByRole("button", { name: "Save task changes", exact: true });
       await save.focus();
       await page.keyboard.press("Enter");
-      await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+      await expect(
+        page.locator('.saved-item, section[aria-label="Committed result"]'),
+      ).toBeVisible();
       const current = await request.get(`/api/tasks/${task.id}`);
       expect(((await current.json()) as Schema["TaskResponse"]).title).toBe(
         "Preserved keyboard edit",

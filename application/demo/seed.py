@@ -28,6 +28,26 @@ def month_after(day):
     return (day.replace(day=28) + timedelta(days=4)).replace(day=1)
 
 
+def tenant_ids(record, index):
+    identifiers = [
+        {
+            "documentType": "business_registration" if record["type"] == "office" else "passport",
+            "issuingCountry": "US",
+            "lastFour": "DEMO",
+        }
+    ]
+    if record["key"] == "op-home" and index == 0:
+        identifiers.append(
+            {
+                "documentType": "drivers_license",
+                "issuingCountry": "US",
+                "issuingRegion": "OR",
+                "lastFour": "TEST",
+            }
+        )
+    return identifiers
+
+
 class Seeder:
     """Journal original requests before dispatch; never recreate a populated workspace."""
 
@@ -102,6 +122,14 @@ class Seeder:
                     "selectionStatus": "preferred" if index % 4 == 0 else "neutral",
                     "selectionReason": "Synthetic demo shortlist" if index % 4 == 0 else None,
                     "notes": "Fictional provider; do not contact.",
+                    "officialIds": [
+                        {
+                            "documentType": "license",
+                            "issuingCountry": "US",
+                            "issuingRegion": "OR",
+                            "lastFour": "DEMO",
+                        }
+                    ],
                 },
                 label=f"provider-{index}",
             )
@@ -112,10 +140,18 @@ class Seeder:
             item.get("unit", "Whole office" if item["type"] == "office" else "Whole home")
         ]
         ownerships = [
-            {"ownerKind": "local_operator"}
+            {"ownerKind": "local_operator", "sharePercent": share}
             if owner == "operator"
-            else {"ownerKind": "client_owner", "partyId": self.catalog["owners"][owner]}
-            for owner in item.get("coOwners", [item["owner"]])
+            else {
+                "ownerKind": "client_owner",
+                "partyId": self.catalog["owners"][owner],
+                "sharePercent": share,
+            }
+            for owner, share in zip(
+                item.get("coOwners", [item["owner"]]),
+                item.get("ownershipShares", [100]),
+                strict=True,
+            )
         ]
         result = self.write(
             "/api/properties",
@@ -202,6 +238,7 @@ class Seeder:
                     "confirmedNewParty": True,
                     "partyKind": "organization" if record["type"] == "office" else "individual",
                     "displayName": name,
+                    "officialIds": tenant_ids(record, index),
                     "contacts": [
                         {
                             "methodKind": "email",

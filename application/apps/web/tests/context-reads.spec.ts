@@ -46,7 +46,7 @@ test("property overview shares review cards, puts them first and identifies suit
   for (const hidden of ["Suites", "Leases", "Money", "Maintenance", "Communications"]) {
     await expect(page.getByRole("region", { name: hidden, exact: true })).toHaveCount(0);
   }
-  await expect(page.getByRole("region", { name: "Relationships", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Owners", exact: true })).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Property status summary", exact: true }),
   ).toContainText("2 active suites");
@@ -99,7 +99,7 @@ test("relationship cards link to the other record by name without self-links or 
   const mixed = await property(request, "Relationship mixed property", [null, ownerId]);
   for (const suffix of ["", "?relationshipScope=all"]) {
     await page.goto(`/properties/${mixed.id}/overview${suffix}`);
-    const relationships = page.getByRole("region", { name: "Relationships", exact: true });
+    const relationships = page.getByRole("region", { name: "Owners", exact: true });
     await expect(
       relationships.getByRole("link", { name: "Relationship client owner", exact: true }),
     ).toHaveAttribute("href", `/owners/${ownerId}/overview`);
@@ -112,7 +112,7 @@ test("relationship cards link to the other record by name without self-links or 
     await expect(relationships).not.toContainText("View source property");
   }
   await page
-    .getByRole("region", { name: "Relationships", exact: true })
+    .getByRole("region", { name: "Owners", exact: true })
     .getByRole("link", { name: "Relationship client owner", exact: true })
     .click();
   await expect(page).toHaveURL(`/owners/${ownerId}/overview`);
@@ -130,7 +130,7 @@ test("property content scrolls without moving the top area", async ({ page, requ
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto(`/properties/${item.id}/overview`);
   const content = page.getByRole("region", { name: "Property content", exact: true });
-  await expect(content.getByRole("group", { name: "Include relationships" })).toBeVisible();
+  await expect(content.getByRole("group", { name: "Include owners" })).toBeVisible();
   const header = page.locator(".property-workspace-header");
   const brand = page.locator(".ui-brand");
   const toolbar = page.locator(".workspace-toolbar");
@@ -365,9 +365,7 @@ test("property setup keeps configuration and actions without duplicating overvie
   await expect(details.getByRole("region", { name: "Ownership history", exact: true })).toHaveCount(
     0,
   );
-  await expect(
-    page.getByRole("region", { name: "relationships section", exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Owners section", exact: true })).toHaveCount(0);
   await expect(details.locator("summary").filter({ hasText: "Property actions" })).toHaveCount(0);
   const edit = details.getByRole("button", { name: "Edit Property", exact: true });
   await expect(edit).toBeVisible();
@@ -504,13 +502,13 @@ test("property owner counts include You and co-owners", async ({ page, request }
   ).toBeVisible();
   await page.goBack();
   await remaining.click();
-  const allOwners = page.getByRole("region", { name: "relationships section", exact: true });
+  const allOwners = page.getByRole("region", { name: "Owners section", exact: true });
   await expect(allOwners.getByText("10 owners", { exact: true })).toBeVisible();
   for (let index = 0; index < 10; index += 1) {
     await expect(allOwners.getByText(new RegExp(`Owner identity ${index} owner`))).toBeVisible();
   }
   await page.goto(`/properties/${sole.id}/overview`);
-  const relationships = page.getByRole("region", { name: "relationships section", exact: true });
+  const relationships = page.getByRole("region", { name: "Owners section", exact: true });
   await expect(relationships.getByText("1 owner · You", { exact: true })).toBeVisible();
   await expect(relationships.getByText("You", { exact: true })).toBeVisible();
 });
@@ -535,7 +533,7 @@ test("real directories recognize properties and owners, preserve filters and swi
   expect(reads[0]).toContain("limit=50");
   await page.getByRole("link", { name: "Éclair Slice49 A", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Éclair Slice49 A", exact: true })).toBeVisible();
-  const relationships = page.getByRole("group", { name: "Include relationships", exact: true });
+  const relationships = page.getByRole("group", { name: "Include owners", exact: true });
   const current = relationships.getByRole("checkbox", { name: "Current", exact: true });
   const former = relationships.getByRole("checkbox", { name: "Former", exact: true });
   await expect(current).toBeChecked();
@@ -552,7 +550,7 @@ test("real directories recognize properties and owners, preserve filters and swi
   await expect(page).toHaveURL(/relationshipScope=current/);
   await page.getByRole("link", { name: "Property setup", exact: true }).click();
   await expect(page).toHaveURL(/\/setup\?relationshipScope=current/);
-  await expect(page.getByRole("region", { name: "Relationships", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Owners", exact: true })).toHaveCount(0);
   await expect(page.getByText("Switch property", { exact: true })).toHaveCount(0);
   await page.getByRole("link", { name: "← Back to Properties", exact: true }).click();
   await expect(page).toHaveURL(/q=.*Slice49.*ownershipContext=managed_for_owner/);
@@ -695,9 +693,7 @@ test("section failure never becomes an empty result and date errors retain input
   });
   await page.goto(`/properties/${item.id}/overview`);
   await expect(page.getByRole("region", { name: "Maintenance", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Relationships", exact: true })).toContainText(
-    "1 owner",
-  );
+  await expect(page.getByRole("region", { name: "Owners", exact: true })).toContainText("1 owner");
   await page
     .getByRole("navigation", { name: "property sections", exact: true })
     .getByRole("link", { name: "maintenance", exact: true })

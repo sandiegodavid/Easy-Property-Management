@@ -17,6 +17,8 @@ import { DisclosureHelp } from "./home-disclosure-help";
 import { readResult } from "../workflows/reads";
 import { propertyUnitsLabel } from "./property-labels";
 import { formatHomeTemporal } from "./home-time";
+import { ownershipShareLabel } from "./ownership-shares";
+import { CommandLinks } from "../workflows/command";
 
 type Schema = components["schemas"];
 type Kind = "property" | "owner";
@@ -427,6 +429,13 @@ export function Directory({
                                 {owner.displayName}
                               </Link>
                             )}
+                            <span>
+                              {" "}
+                              ·{" "}
+                              {owner.sharePercent === null
+                                ? "Share not recorded"
+                                : ownershipShareLabel(owner.sharePercent)}
+                            </span>
                           </li>
                         ))}
                         {item.ownerCount > item.owners.length && (
@@ -617,10 +626,10 @@ function SectionContents({
             ))}
           </dl>
           <p className="property-money-note">
-            Whole-property activity, not owner entitlement. Ownership does not establish financial
-            shares. Scheduled checks and pending owner reports are not received income. Figures
-            reflect current corrected records. Deposit obligations are current balances across all
-            recorded dates, separate from period activity.
+            Whole-property activity, not owner entitlement. Recorded ownership shares do not
+            allocate payments or distributions. Scheduled checks and pending owner reports are not
+            received income. Figures reflect current corrected records. Deposit obligations are
+            current balances across all recorded dates, separate from period activity.
           </p>
           <Link
             to={`/money?${new URLSearchParams({ [section.viewAll.subjectKind === "property" ? "propertyId" : "ownerId"]: section.viewAll.subjectId, fromOn: section.viewAll.fromOn ?? "", throughOn: section.viewAll.throughOn ?? "" })}`}
@@ -676,6 +685,7 @@ function SectionContents({
                     <Link to={`/properties/${item.propertyId}/overview`}>{item.propertyName}</Link>
                   )}
                 </strong>
+                <p>Ownership share: {ownershipShareLabel(item.sharePercent)}</p>
                 <p>
                   {label(item.relationshipState)} · {item.startsOn} to {item.endsOn ?? "ongoing"}
                 </p>
@@ -730,6 +740,7 @@ function OverviewSection({
   query,
   unitNames,
   unitsLabel = "Units",
+  canChangeOwners = false,
 }: {
   initial: Section;
   kind: Kind;
@@ -737,6 +748,7 @@ function OverviewSection({
   query: ContextQuery;
   unitNames?: Record<string, string>;
   unitsLabel?: string;
+  canChangeOwners?: boolean;
 }) {
   const { scope } = useWorkspace();
   const [page, setPage] = useState<{ cursor?: string } | null>(null);
@@ -745,7 +757,9 @@ function OverviewSection({
       ? "Information review"
       : initial.kind === "spaces"
         ? unitsLabel
-        : label(initial.kind).replace(/^./, (character) => character.toUpperCase());
+        : kind === "property" && initial.kind === "relationships"
+          ? "Owners"
+          : label(initial.kind).replace(/^./, (character) => character.toUpperCase());
   const result = useQuery({
     queryKey: scope.key("overview-section", kind, id, query, initial.kind, page),
     enabled: page !== null,
@@ -757,7 +771,7 @@ function OverviewSection({
   return (
     <section
       id={initial.kind}
-      aria-label={`${initial.kind === "coverage" || initial.kind === "spaces" ? heading : initial.kind} section`}
+      aria-label={`${initial.kind === "coverage" || initial.kind === "spaces" || (kind === "property" && initial.kind === "relationships") ? heading : initial.kind} section`}
       className="context-section"
     >
       {result.error ? (
@@ -781,7 +795,19 @@ function OverviewSection({
             showHeading={showHeading}
             headingAction={
               kind === "property" && section.kind === "relationships" ? (
-                <RelationshipCheckboxes value={query.relationshipScope} />
+                <div className="owners-heading-actions">
+                  <RelationshipCheckboxes value={query.relationshipScope} />
+                  {canChangeOwners && (
+                    <CommandLinks
+                      keys={["portfolio.ownerships.replace"]}
+                      target={id}
+                      labels={{ "portfolio.ownerships.replace": "Change ownership" }}
+                      title="Ownership actions"
+                      asButtons
+                      collapsible={false}
+                    />
+                  )}
+                </div>
               ) : undefined
             }
             showCaptureTime={false}
@@ -842,7 +868,7 @@ function RelationshipCheckboxes({ value }: { value: Scope }) {
   const [params, setParams] = useSearchParams();
   const navigationState: unknown = useLocation().state;
   return (
-    <div className="relationship-filter" role="group" aria-label="Include relationships">
+    <div className="relationship-filter" role="group" aria-label="Include owners">
       {(["current", "former"] as const).map((option) => (
         <label key={option}>
           <input
@@ -982,15 +1008,7 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
         />
       ) : result.data ? (
         <>
-          {result.data.subject.kind === "property" ? (
-            tab !== "details" && (
-              <p>
-                {result.data.subject.addressLine1}, {result.data.subject.city},{" "}
-                {result.data.subject.countryCode} · {result.data.subject.timeZone} ·{" "}
-                {result.data.subject.status}
-              </p>
-            )
-          ) : (
+          {result.data.subject.kind !== "property" && (
             <p>
               {result.data.subject.partyKind} ·{" "}
               {result.data.subject.archived ? "Archived" : "Active"}
@@ -1063,6 +1081,7 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
                 id={id}
                 query={query}
                 unitNames={unitNames}
+                canChangeOwners={kind === "property" && property.data?.status === "active"}
                 unitsLabel={
                   property.data ? propertyUnitsLabel(property.data.inventoryLayout) : "Units"
                 }

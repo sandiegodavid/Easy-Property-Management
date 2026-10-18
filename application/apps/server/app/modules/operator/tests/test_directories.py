@@ -263,7 +263,7 @@ def test_owner_counts_include_operator_and_client_owners(directory):
     sole = cards["Sole operator"]
     assert sole["ownerCount"] == 1
     assert sole["owners"] == [
-        {"ownerKind": "local_operator", "partyId": None, "displayName": "You"}
+        {"ownerKind": "local_operator", "partyId": None, "displayName": "You", "sharePercent": None}
     ]
     mixed = cards["Mixed owners"]
     assert mixed["ownerCount"] == 3

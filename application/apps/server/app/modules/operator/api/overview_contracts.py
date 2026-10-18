@@ -4,6 +4,7 @@ from datetime import date
 from typing import Annotated, Literal
 from uuid import UUID
 from pydantic import AwareDatetime, Field, StrictBool, StrictInt, model_validator
+from decimal import Decimal
 
 from app.modules.finance.application.money_models import MoneySummary
 from app.modules.operator.api.directory_contracts import Availability, Occupancy
@@ -88,7 +89,7 @@ class RelationshipItem(Contract):
     propertyId: UUID
     propertyName: str
     ownerKind: Literal["client_owner", "local_operator"]
-    sharePercent: str | None
+    sharePercent: Decimal | None = Field(gt=0, le=100, max_digits=5, decimal_places=2)
     partyId: UUID | None
     ownerName: str | None
     startsOn: date

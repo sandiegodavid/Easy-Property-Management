@@ -185,7 +185,11 @@ class MaintenanceWorkflowTests(unittest.TestCase):
         return providers.create(
             PartyCreateCommand("organization", "Fast Plumbing"),
             ProviderProfileCommand(
-                status, selection_reason="Legacy concern" if status == "avoid" else None
+                status,
+                selection_reason="Legacy concern" if status == "avoid" else None,
+                official_ids=(
+                    {"document_type": "license", "issuing_country": "US", "last_four": "TEST"},
+                ),
             ),
             expected_revision=0,
             idempotency_key=str(uuid4()),
@@ -498,7 +502,13 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             SharedPartyFactory(),
         )
         tenant = tenants.create(
-            TenantCreateCommand("individual", "Taylor Tenant"),
+            TenantCreateCommand(
+                "individual",
+                "Taylor Tenant",
+                official_ids=(
+                    {"document_type": "passport", "issuing_country": "US", "last_four": "TEST"},
+                ),
+            ),
             expected_revision=0,
             idempotency_key=str(uuid4()),
         )

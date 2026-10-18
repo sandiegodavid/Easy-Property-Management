@@ -91,6 +91,9 @@ def tenant_payload(action, payload):
                 payload.get("notes"),
                 payload.get("doNotContact") or False,
                 payload.get("confirmedNewParty") or False,
+                TenantProfilePatchCommand.from_mapping(
+                    {"officialIds": payload.get("officialIds") or []}
+                ).official_ids,
             )
         )
     if action == "patch":
@@ -101,8 +104,9 @@ def tenant_payload(action, payload):
             "preferredContactMethodId": "preferred_contact_method_id",
             "doNotContact": "do_not_contact",
             "notes": "notes",
+            "officialIds": "official_ids",
         }
-        return {name: getattr(command, name) for key, name in names.items() if key in payload}
+        return {name: asdict(command)[name] for key, name in names.items() if key in payload}
     if action == "designate":
         notes = payload.get("notes")
         if notes is not None:
@@ -116,7 +120,13 @@ def tenant_payload(action, payload):
 def identity_fingerprint(family, action, source, payload, key):
     if any(
         name in payload and payload[name] is None
-        for name in ("confirmedNewParty", "doNotContact", "contacts", "referenceResolutions")
+        for name in (
+            "confirmedNewParty",
+            "doNotContact",
+            "contacts",
+            "referenceResolutions",
+            "officialIds",
+        )
     ):
         raise OperatorError("Complete the supplied boolean and contact-list fields.")
     if action in {"archive", "contact_archive"} and payload.get("confirmed") is not True:

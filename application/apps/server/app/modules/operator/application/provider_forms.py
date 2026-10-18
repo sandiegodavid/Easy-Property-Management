@@ -8,6 +8,7 @@ from pydantic import Field, StrictBool, StrictInt
 
 from app.modules.operator.application.identity_forms import ContactFields
 from app.modules.operator.domain.models import Contract
+from app.modules.vendors.application.id_contract import ProviderOfficialIdInput
 
 
 class ProviderForm(Contract):
@@ -18,6 +19,7 @@ class ProfileFields(Contract):
     selectionStatus: Literal["neutral", "preferred", "avoid"] | None = None
     selectionReason: str | None = Field(None, max_length=1000)
     notes: str | None = Field(None, max_length=4000)
+    officialIds: list[ProviderOfficialIdInput] | None = Field(None, max_length=10)
 
 
 class ProfilePatchForm(ProfileFields, ProviderForm):

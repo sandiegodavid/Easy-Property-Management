@@ -1,6 +1,7 @@
 """SQLite implementation of the provider transaction boundary."""
 
 from collections.abc import Callable
+import json
 from typing import Any, TypeVar
 
 from sqlalchemy import func, select, text
@@ -9,6 +10,8 @@ from sqlalchemy.orm import Session
 
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.parties.application.ports import PartyTransactionOperations
+from app.modules.parties.domain.official_ids import official_ids, stored_ids
+from app.modules.vendors.domain.official_ids import ProviderOfficialId
 from app.modules.vendors.application.ports import (
     PropertyAvailability,
     ProviderRoleActivityGuard,
@@ -414,13 +417,15 @@ class _Transaction:
         return self.properties.property(self.connection, property_id) is not None
 
     def insert_profile(self, item):
-        self.connection.execute(ProviderProfileModel.__table__.insert().values(**item.__dict__))
+        self.connection.execute(
+            ProviderProfileModel.__table__.insert().values(**_profile_values(item))
+        )
 
     def replace_profile(self, item):
         self.connection.execute(
             ProviderProfileModel.__table__.update()
             .where(ProviderProfileModel.party_id == item.party_id)
-            .values(**item.__dict__)
+            .values(**_profile_values(item))
         )
 
     def insert_service(self, item):
@@ -588,7 +593,17 @@ def _profile(row):
         row.updated_at,
         row.archived_at,
         row.revision,
+        official_ids(json.loads(row.official_ids_json), ProviderOfficialId),
     )
+
+
+def _profile_values(item):
+    values = dict(item.__dict__)
+    values.pop("official_ids")
+    values["official_ids_json"] = json.dumps(
+        stored_ids(item.official_ids), sort_keys=True, separators=(",", ":")
+    )
+    return values
 
 
 def _service(row):

@@ -13,6 +13,7 @@ from app.modules.tenants.application.service import TenantCreateCommand, TenantP
 from app.modules.parties.application.service import ContactMethodCommand
 from dataclasses import asdict
 from app.modules.tenants.domain.models import TenantProfile
+from app.modules.parties.domain.official_ids import official_ids, official_ids_from_api
 from app.modules.tenants.infrastructure.sqlalchemy_models import (
     TENANT_COMMAND_TRIGGERS,
     TenantCommandOperationModel,
@@ -97,7 +98,13 @@ def _schema(connection):
 
 def _data(connection):
     profiles = {
-        r["party_id"]: TenantProfile(**{**r, "do_not_contact": bool(r["do_not_contact"])})
+        r["party_id"]: TenantProfile(
+            **{
+                **{k: v for k, v in r.items() if k != "official_ids_json"},
+                "do_not_contact": bool(r["do_not_contact"]),
+                "official_ids": official_ids(json.loads(r["official_ids_json"])),
+            }
+        )
         for r in connection.execute(TenantProfileModel.__table__.select()).mappings()
     }
     operations = (
@@ -153,6 +160,7 @@ def _data(connection):
                 "updatedAt",
                 "archivedAt",
                 "revision",
+                "officialIds",
             }
             or state["partyId"] != row["party_id"]
             or state["revision"] != result["revision"]
@@ -161,6 +169,10 @@ def _data(connection):
         ):
             raise ValueError("Profile snapshot differs.")
         _uuid(state["partyId"])
+        if [item.to_dict() for item in official_ids_from_api(state["officialIds"])] != state[
+            "officialIds"
+        ]:
+            raise ValueError("Official ID snapshot differs.")
         if state["preferredContactMethodId"] is not None:
             _uuid(state["preferredContactMethodId"])
         if state["notes"] is not None and (
@@ -296,6 +308,7 @@ def _transition(command, result, state, previous, now):
             "updatedAt": now,
             "archivedAt": None,
             "revision": 1,
+            "officialIds": [item.to_dict() for item in official_ids(payload["official_ids"])],
         }
         if (
             result["displayName"] != payload["display_name"]
@@ -329,6 +342,7 @@ def _transition(command, result, state, previous, now):
             "updatedAt": now,
             "archivedAt": None,
             "revision": 1,
+            "officialIds": [],
         }
     else:
         if previous is None:
@@ -336,7 +350,8 @@ def _transition(command, result, state, previous, now):
         expected = dict(previous)
         if command.action in {"patch", "resolve_contact"}:
             if (
-                not set(payload) <= {"notes", "do_not_contact", "preferred_contact_method_id"}
+                not set(payload)
+                <= {"notes", "do_not_contact", "preferred_contact_method_id", "official_ids"}
                 or not payload
             ):
                 raise ValueError("Profile command fields differ.")
@@ -347,8 +362,13 @@ def _transition(command, result, state, previous, now):
                 "notes": "notes",
                 "do_not_contact": "doNotContact",
                 "preferred_contact_method_id": "preferredContactMethodId",
+                "official_ids": "officialIds",
             }
             expected.update({names[k]: v for k, v in payload.items()})
+            if "official_ids" in payload:
+                expected["officialIds"] = [
+                    item.to_dict() for item in official_ids(payload["official_ids"])
+                ]
             if command.action == "resolve_contact" and set(payload) != {
                 "preferred_contact_method_id"
             }:

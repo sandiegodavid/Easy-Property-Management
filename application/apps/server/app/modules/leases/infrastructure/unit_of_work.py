@@ -287,6 +287,9 @@ class _Transaction:
     def tenant_profile_active(self, party_id):
         return self.tenant_profiles.is_active(self.connection, party_id)
 
+    def tenants_without_official_id(self, party_ids):
+        return self.tenant_profiles.without_official_id(self.connection, party_ids)
+
     def terms(self, lease_id):
         return _mapped_many(
             self.connection,

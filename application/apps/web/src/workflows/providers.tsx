@@ -11,6 +11,7 @@ import { CommandLinks, CommandLoader } from "./command";
 import { Facts, History, readResult } from "./reads";
 import { WorkJournal } from "./work-journal";
 import type { Choices } from "./fields";
+import { OfficialIdList } from "../shared/official-identification";
 
 type Category = components["schemas"]["app__modules__vendors__api__router__CategoryResponse"];
 
@@ -112,6 +113,7 @@ export function ProviderWorkspace({ catalogOnly = false }: { catalogOnly?: boole
               selectionStatus: provider.data?.profile.selectionStatus,
               selectionReason: provider.data?.profile.selectionReason,
               notes: provider.data?.profile.notes,
+              officialIds: provider.data?.profile.officialIds,
             }
           : definition.formKey === "provider.category.create"
             ? { displayOrder: 0 }
@@ -170,34 +172,66 @@ export function ProviderWorkspace({ catalogOnly = false }: { catalogOnly?: boole
     const item = provider.data;
     const active = !item.profile.archivedAt;
     return (
-      <section aria-label="Provider record">
+      <section aria-label="Provider record" className="provider-detail">
         <ParentBackLink to="/providers">← Back to Providers</ParentBackLink>
-        <h2>{item.party.displayName}</h2>
-        <Link to={`/parties?identity=${target}`}>Shared identity and contacts</Link>
-        <Facts
-          value={item.profile}
-          fields={[
-            "revision",
-            "selectionStatus",
-            "selectionReason",
-            "notes",
-            "archivedAt",
-            "updatedAt",
-          ]}
-        />
-        <CommandLinks
-          target={target}
-          keys={
-            active
-              ? [
-                  "provider.profile.patch",
-                  "provider.archive",
-                  "provider.category_assignment.assign",
-                ]
-              : ["provider.restore"]
-          }
-          title="Provider actions"
-        />
+        <header className="record-detail-heading">
+          <div>
+            <h2>{item.party.displayName}</h2>
+            <p className="record-detail-note">
+              {active ? "Active provider" : "Archived provider"} ·{" "}
+              {item.party.partyKind === "organization" ? "Business" : "Individual"}
+            </p>
+          </div>
+          <CommandLinks
+            target={target}
+            keys={active ? ["provider.profile.patch"] : ["provider.restore"]}
+            labels={{ "provider.profile.patch": "Edit provider" }}
+            title="Provider actions"
+            asButtons
+            collapsible={false}
+          />
+        </header>
+        <section className="record-detail-panel" aria-label="Provider summary">
+          <Facts
+            value={item.profile}
+            fields={[
+              "selectionStatus",
+              ...(item.profile.selectionReason ? ["selectionReason"] : []),
+              ...(item.profile.notes ? ["notes"] : []),
+            ]}
+          />
+          <Link className="button-link" to={`/parties?identity=${target}`}>
+            View contact details
+          </Link>
+        </section>
+        <section className="context-section" aria-label="Official identification">
+          <header className="person-detail-section-heading">
+            <h3>Official identification</h3>
+            {active && (
+              <CommandLinks
+                target={target}
+                keys={["provider.profile.patch"]}
+                labels={{ "provider.profile.patch": "Manage official IDs" }}
+                title="Manage official IDs"
+                asButtons
+                collapsible={false}
+              />
+            )}
+          </header>
+          <p>
+            Record at least one official ID before assigning maintenance work. Full ID numbers are
+            optional and hidden until you choose to show them. Recording an ID does not verify
+            identity, qualifications or license validity.
+          </p>
+          {item.profile.officialIds.length ? (
+            <OfficialIdList items={item.profile.officialIds} />
+          ) : (
+            <p>
+              No official ID recorded. You can save this profile, but cannot assign maintenance work
+              yet.
+            </p>
+          )}
+        </section>
         <label>
           <input
             type="checkbox"
@@ -208,14 +242,24 @@ export function ProviderWorkspace({ catalogOnly = false }: { catalogOnly?: boole
               setParams(next, { flushSync: true });
             }}
           />
-          Include archived contextual history
+          Show archived records
         </label>
         <section className="context-section">
-          <h3>Categories and assignment history</h3>
-          <p>
-            Only active assignments, active categories and an active Provider are effective.
-            Category selection does not imply an engagement.
-          </p>
+          <header className="person-detail-section-heading">
+            <h3>Categories</h3>
+            {active && (
+              <CommandLinks
+                target={target}
+                keys={["provider.category_assignment.assign"]}
+                title="Category actions"
+                labels={{ "provider.category_assignment.assign": "Add category" }}
+                asButtons
+                collapsible={false}
+              />
+            )}
+          </header>
+          <p>Categories describe this provider’s services, not an engagement or endorsement.</p>
+          {!item.categories.length && <p className="record-detail-note">None recorded.</p>}
           {item.categories.map((category) => (
             <article key={category.assignmentId}>
               <Facts
@@ -223,11 +267,11 @@ export function ProviderWorkspace({ catalogOnly = false }: { catalogOnly?: boole
                 fields={[
                   "displayName",
                   "description",
-                  "assignmentArchivedAt",
-                  "assignmentArchiveReason",
-                  "archivedAt",
-                  "archiveReason",
-                ]}
+                  ...(category.assignmentArchivedAt
+                    ? ["assignmentArchivedAt", "assignmentArchiveReason"]
+                    : []),
+                  ...(category.archivedAt ? ["archivedAt", "archiveReason"] : []),
+                ].filter((key) => record(category)[key] != null)}
               />
               {active && (
                 <CommandLinks
@@ -244,48 +288,64 @@ export function ProviderWorkspace({ catalogOnly = false }: { catalogOnly?: boole
             </article>
           ))}
         </section>
-        <ProviderChildren
-          kind="service"
-          title="Services"
-          rows={item.services}
-          fields={["displayName"]}
-          target={target}
-          active={active}
-        />
-        <ProviderChildren
-          kind="area"
-          title="Service areas"
-          rows={item.serviceAreas}
-          fields={["displayName", "countryCode"]}
-          target={target}
-          active={active}
-        />
-        <ProviderChildren
-          kind="work_history"
-          title="Work history"
-          rows={item.workHistory}
-          fields={["performedOn", "summary", "propertyId", "outcomeNotes"]}
-          target={target}
-          active={active}
-        />
-        <ProviderChildren
-          kind="reference"
-          title="References"
-          rows={item.references}
-          fields={["referenceName", "organizationName", "relationship", "email", "phone", "notes"]}
-          target={target}
-          active={active}
-        />
-        <ProviderChildren
-          kind="reputation_link"
-          title="Reputation links"
-          rows={item.reputationLinks}
-          fields={["sourceKind", "sourceName", "url", "lastCheckedOn", "notes"]}
-          target={target}
-          active={active}
-        />
+        <div className="provider-detail-sections">
+          <ProviderChildren
+            kind="service"
+            title="Services"
+            rows={item.services}
+            fields={["displayName"]}
+            target={target}
+            active={active}
+          />
+          <ProviderChildren
+            kind="area"
+            title="Service areas"
+            rows={item.serviceAreas}
+            fields={["displayName", "countryCode"]}
+            target={target}
+            active={active}
+          />
+          <ProviderChildren
+            kind="work_history"
+            title="Work history"
+            rows={item.workHistory}
+            fields={["performedOn", "summary", "propertyId", "outcomeNotes"]}
+            target={target}
+            active={active}
+          />
+          <ProviderChildren
+            kind="reference"
+            title="References"
+            rows={item.references}
+            fields={[
+              "referenceName",
+              "organizationName",
+              "relationship",
+              "email",
+              "phone",
+              "notes",
+            ]}
+            target={target}
+            active={active}
+          />
+          <ProviderChildren
+            kind="reputation_link"
+            title="Reputation links"
+            rows={item.reputationLinks}
+            fields={["sourceKind", "sourceName", "url", "lastCheckedOn", "notes"]}
+            target={target}
+            active={active}
+          />
+        </div>
         <WorkJournal id={target} provider />
-        <History kind="provider_profile" id={target} />
+        <details className="record-detail-section">
+          <summary>Record details and history</summary>
+          <Facts value={item.profile} fields={["revision", "updatedAt", "archivedAt"]} />
+          <History kind="provider_profile" id={target} />
+          {active && (
+            <CommandLinks target={target} keys={["provider.archive"]} title="Archive provider" />
+          )}
+        </details>
       </section>
     );
   }
@@ -388,7 +448,18 @@ function ProviderChildren({
 }) {
   return (
     <section className="context-section" aria-label={title}>
-      <h3>{title}</h3>
+      <header className="person-detail-section-heading">
+        <h3>{title}</h3>
+        {active && (
+          <CommandLinks
+            target={target}
+            keys={[`provider.${kind}.add`]}
+            title={`Add ${title.toLowerCase()}`}
+            asButtons
+            collapsible={false}
+          />
+        )}
+      </header>
       {kind === "work_history" && (
         <p>Manually recorded prior work. Maintenance owns issue-backed work journals.</p>
       )}
@@ -399,18 +470,14 @@ function ProviderChildren({
           record do not contact it.
         </p>
       )}
-      {active && (
-        <CommandLinks
-          target={target}
-          keys={[`provider.${kind}.add`]}
-          title={`Add ${title.toLowerCase()}`}
-        />
-      )}
+      {rows.length === 0 && <p className="record-detail-note">None recorded.</p>}
       {rows.map((row) => (
         <article key={row.id}>
           <Facts
             value={row}
-            fields={[...fields, "archivedAt"]}
+            fields={[...fields, "archivedAt"].filter(
+              (key) => !key.endsWith("Id") && record(row)[key] != null && record(row)[key] !== "",
+            )}
             verbatim={kind === "reputation_link"}
           />
           {kind === "reputation_link" && (

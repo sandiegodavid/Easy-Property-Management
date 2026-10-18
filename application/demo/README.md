@@ -44,7 +44,7 @@ Run verification immediately after generation:
 .venv/bin/python demo/verify.py
 ```
 
-The verifier checks exact record counts, ownership membership (including co-ownership), expense-group totals, provider links, funded deposits, executed leases, the vacancy and rent scenarios. It uses read-only SQL and real API reads, checks SQLite integrity and foreign keys, and validates the current application schema. It prints the result and saves `verification.json` in the sibling runtime directory.
+The verifier checks exact record counts, ownership membership and percentages (including a property assignment for every owner), tenant and provider IDs, expense-group totals, provider links, funded deposits, executed leases, the vacancy and rent scenarios. It uses read-only SQL and real API reads, checks SQLite integrity and foreign keys, and validates the current application schema. It prints the result and saves `verification.json` in the sibling runtime directory.
 
 Verification assumes the original scenario date and records. Manual edits or date rollover can change the expected results; see [Dates and repeatability](#dates-and-repeatability).
 
@@ -105,7 +105,7 @@ The generated workspace contains:
 
 Every occupied rental, including both rented offices, has monthly USD rent and an agreed deposit equal to one month's rent, with an actual deposit receipt. The vacant cottage, three co-owned homes and Harbor Offices' two vacant suites have no fabricated leases or deposits.
 
-Alder House has the local operator plus Morgan and Sam as owners. Magnolia House has Morgan, Sam, Priya and Elena as owners. Sequoia House — Ten Owners is a vacant home owned by all ten client owners, without local-operator ownership; it is open for leasing now and has no fabricated lease or expenses. Its directory card shows five owner names and a link to the remaining five. These are additional properties, not changes to the original expense groups. Ownership records do not imply equal percentage shares. Use a fresh workspace after this dataset change so the request journal and catalog describe the same scenarios.
+Alder House has the local operator (50%), Morgan (25%) and Sam (25%) as owners. Magnolia House has Morgan, Sam, Priya and Elena with 25% each. Sequoia House — Ten Owners is a vacant home owned by all ten client owners with 10% each, without local-operator ownership; it is open for leasing now and has no fabricated lease or expenses. Its directory card shows five owner names and a link to the remaining five. These are additional properties, not changes to the original expense groups. Every owner has at least one current property assignment; sole owners have a recorded 100% share. These percentages are explicit synthetic facts, not inferred equal shares. Use a fresh workspace after this dataset change so the request journal and catalog describe the same scenarios.
 
 Leasing status is independent of occupancy: seven occupied properties are **Not open for leasing**; occupied Riverbend Condo 101 and Willow House — Prepaid are **Open for leasing later**. Willow House opens May 1, 2027; Riverbend Condo 101 opens at its current contract end. Vacant Cedar Cottage is **Open for leasing now**. These dates describe leasing intentions, not scheduled move-outs or lease termination.
 
@@ -114,6 +114,10 @@ Willow House's lease, initial rent term and participant period end at the exclus
 All 20 providers have category assignments, service areas and links to property expenses. The seven categories cover plumbing, HVAC, electrical, landscaping, appliance repair, general maintenance and legal/attorney services.
 
 Maple House has two tenants: Alex Morgan and Sam Patel. Spruce House is shared by three college students: Avery Lane, Maya Chen and Leo Bennett. Each household has one primary tenant and the remaining residents are co-tenants on the same lease. Rent and deposits are recorded per lease, not per resident. The other seven rented properties each have one tenant; office tenants are organizations.
+
+Every demo tenant has a fictional masked official ID ending in `DEMO` (passport for people, business registration for office organizations). Alex Morgan also has an Oregon driver's license ending in `TEST`, demonstrating multiple IDs on one tenant. No real ID numbers or scans are used. This satisfies the recording prerequisite for lease execution.
+
+Every demo provider also has a fictional license record ending in `DEMO`, satisfying the maintenance-assignment prerequisite. Provider full numbers are optional; the demo does not seed any. Generate a fresh demo workspace to apply ownership/ID changes; the seeder does not rewrite an existing journal's completed records.
 
 Harbor Offices is one property with two independently rentable spaces: Suite 100 and Suite 200. Both are vacant and open for leasing now. The demo therefore has 14 properties and 15 spaces; occupancy and leasing-status counts describe spaces. Five spaces are open for leasing now. Vacant Alder House — Co-owned deliberately has an unclassified leasing status: its property card shows **Occupancy or leasing status needs review**, and the **Review status** filter includes it. This is a status-information gap, not a Maintenance issue. Use a fresh workspace to see this scenario; an existing demo journal retains its original records.
 
@@ -148,8 +152,9 @@ Use `--local-config` to keep another demo or test fixture's launcher configurati
 From `application/`:
 
 ```bash
-ruff check --config pyproject.toml demo/seed.py demo/serve.py demo/verify.py
-ruff format --check --config pyproject.toml demo/seed.py demo/serve.py demo/verify.py
+ruff check --config pyproject.toml demo/seed.py demo/serve.py demo/verify.py demo/test_demo.py
+ruff format --check --config pyproject.toml demo/seed.py demo/serve.py demo/verify.py demo/test_demo.py
+node scripts/python.mjs -m pytest demo/test_demo.py -q
 ```
 
 For everyday operation and data protection, use the [operator manual](../../manual/README.md). Build and packaging details belong in the [repository README](../../README.md#production-build-and-packaging-instructions).

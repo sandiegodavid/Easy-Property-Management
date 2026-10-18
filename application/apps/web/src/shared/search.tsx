@@ -10,7 +10,7 @@ import { PageAsOf } from "./page-as-of";
 
 type Group = components["schemas"]["SearchGroup"];
 type Target = components["schemas"]["SearchTarget"];
-export function searchTarget(target: Target) {
+function searchTarget(target: Target) {
   const id = encodeURIComponent(target.entityId);
   switch (target.entityType) {
     case "property":

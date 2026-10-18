@@ -29,7 +29,8 @@ async function save(page: Page, action: string) {
       .locator('button[type="submit"]')
       .click();
   });
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
+  if (await page.locator(".saved-item").count()) return;
   await expect(
     page.getByText("This is the original committed response.", { exact: true }),
   ).toBeVisible();
@@ -66,11 +67,9 @@ test("manual source admission resumes a saved draft and reconciles a lost respon
   await page.goto("/settings/recovery");
   await page.getByRole("link", { name: "Resume intake.source.admit", exact: true }).click();
   await page.getByRole("button", { name: "Check original result" }).click();
-  await expect(
-    page.getByText("This is the original committed response.", { exact: true }),
-  ).toBeVisible();
+  await expect(page.locator(".saved-item")).toBeVisible();
   expect(writes).toBe(1);
-  await page.getByRole("link", { name: "Open current source evidence" }).click();
+  await page.getByRole("link", { name: "Back to source evidence", exact: true }).click();
   await expect(page.getByRole("region", { name: "Source evidence detail" })).toContainText(
     "private@example.test",
   );

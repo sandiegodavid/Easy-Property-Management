@@ -802,6 +802,10 @@ class LeaseService:
                 raise LeaseConflictError(
                     "Every participant must have an active tenant profile at execution."
                 )
+            if tx.tenants_without_official_id({item.tenant_party_id for item in participants}):
+                raise LeaseConflictError(
+                    "Record at least one official ID for every tenant before executing the lease. Only masked ID details are needed."
+                )
             required_role = (
                 "primary_tenant" if lease.lease_kind == "residential" else "business_signatory"
             )

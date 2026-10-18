@@ -59,7 +59,7 @@ test("Home explains aggregate availability and shared Task rows reach real sourc
   await page.getByText("Actions", { exact: true }).click();
   await page.getByRole("link", { name: "Start task", exact: true }).click();
   await page.getByRole("button", { name: "Save start task", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   const current = await request.get(`/api/tasks/${task.id}`);
   const started = (await current.json()) as components["schemas"]["TaskResponse"];
   expect(started.status).toBe("in_progress");

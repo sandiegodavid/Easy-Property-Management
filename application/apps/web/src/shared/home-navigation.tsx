@@ -244,6 +244,37 @@ export function useSourceNavigationState() {
   };
 }
 
+/** Return to a saved item's exact route without making its completed editor a new parent. */
+export function ItemReturnLink({
+  to,
+  children,
+  className,
+}: {
+  to: string;
+  children: ReactNode;
+  className: string;
+}) {
+  const location = useLocation();
+  const { scope } = useWorkspace();
+  const runtime = `${scope.workspaceId}:${scope.runtimeEpoch}`;
+  const href = safePath(to) ?? "/home";
+  const trail = parents(location.state, runtime);
+  const index = trail.findIndex((item) => pageIdentity(item.href) === pageIdentity(href));
+  return (
+    <Link
+      className={className}
+      to={href}
+      state={{
+        parentRuntime: runtime,
+        parentTrail: index < 0 ? trail : trail.slice(0, index),
+        parentScroll: index < 0 ? undefined : trail[index].scroll,
+      }}
+    >
+      {children}
+    </Link>
+  );
+}
+
 export function ParentBackLink({ to, children }: { to: string; children?: ReactNode }) {
   const location = useLocation();
   const { scope } = useWorkspace();

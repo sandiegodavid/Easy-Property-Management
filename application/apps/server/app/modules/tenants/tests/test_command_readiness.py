@@ -438,7 +438,12 @@ def test_encrypted_restore_preserves_receipts_and_revisions(tenant_services, tmp
     first = create(tenants)
     changed = tenants.update_profile(
         first["id"],
-        TenantProfilePatchCommand(notes="portable"),
+        TenantProfilePatchCommand(
+            notes="portable",
+            official_ids=(
+                {"document_type": "passport", "issuing_country": "US", "last_four": "TEST"},
+            ),
+        ),
         expected_revision=1,
         idempotency_key=str(uuid4()),
     )
@@ -476,6 +481,7 @@ def test_encrypted_restore_preserves_receipts_and_revisions(tenant_services, tmp
     assert service.recover(operation_id=first["operationId"]) == first
     assert service.recover(operation_id=changed["operationId"]) == changed
     assert service.get(first["id"])["revision"] == 2
+    assert service.get(first["id"])["profile"]["officialIds"] == changed["profile"]["officialIds"]
     with restored.engine.connect() as connection:
         assert [
             tuple(row)

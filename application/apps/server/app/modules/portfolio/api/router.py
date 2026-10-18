@@ -19,6 +19,7 @@ from pydantic import (
 )
 
 from app.platform.api_errors import domain_problem, workspace_unavailable
+from app.modules.portfolio.domain.models import ownership_share_basis_points
 
 from app.modules.parties.application.service import (
     ContactMethodCommand,
@@ -257,7 +258,7 @@ class OwnershipResponse(ContractModel):
     endsOn: date | None
     createdAt: AwareDatetime
     endedAt: AwareDatetime | None
-    sharePercent: str | None
+    sharePercent: Decimal | None = Field(gt=0, le=100, max_digits=5, decimal_places=2)
 
 
 class PropertyResponse(ContractModel):
@@ -819,7 +820,7 @@ def _ownerships(items: list[OwnershipRequest]) -> tuple[OwnershipInput, ...]:
             )
             if item.inlineParty
             else (),
-            share_basis_points=None if item.sharePercent is None else int(item.sharePercent * 100),
+            share_basis_points=ownership_share_basis_points(item.sharePercent),
         )
         for item in items
     )

@@ -19,6 +19,7 @@ from app.modules.portfolio.infrastructure.inventory_recovery_reader import (
 )
 from app.platform.command_recovery import CommandRecoveryReader
 from app.modules.parties.application.service import ContactMethodCommand, PartyValidationError
+from app.modules.portfolio.domain.models import ownership_share_basis_points
 
 
 def owners(items):
@@ -41,6 +42,7 @@ def owners(items):
                 )
                 for contact in (item.get("inlineParty") or {}).get("contacts", [])
             ),
+            share_basis_points=ownership_share_basis_points(item.get("sharePercent")),
         )
         for item in items
     )

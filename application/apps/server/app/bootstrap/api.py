@@ -40,6 +40,7 @@ from app.modules.ai_governance.infrastructure.unit_of_work import SQLiteAiGovern
 from app.modules.audit.api.router import build_router as build_audit_router
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.domain.models import DEFAULT_SNAPSHOT_POLICY, AuditSnapshotPolicyRegistry
+from app.modules.tenants.domain.audit_policy import TENANT_ACTIVITY_POLICY
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
 from app.modules.communications.api.router import build_router as build_communications_router
 from app.modules.communications.application.service import CommunicationService
@@ -696,6 +697,7 @@ def create_app(  # noqa: C901, PLR0915
             ("ai_model_connection", 1): DEFAULT_SNAPSHOT_POLICY,
         },
         activity_policies={
+            ("tenant_profile", 1): TENANT_ACTIVITY_POLICY,
             ("task", 1): TASK_ACTIVITY_POLICY,
             ("file", 1): FILE_ACTIVITY_SNAPSHOT_POLICY,
             ("file_link", 1): FILE_LINK_ACTIVITY_SNAPSHOT_POLICY,

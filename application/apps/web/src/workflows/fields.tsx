@@ -1,5 +1,6 @@
 import { fieldSchema, record, type RequestSchema } from "@epm/contracts/workflows";
 import { leasingStatusLabels } from "../shared/leasing-status";
+import { OfficialIdFields } from "./official-id-fields";
 
 export type Choice = { id: string; label: string; revision?: number; historical?: boolean };
 export type Choices = Record<string, Choice[]>;
@@ -38,7 +39,7 @@ export function label(name: string) {
       .replace(/^./, (letter) => letter.toUpperCase())
   );
 }
-export function seed(schema: RequestSchema): unknown {
+function seed(schema: RequestSchema): unknown {
   const shape = fieldSchema(schema);
   if (shape.default !== undefined) return shape.default;
   if (shape.type === "object") return {};
@@ -70,6 +71,7 @@ export function Fields({
   choices = {},
   disabled = false,
   showChangeControls = true,
+  fieldLabels = {},
 }: {
   schema: RequestSchema;
   value: unknown;
@@ -78,6 +80,7 @@ export function Fields({
   choices?: Choices;
   disabled?: boolean;
   showChangeControls?: boolean;
+  fieldLabels?: Record<string, string>;
 }) {
   const shape = fieldSchema(schema);
   if (shape.type !== "object") return null;
@@ -106,7 +109,8 @@ export function Fields({
           const current = values[key],
             childShape = fieldSchema(child),
             name =
-              key === "value" && values.methodKind === "mailing_address"
+              fieldLabels[key] ??
+              (key === "value" && values.methodKind === "mailing_address"
                 ? "Mailing address"
                 : key === "value" && values.methodKind === "email"
                   ? "Email"
@@ -114,7 +118,7 @@ export function Fields({
                     ? "Phone number"
                     : /^[0-9a-f-]{36}$/.test(key)
                       ? (childShape.title ?? label(key))
-                      : label(key);
+                      : label(key));
           const fieldPath = path ? `${path}.${key}` : key;
           const update = (next: unknown) => {
             const replacement = { ...values };
@@ -197,6 +201,8 @@ export function Fields({
                       path={fieldPath}
                       choices={choices}
                       disabled={disabled}
+                      showChangeControls={showChangeControls}
+                      fieldLabels={fieldLabels}
                     />
                     {!shape.required?.includes(key) && (
                       <button type="button" disabled={disabled} onClick={() => update(undefined)}>
@@ -208,6 +214,21 @@ export function Fields({
               </fieldset>
             );
           if (childShape.type === "array") {
+            if (key === "officialIds")
+              return (
+                <OfficialIdFields
+                  key={key}
+                  value={current}
+                  onChange={update}
+                  disabled={disabled}
+                  documentTypes={
+                    fieldSchema(childShape.items ?? {}).properties?.documentType?.enum ?? []
+                  }
+                  allowsFullNumber={
+                    !!fieldSchema(childShape.items ?? {}).properties?.documentNumber
+                  }
+                />
+              );
             const items: unknown[] = Array.isArray(current) ? current : [];
             return (
               <fieldset key={key}>

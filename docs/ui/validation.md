@@ -8,6 +8,50 @@ TASK-001 completion on October 12, 2026 passed twelve focused Task browser cases
 
 ## Executable entry points
 
+Create/edit completion (October 18, 2026): shared business-data confirmations replace record editors; embedded forms remain in their enclosing content. Lifecycle and credential actions are unchanged.
+
+| Validation area | Focused proof |
+| --- | --- |
+| Happy paths / presentation | `saved-results.spec.ts`: Property create/edit, explicit item returns, embedded Task replacement, light/dark desktop/mobile and axe. Existing identity, Provider, Money, Leasing/Inspection and Intake workflow tests exercise their owning receipt projections. |
+| Invalid combinations / retry | Invalid/conflicting submissions do not show success. Interrupted Party edits remain unresolved until reconciliation; a failed immutable-detail read offers a read-only retry with one mutation. A later name change does not overwrite the original confirmation. |
+| Privacy / bounds | Technical identifiers/revisions and raw JSON are omitted; Tenant/Provider ID regressions retain masked details and explicit Provider-number reveal. Receipt reads remain keyed and bounded; collections are capped in the confirmation. |
+| Persistence / rollback / backup | No server, schema, transaction or archive changes. Existing source-owned receipts and recovery contracts remain authoritative; this slice does not claim new backend/backup proofs. |
+
+Focused validation: 21 workflow cases and 32 additional confirmation, recovery, navigation, identity, Money, Leasing/Inspection, Intake and AI cases passed (the corrected ownership-date case was rerun separately). Lint, formatting, type checking and the production build passed; the existing bundle-size warning remains informational. No full application suite was run.
+
+Provider official IDs (October 18, 2026): profiles/quotes may remain incomplete; new Maintenance assignments require a recorded ID. Optional full numbers are supported for every Provider ID type and revealed explicitly, while Tenant IDs remain masked-only.
+
+| Validation area | Focused proof |
+| --- | --- |
+| Happy paths and invalid combinations | `vendors/tests/test_official_ids.py`: all document types, optional bounded numbers/suffix agreement, malformed/duplicate/over-limit IDs and HTTP extra fields. `provider-ids.spec.ts`: add/edit/remove, explicit reveal/hide for license and passport, both themes/mobile and accessibility; `tenant-ids.spec.ts` guards masked-only Tenant behavior. |
+| Idempotency and retries | Existing Provider revision/no-op/conflict/original-receipt contracts include IDs; original assignment replay succeeds after ID removal. |
+| Transaction rollback | Profile audit failure rolls back IDs; missing-ID assignment and injected assignment audit failure leave the issue/assignment unchanged. Quotes without IDs remain valid. |
+| Persistence/schema validation | Current baseline JSON shape/bounds and Provider command/audit reconstruction reject malformed or rewritten retained IDs. Full numbers are omitted from directory summaries and IDs are redacted from general activity. |
+| Backup/restore | `vendors/tests/test_command_readiness.py::test_encrypted_restore_preserves_original_receipts_and_correlations` compares original receipts, full-ID profile detail and correlations after encrypted restore. |
+| Query budget | Maintenance reuses the existing single Provider-context query on its writer connection, adding only a boolean ID fact; there is no nested session or per-ID query. Existing bounded Provider paging budgets remain covered. |
+
+Tenant official IDs (October 18, 2026): masked metadata is optional during profile/draft creation and required for every participant at lease execution. No full document numbers or scans are retained.
+
+| Validation area | Focused proof |
+| --- | --- |
+| Happy paths and invalid combinations | `tenants/tests/test_official_ids.py`: masked type/country/region/last-four/date validation, duplicate and ten-entry bounds, HTTP extra-field/number rejection; `tenant-ids.spec.ts`: add, edit, remove, empty-profile guidance, both themes/mobile and accessibility. |
+| Idempotency and retries | Tenant original receipts, no-op revisions, changed-key/stale conflicts; execution replays its original result even after ID removal. |
+| Transaction rollback | Audit failure rolls back ID changes; missing primary/co-tenant IDs prevent lease execution and leave the draft unchanged. |
+| Persistence/schema validation | Current-baseline JSON shape constraints and full command/audit reconstruction reject malformed or unaudited retained ID state. |
+| Backup/restore | `test_command_readiness.py::test_encrypted_restore_preserves_receipts_and_revisions` compares masked records and original command rows after encrypted restore. |
+| Query budget | All participant IDs are checked by one set-based Tenant query on the Lease writer connection; profile hydration uses the existing row without per-ID queries. |
+
+Ownership portions (October 18, 2026): optional per-property percentages use exact basis points, with no inferred shares or changes to Finance calculations. The current baseline changes; demo workspaces must be rebuilt.
+
+| Validation area | Focused proof |
+| --- | --- |
+| Happy paths and invalid combinations | `test_ownership_shares.py`: exact totals/rounding, optional unknowns, typed percentages, malformed/range/type and aggregate rejection; browser forms and Property/Owner Relationships. |
+| Idempotency and retries | Share-only changes advance the Property revision once; identical sets remain no-ops, original receipts replay, changed key reuse and stale revisions conflict. |
+| Transaction rollback | Injected failure after an ownership insert leaves no new property, Party, share or receipt. |
+| Persistence/schema | Current integer/null/range checks plus timeline aggregate and audit/receipt validation; tampered shares fail workspace validation. |
+| Backup/restore | Encrypted round trip compares stable ownership rows, exact shares and original receipt result, then validates the restored schema/history. |
+| Bounded reads | Existing Portfolio/Operator directory and overview query-budget tests cover the same set-based reads with added share projections; no per-owner share lookups. |
+
 Parent navigation (October 18, 2026): `parent-navigation.spec.ts` checks top-level exclusions, one top parent link on representative detail/form/secondary pages, direct-URL fallbacks, filtered list and click-time scroll restoration across detail/form returns, tab/reload preservation, and unsafe or stale return state. Focused Home, lease/inspection, tenant, provider and maintenance regressions retain recovery and unsaved-form behavior. Return context is bounded router state, not new persistence; commands, schema and backup contracts are unchanged.
 
 Lease-filtered Money context (October 18, 2026): focused browser checks cover the named property/address and overview link without money rows, persistence across Money tabs, clearing the lease filter, and retry after context lookup failure. The existing bounded money-context endpoint is reused; no backend, mutation, schema or backup contract changed.
@@ -45,7 +89,7 @@ October 17, 2026 property/owner form refinement: ten focused packaged cases pass
 | Bounded reads | Live search debounces typing, ignores stale matches and resets paging; explicit browse stays at ten per page with stable viewport. |
 | Presentation | No Search/Hide results buttons or country input on create; State label, responsive owner composer and both appearances. |
 
-Property-create follow-up: `portfolio-status.spec.ts` checks that delayed autosave does not move or blur inputs, saved drafts remain resumable, and an interrupted creation stays on the form until reconciliation opens the original property without a second create. `workflows.spec.ts` checks direct navigation to the new property's Overview. Autosave remains active without transient saving/saved text above the fields; creation redirects only from a confirmed command receipt. No persistence or backup behavior changes.
+Property-create follow-up: `portfolio-status.spec.ts` checks that delayed autosave does not move or blur inputs, saved drafts remain resumable, and interrupted creation reconciles without a second create. `saved-results.spec.ts` checks the confirmed data and explicit **Back to property** action. Autosave remains active without transient saving/saved text above the fields. No persistence or backup behavior changes.
 
 Property-edit follow-up: the focused property-edit browser test checks the same US address labels as creation (State, no Country code), grouped save actions, a single named top return link, and preservation of country, ownership and rental status after saving. It exercises light/dark and desktop/mobile layouts. A confirmed edit opens the property's Setup tab; the interrupted-edit test verifies that navigation waits for reconciliation and does not repeat the write. The Units and Setup tabs display the address consistently with other detail tabs, with desktop/mobile regression coverage. No persistence contract changes.
 

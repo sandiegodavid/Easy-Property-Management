@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from app.platform.testing_client import LocalApiClient as TestClient
 from sqlalchemy import event, func, select, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
 from app.bootstrap.api import create_app
@@ -42,6 +43,9 @@ from app.modules.maintenance.infrastructure.schema_validation import (
 from app.modules.maintenance.infrastructure.sqlalchemy_models import MaintenanceCommandReceiptModel
 from app.modules.maintenance.infrastructure.unit_of_work import SQLiteMaintenanceTransaction
 from app.modules.maintenance.tests import test_workflow
+from app.modules.vendors.application.service import ProviderProfilePatchCommand, ProviderService
+from app.modules.vendors.infrastructure.unit_of_work import SQLiteProviderUnitOfWork
+from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations
 from app.modules.tasks.application.mutations import TaskMutationCommand, TaskMutationService
 from app.modules.tasks.infrastructure.unit_of_work import SQLiteTaskUnitOfWork
 from app.modules.workspace.application.backup_service import BackupService
@@ -58,6 +62,90 @@ def context():
         yield fixture
     finally:
         fixture.doCleanups()
+
+
+def test_provider_id_is_checked_in_assignment_transaction_after_replay(context):
+    database = context.workspace.paths.database
+    recorder = AuditRecorder(SQLiteAuditRepository(database))
+    providers = ProviderService(
+        SQLiteProviderUnitOfWork(
+            database,
+            recorder,
+            context.party_operations,
+            SQLitePortfolioLeaseOperations(database),
+        )
+    )
+    party = context.provider()
+    providers.update_profile(
+        party,
+        ProviderProfilePatchCommand(official_ids=()),
+        expected_revision=1,
+        idempotency_key=str(uuid4()),
+    )
+    issue = context.issue()
+    today = datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
+    # Quotes can be retained before identification is complete.
+    quote = context.service.create_quote(
+        issue["id"],
+        QuoteCreate(party, "Offer", "Repair", "35.00", today),
+        str(uuid4()),
+        expected_revision=1,
+    )
+    revision = quote["revision"]
+    key, command = str(uuid4()), AssignmentCreate(party, quote_id=quote["id"])
+    with pytest.raises(MaintenanceConflictError) as missing:
+        context.service.create_assignment(issue["id"], command, key, expected_revision=revision)
+    assert missing.value.code == "provider_official_id_required"
+    assert context.issue_revision(issue["id"], kind="issue") == revision
+    assert context.service.detail(issue["id"])["assignments"] == []
+    providers.update_profile(
+        party,
+        ProviderProfilePatchCommand(
+            official_ids=(
+                {"document_type": "license", "issuing_country": "US", "last_four": "TEST"},
+            )
+        ),
+        expected_revision=2,
+        idempotency_key=str(uuid4()),
+    )
+    queries = []
+
+    def observe(_connection, _cursor, statement, *_args):
+        if statement.lstrip().startswith("SELECT") and "official_ids_json" in statement:
+            queries.append(statement)
+
+    event.listen(Engine, "before_cursor_execute", observe)
+    try:
+        with patch.object(
+            context.service.unit_of_work.recorder,
+            "record_change",
+            side_effect=RuntimeError("audit unavailable"),
+        ):
+            with pytest.raises(RuntimeError, match="audit unavailable"):
+                context.service.create_assignment(
+                    issue["id"], command, key, expected_revision=revision
+                )
+        assert context.service.detail(issue["id"])["assignments"] == []
+        result = context.service.create_assignment(
+            issue["id"], command, key, expected_revision=revision
+        )
+    finally:
+        event.remove(Engine, "before_cursor_execute", observe)
+    assert len(queries) == 2  # One source-owned read per attempted write, no nested session.
+    providers.update_profile(
+        party,
+        ProviderProfilePatchCommand(official_ids=()),
+        expected_revision=3,
+        idempotency_key=str(uuid4()),
+    )
+    assert (
+        context.service.create_assignment(issue["id"], command, key, expected_revision=revision)
+        == result
+    )
+    assert context.issue_revision(issue["id"], kind="issue") == revision + 1
+    from app.platform.product_migrations import validate_latest_schema
+
+    validate_latest_schema(database)
 
 
 def test_original_issue_and_lifecycle_replay_before_current_policy(context):

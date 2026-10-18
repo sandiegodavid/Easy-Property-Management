@@ -275,7 +275,7 @@ function ReviewEditor({
     </section>
   );
 }
-export function CoveragePanel({
+function CoveragePanel({
   kind,
   id,
   area,

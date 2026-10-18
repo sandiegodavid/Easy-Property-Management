@@ -178,6 +178,7 @@
     {
       "key": "shared-ten-owner-home",
       "owner": "shared_ten_clients",
+      "ownershipShares": [10, 10, 10, 10, 10, 10, 10, 10, 10, 10],
       "coOwners": [
         "owner_1",
         "owner_2",
@@ -196,12 +197,13 @@
       "rentMinor": 0,
       "tenants": [],
       "vacant": true,
-      "notes": "Fictional vacant property co-owned by ten client owners, without local-operator ownership. Ownership shares are not inferred."
+      "notes": "Fictional vacant property co-owned by ten client owners, each with a recorded 10% share, without local-operator ownership."
     },
     {
       "key": "shared-operator-home",
       "owner": "shared_operator",
       "coOwners": ["operator", "owner_1", "owner_2"],
+      "ownershipShares": [50, 25, 25],
       "name": "Alder House — Co-owned",
       "address": "710 Demo Alder Way",
       "type": "single_family_home",
@@ -209,19 +211,20 @@
       "tenants": [],
       "vacant": true,
       "leasingUnclassified": true,
-      "notes": "Fictional vacant property co-owned by the local operator, Morgan Chen and Sam Rivera. Leasing status is deliberately unclassified to demonstrate status review. Ownership shares are not inferred."
+      "notes": "Fictional vacant property co-owned by the local operator (50%), Morgan Chen (25%) and Sam Rivera (25%). Leasing status is deliberately unclassified to demonstrate status review."
     },
     {
       "key": "shared-client-home",
       "owner": "shared_clients",
       "coOwners": ["owner_1", "owner_2", "owner_3", "owner_4"],
+      "ownershipShares": [25, 25, 25, 25],
       "name": "Magnolia House — Four Owners",
       "address": "720 Demo Magnolia Way",
       "type": "single_family_home",
       "rentMinor": 0,
       "tenants": [],
       "vacant": true,
-      "notes": "Fictional vacant property co-owned by four client owners, without local-operator ownership. Ownership shares are not inferred."
+      "notes": "Fictional vacant property co-owned by four client owners, each with a recorded 25% share, without local-operator ownership."
     },
     {
       "key": "op-office-suites",

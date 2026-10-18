@@ -2,6 +2,14 @@
 
 Each workflow uses the owning module's commands, revisions, confirmation rules and immutable original receipts. Browser forms use generated contracts and registered Operator recovery. Consult the linked module for domain policy and the linked source for exact current forms/routes; these guides replace backlog slice narratives as the developer entry point.
 
+## Create and edit completion
+
+Standalone record create/edit workflows replace their editor with `SavedCommand`/`SavedItem`: a contextual success heading, readable saved business data, and an explicit **Back to [item]** button. Property creation/editing no longer redirect automatically. Return navigation targets the item (or its owning record for a child) without adding the completed form as a new parent. Embedded Task quick-add, AI connection creation and AI draft edits use the same presentation inside their enclosing content, without page navigation. AI controls allow an explicit new connection or return to draft review.
+
+Completion appears only after the existing command/recovery contract acknowledges success. Details come from the immutable owning receipt, not a fresh mutable item read. If that read fails, keep the success confirmation and offer a read-only retry; never resubmit the mutation. Unknown outcomes and validation/conflict failures keep the original form and recovery actions. Lifecycle commands, filter forms, immediate settings toggles and write-only credential controls retain their existing behavior.
+
+Presentation omits operation/record UUIDs, revisions, fingerprints and raw JSON. Instants use browser-local time; date-only values remain unchanged and minor-unit amounts are formatted as money. Official IDs use the shared masked/reveal presentation. Existing original-result APIs, persistence and backup contracts are unchanged. Superseded one-line success displays, Property redirects and Ownership confirmation-only editor branches are removed.
+
 | Area | Delivered journey and boundaries | Authority / implementation |
 | --- | --- | --- |
 | Portfolio | Property/Space create/edit/lifecycle, ownership, manual occupancy/availability, progressive setup and contextual history. Unknown status stays unknown. | [Portfolio](../modules/portfolio.md); [portfolio.tsx](../../application/apps/web/src/workflows/portfolio.tsx) |

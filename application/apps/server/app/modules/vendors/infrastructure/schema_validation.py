@@ -20,6 +20,7 @@ def validate_vendor_schema(connection) -> None:
             {
                 "party_id",
                 "selection_status",
+                "official_ids_json",
                 "revision",
                 "selection_reason",
                 "notes",
@@ -287,6 +288,7 @@ def validate_vendor_schema(connection) -> None:
     }
     expected_checks = {
         "provider_profiles": {
+            "json_valid(official_ids_json)andjson_type(official_ids_json)='array'andjson_array_length(official_ids_json)<=10",
             "typeof(revision)='integer'andrevision>=1",
             "selection_statusin('neutral','preferred','avoid')",
             "selection_status!='avoid'or(selection_reasonisnotnullandlength(trim(selection_reason))>0)",

@@ -8,6 +8,8 @@ from uuid import UUID
 from sqlalchemy import CheckConstraint, UniqueConstraint, inspect, text
 
 from app.modules.parties.application.service import PartyCreateCommand, ContactMethodCommand
+from app.modules.parties.domain.official_ids import official_ids, official_ids_from_api, stored_ids
+from app.modules.vendors.domain.official_ids import ProviderOfficialId
 from app.modules.vendors.application.commands import (
     ProviderCommand,
     canonical,
@@ -126,7 +128,14 @@ def _schema(
 
 def _data(connection):
     profiles = {
-        r["party_id"]: ProviderProfile(**r)
+        r["party_id"]: ProviderProfile(
+            **{
+                **{key: value for key, value in r.items() if key != "official_ids_json"},
+                "official_ids": official_ids(
+                    json.loads(r["official_ids_json"]), ProviderOfficialId
+                ),
+            }
+        )
         for r in connection.execute(ProviderProfileModel.__table__.select()).mappings()
     }
     operations = (
@@ -205,6 +214,7 @@ def _data(connection):
                 "selectionStatus",
                 "selectionReason",
                 "notes",
+                "officialIds",
                 "createdAt",
                 "updatedAt",
                 "archivedAt",
@@ -216,14 +226,22 @@ def _data(connection):
         ):
             raise ValueError("Profile snapshot differs.")
         normalized = ProviderProfileCommand(
-            state["selectionStatus"], state["selectionReason"], state["notes"]
+            state["selectionStatus"],
+            state["selectionReason"],
+            state["notes"],
+            official_ids_from_api(state["officialIds"], ProviderOfficialId),
         )
-        if asdict(normalized) != {
-            "selection_status": state["selectionStatus"],
-            "selection_reason": state["selectionReason"],
-            "notes": state["notes"],
-        }:
+        if canonical(asdict(normalized)) != canonical(
+            {
+                "selection_status": state["selectionStatus"],
+                "selection_reason": state["selectionReason"],
+                "notes": state["notes"],
+                "official_ids": stored_ids(normalized.official_ids),
+            }
+        ):
             raise ValueError("Profile is not normalized.")
+        if [item.to_dict() for item in normalized.official_ids] != state["officialIds"]:
+            raise ValueError("Official IDs are not normalized.")
         if _utc(state["createdAt"]) > _utc(state["updatedAt"]) or _utc(state["updatedAt"]) > now:
             raise ValueError("Profile timestamps differ.")
         if state["archivedAt"] is not None:
@@ -348,13 +366,16 @@ def _transition(command, state, previous, now):
     payload = command.payload
     if command.action in {"create", "designate"}:
         fields = payload["profile"] if command.action == "create" else payload
-        if asdict(ProviderProfileCommand(**fields)) != fields:
+        if canonical(asdict(ProviderProfileCommand(**fields))) != canonical(fields):
             raise ValueError("Initial profile command differs.")
         expected = {
             "partyId": state["partyId"],
             "selectionStatus": fields["selection_status"],
             "selectionReason": fields["selection_reason"],
             "notes": fields["notes"],
+            "officialIds": [
+                item.to_dict() for item in official_ids(fields["official_ids"], ProviderOfficialId)
+            ],
             "createdAt": now,
             "updatedAt": now,
             "archivedAt": None,
@@ -367,19 +388,23 @@ def _transition(command, state, previous, now):
         if command.action == "patch":
             if (
                 not payload
-                or not set(payload) <= {"selection_status", "selection_reason", "notes"}
+                or not set(payload)
+                <= {"selection_status", "selection_reason", "notes", "official_ids"}
                 or previous["archivedAt"] is not None
             ):
                 raise ValueError("Patch fields or lifecycle differ.")
             normalized = ProviderProfilePatchCommand(**payload)
-            if any(getattr(normalized, k) != v for k, v in payload.items()):
+            if any(canonical(asdict(normalized)[k]) != canonical(v) for k, v in payload.items()):
                 raise ValueError("Patch is not normalized.")
             names = {
                 "selection_status": "selectionStatus",
                 "selection_reason": "selectionReason",
                 "notes": "notes",
+                "official_ids": "officialIds",
             }
             expected.update({names[k]: v for k, v in payload.items()})
+            if "official_ids" in payload:
+                expected["officialIds"] = [item.to_dict() for item in normalized.official_ids]
         elif command.action == "archive":
             if payload != {"confirmed": True} or previous["archivedAt"] is not None:
                 raise ValueError("Archival command differs.")

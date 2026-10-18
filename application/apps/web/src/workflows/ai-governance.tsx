@@ -8,6 +8,7 @@ import { useWorkspace } from "../app/workspace-gate";
 import { canonicalRequest, MutationFailure, mutation } from "../shared/mutations";
 import { useAiRecovery } from "./ai-recovery";
 import { readResult } from "./reads";
+import { SavedItem } from "./saved-item";
 
 type Schema = components["schemas"];
 type Settings = Schema["SettingsResponse"];
@@ -84,6 +85,7 @@ export function AiGovernanceSettings() {
       ? (recovery.current.attemptKey ?? "")
       : "";
   const [working, setBusy] = useState(false);
+  const [savedConnection, setSavedConnection] = useState<unknown>();
   const busy = working;
   const [adapterId, setAdapterId] = useState("");
   const [modelIdentifier, setModelIdentifier] = useState("");
@@ -127,9 +129,10 @@ export function AiGovernanceSettings() {
     setMessage("");
     try {
       await recovery.prepare(...intent);
-      await call();
+      const result = await call();
       scope.requireWrite();
       await recovery.reconcile();
+      if (intent[0] === "ai.connection.create") setSavedConnection(result);
       setMessage(success);
       await Promise.all([
         cache.invalidateQueries({ queryKey: scope.key("ai-settings") }),
@@ -160,6 +163,7 @@ export function AiGovernanceSettings() {
     }
     setMessage("The original command receipt was found. Settings are being refreshed.");
     await recovery.reconcile();
+    if (response.data.action === "connection_create") setSavedConnection(response.data.result);
     await Promise.all([
       cache.invalidateQueries({ queryKey: scope.key("ai-settings") }),
       cache.invalidateQueries({ queryKey: scope.key("ai-connections") }),
@@ -263,7 +267,6 @@ export function AiGovernanceSettings() {
         key,
       ],
     );
-    form.reset();
   }
 
   async function externalEffect(
@@ -629,88 +632,106 @@ export function AiGovernanceSettings() {
             </li>
           ))}
         </ul>
-        {available.length > 0 && (
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void createConnection(event.currentTarget);
-            }}
-          >
-            <h4>Add a registered connection</h4>
-            <label>
-              Connection label
-              <input name="label" required maxLength={120} />
-            </label>
-            <label>
-              Adapter and version
-              <select
-                value={adapterId}
-                required
-                onChange={(event) => {
-                  setAdapterId(event.target.value);
-                  setModelIdentifier("");
-                }}
-              >
-                <option value="">Select registered adapter</option>
-                {available.map((item) => (
-                  <option
-                    key={`${item.adapterId}@${item.adapterVersion}`}
-                    value={`${item.adapterId}@${item.adapterVersion}`}
-                  >
-                    {item.adapterId} {item.adapterVersion} · {item.executionLocation}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {selectedAdapter && (
+        {savedConnection !== undefined ? (
+          <SavedItem title="Connection saved" value={savedConnection} embedded>
+            <p>Add disclosure and credentials separately before testing this connection.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setSavedConnection(undefined);
+                setAdapterId("");
+                setModelIdentifier("");
+              }}
+            >
+              Add another connection
+            </button>
+          </SavedItem>
+        ) : (
+          available.length > 0 && (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void createConnection(event.currentTarget);
+              }}
+            >
+              <h4>Add a registered connection</h4>
               <label>
-                Model
+                Connection label
+                <input name="label" required maxLength={120} />
+              </label>
+              <label>
+                Adapter and version
                 <select
-                  value={modelIdentifier}
+                  value={adapterId}
                   required
-                  onChange={(event) => setModelIdentifier(event.target.value)}
+                  onChange={(event) => {
+                    setAdapterId(event.target.value);
+                    setModelIdentifier("");
+                  }}
                 >
-                  <option value="">Select registered model</option>
-                  {selectedAdapter.models.map((model) => (
-                    <option key={model}>{model}</option>
+                  <option value="">Select registered adapter</option>
+                  {available.map((item) => (
+                    <option
+                      key={`${item.adapterId}@${item.adapterVersion}`}
+                      value={`${item.adapterId}@${item.adapterVersion}`}
+                    >
+                      {item.adapterId} {item.adapterVersion} · {item.executionLocation}
+                    </option>
                   ))}
                 </select>
               </label>
-            )}
-            {selectedAdapter?.executionLocation === "on_device" && (
-              <fieldset>
-                <legend>Validated local runtime provenance</legend>
+              {selectedAdapter && (
                 <label>
-                  Model digest
-                  <input name="modelArtifactDigest" required maxLength={256} />
+                  Model
+                  <select
+                    value={modelIdentifier}
+                    required
+                    onChange={(event) => setModelIdentifier(event.target.value)}
+                  >
+                    <option value="">Select registered model</option>
+                    {selectedAdapter.models.map((model) => (
+                      <option key={model}>{model}</option>
+                    ))}
+                  </select>
                 </label>
-                <label>
-                  Quantization
-                  <input name="quantization" required maxLength={128} />
-                </label>
-                <label>
-                  Runtime ID
-                  <input name="runtimeId" required maxLength={128} />
-                </label>
-                <label>
-                  Runtime version
-                  <input name="runtimeVersion" required maxLength={128} />
-                </label>
-                <p>
-                  Installation and runtime setup are operator-assisted. This form does not download
-                  model files.
-                </p>
-              </fieldset>
-            )}
-            <div className="command-form-actions" role="group" aria-label="Connection actions">
-              <button
-                type="submit"
-                disabled={!writable || busy || !!pendingKey || !selectedAdapter || !modelIdentifier}
-              >
-                Create connection
-              </button>
-            </div>
-          </form>
+              )}
+              {selectedAdapter?.executionLocation === "on_device" && (
+                <fieldset>
+                  <legend>Validated local runtime provenance</legend>
+                  <label>
+                    Model digest
+                    <input name="modelArtifactDigest" required maxLength={256} />
+                  </label>
+                  <label>
+                    Quantization
+                    <input name="quantization" required maxLength={128} />
+                  </label>
+                  <label>
+                    Runtime ID
+                    <input name="runtimeId" required maxLength={128} />
+                  </label>
+                  <label>
+                    Runtime version
+                    <input name="runtimeVersion" required maxLength={128} />
+                  </label>
+                  <p>
+                    Installation and runtime setup are operator-assisted. This form does not
+                    download model files.
+                  </p>
+                </fieldset>
+              )}
+              <div className="command-form-actions" role="group" aria-label="Connection actions">
+                <button
+                  type="submit"
+                  disabled={
+                    !writable || busy || !!pendingKey || !selectedAdapter || !modelIdentifier
+                  }
+                >
+                  Create connection
+                </button>
+              </div>
+            </form>
+          )
         )}
         {externalKey && (
           <button
@@ -1100,6 +1121,7 @@ export function AiDraftReview() {
   const [reviewedVersion, setReviewedVersion] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [savedEdits, setSavedEdits] = useState<unknown>();
   const attempt = recovery.current;
   if (detail.isPending || detail.error)
     return (
@@ -1166,12 +1188,15 @@ export function AiDraftReview() {
         key,
       );
       if (action === "edit") {
-        await mutation(() =>
+        const edited = await mutation(() =>
           api.PATCH("/api/ai/drafts/{draft_id}", {
             params: { path: { draft_id: id } },
             body: { ...common, draftPayload: body as Record<string, unknown> },
           }),
         );
+        // Render only after the original OPS attempt is acknowledged below.
+        await recovery.reconcile();
+        setSavedEdits({ ...edited, draftPayload: body, operatorNote: note || null });
       } else if (action === "approve") {
         await mutation(() =>
           api.POST("/api/ai/drafts/{draft_id}/approve", {
@@ -1187,7 +1212,7 @@ export function AiDraftReview() {
           }),
         );
       }
-      await recovery.reconcile();
+      if (action !== "edit") await recovery.reconcile();
       setReviewedVersion(null);
       if (action === "edit") setPayload(null);
       setMessage(
@@ -1226,6 +1251,12 @@ export function AiDraftReview() {
       }
       await recovery.reconcile();
       setReviewedVersion(null);
+      if (result.data.action === "edited")
+        setSavedEdits({
+          ...result.data.result,
+          draftPayload: attempt.payload.draftPayload,
+          operatorNote: attempt.payload.operatorNote,
+        });
       setPayload(null);
       setMessage("Original AI review receipt found; reloading the draft.");
       await cache.invalidateQueries({ queryKey: scope.key("ai-draft", id) });
@@ -1316,101 +1347,111 @@ export function AiDraftReview() {
       </details>
       <section>
         <h3>Suggestion and operator edits</h3>
-        <label>
-          Draft payload (registered schema)
-          <textarea
-            rows={12}
-            value={displayedPayload}
-            onChange={(event) => {
-              setPayload(event.target.value);
-              setReviewedVersion(null);
-            }}
-            disabled={!active || !writable || busy || !!attempt}
-          />
-        </label>
-        {parseError && <p role="alert">{parseError}</p>}
-        {dirtyPayload && <p>Save draft edits before reviewing and approving this version.</p>}
-        <label>
-          Operator note
-          <textarea
-            maxLength={1000}
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            disabled={!active || !writable || busy || !!attempt}
-          />
-        </label>
-        {active && (
-          <div className="command-form-actions" role="group" aria-label="Draft actions">
-            <button
-              type="button"
-              className="command-primary-action"
-              disabled={!writable || busy || !!attempt || !!parseError || !parsedPayload}
-              onClick={() => void decide("edit", parsedPayload)}
-            >
-              Save draft edits
+        {savedEdits !== undefined ? (
+          <SavedItem title="AI draft updated" value={savedEdits} embedded>
+            <button type="button" onClick={() => setSavedEdits(undefined)}>
+              Continue reviewing draft
             </button>
-            <button
-              type="button"
-              disabled={!writable || busy || !!attempt}
-              onClick={() => void decide("dismiss", null)}
-            >
-              Dismiss draft
-            </button>
-          </div>
-        )}
-        {draft.approvalAvailable && active && (
-          <fieldset>
-            <legend>Source checked approval</legend>
-            <p>
-              Approval runs through the owning domain, which checks current source state and records
-              the official result in its transaction.
-            </p>
+          </SavedItem>
+        ) : (
+          <>
             <label>
-              <input
-                type="checkbox"
-                checked={reviewedSource}
-                onChange={(event) =>
-                  setReviewedVersion(event.target.checked ? draft.version : null)
-                }
-                disabled={
-                  !writable ||
-                  busy ||
-                  !!attempt ||
-                  dirtyPayload ||
-                  draft.currentSource?.availability !== "available" ||
-                  draft.currentSource.comparisonState !== "current" ||
-                  draft.currentSource.tombstoned
-                }
+              Draft payload (registered schema)
+              <textarea
+                rows={12}
+                value={displayedPayload}
+                onChange={(event) => {
+                  setPayload(event.target.value);
+                  setReviewedVersion(null);
+                }}
+                disabled={!active || !writable || busy || !!attempt}
               />
-              I reviewed the current source shown above.
             </label>
-            <button
-              disabled={
-                !writable ||
-                busy ||
-                !!attempt ||
-                dirtyPayload ||
-                !reviewedSource ||
-                draft.currentSource?.availability !== "available" ||
-                draft.currentSource.comparisonState !== "current" ||
-                draft.currentSource.tombstoned
-              }
-              onClick={() => void decide("approve", null)}
-            >
-              Approve through {draft.owningModule}
-            </button>
-          </fieldset>
-        )}
-        {!draft.approvalAvailable && active && (
-          <p>
-            Approval is unavailable because no owning-domain approval handler is registered for this
-            draft.
-          </p>
-        )}
-        {attempt && (
-          <button disabled={busy || !scope.canWrite} onClick={() => void reconcile()}>
-            Reconcile original review command
-          </button>
+            {parseError && <p role="alert">{parseError}</p>}
+            {dirtyPayload && <p>Save draft edits before reviewing and approving this version.</p>}
+            <label>
+              Operator note
+              <textarea
+                maxLength={1000}
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                disabled={!active || !writable || busy || !!attempt}
+              />
+            </label>
+            {active && (
+              <div className="command-form-actions" role="group" aria-label="Draft actions">
+                <button
+                  type="button"
+                  className="command-primary-action"
+                  disabled={!writable || busy || !!attempt || !!parseError || !parsedPayload}
+                  onClick={() => void decide("edit", parsedPayload)}
+                >
+                  Save draft edits
+                </button>
+                <button
+                  type="button"
+                  disabled={!writable || busy || !!attempt}
+                  onClick={() => void decide("dismiss", null)}
+                >
+                  Dismiss draft
+                </button>
+              </div>
+            )}
+            {draft.approvalAvailable && active && (
+              <fieldset>
+                <legend>Source checked approval</legend>
+                <p>
+                  Approval runs through the owning domain, which checks current source state and
+                  records the official result in its transaction.
+                </p>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={reviewedSource}
+                    onChange={(event) =>
+                      setReviewedVersion(event.target.checked ? draft.version : null)
+                    }
+                    disabled={
+                      !writable ||
+                      busy ||
+                      !!attempt ||
+                      dirtyPayload ||
+                      draft.currentSource?.availability !== "available" ||
+                      draft.currentSource.comparisonState !== "current" ||
+                      draft.currentSource.tombstoned
+                    }
+                  />
+                  I reviewed the current source shown above.
+                </label>
+                <button
+                  disabled={
+                    !writable ||
+                    busy ||
+                    !!attempt ||
+                    dirtyPayload ||
+                    !reviewedSource ||
+                    draft.currentSource?.availability !== "available" ||
+                    draft.currentSource.comparisonState !== "current" ||
+                    draft.currentSource.tombstoned
+                  }
+                  onClick={() => void decide("approve", null)}
+                >
+                  Approve through {draft.owningModule}
+                </button>
+              </fieldset>
+            )}
+            {!draft.approvalAvailable && active && (
+              <p>
+                Approval is unavailable because no owning-domain approval handler is registered for
+                this draft.
+              </p>
+            )}
+            {attempt && (
+              <button disabled={busy || !scope.canWrite} onClick={() => void reconcile()}>
+                Reconcile original review command
+              </button>
+            )}
+          </>
         )}
       </section>
       <section>

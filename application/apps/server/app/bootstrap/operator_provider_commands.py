@@ -11,6 +11,7 @@ from app.modules.parties.infrastructure.recovery_reader import SQLitePartyRecove
 from app.modules.vendors.application.commands import ProviderCommand, fingerprint, identifier
 from app.modules.vendors.application.category_commands import CategoryCommand
 from app.modules.vendors.application.service import (
+    provider_ids_from_api,
     UNSET,
     ProviderCategoryCommand,
     ProviderCategoryPatchCommand,
@@ -105,7 +106,15 @@ def create_payload(payload):
 
 def profile_payload(payload, *, patch=False):
     definition = ProviderProfilePatchCommand if patch else ProviderProfileCommand
-    return fields(definition(**converted(payload, {"selectionStatus", "selectionReason", "notes"})))
+    values = converted(payload, {"selectionStatus", "selectionReason", "notes"})
+    if "officialIds" in payload:
+        values["official_ids"] = provider_ids_from_api(payload["officialIds"])
+    command = definition(**values)
+    return {
+        name: value
+        for name, value in asdict(command).items()
+        if getattr(command, name) is not UNSET
+    }
 
 
 def category_payload(action, payload, key):
@@ -175,6 +184,7 @@ def provider_fingerprint(family, action, source, payload, key):
             payload.get(name, False) is None
             for name in (
                 "selectionStatus",
+                "officialIds",
                 "contacts",
                 "services",
                 "serviceAreas",

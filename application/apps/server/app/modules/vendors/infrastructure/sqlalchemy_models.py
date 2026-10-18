@@ -16,7 +16,11 @@ class ProviderProfileModel(LocalBase):
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
     archived_at: Mapped[str | None] = mapped_column(String)
     revision: Mapped[int] = mapped_column(nullable=False, server_default="1")
+    official_ids_json: Mapped[str] = mapped_column(String, nullable=False, server_default="[]")
     __table_args__ = (
+        CheckConstraint(
+            "json_valid(official_ids_json) AND json_type(official_ids_json) = 'array' AND json_array_length(official_ids_json) <= 10"
+        ),
         CheckConstraint("typeof(revision) = 'integer' AND revision >= 1"),
         CheckConstraint("selection_status IN ('neutral', 'preferred', 'avoid')"),
         CheckConstraint(

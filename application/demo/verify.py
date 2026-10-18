@@ -5,6 +5,7 @@ import json
 import sqlite3
 from collections import Counter
 from datetime import date, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 from app.bootstrap.api import create_app
@@ -89,6 +90,40 @@ def unclassified_leasing_check(client, row, space):
     )
 
 
+def identity_checks(client, catalog):
+    assigned = set()
+    for row in catalog["properties"]:
+        property_record = read(client, f"/api/properties/{row['id']}")
+        current = [item for item in property_record["ownerships"] if item.get("endsOn") is None]
+        expected = dict(
+            zip(
+                row.get("coOwners", [row["owner"]]),
+                row.get("ownershipShares", [100]),
+                strict=True,
+            )
+        )
+        by_party = {
+            None if key == "operator" else catalog["owners"][key]: Decimal(share)
+            for key, share in expected.items()
+        }
+        actual = {item.get("partyId"): item["sharePercent"] for item in current}
+        require(
+            set(actual) == set(by_party)
+            and all(
+                value is not None and Decimal(str(value)) == by_party[key]
+                for key, value in actual.items()
+            ),
+            f"Ownership share mismatch: {row['key']}",
+        )
+        assigned.update(key for key in actual if key is not None)
+    require(assigned == set(catalog["owners"].values()), "An owner has no property ownership")
+    for party_id in catalog["providers"]:
+        provider = read(client, f"/api/providers/{party_id}")
+        require(
+            bool(provider["profile"]["officialIds"]), "A provider has no license or official ID"
+        )
+
+
 def api_checks(client, catalog):
     vacant = 0
     leasing_statuses = Counter()
@@ -162,7 +197,12 @@ def api_checks(client, catalog):
         )
         for party_id, name in zip(row["tenantIds"], row["tenants"], strict=True):
             tenant = read(client, f"/api/tenants/{party_id}")
-            require(tenant["displayName"] == name, f"Tenant name mismatch: {row['key']}")
+            require(
+                tenant["displayName"] == name
+                and len(tenant["profile"]["officialIds"])
+                == (2 if row["key"] == "op-home" and party_id == row["tenantIds"][0] else 1),
+                f"Tenant name or masked official ID mismatch: {row['key']}",
+            )
         require(lease["terms"][0]["agreedSecurityDepositMinor"] > 0, "Missing agreed deposit")
     suites = next(row for row in catalog["properties"] if row["key"] == "op-office-suites")
     require(len(suites["spaceIds"]) == OFFICE_SUITE_COUNT, "Harbor Offices must have two spaces")
@@ -207,6 +247,7 @@ def main():
     catalog = json.loads((runtime / "catalog.json").read_text())
     counts = database_checks(service.paths.database)
     with LocalApiClient(create_app(args.config)) as client:
+        identity_checks(client, catalog)
         scenarios = api_checks(client, catalog)
     report = {"counts": counts, "scenarios": scenarios, "asOf": catalog["asOf"]}
     (runtime / "verification.json").write_text(json.dumps(report, indent=2) + "\n")

@@ -6,6 +6,7 @@ import { formatHomeTime } from "../shared/home-time";
 import { CommandLinks, workflowUrl } from "./command";
 import { useWorkspace } from "../app/workspace-gate";
 import { History } from "./reads";
+import { OfficialIdList } from "../shared/official-identification";
 
 type Schemas = components["schemas"];
 type Person = Schemas["app__modules__parties__api__router__PartyResponse"];
@@ -201,6 +202,35 @@ export function IdentityDetail({
       <ContactList party={party} allowAdd />
       {tenantLoading && <p role="status">Loading tenant preferences…</p>}
       {tenantError && <p role="alert">{tenantError}</p>}
+      {tenant && (
+        <section className="person-detail-panel" aria-label="Official identification">
+          <header className="person-detail-section-heading">
+            <h3>Official identification</h3>
+            {!tenant.profile.archivedAt && (
+              <CommandLinks
+                target={party.id}
+                keys={["tenant.profile.patch"]}
+                labels={{ "tenant.profile.patch": "Manage official IDs" }}
+                title="Manage official IDs"
+                asButtons
+                collapsible={false}
+              />
+            )}
+          </header>
+          <p className="person-detail-intro">
+            Record at least one official ID before executing a lease. Store only the last four
+            letters or digits, not the full number or a document scan. Recording an ID does not
+            verify its authenticity.
+          </p>
+          {tenant.profile.officialIds.length ? (
+            <OfficialIdList items={tenant.profile.officialIds} />
+          ) : (
+            <p>
+              No official ID recorded. You can save this profile, but cannot execute its lease yet.
+            </p>
+          )}
+        </section>
+      )}
       {tenant && (
         <section className="person-detail-panel" aria-label="Tenant preferences">
           <header className="person-detail-section-heading">

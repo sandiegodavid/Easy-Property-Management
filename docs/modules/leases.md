@@ -8,7 +8,7 @@ Contract start/end and actual occupancy/move-out are separate. Term and occupanc
 
 ## Lifecycle and coordination
 
-Drafts can be edited and their initial terms/participants maintained. Execution checks active property/rentable Space, required terms and participant roles, active Tenant profiles and a valid nonoverlapping occupancy timeline. Missing inspections generate attention without blocking truthful execution or move-out.
+Drafts can be edited and their initial terms/participants maintained. Execution checks active property/rentable Space, required terms and participant roles, active Tenant profiles with at least one recorded masked official ID each, and a valid nonoverlapping occupancy timeline. Official-ID eligibility is read through the Tenant-owned transaction-aware port, not Tenant persistence imports. Missing inspections generate attention without blocking truthful execution or move-out.
 
 Execute/end/terminate/void and renewal transitions coordinate through the Portfolio-owned complete source-timeline operation. The Lease revision protects contractual state and the independent Space revision protects occupancy. Domain effects, timeline, immutable command result and correlated audits commit or roll back together. A missing or incompatible owned timeline conflicts; it is never guessed or incrementally patched into a false success.
 

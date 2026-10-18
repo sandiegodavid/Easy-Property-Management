@@ -3,7 +3,7 @@
 from collections.abc import Collection, Mapping
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.modules.vendors.infrastructure.sqlalchemy_models import (
     ProviderCategoryAssignmentModel,
@@ -22,6 +22,9 @@ class SQLiteProviderContextReader:
                     ProviderProfileModel.party_id,
                     ProviderProfileModel.archived_at,
                     ProviderProfileModel.selection_status,
+                    (func.json_array_length(ProviderProfileModel.official_ids_json) > 0).label(
+                        "has_official_id"
+                    ),
                 ).where(ProviderProfileModel.party_id == party_id)
             )
             .mappings()

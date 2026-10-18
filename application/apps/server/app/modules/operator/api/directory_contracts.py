@@ -5,6 +5,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import AwareDatetime, Field, StrictBool, StrictInt, model_validator
+from decimal import Decimal
 
 from app.modules.operator.domain.models import Contract
 from app.modules.operator.application.coverage_models import CoverageResult
@@ -58,7 +59,7 @@ class OwnerPreview(Contract):
     ownerKind: Literal["local_operator", "client_owner"]
     partyId: UUID | None
     displayName: str
-    sharePercent: str | None
+    sharePercent: Decimal | None = Field(gt=0, le=100, max_digits=5, decimal_places=2)
 
 
 class SpacePreview(Contract):

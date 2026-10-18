@@ -66,7 +66,6 @@ export const destinations = [
   },
 ] as const;
 
-export type DestinationId = (typeof destinations)[number]["id"];
 export const defaultOrder = destinations.map((destination) => destination.id);
 export function destination(id: string) {
   return destinations.find((item) => item.id === id);

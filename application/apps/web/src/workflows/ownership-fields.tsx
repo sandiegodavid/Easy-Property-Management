@@ -9,6 +9,7 @@ import { readResult } from "./reads";
 import { OwnerContactFields } from "./owner-contact-fields";
 import { SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { useLocation } from "react-router-dom";
+import { ownershipShareProblem } from "../shared/ownership-shares";
 
 export function OwnershipFields({
   timeZone,
@@ -25,11 +26,10 @@ export function OwnershipFields({
   choices: Choices;
   disabled: boolean;
   onAddingChange: (pending: boolean) => void;
-  mode?: "change" | "create" | "confirmation";
+  mode?: "change" | "create";
 }) {
   const { scope } = useWorkspace();
   const location = useLocation();
-  const readOnly = mode === "confirmation";
   const id = useId();
   const [adding, setAdding] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -126,12 +126,18 @@ export function OwnershipFields({
       <fieldset className="ownership-owners">
         <legend>{mode === "change" ? "Owners from this date" : "Owners"}</legend>
         <p className="property-edit-hint">
-          {readOnly
-            ? `Ownership recorded from ${scalar(value.effectiveOn)}.`
-            : mode === "create"
-              ? "Keep You if you own this property. Add other owners for a managed or co-owned property, then remove You if needed. Ownership does not set financial shares."
-              : "Keep everyone who will own the property from this date. Remove owners who are leaving and add anyone joining. Previous ownership stays in history; this does not set financial shares."}
+          {mode === "create"
+            ? "Keep You if you own this property. Add other owners for a managed or co-owned property, then remove You if needed."
+            : "Keep everyone who will own the property from this date. Remove owners who are leaving and add anyone joining. Previous owners and shares stay in history."}
         </p>
+        {
+          <p className="property-edit-hint">
+            Enter each owner's percentage if known, or leave it blank as Not recorded. Known shares
+            cannot exceed 100%; when all shares are recorded they must total 100%. Shares do not
+            calculate payments or distributions.
+          </p>
+        }
+        {ownershipShareProblem(owners) && <p role="alert">{ownershipShareProblem(owners)}</p>}
         <ul className="ownership-selected">
           {owners.map((owner, index) => {
             const lookup = recoveredNames.find((result) => result.data?.id === owner.partyId);
@@ -148,11 +154,11 @@ export function OwnershipFields({
                 <header className="ownership-owner-heading">
                   <div className="ownership-selected-name">
                     <strong>{ownerName}</strong>
-                    {!readOnly && owner.inlineParty !== undefined && (
+                    {owner.inlineParty !== undefined && (
                       <span>New owner · created when you save</span>
                     )}
                   </div>
-                  {!readOnly && (
+                  {
                     <button
                       type="button"
                       disabled={disabled || owners.length === 1}
@@ -166,8 +172,29 @@ export function OwnershipFields({
                     >
                       Remove
                     </button>
-                  )}
+                  }
                 </header>
+                {
+                  <div className="workflow-field">
+                    <label htmlFor={`${id}-share-${index}`}>
+                      Ownership share for {ownerName} (%)
+                    </label>
+                    <input
+                      id={`${id}-share-${index}`}
+                      type="number"
+                      min="0.01"
+                      max="100"
+                      step="0.01"
+                      inputMode="decimal"
+                      placeholder="Not recorded"
+                      disabled={disabled}
+                      value={scalar(owner.sharePercent, "")}
+                      onChange={(event) =>
+                        changeOwner(index, { ...owner, sharePercent: event.target.value || null })
+                      }
+                    />
+                  </div>
+                }
                 {!!owner.partyId && (
                   <div className="owner-contact-details">
                     {lookup?.data ? (
@@ -195,49 +222,21 @@ export function OwnershipFields({
                         {!lookup.data.contactMethods?.some(
                           (method) => method.status === "active",
                         ) && <p>No contact details recorded.</p>}
-                        {!readOnly && (
+                        {
                           <Link
                             to={`/parties?identity=${scalar(owner.partyId)}`}
                             state={{ returnTo: location.pathname + location.search }}
                           >
                             Manage contact details
                           </Link>
-                        )}
+                        }
                       </>
                     ) : (
                       <p role="status">Loading contact details…</p>
                     )}
                   </div>
                 )}
-                {readOnly && owner.inlineParty !== undefined && (
-                  <dl className="owner-contact-details ownership-confirmed-contacts">
-                    {(Array.isArray(record(owner.inlineParty).contacts)
-                      ? (record(owner.inlineParty).contacts as unknown[])
-                      : []
-                    ).map((value, position) => {
-                      const contact = record(value);
-                      return (
-                        <div key={position}>
-                          <dt>
-                            {scalar(
-                              contact.label,
-                              contact.methodKind === "mailing_address"
-                                ? "Mailing address"
-                                : contact.methodKind === "email"
-                                  ? "Email"
-                                  : "Phone",
-                            )}
-                          </dt>
-                          <dd>
-                            {scalar(contact.value)}
-                            {contact.extension ? ` ext. ${scalar(contact.extension)}` : ""}
-                          </dd>
-                        </div>
-                      );
-                    })}
-                  </dl>
-                )}
-                {!readOnly && owner.inlineParty !== undefined && (
+                {owner.inlineParty !== undefined && (
                   <div className="ownership-new-fields">
                     <label>
                       New owner name
@@ -278,7 +277,7 @@ export function OwnershipFields({
                     </label>
                   </div>
                 )}
-                {!readOnly && owner.inlineParty !== undefined && (
+                {owner.inlineParty !== undefined && (
                   <OwnerContactFields
                     value={record(owner.inlineParty).contacts}
                     disabled={disabled}
@@ -296,12 +295,10 @@ export function OwnershipFields({
         </ul>
         {recoveredNames.some((result) => result.error) && (
           <p role="alert">
-            {readOnly
-              ? "Some owner contact details could not be loaded. Your ownership change has been saved."
-              : "Some owner contact details could not be loaded. Reopen the form to try again."}
+            Some owner contact details could not be loaded. Reopen the form to try again.
           </p>
         )}
-        {readOnly ? null : !adding ? (
+        {!adding ? (
           <button
             type="button"
             disabled={disabled || owners.length >= 100}

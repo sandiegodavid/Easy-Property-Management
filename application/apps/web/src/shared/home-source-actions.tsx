@@ -24,7 +24,7 @@ export function homeActionLabel(item: Item) {
   return actions[item.nextAction.kind];
 }
 
-export function homeSourceUrl(source: Source): string | null {
+function homeSourceUrl(source: Source): string | null {
   const id = encodeURIComponent(source.id);
   switch (source.kind) {
     case "task":

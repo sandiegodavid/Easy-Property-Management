@@ -9,9 +9,9 @@ export type FormIdentity = Pick<
   RecoveryInput,
   "formKey" | "schemaVersion" | "sourceKind" | "sourceId" | "baseSourceRevision"
 >;
-export type DraftState = "dirty" | "saving" | "saved" | "failed" | "conflicted";
-export type CommandState = "editing" | "submitting" | "committed" | "rejected" | "outcome_unknown";
-export type RecoverySnapshot = {
+type DraftState = "dirty" | "saving" | "saved" | "failed" | "conflicted";
+type CommandState = "editing" | "submitting" | "committed" | "rejected" | "outcome_unknown";
+type RecoverySnapshot = {
   draft: DraftState;
   command: CommandState;
   record?: Recovery;

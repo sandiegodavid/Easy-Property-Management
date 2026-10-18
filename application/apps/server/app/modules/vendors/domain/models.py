@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from app.modules.vendors.domain.official_ids import ProviderOfficialId
+
 
 @dataclass(frozen=True)
 class ProviderCategory:
@@ -67,11 +69,13 @@ class ProviderProfile:
     updated_at: str
     archived_at: str | None
     revision: int = 1
+    official_ids: tuple[ProviderOfficialId, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
             "partyId": self.party_id,
             "selectionStatus": self.selection_status,
+            "officialIds": [item.to_dict() for item in self.official_ids],
             "revision": self.revision,
             "selectionReason": self.selection_reason,
             "notes": self.notes,

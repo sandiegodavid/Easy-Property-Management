@@ -21,6 +21,10 @@ For immediate safety concerns, take the appropriate real-world action; entering 
 
 ## Quotes and provider assignment
 
+Before assigning work, open the provider and choose **Manage official IDs**. Record at least one license, driver's license, passport or other supported ID: issuing country, last four characters and optional state/expiration. You can optionally save a full number for any Provider ID when needed for reference or warranty records; **Show ID number** reveals it on the provider page, and **Hide ID number** conceals it again. A record containing only the last four characters cannot reveal the full number. No document scans are stored here, and recording an ID does not verify identity, licensing, qualifications or warranty eligibility. Check those independently.
+
+Full numbers are hidden by default and excluded from directory summaries and general activity. They remain in contextual history, saved unfinished forms, command receipts and backups—even after editing or removing the current entry. Save full numbers only when needed and protect your workspace and backups. Provider profiles and quotes may be saved without an ID, but new assignments and reassignments require one. Existing assignments and their original retry results remain available.
+
 1. Open the issue and **Record provider quote** for each candidate. Enter provider, scope, amount, received/valid dates and applicable proposed start/finish dates/terms.
 2. Compare the retained quotes. A quote is not spending.
 3. **Assign provider** using the selected quote, or use the explicit direct-assignment option with the required reason.

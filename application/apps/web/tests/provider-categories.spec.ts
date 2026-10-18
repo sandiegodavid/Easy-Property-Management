@@ -17,7 +17,7 @@ async function save(page: Page, name: string) {
       .locator('button[type="submit"]')
       .click();
   });
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
 }
 
 test("Settings manages categories separately from Services, retains assignments and filters effective coverage", async ({
@@ -149,7 +149,7 @@ test("a lost category response recovers its original receipt without duplicating
     page.getByRole("button", { name: "Check original result", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(dispatches).toBe(1);
   expect(
     (await catalog(request)).filter((item) => item.displayName === "Recoverable category"),

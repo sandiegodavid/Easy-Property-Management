@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { SourceWorkflowLink as Link } from "../shared/home-navigation";
-import { api } from "@epm/contracts";
 import { record, scalar, type Workflow } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
-import { Facts, readResult } from "./reads";
+import { Facts } from "./reads";
+import { loadWorkflowResult } from "./workflow-result";
 import { workUrl } from "./work-links";
 
 export function OriginalWorkResult({
@@ -20,61 +20,8 @@ export function OriginalWorkResult({
   const { scope } = useWorkspace();
   const result = useQuery({
     queryKey: scope.key("original-work-result", definition.formKey, attemptKey),
-    queryFn: async ({ signal }) => {
-      if (definition.formKey.startsWith("maintenance."))
-        return record(
-          readResult(
-            await api.GET("/api/maintenance-command-receipts/{operation_id}", {
-              signal,
-              params: { path: { operation_id: operationId } },
-            }),
-          ).response,
-        );
-      if (definition.formKey.startsWith("communication."))
-        return record(
-          readResult(
-            await api.GET("/api/communications/operations/{operation_id}", {
-              signal,
-              params: { path: { operation_id: operationId } },
-            }),
-          ),
-        );
-      if (definition.formKey.startsWith("owner_concern."))
-        return record(
-          readResult(
-            await api.GET("/api/owner-concerns/operations/by-key/{key}", {
-              signal,
-              params: { path: { key: attemptKey } },
-            }),
-          ),
-        );
-      if (definition.formKey === "task.create")
-        return record(
-          readResult(
-            await api.GET("/api/tasks/creation-operations/{key}", {
-              signal,
-              params: { path: { key: attemptKey } },
-            }),
-          ),
-        );
-      if (definition.formKey.startsWith("task.waiting."))
-        return record(
-          readResult(
-            await api.GET("/api/tasks/waiting-operations/{key}", {
-              signal,
-              params: { path: { key: attemptKey } },
-            }),
-          ),
-        );
-      return record(
-        readResult(
-          await api.GET("/api/tasks/mutation-operations/{key}", {
-            signal,
-            params: { path: { key: attemptKey } },
-          }),
-        ),
-      );
-    },
+    queryFn: async ({ signal }) =>
+      record(await loadWorkflowResult(definition.formKey, operationId, attemptKey, signal)),
   });
   const value = result.data,
     item = record(value?.task ?? value);

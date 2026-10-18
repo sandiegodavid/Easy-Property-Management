@@ -17,7 +17,7 @@ function minor(value: unknown) {
   return BigInt(text.replace(".", ""));
 }
 const calculatorFields = ["calculatorPrincipal", "annualRateBasisPoints", "startsOn", "endsOn"];
-export function interestPreview(values: Record<string, unknown>) {
+function interestPreview(values: Record<string, unknown>) {
   const principal = minor(values.calculatorPrincipal),
     rate = Number(values.annualRateBasisPoints);
   const startText = scalar(values.startsOn, ""),
@@ -46,7 +46,7 @@ export function interestPreview(values: Record<string, unknown>) {
   const rounded = (principal * BigInt(rate) * BigInt(days) + denominator / 2n) / denominator;
   return { days, amount: cents(rounded), overflow: rounded > 9_999_999_999n };
 }
-export function interestReviewKey(values: Record<string, unknown>) {
+function interestReviewKey(values: Record<string, unknown>) {
   return JSON.stringify([
     values.expectedRevision,
     ...["kind", ...calculatorFields, "amount", "overrideReason"].map((key) => values[key]),

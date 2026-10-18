@@ -127,12 +127,24 @@ class InspectionWorkflowTests(unittest.TestCase):
             SharedPartyFactory(),
         )
         tenant = tenants.create(
-            TenantCreateCommand("individual", "Tenant"),
+            TenantCreateCommand(
+                "individual",
+                "Tenant",
+                official_ids=(
+                    {"document_type": "passport", "issuing_country": "US", "last_four": "TEST"},
+                ),
+            ),
             expected_revision=0,
             idempotency_key=str(uuid4()),
         )
         co_tenant = tenants.create(
-            TenantCreateCommand("individual", "Co tenant"),
+            TenantCreateCommand(
+                "individual",
+                "Co tenant",
+                official_ids=(
+                    {"document_type": "passport", "issuing_country": "US", "last_four": "TEST"},
+                ),
+            ),
             expected_revision=0,
             idempotency_key=str(uuid4()),
         )

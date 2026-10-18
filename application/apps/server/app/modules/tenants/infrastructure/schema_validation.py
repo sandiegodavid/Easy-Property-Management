@@ -20,6 +20,7 @@ def validate_tenant_schema(connection) -> None:
             "updated_at",
             "archived_at",
             "revision",
+            "official_ids_json",
         },
         "party_contact_methods": {
             "id",
@@ -105,7 +106,11 @@ def validate_tenant_schema(connection) -> None:
         for table in expected
     }
     if checks != {
-        "tenant_profiles": {"do_not_contactin(0,1)", "typeof(revision)='integer'andrevision>=1"},
+        "tenant_profiles": {
+            "do_not_contactin(0,1)",
+            "typeof(revision)='integer'andrevision>=1",
+            "json_valid(official_ids_json)andjson_type(official_ids_json)='array'andjson_array_length(official_ids_json)<=10",
+        },
         "party_contact_methods": {
             "method_kindin('email','phone','mailing_address')",
             "statusin('active','archived')",

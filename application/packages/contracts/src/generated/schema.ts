@@ -8076,6 +8076,8 @@ export interface components {
             idempotencyKey: string;
             /** Notes */
             notes?: string | null;
+            /** Officialids */
+            officialIds?: components["schemas"]["ProviderOfficialIdInput"][];
             party: components["schemas"]["PartyInput"];
             /** References */
             references?: components["schemas"]["ReferenceInput"][];
@@ -8833,6 +8835,8 @@ export interface components {
             idempotencyKey: string;
             /** Notes */
             notes?: string | null;
+            /** Officialids */
+            officialIds?: components["schemas"]["ProviderOfficialIdInput"][];
             /** Selectionreason */
             selectionReason?: string | null;
             /**
@@ -12815,6 +12819,22 @@ export interface components {
              */
             occupancyStatus: "occupied" | "vacant" | "unknown";
         };
+        /** OfficialIdRequest */
+        OfficialIdRequest: {
+            /**
+             * Documenttype
+             * @enum {string}
+             */
+            documentType: "passport" | "drivers_license" | "state_id" | "national_id" | "business_registration";
+            /** Expireson */
+            expiresOn?: string | null;
+            /** Issuingcountry */
+            issuingCountry: string;
+            /** Issuingregion */
+            issuingRegion?: string | null;
+            /** Lastfour */
+            lastFour: string;
+        };
         /** Operating */
         Operating: {
             /**
@@ -13064,6 +13084,8 @@ export interface components {
             ownerKind: "local_operator" | "client_owner";
             /** Partyid */
             partyId: string | null;
+            /** Sharepercent */
+            sharePercent: string | null;
         };
         /** OwnerQueryEcho */
         OwnerQueryEcho: {
@@ -13482,6 +13504,8 @@ export interface components {
             ownerKind: "local_operator" | "client_owner";
             /** Partyid */
             partyId?: string | null;
+            /** Sharepercent */
+            sharePercent?: number | string | null;
         };
         /** OwnershipResponse */
         OwnershipResponse: {
@@ -13512,6 +13536,8 @@ export interface components {
              * Format: uuid
              */
             propertyId: string;
+            /** Sharepercent */
+            sharePercent: string | null;
             /**
              * Startson
              * Format: date
@@ -13985,6 +14011,8 @@ export interface components {
             doNotContact: boolean;
             /** Notes */
             notes: string | null;
+            /** Officialids */
+            officialIds: components["schemas"]["OfficialIdRequest"][];
             /**
              * Operationid
              * Format: uuid
@@ -14016,6 +14044,8 @@ export interface components {
             idempotencyKey: string;
             /** Notes */
             notes?: string | null;
+            /** Officialids */
+            officialIds?: components["schemas"]["ProviderOfficialIdInput"][];
             /** Selectionreason */
             selectionReason?: string | null;
             /** Selectionstatus */
@@ -14037,6 +14067,8 @@ export interface components {
             idempotencyKey: string;
             /** Notes */
             notes?: string | null;
+            /** Officialids */
+            officialIds?: components["schemas"]["OfficialIdRequest"][];
             /** Preferredcontactmethodid */
             preferredContactMethodId?: string | null;
         };
@@ -14051,6 +14083,8 @@ export interface components {
             createdAt: string;
             /** Notes */
             notes: string | null;
+            /** Officialids */
+            officialIds: components["schemas"]["ProviderOfficialIdInput"][];
             /**
              * Partyid
              * Format: uuid
@@ -14545,6 +14579,24 @@ export interface components {
             profile: components["schemas"]["ProfileResponse"];
             /** Revision */
             revision: number;
+        };
+        /** ProviderOfficialIdInput */
+        ProviderOfficialIdInput: {
+            /** Documentnumber */
+            documentNumber?: string | null;
+            /**
+             * Documenttype
+             * @enum {string}
+             */
+            documentType: "license" | "passport" | "drivers_license" | "state_id" | "national_id" | "business_registration";
+            /** Expireson */
+            expiresOn?: string | null;
+            /** Issuingcountry */
+            issuingCountry: string;
+            /** Issuingregion */
+            issuingRegion?: string | null;
+            /** Lastfour */
+            lastFour: string;
         };
         /** ProviderPageResponse */
         ProviderPageResponse: {
@@ -15320,6 +15372,8 @@ export interface components {
              * @enum {string}
              */
             relationshipState: "current" | "former" | "scheduled";
+            /** Sharepercent */
+            sharePercent: string | null;
             /**
              * Startson
              * Format: date
@@ -17813,6 +17867,8 @@ export interface components {
             idempotencyKey: string;
             /** Notes */
             notes?: string | null;
+            /** Officialids */
+            officialIds?: components["schemas"]["OfficialIdRequest"][];
             /**
              * Partykind
              * @enum {string}
@@ -17896,6 +17952,8 @@ export interface components {
             doNotContact: boolean;
             /** Notes */
             notes: string | null;
+            /** Officialids */
+            officialIds: components["schemas"]["OfficialIdRequest"][];
             /**
              * Partyid
              * Format: uuid

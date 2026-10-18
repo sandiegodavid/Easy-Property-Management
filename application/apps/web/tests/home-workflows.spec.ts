@@ -72,7 +72,7 @@ async function save(page: Page, title: string) {
       .locator('button[type="submit"]')
       .click();
   });
-  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
 }
 
 test("Home Task actions reload current state, retain input on conflict, reconcile one lost result and keep return context", async ({
@@ -117,7 +117,7 @@ test("Home Task actions reload current state, retain input on conflict, reconcil
   });
   await page.getByRole("button", { name: "Save complete task", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(calls).toBe(1);
   const current = await get<Schema["TaskResponse"]>(request, `/api/tasks/${task.id}`);
   expect(current.status).toBe("completed");
@@ -265,6 +265,7 @@ async function leaseFixture(request: APIRequestContext, fixedTerm = false) {
   const tenant = await post<Schema["TenantMutationResponse"]>(request, "/api/tenants", {
     partyKind: "individual",
     displayName: `Home tenant ${crypto.randomUUID()}`,
+    officialIds: [{ documentType: "passport", issuingCountry: "US", lastFour: "TEST" }],
     expectedRevision: 0,
     idempotencyKey: crypto.randomUUID(),
   });
@@ -391,7 +392,7 @@ test("Home payment uses current allocations and an interrupted response reconcil
   });
   await page.getByRole("button", { name: "Record rent receipt", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   const receipts = await get<Schema["ReceiptPageResponse"]>(
     request,
     `/api/rent-receipts?leaseId=${f.lease.id}`,

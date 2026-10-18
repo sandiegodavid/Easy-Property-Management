@@ -10,6 +10,7 @@ import { workflows, scalar } from "@epm/contracts/workflows";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks, CommandLoader, workflowUrl } from "./command";
+import { useSaveCompletion } from "./saved-command";
 import { Facts, History, readResult } from "./reads";
 import { useState } from "react";
 import { PortfolioStatusSummary, statusLabel } from "./portfolio-status";
@@ -61,18 +62,12 @@ export function PortfolioRecord({ id, view = "setup" }: { id: string; view?: "se
   if (result.isPending) return <p role="status">Loading property setup…</p>;
   if (result.error) return <p role="alert">{result.error.message}</p>;
   const item = result.data;
-  const address = (
-    <p aria-label="Property address">
-      {item.addressLine1}, {item.city}, {item.countryCode} · {item.timeZone} · {item.status}
-    </p>
-  );
   if (view === "spaces") {
     const summary = item.statusSummary;
     const unitLabel = propertyUnitsLabel(item.inventoryLayout);
     return (
       <section aria-label={`Property ${unitLabel.toLowerCase()}`} className="property-spaces">
         <PageAsOf asOf={item.asOf} priority={1} />
-        {address}
         <div className="property-spaces-intro">
           <p>
             {unitLabel === "Suites"
@@ -123,7 +118,6 @@ export function PortfolioRecord({ id, view = "setup" }: { id: string; view?: "se
   return (
     <section aria-label="Property setup" className="context-section property-details">
       <PageAsOf asOf={item.asOf} priority={1} />
-      {address}
       <section className="property-details-panel" aria-label="Property information">
         <div className="property-setup-actions" data-status={item.status}>
           <CommandLinks
@@ -133,7 +127,6 @@ export function PortfolioRecord({ id, view = "setup" }: { id: string; view?: "se
                 ? ["portfolio.property.restore"]
                 : [
                     "portfolio.property.patch",
-                    "portfolio.ownerships.replace",
                     ...(item.inventoryLayout === "office_suites" ? ["portfolio.space.create"] : []),
                     "portfolio.property.archive",
                   ]
@@ -141,14 +134,16 @@ export function PortfolioRecord({ id, view = "setup" }: { id: string; view?: "se
             title="Property actions"
             labels={{
               "portfolio.property.patch": "Edit Property",
-              "portfolio.ownerships.replace": "Change ownership",
               "portfolio.space.create": "Add Suite",
             }}
             collapsible={false}
             asButtons
           />
         </div>
-        <Facts value={item} fields={["propertyType", "inventoryLayout", "propertyRevision"]} />
+        <Facts
+          value={item}
+          fields={["propertyType", "inventoryLayout", "timeZone", "status", "propertyRevision"]}
+        />
         {item.notes && <p className="property-details-notes">{item.notes}</p>}
       </section>
       <div className="property-details-panel">
@@ -397,6 +392,7 @@ function SpaceRecord({
 }
 
 export function PortfolioCommand() {
+  const { completed, onSaved } = useSaveCompletion();
   const [params] = useSearchParams();
   const definition = workflows.find((item) => item.formKey === params.get("workflow"));
   const target = params.get("target") ?? undefined;
@@ -486,6 +482,7 @@ export function PortfolioCommand() {
                       )
                       .map((item) => ({
                         ownerKind: item.ownerKind,
+                        sharePercent: item.sharePercent,
                         ...(item.partyId ? { partyId: item.partyId } : {}),
                       })),
                   }
@@ -580,165 +577,170 @@ export function PortfolioCommand() {
               : undefined
       }
     >
-      {changingOwners && source.data?.property && (
+      {!completed && (
         <>
-          <ParentBackLink to={`/properties/${source.data.property.id}/setup`}>
-            ← Back to {source.data.property.displayName}
-          </ParentBackLink>
-          <section className="property-edit-context" aria-label="Selected property">
-            <p className="space-classification-property">Changing ownership</p>
-            <h2>{source.data.property.displayName}</h2>
-            <p>
-              Choose the owners who should be recorded from the effective date. You can keep current
-              owners, select existing people by name, or add a new owner.
-            </p>
-          </section>
-        </>
-      )}
-      {editingProperty && source.data?.property && (
-        <>
-          <ParentBackLink to={`/properties/${source.data.property.id}/setup`}>
-            ← Back to {source.data.property.displayName}
-          </ParentBackLink>
-          <section className="property-edit-context" aria-label="Selected property">
-            <p className="space-classification-property">Editing property</p>
-            <h2>{source.data.property.displayName}</h2>
-            <p>
-              {[
-                source.data.property.addressLine1,
-                source.data.property.city,
-                source.data.property.region,
-                source.data.property.postalCode,
-              ]
-                .filter(Boolean)
-                .join(", ")}
-            </p>
-            <p>
-              Update the property name, address and notes. Ownership, rental units, occupancy,
-              leasing status and lease records stay unchanged.
-            </p>
-          </section>
-        </>
-      )}
-      {(editingRental || archivingRental) && source.data?.property && selectedUnit && (
-        <>
-          <ParentBackLink to={`/properties/${source.data.property.id}/units`}>
-            ← Back to {source.data.property.displayName}
-          </ParentBackLink>
-          <section
-            className="space-classification-context"
-            aria-label="Selected property and rental"
-          >
-            <p className="space-classification-property">{source.data.property.displayName}</p>
-            <h2>{selectedUnit.displayName}</h2>
-            <dl>
-              <div>
-                <dt>Current lifecycle</dt>
-                <dd>{statusLabel(selectedUnit.status)}</dd>
-              </div>
-              <div>
-                <dt>Current occupancy</dt>
-                <dd>{statusLabel(selectedUnit.currentOccupancy.occupancyStatus)}</dd>
-              </div>
-              <div>
-                <dt>Current leasing status</dt>
-                <dd>{statusLabel(selectedUnit.availability.effectiveStatus)}</dd>
-              </div>
-            </dl>
-            {archivingRental ? (
-              <div className="space-archive-notice">
-                <h3>Retire this {unit}, not the property</h3>
+          {changingOwners && source.data?.property && (
+            <>
+              <ParentBackLink to={`/properties/${source.data.property.id}/overview`}>
+                ← Back to {source.data.property.displayName}
+              </ParentBackLink>
+              <section className="property-edit-context" aria-label="Selected property">
+                <p className="space-classification-property">Changing ownership</p>
+                <h2>{source.data.property.displayName}</h2>
                 <p>
-                  The property and its other suites remain active. Existing records and history are
-                  retained; archiving does not delete them.
+                  Choose the owners who should be recorded from the effective date. You can keep
+                  current owners, select existing people by name, or add a new owner.
+                </p>
+              </section>
+            </>
+          )}
+          {editingProperty && source.data?.property && (
+            <>
+              <ParentBackLink to={`/properties/${source.data.property.id}/setup`}>
+                ← Back to {source.data.property.displayName}
+              </ParentBackLink>
+              <section className="property-edit-context" aria-label="Selected property">
+                <p className="space-classification-property">Editing property</p>
+                <h2>{source.data.property.displayName}</h2>
+                <p>
+                  {[
+                    source.data.property.addressLine1,
+                    source.data.property.city,
+                    source.data.property.region,
+                    source.data.property.postalCode,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
                 </p>
                 <p>
-                  For temporary vacancy or a pause in leasing, change occupancy or leasing status
-                  instead. An occupied suite, a suite with scheduled occupancy changes, or the
-                  property’s last active suite cannot be archived.
+                  Update the property name, address and notes. Ownership, rental units, occupancy,
+                  leasing status and lease records stay unchanged.
                 </p>
-              </div>
-            ) : (
+              </section>
+            </>
+          )}
+          {(editingRental || archivingRental) && source.data?.property && selectedUnit && (
+            <>
+              <ParentBackLink to={`/properties/${source.data.property.id}/units`}>
+                ← Back to {source.data.property.displayName}
+              </ParentBackLink>
+              <section
+                className="space-classification-context"
+                aria-label="Selected property and rental"
+              >
+                <p className="space-classification-property">{source.data.property.displayName}</p>
+                <h2>{selectedUnit.displayName}</h2>
+                <dl>
+                  <div>
+                    <dt>Current lifecycle</dt>
+                    <dd>{statusLabel(selectedUnit.status)}</dd>
+                  </div>
+                  <div>
+                    <dt>Current occupancy</dt>
+                    <dd>{statusLabel(selectedUnit.currentOccupancy.occupancyStatus)}</dd>
+                  </div>
+                  <div>
+                    <dt>Current leasing status</dt>
+                    <dd>{statusLabel(selectedUnit.availability.effectiveStatus)}</dd>
+                  </div>
+                </dl>
+                {archivingRental ? (
+                  <div className="space-archive-notice">
+                    <h3>Retire this {unit}, not the property</h3>
+                    <p>
+                      The property and its other suites remain active. Existing records and history
+                      are retained; archiving does not delete them.
+                    </p>
+                    <p>
+                      For temporary vacancy or a pause in leasing, change occupancy or leasing
+                      status instead. An occupied suite, a suite with scheduled occupancy changes,
+                      or the property’s last active suite cannot be archived.
+                    </p>
+                  </div>
+                ) : (
+                  <p>
+                    Update the name, suite or floor, and notes. Occupancy, leasing status and lease
+                    records stay unchanged.
+                  </p>
+                )}
+              </section>
+            </>
+          )}
+          {statusCommand && source.data?.space && (
+            <>
+              <ParentBackLink to={`/properties/${source.data.space.propertyId}/units`}>
+                ← Back to {source.data.property?.displayName ?? "property"}
+              </ParentBackLink>
+              <section
+                className="space-classification-context"
+                aria-label="Selected property and rental"
+              >
+                <p className="space-classification-property">{source.data.property?.displayName}</p>
+                <h2>{source.data.space.displayName}</h2>
+                <dl>
+                  <div>
+                    <dt>Current occupancy</dt>
+                    <dd>{statusLabel(source.data.space.currentOccupancy.occupancyStatus)}</dd>
+                  </div>
+                  <div>
+                    <dt>Current leasing status</dt>
+                    <dd>{statusLabel(source.data.space.availability.effectiveStatus)}</dd>
+                    {source.data.space.availability.effectiveStatus === "available_on" &&
+                      source.data.space.availability.availableOn && (
+                        <dd>
+                          <time dateTime={source.data.space.availability.availableOn}>
+                            {source.data.space.availability.availableOn}
+                          </time>
+                        </dd>
+                      )}
+                  </div>
+                </dl>
+                <p>
+                  {classifying
+                    ? "Set only the information that needs classification. Leave an already classified status unchanged."
+                    : changingOccupancy
+                      ? `Occupancy records whether this ${unit} is occupied or vacant. Changing it does not change leasing status or an existing lease. Lease-managed occupancy must be changed through Leasing.`
+                      : `Leasing status describes whether this ${unit} is open to a new tenancy. Changing it does not change occupancy or an existing lease.`}
+                </p>
+              </section>
+            </>
+          )}
+          {definition.formKey === "portfolio.property.create" && (
+            <ParentBackLink to="/properties">← Back to Properties</ParentBackLink>
+          )}
+          {!statusCommand &&
+            !editingRental &&
+            !archivingRental &&
+            !editingProperty &&
+            !changingOwners &&
+            !creatingProperty && (
               <p>
-                Update the name, suite or floor, and notes. Occupancy, leasing status and lease
-                records stay unchanged.
+                Effective dates use the property time zone. Inventory uses the Property revision;
+                manual status uses its own status revision. Lease-owned occupancy must be changed
+                through Leasing.
               </p>
             )}
-          </section>
-        </>
-      )}
-      {statusCommand && source.data?.space && (
-        <>
-          <ParentBackLink to={`/properties/${source.data.space.propertyId}/units`}>
-            ← Back to {source.data.property?.displayName ?? "property"}
-          </ParentBackLink>
-          <section
-            className="space-classification-context"
-            aria-label="Selected property and rental"
-          >
-            <p className="space-classification-property">{source.data.property?.displayName}</p>
-            <h2>{source.data.space.displayName}</h2>
-            <dl>
-              <div>
-                <dt>Current occupancy</dt>
-                <dd>{statusLabel(source.data.space.currentOccupancy.occupancyStatus)}</dd>
-              </div>
-              <div>
-                <dt>Current leasing status</dt>
-                <dd>{statusLabel(source.data.space.availability.effectiveStatus)}</dd>
-                {source.data.space.availability.effectiveStatus === "available_on" &&
-                  source.data.space.availability.availableOn && (
-                    <dd>
-                      <time dateTime={source.data.space.availability.availableOn}>
-                        {source.data.space.availability.availableOn}
-                      </time>
-                    </dd>
-                  )}
-              </div>
-            </dl>
-            <p>
-              {classifying
-                ? "Set only the information that needs classification. Leave an already classified status unchanged."
-                : changingOccupancy
-                  ? `Occupancy records whether this ${unit} is occupied or vacant. Changing it does not change leasing status or an existing lease. Lease-managed occupancy must be changed through Leasing.`
-                  : `Leasing status describes whether this ${unit} is open to a new tenancy. Changing it does not change occupancy or an existing lease.`}
-            </p>
-          </section>
-        </>
-      )}
-      {definition.formKey === "portfolio.property.create" && (
-        <ParentBackLink to="/properties">← Back to Properties</ParentBackLink>
-      )}
-      {!statusCommand &&
-        !editingRental &&
-        !archivingRental &&
-        !editingProperty &&
-        !changingOwners &&
-        !creatingProperty && (
-          <p>
-            Effective dates use the property time zone. Inventory uses the Property revision; manual
-            status uses its own status revision. Lease-owned occupancy must be changed through
-            Leasing.
-          </p>
-        )}
-      {source.data?.space && (
-        <>
-          <PageAsOf asOf={source.data.space.asOf} />
-          {!statusCommand && (
-            <Facts
-              value={source.data.space}
-              fields={["displayName", "effectiveLocalDate", "revision"]}
-            />
-          )}
-          {statusCommand && (
-            <p className="space-classification-date">
-              {classifying ? "Classification takes effect today" : "Property-local date"}:{" "}
-              {source.data.space.effectiveLocalDate} · {source.data.property?.timeZone}.
-            </p>
+          {source.data?.space && (
+            <>
+              <PageAsOf asOf={source.data.space.asOf} />
+              {!statusCommand && (
+                <Facts
+                  value={source.data.space}
+                  fields={["displayName", "effectiveLocalDate", "revision"]}
+                />
+              )}
+              {statusCommand && (
+                <p className="space-classification-date">
+                  {classifying ? "Classification takes effect today" : "Property-local date"}:{" "}
+                  {source.data.space.effectiveLocalDate} · {source.data.property?.timeZone}.
+                </p>
+              )}
+            </>
           )}
         </>
       )}
       <CommandLoader
+        onSaved={onSaved}
         definition={formDefinition}
         propertyTimeZone={source.data?.property?.timeZone}
         sourceId={target}
@@ -750,7 +752,7 @@ export function PortfolioCommand() {
           source.data?.space
             ? `/properties/${source.data.space.propertyId}/units`
             : (editingProperty || changingOwners) && source.data?.property
-              ? `/properties/${source.data.property.id}/setup`
+              ? `/properties/${source.data.property.id}/${changingOwners ? "overview" : "setup"}`
               : (editingRental || archivingRental) && source.data?.property
                 ? `/properties/${source.data.property.id}/units`
                 : undefined

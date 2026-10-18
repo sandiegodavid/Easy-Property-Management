@@ -48,6 +48,7 @@ async function fixture(request: APIRequestContext, historicalRent = false) {
   const tenant = await post<Schemas["TenantMutationResponse"]>(request, "/api/tenants", {
     partyKind: "individual",
     displayName: `Slice52 tenant ${crypto.randomUUID()}`,
+    officialIds: [{ documentType: "passport", issuingCountry: "US", lastFour: "TEST" }],
     expectedRevision: 0,
     idempotencyKey: crypto.randomUUID(),
   });
@@ -167,7 +168,8 @@ async function save(page: Page, title: string) {
       .locator('button[type="submit"]')
       .click();
   });
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
+  if (await page.locator(".saved-item").count()) return;
   await expect(
     page.getByText("This is the original committed response.", { exact: true }),
   ).toBeVisible();
@@ -340,9 +342,7 @@ test("paid Expense creation selects Property Space Provider and a Party payer wi
   await page.getByLabel("Paid by party id", { exact: true }).fill(f.owner);
   await save(page, "Record paid expense");
   await expect(page.getByRole("link", { name: "Add expense evidence", exact: true })).toBeVisible();
-  await page
-    .getByRole("link", { name: "Skip evidence and review saved expense", exact: true })
-    .click();
+  await page.getByRole("link", { name: "Back to expense", exact: true }).click();
   const items = (
     await get<Schemas["ExpensePageResponse"]>(request, `/api/expenses?propertyId=${f.property.id}`)
   ).items;
@@ -430,7 +430,7 @@ test("Expense category correction evidence archival and refund replacement prese
   await page.getByLabel("Reason (required)").fill("Incorrect expense association");
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
   await page.getByRole("button", { name: "Save archive evidence link", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   const current = await get<Schemas["ExpenseResponse"]>(request, `/api/expenses/${item.id}`);
   expect(current.categoryId).toBe(category.id);
   expect(current.activeEvidence).toHaveLength(0);
@@ -513,7 +513,7 @@ test("archived Expense categories require a visible historical entry confirmatio
 test("rent synchronization and a partial receipt keep allocations and remaining balance visible", async ({
   page,
   request,
-}) => {
+}, testInfo) => {
   const f = await fixture(request);
   await page.goto(`/money?workflow=finance.rent_expectation.synchronize&target=${f.lease.id}`);
   await page.getByLabel("Lease term id (required)").selectOption(f.lease.terms[0].id);
@@ -534,8 +534,36 @@ test("rent synchronization and a partial receipt keep allocations and remaining 
   const expectation = expectations.items.find((item) => item.periodStartsOn === f.start)!;
   await page.goto(`/money?record=expectation&id=${expectation.id}`);
   await expect(page.getByText("USD 1000.00", { exact: true }).first()).toBeVisible();
-  await page.getByText("Rent ledger actions", { exact: true }).click();
-  await page.getByRole("link", { name: "Record rent receipt", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Rent due", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Rent balance", exact: true })).toContainText(
+    "Still due",
+  );
+  await expect(page.getByRole("region", { name: "Money record", exact: true })).not.toContainText(
+    expectation.id,
+  );
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await page
+        .locator(".rent-detail")
+        .screenshot({ path: testInfo.outputPath(`rent-${theme}-${width}.png`) });
+    }
+  }
+  await page.evaluate(axe.source);
+  expect(
+    await page.evaluate(async () =>
+      (
+        await window.axe.run(".rent-detail", {
+          runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
+        })
+      ).violations.map((item) => item.id),
+    ),
+  ).toEqual([]);
+  await page.getByRole("button", { name: "Record payment", exact: true }).click();
   await page.getByLabel("Received on (required)").fill(f.today);
   await page.getByLabel("Payment method kind (required)").selectOption("cash");
   await page.getByLabel("Amount minor (required)").nth(0).fill("40000");
@@ -1027,18 +1055,33 @@ test("Expense category create, edit, archive and restore use the catalog receipt
   await page.goto("/money?workflow=finance.expense_category.create");
   await page.getByLabel("Display name (required)").fill(name);
   await save(page, "Create expense category");
-  await page.getByRole("link", { name: "Open current money record", exact: true }).click();
+  await page
+    .getByRole("link", {
+      name: /^(Open current money record|Back to (expense|deposit account|rent receipt|prepaid check|owner rent report|expense category))$/,
+      exact: true,
+    })
+    .click();
   await page.getByText("Actions", { exact: true }).click();
   await page.getByRole("link", { name: "Edit expense category", exact: true }).click();
   await page.getByLabel("Description", { exact: true }).fill("Current category description");
   await save(page, "Edit expense category");
-  await page.getByRole("link", { name: "Open current money record", exact: true }).click();
+  await page
+    .getByRole("link", {
+      name: /^(Open current money record|Back to (expense|deposit account|rent receipt|prepaid check|owner rent report|expense category))$/,
+      exact: true,
+    })
+    .click();
   await page.getByText("Actions", { exact: true }).click();
   await page.getByRole("link", { name: "Archive expense category", exact: true }).click();
   await page.getByLabel("Reason (required)").fill("Unused category");
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
   await save(page, "Archive expense category");
-  await page.getByRole("link", { name: "Open current money record", exact: true }).click();
+  await page
+    .getByRole("link", {
+      name: /^(Open current money record|Back to (expense|deposit account|rent receipt|prepaid check|owner rent report|expense category))$/,
+      exact: true,
+    })
+    .click();
   await page.getByText("Actions", { exact: true }).click();
   await page.getByRole("link", { name: "Restore expense category", exact: true }).click();
   await page.getByLabel("Reason (required)").fill("Category needed again");
@@ -1204,7 +1247,7 @@ test("Owner duplicate creation cannot add income; explicit adoption recovers its
   });
   await page.getByRole("button", { name: "Save verify owner rent report", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(calls).toBe(1);
   const final = await get<Schemas["OwnerRentReportResponse"]>(
     request,
@@ -1243,7 +1286,7 @@ test("Owner report evidence archival retains history but cannot remove the last 
   await page.getByLabel("Reason (required)").fill("Keep one document in historical context");
   await page.getByLabel("I confirm this lifecycle change").check();
   await page.getByRole("button", { name: "Save archive evidence link", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   await page.goto(`/money?record=report&id=${report.id}`);
   await page.getByText("Archived evidence history", { exact: true }).click();
   await expect(
@@ -1292,6 +1335,7 @@ test("Archived historical client owner can report a past payment without creatin
   const tenant = await post<Schemas["TenantMutationResponse"]>(request, "/api/tenants", {
     partyKind: "individual",
     displayName: `Historical report tenant ${crypto.randomUUID()}`,
+    officialIds: [{ documentType: "passport", issuingCountry: "US", lastFour: "TEST" }],
     expectedRevision: 0,
     idempotencyKey: crypto.randomUUID(),
   });
@@ -1694,7 +1738,7 @@ test("draft deposit evidence can be archived without losing its file or deductio
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
   await page.getByLabel("Reason (required)").fill("Wrong association, keep the retained file");
   await page.getByRole("button", { name: "Save archive evidence link", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   const current = await get<Schemas["SettlementResponse"]>(
     request,
     `/api/security-deposit-settlements/${draft.id}`,
@@ -2148,7 +2192,12 @@ test("supporting evidence can be reselected after restart and metadata retains v
     .click();
   await page.getByLabel("Evidence file (required)").setInputFiles(bytes);
   await save(page, "Attach supporting evidence");
-  await page.getByRole("link", { name: "Open current money record", exact: true }).click();
+  await page
+    .getByRole("link", {
+      name: /^(Open current money record|Back to (expense|deposit account|rent receipt|prepaid check|owner rent report|expense category))$/,
+      exact: true,
+    })
+    .click();
   await expect(page.getByRole("region", { name: "Evidence metadata", exact: true })).toContainText(
     "Verified at",
   );

@@ -1,8 +1,36 @@
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
 import type { components } from "@epm/contracts/generated";
 import axe from "axe-core";
 
 type Schemas = components["schemas"];
+async function checkCreateLayout(page: Page, info: TestInfo, name: string) {
+  const form = page.locator(".maintenance-create-command");
+  await expect(
+    form.getByRole("heading", { name: "Property and people", exact: true }),
+  ).toBeVisible();
+  await expect(form.getByText("Not recorded", { exact: true })).toHaveCount(0);
+  await expect(form.getByText("Displayed source revision:", { exact: false })).not.toBeVisible();
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await form.screenshot({ path: info.outputPath(`${name}-${theme}-${width}.png`) });
+    }
+  }
+  await page.evaluate(axe.source);
+  expect(
+    await page.evaluate(async () =>
+      (
+        await window.axe.run(".maintenance-create-command", {
+          runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
+        })
+      ).violations.map((item) => item.id),
+    ),
+  ).toEqual([]);
+}
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
 async function post<T>(request: APIRequestContext, path: string, data: unknown): Promise<T> {
   const response = await request.post(path, { data });
@@ -68,7 +96,8 @@ async function save(page: Page, title: string) {
       .locator('button[type="submit"]')
       .click();
   });
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
+  if (await page.locator(".saved-item").count()) return;
   await expect(
     page.getByText("This is the original committed response.", { exact: true }),
   ).toBeVisible();
@@ -208,7 +237,7 @@ test("issue details prioritize description, named property and grouped actions",
   await expect(
     detail
       .getByRole("navigation", { name: "Issue actions", exact: true })
-      .getByRole("link", { name: "Start work", exact: true }),
+      .getByRole("button", { name: "Start work", exact: true }),
   ).toBeVisible();
   await expect(detail.getByText("Not recorded", { exact: true })).toHaveCount(0);
   await expect(
@@ -244,7 +273,7 @@ test("issue details prioritize description, named property and grouped actions",
   ).toBeVisible();
   await detail
     .getByRole("navigation", { name: "Issue actions", exact: true })
-    .getByRole("link", { name: "Edit issue", exact: true })
+    .getByRole("button", { name: "Edit issue", exact: true })
     .click();
   await expect(page).toHaveURL(/workflow=maintenance.issue.patch/);
 });
@@ -289,7 +318,9 @@ test("Task creation uses original recovery identity and saved forms survive relo
   await page.goto(`/tasks?workflow=task.create&resume=${recovery.id}`);
   await expect(page.getByLabel("Title (required)", { exact: true })).not.toHaveValue("");
   await save(page, "Create task");
-  const currentLink = page.getByRole("link", { name: "Open current work record" });
+  const currentLink = page.getByRole("link", {
+    name: /^(Open current work record|Back to (task|maintenance issue|conversation|owner concern))$/,
+  });
   const target = new URL(
     (await currentLink.getAttribute("href"))!,
     "http://local",
@@ -404,7 +435,7 @@ test("Waiting reschedule lost response recovers one overdue follow-up without re
   });
   await page.getByRole("button", { name: "Save reschedule follow-up", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   const current = await get<Schemas["TaskResponse"]>(request, `/api/tasks/${original.id}`);
   expect(current.followUpState).toBe("overdue");
   expect(current.followUpActionable).toBe(true);
@@ -518,7 +549,11 @@ test("Task quick add preserves optional input and explicitly clears a deadline",
   await expect(page.getByLabel("Notes", { exact: true })).toHaveValue("Keep optional input");
   await save(page, "Create task");
   const id = new URL(
-    (await page.getByRole("link", { name: "Open current work record" }).getAttribute("href"))!,
+    (await page
+      .getByRole("link", {
+        name: /^(Open current work record|Back to (task|maintenance issue|conversation|owner concern))$/,
+      })
+      .getAttribute("href"))!,
     "http://local",
   ).searchParams.get("id")!;
   const created = await get<Schemas["TaskResponse"]>(request, `/api/tasks/${id}`);
@@ -542,7 +577,11 @@ test("Task quick add preserves optional input and explicitly clears a deadline",
   await page.getByLabel("Due date", { exact: true }).fill(deadline.date);
   await save(page, "Create task");
   const scheduledId = new URL(
-    (await page.getByRole("link", { name: "Open current work record" }).getAttribute("href"))!,
+    (await page
+      .getByRole("link", {
+        name: /^(Open current work record|Back to (task|maintenance issue|conversation|owner concern))$/,
+      })
+      .getAttribute("href"))!,
     "http://local",
   ).searchParams.get("id")!;
   const scheduled = await get<Schemas["TaskResponse"]>(request, `/api/tasks/${scheduledId}`);
@@ -649,21 +688,26 @@ test("Task edit stale source preserves edits and explicit source review", async 
 test("Issue creation records attribution and related Property, not physical verification", async ({
   page,
   request,
-}) => {
+}, testInfo) => {
   const property = await home(request);
   await page.goto("/maintenance?workflow=maintenance.issue.create");
-  await page.getByLabel("Property id (required)").selectOption(property.id);
+  await page.getByLabel("Property (required)").selectOption(property.id);
   await page
-    .getByRole("combobox", { name: "Space id", exact: true })
+    .getByRole("combobox", { name: "Home, unit or suite (optional)", exact: true })
     .selectOption(property.spaces[0].id);
   await page.getByLabel("Summary (required)").fill("Browser sink leak");
   await page.getByLabel("Description (required)").fill("Water visible");
   await page.getByLabel("Category (required)").selectOption("plumbing");
   await page
-    .getByLabel("Reported at utc (required)")
+    .getByLabel("Reported at (include time-zone offset) (required)")
     .fill(new Date(Date.now() - 60000).toISOString());
+  await checkCreateLayout(page, testInfo, "maintenance-create");
   await save(page, "Report maintenance issue");
-  await page.getByRole("link", { name: "Open current work record" }).click();
+  await page
+    .getByRole("link", {
+      name: /^(Open current work record|Back to (task|maintenance issue|conversation|owner concern))$/,
+    })
+    .click();
   await expect(page.getByRole("heading", { name: "Browser sink leak" })).toBeVisible();
   await expect(page.getByRole("link", { name: property.displayName, exact: true })).toBeVisible();
   await expect(page.locator(".issue-detail-facts")).toContainText("You");
@@ -680,26 +724,38 @@ test("Party owner reporter correction preserves originating communication and re
     `/api/parties/${ownerId}`,
   );
   await page.goto("/maintenance?workflow=maintenance.issue.create");
-  await page.getByLabel("Property id (required)").selectOption(property.id);
+  await page.getByLabel("Property (required)").selectOption(property.id);
   await page.getByLabel("Summary (required)").fill("Owner attribution workflow");
   await page.getByLabel("Description (required)").fill("Owner observed a leak");
   await page.getByLabel("Category (required)").selectOption("plumbing");
-  await page.getByLabel("Reported at utc (required)").fill(new Date().toISOString());
+  await page
+    .getByLabel("Reported at (include time-zone offset) (required)")
+    .fill(new Date().toISOString());
   const reporter = page.getByRole("group", { name: "Reporter", exact: true });
-  await reporter.getByLabel("Role (required)").selectOption("owner");
-  await reporter.getByLabel("Subject kind (required)").selectOption("party");
+  await reporter
+    .getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ })
+    .selectOption("owner");
+  await reporter
+    .getByRole("combobox", { name: /^(Subject kind|Reported by) \(required\)$/ })
+    .selectOption("party");
   await page.getByLabel("Find reporter by name").fill(owner.displayName);
   await page.getByRole("button", { name: "Search reporter identities", exact: true }).click();
   await page
     .getByRole("button", { name: `Use ${owner.displayName} as reporter`, exact: true })
     .click();
   await save(page, "Report maintenance issue");
-  await page.getByRole("link", { name: "Open current work record" }).click();
+  await page
+    .getByRole("link", {
+      name: /^(Open current work record|Back to (task|maintenance issue|conversation|owner concern))$/,
+    })
+    .click();
   const issueId = new URL(page.url()).searchParams.get("id")!;
   await expect(page.locator(".issue-detail-facts")).toContainText(owner.displayName);
   await page.getByRole("link", { name: "Record linked conversation", exact: true }).click();
   await expect(page.getByLabel("Existing identity (required)")).toHaveValue(ownerId);
-  await expect(page.getByLabel("Role (required)")).toHaveValue("reporter");
+  await expect(
+    page.getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ }),
+  ).toHaveValue("reporter");
   await page.getByLabel("Subject (required)").fill("Owner's original report");
   await page.getByLabel("Body (required)").fill("Owner contacted operator about leak");
   await page.getByLabel("Occurred at utc (required)").fill(new Date().toISOString());
@@ -708,9 +764,15 @@ test("Party owner reporter correction preserves originating communication and re
   await save(page, "Create conversation");
   await openAction(page, "maintenance.reporter.correct", issueId);
   const correction = page.getByRole("group", { name: "Reporter", exact: true });
-  await expect(correction.getByLabel("Role (required)")).toHaveValue("owner");
-  await correction.getByLabel("Role (required)").selectOption("staff");
-  await expect(correction.getByLabel("Subject kind (required)")).toHaveValue("local_operator");
+  await expect(
+    correction.getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ }),
+  ).toHaveValue("owner");
+  await correction
+    .getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ })
+    .selectOption("staff");
+  await expect(
+    correction.getByRole("combobox", { name: /^(Subject kind|Reported by) \(required\)$/ }),
+  ).toHaveValue("local_operator");
   await expect(correction.getByText("Historical selection reason", { exact: true })).toHaveCount(0);
   await page
     .getByLabel("Reason (required)")
@@ -757,6 +819,7 @@ test("tenant reporter is rejected for a draft lease and accepted after explicit 
     idempotencyKey: crypto.randomUUID(),
     partyKind: "individual",
     displayName: `Reporter tenant ${crypto.randomUUID()}`,
+    officialIds: [{ documentType: "passport", issuingCountry: "US", lastFour: "TEST" }],
   });
   const lease = await post<Schemas["LeaseMutationResponse"]>(request, "/api/leases", {
     expectedLeaseRevision: 0,
@@ -776,17 +839,19 @@ test("tenant reporter is rejected for a draft lease and accepted after explicit 
   });
   const fill = async () => {
     await page.goto("/maintenance?workflow=maintenance.issue.create");
-    await page.getByLabel("Property id (required)").selectOption(property.id);
+    await page.getByLabel("Property (required)").selectOption(property.id);
     await page
-      .getByRole("combobox", { name: "Space id", exact: true })
+      .getByRole("combobox", { name: "Home, unit or suite (optional)", exact: true })
       .selectOption(property.spaces[0].id);
     await page.getByLabel("Summary (required)").fill("Tenant leak report");
     await page.getByLabel("Description (required)").fill("Occupant reported the issue");
     await page.getByLabel("Category (required)").selectOption("plumbing");
-    await page.getByLabel("Reported at utc (required)").fill(new Date().toISOString());
+    await page
+      .getByLabel("Reported at (include time-zone offset) (required)")
+      .fill(new Date().toISOString());
     await page
       .getByRole("group", { name: "Reporter", exact: true })
-      .getByLabel("Role (required)")
+      .getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ })
       .selectOption("tenant");
     await page.getByLabel("Find reporter by name").fill(tenant.displayName);
     await page.getByRole("button", { name: "Search reporter identities", exact: true }).click();
@@ -876,8 +941,12 @@ test("archived owner selection requires historical confirmation and preserves th
   });
   await openAction(page, "maintenance.reporter.correct", current.id);
   const attribution = page.getByRole("group", { name: "Reporter", exact: true });
-  await attribution.getByLabel("Role (required)").selectOption("owner");
-  await attribution.getByLabel("Subject kind (required)").selectOption("party");
+  await attribution
+    .getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ })
+    .selectOption("owner");
+  await attribution
+    .getByRole("combobox", { name: /^(Subject kind|Reported by) \(required\)$/ })
+    .selectOption("party");
   await page.getByLabel("Find reporter by name").fill(owner.displayName);
   await page.getByRole("button", { name: "Search reporter identities", exact: true }).click();
   await expect(
@@ -1082,6 +1151,7 @@ test("Reported partial work and operator verification remain distinct from resol
       partyKind: "organization",
       displayName: `Reported-work provider ${crypto.randomUUID()}`,
     },
+    officialIds: [{ documentType: "license", issuingCountry: "US", lastFour: "TEST" }],
     expectedRevision: 0,
     idempotencyKey: crypto.randomUUID(),
   });
@@ -1192,7 +1262,7 @@ test("Journal correction retains evidence and reconciles a lost completion respo
     .fill("Keep original evidence only in contextual history");
   await page.getByLabel("I confirm this lifecycle change").check();
   await page.getByRole("button", { name: "Save archive evidence link", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
   await expect(
     page
@@ -1226,7 +1296,7 @@ test("Journal correction retains evidence and reconciles a lost completion respo
   });
   await page.getByRole("button", { name: "Record work journal entry", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(calls).toBe(1);
   const after = await get<Schemas["IssueResponse"]>(
     request,
@@ -1319,10 +1389,14 @@ test("Conversation draft, optional follow-up and correction retain separate orig
   await page.getByLabel("Occurred timezone (required)").fill("America/Los_Angeles");
   await page.getByRole("button", { name: "Add participants entry" }).click();
   await page.getByLabel("Existing identity (required)").fill(ownerId);
-  await page.getByLabel("Role (required)").selectOption("reporter");
+  await page
+    .getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ })
+    .selectOption("reporter");
   await save(page, "Create conversation");
   const href = (await page
-    .getByRole("link", { name: "Open current work record" })
+    .getByRole("link", {
+      name: /^(Open current work record|Back to (task|maintenance issue|conversation|owner concern))$/,
+    })
     .getAttribute("href"))!;
   const id = new URL(href, "http://local").searchParams.get("id")!;
   const draft = await get<Schemas["CommunicationResponse"]>(request, `/api/communications/${id}`);
@@ -1427,7 +1501,9 @@ test("manual outbound contact selection and local-date timeline filters preserve
   await page.getByLabel("Record", { exact: true }).check();
   await save(page, "Create conversation");
   const href = (await page
-    .getByRole("link", { name: "Open current work record" })
+    .getByRole("link", {
+      name: /^(Open current work record|Back to (task|maintenance issue|conversation|owner concern))$/,
+    })
     .getAttribute("href"))!;
   const id = new URL(href, "http://local").searchParams.get("id")!;
   const stored = await get<Schemas["CommunicationResponse"]>(request, `/api/communications/${id}`);
@@ -1475,7 +1551,9 @@ test("lost manual recording response recovers one communication and one follow-u
   await page.getByLabel("Occurred timezone (required)").fill("America/Los_Angeles");
   await page.getByRole("button", { name: "Add participants entry" }).click();
   await page.getByLabel("Existing identity (required)").fill(ownerId);
-  await page.getByLabel("Role (required)").selectOption("reporter");
+  await page
+    .getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ })
+    .selectOption("reporter");
   await page.getByLabel("Record", { exact: true }).check();
   await page.getByRole("button", { name: "Add follow up", exact: true }).click();
   await page.getByLabel("Title (required)").fill("Call owner tomorrow");
@@ -1528,7 +1606,11 @@ test("Owner concern resolution preserves claim context and independent follow-up
   const current = await get<Schemas["ConcernResponse"]>(request, `/api/owner-concerns/${value.id}`);
   expect(current.status).toBe("resolved");
   expect(current.followUpTasks[0].status).toBe("open");
-  await page.getByRole("link", { name: "Open current work record" }).click();
+  await page
+    .getByRole("link", {
+      name: /^(Open current work record|Back to (task|maintenance issue|conversation|owner concern))$/,
+    })
+    .click();
   await expect(page.getByRole("link", { name: "Owner context" })).toBeVisible();
 });
 
@@ -1613,6 +1695,7 @@ test("Provider quotes, assignment and ending remain independent of paid expenses
   const f = await issue(request);
   const provider = await post<Schemas["ProviderMutationResponse"]>(request, "/api/providers", {
     party: { partyKind: "organization", displayName: `Slice53 plumber ${crypto.randomUUID()}` },
+    officialIds: [{ documentType: "license", issuingCountry: "US", lastFour: "TEST" }],
     expectedRevision: 0,
     idempotencyKey: crypto.randomUUID(),
   });
@@ -1689,6 +1772,7 @@ test("avoided Provider direct assignment and lost-response reassignment preserve
     expectedRevision: 0,
     idempotencyKey: crypto.randomUUID(),
     party: { partyKind: "organization", displayName: `Avoided worker ${crypto.randomUUID()}` },
+    officialIds: [{ documentType: "license", issuingCountry: "US", lastFour: "TEST" }],
     selectionStatus: "avoid",
     selectionReason: "Provider-owned confidential context",
   });
@@ -1696,6 +1780,7 @@ test("avoided Provider direct assignment and lost-response reassignment preserve
     expectedRevision: 0,
     idempotencyKey: crypto.randomUUID(),
     party: { partyKind: "organization", displayName: `Alternate worker ${crypto.randomUUID()}` },
+    officialIds: [{ documentType: "license", issuingCountry: "US", lastFour: "TEST" }],
   });
   await openAction(page, "maintenance.assignment.create", f.issue.id);
   await page.getByLabel("Provider party id (required)").selectOption(avoided.party.id);
@@ -1756,18 +1841,23 @@ test("avoided Provider direct assignment and lost-response reassignment preserve
 test("Owner concern create and edit use effective relationship validation", async ({
   page,
   request,
-}) => {
+}, testInfo) => {
   const property = await home(request);
   await page.goto("/maintenance?workflow=owner_concern.create");
-  await page.getByLabel("Property id (required)").selectOption(property.id);
-  await page.getByLabel("Owner party id (required)").fill(property.ownerships[0].partyId!);
+  await page.getByLabel("Property (required)").selectOption(property.id);
+  await page.getByLabel("Owner (required)").selectOption(property.ownerships[0].partyId);
   await page.getByLabel("Concern type (required)").selectOption("general_rental");
   await page.getByLabel("Summary (required)").fill("Owner requests an update");
   await page.getByLabel("Description (required)").fill("Manual owner request");
-  await page.getByLabel("Raised at utc (required)").fill(property.asOf);
+  await page.getByLabel("Raised at (include time-zone offset) (required)").fill(property.asOf);
+  await checkCreateLayout(page, testInfo, "concern-create");
   await save(page, "Record owner concern");
   const id = new URL(
-    (await page.getByRole("link", { name: "Open current work record" }).getAttribute("href"))!,
+    (await page
+      .getByRole("link", {
+        name: /^(Open current work record|Back to (task|maintenance issue|conversation|owner concern))$/,
+      })
+      .getAttribute("href"))!,
     "http://local",
   ).searchParams.get("id")!;
   await openAction(page, "owner_concern.patch", id);
@@ -1794,12 +1884,12 @@ test("Owner concern duplicate review requires an independent reason and never me
     raisedAtUtc: property.asOf,
   });
   await page.goto("/maintenance?workflow=owner_concern.create");
-  await page.getByLabel("Property id (required)").selectOption(property.id);
-  await page.getByLabel("Owner party id (required)").fill(property.ownerships[0].partyId!);
+  await page.getByLabel("Property (required)").selectOption(property.id);
+  await page.getByLabel("Owner (required)").selectOption(property.ownerships[0].partyId);
   await page.getByLabel("Concern type (required)").selectOption("general_rental");
   await page.getByLabel("Summary (required)").fill("Independent owner request");
   await page.getByLabel("Description (required)").fill("A distinct rental question");
-  await page.getByLabel("Raised at utc (required)").fill(property.asOf);
+  await page.getByLabel("Raised at (include time-zone offset) (required)").fill(property.asOf);
   await page.getByRole("button", { name: "Record owner concern", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Possible duplicate concerns", exact: true }),
@@ -1808,6 +1898,7 @@ test("Owner concern duplicate review requires an independent reason and never me
     page.getByRole("link", { name: `Review existing concern ${original.id}`, exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Start independent concern review", exact: true }).click();
+  await page.getByText("Follow-up and additional context", { exact: true }).click();
   await page.getByRole("checkbox", { name: "Duplicate confirmed", exact: true }).check();
   await expect(
     page.getByRole("button", { name: "Record owner concern", exact: true }),
@@ -1861,17 +1952,23 @@ test("Archived Owner concern selection requires explicit backdated confirmation"
     confirmed: true,
   });
   await page.goto("/maintenance?workflow=owner_concern.create");
-  await page.getByLabel("Property id (required)").selectOption(property.id);
-  await page.getByLabel("Owner party id (required)").fill(ownerId);
+  await page.getByLabel("Property (required)").selectOption(property.id);
+  await page.getByText("Find a former or different owner", { exact: true }).click();
+  await page.getByLabel("Find owner by name", { exact: true }).fill(owner.displayName);
+  await page
+    .getByRole("button", { name: `Use ${owner.displayName} (archived)`, exact: true })
+    .click();
+  await expect(page.getByLabel("Owner (required)")).toHaveValue(ownerId);
   await page.getByLabel("Concern type (required)").selectOption("general_rental");
   await page.getByLabel("Summary (required)").fill("Historical Owner question");
   await page.getByLabel("Description (required)").fill("Backdated client-owner context");
   await page
-    .getByLabel("Raised at utc (required)")
+    .getByLabel("Raised at (include time-zone offset) (required)")
     .fill(`${property.effectiveLocalDate}T20:00:00Z`);
   await expect(
     page.getByRole("region", { name: "Owner concern review", exact: true }),
   ).toContainText("Archived — historical selection required");
+  await page.getByText("Follow-up and additional context", { exact: true }).click();
   await page.getByRole("checkbox", { name: "Historical selection confirmed", exact: true }).check();
   await expect(
     page.getByRole("button", { name: "Record owner concern", exact: true }),
@@ -1898,17 +1995,17 @@ test("Vacancy concern requires a matching Space and retains observed status rath
     `/api/spaces/${property.spaces[0].id}/status`,
   );
   await page.goto("/maintenance?workflow=owner_concern.create");
-  await page.getByLabel("Property id (required)").selectOption(property.id);
-  await page.getByLabel("Owner party id (required)").fill(property.ownerships[0].partyId!);
+  await page.getByLabel("Property (required)").selectOption(property.id);
+  await page.getByLabel("Owner (required)").selectOption(property.ownerships[0].partyId);
   await page.getByLabel("Concern type (required)").selectOption("vacancy");
   await page.getByLabel("Summary (required)").fill("Owner asks about vacancy");
   await page.getByLabel("Description (required)").fill("Current vacancy context only");
-  await page.getByLabel("Raised at utc (required)").fill(property.asOf);
+  await page.getByLabel("Raised at (include time-zone offset) (required)").fill(property.asOf);
   await expect(
     page.getByRole("button", { name: "Record owner concern", exact: true }),
   ).toBeDisabled();
   await page
-    .getByRole("combobox", { name: "Space id", exact: true })
+    .getByRole("combobox", { name: "Home, unit or suite (optional)", exact: true })
     .selectOption(property.spaces[0].id);
   await save(page, "Record owner concern");
   const after = await get<Schemas["SpaceStatusResponse"]>(
@@ -1945,9 +2042,11 @@ test("Dismissed Owner concern target correction preserves its predecessor and or
   await page.goto(`/maintenance?record=concern&id=${original.id}`);
   await page.getByRole("link", { name: "Correct dismissed concern context", exact: true }).click();
   await expect(page.getByLabel("Summary (required)")).toHaveValue("Wrong property selected");
-  await page.getByLabel("Property id (required)").selectOption(correctedProperty.id);
-  await page.getByLabel("Owner party id (required)").fill(correctedProperty.ownerships[0].partyId!);
-  await page.getByLabel("Raised at utc (required)").fill(correctedProperty.asOf);
+  await page.getByLabel("Property (required)").selectOption(correctedProperty.id);
+  await page.getByLabel("Owner (required)").selectOption(correctedProperty.ownerships[0].partyId);
+  await page
+    .getByLabel("Raised at (include time-zone offset) (required)")
+    .fill(correctedProperty.asOf);
   await page.getByLabel("Summary (required)").fill("Correct property selected");
   await save(page, "Record owner concern");
   const current = await get<Schemas["ConcernResponse"]>(
@@ -1987,7 +2086,7 @@ test("Lost concern follow-up recovers one Task while recorded conversation histo
   });
   await page.getByRole("button", { name: "Create concern follow-up", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(calls).toBe(1);
   const conversation = await post<Schemas["CommunicationReceiptResponse"]>(
     request,
@@ -2071,7 +2170,7 @@ test("Evidence attachment is a separate command and unavailable data cannot be o
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
   await page.getByLabel("Reason (required)").fill("Unrelated attachment; retain original history");
   await page.getByRole("button", { name: "Save archive evidence link", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   const retained = await get<Schemas["FileMetadataResponse"]>(
     request,
     `/api/files/${after.files[0].fileId}`,

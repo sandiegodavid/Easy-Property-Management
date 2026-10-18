@@ -379,12 +379,16 @@ def upgrade() -> None:
             "preferred_contact_method_id", sa.String(), sa.ForeignKey("party_contact_methods.id")
         ),
         sa.Column("do_not_contact", sa.Integer(), nullable=False),
+        sa.Column("official_ids_json", sa.String(), nullable=False, server_default="[]"),
         sa.Column("revision", sa.Integer(), nullable=False, server_default="1"),
         sa.Column("notes", sa.String()),
         sa.Column("created_at", sa.String(), nullable=False),
         sa.Column("updated_at", sa.String(), nullable=False),
         sa.Column("archived_at", sa.String()),
         sa.CheckConstraint("do_not_contact IN (0, 1)"),
+        sa.CheckConstraint(
+            "json_valid(official_ids_json) AND json_type(official_ids_json) = 'array' AND json_array_length(official_ids_json) <= 10"
+        ),
         sa.CheckConstraint("typeof(revision) = 'integer' AND revision >= 1"),
     )
     op.create_index("tenant_profiles_active_name", "tenant_profiles", ["archived_at"])

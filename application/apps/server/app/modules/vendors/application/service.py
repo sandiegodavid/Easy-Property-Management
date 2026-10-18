@@ -39,6 +39,8 @@ from app.modules.vendors.domain.models import (
     ProviderProfile,
 )
 from app.modules.vendors.domain.category_seeds import fingerprint as category_fingerprint
+from app.modules.parties.domain.official_ids import official_ids, official_ids_from_api
+from app.modules.vendors.domain.official_ids import ProviderOfficialId
 from app.modules.vendors.domain.models import ProviderReference as ProviderReferenceRecord
 from app.modules.vendors.domain.models import ProviderReputationLink
 from app.modules.vendors.domain.models import ProviderService as ProviderServiceRecord
@@ -55,8 +57,10 @@ class ProviderProfileCommand:
     selection_status: str = "neutral"
     selection_reason: str | None = None
     notes: str | None = None
+    official_ids: tuple[ProviderOfficialId, ...] = ()
 
     def __post_init__(self):
+        object.__setattr__(self, "official_ids", _ids(self.official_ids))
         if self.selection_status not in {"neutral", "preferred", "avoid"}:
             raise ProviderError("Selection status is invalid.")
         object.__setattr__(
@@ -75,8 +79,11 @@ class ProviderProfilePatchCommand:
     selection_status: str | object = UNSET
     selection_reason: str | None | object = UNSET
     notes: str | None | object = UNSET
+    official_ids: object = UNSET
 
     def __post_init__(self) -> None:
+        if self.official_ids is not UNSET:
+            object.__setattr__(self, "official_ids", _ids(self.official_ids))
         if self.selection_status is not UNSET and self.selection_status not in {
             "neutral",
             "preferred",
@@ -975,7 +982,11 @@ class ProviderService:
             party_id,
             expected_revision,
             idempotency_key,
-            {name: value for name, value in command.__dict__.items() if value is not UNSET},
+            {
+                name: value
+                for name, value in asdict(command).items()
+                if getattr(command, name) is not UNSET
+            },
         )
         correlation = str(uuid4())
 
@@ -995,12 +1006,14 @@ class ProviderService:
                 else command.selection_reason
             )
             notes = current.notes if command.notes is UNSET else command.notes
+            ids = current.official_ids if command.official_ids is UNSET else command.official_ids
             if status == "avoid" and reason is None:
                 raise ProviderError("Avoid status requires a selection reason.")
-            if (status, reason, notes) == (
+            if (status, reason, notes, ids) == (
                 current.selection_status,
                 current.selection_reason,
                 current.notes,
+                current.official_ids,
             ):
                 return finish(tx, identity, current, now, correlation)
             updated = replace(
@@ -1008,6 +1021,7 @@ class ProviderService:
                 selection_status=status,
                 selection_reason=reason,
                 notes=notes,
+                official_ids=ids,
                 updated_at=now,
                 revision=current.revision + 1,
             )
@@ -1408,8 +1422,29 @@ def _assignment(party_id, category_id, now, idempotency_key, fingerprint=None):
 
 def _profile(party_id, command, now):
     return ProviderProfile(
-        party_id, command.selection_status, command.selection_reason, command.notes, now, now, None
+        party_id,
+        command.selection_status,
+        command.selection_reason,
+        command.notes,
+        now,
+        now,
+        None,
+        official_ids=command.official_ids,
     )
+
+
+def _ids(values):
+    try:
+        return official_ids(values, ProviderOfficialId)
+    except (TypeError, ValueError, KeyError) as error:
+        raise ProviderError(str(error)) from error
+
+
+def provider_ids_from_api(values):
+    try:
+        return official_ids_from_api(values, ProviderOfficialId)
+    except (TypeError, ValueError, KeyError, AttributeError) as error:
+        raise ProviderError("Official IDs must contain valid masked document details.") from error
 
 
 def _children(tx, kind, party_id):
@@ -1580,9 +1615,13 @@ def _summary(record):
         reputation_link_count,
         categories,
     ) = record
+    summary_profile = profile.to_dict()
+    summary_profile["officialIds"] = [
+        {**item.to_dict(), "documentNumber": None} for item in profile.official_ids
+    ]
     return {
         "party": party.to_dict(),
-        "profile": profile.to_dict(),
+        "profile": summary_profile,
         "services": [item.to_dict() for item in services],
         "serviceAreas": [item.to_dict() for item in areas],
         "workHistoryCount": work_count,

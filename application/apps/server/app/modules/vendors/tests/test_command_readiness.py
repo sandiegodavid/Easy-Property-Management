@@ -478,7 +478,17 @@ def test_encrypted_restore_preserves_original_receipts_and_correlations(
     first = create(service)
     changed = service.update_profile(
         first["party"]["id"],
-        ProviderProfilePatchCommand(notes="portable"),
+        ProviderProfilePatchCommand(
+            notes="portable",
+            official_ids=(
+                {
+                    "document_type": "license",
+                    "issuing_country": "US",
+                    "last_four": "TEST",
+                    "document_number": "OR-TEST",
+                },
+            ),
+        ),
         expected_revision=1,
         idempotency_key=str(uuid4()),
     )

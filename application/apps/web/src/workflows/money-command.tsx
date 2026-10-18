@@ -7,6 +7,7 @@ import type { components } from "@epm/contracts/generated";
 import { workflows, record, scalar, type Workflow } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLoader } from "./command";
+import { useSaveCompletion } from "./saved-command";
 import { readResult } from "./reads";
 import { loadMoneyRecord, MoneyFacts, moneyRecordUrl, type MoneyKind } from "./money-records";
 import { ExpenseContext } from "./expense-context";
@@ -270,6 +271,7 @@ async function commandSource(
 }
 
 export function MoneyCommand() {
+  const { completed, onSaved } = useSaveCompletion();
   const [params] = useSearchParams();
   const definition = workflows.find((item) => item.formKey === params.get("workflow"));
   const target = params.get("target") ?? undefined,
@@ -564,59 +566,66 @@ export function MoneyCommand() {
   return (
     <>
       <ParentBackLink to={parentTarget} />
-      <MoneyFacts
-        value={selected ?? state.value}
-        fields={[
-          "id",
-          "status",
-          "amountMinor",
-          "outstandingAmountMinor",
-          "amount",
-          "receivedOn",
-          "refundDue",
-          "settlementStatus",
-          "voidedAt",
-        ]}
-      />
-      <p>
-        Amounts ending in Minor are integer USD cents. Decimal amounts require exactly two decimal
-        places. Allocation amounts must total the receipt; review the displayed outstanding balance.
-      </p>
-      {state.ledgerRevision !== undefined && (
-        <p>Displayed rent-ledger revision: {state.ledgerRevision}</p>
-      )}
-      {verification && (
-        <fieldset disabled={!!selectedMode}>
-          <legend>Receipt verification choice</legend>
-          <label>
-            <input
-              type="radio"
-              name="verificationMode"
-              checked={selectedMode === "existing"}
-              onChange={() => setMode("existing")}
-            />
-            Adopt an existing compatible receipt
-          </label>
-          <label>
-            <input
-              type="radio"
-              name="verificationMode"
-              checked={selectedMode === "create"}
-              onChange={() => setMode("create")}
-            />
-            Create a receipt with explicit allocations
-          </label>
+      {!completed && (
+        <>
+          <MoneyFacts
+            value={selected ?? state.value}
+            fields={[
+              "id",
+              "status",
+              "amountMinor",
+              "outstandingAmountMinor",
+              "amount",
+              "receivedOn",
+              "refundDue",
+              "settlementStatus",
+              "voidedAt",
+            ]}
+          />
           <p>
-            Creation cannot reuse another operation's receipt key. Pending claims are not income.
+            Amounts ending in Minor are integer USD cents. Decimal amounts require exactly two
+            decimal places. Allocation amounts must total the receipt; review the displayed
+            outstanding balance.
           </p>
-        </fieldset>
+          {state.ledgerRevision !== undefined && (
+            <p>Displayed rent-ledger revision: {state.ledgerRevision}</p>
+          )}
+          {verification && (
+            <fieldset disabled={!!selectedMode}>
+              <legend>Receipt verification choice</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="verificationMode"
+                  checked={selectedMode === "existing"}
+                  onChange={() => setMode("existing")}
+                />
+                Adopt an existing compatible receipt
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="verificationMode"
+                  checked={selectedMode === "create"}
+                  onChange={() => setMode("create")}
+                />
+                Create a receipt with explicit allocations
+              </label>
+              <p>
+                Creation cannot reuse another operation's receipt key. Pending claims are not
+                income.
+              </p>
+            </fieldset>
+          )}
+          <p>
+            Pickers show at most 100 records. Use a contextual record link if the needed expectation
+            is outside this selection.
+          </p>
+        </>
       )}
-      <p>
-        Pickers show at most 100 records. Use a contextual record link if the needed expectation is
-        outside this selection.
-      </p>
       {(!verification || selectedMode) && (
         <CommandLoader
+          onSaved={onSaved}
           showParentLink={false}
           key={`${session}:${selectedMode}`}
           definition={editor}

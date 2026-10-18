@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, useSearchParams } from "react-router-dom";
-import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
+import { ParentBackLink } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import { workflows, record, scalar, type Workflow } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLoader } from "./command";
+import { useSaveCompletion } from "./saved-command";
 import { Facts, IdentityLookup, readResult } from "./reads";
 import { type Choices } from "./fields";
 import { loadWorkRecord, workChildren } from "./work-records";
@@ -15,7 +16,7 @@ import { MaintenanceContext } from "./maintenance-context";
 import { ReporterContext, reporterProblem } from "./reporter-context";
 import { QuoteCommandContext, assignmentProblem, quoteProblem } from "./quote-context";
 import { JournalCommandContext, journalProblem } from "./work-journal";
-import { ConcernContext, concernProblem } from "./concern-context";
+import { ConcernContext, ConcernOwnerSearch, concernProblem } from "./concern-context";
 import type { components } from "@epm/contracts/generated";
 
 function sourceKind(definition: Workflow): WorkKind {
@@ -130,6 +131,7 @@ async function source(
   return result;
 }
 export function WorkCommand() {
+  const { completed, onSaved } = useSaveCompletion();
   const [params] = useSearchParams();
   const location = useLocation();
   const { scope } = useWorkspace();
@@ -393,40 +395,54 @@ export function WorkCommand() {
       : {}),
   };
   return (
-    <>
+    <div
+      className={
+        ["maintenance.issue.create", "owner_concern.create"].includes(definition.formKey)
+          ? "maintenance-create-command"
+          : undefined
+      }
+    >
       <ParentBackLink to={parentTarget} />
-      {loaded.error && (
-        <p role="alert">
-          Current source unavailable. Only the original attempt can be reconciled or replayed; no
-          new change can be submitted.
-        </p>
-      )}
-      <p>
-        Choices are bounded to the first 100 relevant records. Use an existing contextual identity;
-        server validation decides effective relationships and historical-selection eligibility.
-      </p>
-      <Facts
-        value={context.value}
-        fields={["summary", "subject", "title", "status", "revision", "priority"]}
-      />
-      {[
-        "communication.create",
-        "communication.patch",
-        "communication.correct",
-        "owner_concern.create",
-        "maintenance.issue.create",
-        "maintenance.reporter.correct",
-      ].includes(definition.formKey) && (
-        <IdentityLookup
-          onSelect={(id, displayName) =>
-            setIdentities((current) => [
-              ...current.filter((item) => item.id !== id),
-              { id, label: displayName },
-            ])
-          }
-        />
+      {!completed && (
+        <>
+          {loaded.error && (
+            <p role="alert">
+              Current source unavailable. Only the original attempt can be reconciled or replayed;
+              no new change can be submitted.
+            </p>
+          )}
+          {!["maintenance.issue.create", "owner_concern.create"].includes(definition.formKey) && (
+            <>
+              <p>
+                Choices are bounded to the first 100 relevant records. Use an existing contextual
+                identity; server validation decides effective relationships and historical-selection
+                eligibility.
+              </p>
+              <Facts
+                value={context.value}
+                fields={["summary", "subject", "title", "status", "revision", "priority"]}
+              />
+            </>
+          )}
+          {[
+            "communication.create",
+            "communication.patch",
+            "communication.correct",
+            "maintenance.reporter.correct",
+          ].includes(definition.formKey) && (
+            <IdentityLookup
+              onSelect={(id, displayName) =>
+                setIdentities((current) => [
+                  ...current.filter((item) => item.id !== id),
+                  { id, label: displayName },
+                ])
+              }
+            />
+          )}
+        </>
       )}
       <CommandLoader
+        onSaved={onSaved}
         showParentLink={false}
         definition={definition}
         sourceId={target}
@@ -467,6 +483,32 @@ export function WorkCommand() {
             : context.properties
               ? {
                   ...choices,
+                  ...(definition.formKey === "owner_concern.create"
+                    ? {
+                        ownerPartyId: [
+                          ...new Map(
+                            [
+                              ...(values.ownerPartyId
+                                ? [
+                                    {
+                                      id: scalar(values.ownerPartyId),
+                                      label: "Selected owner — see details below",
+                                    },
+                                  ]
+                                : []),
+                              ...(context.properties
+                                .find((property) => property.id === values.propertyId)
+                                ?.ownerships.filter((owner) => owner.partyId && owner.party)
+                                .map((owner) => ({
+                                  id: owner.partyId!,
+                                  label: owner.party!.displayName,
+                                })) ?? []),
+                              ...identities,
+                            ].map((item) => [item.id, item]),
+                          ).values(),
+                        ],
+                      }
+                    : {}),
                   spaceId:
                     context.properties
                       .find((property) => property.id === values.propertyId)
@@ -518,7 +560,21 @@ export function WorkCommand() {
               )}
             </>
           ) : definition.formKey.startsWith("owner_concern.") ? (
-            <ConcernContext values={values} source={context.value} />
+            <>
+              {definition.formKey === "owner_concern.create" && (
+                <ConcernOwnerSearch
+                  disabled={locked}
+                  onSelect={(id, name) => {
+                    setIdentities((current) => [
+                      ...current.filter((item) => item.id !== id),
+                      { id, label: name },
+                    ]);
+                    onChange({ ...values, ownerPartyId: id });
+                  }}
+                />
+              )}
+              <ConcernContext values={values} source={context.value} />
+            </>
           ) : null
         }
         returnTo={parentTarget}
@@ -595,7 +651,6 @@ export function WorkCommand() {
             throw new Error("Cancellation requires a reason.");
         }}
       />
-      <Link to="/settings/recovery">Unfinished forms</Link>
-    </>
+    </div>
   );
 }

@@ -19,6 +19,7 @@ from app.modules.tenants.application.service import (
     TenantService,
 )
 from app.modules.workspace.application.runtime import WorkspaceRuntime
+from app.modules.tenants.application.id_contract import OfficialIdRequest
 
 
 class Contract(BaseModel):
@@ -49,6 +50,7 @@ class TenantCreateRequest(ConcurrencyRequest):
     notes: str | None = Field(None, max_length=4000)
     doNotContact: StrictBool = False
     confirmedNewParty: StrictBool = False
+    officialIds: list[OfficialIdRequest] = Field(default_factory=list, max_length=10)
 
 
 class DesignateRequest(ConcurrencyRequest):
@@ -59,11 +61,16 @@ class ProfilePatchRequest(ExistingRequest):
     preferredContactMethodId: UUID | None = None
     doNotContact: StrictBool = False
     notes: str | None = Field(None, max_length=4000)
+    officialIds: list[OfficialIdRequest] = Field(default_factory=list, max_length=10)
 
     def command(self) -> TenantProfilePatchCommand:
         return TenantProfilePatchCommand.from_mapping(
             {
-                field: str(value) if isinstance(value := getattr(self, field), UUID) else value
+                field: [item.model_dump(mode="json") for item in self.officialIds]
+                if field == "officialIds"
+                else str(value)
+                if isinstance(value := getattr(self, field), UUID)
+                else value
                 for field in self.model_fields_set - {"expectedRevision", "idempotencyKey"}
             }
         )
@@ -82,6 +89,7 @@ class TenantProfileResponse(Contract):
     createdAt: AwareDatetime
     updatedAt: AwareDatetime
     archivedAt: AwareDatetime | None
+    officialIds: list[OfficialIdRequest] = Field(max_length=10)
 
 
 class ContactMethodResponse(Contract):
@@ -190,6 +198,9 @@ def build_router(service: TenantService, runtime: WorkspaceRuntime) -> APIRouter
                     notes=data.notes,
                     do_not_contact=data.doNotContact,
                     confirmed_new_party=data.confirmedNewParty,
+                    official_ids=TenantProfilePatchCommand.from_mapping(
+                        {"officialIds": [item.model_dump(mode="json") for item in data.officialIds]}
+                    ).official_ids,
                 ),
                 expected_revision=data.expectedRevision,
                 idempotency_key=str(data.idempotencyKey),

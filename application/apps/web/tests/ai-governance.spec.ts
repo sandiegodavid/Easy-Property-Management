@@ -207,9 +207,14 @@ test("AI draft detail separates governed input and blocks unsupported or stale a
   await page.reload();
   await expect(approve).toBeDisabled();
   await page.route("**/api/ai/command-operations/by-key/*", (route) =>
-    route.fulfill({ json: { id } }),
+    route.fulfill({ json: { id, action: "edited", result: draft } }),
   );
   await page.getByRole("button", { name: "Reconcile original review command" }).click();
+  await expect(page.getByRole("region", { name: "AI draft updated", exact: true })).toContainText(
+    "Corrected",
+  );
+  await expect(payload).toHaveCount(0);
+  await page.getByRole("button", { name: "Continue reviewing draft", exact: true }).click();
   await expect(payload).toContainText("Corrected");
   await expect(review).not.toBeChecked();
   await review.check();
@@ -392,7 +397,7 @@ test("cloud setup records disclosure, keeps credentials write-only and never rep
       return route.abort();
     }
     if (path.startsWith("/api/ai/command-operations/by-key/"))
-      return route.fulfill({ json: { id } });
+      return route.fulfill({ json: { id, action: "connection_create", result: connection } });
     if (path === `/api/ai/connections/${id}/disclosure` && request.method() === "PUT") {
       connection = {
         ...connection!,
@@ -455,6 +460,8 @@ test("cloud setup records disclosure, keeps credentials write-only and never rep
   await page.reload();
   await expect(page.getByRole("button", { name: "Create connection" })).toBeDisabled();
   await page.getByRole("button", { name: "Check original command receipt" }).click();
+  await expect(page.getByRole("region", { name: "Connection saved", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create connection", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Record cloud disclosure" })).toBeDisabled();
   expect(connectionRequests).toBe(1);
   await expect(page.getByText("Credential: Not configured.")).toBeVisible();

@@ -8,6 +8,7 @@ import { workflows, record, scalar } from "@epm/contracts/workflows";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks, CommandLoader } from "./command";
+import { useSaveCompletion } from "./saved-command";
 import { Facts, History, readResult } from "./reads";
 import { InspectionList } from "./inspections";
 import { LeaseDocuments } from "./lease-documents";
@@ -214,7 +215,7 @@ function leaseDate(value: string) {
   );
 }
 
-export function LeaseRecord({ id }: { id: string }) {
+function LeaseRecord({ id }: { id: string }) {
   const { scope } = useWorkspace();
   const lease = useQuery({
     queryKey: scope.key("lease-record", id),
@@ -613,6 +614,7 @@ function TerminationCases({ lease }: { lease: Lease }) {
 }
 
 function LeaseCommand() {
+  const { completed, onSaved } = useSaveCompletion();
   const [params] = useSearchParams();
   const definition = workflows.find((item) => item.formKey === params.get("workflow"))!;
   const target = params.get("target") ?? undefined;
@@ -714,12 +716,15 @@ function LeaseCommand() {
     });
   return (
     <>
-      <p>
-        Lease revision: {lease?.leaseRevision ?? 0}
-        {source.data?.space && ` · Space timeline revision: ${source.data.space.revision}`}. These
-        are independent checks; review both before submitting a timeline change.
-      </p>
+      {!completed && (
+        <p>
+          Lease revision: {lease?.leaseRevision ?? 0}
+          {source.data?.space && ` · Space timeline revision: ${source.data.space.revision}`}. These
+          are independent checks; review both before submitting a timeline change.
+        </p>
+      )}
       <CommandLoader
+        onSaved={onSaved}
         definition={definition}
         sourceId={target}
         childId={child}

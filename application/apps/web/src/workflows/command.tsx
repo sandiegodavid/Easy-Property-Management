@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { useWatch } from "react-hook-form";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -25,9 +25,13 @@ import { Facts, readResult } from "./reads";
 import { MoneyFacts } from "./money-presentation";
 import { OriginalWorkResult } from "./work-result";
 import { TaskCreateFields } from "./task-fields";
+import { MaintenanceCreateFields } from "./maintenance-create-fields";
 import { PropertyEditFields } from "./property-edit-fields";
 import { PropertyCreateFields } from "./property-create-fields";
 import { OwnershipFields } from "./ownership-fields";
+import { ownershipShareProblem } from "../shared/ownership-shares";
+import { SavedCommand, savesItem } from "./saved-command";
+import { loadWorkflowResult } from "./workflow-result";
 
 export function workflowUrl(formKey: string, sourceId?: string, childId?: string) {
   const params = new URLSearchParams({ workflow: formKey });
@@ -236,6 +240,8 @@ export function CommandLoader({
   choicesForValues,
   returnTo,
   showParentLink = true,
+  embedded = false,
+  onSaved,
   reviewSource,
   checkSource,
   renderContext,
@@ -251,6 +257,8 @@ export function CommandLoader({
   choicesForValues?: (values: Record<string, unknown>) => Choices;
   returnTo?: string;
   showParentLink?: boolean;
+  embedded?: boolean;
+  onSaved?: () => void;
   reviewSource?: () => Promise<{
     revision: number;
     value: unknown;
@@ -305,6 +313,8 @@ export function CommandLoader({
       recovered={recovery.data}
       returnTo={returnTo}
       showParentLink={showParentLink}
+      embedded={embedded}
+      onSaved={onSaved}
       reviewSource={reviewSource}
       checkSource={checkSource}
       renderContext={renderContext}
@@ -325,6 +335,8 @@ function CommandEditor({
   recovered,
   returnTo,
   showParentLink,
+  embedded,
+  onSaved,
   reviewSource,
   checkSource,
   renderContext,
@@ -341,6 +353,8 @@ function CommandEditor({
   recovered?: Recovery;
   returnTo?: string;
   showParentLink: boolean;
+  embedded: boolean;
+  onSaved?: () => void;
   reviewSource?: () => Promise<{
     revision: number;
     value: unknown;
@@ -356,7 +370,6 @@ function CommandEditor({
 }) {
   const { scope } = useWorkspace();
   const location = useLocation();
-  const navigate = useNavigate();
   const addingContact = definition.formKey === "party.contact.add";
   const editingContact = definition.formKey === "party.contact.update";
   const removingContact = definition.formKey === "party.contact.archive";
@@ -444,16 +457,6 @@ function CommandEditor({
     project,
   });
   const values = useWatch({ control: form.control, name: "data" }) ?? {};
-  const savedPropertyId =
-    ["portfolio.property.create", "portfolio.property.patch"].includes(definition.formKey) &&
-    state.command === "committed"
-      ? scalar(record(state.record?.receipt?.result).targetId)
-      : "";
-  const savedPropertyTab = definition.formKey === "portfolio.property.patch" ? "setup" : "overview";
-  useEffect(() => {
-    if (savedPropertyId)
-      void navigate(`/properties/${savedPropertyId}/${savedPropertyTab}`, { replace: true });
-  }, [savedPropertyId, savedPropertyTab, navigate]);
   const locked =
     state.command === "submitting" ||
     state.command === "outcome_unknown" ||
@@ -573,6 +576,7 @@ function CommandEditor({
         predicate: (query) =>
           query.queryKey[0] === scope.workspaceId &&
           !scalar(query.queryKey[2]).endsWith("command-source") &&
+          query.queryKey[2] !== "saved-command" &&
           query.queryKey[2] !== "workflow-recovery" &&
           query.queryKey[2] !== "recovery",
       });
@@ -582,6 +586,7 @@ function CommandEditor({
         predicate: (query) =>
           query.queryKey[0] === scope.workspaceId &&
           !scalar(query.queryKey[2]).endsWith("command-source") &&
+          query.queryKey[2] !== "saved-command" &&
           query.queryKey[2] !== "recovery" &&
           query.queryKey[2] !== "workflow-recovery",
       });
@@ -737,34 +742,17 @@ function CommandEditor({
       </button>
     </>
   );
-  const propertyCreateStatus =
-    state.command === "submitting"
-      ? "Creating property…"
-      : state.command === "committed"
-        ? "Property created successfully."
-        : null;
-  if (
-    definition.formKey === "portfolio.ownerships.replace" &&
-    state.command === "committed" &&
-    state.record?.receipt
-  )
+  const propertyCreateStatus = state.command === "submitting" ? "Creating property…" : null;
+  if (state.command === "committed" && state.record?.receipt && savesItem(definition.formKey))
     return (
-      <section
-        className="command-editor ownership-confirmation"
-        aria-label="Ownership confirmation"
-      >
-        <p role="status" className="command-success">
-          Ownership updated successfully.
-        </p>
-        <OwnershipFields
-          mode="confirmation"
-          value={state.record.payload}
-          choices={choices}
-          disabled
-          onChange={() => undefined}
-          onAddingChange={() => undefined}
-        />
-      </section>
+      <SavedCommand
+        definition={definition}
+        recovery={state.record}
+        sourceId={sourceId}
+        back={back}
+        embedded={embedded}
+        onSaved={onSaved}
+      />
     );
   return (
     <section aria-label={commandTitle} className="command-editor">
@@ -795,7 +783,11 @@ function CommandEditor({
                             ? "Edit the details below, then save your changes. Saving an unfinished form does not update the property’s records."
                             : definition.formKey === "portfolio.space.archive"
                               ? "Confirm that you want to archive this rental, then select Archive below. Saving an unfinished form does not archive it."
-                              : "Review the displayed record and make an explicit change. Saved input is an unfinished form, not an official record."}
+                              : definition.formKey === "maintenance.issue.create"
+                                ? "Describe the issue, choose the property, and record who reported it. You can add appointments, quotes and evidence after saving."
+                                : definition.formKey === "owner_concern.create"
+                                  ? "Record what the owner has raised and which property it concerns. A concern does not change the property’s occupancy, rent or repair records."
+                                  : "Review the displayed record and make an explicit change. Saved input is an unfinished form, not an official record."}
       </p>
       {definition.formKey === "portfolio.property.create" ? (
         propertyCreateStatus && <p role="status">{propertyCreateStatus}</p>
@@ -811,6 +803,8 @@ function CommandEditor({
           "party.contact.add",
           "party.contact.update",
           "party.contact.archive",
+          "maintenance.issue.create",
+          "owner_concern.create",
         ].includes(definition.formKey) ? (
         <details className="space-classification-recovery">
           <summary>Form status and recovery details</summary>
@@ -911,6 +905,13 @@ function CommandEditor({
       <form
         onSubmit={(event) => {
           event.preventDefault();
+          if (
+            ["portfolio.property.create", "portfolio.ownerships.replace"].includes(
+              definition.formKey,
+            ) &&
+            ownershipShareProblem(values.ownerships)
+          )
+            return;
           void action(async () => {
             if (evidence && !attachment)
               throw new Error("Select the evidence file before submitting.");
@@ -1084,6 +1085,15 @@ function CommandEditor({
               onChange={(next) => form.setValue("data", next)}
               choices={choicesForValues?.(values) ?? choices}
               disabled={locked}
+            />
+          ) : ["maintenance.issue.create", "owner_concern.create"].includes(definition.formKey) ? (
+            <MaintenanceCreateFields
+              schema={definition.schema}
+              value={values}
+              onChange={(next) => form.setValue("data", record(next))}
+              choices={choicesForValues?.(values) ?? choices}
+              disabled={locked}
+              concern={definition.formKey === "owner_concern.create"}
             />
           ) : definition.formKey === "portfolio.property.create" ? (
             <PropertyCreateFields
@@ -1264,15 +1274,9 @@ function CommandEditor({
         </section>
       )}
       {state.record?.receipt &&
-        (personEdit ? (
+        (removingContact ? (
           <p role="status" className="command-success">
-            {addingContact
-              ? "Contact details added successfully."
-              : editingContact
-                ? "Contact details updated successfully."
-                : removingContact
-                  ? "Contact details removed successfully. History retained."
-                  : "Name changed successfully."}
+            Contact details removed successfully. History retained.
           </p>
         ) : (
           <section aria-label="Committed result">
@@ -1373,35 +1377,7 @@ function OriginalMoneyResult({
   const { scope } = useWorkspace();
   const result = useQuery({
     queryKey: scope.key("original-money-result", definition.formKey, attemptKey),
-    queryFn: async ({ signal }) => {
-      if (definition.formKey === "file.upload")
-        return readResult(
-          await api.GET("/api/files/commands/by-key/{key}", {
-            signal,
-            params: { path: { key: attemptKey } },
-          }),
-        );
-      if (definition.formKey.startsWith("owner_rent_report."))
-        return readResult(
-          await api.GET("/api/owner-rent-report-operations/{key}", {
-            signal,
-            params: { path: { key: attemptKey } },
-          }),
-        ).result;
-      if (definition.formKey.startsWith("finance.expense_category."))
-        return readResult(
-          await api.GET("/api/expense-categories/operations/by-key/{key}", {
-            signal,
-            params: { path: { key: attemptKey } },
-          }),
-        );
-      return readResult(
-        await api.GET("/api/finance/command-operations/{idempotency_key}", {
-          signal,
-          params: { path: { idempotency_key: attemptKey } },
-        }),
-      ).result;
-    },
+    queryFn: ({ signal }) => loadWorkflowResult(definition.formKey, "", attemptKey, signal),
   });
   const item = record(result.data);
   const kind = definition.formKey.startsWith("owner_rent_report.")

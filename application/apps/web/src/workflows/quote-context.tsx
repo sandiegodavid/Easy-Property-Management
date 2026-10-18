@@ -68,6 +68,12 @@ export function QuoteCommandContext({
           <Facts value={provider.data.party} fields={["displayName", "archivedAt"]} />
           <Facts value={provider.data.profile} fields={["selectionStatus", "archivedAt"]} />
           <Link to={`/providers/${id}/details`}>Review Provider services, areas and history</Link>
+          {!provider.data.profile.officialIds.length && (
+            <p>
+              Record an official ID on this Provider before assigning maintenance work. You may
+              still record a quote.
+            </p>
+          )}
           {provider.data.profile.selectionStatus === "avoid" && (
             <p role="alert">
               This Provider is marked avoid. Assignment requires explicit Avoid override

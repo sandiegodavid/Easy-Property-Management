@@ -4,6 +4,16 @@
 
 Providers reuses shared Party identity and owns provider state (`preferred`/avoid context and lifecycle), services, service areas, manual prior-work context, references and external reputation links. Issue-backed work history remains Maintenance-owned; imported/manual prior work is labeled as such.
 
+## Official identification
+
+Provider profiles own `officialIds`: zero to ten license, driver's license, passport, state ID, national ID or business-registration records. Each records an issuing country, last four alphanumeric characters, optional issuing state/region and optional expiration date. Any Provider ID may also retain an optional `documentNumber` (bounded to 80 ASCII letters, digits and common separators); its last four alphanumeric characters must agree with `lastFour`. Duplicate masked identities and unknown fields are rejected. This is operator-recorded reference information, not authentication, license/qualification verification or an automatic expiration check.
+
+Incomplete profiles and quotes may be saved. A new Maintenance assignment or reassignment requires at least one recorded ID, checked through the source-owned Provider reader on the same writer connection before assignment writes. The reader exposes only `has_official_id`, not document numbers. Original assignment receipts replay before mutable eligibility checks, including after subsequent ID removal.
+
+**Manage official IDs** uses the existing Provider profile command, revision and immutable receipt. Omission preserves IDs, `[]` clears them, effective edits advance the revision once, and no-op edits retain it. Full numbers are hidden by default in the form and detail page; **Show ID number** reveals an explicitly stored number for any Provider ID type. Last-four-only records cannot be unmasked. Directory summaries omit full numbers. General activity redacts the complete ID collection; contextual history, receipts, unfinished forms and backups retain it, including earlier numbers after an edit or removal. Tenant IDs remain masked-only; only the bounded field validation/editor/presentation mechanics are shared.
+
+The current greenfield baseline adds non-null `provider_profiles.official_ids_json`, with array/ten-entry checks; retained validation binds typed ID content to command and audit history. No compatibility migration is provided. Rebuild demo workspaces for this schema; demo Providers use fictional license suffixes ending `DEMO`.
+
 ## Categories and selection
 
 Provider categories are a flat editable workspace catalog with stable seeded identities, independent revisions and archive/restore history. Providers have zero or more retained category assignments; zero is valid Uncategorized. Services remain separate free-form labels. Maintenance issue categories, Provider categories and service labels have no implicit equivalence.

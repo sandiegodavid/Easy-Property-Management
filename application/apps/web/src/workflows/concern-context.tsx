@@ -1,14 +1,82 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { api } from "@epm/contracts";
 import { record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { Facts, readResult } from "./reads";
 
+export function ConcernOwnerSearch({
+  disabled,
+  onSelect,
+}: {
+  disabled: boolean;
+  onSelect: (id: string, name: string) => void;
+}) {
+  const { scope } = useWorkspace();
+  const [input, setInput] = useState("");
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(input.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [input]);
+  const owners = useQuery({
+    queryKey: scope.key("concern-owner-search", search),
+    enabled: search.length >= 2,
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/parties/selection", {
+          signal,
+          params: { query: { search, includeArchived: true, limit: 25 } },
+        }),
+      ),
+  });
+  return (
+    <details className="maintenance-create-section">
+      <summary>Find a former or different owner</summary>
+      <p>
+        Search for an existing person or organization. Ownership at the raised time is checked when
+        you save.
+      </p>
+      <label>
+        Find owner by name
+        <input
+          value={input}
+          maxLength={200}
+          disabled={disabled}
+          onChange={(event) => setInput(event.target.value)}
+        />
+      </label>
+      {owners.isFetching && <p role="status">Finding owners…</p>}
+      {owners.error && <p role="alert">Owner search is unavailable. Try again.</p>}
+      {search === input.trim() && owners.data && (
+        <>
+          <p>Showing up to 25 matching identities. Refine the name to narrow the results.</p>
+          <ul>
+            {owners.data.items.map((owner) => (
+              <li key={owner.id}>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onSelect(owner.id, owner.displayName)}
+                >
+                  Use {owner.displayName}
+                  {owner.archivedAt ? " (archived)" : ""}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {!owners.data.items.length && <p>No matching identities.</p>}
+        </>
+      )}
+    </details>
+  );
+}
+
 export function concernProblem(values: Record<string, unknown>) {
   if (["lease", "tenant", "vacancy"].includes(scalar(values.concernType)) && !values.spaceId)
-    return "Select a Space from the owning Property for this concern type.";
+    return "Select the home, unit or suite for this concern type.";
   if (["lease", "tenant"].includes(scalar(values.concernType)) && !values.leaseId)
-    return "Lease and Tenant concerns require a Lease from the selected Space.";
+    return "Lease and tenant concerns require a lease for the selected rental.";
   if (values.concernType === "tenant" && !values.tenantPartyId)
     return "Select a participant's existing Tenant identity for a Tenant concern.";
   if (
@@ -69,23 +137,16 @@ export function ConcernContext({
       ),
   });
   return (
-    <section aria-label="Owner concern review">
+    <section aria-label="Owner concern review" className="maintenance-create-section">
+      <h3>Check the selected context</h3>
       <p>
-        A concern records a client Owner's claim, not occupancy, paid income or a verified repair.
-        Completing a Task does not resolve the concern; resolving it does not change its Lease,
-        Tenant or Property.
-      </p>
-      <p>
-        Eligibility is checked at the raised instant in the Property's IANA zone. Current source
-        state is context, not a rewrite of retained snapshots. Ended relationships and archived
-        identities require explicit historical confirmation/reason for genuinely backdated
-        selection. Local operator ownership never creates an Owner Party.
+        Choose an owner of the property at the time the concern was raised. For a backdated concern
+        involving a former owner or tenant, confirm the historical selection and give a reason under
+        additional context.
       </p>
       {property.data && (
         <p>
-          {property.data.displayName} · {property.data.timeZone} · Current ownership:{" "}
-          {property.data.ownershipContext}. Historical relationships may not appear in this current
-          view.
+          {property.data.displayName} · {property.data.timeZone}
         </p>
       )}
       {owner.data && (
@@ -97,10 +158,7 @@ export function ConcernContext({
         </p>
       )}
       {lease.data && (
-        <Facts
-          value={lease.data}
-          fields={["id", "spaceId", "status", "occupancyStartsOn", "actualMoveOutOn"]}
-        />
+        <Facts value={lease.data} fields={["status", "occupancyStartsOn", "actualMoveOutOn"]} />
       )}
       {[property.error, owner.error, lease.error].filter(Boolean).map((error, index) => (
         <p role="alert" key={index}>
@@ -108,9 +166,8 @@ export function ConcernContext({
         </p>
       ))}
       <p>
-        General rental may be Property-wide. Vacancy requires a matching Space; Lease and Tenant
-        concerns require its Lease, and Tenant concerns also require that Lease's participant. The
-        server rechecks every reference together.
+        General rental concerns can cover the whole property. For a vacancy, choose a rental; for a
+        lease or tenant concern, also choose its lease and, where relevant, its tenant.
       </p>
       {!!values.replacesConcernId && (
         <p>

@@ -13,7 +13,7 @@
 
 Residential homes/condos/townhomes have one rentable home per property in the current model. An office property can be rented as a whole office or as separate suites. The tab uses **Home**, **Office** or **Suites** accordingly; individual suite names remain visible. Separate managed condo units may be separate properties sharing a building address. Multi-unit apartment-building operations are outside this release.
 
-**Overview** shows the property address, compact occupancy/leasing status, review cards and Relationships. It also retains contextual Tasks, which have no dedicated property tab. Use **Home/Office/Suites**, **Leases**, **Money**, **Maintenance** and **Conversations** for their detailed records rather than looking for duplicate sections on Overview.
+The property address appears directly below its name in the shared header on every tab. **Overview** shows compact occupancy/leasing status, review cards and **Owners**, with Current/Former filters and **Change ownership** beside the heading. It also retains contextual Tasks, which have no dedicated property tab. Use **Home/Office/Suites**, **Leases**, **Money**, **Maintenance** and **Conversations** for their detailed records rather than looking for duplicate sections on Overview.
 
 ## Edit, classify and schedule changes
 
@@ -25,19 +25,23 @@ For a single home or whole office, use **Archive property** in **Property setup*
 
 Client owners use shared person/company identities. Create or select the identity, open the Property and choose **Change ownership**. Review the complete proposed relationship set/effective context before confirming; do not accidentally remove another retained relationship. Self-owned properties do not need a fabricated client-owner identity.
 
+Each owner card includes an optional **Ownership share (%)** for that property. Enter the confirmed percentage with up to two decimal places, or leave it blank as **Not recorded**. When every share is known, the total must be exactly 100%; known shares must leave room for any unknown owners. Never guess an equal split. Shares appear alongside owners in the property list, the property's **Owners** section and the owner's Relationships section. To change a share, use **Change ownership** and choose its effective date; prior shares remain in history. These percentages do not calculate or split money, distributions or entitlements.
+
 **Owners** lists client owners. Open one to review related Properties, Leases, Maintenance, Money and Conversations. Use current/former relationship filtering as available. To change actual property facts, follow its Property/source link. Owner money describes related whole-property activity; the app does not infer shares or distributable entitlement.
 
-In a property's **Relationships** cards, select a client owner's name to open their workspace; **You** identifies local-operator ownership and has no profile link. In an owner's Relationships cards, select the property name to open that property.
+In a property's **Owners** cards, select a client owner's name to open their workspace; **You** identifies local-operator ownership and has no profile link. In an owner's Relationships cards, select the property name to open that property.
 
 ## People, contacts and tenants
 
-On **Property setup → Change ownership**, each selected owner shows their saved contact details. Use **Manage contact details** to edit the shared record. When adding a new owner, contact details are optional and save together with the ownership change.
+On **Overview → Owners → Change ownership**, each selected owner shows their saved contact details. Use **Manage contact details** to edit the shared record. When adding a new owner, contact details are optional and save together with the ownership change.
 
 You can keep multiple emails, phone numbers and mailing addresses for each person or organization. Each type has one **Primary** contact; the first is selected automatically. On **Add contact details**, existing contacts appear below the form with **Edit**, **Make primary** and **Remove** actions. Select **Make primary** and save to switch the primary for that type. If you want to remove a primary with alternatives, make another contact of the same type primary first. Removing the last entry is allowed. **Remove** archives the contact rather than deleting its history; archived contacts can be restored.
 
 These contacts and primary choices are shared across owner, tenant and provider roles. A role's explicitly preferred contact remains a separate choice; primary changes do not replace it. Removing a preferred contact may require choosing a replacement or clearing that role preference.
 
 On a tenant's detail page, **Add contact details** is beside **Contact details**, and **Edit tenant preferences** is beside **Tenant preferences**. Preferences include the contact to use and whether contact is allowed; notes can describe preferred contact times/time zone, communication channel, language or accessibility needs. **Archive tenant** below preferences archives the tenant role, not the shared person or organization.
+
+**Official identification:** choose **Manage official IDs** on the tenant page to record a passport, driver's license, state/national ID, or an organization's business registration. Enter the issuing country (for example, `US`), optional state/region, **only the last four letters or digits**, and optional expiration date. Never enter a full ID number or upload a document scan here. You may record multiple IDs, edit them or remove entries. A tenant profile and lease draft can be saved without one, but every participant needs at least one recorded ID before you execute the lease. Recording details does not authenticate the document; check the document and expiration yourself. Saved changes use the tenant's existing conflict/retry safeguards. General activity hides ID details; contextual tenant history and encrypted backups retain the masked records.
 
 Open **Tenants**, or `/tenants`. Tenant profiles and tenant actions use this path. Shared names and contact details used by owners, tenants and providers open their person record under `/parties`.
 

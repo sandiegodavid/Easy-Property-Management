@@ -10510,6 +10510,22 @@
                   }
                 ],
                 "title": "Partyid"
+              },
+              "sharePercent": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "maximum": 100,
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Sharepercent"
               }
             },
             "required": [
@@ -11121,6 +11137,22 @@
                   }
                 ],
                 "title": "Partyid"
+              },
+              "sharePercent": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "maximum": 100,
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Sharepercent"
               }
             },
             "required": [
@@ -12677,6 +12709,68 @@
           ],
           "title": "Notes"
         },
+        "officialIds": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "documentType": {
+                "enum": [
+                  "passport",
+                  "drivers_license",
+                  "state_id",
+                  "national_id",
+                  "business_registration"
+                ],
+                "title": "Documenttype",
+                "type": "string"
+              },
+              "expiresOn": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Expireson"
+              },
+              "issuingCountry": {
+                "pattern": "^[A-Z]{2}$",
+                "title": "Issuingcountry",
+                "type": "string"
+              },
+              "issuingRegion": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Z0-9-]{1,10}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Issuingregion"
+              },
+              "lastFour": {
+                "pattern": "^[A-Za-z0-9]{4}$",
+                "title": "Lastfour",
+                "type": "string"
+              }
+            },
+            "required": [
+              "issuingCountry",
+              "lastFour",
+              "documentType"
+            ],
+            "title": "OfficialIdRequest",
+            "type": "object"
+          },
+          "maxItems": 10,
+          "title": "Officialids",
+          "type": "array"
+        },
         "partyKind": {
           "enum": [
             "individual",
@@ -12777,6 +12871,68 @@
             }
           ],
           "title": "Notes"
+        },
+        "officialIds": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "documentType": {
+                "enum": [
+                  "passport",
+                  "drivers_license",
+                  "state_id",
+                  "national_id",
+                  "business_registration"
+                ],
+                "title": "Documenttype",
+                "type": "string"
+              },
+              "expiresOn": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Expireson"
+              },
+              "issuingCountry": {
+                "pattern": "^[A-Z]{2}$",
+                "title": "Issuingcountry",
+                "type": "string"
+              },
+              "issuingRegion": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Z0-9-]{1,10}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Issuingregion"
+              },
+              "lastFour": {
+                "pattern": "^[A-Za-z0-9]{4}$",
+                "title": "Lastfour",
+                "type": "string"
+              }
+            },
+            "required": [
+              "issuingCountry",
+              "lastFour",
+              "documentType"
+            ],
+            "title": "OfficialIdRequest",
+            "type": "object"
+          },
+          "maxItems": 10,
+          "title": "Officialids",
+          "type": "array"
         },
         "preferredContactMethodId": {
           "anyOf": [
@@ -12977,6 +13133,81 @@
             }
           ],
           "title": "Notes"
+        },
+        "officialIds": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "documentNumber": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9 ./_-]{0,79}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Documentnumber"
+              },
+              "documentType": {
+                "enum": [
+                  "license",
+                  "passport",
+                  "drivers_license",
+                  "state_id",
+                  "national_id",
+                  "business_registration"
+                ],
+                "title": "Documenttype",
+                "type": "string"
+              },
+              "expiresOn": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Expireson"
+              },
+              "issuingCountry": {
+                "pattern": "^[A-Z]{2}$",
+                "title": "Issuingcountry",
+                "type": "string"
+              },
+              "issuingRegion": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Z0-9-]{1,10}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Issuingregion"
+              },
+              "lastFour": {
+                "pattern": "^[A-Za-z0-9]{4}$",
+                "title": "Lastfour",
+                "type": "string"
+              }
+            },
+            "required": [
+              "issuingCountry",
+              "lastFour",
+              "documentType"
+            ],
+            "title": "ProviderOfficialIdInput",
+            "type": "object"
+          },
+          "maxItems": 10,
+          "title": "Officialids",
+          "type": "array"
         },
         "party": {
           "additionalProperties": false,
@@ -13255,6 +13486,81 @@
           ],
           "title": "Notes"
         },
+        "officialIds": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "documentNumber": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9 ./_-]{0,79}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Documentnumber"
+              },
+              "documentType": {
+                "enum": [
+                  "license",
+                  "passport",
+                  "drivers_license",
+                  "state_id",
+                  "national_id",
+                  "business_registration"
+                ],
+                "title": "Documenttype",
+                "type": "string"
+              },
+              "expiresOn": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Expireson"
+              },
+              "issuingCountry": {
+                "pattern": "^[A-Z]{2}$",
+                "title": "Issuingcountry",
+                "type": "string"
+              },
+              "issuingRegion": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Z0-9-]{1,10}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Issuingregion"
+              },
+              "lastFour": {
+                "pattern": "^[A-Za-z0-9]{4}$",
+                "title": "Lastfour",
+                "type": "string"
+              }
+            },
+            "required": [
+              "issuingCountry",
+              "lastFour",
+              "documentType"
+            ],
+            "title": "ProviderOfficialIdInput",
+            "type": "object"
+          },
+          "maxItems": 10,
+          "title": "Officialids",
+          "type": "array"
+        },
         "selectionReason": {
           "anyOf": [
             {
@@ -13319,6 +13625,81 @@
             }
           ],
           "title": "Notes"
+        },
+        "officialIds": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "documentNumber": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9 ./_-]{0,79}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Documentnumber"
+              },
+              "documentType": {
+                "enum": [
+                  "license",
+                  "passport",
+                  "drivers_license",
+                  "state_id",
+                  "national_id",
+                  "business_registration"
+                ],
+                "title": "Documenttype",
+                "type": "string"
+              },
+              "expiresOn": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Expireson"
+              },
+              "issuingCountry": {
+                "pattern": "^[A-Z]{2}$",
+                "title": "Issuingcountry",
+                "type": "string"
+              },
+              "issuingRegion": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Z0-9-]{1,10}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Issuingregion"
+              },
+              "lastFour": {
+                "pattern": "^[A-Za-z0-9]{4}$",
+                "title": "Lastfour",
+                "type": "string"
+              }
+            },
+            "required": [
+              "issuingCountry",
+              "lastFour",
+              "documentType"
+            ],
+            "title": "ProviderOfficialIdInput",
+            "type": "object"
+          },
+          "maxItems": 10,
+          "title": "Officialids",
+          "type": "array"
         },
         "selectionReason": {
           "anyOf": [

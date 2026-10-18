@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import Field, StrictBool, StrictInt, model_validator
 
 from app.modules.operator.domain.models import Contract
+from app.modules.tenants.application.id_contract import OfficialIdRequest
 
 
 class IdentityForm(Contract):
@@ -72,6 +73,7 @@ class ContactRestoreForm(IdentityForm):
 class TenantCreateForm(PartyCreateForm):
     notes: str | None = Field(None, max_length=4000)
     doNotContact: StrictBool | None = None
+    officialIds: list[OfficialIdRequest] | None = Field(None, max_length=10)
 
 
 class TenantDesignateForm(Contract):
@@ -83,6 +85,7 @@ class TenantPatchForm(IdentityForm):
     preferredContactMethodId: UUID | None = None
     doNotContact: StrictBool | None = None
     notes: str | None = Field(None, max_length=4000)
+    officialIds: list[OfficialIdRequest] | None = Field(None, max_length=10)
 
 
 IDENTITY_SCHEMAS = {

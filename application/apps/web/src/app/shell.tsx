@@ -320,11 +320,26 @@ function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
       <div className={kind === "property" ? "property-workspace-header" : undefined}>
         <ContextNavigator key={`${kind}:${id}`} kind={kind} />
         <div className="directory-heading">
-          <h2>
-            {kind === "property"
-              ? (property.data?.displayName ?? "Property")
-              : (owner.data?.displayName ?? "Owner")}
-          </h2>
+          <div className="property-workspace-title">
+            <h2>
+              {kind === "property"
+                ? (property.data?.displayName ?? "Property")
+                : (owner.data?.displayName ?? "Owner")}
+            </h2>
+            {kind === "property" && property.data && (
+              <p className="property-workspace-address" aria-label="Property address">
+                {[
+                  property.data.addressLine1,
+                  property.data.addressLine2,
+                  property.data.city,
+                  property.data.region,
+                  property.data.postalCode,
+                ]
+                  .filter(Boolean)
+                  .join(", ")}
+              </p>
+            )}
+          </div>
           {kind === "property" && (
             <button
               type="button"

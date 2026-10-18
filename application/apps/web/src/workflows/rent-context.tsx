@@ -7,7 +7,7 @@ import { MoneyFacts } from "./money-presentation";
 import { cents } from "./money-presentation";
 
 type Preview = components["schemas"]["SchedulePreviewResponse"];
-export function scheduleRequest(values: Record<string, unknown>) {
+function scheduleRequest(values: Record<string, unknown>) {
   return {
     leaseTermId: scalar(values.leaseTermId, ""),
     throughOn: scalar(values.throughOn, ""),

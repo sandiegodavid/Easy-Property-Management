@@ -17,7 +17,7 @@ type Read = Pick<
 >;
 const label = (value: string) => value.replaceAll("_", " ");
 
-export function HomeRegion({
+function HomeRegion({
   title,
   capture,
   unavailable,

@@ -19,10 +19,14 @@ class TenantProfileModel(LocalBase):
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
     archived_at: Mapped[str | None] = mapped_column(String)
     revision: Mapped[int] = mapped_column(nullable=False, server_default="1")
+    official_ids_json: Mapped[str] = mapped_column(String, nullable=False, server_default="[]")
 
     __table_args__ = (
         CheckConstraint("do_not_contact IN (0, 1)"),
         CheckConstraint("typeof(revision) = 'integer' AND revision >= 1"),
+        CheckConstraint(
+            "json_valid(official_ids_json) AND json_type(official_ids_json) = 'array' AND json_array_length(official_ids_json) <= 10"
+        ),
         Index("tenant_profiles_active_name", "archived_at"),
     )
 

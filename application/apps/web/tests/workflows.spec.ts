@@ -54,21 +54,15 @@ async function saved(page: Page, title: string) {
       .click();
   });
   if (title === "Create property") {
+    await page.getByRole("link", { name: "Back to property", exact: true }).click();
     await expect(page).toHaveURL(/\/properties\/[^/]+\/overview$/);
     return;
   }
-  if (title === "Name" || title === "Add contact") {
-    await expect(
-      page.getByText(
-        title === "Name" ? "Name changed successfully." : "Contact details added successfully.",
-        { exact: true },
-      ),
-    ).toBeVisible();
-    await expect(page.getByRole("region", { name: "Committed result" })).toHaveCount(0);
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
+  if (await page.locator(".saved-item").count()) {
     await expect(page.getByText(/^Operation /)).toHaveCount(0);
     await expect(page.getByText(/^Result record /)).toHaveCount(0);
-  } else {
-    await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+    return;
   }
   if (!(await page.getByText("Draft saved · Command committed", { exact: true }).isVisible()))
     await page.getByText("Form status and recovery details", { exact: true }).click();
@@ -96,6 +90,7 @@ test("progressive property creation opens the new property overview", async ({ p
   await page.getByLabel("Postal code", { exact: true }).fill("97201");
   await expect(page.getByText("Form status and recovery details", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Create property", exact: true }).click();
+  await page.getByRole("link", { name: "Back to property", exact: true }).click();
   await expect(page).toHaveURL(/\/properties\/[^/]+\/overview$/);
   expect(savedCountries.length).toBeGreaterThan(0);
   expect(savedCountries.every((country) => country === "US")).toBe(true);
@@ -290,9 +285,14 @@ test("shared contacts allow multiple values per type, switch primary and retain 
       await page.getByLabel(`${field} (required)`, { exact: true }).fill(value);
       await page.getByLabel("Label", { exact: true }).fill(`${type} ${index + 1}`);
       await saved(page, "Add contact");
-      const row = page.locator(".person-contact-row").filter({ hasText: `${type} ${index + 1}` });
+      const row = page.locator(".saved-item");
       await expect(row).toContainText(value);
-      await expect(row.getByText("Primary", { exact: true })).toHaveCount(index === 0 ? 1 : 0);
+      await expect(
+        row
+          .getByText("Primary contact", { exact: true })
+          .locator("..")
+          .getByText(index === 0 ? "Yes" : "No", { exact: true }),
+      ).toBeVisible();
     }
   }
   for (const { type } of values) {
@@ -315,7 +315,7 @@ test("shared contacts allow multiple values per type, switch primary and retain 
     await expect(page.getByLabel("Make primary for this contact type")).toBeChecked();
     await page.getByRole("button", { name: "Save contact details", exact: true }).click();
     await expect(
-      page.getByText("Contact details updated successfully.", { exact: true }),
+      page.getByRole("heading", { name: "Contact details updated", exact: true }),
     ).toBeVisible();
     await page.goto(addUrl);
     await expect(second.getByText("Primary", { exact: true })).toBeVisible();
@@ -329,7 +329,7 @@ test("shared contacts allow multiple values per type, switch primary and retain 
     await expect(page.getByLabel("Label", { exact: true })).toHaveValue(`${type} edited`);
     await page.getByRole("button", { name: "Save contact details", exact: true }).click();
     await expect(
-      page.getByText("Contact details updated successfully.", { exact: true }),
+      page.getByRole("heading", { name: "Contact details updated", exact: true }),
     ).toBeVisible();
     await page.goto(addUrl);
     await page
@@ -432,7 +432,7 @@ test("shared contact primary edits recover interrupted results and preserve stal
   ).toBeVisible();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
   await expect(
-    page.getByText("Contact details updated successfully.", { exact: true }),
+    page.getByRole("heading", { name: "Contact details updated", exact: true }),
   ).toBeVisible();
   expect(writes).toBe(1);
   await page.goto(addUrl);
@@ -641,11 +641,10 @@ test("existing shared identity becomes a Provider without duplicating identity a
   await expect(page.getByRole("region", { name: "Provider record", exact: true })).toContainText(
     "Operator recorded concern",
   );
-  await page.getByText("Provider actions", { exact: true }).click();
   await expect(page.getByRole("link", { name: "Edit provider profile", exact: true })).toHaveCount(
     0,
   );
-  await page.getByRole("link", { name: "Restore provider", exact: true }).click();
+  await page.getByRole("button", { name: "Restore provider", exact: true }).click();
   await saved(page, "Restore provider");
   const restored = (await (
     await request.get(`/api/providers/${identity.id}`)
@@ -658,7 +657,7 @@ test("existing shared identity becomes a Provider without duplicating identity a
 test("Provider search combines service area references and avoid state with accessible contextual review", async ({
   page,
   request,
-}) => {
+}, testInfo) => {
   const created = await provider(request, `Éclair Provider ${crypto.randomUUID()}`);
   const id = created.profile.partyId;
   let revision = created.profile.revision;
@@ -712,6 +711,13 @@ test("Provider search combines service area references and avoid state with acce
     await expect(page.getByRole("region", { name: "Provider record", exact: true })).toContainText(
       "Manually recorded prior work",
     );
+    await expect(page.getByRole("button", { name: "Edit provider", exact: true })).toBeVisible();
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page
+        .locator(".provider-detail")
+        .screenshot({ path: testInfo.outputPath(`provider-${theme}-${width}.png`) });
+    }
     await page.evaluate(axe.source);
     expect(
       await page.evaluate(async () =>
@@ -726,7 +732,7 @@ test("Provider search combines service area references and avoid state with acce
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
   }
-  const link = page.getByRole("link", { name: "Shared identity and contacts", exact: true });
+  const link = page.getByRole("link", { name: "View contact details", exact: true });
   await link.focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(new RegExp(`/parties\\?identity=${id}`));
@@ -739,8 +745,7 @@ test("provider profile and service history commit through their registered OPS f
   const created = await provider(request, "Slice50 services provider");
   const id = created.profile.partyId;
   await page.goto(`/providers/${id}/details`);
-  await page.getByText("Add services", { exact: true }).click();
-  await page.getByRole("link", { name: "Add service", exact: true }).click();
+  await page.getByRole("button", { name: "Add service", exact: true }).click();
   await page.getByLabel("Display name (required)").fill("Electrical repair");
   await saved(page, "Add service");
   const response = await request.get(`/api/providers/${id}`);
@@ -751,7 +756,7 @@ test("provider profile and service history commit through their registered OPS f
   await saved(page, "Archive service");
   await page.goto(`/providers/${id}/details`);
   await expect(page.getByText("Electrical repair", { exact: true })).toHaveCount(0);
-  await page.getByLabel("Include archived contextual history").check();
+  await page.getByLabel("Show archived records").check();
   await expect(page.getByText("Electrical repair", { exact: true })).toBeVisible();
   await page.goto(`/providers?workflow=provider.service.restore&target=${id}&child=${service.id}`);
   await saved(page, "Restore service");
@@ -856,7 +861,7 @@ test("an interrupted committed response reconciles without duplicating the Provi
   await page.getByRole("button", { name: "Add service", exact: true }).click();
   await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
   await page.getByRole("button", { name: "Check original result" }).click();
-  await expect(page.getByRole("region", { name: "Committed result" })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(writes).toBe(1);
   const response = await request.get(`/api/providers/${id}`);
   const current = (await response.json()) as Schema["ProviderResponse"];
@@ -951,7 +956,7 @@ test("ownership replacement can create an inline owner without erasing interval 
   await page.getByLabel("New owner name", { exact: true }).fill("Slice50 inline owner");
   await page.getByRole("button", { name: "Add to owners", exact: true }).click();
   await page.getByRole("button", { name: "Save ownership change", exact: true }).click();
-  await expect(page.getByText("Ownership updated successfully.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Ownership updated", exact: true })).toBeVisible();
   const response = await request.get(`/api/properties/${created.id}`);
   const current =
     (await response.json()) as Schema["app__modules__portfolio__api__router__PropertyResponse"];
@@ -1029,7 +1034,7 @@ test("manual reputation sources retain safe external pointers and contextual lif
   await expect(
     section.getByRole("link", { name: "Review google externally (new tab)", exact: true }),
   ).toHaveCount(0);
-  await page.getByLabel("Include archived contextual history", { exact: true }).check();
+  await page.getByLabel("Show archived records", { exact: true }).check();
   const historyRow = section
     .locator(":scope > article")
     .filter({ hasText: "https://reputation.example/google_updated" });
@@ -1102,7 +1107,7 @@ test("reputation edits reconcile a lost response and reject unsafe or duplicate 
   await page.getByRole("textbox", { name: "Notes", exact: true }).fill("Updated note after review");
   await page.getByRole("button", { name: "Save reputation link changes", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Committed result", exact: true })).toBeVisible();
+  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(writes).toBe(1);
   const current = (await (
     await request.get(`/api/providers/${id}`)

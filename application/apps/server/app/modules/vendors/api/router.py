@@ -23,6 +23,7 @@ from app.modules.parties.application.service import (
     PartyValidationError,
 )
 from app.modules.vendors.application.service import (
+    provider_ids_from_api,
     UNSET,
     PossibleDuplicateParty,
     ProviderError,
@@ -45,6 +46,7 @@ from app.modules.vendors.application.service import (
     canonical_reputation_url,
 )
 from app.modules.workspace.application.runtime import WorkspaceRuntime
+from app.modules.vendors.application.id_contract import ProviderOfficialIdInput
 
 
 class Contract(BaseModel):
@@ -68,6 +70,7 @@ class ProfileInput(Contract):
     selectionStatus: Literal["neutral", "preferred", "avoid"] = "neutral"
     selectionReason: str | None = Field(None, max_length=1000)
     notes: str | None = Field(None, max_length=4000)
+    officialIds: list[ProviderOfficialIdInput] = Field(default_factory=list, max_length=10)
 
 
 class ProviderConcurrency(Contract):
@@ -102,6 +105,7 @@ class ProfilePatchInput(ExistingProviderConcurrency):
     selectionStatus: Literal["neutral", "preferred", "avoid"] | None = None
     selectionReason: str | None = Field(None, max_length=1000)
     notes: str | None = Field(None, max_length=4000)
+    officialIds: list[ProviderOfficialIdInput] = Field(default_factory=list, max_length=10)
 
     @model_validator(mode="after")
     def require_non_null_selection_status_when_supplied(self):
@@ -288,6 +292,7 @@ class ProfileResponse(Contract):
     selectionStatus: Literal["neutral", "preferred", "avoid"]
     selectionReason: str | None
     notes: str | None
+    officialIds: list[ProviderOfficialIdInput] = Field(max_length=10)
     createdAt: AwareDatetime
     updatedAt: AwareDatetime
     archivedAt: AwareDatetime | None
@@ -1030,7 +1035,12 @@ def _restore_endpoint(operation, ready, invoke):
 
 
 def _profile(data):
-    return ProviderProfileCommand(data.selectionStatus, data.selectionReason, data.notes)
+    return ProviderProfileCommand(
+        data.selectionStatus,
+        data.selectionReason,
+        data.notes,
+        provider_ids_from_api([item.model_dump(mode="json") for item in data.officialIds]),
+    )
 
 
 def _patch_profile(data):
@@ -1039,6 +1049,9 @@ def _patch_profile(data):
         data.selectionStatus if "selectionStatus" in fields else UNSET,
         data.selectionReason if "selectionReason" in fields else UNSET,
         data.notes if "notes" in fields else UNSET,
+        provider_ids_from_api([item.model_dump(mode="json") for item in data.officialIds])
+        if "officialIds" in fields
+        else UNSET,
     )
 
 
