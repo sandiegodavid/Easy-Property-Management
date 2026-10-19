@@ -124,7 +124,7 @@ test("lease detail links to its money records", async ({ page }) => {
   await expect(moneyLink).toHaveAttribute("href", /\/money\?leaseId=[^&]+$/);
   await moneyLink.click();
   await expect(page).toHaveURL(/\/money\?leaseId=[^&]+$/);
-  await expect(page.getByText("Showing this lease's records.", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Showing this lease.s records./)).toBeVisible();
   const rent = page.getByRole("region", { name: "rent records", exact: true });
   await expect(rent.getByRole("article")).toHaveCount(2);
 });

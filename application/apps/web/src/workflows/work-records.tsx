@@ -646,6 +646,7 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
                 <article
                   key={scalar(item.id)}
                   id={key === "appointments" ? `appointment-${scalar(item.id)}` : undefined}
+                  className={key === "appointments" ? "maintenance-appointment-card" : undefined}
                 >
                   {key === "costContexts" ? (
                     <MoneyFacts

@@ -154,6 +154,21 @@ npm run test:web -- apps/web/tests/home-layout.spec.ts
 
 Packaged browser tests start local FastAPI servers on ports 18744/18745 with disposable workspaces and the wheel's extracted assets. `npm run test:web` without a selector runs all browser suites. See [code-quality requirements](docs/CODE_QUALITY.md) for Python Ruff checks and [browser validation](docs/ui/validation.md) for recorded acceptance evidence.
 
+### Demo end-to-end tests (Playwright)
+
+The seeded demo workspace has its own read-only Playwright suite covering the main workspaces (properties, owners, tenants, leasing, money, maintenance, providers, home) against a locally served demo server on `http://127.0.0.1:8001`. The suite never submits workflows, so seeded records stay intact for `demo/verify.py`.
+
+Run from `application/` after seeding and serving the demo workspace:
+
+```bash
+export EPM_PYTHON="$PWD/.venv/bin/python"
+.venv/bin/python demo/seed.py --workspace "$HOME/Desktop/Property-Management-Data/synthetic-demo"
+.venv/bin/python demo/serve.py
+npm run test:demo
+```
+
+See [demo Playwright tests](application/apps/web/tests-demo/README.md) for prerequisites, the full suite list, and conventions.
+
 ## Local HTTP transport
 
 `python -m app serve` binds only to `127.0.0.1:8000`; `--port` selects another port. Production browser requests use the same origin. Null/foreign origins and non-loopback Host headers are rejected before route handling; forwarded headers are not trusted. Development can explicitly allow an exact loopback frontend origin with the repeatable `--development-origin` flag.

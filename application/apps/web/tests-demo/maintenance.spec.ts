@@ -21,6 +21,7 @@ test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:8001" } });
 
 const ISSUE_SUMMARIES = [
   "Seasonal furnace service scheduled",
+  "Annual plumbing inspection",
   "Urgent under-sink leak",
   "Urgent loss of heating",
 ];
@@ -53,7 +54,7 @@ test("maintenance directory lists the seeded demo issues", async ({ page }) => {
   );
   await expect(views.getByRole("link", { name: "Owner concerns", exact: true })).toBeVisible();
 
-  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(3);
+  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(4);
   for (const summary of ISSUE_SUMMARIES) {
     await expect(page.getByRole("heading", { name: summary, exact: true })).toBeVisible();
   }
@@ -77,6 +78,12 @@ test("issue cards show status, priority, category and property", async ({ page }
   const heating = issueCard(page, "Urgent loss of heating");
   await expect(heating).toContainText("Urgent priority");
   await expect(heating).toContainText("Spruce House");
+
+  const inspection = issueCard(page, "Annual plumbing inspection");
+  await expect(inspection.locator(".maintenance-issue-status")).toHaveText("Open");
+  await expect(inspection).toContainText("Low priority");
+  await expect(inspection).toContainText("Plumbing");
+  await expect(inspection).toContainText("Willow House — Prepaid");
 });
 
 test("category and priority filters narrow the issue list", async ({ page }) => {
@@ -85,14 +92,16 @@ test("category and priority filters narrow the issue list", async ({ page }) => 
 
   await dir.getByRole("combobox", { name: "Issue category", exact: true }).selectOption("plumbing");
   await expect(page).toHaveURL(/category=plumbing/);
-  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(1);
-  await expect(
-    page.getByRole("heading", { name: "Urgent under-sink leak", exact: true }),
-  ).toBeVisible();
+  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(2);
+  for (const summary of ["Urgent under-sink leak", "Annual plumbing inspection"]) {
+    await expect(
+      page.getByRole("heading", { name: summary, exact: true }),
+    ).toBeVisible();
+  }
 
   await dir.getByRole("button", { name: "Clear filters", exact: true }).click();
   await expect(page).toHaveURL(/\/maintenance$/);
-  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(3);
+  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(4);
 
   await dir.getByRole("combobox", { name: "Issue priority", exact: true }).selectOption("urgent");
   await expect(page).toHaveURL(/priority=urgent/);
@@ -125,6 +134,12 @@ test("opening an issue shows its quotes and returns to maintenance", async ({ pa
   await expect(
     detail.getByRole("heading", { name: "Urgent under-sink leak", exact: true }),
   ).toBeVisible();
+  // The appointment card must not repeat the issue title as a heading.
+  await expect(
+    detail
+      .getByRole("region", { name: "Appointments", exact: true })
+      .getByRole("heading", { name: "Urgent under-sink leak", exact: true }),
+  ).toHaveCount(0);
   const quotes = detail.getByRole("region", {
     name: "Provider quote comparison table",
     exact: true,
@@ -143,7 +158,7 @@ test("opening an issue shows its quotes and returns to maintenance", async ({ pa
   await expect(back).toHaveAttribute("href", "/maintenance");
   await back.click();
   await expect(page).toHaveURL(/\/maintenance$/);
-  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(3);
+  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(4);
 });
 
 test("owner concerns tab shows the empty state", async ({ page }) => {

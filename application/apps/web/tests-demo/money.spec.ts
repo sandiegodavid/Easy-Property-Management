@@ -93,7 +93,7 @@ test("birch townhome shows its unpaid rent expectations", async ({ page }) => {
     .click();
   await page.getByRole("button", { name: "View in Money", exact: true }).click();
   await expect(page).toHaveURL(/\/money\?propertyId=[^&]+$/);
-  await expect(page.getByText("Showing this property's records.", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Showing this property.s records./)).toBeVisible(); // regex, non-exact: the notice shares its paragraph with a Remove-filter button, and the source uses a curly apostrophe.
   const context = page.getByRole("region", { name: "Property context", exact: true });
   await expect(
     context.getByRole("link", { name: "Birch Townhome — Rent Follow-up", exact: true }),
@@ -103,7 +103,7 @@ test("birch townhome shows its unpaid rent expectations", async ({ page }) => {
   await expect(cards).toHaveCount(2);
   const first = cards.first();
   await expect(first.getByRole("heading", { name: "Rent due", exact: true })).toBeVisible();
-  await expect(first.getByText("Unpaid", { exact: true }).first()).toBeVisible();
+  await expect(first.getByText("unpaid", { exact: true }).first()).toBeVisible();
   await expect(first.getByText("USD 1950.00", { exact: true }).first()).toBeVisible();
 });
 
@@ -116,7 +116,7 @@ test("willow house prepayment is a paid future expectation", async ({ page }) =>
   await expect(page).toHaveURL(/\/leases\/[^/]+\/details$/);
   await page.getByRole("link", { name: "View rent and deposits →", exact: true }).click();
   await expect(page).toHaveURL(/\/money\?leaseId=[^&]+$/);
-  await expect(page.getByText("Showing this lease's records.", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Showing this lease.s records./)).toBeVisible();
   const rent = page.getByRole("region", { name: "rent records", exact: true });
   await expect(rent.getByRole("article")).toHaveCount(2);
   await rent.getByRole("combobox", { name: "Settlement", exact: true }).selectOption("paid");

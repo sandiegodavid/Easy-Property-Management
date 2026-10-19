@@ -26,7 +26,11 @@ type Section = Schema["OverviewResponse"]["sections"][string];
 type SectionKind = Section["kind"];
 type Scope = "current" | "former" | "all";
 type RentalUnit = { id: string; displayName: string; status: string };
-const label = (value: string) => value.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ");
+const label = (value: string) =>
+  value
+    .replace(/([a-z])([A-Z])/g, (_, a, b) => `${a} ${b.toLowerCase()}`)
+    .replaceAll("_", " ")
+    .replace(/^\w/, (character) => character.toUpperCase());
 class ReadFailure extends Error {
   constructor(
     readonly status: number,
