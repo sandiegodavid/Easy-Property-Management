@@ -604,6 +604,8 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
         keys={actions[tab]}
         target={tab === "rent" || tab === "receipts" || tab === "checks" ? leaseId : undefined}
         title="Money actions"
+        asButtons
+        collapsible={false}
       />
       {(tab === "expenses" || tab === "rent" || tab === "receipts") && (
         <label>

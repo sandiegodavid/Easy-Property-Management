@@ -224,6 +224,7 @@ function HomeTransport() {
               showDisclosureHint={false}
               allItems={tab === "Waiting"}
               title="Waiting"
+              showHeading={false}
               filters={filters}
               collection={reads.full.value?.waiting}
               read={reads.full}
@@ -239,6 +240,7 @@ function HomeTransport() {
               showDisclosureHint={false}
               allItems={tab === "Upcoming"}
               title="Upcoming"
+              showHeading={false}
               filters={filters}
               collection={reads.full.value?.upcoming}
               read={reads.full}

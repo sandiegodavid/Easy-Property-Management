@@ -221,6 +221,8 @@ test("information review cards fit all areas in both themes and narrow screens",
       await expect(information.getByText("applicable", { exact: true })).toHaveCount(0);
       if (area === "lease" || area === "rent" || area === "deposit") {
         await expect(information.getByText("not applicable", { exact: true })).toHaveCount(1);
+        await expect(information).toContainText("No setup is needed for the current records.");
+        await expect(information.getByRole("link")).toHaveCount(0);
       }
       const explanation = page.locator(".information-review-page > footer");
       await expect(explanation).toContainText(
@@ -302,13 +304,21 @@ test("unclassified leasing status offers one clear next step", async ({ page, re
     information.getByText(/Choose whether this home is not open for leasing/),
   ).toBeVisible();
   const action = information.getByRole("link", { name: "Set leasing status", exact: true });
-  await expect(action).toHaveAttribute("href", `/properties/${item.id}/units`);
+  await expect(action).toHaveAttribute(
+    "href",
+    `/properties?workflow=portfolio.space.classify&target=${space.id}`,
+  );
+  await expect(information).toContainText(
+    "Save the classification form, then return here and refresh.",
+  );
   const history = page.getByRole("region", { name: "Review details", exact: true });
   await expect(history.getByRole("heading", { name: "Review history", exact: true })).toBeVisible();
   await expect(history).toContainText("A review note does not change occupancy or leasing status");
   await expect(history.getByRole("button", { name: "Add review note", exact: true })).toBeVisible();
   await action.click();
-  await expect(page.getByRole("region", { name: "Property home", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(`/properties?workflow=portfolio.space.classify&target=${space.id}`);
+  await expect(page.getByRole("heading", { name: "Classify home", exact: true })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Requested change", exact: true })).toBeVisible();
 });
 
 test("required gaps survive acknowledgment and non-applicability comes from sources", async ({
@@ -324,7 +334,10 @@ test("required gaps survive acknowledgment and non-applicability comes from sour
   await expect(
     page.getByText("Leasing status hasn’t been classified.", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText(/Save any changes in the property’s Home tab/)).toBeVisible();
+  await expect(page.getByText(/Save the classification form/)).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Set occupancy and leasing status", exact: true }),
+  ).toHaveAttribute("href", `/properties?workflow=portfolio.space.classify&target=${space.id}`);
   await page.getByRole("button", { name: "Add review note" }).click();
   await expect(page.getByRole("option", { name: "Not applicable", exact: true })).toHaveCount(0);
   await page.getByLabel("Review reason").fill("Reviewed the unknown facts");
@@ -336,6 +349,177 @@ test("required gaps survive acknowledgment and non-applicability comes from sour
   );
   await page.getByRole("button", { name: "Review lease information" }).click();
   await expect(page.getByRole("option", { name: "Not applicable", exact: true })).toHaveCount(1);
+});
+
+test("conflicting occupancy routes to record review rather than classification", async ({
+  page,
+  request,
+}) => {
+  const item = await property(request, "Conflicting occupancy guidance");
+  const space = item.spaces[0];
+  await page.route(`**/api/spaces/${space.id}/status`, async (route) => {
+    const response = await route.fetch();
+    const status = (await response.json()) as Schema["SpaceStatusResponse"];
+    await route.fulfill({
+      response,
+      json: { ...status, attentionReasons: [{ code: "source_conflict" }] },
+    });
+  });
+  await page.goto(`/coverage/space/${space.id}/occupancy`);
+  const information = page.getByRole("region", { name: "Current information", exact: true });
+  await expect(
+    information.getByRole("link", { name: "Review occupancy and leasing status", exact: true }),
+  ).toHaveAttribute("href", `/properties/${item.id}/units`);
+  await expect(information).toContainText("conflicting records need review before changes");
+  await expect(information.locator('a[href*="workflow=portfolio.space.classify"]')).toHaveCount(0);
+});
+
+test("missing lease context opens property leases without assuming a new agreement", async ({
+  page,
+  request,
+}) => {
+  const item = await property(request, "Missing lease context guidance");
+  const unit = item.spaces[0];
+  await page.route(`**/api/operator/coverage/space/${unit.id}/lease`, async (route) => {
+    const response = await route.fetch();
+    const result = (await response.json()) as Schema["CoverageResult"];
+    await route.fulfill({
+      response,
+      json: {
+        ...result,
+        applicability: "applicable",
+        state: "missing_required_information",
+        causes: ["lease_context_missing"],
+      },
+    });
+  });
+  await page.goto(`/coverage/space/${unit.id}/lease`);
+  const information = page.getByRole("region", { name: "Current information", exact: true });
+  const action = information.getByRole("link", { name: "Review property leases", exact: true });
+  await expect(action).toHaveAttribute("href", `/properties/${item.id}/leases`);
+  await expect(information.locator('a[href*="workflow=lease.create"]')).toHaveCount(0);
+  await action.click();
+  await expect(page.getByRole("region", { name: "leases section", exact: true })).toBeVisible();
+});
+
+test("missing rent and deposit tracking opens the matching setup form for its lease", async ({
+  page,
+  request,
+}) => {
+  const item = await property(request, "Money setup guidance");
+  const tenantResponse = await request.post("/api/tenants", {
+    data: {
+      partyKind: "individual",
+      displayName: "Review setup tenant",
+      officialIds: [{ documentType: "passport", issuingCountry: "US", lastFour: "TEST" }],
+      expectedRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(tenantResponse.ok(), await tenantResponse.text()).toBeTruthy();
+  const tenant = (await tenantResponse.json()) as Schema["TenantMutationResponse"];
+  const created = await request.post("/api/leases", {
+    data: {
+      expectedLeaseRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+      spaceId: item.spaces[0].id,
+      leaseKind: "residential",
+      contractStartsOn: item.effectiveLocalDate,
+      occupancyStartsOn: item.effectiveLocalDate,
+      initialTerm: {
+        baseRentMinor: 100000,
+        currencyCode: "USD",
+        paymentFrequency: "monthly",
+        paymentDueDay: 1,
+        agreedSecurityDepositMinor: 100000,
+      },
+      participants: [{ tenantPartyId: tenant.id, participantRole: "primary_tenant" }],
+    },
+  });
+  expect(created.ok(), await created.text()).toBeTruthy();
+  const lease = (await created.json()) as Schema["LeaseMutationResponse"];
+  const executed = await request.post(`/api/leases/${lease.id}/execute`, {
+    data: {
+      expectedLeaseRevision: lease.leaseRevision,
+      expectedRevision: item.spaces[0].revision,
+      idempotencyKey: crypto.randomUUID(),
+      confirmed: true,
+      executedOn: item.effectiveLocalDate,
+    },
+  });
+  expect(executed.ok(), await executed.text()).toBeTruthy();
+  for (const scenario of [
+    {
+      area: "rent",
+      label: "Set up rent schedule",
+      url: `/money?workflow=finance.rent_expectation.synchronize&target=${lease.id}`,
+      heading: "Synchronize rent schedule",
+    },
+    {
+      area: "deposit",
+      label: "Set up deposit tracking",
+      url: `/money?workflow=finance.deposit_account.create&leaseId=${lease.id}`,
+      heading: "Create deposit account",
+    },
+  ]) {
+    await page.goto(`/coverage/space/${item.spaces[0].id}/${scenario.area}`);
+    const information = page.getByRole("region", { name: "Current information", exact: true });
+    const action = information.getByRole("link", { name: scenario.label, exact: true });
+    await expect(action).toHaveAttribute("href", scenario.url);
+    await expect(
+      information.getByRole("link", { name: "Review lease and terms", exact: true }),
+    ).toHaveCount(1);
+    await action.click();
+    await expect(page).toHaveURL(scenario.url);
+    await expect(page.getByRole("heading", { name: scenario.heading, exact: true })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Requested change", exact: true })).toBeVisible();
+  }
+  for (const scenario of [
+    {
+      area: "rent",
+      cause: "rent_synchronization_required",
+      label: "Update rent schedule",
+      url: `/money?workflow=finance.rent_expectation.synchronize&target=${lease.id}`,
+    },
+    {
+      area: "deposit",
+      cause: "deposit_terms_changed",
+      label: "Review deposit records",
+      url: `/money?tab=deposits&leaseId=${lease.id}`,
+    },
+    {
+      area: "lease",
+      cause: "lease_context_ambiguous_or_missing_term",
+      label: "Review lease and terms",
+      url: `/leases/${lease.id}/details`,
+    },
+  ]) {
+    await page.route(
+      `**/api/operator/coverage/space/${item.spaces[0].id}/${scenario.area}`,
+      async (route) => {
+        const response = await route.fetch();
+        const result = (await response.json()) as Schema["CoverageResult"];
+        await route.fulfill({
+          response,
+          json: {
+            ...result,
+            applicability: "applicable",
+            state: "needs_review",
+            causes: [scenario.cause],
+          },
+        });
+      },
+    );
+    await page.goto(`/coverage/space/${item.spaces[0].id}/${scenario.area}`);
+    const information = page.getByRole("region", { name: "Current information", exact: true });
+    await expect(
+      information.getByRole("link", { name: scenario.label, exact: true }),
+    ).toHaveAttribute("href", scenario.url);
+    if (scenario.area === "deposit")
+      await expect(
+        information.locator('a[href*="workflow=finance.deposit_account.create"]'),
+      ).toHaveCount(0);
+  }
 });
 
 test("source changes retain review text and require explicit revision review", async ({

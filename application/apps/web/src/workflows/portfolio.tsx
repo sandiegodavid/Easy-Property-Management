@@ -191,17 +191,6 @@ function SpaceRecord({
                 >
                   Edit {unitTitle}
                 </button>
-                <button
-                  type="button"
-                  disabled={!scope.canWrite}
-                  onClick={() => {
-                    void navigate(`/leasing?workflow=lease.create&spaceId=${space.id}`, {
-                      state: { returnTo: location.pathname + location.search },
-                    });
-                  }}
-                >
-                  Start lease draft
-                </button>
                 {allowSuiteLifecycle && space.spaceKind === "office_suite" && (
                   <CommandLinks
                     collapsible={false}
@@ -585,11 +574,15 @@ export function PortfolioCommand() {
                 ← Back to {source.data.property.displayName}
               </ParentBackLink>
               <section className="property-edit-context" aria-label="Selected property">
-                <p className="space-classification-property">Changing ownership</p>
                 <h2>{source.data.property.displayName}</h2>
                 <p>
-                  Choose the owners who should be recorded from the effective date. You can keep
-                  current owners, select existing people by name, or add a new owner.
+                  {[
+                    source.data.property.addressLine1,
+                    source.data.property.city,
+                    source.data.property.region,
+                  ]
+                    .filter(Boolean)
+                    .join(", ")}
                 </p>
               </section>
             </>

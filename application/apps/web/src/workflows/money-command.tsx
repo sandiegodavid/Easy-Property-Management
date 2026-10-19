@@ -563,32 +563,72 @@ export function MoneyCommand() {
         },
       }
     : definition;
+  const tidy = [
+    "finance.expense_category.create",
+    "finance.expense_category.patch",
+    "finance.rent_receipt.create",
+  ].includes(definition.formKey);
   return (
-    <>
-      <ParentBackLink to={parentTarget} />
+    <div className={tidy ? "tidy-command money-edit-command" : undefined}>
+      <ParentBackLink
+        to={
+          definition.formKey === "finance.expense_category.create"
+            ? "/money?tab=categories"
+            : parentTarget
+        }
+      >
+        {definition.formKey === "finance.expense_category.create"
+          ? "← Back to Expense categories"
+          : definition.formKey === "finance.expense_category.patch"
+            ? `← Back to ${scalar(state.value.displayName, "expense category")}`
+            : undefined}
+      </ParentBackLink>
       {!completed && (
         <>
-          <MoneyFacts
-            value={selected ?? state.value}
-            fields={[
-              "id",
-              "status",
-              "amountMinor",
-              "outstandingAmountMinor",
-              "amount",
-              "receivedOn",
-              "refundDue",
-              "settlementStatus",
-              "voidedAt",
-            ]}
-          />
-          <p>
-            Amounts ending in Minor are integer USD cents. Decimal amounts require exactly two
-            decimal places. Allocation amounts must total the receipt; review the displayed
-            outstanding balance.
-          </p>
-          {state.ledgerRevision !== undefined && (
-            <p>Displayed rent-ledger revision: {state.ledgerRevision}</p>
+          {definition.formKey === "finance.expense_category.create" ? null : tidy ? (
+            <div className="selected-command-context">
+              {definition.formKey.startsWith("finance.expense_category.") ? (
+                <strong>{scalar(state.value.displayName, "New expense category")}</strong>
+              ) : (
+                <>
+                  <strong>Payment for recorded rent</strong>
+                  <MoneyFacts
+                    value={selected ?? {}}
+                    fields={["periodStartsOn", "periodEndsOn", "outstandingAmountMinor"]}
+                    labels={{
+                      periodStartsOn: "Rent period starts",
+                      periodEndsOn: "Rent period ends",
+                      outstandingAmountMinor: "Still due",
+                    }}
+                  />
+                </>
+              )}
+            </div>
+          ) : (
+            <>
+              <MoneyFacts
+                value={selected ?? state.value}
+                fields={[
+                  "id",
+                  "status",
+                  "amountMinor",
+                  "outstandingAmountMinor",
+                  "amount",
+                  "receivedOn",
+                  "refundDue",
+                  "settlementStatus",
+                  "voidedAt",
+                ]}
+              />
+              <p>
+                Amounts ending in Minor are integer USD cents. Decimal amounts require exactly two
+                decimal places. Allocation amounts must total the receipt; review the displayed
+                outstanding balance.
+              </p>
+              {state.ledgerRevision !== undefined && (
+                <p>Displayed rent-ledger revision: {state.ledgerRevision}</p>
+              )}
+            </>
           )}
           {verification && (
             <fieldset disabled={!!selectedMode}>
@@ -617,10 +657,12 @@ export function MoneyCommand() {
               </p>
             </fieldset>
           )}
-          <p>
-            Pickers show at most 100 records. Use a contextual record link if the needed expectation
-            is outside this selection.
-          </p>
+          {!tidy && (
+            <p>
+              Pickers show at most 100 records. Use a contextual record link if the needed
+              expectation is outside this selection.
+            </p>
+          )}
         </>
       )}
       {(!verification || selectedMode) && (
@@ -829,6 +871,6 @@ export function MoneyCommand() {
           returnTo={parentTarget}
         />
       )}
-    </>
+    </div>
   );
 }

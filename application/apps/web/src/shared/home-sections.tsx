@@ -24,6 +24,7 @@ function HomeRegion({
   read,
   stale = false,
   headingAction,
+  showHeading = true,
   children,
 }: {
   title: string;
@@ -32,6 +33,7 @@ function HomeRegion({
   read: Read;
   stale?: boolean;
   headingAction?: ReactNode;
+  showHeading?: boolean;
   children?: ReactNode;
 }) {
   const retry = (
@@ -76,6 +78,7 @@ function HomeRegion({
     <div className="home-section">
       <AsyncRegion
         title={title}
+        showHeading={showHeading}
         headingAction={headingAction}
         state={state}
         formatTimestamp={formatHomeTime}
@@ -120,6 +123,7 @@ function HomeRow({
   const when = item.followUp ?? item.taskDeadline ?? item.sourceDeadline;
   return (
     <DisclosureRow
+      showCollapseButton={false}
       title={
         item.source.kind === "coverage"
           ? `${item.title} — ${label(item.source.area)} information`
@@ -169,6 +173,7 @@ export function HomeCollection({
   allItems = false,
   showDisclosureHint = true,
   showDisclosureHelp = false,
+  showHeading = true,
 }: {
   title: string;
   collection?: Collection;
@@ -181,12 +186,14 @@ export function HomeCollection({
   allItems?: boolean;
   showDisclosureHint?: boolean;
   showDisclosureHelp?: boolean;
+  showHeading?: boolean;
 }) {
   const extra = useHomeCardItems(collection, allItems);
   const items = collection?.status === "available" ? [...collection.items, ...extra.items] : [];
   return (
     <HomeRegion
       title={title}
+      showHeading={showHeading}
       headingAction={showDisclosureHelp ? <DisclosureHelp /> : undefined}
       capture={collection?.capture}
       read={read}
@@ -195,11 +202,18 @@ export function HomeCollection({
     >
       {collection?.status === "available" && (
         <>
-          <h4>{collection.matchingTotal} recorded items</h4>
-          {filters && (
-            <HomeSourceLink to={collectionUrl(collection, filters)}>
-              View all {title} ({collection.matchingTotal})
+          {filters ? (
+            <HomeSourceLink
+              to={collectionUrl(collection, filters)}
+              collectionCursor={collection.viewAllCursor}
+            >
+              View all {title} ({collection.matchingTotal}{" "}
+              {collection.matchingTotal === 1 ? "item" : "items"})
             </HomeSourceLink>
+          ) : (
+            <p>
+              {collection.matchingTotal} {collection.matchingTotal === 1 ? "item" : "items"}
+            </p>
           )}
           {urgent !== undefined && urgent > 0 && <p>{urgent} urgent items in this response.</p>}
           {items.length === 0 ? (
@@ -229,8 +243,7 @@ export function HomeCollection({
           )}
           {collection.matchingTotal > items.length && (
             <p>
-              Showing {items.length} of {collection.matchingTotal}. Open the source workflows to
-              review more records.
+              Showing {items.length} of {collection.matchingTotal} items.
             </p>
           )}
         </>
@@ -320,6 +333,7 @@ export function LiveAttention({
         </div>
       )}
       <HomeCollection
+        showHeading={false}
         allItems={allItems}
         showDisclosureHint={showDisclosureHint}
         title="Needs action"

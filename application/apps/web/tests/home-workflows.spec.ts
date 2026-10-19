@@ -217,8 +217,7 @@ test("Home appointment opens its owning issue and records attendance without res
     new RegExp(`#appointment-${appointment.id}$`),
   );
   await panel.getByRole("link", { name: "View", exact: true }).click();
-  await page.getByText("Actions for Home appointment inspection", { exact: true }).click();
-  await page.getByRole("link", { name: "Finish appointment", exact: true }).click();
+  await page.getByRole("button", { name: "Record outcome", exact: true }).click();
   await page.getByLabel("I confirm this lifecycle change").check();
   await page.getByLabel("Reason", { exact: true }).fill("Attended; repair remains outstanding");
   await save(page, "Finish appointment");
@@ -379,7 +378,10 @@ test("Home payment uses current allocations and an interrupted response reconcil
   expect(row).toBeTruthy();
   await page.getByRole("button", { name: new RegExp(row.title) }).click();
   await page.getByRole("link", { name: "Record payment", exact: true }).click();
-  await action(page, "Record rent receipt", "Rent ledger actions");
+  await page
+    .getByRole("navigation", { name: "Rent ledger actions" })
+    .getByRole("button", { name: "Record payment", exact: true })
+    .click();
   await page.getByLabel("Received on (required)").fill(f.today);
   await page.getByLabel("Payment method kind (required)").selectOption("cash");
   let calls = 0;

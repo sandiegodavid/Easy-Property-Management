@@ -5,6 +5,7 @@ import { ConversationDetail } from "../shared/source-detail";
 import { formatHomeTime, formatHomeTemporal } from "../shared/home-time";
 import { MoneyFacts } from "./money-presentation";
 import { QuoteComparison } from "./quote-context";
+import { MaintenanceAppointment } from "./maintenance-appointment";
 import { WorkJournal } from "./work-journal";
 import { api } from "@epm/contracts";
 import { record, scalar } from "@epm/contracts/workflows";
@@ -593,27 +594,6 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
             ["maintenance.appointment.update", "maintenance.appointment.finish"],
           ],
           [
-            "quotes",
-            "Provider quotes",
-            [
-              "providerDisplayNameSnapshot",
-              "label",
-              "scopeSummary",
-              "amountMinor",
-              "receivedOn",
-              "withdrawnAt",
-              "earliestWorkStartOn",
-              "estimatedWorkFinishOn",
-              "termsNotes",
-              "validThrough",
-              "withdrawalReason",
-              "replacesQuoteId",
-              "currentPartyState",
-              "currentProviderProfileState",
-            ],
-            ["maintenance.quote.withdraw"],
-          ],
-          [
             "assignments",
             "Provider assignments",
             [
@@ -674,13 +654,8 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
                         (field) => item[field] != null && !field.endsWith("Id"),
                       )}
                     />
-                  ) : key === "quotes" ? (
-                    <MoneyFacts
-                      value={item}
-                      fields={(fields as string[]).filter(
-                        (field) => item[field] != null && !field.endsWith("Id"),
-                      )}
-                    />
+                  ) : key === "appointments" ? (
+                    <MaintenanceAppointment item={item} />
                   ) : (
                     <Facts
                       value={Object.fromEntries(
@@ -697,13 +672,6 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
                         (field) => item[field] != null && !field.endsWith("Id"),
                       )}
                     />
-                  )}
-                  {key === "quotes" && !!item.withdrawnAt && active && (
-                    <Link
-                      to={`${workflowUrl("maintenance.quote.create", id)}&replacesQuoteId=${scalar(item.id)}`}
-                    >
-                      Replace withdrawn quote
-                    </Link>
                   )}
                   {key === "assignments" && !item.endedAt && active && (
                     <Link
@@ -727,7 +695,7 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
                     <p>
                       <Link
                         state={{ returnTo: workUrl("issue", id) }}
-                        to={`${workflowUrl("file.upload")}&entityType=${key === "appointments" ? "maintenance_appointment" : key === "quotes" ? "maintenance_quote" : key === "assignments" ? "maintenance_assignment" : "maintenance_cost_context"}&entityId=${scalar(item.id)}&purpose=${key === "appointments" ? "appointment_document" : "supporting_document"}`}
+                        to={`${workflowUrl("file.upload")}&entityType=${key === "appointments" ? "maintenance_appointment" : key === "assignments" ? "maintenance_assignment" : "maintenance_cost_context"}&entityId=${scalar(item.id)}&purpose=${key === "appointments" ? "appointment_document" : "supporting_document"}`}
                       >
                         Attach supporting document
                       </Link>
@@ -745,6 +713,12 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
                     !item.endedAt &&
                     (key !== "appointments" || item.status === "scheduled") && (
                       <CommandLinks
+                        asButtons={key === "appointments"}
+                        collapsible={key !== "appointments"}
+                        labels={{
+                          "maintenance.appointment.update": "Reschedule",
+                          "maintenance.appointment.finish": "Record outcome",
+                        }}
                         target={id}
                         child={scalar(item.id)}
                         keys={actions as string[]}
@@ -757,13 +731,22 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
           </section>
         ))}
       </div>
+      <QuoteComparison
+        id={id}
+        active={active}
+        documents={(quoteId) => (
+          <EvidenceLinks
+            items={workChildren(
+              workChildren(value, "quotes").find((quote) => quote.id === quoteId) ?? {},
+              "files",
+            )}
+            issueId={id}
+          />
+        )}
+      />
       <section className="issue-detail-section">
         <WorkJournal id={id} />
       </section>
-      <details className="issue-detail-section">
-        <summary>Compare provider quotes</summary>
-        <QuoteComparison id={id} active={active} />
-      </details>
       <section className="issue-detail-section" aria-label="Issue evidence">
         <h3>Photos and documents</h3>
         <p>

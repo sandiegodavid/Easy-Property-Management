@@ -2,7 +2,7 @@ import { DynamicFilterForm } from "./dynamic-filter-form";
 import { useId, useState } from "react";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ParentBackLink, SourceWorkflowLink as Link } from "./home-navigation";
 import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
@@ -25,6 +25,7 @@ type Kind = "property" | "owner";
 type Section = Schema["OverviewResponse"]["sections"][string];
 type SectionKind = Section["kind"];
 type Scope = "current" | "former" | "all";
+type RentalUnit = { id: string; displayName: string; status: string };
 const label = (value: string) => value.replace(/([a-z])([A-Z])/g, "$1 $2").replaceAll("_", " ");
 class ReadFailure extends Error {
   constructor(
@@ -580,17 +581,102 @@ function LeaseTenants({ lease }: { lease: Schema["LeaseItem"] }) {
     </>
   );
 }
+function PropertyLeases({
+  section,
+  units,
+  canStart,
+}: {
+  section: Schema["LeaseSection"];
+  units: RentalUnit[];
+  canStart: boolean;
+}) {
+  const { scope } = useWorkspace();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const groups = new Map(
+    units.map((unit) => [unit.id, { unit, leases: [] as Schema["LeaseItem"][] }]),
+  );
+  for (const lease of section.items ?? []) {
+    if (!groups.has(lease.spaceId)) {
+      groups.set(lease.spaceId, {
+        unit: { id: lease.spaceId, displayName: "Rental unit", status: "archived" },
+        leases: [],
+      });
+    }
+    groups.get(lease.spaceId)!.leases.push(lease);
+  }
+  return (
+    <>
+      <p>Manage agreements, tenants and lease history for this property.</p>
+      <p>
+        {section.matchingTotal} matching {section.matchingTotal === 1 ? "lease" : "leases"}.
+        {section.nextCursor &&
+          " More agreements may appear under the same rental on the next page."}
+      </p>
+      <div className="property-lease-groups">
+        {[...groups.values()].map(({ unit, leases }) => (
+          <section
+            className="property-lease-group"
+            key={unit.id}
+            aria-label={`Leases for ${unit.displayName}`}
+          >
+            <header className="property-space-title-row">
+              <h4>{unit.displayName}</h4>
+              {canStart && unit.status === "active" && (
+                <button
+                  type="button"
+                  disabled={!scope.canWrite}
+                  onClick={() => {
+                    void navigate(`/leasing?workflow=lease.create&spaceId=${unit.id}`, {
+                      state: { returnTo: location.pathname + location.search },
+                    });
+                  }}
+                >
+                  Start lease draft
+                </button>
+              )}
+            </header>
+            {!leases.length && <p>No matching leases on this page.</p>}
+            <ul className="context-item-cards">
+              {leases.map((lease) => (
+                <li key={lease.id}>
+                  <strong>
+                    {label(lease.status).replace(/^./, (character) => character.toUpperCase())} ·{" "}
+                    {label(lease.leaseKind)}
+                  </strong>
+                  <p>
+                    Contract: {lease.contractStartsOn} through{" "}
+                    {leaseLastCoveredOn(lease.contractEndsOn) ?? "ongoing"}
+                  </p>
+                  {lease.actualMoveOutOn && <p>Move-out: {lease.actualMoveOutOn}</p>}
+                  <LeaseTenants lease={lease} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </>
+  );
+}
 function SectionContents({
   section,
   currentPropertyOwners = false,
   propertyContext = false,
   unitNames,
+  rentalUnits = [],
+  canStartLeases = false,
 }: {
   section: Section;
   currentPropertyOwners?: boolean;
   propertyContext?: boolean;
   unitNames?: Record<string, string>;
+  rentalUnits?: RentalUnit[];
+  canStartLeases?: boolean;
 }) {
+  if (section.kind === "leases" && propertyContext) {
+    return <PropertyLeases section={section} units={rentalUnits} canStart={canStartLeases} />;
+  }
   if (section.kind === "coverage" && propertyContext) {
     const items = section.items ?? [];
     const needsReview = items.filter(
@@ -740,7 +826,8 @@ function OverviewSection({
   query,
   unitNames,
   unitsLabel = "Units",
-  canChangeOwners = false,
+  canManageProperty = false,
+  rentalUnits,
 }: {
   initial: Section;
   kind: Kind;
@@ -748,7 +835,8 @@ function OverviewSection({
   query: ContextQuery;
   unitNames?: Record<string, string>;
   unitsLabel?: string;
-  canChangeOwners?: boolean;
+  canManageProperty?: boolean;
+  rentalUnits?: RentalUnit[];
 }) {
   const { scope } = useWorkspace();
   const [page, setPage] = useState<{ cursor?: string } | null>(null);
@@ -797,7 +885,7 @@ function OverviewSection({
               kind === "property" && section.kind === "relationships" ? (
                 <div className="owners-heading-actions">
                   <RelationshipCheckboxes value={query.relationshipScope} />
-                  {canChangeOwners && (
+                  {canManageProperty && (
                     <CommandLinks
                       keys={["portfolio.ownerships.replace"]}
                       target={id}
@@ -808,6 +896,8 @@ function OverviewSection({
                     />
                   )}
                 </div>
+              ) : kind === "property" && section.kind === "leases" ? (
+                <LeaseScopeFilter value={query.relationshipScope} />
               ) : undefined
             }
             showCaptureTime={false}
@@ -848,6 +938,8 @@ function OverviewSection({
               currentPropertyOwners={kind === "property" && query.relationshipScope === "current"}
               propertyContext={kind === "property"}
               unitNames={unitNames}
+              rentalUnits={rentalUnits}
+              canStartLeases={canManageProperty}
             />
           </AsyncRegion>
           {section.kind !== "coverage" && <p>Source: {section.sourceKind}</p>}
@@ -862,6 +954,25 @@ function OverviewSection({
         </>
       )}
     </section>
+  );
+}
+function LeaseScopeFilter({ value }: { value: Scope }) {
+  const [params, setParams] = useSearchParams();
+  const state: unknown = useLocation().state;
+  return (
+    <label className="relationship-filter lease-scope-filter">
+      <input
+        type="checkbox"
+        checked={value !== "current"}
+        onChange={(event) => {
+          const next = new URLSearchParams(params);
+          next.set("leaseScope", event.target.checked ? "all" : "current");
+          next.delete("cursor");
+          setParams(next, { state, preventScrollReset: true });
+        }}
+      />{" "}
+      Include past, future and draft leases
+    </label>
   );
 }
 function RelationshipCheckboxes({ value }: { value: Scope }) {
@@ -948,9 +1059,9 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
   );
   const [params, setParams] = useSearchParams();
   const relationshipScope = choice(
-    params.get("relationshipScope"),
+    params.get(kind === "property" && tab === "leases" ? "leaseScope" : "relationshipScope"),
     ["current", "former", "all"] as const,
-    "current",
+    kind === "property" && tab === "leases" ? "all" : "current",
   );
   const query: ContextQuery = {
     relationshipScope,
@@ -1081,7 +1192,8 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
                 id={id}
                 query={query}
                 unitNames={unitNames}
-                canChangeOwners={kind === "property" && property.data?.status === "active"}
+                rentalUnits={property.data?.spaces}
+                canManageProperty={kind === "property" && property.data?.status === "active"}
                 unitsLabel={
                   property.data ? propertyUnitsLabel(property.data.inventoryLayout) : "Units"
                 }

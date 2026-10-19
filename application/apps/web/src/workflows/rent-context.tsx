@@ -258,10 +258,6 @@ export function PaymentMethodReview({
         This records a payment already received. It does not collect, initiate, schedule or
         authorize a payment.
       </p>
-      <p>
-        Automatic bank payment means an externally arranged payment confirmed as received, not an
-        instruction to debit an account or a live bank connection.
-      </p>
       {suggestion?.paymentMethodKind ? (
         <>
           <p>
@@ -284,13 +280,17 @@ export function PaymentMethodReview({
       ) : (
         <p>No prior method is suggested. Select the actual method explicitly.</p>
       )}
-      <p>
-        Changing the method clears its label, reference and Other explanation; re-enter them if
-        needed. Optional label: at most 100 characters. A reference is optional for every method and
-        normally omitted for cash. Use at least two • or * mask characters with at most four final
-        digits, optionally preceded by a plain ASCII label: •••• 1234 or Check •••• 9182. Never
-        enter bank/card/routing details, passwords, tokens or processor credentials.
-      </p>
+      <details>
+        <summary>Payment method and reference guidance</summary>
+        <p>
+          Automatic bank payment records an externally arranged payment, not a bank connection or
+          instruction to debit an account. Changing the method clears its label, reference and Other
+          explanation. Optional labels permit at most 100 characters. A reference is optional, and
+          is normally omitted for cash. Use at least two • or * mask characters and at most four
+          final digits, optionally preceded by a plain ASCII label, such as Check •••• 9182. Never
+          enter bank, card or routing details, passwords, tokens or processor credentials.
+        </p>
+      </details>
       {values.paymentMethodKind === "other" && (
         <p>
           Explain Other in the required 1–200 character note; it is retained with this receipt only.

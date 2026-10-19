@@ -278,6 +278,132 @@ test("issue details prioritize description, named property and grouped actions",
   await expect(page).toHaveURL(/workflow=maintenance.issue.patch/);
 });
 
+test("issue appointments and provider quotes are readable, comparable and retain lifecycle actions", async ({
+  page,
+  request,
+}, testInfo) => {
+  const f = await issue(request);
+  let revision = f.issue.revision;
+  const start = new Date(Date.now() + 86400000).toISOString();
+  const end = new Date(Date.now() + 90000000).toISOString();
+  for (const purpose of ["Inspect the leaking sink", "Cancelled visit"]) {
+    const appointment = await post<Schemas["AppointmentCommandResponse"]>(
+      request,
+      `/api/maintenance-issues/${f.issue.id}/appointments`,
+      {
+        startsAtUtc: start,
+        endsAtUtc: end,
+        purpose,
+        instructions: "Use the side entrance",
+        expectedRevision: revision,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    );
+    revision = appointment.revision;
+    if (purpose === "Cancelled visit") {
+      const cancelled = await post<Schemas["AppointmentCommandResponse"]>(
+        request,
+        `/api/maintenance-appointments/${appointment.id}/cancel`,
+        {
+          reason: "Provider unavailable",
+          expectedRevision: revision,
+          idempotencyKey: crypto.randomUUID(),
+          confirmed: true,
+        },
+      );
+      revision = cancelled.revision;
+    }
+  }
+  for (const [index, name] of ["Coast Plumbing", "Valley Repairs"].entries()) {
+    const provider = await post<Schemas["ProviderMutationResponse"]>(request, "/api/providers", {
+      party: { partyKind: "organization", displayName: `${name} ${crypto.randomUUID()}` },
+      expectedRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    const quote = await post<Schemas["QuoteCommandResponse"]>(
+      request,
+      `/api/maintenance-issues/${f.issue.id}/quotes`,
+      {
+        providerPartyId: provider.party.id,
+        label: `${name} offer`,
+        scopeSummary: index ? "Replace pipe and fittings" : "Repair the leaking joint",
+        amount: index ? "245.50" : "125.00",
+        receivedOn: f.property.effectiveLocalDate,
+        termsNotes: "Parts and labor included",
+        earliestWorkStartOn: f.property.effectiveLocalDate,
+        estimatedWorkFinishOn: f.property.effectiveLocalDate,
+        expectedRevision: revision,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    );
+    revision = quote.revision;
+    if (index) {
+      const withdrawn = await post<Schemas["QuoteCommandResponse"]>(
+        request,
+        `/api/maintenance-quotes/${quote.id}/withdraw`,
+        {
+          reason: "Revised offer expected",
+          expectedRevision: revision,
+          idempotencyKey: crypto.randomUUID(),
+          confirmed: true,
+        },
+      );
+      revision = withdrawn.revision;
+    }
+  }
+  await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
+  const appointments = page.getByRole("region", { name: "Appointments", exact: true });
+  await expect(
+    appointments.getByRole("heading", { name: "Inspect the leaking sink" }),
+  ).toBeVisible();
+  await expect(appointments).toContainText("Use the side entrance");
+  await expect(appointments.getByRole("button", { name: "Reschedule", exact: true })).toHaveCount(
+    1,
+  );
+  await expect(
+    appointments.getByRole("button", { name: "Record outcome", exact: true }),
+  ).toHaveCount(1);
+  const comparison = page.getByRole("region", { name: "Quote comparison", exact: true });
+  const table = comparison.getByRole("table");
+  await expect(table.getByRole("row")).toHaveCount(3);
+  await expect(table).toContainText("USD 125.00");
+  await expect(table).toContainText("USD 245.50");
+  await expect(table.getByRole("columnheader", { name: "Quoted total" })).toBeVisible();
+  const withdrawn = table.getByRole("row").filter({ hasText: "Valley Repairs offer" });
+  await expect(withdrawn).toContainText("Withdrawn");
+  await expect(withdrawn.getByRole("link", { name: /Review assignment/ })).toHaveCount(0);
+  await expect(withdrawn.getByRole("link", { name: "Replace withdrawn quote" })).toBeVisible();
+  await withdrawn.getByText("Documents and history (0)", { exact: true }).click();
+  await expect(withdrawn).toContainText("Revised offer expected");
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+        .toBe(true);
+      await page.screenshot({
+        path: testInfo.outputPath(`maintenance-planning-${theme}-${width}.png`),
+        fullPage: true,
+      });
+      await page.evaluate(axe.source);
+      expect(
+        await page.evaluate(
+          async () =>
+            (
+              await window.axe.run(".issue-detail", {
+                runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
+              })
+            ).violations,
+        ),
+      ).toEqual([]);
+    }
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await appointments.getByRole("button", { name: "Reschedule", exact: true }).click();
+  await expect(page).toHaveURL(/workflow=maintenance.appointment.update/);
+});
+
 test("issue facts and actions stay available when the property name cannot load", async ({
   page,
   request,
@@ -294,7 +420,101 @@ test("issue facts and actions stay available when the property name cannot load"
   const detail = page.getByRole("region", { name: "Work record", exact: true });
   await expect(detail.getByText("Property name unavailable", { exact: false })).toBeVisible();
   await expect(detail.locator(".issue-detail-description")).toHaveText("Water under sink");
-  await expect(detail.getByRole("link", { name: "Edit issue", exact: true })).toBeVisible();
+  await expect(detail.getByRole("button", { name: "Edit issue", exact: true })).toBeVisible();
+});
+
+test("issue editing groups only editable details and preserves its property and lifecycle", async ({
+  page,
+  request,
+}, testInfo) => {
+  const f = await issue(request);
+  await page.goto(`/maintenance?workflow=maintenance.issue.patch&target=${f.issue.id}`);
+  const form = page.getByRole("region", { name: "Edit maintenance issue", exact: true });
+  for (const name of ["Issue details", "Category and priority"])
+    await expect(form.getByRole("region", { name, exact: true })).toBeVisible();
+  await expect(form.getByText("Form status and recovery details", { exact: true })).toHaveCount(0);
+  await expect(form.getByText(/^Clear or keep /)).toHaveCount(0);
+  await expect(form.getByRole("button", { name: /unchanged \/ omit/ })).toHaveCount(0);
+  await expect(form.getByText("Displayed source revision:", { exact: false })).not.toBeVisible();
+  await expect(page.getByText("Choices are bounded", { exact: false })).toHaveCount(0);
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset.theme = value;
+    }, theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await form.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+        true,
+      );
+      await form.screenshot({ path: testInfo.outputPath(`issue-edit-${theme}-${width}.png`) });
+    }
+  }
+  await form
+    .getByRole("textbox", { name: "Description", exact: true })
+    .fill("Updated issue description");
+  await form.getByRole("combobox", { name: "Category", exact: true }).selectOption("other");
+  const categoryDetail = form.getByRole("textbox", { name: "Category detail", exact: true });
+  await expect(categoryDetail).toBeEnabled();
+  await categoryDetail.fill("Fixture review");
+  await save(page, "Edit maintenance issue");
+  const updated = await get<Schemas["IssueResponse"]>(
+    request,
+    `/api/maintenance-issues/${f.issue.id}`,
+  );
+  expect(updated.description).toBe("Updated issue description");
+  expect(updated.propertyId).toBe(f.property.id);
+  expect(updated.status).toBe(f.issue.status);
+  expect(updated.categoryDetail).toBe("Fixture review");
+  await page.goto(`/maintenance?workflow=maintenance.issue.patch&target=${f.issue.id}`);
+  await form.getByRole("combobox", { name: "Category", exact: true }).selectOption("plumbing");
+  await expect(categoryDetail).toHaveCount(0);
+  await save(page, "Edit maintenance issue");
+  const recategorized = await get<Schemas["IssueResponse"]>(
+    request,
+    `/api/maintenance-issues/${f.issue.id}`,
+  );
+  expect(recategorized.categoryDetail).toBeNull();
+  expect(recategorized.description).toBe(updated.description);
+});
+
+test("issue edit keeps stale-revision recovery available without routine recovery disclosures", async ({
+  page,
+  request,
+}) => {
+  const f = await issue(request);
+  await page.goto(`/maintenance?workflow=maintenance.issue.patch&target=${f.issue.id}`);
+  await page
+    .getByRole("textbox", { name: "Description", exact: true })
+    .fill("Retain this description");
+  const changed = await request.patch(`/api/maintenance-issues/${f.issue.id}`, {
+    data: {
+      expectedRevision: f.issue.revision,
+      idempotencyKey: crypto.randomUUID(),
+      priority: "normal",
+    },
+  });
+  expect(changed.ok(), await changed.text()).toBe(true);
+  await page
+    .getByRole("group", { name: "Form actions", exact: true })
+    .locator('button[type="submit"]')
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Review current source", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Description", exact: true })).toHaveValue(
+    "Retain this description",
+  );
+  await page.getByRole("button", { name: "Review current source", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Keep my edits with this reviewed revision", exact: true })
+    .click();
+  await save(page, "Edit maintenance issue");
+  const current = await get<Schemas["IssueResponse"]>(
+    request,
+    `/api/maintenance-issues/${f.issue.id}`,
+  );
+  expect(current.description).toBe("Retain this description");
+  expect(current.revision).toBe(f.issue.revision + 2);
 });
 
 test("Task creation uses original recovery identity and saved forms survive reload", async ({
@@ -1717,7 +1937,7 @@ test("Provider quotes, assignment and ending remain independent of paid expenses
   );
   await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
   const comparison = page.getByRole("region", { name: "Quote comparison", exact: true });
-  await page.getByText("Compare provider quotes", { exact: true }).click();
+  await expect(comparison.getByRole("table")).toBeVisible();
   await expect(comparison).toContainText("USD 100.00");
   await comparison
     .getByRole("link", { name: "Review assignment for Sink repair quote", exact: true })
@@ -1821,7 +2041,7 @@ test("avoided Provider direct assignment and lost-response reassignment preserve
   await page.getByRole("button", { name: "Assign provider", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
   await expect(
-    page.getByText("This is the original committed response.", { exact: true }),
+    page.getByRole("region", { name: "Provider assignment saved", exact: true }),
   ).toBeVisible();
   const current = await get<Schemas["IssueResponse"]>(
     request,

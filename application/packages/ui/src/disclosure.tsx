@@ -27,6 +27,7 @@ export function DisclosureRow({
   open,
   onOpenChange,
   children,
+  showCollapseButton = true,
 }: {
   title: string;
   summary?: string;
@@ -35,6 +36,7 @@ export function DisclosureRow({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: (visible: boolean) => ReactNode;
+  showCollapseButton?: boolean;
 }) {
   const id = useId();
   const button = useRef<HTMLButtonElement>(null);
@@ -97,7 +99,7 @@ export function DisclosureRow({
         }}
       >
         {mounted && children(open)}
-        {mounted && (
+        {mounted && showCollapseButton && (
           <button
             type="button"
             onClick={() => {

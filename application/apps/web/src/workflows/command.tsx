@@ -26,12 +26,24 @@ import { MoneyFacts } from "./money-presentation";
 import { OriginalWorkResult } from "./work-result";
 import { TaskCreateFields } from "./task-fields";
 import { MaintenanceCreateFields } from "./maintenance-create-fields";
+import { GroupedCommandFields } from "./grouped-command-fields";
 import { PropertyEditFields } from "./property-edit-fields";
 import { PropertyCreateFields } from "./property-create-fields";
 import { OwnershipFields } from "./ownership-fields";
 import { ownershipShareProblem } from "../shared/ownership-shares";
 import { SavedCommand, savesItem } from "./saved-command";
 import { loadWorkflowResult } from "./workflow-result";
+
+const workflowIntroductions: Partial<Record<Workflow["formKey"], string>> = {
+  "maintenance.issue.patch":
+    "Update the issue description, category or priority. The property, reporter and issue status stay unchanged.",
+  "finance.expense_category.create":
+    "Add a category for grouping paid expenses. No spending is recorded by creating a category.",
+  "finance.expense_category.patch":
+    "Update this expense category. Existing expenses keep their recorded amounts and history.",
+  "finance.rent_receipt.create":
+    "Record money already received, how it was paid, and the rent periods it covers. Review the totals before saving.",
+};
 
 export function workflowUrl(formKey: string, sourceId?: string, childId?: string) {
   const params = new URLSearchParams({ workflow: formKey });
@@ -787,10 +799,16 @@ function CommandEditor({
                                 ? "Describe the issue, choose the property, and record who reported it. You can add appointments, quotes and evidence after saving."
                                 : definition.formKey === "owner_concern.create"
                                   ? "Record what the owner has raised and which property it concerns. A concern does not change the property’s occupancy, rent or repair records."
-                                  : "Review the displayed record and make an explicit change. Saved input is an unfinished form, not an official record."}
+                                  : (workflowIntroductions[definition.formKey] ??
+                                    "Review the displayed record and make an explicit change. Saved input is an unfinished form, not an official record.")}
       </p>
       {definition.formKey === "portfolio.property.create" ? (
         propertyCreateStatus && <p role="status">{propertyCreateStatus}</p>
+      ) : definition.formKey === "maintenance.issue.patch" ? (
+        <>
+          {state.command === "submitting" && <p role="status">Saving changes…</p>}
+          {(state.command === "rejected" || state.draft === "conflicted") && currentSourceAction}
+        </>
       ) : [
           "portfolio.space.classify",
           "portfolio.availability.change",
@@ -804,6 +822,9 @@ function CommandEditor({
           "party.contact.update",
           "party.contact.archive",
           "maintenance.issue.create",
+          "finance.expense_category.create",
+          "finance.expense_category.patch",
+          "finance.rent_receipt.create",
           "owner_concern.create",
         ].includes(definition.formKey) ? (
         <details className="space-classification-recovery">
@@ -1094,6 +1115,20 @@ function CommandEditor({
               choices={choicesForValues?.(values) ?? choices}
               disabled={locked}
               concern={definition.formKey === "owner_concern.create"}
+            />
+          ) : [
+              "maintenance.issue.patch",
+              "finance.expense_category.create",
+              "finance.expense_category.patch",
+              "finance.rent_receipt.create",
+            ].includes(definition.formKey) ? (
+            <GroupedCommandFields
+              schema={definition.schema}
+              value={values}
+              onChange={(next) => form.setValue("data", record(next))}
+              choices={choicesForValues?.(values) ?? choices}
+              disabled={locked}
+              formKey={definition.formKey}
             />
           ) : definition.formKey === "portfolio.property.create" ? (
             <PropertyCreateFields

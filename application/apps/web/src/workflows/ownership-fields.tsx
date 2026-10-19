@@ -130,13 +130,14 @@ export function OwnershipFields({
             ? "Keep You if you own this property. Add other owners for a managed or co-owned property, then remove You if needed."
             : "Keep everyone who will own the property from this date. Remove owners who are leaving and add anyone joining. Previous owners and shares stay in history."}
         </p>
-        {
+        <details className="ownership-share-help">
+          <summary>How ownership percentages work</summary>
           <p className="property-edit-hint">
             Enter each owner's percentage if known, or leave it blank as Not recorded. Known shares
             cannot exceed 100%; when all shares are recorded they must total 100%. Shares do not
             calculate payments or distributions.
           </p>
-        }
+        </details>
         {ownershipShareProblem(owners) && <p role="alert">{ownershipShareProblem(owners)}</p>}
         <ul className="ownership-selected">
           {owners.map((owner, index) => {

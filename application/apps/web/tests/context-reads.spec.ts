@@ -1,8 +1,136 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import type { components } from "@epm/contracts/generated";
+import axe from "axe-core";
 
 type Schema = components["schemas"];
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
+
+test("property leases group drafts by rental with bounded pages and contextual creation", async ({
+  page,
+  request,
+}, testInfo) => {
+  const created = await request.post("/api/properties", {
+    data: {
+      displayName: "Lease groups office",
+      addressLine1: "10 Maple Street",
+      city: "Portland",
+      region: "OR",
+      postalCode: "97201",
+      countryCode: "US",
+      propertyType: "office",
+      inventoryLayout: "office_suites",
+      spaces: [{ displayName: "Suite A" }, { displayName: "Suite B" }],
+      ownerships: [{ ownerKind: "local_operator" }],
+      expectedPropertyRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(created.ok(), await created.text()).toBeTruthy();
+  const property = (await created.json()) as Schema["PropertyMutationResponse"];
+  const tenantResponse = await request.post("/api/tenants", {
+    data: {
+      partyKind: "individual",
+      displayName: "Lease group tenant",
+      expectedRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(tenantResponse.ok(), await tenantResponse.text()).toBeTruthy();
+  const tenant = (await tenantResponse.json()) as Schema["TenantMutationResponse"];
+  const leaseIds = new Set<string>();
+  for (let index = 0; index < 12; index++) {
+    const response = await request.post("/api/leases", {
+      data: {
+        spaceId: property.spaces[index % 2].id,
+        leaseKind: "commercial",
+        contractStartsOn: property.effectiveLocalDate,
+        occupancyStartsOn: property.effectiveLocalDate,
+        initialTerm: {
+          baseRentMinor: 100000,
+          currencyCode: "USD",
+          paymentFrequency: "monthly",
+          paymentDueDay: 1,
+          agreedSecurityDepositMinor: 0,
+        },
+        participants: [{ tenantPartyId: tenant.id, participantRole: "business_signatory" }],
+        expectedLeaseRevision: 0,
+        idempotencyKey: crypto.randomUUID(),
+      },
+    });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    leaseIds.add(((await response.json()) as Schema["LeaseMutationResponse"]).id);
+  }
+  await page.goto(`/properties/${property.id}/leases`);
+  const section = page.getByRole("region", { name: "leases section", exact: true });
+  await expect(section).toContainText("12 matching leases");
+  await expect(
+    section.getByRole("checkbox", { name: "Include past, future and draft leases" }),
+  ).toBeChecked();
+  const links = section.getByRole("link", { name: "View lease", exact: true });
+  await expect(links).toHaveCount(10);
+  const firstPage = await links.evaluateAll((items) =>
+    items.map((item) => item.getAttribute("href")),
+  );
+  for (const unit of property.spaces) {
+    const group = section.getByRole("region", {
+      name: `Leases for ${unit.displayName}`,
+      exact: true,
+    });
+    await expect(group.getByRole("button", { name: "Start lease draft" })).toBeVisible();
+    await expect(group).toContainText("Lease group tenant");
+    await expect(group).not.toContainText(unit.id);
+  }
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset.theme = value;
+    }, theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(
+        await section
+          .getByRole("heading", { name: "Leases", exact: true })
+          .evaluate((element) => element.getBoundingClientRect().height),
+      ).toBeLessThan(40);
+      expect(await section.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+        true,
+      );
+      await page.screenshot({
+        path: testInfo.outputPath(`property-leases-${theme}-${width}.png`),
+        fullPage: true,
+      });
+      await page.evaluate(axe.source);
+      expect(
+        await page.evaluate(async () =>
+          (
+            await window.axe.run(document, {
+              runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+            })
+          ).violations.map((item) => item.id),
+        ),
+      ).toEqual([]);
+    }
+  }
+  await section.getByRole("button", { name: "Next leases", exact: true }).click();
+  await expect(links).toHaveCount(2);
+  const secondPage = await links.evaluateAll((items) =>
+    items.map((item) => item.getAttribute("href")),
+  );
+  expect(new Set([...firstPage, ...secondPage])).toEqual(
+    new Set([...leaseIds].map((id) => `/leases/${id}/details`)),
+  );
+  await section.getByRole("checkbox", { name: "Include past, future and draft leases" }).click();
+  await expect(
+    section.getByRole("checkbox", { name: "Include past, future and draft leases" }),
+  ).not.toBeChecked();
+  await expect(section).toContainText("0 matching leases");
+  await expect(links).toHaveCount(0);
+  const firstGroup = section.getByRole("region", {
+    name: `Leases for ${property.spaces[0].displayName}`,
+    exact: true,
+  });
+  await firstGroup.getByRole("button", { name: "Start lease draft" }).click();
+  await expect(page).toHaveURL(`/leasing?workflow=lease.create&spaceId=${property.spaces[0].id}`);
+});
 
 test("property overview shares review cards, puts them first and identifies suites", async ({
   page,

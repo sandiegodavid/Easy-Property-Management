@@ -1117,7 +1117,7 @@ test("property layout uses Home, Office, or Suites labels without developer word
       card
         .locator(".property-space-title-row")
         .getByRole("button", { name: "Start lease draft", exact: true }),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await expect(card.getByRole("link", { name: "Start lease draft", exact: true })).toHaveCount(0);
     await expect(card.getByText("More actions", { exact: true })).toHaveCount(0);
     const archiveAction = card.getByRole("button", {
@@ -1127,10 +1127,10 @@ test("property layout uses Home, Office, or Suites labels without developer word
     await expect(archiveAction).toHaveCount(item.label === "Suites" ? 1 : 0);
     if (item.label === "Suites") {
       const titleRow = card.locator(".property-space-title-row");
-      await expect(titleRow.getByRole("button", { name: "Start lease draft" })).toBeVisible();
+      await expect(titleRow.getByRole("button", { name: "Start lease draft" })).toHaveCount(0);
       await expect(archiveAction).toBeVisible();
       const titleActions = await titleRow.locator("button").allTextContents();
-      expect(titleActions).toEqual([`Edit ${unitTitle}`, "Start lease draft", "Archive Suite"]);
+      expect(titleActions).toEqual([`Edit ${unitTitle}`, "Archive Suite"]);
       await expect(archiveAction).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     }
     await expect(
@@ -1170,8 +1170,13 @@ test("property layout uses Home, Office, or Suites labels without developer word
     await expect(
       page.getByRole("link", { name: `← Back to ${property.displayName}`, exact: true }),
     ).toHaveAttribute("href", `/properties/${property.id}/units`);
-    await page.goto(`/properties/${property.id}/units`);
-    await card.getByRole("button", { name: "Start lease draft", exact: true }).click();
+    await page.goto(`/properties/${property.id}/leases`);
+    const leaseGroup = page.getByRole("region", {
+      name: `Leases for ${property.spaces[0].displayName}`,
+      exact: true,
+    });
+    await expect(leaseGroup).toContainText("No matching leases on this page.");
+    await leaseGroup.getByRole("button", { name: "Start lease draft", exact: true }).click();
     await expect(page).toHaveURL(`/leasing?workflow=lease.create&spaceId=${property.spaces[0].id}`);
   }
 });

@@ -12,6 +12,13 @@ import { MoneyFacts, moneyRecordUrl } from "./money-records";
 import { MoneyScope } from "./money";
 
 type Metric = components["schemas"]["Metric"];
+const metricNames: Record<string, string> = {
+  operatingRemainder: "Rent less net expenses",
+  recordedDepositObligation: "Current recorded deposit obligation",
+};
+const metricName = (value: string) =>
+  metricNames[value] ??
+  value.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (letter) => letter.toUpperCase());
 export function MoneyReporting() {
   const { scope } = useWorkspace();
   const location = useLocation();
@@ -86,8 +93,8 @@ export function MoneyReporting() {
     return `/money?${next}`;
   }
   return (
-    <section aria-label="Money reporting">
-      <h3>Explicit-period recorded activity</h3>
+    <section aria-label="Money reporting" className="money-reporting">
+      <h3>{metric ? `${metricName(metric)} records` : "Recorded money summary"}</h3>
       <MoneyScope />
       {params.has("leaseId") && (
         <p>
@@ -95,10 +102,6 @@ export function MoneyReporting() {
           totals.
         </p>
       )}
-      <p>
-        These totals describe recorded activity, not profit, bank balance or amounts due to owners.
-        Current deposit obligation includes all recorded dates at the displayed instant.
-      </p>
       {ownerId && !propertyId && (
         <p>
           Select a related Property from{" "}
@@ -107,6 +110,7 @@ export function MoneyReporting() {
         </p>
       )}
       <DynamicFilterForm
+        className="money-reporting-filters"
         onSubmit={(event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
@@ -165,65 +169,100 @@ export function MoneyReporting() {
             {properties.data.matchingTotal} matching properties · Property-local dates {fromOn}{" "}
             through {throughOn}
           </p>
-          {(["operating", "depositActivity", "depositObligations"] as const).map((name) => (
-            <section key={name} aria-label={name}>
-              <h4>{name.replace(/([A-Z])/g, " $1")}</h4>
-              {properties.data.summary[name].available ? (
-                <MoneyFacts
-                  value={properties.data.summary[name]}
-                  fields={Object.keys(properties.data.summary[name])}
-                  labels={{ operatingRemainder: "Rent less net expenses" }}
-                />
-              ) : (
-                <p role="alert">This money section is unavailable.</p>
-              )}
-            </section>
-          ))}
-          <nav aria-label="Reporting metric sources">
-            {properties.data.summary.metrics.map((item) => (
-              <Link key={item.metric} to={metricTarget(item.metric)}>
-                {item.metric === "operatingRemainder" ? "Rent less net expenses" : item.metric} ·
-                USD {item.amount}
-              </Link>
+          <div className="money-reporting-totals">
+            {(["operating", "depositActivity", "depositObligations"] as const).map((name) => (
+              <section className="record-detail-panel" key={name} aria-label={name}>
+                <h4>
+                  {
+                    {
+                      operating: "Rent and expenses",
+                      depositActivity: "Deposit activity",
+                      depositObligations: "Current deposit obligations",
+                    }[name]
+                  }
+                </h4>
+                {name === "depositObligations" && (
+                  <p className="record-detail-note">
+                    Current balances include all recorded dates, not just the reporting period.
+                  </p>
+                )}
+                {properties.data.summary[name].available ? (
+                  <MoneyFacts
+                    value={properties.data.summary[name]}
+                    fields={Object.keys(properties.data.summary[name]).filter(
+                      (key) => key !== "available" && !key.endsWith("Count"),
+                    )}
+                    labels={{ operatingRemainder: "Rent less net expenses" }}
+                  />
+                ) : (
+                  <p role="alert">This money section is unavailable.</p>
+                )}
+                {properties.data.summary[name].available && (
+                  <details>
+                    <summary>Record counts</summary>
+                    <MoneyFacts
+                      value={properties.data.summary[name]}
+                      fields={Object.keys(properties.data.summary[name]).filter((key) =>
+                        key.endsWith("Count"),
+                      )}
+                    />
+                  </details>
+                )}
+              </section>
             ))}
-            <Link to={metricTarget("recordedDepositObligation")}>
-              Current recorded deposit obligation
-            </Link>
-          </nav>
-          {properties.data.items.map((item) => (
-            <article key={item.propertyId}>
-              <Link
-                to={`/money?${new URLSearchParams({ ...Object.fromEntries([...params].filter(([key]) => key !== "cursor")), propertyId: item.propertyId, sourceRevision: properties.data.summary.sourceRevision })}`}
-              >
-                {item.propertyName} · {item.propertyState}
+          </div>
+          <details className="reporting-sources">
+            <summary>Explore the records behind these totals</summary>
+            <nav aria-label="Reporting metric sources">
+              {properties.data.summary.metrics
+                .filter((item) => item.metric !== "recordedDepositObligation")
+                .map((item) => (
+                  <Link key={item.metric} to={metricTarget(item.metric)}>
+                    View {metricName(item.metric).toLowerCase()} records
+                  </Link>
+                ))}
+              <Link to={metricTarget("recordedDepositObligation")}>
+                Current recorded deposit obligation
               </Link>
-              <p>
-                <Link to={`/properties/${item.propertyId}/money`}>Property context</Link>
-              </p>
-              {item.operating.available ? (
-                <MoneyFacts
-                  value={item.operating}
-                  labels={{ operatingRemainder: "Rent less net expenses" }}
-                  fields={[
-                    "rentReceived",
-                    "expensesPaid",
-                    "expenseRefundsReceived",
-                    "netRecordedExpenses",
-                    "operatingRemainder",
-                  ]}
-                />
-              ) : (
-                <p role="alert">Operating activity for this property is unavailable.</p>
-              )}
-            </article>
-          ))}
+            </nav>
+          </details>
+          <h4>By property</h4>
+          <div className="money-reporting-properties">
+            {properties.data.items.map((item) => (
+              <article className="record-detail-panel" key={item.propertyId}>
+                <Link
+                  to={`/money?${new URLSearchParams({ ...Object.fromEntries([...params].filter(([key]) => key !== "cursor")), propertyId: item.propertyId, sourceRevision: properties.data.summary.sourceRevision })}`}
+                >
+                  {item.propertyName} · {item.propertyState}
+                </Link>
+                <p>
+                  <Link to={`/properties/${item.propertyId}/money`}>Property context</Link>
+                </p>
+                {item.operating.available ? (
+                  <MoneyFacts
+                    value={item.operating}
+                    labels={{ operatingRemainder: "Rent less net expenses" }}
+                    fields={[
+                      "rentReceived",
+                      "expensesPaid",
+                      "expenseRefundsReceived",
+                      "netRecordedExpenses",
+                      "operatingRemainder",
+                    ]}
+                  />
+                ) : (
+                  <p role="alert">Operating activity for this property is unavailable.</p>
+                )}
+              </article>
+            ))}
+          </div>
         </>
       )}
       {sources.data && metric && (
         <>
           <PageAsOf asOf={sources.data.asOf} />
           <p>
-            {sources.data.matchingTotal} source records · Backend total USD {sources.data.total}
+            {sources.data.matchingTotal} source records · Total USD {sources.data.total}
           </p>
           {sources.data.items.map((item) => {
             const url =
@@ -238,11 +277,12 @@ export function MoneyReporting() {
                       ? moneyRecordUrl("deposit", item.accountId)
                       : undefined;
             return (
-              <article key={`${item.sourceKind}:${item.sourceId}`}>
+              <article className="reporting-source-row" key={`${item.sourceKind}:${item.sourceId}`}>
                 <p>
-                  {item.sourceKind} · {item.businessOn} · USD {item.contribution} · {item.lifecycle}
+                  {item.sourceKind.replaceAll("_", " ")} · {item.businessOn} · USD{" "}
+                  {item.contribution} · {item.lifecycle.replaceAll("_", " ")}
                 </p>
-                {url && <Link to={url}>Open contribution source</Link>}
+                {url && <Link to={url}>View source record</Link>}
               </article>
             );
           })}
@@ -306,6 +346,10 @@ export function MoneyReporting() {
           Return to reporting totals
         </button>
       )}
+      <p className="record-detail-note reporting-disclaimer">
+        These totals describe recorded activity, not profit, bank balance or amounts due to owners.
+        Current deposit obligations include all recorded dates at the displayed instant.
+      </p>
     </section>
   );
 }

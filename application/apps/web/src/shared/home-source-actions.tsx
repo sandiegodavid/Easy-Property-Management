@@ -38,7 +38,7 @@ function homeSourceUrl(source: Source): string | null {
     case "rent_expectation":
       return `/money?record=expectation&id=${id}`;
     case "lease":
-      return `/leases/${id}`;
+      return `/leases/${id}/details`;
     case "coverage":
       return `/coverage/${source.subjectKind}/${id}/${source.area}`;
     case "maintenance_appointment":
@@ -120,7 +120,6 @@ export function HomeSourceActions({ item }: { item: Item }) {
           <p>
             <HomeSourceLink to={url}>{actions[item.nextAction.kind]}</HomeSourceLink>
           </p>
-          <HomeSourceLink to={url}>View {words(item.source.kind)} details</HomeSourceLink>
         </>
       ) : (
         <p>Source detail context is unavailable.</p>

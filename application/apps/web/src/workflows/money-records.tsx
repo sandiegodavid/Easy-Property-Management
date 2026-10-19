@@ -10,6 +10,8 @@ export { MoneyFacts } from "./money-presentation";
 import { MoneyFacts } from "./money-presentation";
 import { CheckContext } from "./check-context";
 import { RentExpectationDetail } from "./rent-expectation-detail";
+import { RentReceiptDetail } from "./rent-receipt-detail";
+import { ExpenseDetail, ExpenseCategoryDetail } from "./expense-detail";
 
 export type MoneyKind =
   | "expectation"
@@ -233,30 +235,36 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
   return (
     <section
       aria-label="Money record"
-      className={kind === "expectation" ? "rent-detail" : undefined}
+      className={
+        ["expectation", "receipt", "expense", "category"].includes(kind) ? "rent-detail" : undefined
+      }
     >
-      <ParentBackLink to="/money">← Back to Money</ParentBackLink>
-      <h2>{kind === "expectation" ? "Rent due" : `${label(kind)} record`}</h2>
+      <ParentBackLink to={kind === "category" ? "/money?tab=categories" : "/money"}>
+        ← Back to {kind === "category" ? "Expense categories" : "Money"}
+      </ParentBackLink>
+      <h2>
+        {kind === "expectation"
+          ? "Rent due"
+          : kind === "category"
+            ? scalar(item.displayName, "Expense category")
+            : kind === "expense"
+              ? "Paid expense"
+              : kind === "receipt"
+                ? "Rent payment"
+                : `${label(kind)} record`}
+      </h2>
       {kind === "expectation" ? (
         <RentExpectationDetail item={item} />
+      ) : kind === "receipt" ? (
+        <RentReceiptDetail item={item} />
+      ) : kind === "expense" ? (
+        <ExpenseDetail item={item} />
+      ) : kind === "category" ? (
+        <ExpenseCategoryDetail item={item} />
       ) : (
         <MoneyFacts value={item} fields={detailFields} />
       )}
       {kind === "check" && <CheckContext check={item} />}
-      {kind === "expense" && (
-        <MoneyFacts
-          value={{
-            property: record(item.property).displayName,
-            space: record(item.space).displayName ?? "Whole Property",
-            category: record(item.category).displayName,
-            paidBy:
-              item.paidByKind === "party"
-                ? `Party ${scalar(item.paidByPartyId)}`
-                : "Local operator",
-          }}
-          fields={["property", "space", "category", "paidBy"]}
-        />
-      )}
       {(leaseId || !!item.propertyId) && (
         <nav aria-label="Related money records">
           {leaseId && <Link to={`/leases/${leaseId}/details`}>View lease</Link>}
@@ -271,13 +279,14 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
           target={leaseId}
           child={id}
           title="Rent ledger actions"
-          collapsible={kind !== "expectation"}
-          asButtons={kind === "expectation"}
+          collapsible={kind !== "expectation" && kind !== "receipt"}
+          asButtons={kind === "expectation" || kind === "receipt"}
           labels={{
             "finance.rent_receipt.create": "Record payment",
             "finance.prepaid_check.create": "Record prepaid check",
             "finance.rent_expectation.void": "Void rent expectation",
             "finance.rent_expectation.timeliness_review": "Review payment timing",
+            "finance.rent_receipt.void": "Void payment",
           }}
         />
       )}
@@ -285,6 +294,13 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
         <CommandLinks
           keys={["finance.expense.patch", "finance.expense.void", "finance.expense_refund.create"]}
           target={id}
+          asButtons
+          collapsible={false}
+          labels={{
+            "finance.expense.patch": "Edit expense notes",
+            "finance.expense.void": "Void expense",
+            "finance.expense_refund.create": "Record refund",
+          }}
         />
       )}
       {kind === "expense" && !!item.voidedAt && (
@@ -301,6 +317,8 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
       )}
       {kind === "category" && (
         <CommandLinks
+          asButtons
+          collapsible={false}
           keys={
             item.archivedAt
               ? ["finance.expense_category.restore"]
@@ -411,6 +429,7 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
         "correctionChain",
       ].map(
         (name) =>
+          !(kind === "receipt" && name === "allocations") &&
           Array.isArray(item[name]) && (
             <section key={name} aria-label={label(name)}>
               <h3>{label(name)}</h3>

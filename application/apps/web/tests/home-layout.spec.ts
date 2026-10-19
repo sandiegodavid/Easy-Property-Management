@@ -112,14 +112,14 @@ test("Home renders every region, exact totals, keyboard source disclosure and bo
   const current = await fixtures(request);
   if (current.live.needsAction.status !== "available") throw new Error("Live fixture unavailable");
   const action = page.getByRole("region", { name: "Needs action", exact: true });
-  await expect(action.getByRole("heading", { level: 4 })).toHaveText(
-    `${current.live.needsAction.matchingTotal} recorded items`,
+  await expect(action.getByRole("link", { name: /^View all Needs action/ })).toHaveText(
+    `View all Needs action (${current.live.needsAction.matchingTotal} items)`,
   );
   const row = action.getByRole("button", { name: new RegExp(task.title) });
   await row.focus();
   await page.keyboard.press("Enter");
   await expect(row).toHaveAttribute("aria-expanded", "true");
-  await expect(action.getByRole("link", { name: "View task details" }).first()).toHaveAttribute(
+  await expect(action.getByRole("link", { name: "View", exact: true }).first()).toHaveAttribute(
     "href",
     new RegExp(task.id),
   );
@@ -195,7 +195,7 @@ test("agenda rows retain appointment time and reach the owning issue details", a
   const row = agenda.getByRole("button", { name: new RegExp(issue.summary) });
   await expect(row).toContainText("America/Los_Angeles");
   await row.click();
-  const source = agenda.getByRole("link", { name: "View maintenance appointment details" });
+  const source = agenda.getByRole("link", { name: "View", exact: true });
   await expect(source).toHaveAttribute(
     "href",
     `/maintenance?record=issue&id=${issue.id}#appointment-${recorded.id}`,
@@ -242,7 +242,7 @@ test("independent section failures never fabricate counts or an all-clear", asyn
   );
   await page.getByRole("tab", { name: "Waiting", exact: true }).click();
   await expect(page.getByRole("region", { name: "Waiting", exact: true })).toContainText(
-    "recorded items",
+    "View all Waiting",
   );
 });
 
@@ -280,10 +280,11 @@ test("slow initial reads show bounded skeletons, delayed feedback and cancellabl
       page.getByRole("button", { name: "Retry Needs action", exact: true }),
     ).toBeEnabled();
     expect(liveReads).toBe(1);
-    expect(fullReads).toBe(1);
+    // Changing the money period replaces the full read, not the live attention read.
+    expect(fullReads).toBe(2);
     await page.unroute("**/api/operator/home/attention?*");
     await page.getByRole("button", { name: "Retry Needs action", exact: true }).click();
-    await expect(action).toContainText("recorded items");
+    await expect(action).toContainText("View all Needs action");
     await expect(page.getByRole("region", { name: "Recorded money", exact: true })).toContainText(
       "timed out",
     );
@@ -363,15 +364,15 @@ test("new attention remains announced with its exact total until the operator sh
   await updated;
   await expect(page.getByText("New items need attention", { exact: false })).toBeVisible();
   const action = page.getByRole("region", { name: "Needs action", exact: true });
-  await expect(action.getByRole("heading", { level: 4 })).toHaveText(
-    `${before.live.needsAction.matchingTotal} recorded items`,
+  await expect(action.getByRole("link", { name: /^View all Needs action/ })).toContainText(
+    `(${before.live.needsAction.matchingTotal} items)`,
   );
   await page.getByRole("button", { name: "Filters", exact: true }).click();
   await page.getByLabel("Money from", { exact: true }).fill("2026-08-01");
   await expect(page.getByText("New items need attention", { exact: false })).toBeVisible();
   await page.getByRole("button", { name: "Show updated list" }).click();
-  await expect(action.getByRole("heading", { level: 4 })).toHaveText(
-    `${before.live.needsAction.matchingTotal + 1} recorded items`,
+  await expect(action.getByRole("link", { name: /^View all Needs action/ })).toContainText(
+    `(${before.live.needsAction.matchingTotal + 1} items)`,
   );
   await expect(page.getByText("New items need attention", { exact: false })).toHaveCount(0);
   await expect(page.getByLabel("Money from", { exact: true })).toHaveValue("2026-08-01");

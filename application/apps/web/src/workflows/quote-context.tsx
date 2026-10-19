@@ -1,11 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import type { ReactNode } from "react";
+import { SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import { record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
-import { MoneyFacts } from "./money-presentation";
+import { cents, MoneyFacts } from "./money-presentation";
 import { Facts, readResult } from "./reads";
-import { workflowUrl } from "./command";
+import { CommandLinks, workflowUrl } from "./command";
+import { formatHomeTime } from "../shared/home-time";
 
 export function assignmentProblem(values: Record<string, unknown>) {
   if (
@@ -113,7 +115,15 @@ export function QuoteCommandContext({
   );
 }
 
-export function QuoteComparison({ id, active }: { id: string; active: boolean }) {
+export function QuoteComparison({
+  id,
+  active,
+  documents,
+}: {
+  id: string;
+  active: boolean;
+  documents: (quoteId: string) => ReactNode;
+}) {
   const { scope } = useWorkspace();
   const result = useQuery({
     queryKey: scope.key("maintenance-quote-comparison", id),
@@ -126,12 +136,11 @@ export function QuoteComparison({ id, active }: { id: string; active: boolean })
       ),
   });
   return (
-    <section aria-label="Quote comparison">
-      <h3>Compare received offers</h3>
+    <section aria-label="Quote comparison" className="issue-detail-section maintenance-quotes">
+      <h3>Provider quotes</h3>
       <p>
-        Review scope, terms, exact USD totals and quoted dates yourself. Ordering is server-owned;
-        active nonexpired offers precede expired/withdrawn history. No total is summed or winner
-        inferred. Assignment records preserve which exact option was selected.
+        Compare scope, price and estimated work dates. Quotes are offers, not paid expenses. No
+        provider is selected automatically.
       </p>
       {result.isPending && <p role="status">Loading bounded comparison…</p>}
       {result.error && <p role="alert">Comparison unavailable: {result.error.message}</p>}
@@ -140,38 +149,125 @@ export function QuoteComparison({ id, active }: { id: string; active: boolean })
           No received quotes. A direct assignment requires its own explicit confirmation and reason.
         </p>
       )}
-      {result.data?.quotes.map((quote) => (
-        <article key={quote.id}>
-          <MoneyFacts
-            value={quote}
-            fields={[
-              "providerDisplayNameSnapshot",
-              "label",
-              "scopeSummary",
-              "amountMinor",
-              "receivedOn",
-              "validThrough",
-              "earliestWorkStartOn",
-              "estimatedWorkFinishOn",
-              "termsNotes",
-              "documentCount",
-              "withdrawnAt",
-              "withdrawalReason",
-              "isCurrentAssignment",
-              "isHistoricalAssignment",
-              "currentPartyState",
-              "currentProviderProfileState",
-            ]}
-          />
-          {active && !quote.withdrawnAt && (
-            <Link
-              to={`${workflowUrl("maintenance.assignment.create", id)}&quoteId=${quote.id}&providerPartyId=${quote.providerPartyId}`}
-            >
-              Review assignment for {quote.label}
-            </Link>
-          )}
-        </article>
-      ))}
+      {!!result.data?.quotes.length && (
+        <div
+          className="maintenance-quote-scroll"
+          role="region"
+          aria-label="Provider quote comparison table"
+        >
+          <table className="maintenance-quote-table">
+            <caption>Received quotes — compare each offer before assigning work</caption>
+            <thead>
+              <tr>
+                {[
+                  "Provider / quote",
+                  "Work included",
+                  "Quoted total",
+                  "Work dates and terms",
+                  "Status and actions",
+                ].map((heading) => (
+                  <th scope="col" key={heading}>
+                    {heading}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {result.data.quotes.map((quote) => (
+                <tr key={quote.id}>
+                  <th scope="row">
+                    <Link to={`/providers/${quote.providerPartyId}/details`}>
+                      {quote.providerDisplayNameSnapshot}
+                    </Link>
+                    <span className="quote-secondary">{quote.label}</span>
+                    {(quote.currentPartyState === "archived" ||
+                      quote.currentProviderProfileState === "archived") && (
+                      <span className="quote-secondary">Provider archived</span>
+                    )}
+                  </th>
+                  <td>{quote.scopeSummary}</td>
+                  <td className="quote-total">
+                    {quote.currencyCode} {cents(quote.amountMinor)}
+                  </td>
+                  <td>
+                    {quote.earliestWorkStartOn && quote.estimatedWorkFinishOn ? (
+                      <p>
+                        <strong>Estimated work:</strong> {quote.earliestWorkStartOn} –{" "}
+                        {quote.estimatedWorkFinishOn}
+                      </p>
+                    ) : (
+                      <p>No work dates supplied.</p>
+                    )}
+                    <p>
+                      <strong>Received:</strong> {quote.receivedOn}
+                    </p>
+                    {quote.validThrough && (
+                      <p>
+                        <strong>Valid through:</strong> {quote.validThrough}
+                      </p>
+                    )}
+                    {quote.termsNotes && <p>{quote.termsNotes}</p>}
+                    <details>
+                      <summary>Documents and history ({quote.documentCount})</summary>
+                      {quote.replacesQuoteId && (
+                        <p>Replaces an earlier quote; the original remains in this comparison.</p>
+                      )}
+                      {quote.withdrawnAt && (
+                        <p>
+                          Withdrawn {formatHomeTime(quote.withdrawnAt)}
+                          {quote.withdrawalReason ? ` · ${quote.withdrawalReason}` : ""}
+                        </p>
+                      )}
+                      {documents(quote.id)}
+                      <Link
+                        state={{ returnTo: `/maintenance?record=issue&id=${id}` }}
+                        to={`${workflowUrl("file.upload")}&entityType=maintenance_quote&entityId=${quote.id}&purpose=supporting_document`}
+                      >
+                        Attach supporting document
+                      </Link>
+                    </details>
+                  </td>
+                  <td>
+                    <span className="maintenance-record-status">
+                      {quote.withdrawnAt ? "Withdrawn" : "Received"}
+                    </span>
+                    {quote.isCurrentAssignment && <p>Currently assigned</p>}
+                    {quote.isHistoricalAssignment && <p>Previously assigned</p>}
+                    {active &&
+                      (quote.withdrawnAt ? (
+                        <p>
+                          <Link
+                            to={`${workflowUrl("maintenance.quote.create", id)}&replacesQuoteId=${quote.id}`}
+                          >
+                            Replace withdrawn quote
+                          </Link>
+                        </p>
+                      ) : (
+                        <>
+                          <p>
+                            <Link
+                              to={`${workflowUrl("maintenance.assignment.create", id)}&quoteId=${quote.id}&providerPartyId=${quote.providerPartyId}`}
+                            >
+                              Review assignment for {quote.label}
+                            </Link>
+                          </p>
+                          <CommandLinks
+                            target={id}
+                            child={quote.id}
+                            keys={["maintenance.quote.withdraw"]}
+                            title={`Actions for ${quote.label}`}
+                            asButtons
+                            collapsible={false}
+                          />
+                        </>
+                      ))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }

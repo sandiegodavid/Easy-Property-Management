@@ -31,15 +31,25 @@ export function collectionUrl(
     propertyId: section.viewAllTarget.scope.propertyId ?? undefined,
     horizonDays: section.viewAllTarget.horizonDays,
   });
-  if (section.viewAllCursor) params.set("cursor", section.viewAllCursor);
   return `/home/collections/${section.collection}?${params}`;
 }
 
-export function HomeSourceLink({ to, children }: { to: string; children: ReactNode }) {
+export function HomeSourceLink({
+  to,
+  children,
+  collectionCursor,
+}: {
+  to: string;
+  children: ReactNode;
+  collectionCursor?: string | null;
+}) {
   const location = useLocation(),
     navigate = useNavigate();
   const { scope } = useWorkspace();
   const parent = useReturn();
+  const state: unknown = location.state;
+  const collectionState =
+    state && typeof state === "object" ? (state as Record<string, unknown>) : {};
   return (
     <Link
       to={to}
@@ -54,8 +64,13 @@ export function HomeSourceLink({ to, children }: { to: string; children: ReactNo
             homeReturnTo: returnTo,
             homeReturnScroll: window.scrollY,
             homeRuntime: `${scope.workspaceId}:${scope.runtimeEpoch}`,
+            homeReturnCollectionState: {
+              homeCollectionCursor: collectionState.homeCollectionCursor,
+              homeCollectionPrevious: collectionState.homeCollectionPrevious,
+            },
             rootReturnTo: parent?.href,
             rootReturnScroll: parent?.scroll,
+            homeCollectionCursor: collectionCursor,
           },
         });
       }}
@@ -208,6 +223,7 @@ export function useSourceNavigationState() {
         homeReturnTo: back.href,
         homeReturnScroll: back.scroll,
         homeRuntime: back.runtime,
+        homeReturnCollectionState: back.collectionState,
         rootReturnTo: back.parentHref,
         rootReturnScroll: back.parentScroll,
       }
@@ -427,6 +443,8 @@ function useReturn() {
     href: url.pathname + url.search,
     scroll: value.homeReturnScroll,
     runtime: value.homeRuntime,
+    collectionState:
+      "homeReturnCollectionState" in value ? value.homeReturnCollectionState : undefined,
     parentHref:
       "rootReturnTo" in value && typeof value.rootReturnTo === "string"
         ? value.rootReturnTo
@@ -438,10 +456,19 @@ function useReturn() {
   };
 }
 
-export function HomeBackLink({ fallback, children }: { fallback: string; children: ReactNode }) {
+export function HomeBackLink({
+  fallback,
+  children,
+  className,
+}: {
+  fallback: string;
+  children: ReactNode;
+  className?: string;
+}) {
   const back = useReturn();
   return (
     <Link
+      className={className}
       to={back?.href ?? fallback}
       state={
         back
@@ -450,6 +477,9 @@ export function HomeBackLink({ fallback, children }: { fallback: string; childre
               homeRuntime: back.runtime,
               homeReturnTo: back.parentHref,
               homeReturnScroll: back.parentScroll,
+              ...(back.collectionState && typeof back.collectionState === "object"
+                ? back.collectionState
+                : {}),
             }
           : undefined
       }

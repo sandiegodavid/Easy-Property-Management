@@ -397,7 +397,9 @@ export function WorkCommand() {
   return (
     <div
       className={
-        ["maintenance.issue.create", "owner_concern.create"].includes(definition.formKey)
+        ["maintenance.issue.create", "owner_concern.create", "maintenance.issue.patch"].includes(
+          definition.formKey,
+        )
           ? "maintenance-create-command"
           : undefined
       }
@@ -411,7 +413,24 @@ export function WorkCommand() {
               no new change can be submitted.
             </p>
           )}
-          {!["maintenance.issue.create", "owner_concern.create"].includes(definition.formKey) && (
+          {definition.formKey === "maintenance.issue.patch" && (
+            <>
+              <div className="selected-command-context">
+                <strong>{scalar(context.value.summary)}</strong>
+                <span>{scalar(context.value.status).replaceAll("_", " ")}</span>
+              </div>
+              <MaintenanceContext
+                formKey={definition.formKey}
+                values={initial}
+                source={context.value}
+              />
+            </>
+          )}
+          {![
+            "maintenance.issue.create",
+            "owner_concern.create",
+            "maintenance.issue.patch",
+          ].includes(definition.formKey) && (
             <>
               <p>
                 Choices are bounded to the first 100 relevant records. Use an existing contextual
@@ -534,11 +553,13 @@ export function WorkCommand() {
             />
           ) : definition.formKey.startsWith("maintenance.") ? (
             <>
-              <MaintenanceContext
-                formKey={definition.formKey}
-                values={values}
-                source={context.value}
-              />
+              {definition.formKey !== "maintenance.issue.patch" && (
+                <MaintenanceContext
+                  formKey={definition.formKey}
+                  values={values}
+                  source={context.value}
+                />
+              )}
               {definition.formKey === "maintenance.journal.record" && (
                 <JournalCommandContext
                   values={values}

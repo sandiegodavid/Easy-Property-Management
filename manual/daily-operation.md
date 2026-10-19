@@ -53,6 +53,8 @@ Information review checks whether the app has enough recorded information for an
 4. If manual review is requested, enter the allowed reason/date and submit the explicit review action.
 5. Choose Not applicable only when the source rules offer it and the reason is true. Required gaps remain until the underlying records are corrected.
 
+The **Next step** action follows the missing information: unclassified occupancy or leasing status opens classification, missing rent schedules open rent synchronization, and missing deposit tracking opens deposit-account setup. Conflicting occupancy or lease/term records open the relevant records for review instead of assuming a new record is needed. **Not applicable** explains that no setup is needed and offers no creation shortcut. Maintenance review opens the property's issue list. Opening a form does not save changes; complete its normal review and confirmation steps, then return and refresh the information review.
+
 A later relevant source change may require renewed review. Maintenance acknowledgment records your review time; it does not certify that no physical issue exists.
 
 ## Save, resume and correct

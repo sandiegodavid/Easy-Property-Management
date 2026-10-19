@@ -37,6 +37,57 @@ async function seed(request: APIRequestContext, count: number) {
   return { property, tasks };
 }
 
+test("Home has concise collection links, no repeated tab headings and one expanded source action", async ({
+  page,
+  request,
+}) => {
+  const { property, tasks } = await seed(request, 1);
+  await page.goto(`/home?propertyId=${property.id}`);
+  for (const title of ["Needs action", "Waiting", "Upcoming"]) {
+    await page.getByRole("tab", { name: title, exact: true }).click();
+    const region = page.getByRole("region", { name: title, exact: true });
+    await expect(region.getByRole("heading")).toHaveCount(0);
+    const link = region.getByRole("link", { name: new RegExp(`^View all ${title} \\(`) });
+    await expect(link).toBeVisible();
+    await expect(link).not.toHaveAttribute("href", /cursor=/);
+    await expect(region).not.toContainText("recorded items");
+  }
+  for (const title of ["Calendar and appointments", "Information review"]) {
+    const region = page.getByRole("region", { name: title, exact: true });
+    await expect(
+      region.getByRole("link", { name: new RegExp(`^View all ${title} \\(`) }),
+    ).toBeVisible();
+    await expect(region).not.toContainText("recorded items");
+  }
+  await page.getByRole("tab", { name: "Needs action", exact: true }).click();
+  const action = page.getByRole("region", { name: "Needs action", exact: true });
+  await expect(
+    action.getByRole("link", { name: "View all Needs action (1 item)", exact: true }),
+  ).toBeVisible();
+  const row = action.getByRole("button", { name: new RegExp(tasks[0].title) });
+  await row.click();
+  await expect(action.getByRole("button", { name: "Collapse details" })).toHaveCount(0);
+  await expect(action.getByRole("link", { name: "View", exact: true })).toHaveCount(1);
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute("data-theme", value),
+      theme,
+    );
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+        .toBe(true);
+      await page.screenshot({
+        path: test.info().outputPath(`home-links-${theme}-${width}.png`),
+        fullPage: true,
+      });
+    }
+  }
+  await row.click();
+  await expect(row).toHaveAttribute("aria-expanded", "false");
+});
+
 test("View all keeps preview capture and exact total, bounds pages and preserves source return and scroll", async ({
   page,
   request,
@@ -46,14 +97,20 @@ test("View all keeps preview capture and exact total, bounds pages and preserves
     `/home?propertyId=${property.id}&horizonDays=30&fromOn=2026-09-01&throughOn=2026-09-30`,
   );
   const preview = page.getByRole("region", { name: "Needs action", exact: true });
-  await expect(preview.getByRole("heading", { level: 4 })).toHaveText("55 recorded items");
+  await expect(preview.getByRole("heading")).toHaveCount(0);
+  await expect(preview).not.toContainText("recorded items");
   const capture = await preview.locator(".home-capture time").getAttribute("datetime");
   const response = page.waitForResponse(
     (result) =>
       new URL(result.url()).pathname === "/api/operator/home/items" &&
       new URL(result.url()).searchParams.get("limit") === "50",
   );
-  await preview.getByRole("link", { name: "View all Needs action (55)", exact: true }).click();
+  const viewAll = preview.getByRole("link", {
+    name: "View all Needs action (55 items)",
+    exact: true,
+  });
+  await expect(viewAll).not.toHaveAttribute("href", /cursor=/);
+  await viewAll.click();
   const body = (await (await response).json()) as Schema["CollectionResponse"];
   expect(body.asOf).toBe(capture);
   if (body.result.status !== "available") throw new Error("Collection unavailable");
@@ -61,23 +118,41 @@ test("View all keeps preview capture and exact total, bounds pages and preserves
   await expect(
     page
       .getByRole("region", { name: "Needs action", exact: true })
-      .getByRole("heading", { level: 4 }),
-  ).toHaveText("55 recorded items");
+      .getByText("55 items", { exact: true }),
+  ).toBeVisible();
   const firstKeys = body.result.items.map((item) => item.key);
   const nextResponse = page.waitForResponse(
     (result) => new URL(result.url()).pathname === "/api/operator/home/items",
   );
-  await page.getByRole("link", { name: "Next collection page", exact: true }).click();
+  await page.getByRole("link", { name: "Next →", exact: true }).click();
   const next = (await (await nextResponse).json()) as Schema["CollectionResponse"];
   expect(next.asOf).toBe(capture);
   if (next.result.status !== "available") throw new Error("Collection unavailable");
   expect(next.result.items).toHaveLength(5);
   expect(new Set([...firstKeys, ...next.result.items.map((item) => item.key)]).size).toBe(55);
-  await page.goBack();
+  await expect(page.getByRole("navigation", { name: "Collection pages" })).toContainText("Page 2");
+  await expect(page).not.toHaveURL(/cursor=/);
+  await page.reload();
+  await expect(page.getByRole("navigation", { name: "Collection pages" })).toContainText("Page 2");
+  const secondPage = page.getByRole("region", { name: "Needs action", exact: true });
+  await expect(secondPage.getByRole("button", { name: /Collection Task/ })).toHaveCount(5);
+  const secondRow = secondPage.getByRole("button", { name: /Collection Task/ }).first();
+  await secondRow.click();
+  await secondPage.getByRole("link", { name: "View", exact: true }).click();
+  await page
+    .getByRole("link", { name: "Return to Home collection or preview", exact: true })
+    .click();
+  await expect(page.getByRole("navigation", { name: "Collection pages" })).toContainText("Page 2");
+  await expect(secondPage.getByRole("button", { name: /Collection Task/ })).toHaveCount(5);
+  await page.getByRole("link", { name: "← Previous", exact: true }).click();
   const action = page.getByRole("region", { name: "Needs action", exact: true });
   const row = action.getByRole("button").nth(20);
   await row.click();
-  const source = action.getByRole("link", { name: "View task details", exact: true });
+  await expect(action.getByRole("button", { name: "Collapse details", exact: true })).toHaveCount(
+    0,
+  );
+  const source = action.getByRole("link", { name: "View", exact: true });
+  await expect(source).toHaveCount(1);
   await source.scrollIntoViewIfNeeded();
   const returnUrl = page.url(),
     scroll = await page.evaluate(() => scrollY);
@@ -98,8 +173,8 @@ test("View all keeps preview capture and exact total, bounds pages and preserves
   const all = (await (await maximum).json()) as Schema["CollectionResponse"];
   if (all.result.status !== "available") throw new Error("Collection unavailable");
   expect(all.result.items).toHaveLength(55);
-  await expect(page.getByRole("link", { name: "Next collection page" })).toHaveCount(0);
-  await page.getByRole("link", { name: "Return Home", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Next →" })).toHaveCount(0);
+  await page.getByRole("link", { name: "← Back to Home", exact: true }).click();
   await expect(page).toHaveURL(
     new RegExp(
       `propertyId=${property.id}.*horizonDays=30.*fromOn=2026-09-01.*throughOn=2026-09-30`,
@@ -123,13 +198,13 @@ test("one-row pages have no gaps and filter changes discard incompatible continu
   });
   await page.goto(`/home/collections/needs_action?propertyId=${property.id}&limit=1`);
   const action = page.getByRole("region", { name: "Needs action", exact: true });
-  await expect(action.getByRole("heading", { level: 4 })).toHaveText("3 recorded items");
-  await page.getByRole("link", { name: "Next collection page" }).click();
+  await expect(action.getByText("3 items", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Next →" }).click();
   await expect.poll(() => keys.length).toBe(2);
-  await page.getByRole("link", { name: "Next collection page" }).click();
+  await page.getByRole("link", { name: "Next →" }).click();
   await expect.poll(() => keys.length).toBe(3);
   expect(new Set(keys)).toEqual(new Set(tasks.map((task) => `task:${task.id}`)));
-  await expect(page.getByRole("link", { name: "Next collection page" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Next →" })).toHaveCount(0);
   const changed = page.waitForResponse((result) => {
     const url = new URL(result.url());
     return (
@@ -142,7 +217,7 @@ test("one-row pages have no gaps and filter changes discard incompatible continu
   const continued = page.waitForResponse(
     (result) => new URL(result.url()).pathname === "/api/operator/home/items",
   );
-  await page.getByRole("link", { name: "Next collection page" }).click();
+  await page.getByRole("link", { name: "Next →" }).click();
   await continued;
   const rescope = page.waitForResponse(
     (result) =>
@@ -151,7 +226,7 @@ test("one-row pages have no gaps and filter changes discard incompatible continu
   );
   await page.getByLabel("Property ID", { exact: false }).fill(other.property.id);
   expect(new URL((await rescope).url()).searchParams.has("cursor")).toBe(false);
-  await expect(action.getByRole("heading", { level: 4 })).toHaveText("0 recorded items");
+  await expect(action.getByText("0 items", { exact: true })).toBeVisible();
 });
 
 test("changed sources and changed runtime cursors require a fresh restart with the same filters", async ({
@@ -161,7 +236,7 @@ test("changed sources and changed runtime cursors require a fresh restart with t
   const { property, tasks } = await seed(request, 3);
   await page.goto(`/home?propertyId=${property.id}`);
   const preview = page.getByRole("region", { name: "Needs action", exact: true });
-  const link = preview.getByRole("link", { name: "View all Needs action (3)", exact: true });
+  const link = preview.getByRole("link", { name: "View all Needs action (3 items)", exact: true });
   await expect(link).toBeVisible();
   const href = await link.getAttribute("href");
   expect(href).toBeTruthy();
@@ -174,14 +249,14 @@ test("changed sources and changed runtime cursors require a fresh restart with t
   });
   expect(completed.ok(), await completed.text()).toBe(true);
   await link.click();
-  await expect(page.getByRole("alert")).toContainText("Restart with the same filters");
-  await expect(page.getByRole("link", { name: "Next collection page" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Restart collection with current filters" }).click();
+  await expect(page.getByRole("alert")).toContainText("Refresh collection");
+  await expect(page.getByRole("link", { name: "Next →" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Refresh collection" }).click();
   await expect(
     page
       .getByRole("region", { name: "Needs action", exact: true })
-      .getByRole("heading", { level: 4 }),
-  ).toHaveText("2 recorded items");
+      .getByText("2 items", { exact: true }),
+  ).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`propertyId=${property.id}`));
   await expect(page).not.toHaveURL(/cursor=/);
   const current = await request.get(
@@ -205,9 +280,7 @@ test("every collection has a deep link and missing readiness never dispatches a 
   for (const collection of ["waiting", "upcoming", "appointments", "information_review"]) {
     await page.goto(`/home/collections/${collection}`);
     await expect(page.getByRole("region", { name: "Home collection page" })).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Restart collection with current filters" }),
-    ).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Refresh collection" })).toBeEnabled();
   }
   let requests = 0;
   page.on("request", (pending) => {
@@ -261,7 +334,7 @@ test("hidden destinations remain reachable from collection source links with a p
   const action = page.getByRole("region", { name: "Needs action", exact: true });
   await action.getByRole("button", { name: new RegExp(issue.summary) }).click();
   const returnUrl = page.url();
-  await action.getByRole("link", { name: "View maintenance issue details" }).click();
+  await action.getByRole("link", { name: "Review issue", exact: true }).click();
   await expect(page.getByRole("heading", { name: issue.summary, exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Return to Home collection or preview" }).click();
   await expect(page).toHaveURL(returnUrl);

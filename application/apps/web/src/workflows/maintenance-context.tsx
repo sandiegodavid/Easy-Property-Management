@@ -28,6 +28,19 @@ export function MaintenanceContext({
         }),
       ),
   });
+  if (formKey === "maintenance.issue.patch")
+    return (
+      <div className="record-detail-note" role="note">
+        {property.data && <p>{property.data.displayName}</p>}
+        <p>
+          Editing these details does not move the issue, change its reporter or resolve it. Urgent
+          priority does not contact emergency services.
+        </p>
+        {property.error && (
+          <p role="alert">Property details are unavailable. The issue can still be reviewed.</p>
+        )}
+      </div>
+    );
   if (formKey === "maintenance.issue.create")
     return (
       <div className="maintenance-create-note" role="note" aria-label="Reporting guidance">

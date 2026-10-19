@@ -11,13 +11,24 @@ function CollectionPage({ collection }: { collection: (typeof collections)[numbe
   const [params, setParams] = useSearchParams(),
     location = useLocation();
   const navigationState: unknown = location.state;
+  const state =
+    navigationState && typeof navigationState === "object"
+      ? (navigationState as Record<string, unknown>)
+      : {};
+  const previous = Array.isArray(state.homeCollectionPrevious)
+    ? state.homeCollectionPrevious.filter(
+        (value): value is string | null => value === null || typeof value === "string",
+      )
+    : [];
   const filters = homeFilters(params, bootstrap.serverTimeUtc);
   const requested = Number(params.get("limit") ?? 50);
   const limit = Number.isInteger(requested) && requested >= 1 && requested <= 100 ? requested : 50;
-  const cursor = params.get("cursor") ?? undefined;
+  const cursor =
+    params.get("cursor") ??
+    (typeof state.homeCollectionCursor === "string" ? state.homeCollectionCursor : undefined);
   const normalized = homeParams(filters);
   normalized.set("limit", String(limit));
-  if (cursor) normalized.set("cursor", cursor);
+  if (params.has("cursor")) normalized.set("cursor", params.get("cursor")!);
   const query = normalized.toString();
   const read = useHomeItems(collection, filters, limit, cursor);
   useHomeScroll(!!read.value && !read.updating);
@@ -27,15 +38,19 @@ function CollectionPage({ collection }: { collection: (typeof collections)[numbe
   function restart() {
     const next = new URLSearchParams(query);
     next.delete("cursor");
-    if (cursor) setParams(next, { state: navigationState });
+    if (cursor)
+      setParams(next, {
+        state: { ...state, homeCollectionCursor: undefined, homeCollectionPrevious: [] },
+      });
     else read.retry();
   }
   const next = new URLSearchParams(query);
-  if (read.value?.result.status === "available" && read.value.result.nextCursor)
-    next.set("cursor", read.value.result.nextCursor);
+  next.delete("cursor");
   return (
     <section aria-label="Home collection page">
-      <HomeBackLink fallback={`/home?${homeParams(filters)}`}>Return Home</HomeBackLink>
+      <HomeBackLink className="parent-back-link" fallback={`/home?${homeParams(filters)}`}>
+        ← Back to Home
+      </HomeBackLink>
       <h2>{collectionTitles[collection]}</h2>
       <p>
         Scope: {filters.propertyId ?? "All properties"} · Horizon: {filters.horizonDays} days. Each
@@ -53,7 +68,7 @@ function CollectionPage({ collection }: { collection: (typeof collections)[numbe
           }
           changed.delete("cursor");
           setParams(changed, {
-            state: navigationState,
+            state: { ...state, homeCollectionCursor: undefined, homeCollectionPrevious: [] },
             replace: true,
             preventScrollReset: true,
           });
@@ -77,31 +92,50 @@ function CollectionPage({ collection }: { collection: (typeof collections)[numbe
         </label>
       </DynamicFilterForm>
       <button disabled={read.updating} onClick={restart}>
-        Restart collection with current filters
+        Refresh collection
       </button>
       {read.status === 409 ? (
         <div role="alert">
-          This collection changed or its continuation expired. Restart with the same filters before
-          continuing.
+          This collection changed or its continuation expired. Refresh collection to continue with
+          the same filters.
         </div>
       ) : (
         <HomeCollection
+          showHeading={false}
           title={collectionTitles[collection]}
           collection={read.value?.result}
           read={read}
         />
       )}
-      {read.kind === "available" &&
-        read.value?.result.status === "available" &&
-        read.value.result.nextCursor && (
-          <Link state={navigationState} to={`?${next}`}>
-            Next collection page
+      <nav aria-label="Collection pages" className="home-collection-pagination">
+        {previous.length > 0 && (
+          <Link
+            to={`?${next}`}
+            state={{
+              ...state,
+              homeCollectionCursor: previous.at(-1),
+              homeCollectionPrevious: previous.slice(0, -1),
+            }}
+          >
+            ← Previous
           </Link>
         )}
-      <p>
-        Restart replaces this page with a fresh capture. Pages from different captures are never
-        appended together.
-      </p>
+        <span>Page {previous.length + 1}</span>
+        {read.kind === "available" &&
+          read.value?.result.status === "available" &&
+          read.value.result.nextCursor && (
+            <Link
+              state={{
+                ...state,
+                homeCollectionCursor: read.value.result.nextCursor,
+                homeCollectionPrevious: [...previous, cursor ?? null],
+              }}
+              to={`?${next}`}
+            >
+              Next →
+            </Link>
+          )}
+      </nav>
     </section>
   );
 }

@@ -71,6 +71,7 @@ export function Fields({
   choices = {},
   disabled = false,
   showChangeControls = true,
+  compactChangeControls = false,
   fieldLabels = {},
 }: {
   schema: RequestSchema;
@@ -80,6 +81,7 @@ export function Fields({
   choices?: Choices;
   disabled?: boolean;
   showChangeControls?: boolean;
+  compactChangeControls?: boolean;
   fieldLabels?: Record<string, string>;
 }) {
   const shape = fieldSchema(schema);
@@ -203,6 +205,7 @@ export function Fields({
                       disabled={disabled}
                       showChangeControls={showChangeControls}
                       fieldLabels={fieldLabels}
+                      compactChangeControls={compactChangeControls}
                     />
                     {!shape.required?.includes(key) && (
                       <button type="button" disabled={disabled} onClick={() => update(undefined)}>
@@ -248,6 +251,9 @@ export function Fields({
                         path={`${fieldPath}.${index}`}
                         choices={choices}
                         disabled={disabled}
+                        showChangeControls={showChangeControls}
+                        fieldLabels={fieldLabels}
+                        compactChangeControls={compactChangeControls}
                       />
                     ) : (
                       <label>
@@ -291,6 +297,29 @@ export function Fields({
               </fieldset>
             );
           }
+          const changeOptions = (
+            <>
+              {showChangeControls && nullable && (
+                <label>
+                  <input
+                    type="checkbox"
+                    disabled={disabled}
+                    checked={current === null}
+                    onChange={(event) => update(event.target.checked ? null : undefined)}
+                  />
+                  Clear {name.toLowerCase()}
+                </label>
+              )}
+              {showChangeControls &&
+                !shape.required?.includes(key) &&
+                current !== undefined &&
+                current !== null && (
+                  <button type="button" disabled={disabled} onClick={() => update(undefined)}>
+                    Leave {name.toLowerCase()} unchanged / omit
+                  </button>
+                )}
+            </>
+          );
           return (
             <div className="workflow-field" key={key}>
               {childShape.type === "boolean" ? (
@@ -373,25 +402,17 @@ export function Fields({
                   )}
                 </label>
               )}
-              {showChangeControls && nullable && (
-                <label>
-                  <input
-                    type="checkbox"
-                    disabled={disabled}
-                    checked={current === null}
-                    onChange={(event) => update(event.target.checked ? null : undefined)}
-                  />
-                  Clear {name.toLowerCase()}
-                </label>
+              {compactChangeControls &&
+              showChangeControls &&
+              (nullable ||
+                (!shape.required?.includes(key) && current !== undefined && current !== null)) ? (
+                <details className="field-change-options" open={current === null}>
+                  <summary>Clear or keep {name.toLowerCase()}</summary>
+                  {changeOptions}
+                </details>
+              ) : (
+                changeOptions
               )}
-              {showChangeControls &&
-                !shape.required?.includes(key) &&
-                current !== undefined &&
-                current !== null && (
-                  <button type="button" disabled={disabled} onClick={() => update(undefined)}>
-                    Leave {name.toLowerCase()} unchanged / omit
-                  </button>
-                )}
             </div>
           );
         })}

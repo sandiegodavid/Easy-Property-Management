@@ -90,6 +90,103 @@ async function schedule(request: APIRequestContext, f: Awaited<ReturnType<typeof
     },
   );
 }
+
+test("money editing, category details, expenses and reporting use readable responsive sections", async ({
+  page,
+  request,
+}, testInfo) => {
+  const f = await fixture(request);
+  const synced = await schedule(request, f);
+  const paid = await expense(request, f);
+  const cases = [
+    {
+      key: "category-create",
+      url: "/money?workflow=finance.expense_category.create",
+      region: "Create expense category",
+    },
+    {
+      key: "category-edit",
+      url: `/money?workflow=finance.expense_category.patch&target=${paid.categoryId}`,
+      region: "Edit expense category",
+    },
+    {
+      key: "category-detail",
+      url: `/money?record=category&id=${paid.categoryId}`,
+      region: "Money record",
+    },
+    { key: "expense-detail", url: `/money?record=expense&id=${paid.id}`, region: "Money record" },
+    {
+      key: "payment-create",
+      url: `/money?workflow=finance.rent_receipt.create&target=${f.lease.id}&child=${synced.items[0].id}`,
+      region: "Record rent receipt",
+    },
+    {
+      key: "reporting",
+      url: `/money?tab=reporting&fromOn=${f.today}&throughOn=${f.today}&propertyState=all&propertyId=${f.property.id}`,
+      region: "Money reporting",
+    },
+  ];
+  for (const item of cases) {
+    await page.goto(item.url);
+    const region = page.getByRole("region", { name: item.region, exact: true });
+    await expect(region).toBeVisible();
+    if (item.key === "reporting")
+      await expect(region.getByRole("region", { name: "operating", exact: true })).toBeVisible();
+    if (item.key.startsWith("category-") && item.key !== "category-detail") {
+      await expect(
+        region.getByRole("region", { name: "Category details", exact: true }),
+      ).toBeVisible();
+      await expect(
+        region.getByText("Displayed source revision:", { exact: false }),
+      ).not.toBeVisible();
+    }
+    if (item.key === "payment-create") {
+      for (const title of ["Payment received", "Payment method", "Apply payment to rent"])
+        await expect(region.getByRole("region", { name: title, exact: true })).toBeVisible();
+      await expect(region.getByLabel("Lease id (required)")).toHaveCount(0);
+      await expect(
+        region.getByText("Displayed source revision:", { exact: false }),
+      ).not.toBeVisible();
+    }
+    if (item.key === "expense-detail") {
+      await expect(
+        region.getByRole("region", { name: "Expense summary", exact: true }),
+      ).toContainText("Actual paid repair");
+      await expect(
+        region.getByRole("button", { name: "Record refund", exact: true }),
+      ).toBeVisible();
+      await expect(region.getByText(paid.id, { exact: true })).not.toBeVisible();
+    }
+    if (item.key === "category-detail")
+      await expect(
+        region.getByRole("button", { name: "Edit expense category", exact: true }),
+      ).toBeVisible();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset.theme = value;
+      }, theme);
+      for (const width of [1280, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        expect(await region.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+          true,
+        );
+        await region.screenshot({ path: testInfo.outputPath(`${item.key}-${theme}-${width}.png`) });
+      }
+    }
+    await page.evaluate(axe.source);
+    expect(
+      await page.evaluate(
+        async (name) =>
+          (
+            await window.axe.run(`section[aria-label="${name}"]`, {
+              runOnly: { type: "tag", values: ["wcag2a", "wcag2aa", "wcag21aa"] },
+            })
+          ).violations.map((item) => item.id),
+        item.region,
+      ),
+    ).toEqual([]);
+  }
+});
 test("property-scoped Money shows a named link back to property details", async ({
   page,
   request,
@@ -191,6 +288,107 @@ async function expense(request: APIRequestContext, f: Awaited<ReturnType<typeof 
     description: "Actual paid repair",
   });
 }
+test("Money actions are visible buttons and open the selected workflow", async ({ page }) => {
+  for (const [tab, label, formKey] of [
+    ["expenses", "Record paid expense", "finance.expense.create"],
+    ["categories", "Create expense category", "finance.expense_category.create"],
+  ]) {
+    await page.goto(`/money?tab=${tab}`);
+    const actions = page.getByRole("navigation", { name: "Money actions", exact: true });
+    await expect(actions).toBeVisible();
+    await expect(actions.locator("xpath=ancestor::details")).toHaveCount(0);
+    const button = actions.getByRole("button", { name: label, exact: true });
+    await expect(button).toBeVisible();
+    await button.click();
+    await expect(page).toHaveURL(new RegExp(`workflow=${formKey.replaceAll(".", "\\.")}`));
+  }
+});
+
+test("rent payment detail shows named context, exact allocations and retained void history", async ({
+  page,
+  request,
+}, testInfo) => {
+  const f = await fixture(request, true);
+  const synced = await schedule(request, f);
+  const receipt = await post<
+    Schemas["app__modules__finance__api__router__ReceiptMutationResponse"]
+  >(request, "/api/rent-receipts", {
+    leaseId: f.lease.id,
+    expectedRevision: synced.rentLedgerRevision,
+    idempotencyKey: crypto.randomUUID(),
+    receivedOn: f.today,
+    amountMinor: 65000,
+    currencyCode: "USD",
+    paymentMethodKind: "bank_transfer",
+    maskedReference: "Transfer **** 9876",
+    notes: "Payment covers two rent periods",
+    allocations: synced.items
+      .slice(0, 2)
+      .map((item, index) => ({ expectationId: item.id, amountMinor: index ? 30000 : 35000 })),
+  });
+  await page.goto(`/money?record=receipt&id=${receipt.id}`);
+  const detail = page.getByRole("region", { name: "Money record", exact: true });
+  await expect(detail.getByRole("heading", { name: "Rent payment", exact: true })).toBeVisible();
+  await expect(
+    detail.getByRole("link", { name: f.property.displayName, exact: true }),
+  ).toBeVisible();
+  const summary = detail.getByRole("region", { name: "Payment summary", exact: true });
+  await expect(summary).toContainText("USD 650.00");
+  await expect(summary).toContainText("Transfer **** 9876");
+  await expect(summary).toContainText("Payment covers two rent periods");
+  const table = detail.getByRole("table", { name: "Rent allocations", exact: true });
+  await expect(table.getByRole("row")).toHaveCount(3);
+  await expect(table).toContainText("USD 350.00");
+  await expect(table).toContainText("USD 300.00");
+  await expect(detail.getByRole("button", { name: "Void payment", exact: true })).toBeVisible();
+  await expect(detail.getByText(f.lease.id, { exact: true })).toHaveCount(0);
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+        .toBe(true);
+      await page.screenshot({
+        path: testInfo.outputPath(`rent-payment-${theme}-${width}.png`),
+        fullPage: true,
+      });
+      await page.evaluate(axe.source);
+      expect(
+        await page.evaluate(
+          async () =>
+            (
+              await window.axe.run(".rent-detail", {
+                runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
+              })
+            ).violations,
+        ),
+      ).toEqual([]);
+    }
+  }
+  await post(request, `/api/rent-receipts/${receipt.id}/void`, {
+    expectedRevision: receipt.rentLedgerRevision,
+    idempotencyKey: crypto.randomUUID(),
+    confirmed: true,
+    voidReason: "Duplicate transfer entry",
+  });
+  await page.reload();
+  await expect(summary).toContainText("This payment was voided.");
+  await expect(summary).toContainText("Duplicate transfer entry");
+  await expect(
+    detail.getByRole("table", { name: "Original rent allocations", exact: true }),
+  ).toBeVisible();
+  await expect(detail.getByRole("button", { name: "Void payment", exact: true })).toHaveCount(0);
+  await expect(detail.getByRole("link", { name: "Record replacement rent receipt" })).toBeVisible();
+  await detail
+    .getByRole("link", {
+      name: `${synced.items[0].periodStartsOn} – ${synced.items[0].periodEndsOn}`,
+      exact: true,
+    })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`record=expectation&id=${synced.items[0].id}`));
+});
+
 test("Money lists present rent and expenses as readable cards", async ({ page, request }) => {
   const f = await fixture(request);
   await schedule(request, f);
@@ -566,8 +764,8 @@ test("rent synchronization and a partial receipt keep allocations and remaining 
   await page.getByRole("button", { name: "Record payment", exact: true }).click();
   await page.getByLabel("Received on (required)").fill(f.today);
   await page.getByLabel("Payment method kind (required)").selectOption("cash");
-  await page.getByLabel("Amount minor (required)").nth(0).fill("40000");
-  await page.getByLabel("Amount minor (required)").nth(1).fill("40000");
+  await page.getByLabel("Amount (USD cents) (required)").nth(0).fill("40000");
+  await page.getByLabel("Amount (USD cents) (required)").nth(1).fill("40000");
   await save(page, "Record rent receipt");
   await page.goto(`/money?record=expectation&id=${expectation.id}`);
   await expect(page.getByText("USD 600.00", { exact: true })).toBeVisible();
@@ -783,8 +981,14 @@ test("receipt totals prevent unmatched money and allocate one payment across two
   );
   await page.getByLabel("Received on (required)").fill(f.today);
   await page.getByLabel("Payment method kind (required)").selectOption("cash");
-  await page.getByLabel("Amount minor (required)").last().fill("150000");
-  await page.getByLabel("Amount minor (required)").first().fill("100000");
+  await page
+    .getByRole("region", { name: "Payment received", exact: true })
+    .getByLabel("Amount (USD cents) (required)")
+    .fill("150000");
+  await page
+    .getByRole("region", { name: "Apply payment to rent", exact: true })
+    .getByLabel("Amount (USD cents) (required)")
+    .fill("100000");
   const totals = page.getByRole("region", { name: "Receipt allocation totals", exact: true });
   await expect(totals).toContainText("USD 500.00");
   await expect(
@@ -796,10 +1000,14 @@ test("receipt totals prevent unmatched money and allocate one payment across two
   ).toHaveLength(0);
   await page.getByRole("button", { name: "Add allocations entry", exact: true }).click();
   await page
-    .getByRole("combobox", { name: "Expectation id (required)", exact: true })
+    .getByRole("combobox", { name: "Rent period (required)", exact: true })
     .nth(1)
     .selectOption(second.id);
-  await page.getByLabel("Amount minor (required)").nth(1).fill("50000");
+  await page
+    .getByRole("region", { name: "Apply payment to rent", exact: true })
+    .getByLabel("Amount (USD cents) (required)")
+    .nth(1)
+    .fill("50000");
   await expect(totals).toContainText("USD 0.00");
   await save(page, "Record rent receipt");
   const receipts = await get<Schemas["ReceiptPageResponse"]>(
@@ -1061,8 +1269,7 @@ test("Expense category create, edit, archive and restore use the catalog receipt
       exact: true,
     })
     .click();
-  await page.getByText("Actions", { exact: true }).click();
-  await page.getByRole("link", { name: "Edit expense category", exact: true }).click();
+  await page.getByRole("button", { name: "Edit expense category", exact: true }).click();
   await page.getByLabel("Description", { exact: true }).fill("Current category description");
   await save(page, "Edit expense category");
   await page
@@ -1071,8 +1278,15 @@ test("Expense category create, edit, archive and restore use the catalog receipt
       exact: true,
     })
     .click();
-  await page.getByText("Actions", { exact: true }).click();
-  await page.getByRole("link", { name: "Archive expense category", exact: true }).click();
+  await page.getByRole("button", { name: "Edit expense category", exact: true }).click();
+  await page.getByText("Clear or keep description", { exact: true }).click();
+  await page.getByLabel("Clear description", { exact: true }).check();
+  await save(page, "Clear expense category description");
+  await page.getByRole("link", { name: "Back to expense category", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Expense category details", exact: true }),
+  ).toContainText("No description recorded.");
+  await page.getByRole("button", { name: "Archive expense category", exact: true }).click();
   await page.getByLabel("Reason (required)").fill("Unused category");
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
   await save(page, "Archive expense category");
@@ -1082,8 +1296,7 @@ test("Expense category create, edit, archive and restore use the catalog receipt
       exact: true,
     })
     .click();
-  await page.getByText("Actions", { exact: true }).click();
-  await page.getByRole("link", { name: "Restore expense category", exact: true }).click();
+  await page.getByRole("button", { name: "Restore expense category", exact: true }).click();
   await page.getByLabel("Reason (required)").fill("Category needed again");
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
   await save(page, "Restore expense category");
@@ -2106,8 +2319,8 @@ test("rent receipt correction voids the predecessor and preserves one current re
   );
   await page.getByLabel("Received on (required)").fill(f.today);
   await page.getByLabel("Payment method kind (required)").selectOption("cash");
-  await page.getByLabel("Amount minor (required)").nth(0).fill("20000");
-  await page.getByLabel("Amount minor (required)").nth(1).fill("20000");
+  await page.getByLabel("Amount (USD cents) (required)").nth(0).fill("20000");
+  await page.getByLabel("Amount (USD cents) (required)").nth(1).fill("20000");
   await save(page, "Record rent receipt");
   const current = await get<Schemas["ReceiptPageResponse"]>(
     request,
@@ -2247,9 +2460,10 @@ test("explicit-period reporting uses backend totals and source drill-down withou
     "Rent less net expenses",
   );
   expect(details).toBe(0);
-  await page.getByRole("link", { name: "expensesPaid · USD 120.01", exact: true }).click();
-  await expect(page.getByText("Backend total USD 120.01", { exact: false })).toBeVisible();
-  await page.getByRole("link", { name: "Open contribution source", exact: true }).click();
+  await page.getByText("Explore the records behind these totals", { exact: true }).click();
+  await page.getByRole("link", { name: "View expenses paid records", exact: true }).click();
+  await expect(page.getByText("Total USD 120.01", { exact: false })).toBeVisible();
+  await page.getByRole("link", { name: "View source record", exact: true }).click();
   await expect(page.getByRole("region", { name: "Money record", exact: true })).toContainText(
     "Actual paid repair",
   );
@@ -2290,6 +2504,7 @@ test("reporting drill-down retains its period and scope without reusing another 
     name: "Current recorded deposit obligation",
     exact: true,
   });
+  await reporting.getByText("Explore the records behind these totals", { exact: true }).click();
   const href = new URL((await obligation.getAttribute("href"))!, page.url());
   expect(href.searchParams.has("cursor")).toBe(false);
   expect(href.searchParams.get("sourceRevision")).toBe(summary.summary.sourceRevision);

@@ -38,7 +38,7 @@ test("Home live reads meet local p95 and shell-feedback gates without a snapshot
   request,
 }) => {
   test.setTimeout(30_000);
-  await task(request);
+  const sample = await task(request);
   const initial: number[] = [];
   const collection: number[] = [];
   const refresh: number[] = [];
@@ -50,8 +50,10 @@ test("Home live reads meet local p95 and shell-feedback gates without a snapshot
     await ready(page);
     initial.push(performance.now() - started);
 
-    await page.getByRole("link", { name: "Task deadlines and reminders", exact: true }).click();
-    await expect(page).toHaveURL(/\/tasks$/);
+    const attention = page.getByRole("region", { name: "Needs action", exact: true });
+    await attention.getByRole("button", { name: new RegExp(sample.title) }).click();
+    await attention.getByRole("link", { name: "View", exact: true }).click();
+    await expect(page).toHaveURL(/\/tasks\?record=task/);
     started = performance.now();
     await page.getByRole("link", { name: "Home", exact: true }).click();
     await expect(
@@ -65,7 +67,9 @@ test("Home live reads meet local p95 and shell-feedback gates without a snapshot
     await expect(
       page.getByRole("region", { name: "Home collection page", exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole("heading", { name: /recorded items/ })).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Needs action", exact: true }).getByText(/^\d+ items?$/),
+    ).toBeVisible();
     collection.push(performance.now() - started);
 
     await page.goto(`/home?${period}`);

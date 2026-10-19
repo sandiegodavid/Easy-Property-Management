@@ -45,12 +45,71 @@ const occupancyReasons: Partial<Record<Coverage["causes"][number], string>> = {
   occupancy_unknown_or_conflicting: "Occupancy is unclassified or has conflicting records.",
 };
 
-function CoverageResolution({ current }: { current: Coverage }) {
+function OccupancyResolution({
+  current,
+  space,
+  unitName,
+  unitsLabel,
+}: {
+  current: Coverage;
+  space: components["schemas"]["SpaceStatusResponse"];
+  unitName: string;
+  unitsLabel: string;
+}) {
+  const missingLeasing = current.causes.includes("availability_unknown");
+  const unknownOccupancy =
+    space.currentOccupancy.occupancyStatus === "unknown" &&
+    space.currentOccupancy.sourceKind === "manual";
+  const conflict = space.attentionReasons.some((reason) => reason.code === "source_conflict");
+  const classify =
+    !conflict &&
+    (unknownOccupancy ||
+      (missingLeasing && !current.causes.includes("occupancy_unknown_or_conflicting")));
+  let label = "Review occupancy and leasing status";
+  if (classify)
+    label = unknownOccupancy
+      ? missingLeasing
+        ? "Set occupancy and leasing status"
+        : "Set occupancy"
+      : "Set leasing status";
+  return (
+    <>
+      <p>
+        {classify
+          ? `${unknownOccupancy ? `Record whether this ${unitName} is occupied or vacant.` : `Choose whether this ${unitName} is not open for leasing, open now, or open from a future date.`} Save the classification form, then return here and refresh.`
+          : `Review the current records in the property’s ${unitsLabel} tab. Lease-owned occupancy must be changed through its lease; conflicting records need review before changes.`}
+      </p>
+      <Link
+        className="information-review-primary"
+        to={
+          classify
+            ? `/properties?workflow=portfolio.space.classify&target=${space.id}`
+            : `/properties/${space.propertyId}/units`
+        }
+      >
+        {label}
+      </Link>
+    </>
+  );
+}
+
+function CoverageResolution({
+  current,
+  unitName,
+  unitsLabel,
+}: {
+  current: Coverage;
+  unitName: string;
+  unitsLabel: string;
+}) {
   const { scope } = useWorkspace();
   const target = current.resolutionRoute;
   const space = useQuery({
     queryKey: scope.key("coverage-resolution-space", target?.entityId),
-    enabled: target?.entityType === "space" && target.section === "occupancy",
+    enabled:
+      current.applicability !== "not_applicable" &&
+      target?.entityType === "space" &&
+      (target.section === "occupancy" || !current.leaseId),
     retry: false,
     queryFn: async ({ signal }) =>
       readResult(
@@ -60,6 +119,8 @@ function CoverageResolution({ current }: { current: Coverage }) {
         }),
       ),
   });
+  if (current.applicability === "not_applicable")
+    return <p>No setup is needed for the current records.</p>;
   if (!target) return <p>Source resolution context is unavailable.</p>;
   if (target.section === "occupancy")
     return (
@@ -69,27 +130,61 @@ function CoverageResolution({ current }: { current: Coverage }) {
         )}
         {space.isPending && <p role="status">Loading current property context…</p>}
         {space.data && (
-          <Link
-            className="information-review-primary"
-            to={`/properties/${space.data.propertyId}/units`}
-          >
-            {current.causes.includes("availability_unknown") &&
-            !current.causes.includes("occupancy_unknown_or_conflicting")
-              ? "Set leasing status"
-              : "Review occupancy and leasing status"}
-          </Link>
+          <OccupancyResolution
+            current={current}
+            space={space.data}
+            unitName={unitName}
+            unitsLabel={unitsLabel}
+          />
         )}
       </>
     );
+  if (target.section === "maintenance")
+    return <Link to={`/maintenance?propertyId=${target.entityId}`}>Review maintenance issues</Link>;
+  if (
+    target.section === "lease" ||
+    current.causes.includes("lease_context_missing") ||
+    current.causes.includes("lease_context_ambiguous_or_missing_term")
+  ) {
+    if (current.leaseId)
+      return <Link to={`/leases/${current.leaseId}/details`}>Review lease and terms</Link>;
+    if (space.error)
+      return <p role="alert">Current property context unavailable: {space.error.message}</p>;
+    if (!space.data) return <p role="status">Loading current property context…</p>;
+    return <Link to={`/properties/${space.data.propertyId}/leases`}>Review property leases</Link>;
+  }
+  if (!current.leaseId)
+    return (
+      <p>
+        Lease context is unavailable. Review the property’s leases before setting up money records.
+      </p>
+    );
+  const needsRentSetup =
+    current.causes.includes("rent_expectations_missing") ||
+    current.causes.includes("rent_synchronization_required");
+  const needsDepositSetup = current.causes.includes("deposit_account_missing");
   const url =
-    target.section === "maintenance"
-      ? `/maintenance?propertyId=${target.entityId}`
-      : target.section === "lease" && current.leaseId
-        ? `/leases/${current.leaseId}`
-        : current.leaseId
-          ? `/money?tab=${target.section === "deposit" ? "deposits" : "rent"}&leaseId=${current.leaseId}`
-          : `/leasing?workflow=lease.create&spaceId=${target.entityId}`;
-  return <Link to={url}>Open {target.section} sources</Link>;
+    target.section === "rent" && needsRentSetup
+      ? `/money?workflow=finance.rent_expectation.synchronize&target=${current.leaseId}`
+      : target.section === "deposit" && needsDepositSetup
+        ? `/money?workflow=finance.deposit_account.create&leaseId=${current.leaseId}`
+        : `/money?tab=${target.section === "deposit" ? "deposits" : "rent"}&leaseId=${current.leaseId}`;
+  return (
+    <>
+      <Link className="information-review-primary" to={url}>
+        {target.section === "rent"
+          ? needsRentSetup
+            ? current.causes.includes("rent_expectations_missing")
+              ? "Set up rent schedule"
+              : "Update rent schedule"
+            : "Review rent records"
+          : needsDepositSetup
+            ? "Set up deposit tracking"
+            : "Review deposit records"}
+      </Link>
+      <Link to={`/leases/${current.leaseId}/details`}>Review lease and terms</Link>
+    </>
+  );
 }
 function ReviewEditor({
   current,
@@ -374,20 +469,10 @@ function CoveragePanel({
               </p>
             )}
             <div className="information-review-sources">
-              <h4>{area === "occupancy" ? "Next step" : "Review the source records"}</h4>
-              {area === "occupancy" && (
-                <p>
-                  {current.causes.includes("availability_unknown") &&
-                  !current.causes.includes("occupancy_unknown_or_conflicting")
-                    ? `Choose whether this ${unitName} is not open for leasing, open now, or open from a future date.`
-                    : `Check whether this ${unitName} is occupied or vacant and whether it is open for leasing.`}{" "}
-                  Save any changes in the property’s {unitsLabel} tab, then return here and refresh.
-                </p>
-              )}
-              <CoverageResolution current={current} />
-              {current.leaseId && (
-                <Link to={`/leases/${current.leaseId}`}>Review lease source</Link>
-              )}
+              <h4>
+                {current.applicability === "not_applicable" ? "No setup needed" : "Next step"}
+              </h4>
+              <CoverageResolution current={current} unitName={unitName} unitsLabel={unitsLabel} />
             </div>
           </section>
           <PageAsOf asOf={current.asOf} />
