@@ -67,6 +67,8 @@ class IssueInput(CommandInput):
 
 
 class IssuePatch(CommandInput):
+    reporter: ReporterInput | None = None
+    reporterCorrectionReason: str | None = Field(None, min_length=1, max_length=1000)
     summary: str | None = Field(None, min_length=1, max_length=240)
     description: str | None = Field(None, min_length=1, max_length=10000)
     category: (
@@ -839,14 +841,19 @@ def build_router(
     )
     def patch(issue_id: UUID, data: IssuePatch):
         ready(True)
-        names = {"categoryDetail": "category_detail"}
+        names = {
+            "categoryDetail": "category_detail",
+            "reporterCorrectionReason": "reporter_correction_reason",
+        }
         return invoke(
             lambda: service.patch_issue(
                 str(issue_id),
                 {
                     names.get(k, k): v
                     for k, v in data.model_dump(
-                        exclude_unset=True, exclude={"expectedRevision", "idempotencyKey"}
+                        mode="json",
+                        exclude_unset=True,
+                        exclude={"expectedRevision", "idempotencyKey"},
                     ).items()
                 },
                 expected_revision=data.expectedRevision,

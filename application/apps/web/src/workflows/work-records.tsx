@@ -543,10 +543,10 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
         <CommandLinks
           target={id}
           title="More issue actions"
+          dropdown
           keys={
             active
               ? [
-                  "maintenance.reporter.correct",
                   "maintenance.appointment.create",
                   "maintenance.quote.create",
                   "maintenance.assignment.create",

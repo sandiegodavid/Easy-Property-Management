@@ -1,5 +1,6 @@
 import type { RequestSchema } from "@epm/contracts/workflows";
 import { Fields, type Choices } from "./fields";
+import { reporterChanged } from "./reporter-context";
 
 export function GroupedCommandFields({
   schema,
@@ -8,6 +9,7 @@ export function GroupedCommandFields({
   choices,
   disabled,
   formKey,
+  originalReporter,
 }: {
   schema: RequestSchema;
   value: Record<string, unknown>;
@@ -15,6 +17,7 @@ export function GroupedCommandFields({
   choices: Choices;
   disabled: boolean;
   formKey: string;
+  originalReporter?: unknown;
 }) {
   const receipt = formKey === "finance.rent_receipt.create";
   const issue = formKey === "maintenance.issue.patch";
@@ -42,6 +45,14 @@ export function GroupedCommandFields({
             "Category and priority",
             ["category", ...(value.category === "other" ? ["categoryDetail"] : []), "priority"],
           ],
+          [
+            "Reporter",
+            [
+              "reporter",
+              ...(reporterChanged(value, originalReporter) ? ["reporterCorrectionReason"] : []),
+            ],
+            "Correct the person or role recorded for the original report. A changed reporter requires a reason.",
+          ],
         ]
       : [
           [
@@ -55,7 +66,7 @@ export function GroupedCommandFields({
     "expectedRevision",
     "idempotencyKey",
     ...(receipt ? ["leaseId"] : []),
-    ...(issue ? ["categoryDetail"] : []),
+    ...(issue ? ["categoryDetail", "reporterCorrectionReason"] : []),
   ]);
   const remaining = Object.keys(schema.properties ?? {}).filter((key) => !used.has(key));
   function fields(keys: string[]) {
@@ -63,6 +74,7 @@ export function GroupedCommandFields({
       <Fields
         schema={{
           ...schema,
+          required: [...(schema.required ?? []), ...(issue ? ["reporter"] : [])],
           properties: Object.fromEntries(
             keys
               .filter((key) => schema.properties?.[key])
@@ -81,6 +93,7 @@ export function GroupedCommandFields({
           const edited = { ...next } as Record<string, unknown>;
           if ((edited.category && edited.category !== "other") || edited.categoryDetail === "")
             edited.categoryDetail = null;
+          if (!reporterChanged(edited, originalReporter)) delete edited.reporterCorrectionReason;
           onChange(edited);
         }}
         choices={choices}

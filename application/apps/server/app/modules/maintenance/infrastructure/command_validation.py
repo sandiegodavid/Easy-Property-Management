@@ -217,6 +217,33 @@ def _validate_receipt(receipt, audits):
     ):
         raise ValueError("command marker evidence")
     mutations = [e for e in audits if e["action"] != "command_recorded"]
+    if action == "patch_issue":
+        values = request["payload"].get("values", {})
+        reporter = values.get("reporter")
+        fields = {
+            "reporterRole": "role",
+            "reporterSubjectKind": "subjectKind",
+            "reporterPartyId": "partyId",
+        }
+        if reporter is not None and any(
+            reporter.get(key) != response["reporter"].get(key) for key in fields.values()
+        ):
+            raise ValueError("edited reporter response")
+        for event in mutations:
+            before = json.loads(event["before_snapshot"]) if event["before_snapshot"] else {}
+            after = json.loads(event["after_snapshot"]) if event["after_snapshot"] else {}
+            if any(before.get(key) != after.get(key) for key in fields):
+                reason = values.get("reporter_correction_reason")
+                if (
+                    event["action"] != "reporter_corrected"
+                    or event["reason"] != "reporter_corrected"
+                    or not isinstance(reason, str)
+                    or not 1 <= len(reason.strip()) <= 1000
+                    or after.get("operatorNarrative") != reason.strip()
+                    or not isinstance(reporter, dict)
+                    or any(after.get(key) != reporter.get(value) for key, value in fields.items())
+                ):
+                    raise ValueError("combined reporter correction evidence")
     if bool(mutations) != bool(effective):
         raise ValueError("effective command audit")
     if not effective and action not in {"patch_issue", "update_appointment"}:

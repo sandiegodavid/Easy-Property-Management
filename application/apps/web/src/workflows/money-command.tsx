@@ -345,6 +345,21 @@ export function MoneyCommand() {
     refetchOnWindowFocus: false,
     queryFn: ({ signal }) => commandSource(definition!, target, selectedChild, leaseId, signal),
   });
+  const attachmentIssueId =
+    definition?.formKey === "file.upload" && params.get("entityType") === "maintenance_issue"
+      ? params.get("entityId")
+      : null;
+  const attachmentIssue = useQuery({
+    queryKey: scope.key("attachment-maintenance-issue", attachmentIssueId),
+    enabled: !!attachmentIssueId,
+    queryFn: async ({ signal }) =>
+      readResult(
+        await api.GET("/api/maintenance-issues/{issue_id}", {
+          signal,
+          params: { path: { issue_id: attachmentIssueId! } },
+        }),
+      ),
+  });
   if (
     !definition ||
     !(
@@ -531,8 +546,9 @@ export function MoneyCommand() {
       initial.allocations = [{}];
     }
   }
-  const parentTarget =
-    definition.formKey === "file.upload" && leaseId
+  const parentTarget = attachmentIssueId
+    ? `/maintenance?record=issue&id=${attachmentIssueId}`
+    : definition.formKey === "file.upload" && leaseId
       ? `/leases/${leaseId}/details`
       : definition.sourceKind === "lease"
         ? `/money?leaseId=${target}`
@@ -563,11 +579,13 @@ export function MoneyCommand() {
         },
       }
     : definition;
-  const tidy = [
-    "finance.expense_category.create",
-    "finance.expense_category.patch",
-    "finance.rent_receipt.create",
-  ].includes(definition.formKey);
+  const tidy =
+    !!attachmentIssueId ||
+    [
+      "finance.expense_category.create",
+      "finance.expense_category.patch",
+      "finance.rent_receipt.create",
+    ].includes(definition.formKey);
   return (
     <div className={tidy ? "tidy-command money-edit-command" : undefined}>
       <ParentBackLink
@@ -585,7 +603,13 @@ export function MoneyCommand() {
       </ParentBackLink>
       {!completed && (
         <>
-          {definition.formKey === "finance.expense_category.create" ? null : tidy ? (
+          {attachmentIssueId ? (
+            <div className="selected-command-context">
+              <strong>{attachmentIssue.data?.summary ?? "Maintenance issue"}</strong>
+              <p>Upload supporting evidence. The issue remains unchanged if the upload fails.</p>
+              {attachmentIssue.error && <p role="alert">Issue details are unavailable.</p>}
+            </div>
+          ) : definition.formKey === "finance.expense_category.create" ? null : tidy ? (
             <div className="selected-command-context">
               {definition.formKey.startsWith("finance.expense_category.") ? (
                 <strong>{scalar(state.value.displayName, "New expense category")}</strong>

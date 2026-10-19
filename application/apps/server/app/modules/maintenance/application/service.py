@@ -166,6 +166,52 @@ class MaintenanceService:
                 if k in {"summary", "description", "category", "category_detail", "priority"}
             }
             updated = {**old, **allowed, "updated_at": _stamp()}
+            reporter_changed = False
+            reporter = None
+            correction_reason = None
+            if "reporter" in values:
+                raw = values["reporter"]
+                if not isinstance(raw, dict) or set(raw) - {
+                    "role",
+                    "subjectKind",
+                    "partyId",
+                    "historicalSelectionConfirmed",
+                    "historicalSelectionReason",
+                }:
+                    raise MaintenanceError("Reporter details are invalid.")
+                reporter = ReporterAttribution(
+                    raw.get("role"),
+                    raw.get("subjectKind"),
+                    raw.get("partyId"),
+                    raw.get("historicalSelectionConfirmed"),
+                    raw.get("historicalSelectionReason"),
+                )
+                reporter_changed = (reporter.role, reporter.subject_kind, reporter.party_id) != (
+                    old["reporter_role"],
+                    old["reporter_subject_kind"],
+                    old["reporter_party_id"],
+                )
+                if reporter_changed:
+                    correction_reason = maintenance_text(
+                        values.get("reporter_correction_reason"),
+                        "reporterCorrectionReason",
+                        1000,
+                        required=True,
+                    )
+                    updated.update(
+                        self._validated_reporter(
+                            tx,
+                            reporter,
+                            old["property_id"],
+                            old["space_id"],
+                            old["reported_at_utc"],
+                            old["reported_timezone"],
+                        )
+                    )
+            if not reporter_changed and "reporter_correction_reason" in values:
+                maintenance_text(
+                    values["reporter_correction_reason"], "reporterCorrectionReason", 1000
+                )
             IssueCreate(
                 old["property_id"],
                 old["space_id"],
@@ -179,17 +225,21 @@ class MaintenanceService:
                     old["reporter_role"], old["reporter_subject_kind"], old["reporter_party_id"]
                 ),
             )
-            if all(old[k] == updated[k] for k in allowed):
+            if not reporter_changed and all(old[k] == updated[k] for k in allowed):
                 return self._detail(tx, issue_id)
             tx.replace_issue(issue_id, updated)
+            after = _dict(updated)
+            if reporter_changed and reporter.historical_selection_reason:
+                after["historicalSelectionReason"] = reporter.historical_selection_reason
             self._audit(
                 tx,
                 "maintenance_issue",
                 issue_id,
-                "updated",
+                "reporter_corrected" if reporter_changed else "updated",
                 _dict(old),
-                _dict(updated),
-                "issue_updated",
+                after,
+                "reporter_corrected" if reporter_changed else "issue_updated",
+                narrative=correction_reason,
             )
             return self._detail(tx, issue_id)
 

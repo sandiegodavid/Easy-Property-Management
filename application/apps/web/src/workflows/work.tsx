@@ -2,6 +2,7 @@ import { DynamicFilterForm } from "../shared/dynamic-filter-form";
 import { useQuery } from "@tanstack/react-query";
 import { PageAsOf } from "../shared/page-as-of";
 import { MaintenanceFilters, MaintenancePropertyFilter } from "./maintenance-context";
+import { ConcernFilters } from "./concern-filters";
 import { MaintenanceEvidenceArchive } from "./maintenance-evidence";
 import { useState } from "react";
 import { useLocation, useParams, useSearchParams } from "react-router-dom";
@@ -50,6 +51,16 @@ export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
             collapsible={false}
           />
         </header>
+      ) : current === "concern" ? (
+        <header className="maintenance-directory-heading">
+          <h2>Owner concerns</h2>
+          <Link
+            className="concern-create-link"
+            to={`/maintenance?workflow=owner_concern.create${params.get("ownerId") ? `&ownerId=${encodeURIComponent(params.get("ownerId")!)}` : ""}`}
+          >
+            Record concern
+          </Link>
+        </header>
       ) : (
         <>
           <h2>
@@ -65,12 +76,7 @@ export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
           </p>
           <nav className="page-tabs" aria-label="Work views">
             <Link to="/maintenance">Issues</Link>{" "}
-            <Link
-              to="/maintenance?tab=concerns"
-              aria-current={current === "concern" ? "page" : undefined}
-            >
-              Owner concerns
-            </Link>{" "}
+            <Link to="/maintenance?tab=concerns">Owner concerns</Link>{" "}
             <Link
               to="/conversations"
               aria-current={current === "communication" ? "page" : undefined}
@@ -90,12 +96,20 @@ export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
           <TaskSummary />
         </>
       )}
-      <WorkDirectory key={current} kind={current} />
-      {current === "issue" && (
-        <footer className="maintenance-directory-footer">
-          <Link to="/maintenance?tab=concerns">Owner concerns</Link>
-        </footer>
+      {(current === "issue" || current === "concern") && (
+        <nav className="page-tabs" aria-label="Maintenance views">
+          <Link to="/maintenance" aria-current={current === "issue" ? "page" : undefined}>
+            Issues
+          </Link>
+          <Link
+            to="/maintenance?tab=concerns"
+            aria-current={current === "concern" ? "page" : undefined}
+          >
+            Owner concerns
+          </Link>
+        </nav>
       )}
+      <WorkDirectory key={current} kind={current} />
     </section>
   );
 }
@@ -265,247 +279,200 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
         ];
   return (
     <section aria-label="Work directory">
-      {kind !== "issue" && (
-        <CommandLinks
-          keys={[
-            kind === "concern"
-              ? "owner_concern.create"
-              : kind === "communication"
-                ? "communication.create"
-                : "task.create",
-          ]}
-        />
+      {kind !== "issue" && kind !== "concern" && (
+        <CommandLinks keys={[kind === "communication" ? "communication.create" : "task.create"]} />
       )}
-      <DynamicFilterForm
-        key={filterReset}
-        onReset={
-          kind === "issue"
-            ? (event) => {
-                event.preventDefault();
-                setParams(
-                  {},
-                  {
-                    state: navigationState,
-                    replace: true,
-                    preventScrollReset: true,
-                    flushSync: true,
-                  },
-                );
-                setFilterReset((value) => value + 1);
-              }
-            : undefined
-        }
-        className={kind === "issue" ? "maintenance-directory-filters" : undefined}
-        aria-label={kind === "issue" ? "Maintenance filters" : undefined}
-        onSubmit={(event) => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          const next = new URLSearchParams(params);
-          next.delete("cursor");
-          for (const key of [
-            "status",
-            "propertyId",
-            "ownerId",
-            "entityType",
-            "entityId",
-            "state",
-            "followUps",
-            "priority",
-            "due",
-            "partyId",
-            "spaceId",
-            "leaseId",
-            "tenantPartyId",
-            "concernType",
-            "raisedLocalOnOrAfter",
-            "raisedLocalOnOrBefore",
-            "direction",
-            "channel",
-            "occurredOnOrAfter",
-            "occurredOnOrBefore",
-            "linkedTaskStatus",
-            "category",
-            "reporterRole",
-            "reporterSubjectKind",
-            "reporterPartyId",
-            "reportedFrom",
-            "reportedTo",
-            "appointmentFrom",
-            "appointmentTo",
-            "hasEvidence",
-            "hasLinkedExpense",
-            "hasActiveTask",
-          ]) {
-            const raw = data.get(key);
-            const value = typeof raw === "string" ? raw : "";
-            if (value) next.set(key, value);
-            else next.delete(key);
+      {kind === "concern" ? (
+        <ConcernFilters key={params.toString()} />
+      ) : (
+        <DynamicFilterForm
+          key={filterReset}
+          onReset={
+            kind === "issue"
+              ? (event) => {
+                  event.preventDefault();
+                  setParams(
+                    {},
+                    {
+                      state: navigationState,
+                      replace: true,
+                      preventScrollReset: true,
+                      flushSync: true,
+                    },
+                  );
+                  setFilterReset((value) => value + 1);
+                }
+              : undefined
           }
-          setParams(next, { state: navigationState, replace: true, preventScrollReset: true });
-        }}
-      >
-        <label>
-          Status
-          <select name="status" defaultValue={status ?? ""}>
-            <option value="">All statuses</option>
-            {statuses.map((item) => (
-              <option key={item} value={item}>
-                {kind === "issue" ? workLabel(item) : item}
-              </option>
-            ))}
-          </select>
-        </label>
-        {kind === "issue" && <MaintenancePropertyFilter key={propertyId ?? "all"} />}
-        {kind !== "task" && kind !== "issue" && (
+          className={kind === "issue" ? "maintenance-directory-filters" : undefined}
+          aria-label={kind === "issue" ? "Maintenance filters" : undefined}
+          onSubmit={(event) => {
+            event.preventDefault();
+            const data = new FormData(event.currentTarget);
+            const next = new URLSearchParams(params);
+            next.delete("cursor");
+            for (const key of [
+              "status",
+              "propertyId",
+              "ownerId",
+              "entityType",
+              "entityId",
+              "state",
+              "followUps",
+              "priority",
+              "due",
+              "partyId",
+              "spaceId",
+              "leaseId",
+              "tenantPartyId",
+              "concernType",
+              "raisedLocalOnOrAfter",
+              "raisedLocalOnOrBefore",
+              "direction",
+              "channel",
+              "occurredOnOrAfter",
+              "occurredOnOrBefore",
+              "linkedTaskStatus",
+              "category",
+              "reporterRole",
+              "reporterSubjectKind",
+              "reporterPartyId",
+              "reportedFrom",
+              "reportedTo",
+              "appointmentFrom",
+              "appointmentTo",
+              "hasEvidence",
+              "hasLinkedExpense",
+              "hasActiveTask",
+            ]) {
+              const raw = data.get(key);
+              const value = typeof raw === "string" ? raw : "";
+              if (value) next.set(key, value);
+              else next.delete(key);
+            }
+            setParams(next, { state: navigationState, replace: true, preventScrollReset: true });
+          }}
+        >
           <label>
-            Property ID
-            <input name="propertyId" defaultValue={propertyId} />
+            Status
+            <select name="status" defaultValue={status ?? ""}>
+              <option value="">All statuses</option>
+              {statuses.map((item) => (
+                <option key={item} value={item}>
+                  {kind === "issue" ? workLabel(item) : item}
+                </option>
+              ))}
+            </select>
           </label>
-        )}
-        {kind === "concern" && (
-          <>
+          {kind === "issue" && <MaintenancePropertyFilter key={propertyId ?? "all"} />}
+          {kind !== "task" && kind !== "issue" && (
             <label>
-              Owner identity ID
-              <input name="ownerId" defaultValue={params.get("ownerId") ?? ""} />
+              Property ID
+              <input name="propertyId" defaultValue={propertyId} />
             </label>
-            <label>
-              Concern type
-              <select name="concernType" defaultValue={params.get("concernType") ?? ""}>
-                <option value="">Any</option>
-                {["general_rental", "lease", "tenant", "vacancy"].map((type) => (
-                  <option key={type}>{type}</option>
-                ))}
-              </select>
-            </label>
-            {[
-              ["spaceId", "Concern Space ID"],
-              ["leaseId", "Concern Lease ID"],
-              ["tenantPartyId", "Concern Tenant ID"],
-            ].map(([key, label]) => (
-              <label key={key}>
-                {label}
-                <input name={key} defaultValue={params.get(key) ?? ""} />
+          )}
+          {kind === "issue" && <MaintenanceFilters />}
+          {(kind === "communication" || kind === "task") && (
+            <>
+              <label>
+                Related entity type
+                <input name="entityType" defaultValue={entityType} />
               </label>
-            ))}
-            <label>
-              Raised local from
-              <input
-                type="date"
-                name="raisedLocalOnOrAfter"
-                defaultValue={params.get("raisedLocalOnOrAfter") ?? ""}
-              />
-            </label>
-            <label>
-              Raised local through
-              <input
-                type="date"
-                name="raisedLocalOnOrBefore"
-                defaultValue={params.get("raisedLocalOnOrBefore") ?? ""}
-              />
-            </label>
-          </>
-        )}
-        {kind === "issue" && <MaintenanceFilters />}
-        {(kind === "communication" || kind === "task") && (
-          <>
-            <label>
-              Related entity type
-              <input name="entityType" defaultValue={entityType} />
-            </label>
-            <label>
-              Related entity ID
-              <input name="entityId" defaultValue={entityId} />
-            </label>
-          </>
-        )}
-        {kind === "communication" && (
-          <>
-            {[
-              ["direction", "Direction", ["inbound", "outbound", "internal"]],
-              ["channel", "Channel", ["phone", "email", "sms", "in_person", "letter", "other"]],
-              [
-                "linkedTaskStatus",
-                "Follow-up Task status",
-                ["open", "in_progress", "completed", "cancelled"],
-              ],
-            ].map(([key, title, options]) => (
-              <label key={key as string}>
-                {title}
-                <select name={key as string} defaultValue={params.get(key as string) ?? ""}>
-                  <option value="">Any</option>
-                  {(options as string[]).map((option) => (
-                    <option key={option} value={option}>
-                      {option.replaceAll("_", " ")}
-                    </option>
+              <label>
+                Related entity ID
+                <input name="entityId" defaultValue={entityId} />
+              </label>
+            </>
+          )}
+          {kind === "communication" && (
+            <>
+              {[
+                ["direction", "Direction", ["inbound", "outbound", "internal"]],
+                ["channel", "Channel", ["phone", "email", "sms", "in_person", "letter", "other"]],
+                [
+                  "linkedTaskStatus",
+                  "Follow-up Task status",
+                  ["open", "in_progress", "completed", "cancelled"],
+                ],
+              ].map(([key, title, options]) => (
+                <label key={key as string}>
+                  {title}
+                  <select name={key as string} defaultValue={params.get(key as string) ?? ""}>
+                    <option value="">Any</option>
+                    {(options as string[]).map((option) => (
+                      <option key={option} value={option}>
+                        {option.replaceAll("_", " ")}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+              {[
+                ["partyId", "Participant Party ID"],
+                ["spaceId", "Space ID"],
+                ["leaseId", "Lease ID"],
+              ].map(([key, title]) => (
+                <label key={key}>
+                  {title}
+                  <input name={key} maxLength={36} defaultValue={params.get(key) ?? ""} />
+                </label>
+              ))}
+              <label>
+                Occurred from (stored local date)
+                <input
+                  type="date"
+                  name="occurredOnOrAfter"
+                  defaultValue={params.get("occurredOnOrAfter") ?? ""}
+                />
+              </label>
+              <label>
+                Occurred to (stored local date)
+                <input
+                  type="date"
+                  name="occurredOnOrBefore"
+                  defaultValue={params.get("occurredOnOrBefore") ?? ""}
+                />
+              </label>
+            </>
+          )}
+          {kind === "task" && (
+            <>
+              <label>
+                Priority
+                <select name="priority" defaultValue={priority ?? ""}>
+                  <option value="">All priorities</option>
+                  {["low", "normal", "high", "urgent"].map((item) => (
+                    <option key={item}>{item}</option>
                   ))}
                 </select>
               </label>
-            ))}
-            {[
-              ["partyId", "Participant Party ID"],
-              ["spaceId", "Space ID"],
-              ["leaseId", "Lease ID"],
-            ].map(([key, title]) => (
-              <label key={key}>
-                {title}
-                <input name={key} maxLength={36} defaultValue={params.get(key) ?? ""} />
+              <label>
+                Due period
+                <select name="due" defaultValue={due ?? ""} disabled={follow}>
+                  <option value="">All due dates</option>
+                  <option value="overdue">Overdue</option>
+                  <option value="today">Today</option>
+                  <option value="next7days">Next 7 days</option>
+                  <option value="nodate">No due date</option>
+                </select>
               </label>
-            ))}
-            <label>
-              Occurred from (stored local date)
-              <input
-                type="date"
-                name="occurredOnOrAfter"
-                defaultValue={params.get("occurredOnOrAfter") ?? ""}
-              />
-            </label>
-            <label>
-              Occurred to (stored local date)
-              <input
-                type="date"
-                name="occurredOnOrBefore"
-                defaultValue={params.get("occurredOnOrBefore") ?? ""}
-              />
-            </label>
-          </>
-        )}
-        {kind === "task" && (
-          <>
-            <label>
-              Priority
-              <select name="priority" defaultValue={priority ?? ""}>
-                <option value="">All priorities</option>
-                {["low", "normal", "high", "urgent"].map((item) => (
-                  <option key={item}>{item}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Due period
-              <select name="due" defaultValue={due ?? ""} disabled={follow}>
-                <option value="">All due dates</option>
-                <option value="overdue">Overdue</option>
-                <option value="today">Today</option>
-                <option value="next7days">Next 7 days</option>
-                <option value="nodate">No due date</option>
-              </select>
-            </label>
-            <label>
-              <input type="checkbox" name="followUps" value="true" defaultChecked={follow} />
-              Waiting follow-ups
-            </label>
-            <label>
-              Follow-up state
-              <select name="state" defaultValue={params.get("state") ?? ""}>
-                <option value="">All follow-ups</option>
-                {["scheduled", "due", "overdue", "unscheduled"].map((item) => (
-                  <option key={item}>{item}</option>
-                ))}
-              </select>
-            </label>
-          </>
-        )}
-      </DynamicFilterForm>
+              <label>
+                <input type="checkbox" name="followUps" value="true" defaultChecked={follow} />
+                Waiting follow-ups
+              </label>
+              <label>
+                Follow-up state
+                <select name="state" defaultValue={params.get("state") ?? ""}>
+                  <option value="">All follow-ups</option>
+                  {["scheduled", "due", "overdue", "unscheduled"].map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+        </DynamicFilterForm>
+      )}
       {result.isPending && (
         <p role="status">
           {kind === "issue" ? "Loading maintenance issues…" : "Loading work records…"}

@@ -4,9 +4,9 @@
 
 ## Find an issue
 
-The Maintenance page shows issue cards with property, status, priority and reported time. Select a card to review it. Filter by status, find a property by name, or choose a category or priority; results update automatically. **More filters** contains reporter, evidence, expense, follow-up and date filters. **Clear filters** returns to the full issue list. Owner concerns are a separate link below the results.
+The Maintenance page shows issue cards with property, status, priority and reported time. Select a card to review it. Filter by status, find a property by name, or choose a category or priority; results update automatically. **More filters** contains reporter, evidence, expense, follow-up and date filters. **Clear filters** returns to the full issue list. **Issues** and **Owner concerns** tabs appear above the results; Maintenance remains the sidebar destination.
 
-Issue details show the property name, description, status, priority and reporter first. Use the main buttons to edit, start, resolve, cancel or reopen an issue. **More issue actions** contains scheduling, provider, cost, follow-up and work-entry commands. Empty related sections stay collapsed; photos, conversations and change history remain available below. Reported times use your browser's local time zone.
+Issue details show the property name, description, status, priority and reporter first. Use the main buttons to edit, start, resolve, cancel or reopen an issue. The **More issue actions** dropdown contains scheduling, provider, cost, follow-up and work-entry commands. Forms group related fields and show the issue context with a return link at the top; recovery controls appear when needed. Empty related sections stay collapsed; photos, conversations and change history remain available below. Reported times use your browser's local time zone.
 
 ## Report and triage a repair
 
@@ -14,7 +14,7 @@ Issue details show the property name, description, status, priority and reporter
 2. Select property and optional rental unit, enter what happened, category, priority and report time.
 3. Identify the reporter and role explicitly. Self-reported operator context differs from a client owner or tenant. Historical attribution may require a reason/confirmation.
 4. Review existing issues to avoid duplicates, then save.
-5. Correct reporter attribution through **Correct issue reporter** when needed; edit supported issue facts with the current record.
+5. Use **Edit issue** to change details or correct reporter attribution. A reporter change requires a correction reason. **Save changes** saves both together; if validation fails, neither change is saved. The report date, property and issue status stay unchanged.
 6. Start the issue when work begins. Use waiting/follow-up to track external dependencies without hiding urgency.
 
 For immediate safety concerns, take the appropriate real-world action; entering an urgent record does not contact emergency services or a provider.
@@ -56,7 +56,9 @@ Completing a Task/appointment or ending assignment does not resolve an issue. Re
 
 ## Owner concerns
 
-Use **Maintenance → Owner concerns** (`/maintenance?tab=concerns`) for a client owner's operational rental/lease/tenant/vacancy concern. Record the owner, Property, context, raised date and evidence; retain historical owner context only with required review.
+Use **Owners → Owner concerns** or the **Owner concerns** tab in Maintenance (`/maintenance?tab=concerns`) for a client owner's operational rental/lease/tenant/vacancy concern. Each Owner overview shows their concerns with **View all concerns** and **Record concern** actions; recording from an Owner preselects that owner. Record the Property, context, raised date and evidence; retain historical owner context only with required review.
+
+The primary filters are **Owner → Property → Suite → Concern type**. Search owners and properties by name; **Suite** appears only for an office property. Selecting **Lease** or **Tenant** as the concern type shows a **Lease period** dropdown with inclusive end dates, rental names and statuses. Lease choices use the selected property and, when chosen, the owner's current and former property relationships. **More lease periods** loads another bounded page; a page without matches may still have more periods. Changing the property, owner or suite clears dependent lease/tenant filters. A separate Tenant name search and status, priority and date filters are also available. Results update automatically; **Clear filters** removes all selections.
 
 Use Edit, Start, Reopen, Resolve or Dismiss to reflect the actual concern lifecycle. Add conversations and **Create concern follow-up** as needed. Concern resolution does not change a Lease, occupancy or money, and linked Task completion does not resolve the concern.
 

@@ -46,6 +46,8 @@ Quoted earliest-start and estimated-finish dates exist in current `QuoteCreate` 
 
 Maintenance browser records expose issue reporter/context, appointments, operational costs, quotes/comparison, assignments, expense associations, journal, evidence and follow-up. Owning issue revisions/receipts govern child actions. Source Task, appointment and verified repair lifecycles remain distinct; loss of a response reconciles the original operation. See the [workflow guide](../ui/workflows.md) and [browser validation](../ui/validation.md) for implementation and evidence entry points.
 
+Edit issue accepts optional reporter attribution and `reporterCorrectionReason` alongside issue facts. One writer transaction rechecks source relationships at the original reported time, applies all changes, advances the issue revision once and stores one immutable command receipt. Changed attribution requires a bounded reason and a correlated `reporter_corrected` audit snapshot containing all resulting edits; retained validation checks that evidence. Unchanged attribution requires no correction reason. The browser integrates these fields into Edit issue rather than offering a separate reporter action in the More issue actions dropdown. Related command forms use grouped fields, preserve confirmations and expose recovery on failure.
+
 Issue creation selects an active Property and optional matching Space from bounded source projections, with mandatory existing reporter attribution. Command review shows the Property IANA zone/local date, independent lifecycle rules and sensitive-data cues. Appointments retain their scheduled zone and reasoned rescheduling history; completing an appointment never resolves an issue. Follow-up Tasks remain separately managed and display their deadlines.
 
 Operator-estimate/work-reported context is explicitly labeled non-financial, formatted in exact USD cents, never summed and never included in Finance totals. Voided context can be replaced from its retained predecessor. Paid spending is linked from a bounded same-Property Expense selection; archival removes only the association, not the Expense. Issue detail accepts the source projections' Expense void timestamp and Task deletion timestamp through typed response contracts rather than failing response validation.
@@ -66,6 +68,14 @@ Persistence identities below are read from the current models. Column definition
 | `maintenance_issues`, `maintenance_command_receipts`, `maintenance_appointments`, `maintenance_cost_contexts`, `maintenance_issue_expense_links`, `maintenance_follow_up_operations`, `maintenance_quotes`, `maintenance_assignments`, `maintenance_work_journal_entries` | [sqlalchemy_models.py](../../application/apps/server/app/modules/maintenance/infrastructure/sqlalchemy_models.py) |
 
 ## Validation
+
+| Combined-edit and form checks | Focused evidence |
+| --- | --- |
+| Details/reporter saved once; unchanged reporter; invalid reason or relationship; stale revision and original-response replay | `test_command_readiness.py`; combined-edit and stale-edit cases in `work.spec.ts` |
+| Audit-write rollback; missing correction evidence rejected; encrypted restore retains both original and combined-edit receipts | Combined-edit and encrypted-restore cases in `test_command_readiness.py` |
+| Listed forms and dropdown; contextual return links; light/dark desktop/mobile layout; accessibility; independent lifecycle and evidence commands | Issue command-pages and existing workflow cases in `work.spec.ts` |
+
+No persistence tables or list/query projections change in this update.
 
 DASH-001's source attention reader projects urgent/ordinary issues, explicit Task-supported waiting, scheduled appointment intervals and missed outcomes on a caller-owned snapshot. Exact counts and bounded child previews support the later Home composition while issue, appointment and Task lifecycle commands remain independent. See the [Slice 4 validation matrix](../archive/validation/DASH-001_CONTRACT_EXAMPLES_COMPLETED_2026-10-14.md#slice-4-maintenance-issue-and-appointment-facts) and [attention tests](../../application/apps/server/app/modules/maintenance/tests/test_attention_reader.py).
 

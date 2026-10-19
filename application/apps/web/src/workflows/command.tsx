@@ -27,6 +27,7 @@ import { OriginalWorkResult } from "./work-result";
 import { TaskCreateFields } from "./task-fields";
 import { MaintenanceCreateFields } from "./maintenance-create-fields";
 import { GroupedCommandFields } from "./grouped-command-fields";
+import { WorkCommandFields, hasWorkCommandFields } from "./work-command-fields";
 import { PropertyEditFields } from "./property-edit-fields";
 import { PropertyCreateFields } from "./property-create-fields";
 import { OwnershipFields } from "./ownership-fields";
@@ -35,8 +36,30 @@ import { SavedCommand, savesItem } from "./saved-command";
 import { loadWorkflowResult } from "./workflow-result";
 
 const workflowIntroductions: Partial<Record<Workflow["formKey"], string>> = {
+  "maintenance.issue.start": "Mark this issue as In progress when work is being handled.",
+  "maintenance.issue.resolve":
+    "Review the issue and describe its resolution. Scheduled appointments must be completed or cancelled first.",
+  "maintenance.issue.cancel":
+    "Record why the issue no longer needs to be handled. Its history will be retained.",
+  "maintenance.appointment.create":
+    "Schedule a visit for this issue and add any access instructions.",
+  "maintenance.quote.create":
+    "Record a provider's offer so you can compare its scope, price and proposed dates.",
+  "maintenance.assignment.create":
+    "Select the provider handling this issue and record why you chose them.",
+  "maintenance.cost.create":
+    "Record an estimate or reported cost. Record actual spending separately as a paid expense.",
+  "maintenance.expense.link":
+    "Associate an existing paid expense with this issue without recording it twice.",
+  "maintenance.follow_up.create": "Create a task to track the next step for this issue.",
+  "maintenance.journal.record":
+    "Record what happened, who reported it, and whether completed work was verified.",
+  "maintenance.quote.withdraw":
+    "Withdraw an offer that is no longer valid. The original remains in history.",
+  "communication.create":
+    "Record a conversation that happened outside the app, or save it as a draft. Nothing is sent.",
   "maintenance.issue.patch":
-    "Update the issue description, category or priority. The property, reporter and issue status stay unchanged.",
+    "Update issue details and reporter information together. A reporter change requires a correction reason. The property and issue status stay unchanged.",
   "finance.expense_category.create":
     "Add a category for grouping paid expenses. No spending is recorded by creating a category.",
   "finance.expense_category.patch":
@@ -183,6 +206,7 @@ export function CommandLinks({
   labels = {},
   collapsible = true,
   asButtons = false,
+  dropdown = false,
 }: {
   keys: string[];
   target?: string;
@@ -191,12 +215,40 @@ export function CommandLinks({
   labels?: Record<string, string>;
   collapsible?: boolean;
   asButtons?: boolean;
+  dropdown?: boolean;
 }) {
   const { scope } = useWorkspace();
   const location = useLocation();
   const navigate = useNavigate();
   const navigationState = useSourceNavigationState();
   if (!scope.canWrite) return <p>Workspace writes are unavailable.</p>;
+  if (dropdown)
+    return (
+      <label className="workflow-action-select">
+        {title}
+        <select
+          value=""
+          onChange={(event) => {
+            const url = workflowUrl(event.target.value, target, child);
+            void navigate(url, {
+              state: navigationState({ returnTo: location.pathname + location.search }, url),
+            });
+          }}
+        >
+          <option value="" disabled>
+            Choose an action…
+          </option>
+          {keys.map((key) => {
+            const item = workflows.find((entry) => entry.formKey === key);
+            return item ? (
+              <option key={key} value={key}>
+                {labels[key] ?? item.title}
+              </option>
+            ) : null;
+          })}
+        </select>
+      </label>
+    );
   const actions = (
     <nav aria-label={title} className={collapsible ? undefined : "workflow-actions-inline"}>
       {keys.map((key) => {
@@ -727,21 +779,31 @@ function CommandEditor({
         type="submit"
         disabled={!scope.canWrite || selecting || addingOwner || canSubmit?.(values) === false}
       >
-        {createsRecord || definition.formKey === "portfolio.space.archive"
-          ? commandTitle
-          : editingContact
-            ? "Save contact details"
-            : removingContact
-              ? "Remove contact details"
-              : definition.formKey === "party.patch"
-                ? "Save name"
-                : definition.formKey === "portfolio.ownerships.replace"
-                  ? "Save ownership change"
-                  : editSubject
-                    ? `Save ${editSubject.toLowerCase()} changes`
-                    : correctionSubject
-                      ? `Save ${correctionSubject.toLowerCase()} correction`
-                      : `Save ${definition.title.toLowerCase()}`}
+        {definition.formKey === "maintenance.issue.patch"
+          ? "Save changes"
+          : definition.formKey === "maintenance.issue.start"
+            ? "Start work"
+            : definition.formKey === "maintenance.issue.resolve"
+              ? "Resolve issue"
+              : definition.formKey === "maintenance.issue.cancel"
+                ? "Cancel issue"
+                : definition.formKey === "maintenance.quote.withdraw"
+                  ? "Withdraw quote"
+                  : createsRecord || definition.formKey === "portfolio.space.archive"
+                    ? commandTitle
+                    : editingContact
+                      ? "Save contact details"
+                      : removingContact
+                        ? "Remove contact details"
+                        : definition.formKey === "party.patch"
+                          ? "Save name"
+                          : definition.formKey === "portfolio.ownerships.replace"
+                            ? "Save ownership change"
+                            : editSubject
+                              ? `Save ${editSubject.toLowerCase()} changes`
+                              : correctionSubject
+                                ? `Save ${correctionSubject.toLowerCase()} correction`
+                                : `Save ${definition.title.toLowerCase()}`}
       </button>
       <button
         type="button"
@@ -804,7 +866,9 @@ function CommandEditor({
       </p>
       {definition.formKey === "portfolio.property.create" ? (
         propertyCreateStatus && <p role="status">{propertyCreateStatus}</p>
-      ) : definition.formKey === "maintenance.issue.patch" ? (
+      ) : definition.formKey.startsWith("maintenance.") ||
+        definition.formKey === "communication.create" ||
+        (definition.formKey === "file.upload" && values.entityType === "maintenance_issue") ? (
         <>
           {state.command === "submitting" && <p role="status">Saving changes…</p>}
           {(state.command === "rejected" || state.draft === "conflicted") && currentSourceAction}
@@ -1005,10 +1069,29 @@ function CommandEditor({
                   }}
                 />
               </label>
-              <Facts
-                value={values}
-                fields={["originalName", "mediaType", "sizeBytes", "contentSha256"]}
-              />
+              {definition.formKey === "file.upload" && values.entityType === "maintenance_issue" ? (
+                values.originalName && (
+                  <dl className="money-facts">
+                    <div>
+                      <dt>Selected file</dt>
+                      <dd>{scalar(values.originalName)}</dd>
+                    </div>
+                    <div>
+                      <dt>Type</dt>
+                      <dd>{scalar(values.mediaType)}</dd>
+                    </div>
+                    <div>
+                      <dt>Size</dt>
+                      <dd>{scalar(values.sizeBytes)} bytes</dd>
+                    </div>
+                  </dl>
+                )
+              ) : (
+                <Facts
+                  value={values}
+                  fields={["originalName", "mediaType", "sizeBytes", "contentSha256"]}
+                />
+              )}
             </>
           )}
           {definition.formKey === "intake.source.import" && (
@@ -1099,7 +1182,17 @@ function CommandEditor({
               ))}
             </>
           )}
-          {definition.formKey === "task.create" ? (
+          {hasWorkCommandFields(definition.formKey) &&
+          (definition.formKey !== "file.upload" || values.entityType === "maintenance_issue") ? (
+            <WorkCommandFields
+              formKey={definition.formKey}
+              schema={definition.schema}
+              value={values}
+              onChange={(next) => form.setValue("data", record(next))}
+              choices={choicesForValues?.(values) ?? choices}
+              disabled={locked}
+            />
+          ) : definition.formKey === "task.create" ? (
             <TaskCreateFields
               schema={definition.schema}
               value={values}
@@ -1129,6 +1222,7 @@ function CommandEditor({
               choices={choicesForValues?.(values) ?? choices}
               disabled={locked}
               formKey={definition.formKey}
+              originalReporter={initial.reporter}
             />
           ) : definition.formKey === "portfolio.property.create" ? (
             <PropertyCreateFields

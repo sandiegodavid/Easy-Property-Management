@@ -3,7 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@epm/contracts";
 import { record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
-import { Facts, readResult } from "./reads";
+import { readResult } from "./reads";
+
+export function reporterChanged(values: Record<string, unknown>, original: unknown) {
+  const current = record(values.reporter),
+    prior = record(original);
+  return ["role", "subjectKind", "partyId"].some(
+    (key) => scalar(current[key], "") !== scalar(prior[key], ""),
+  );
+}
 
 export function reporterProblem(values: Record<string, unknown>) {
   const reporter = record(values.reporter);
@@ -81,10 +89,10 @@ export function ReporterContext({
     <section aria-label="Reporter attribution review" className="maintenance-create-section">
       <h3>Reporter details</h3>
       {Object.keys(record(source.reporter)).length > 0 && (
-        <Facts
-          value={source.reporter}
-          fields={["role", "subjectKind", "partyId", "displayName", "currentPartyState"]}
-        />
+        <p>
+          Currently recorded: {scalar(record(source.reporter).displayName, "Local operator")} ·{" "}
+          {scalar(record(source.reporter).role)}
+        </p>
       )}
       <p>
         For a manager or staff report, choose Local operator. For an owner or tenant, select the

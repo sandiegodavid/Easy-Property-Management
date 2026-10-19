@@ -155,10 +155,7 @@ export function Fields({
             }
             if (next === undefined) delete replacement[key];
             else replacement[key] = next;
-            if (
-              shape.properties?.correctedEntryKind &&
-              ["entryKind", "correctedEntryKind"].includes(key)
-            ) {
+            if (["entryKind", "correctedEntryKind"].includes(key)) {
               const effective =
                 replacement.entryKind === "correction"
                   ? replacement.correctedEntryKind

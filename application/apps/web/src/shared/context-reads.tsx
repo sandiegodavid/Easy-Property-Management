@@ -254,6 +254,7 @@ export function Directory({
       <div className="directory-heading">
         <h2>{kind === "property" ? "Properties" : "Owners"}</h2>
         {headingAction}
+        {kind === "owner" && <Link to="/maintenance?tab=concerns">Owner concerns</Link>}
       </div>
       {beforeFilters}
       <DynamicFilterForm
@@ -847,7 +848,9 @@ function OverviewSection({
         ? unitsLabel
         : kind === "property" && initial.kind === "relationships"
           ? "Owners"
-          : label(initial.kind).replace(/^./, (character) => character.toUpperCase());
+          : initial.kind === "concerns"
+            ? "Owner concerns"
+            : label(initial.kind).replace(/^./, (character) => character.toUpperCase());
   const result = useQuery({
     queryKey: scope.key("overview-section", kind, id, query, initial.kind, page),
     enabled: page !== null,
@@ -898,6 +901,16 @@ function OverviewSection({
                 </div>
               ) : kind === "property" && section.kind === "leases" ? (
                 <LeaseScopeFilter value={query.relationshipScope} />
+              ) : kind === "owner" && section.kind === "concerns" ? (
+                <div className="owners-heading-actions">
+                  <Link
+                    className="concern-create-link"
+                    to={`/maintenance?workflow=owner_concern.create&ownerId=${id}`}
+                  >
+                    Record concern
+                  </Link>
+                  <Link to={`/maintenance?tab=concerns&ownerId=${id}`}>View all concerns</Link>
+                </div>
               ) : undefined
             }
             showCaptureTime={false}

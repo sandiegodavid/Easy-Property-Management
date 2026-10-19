@@ -267,10 +267,12 @@ test("issue details prioritize description, named property and grouped actions",
       expect(violations).toEqual([]);
     }
   }
-  await detail.getByText("More issue actions", { exact: true }).click();
   await expect(
-    detail.getByRole("link", { name: "Schedule appointment", exact: true }),
-  ).toBeVisible();
+    detail.getByRole("combobox", { name: "More issue actions", exact: true }),
+  ).toContainText("Schedule appointment");
+  await expect(
+    detail.getByRole("combobox", { name: "More issue actions", exact: true }),
+  ).not.toContainText("Correct issue reporter");
   await detail
     .getByRole("navigation", { name: "Issue actions", exact: true })
     .getByRole("button", { name: "Edit issue", exact: true })
@@ -475,6 +477,139 @@ test("issue editing groups only editable details and preserves its property and 
   );
   expect(recategorized.categoryDetail).toBeNull();
   expect(recategorized.description).toBe(updated.description);
+});
+
+test("Edit issue saves reporter and details atomically and recovers its original result", async ({
+  page,
+  request,
+}) => {
+  const f = await issue(request);
+  await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
+  await page.getByRole("button", { name: "Edit issue", exact: true }).click();
+  const editor = page.getByRole("region", { name: "Edit maintenance issue", exact: true });
+  const reporter = editor.getByRole("group", { name: "Reporter", exact: true });
+  await reporter
+    .getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ })
+    .selectOption("staff");
+  const submit = editor.getByRole("button", { name: "Save changes", exact: true });
+  await expect(submit).toBeDisabled();
+  await editor
+    .getByRole("textbox", { name: "Reporter correction reason", exact: true })
+    .fill("Staff received the original report");
+  await editor
+    .getByRole("textbox", { name: "Description", exact: true })
+    .fill("Updated repair details and attribution");
+  let writes = 0;
+  await page.route(`**/api/maintenance-issues/${f.issue.id}`, async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    writes++;
+    await route.fetch();
+    await route.abort("failed");
+  });
+  await submit.click();
+  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await expect(page.locator(".saved-item")).toBeVisible();
+  expect(writes).toBe(1);
+  const result = await get<Schemas["IssueResponse"]>(
+    request,
+    `/api/maintenance-issues/${f.issue.id}`,
+  );
+  expect(result.revision).toBe(f.issue.revision + 1);
+  expect(result.reporter.role).toBe("staff");
+  expect(result.description).toBe("Updated repair details and attribution");
+});
+
+test("issue command pages use grouped responsive forms and contextual return links", async ({
+  page,
+  request,
+}, testInfo) => {
+  const f = await issue(request);
+  const provider = await post<Schemas["ProviderMutationResponse"]>(request, "/api/providers", {
+    party: { partyKind: "organization", displayName: `Layout provider ${crypto.randomUUID()}` },
+    expectedRevision: 0,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  const quote = await post<Schemas["QuoteCommandResponse"]>(
+    request,
+    `/api/maintenance-issues/${f.issue.id}/quotes`,
+    {
+      providerPartyId: provider.party.id,
+      label: "Repair offer",
+      scopeSummary: "Repair leak",
+      amount: "100.00",
+      receivedOn: f.property.effectiveLocalDate,
+      expectedRevision: f.issue.revision,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  );
+  const keys = [
+    "issue.start",
+    "issue.resolve",
+    "issue.cancel",
+    "appointment.create",
+    "quote.create",
+    "assignment.create",
+    "cost.create",
+    "expense.link",
+    "follow_up.create",
+    "journal.record",
+    "quote.withdraw",
+  ];
+  const urls = keys.map((key) => [
+    `maintenance.${key}`,
+    `/maintenance?workflow=maintenance.${key}&target=${f.issue.id}${key === "quote.withdraw" ? `&child=${quote.id}` : ""}`,
+  ]);
+  urls.push(
+    [
+      "file.upload",
+      `/money?workflow=file.upload&entityType=maintenance_issue&entityId=${f.issue.id}`,
+    ],
+    [
+      "communication.create",
+      `/conversations?workflow=communication.create&entityType=maintenance_issue&entityId=${f.issue.id}`,
+    ],
+  );
+  for (const [key, url] of urls) {
+    await page.goto(url);
+    const editor = page.locator(".command-editor");
+    await expect(editor).toBeVisible();
+    await expect(editor.locator(".tidy-form-sections")).toBeVisible();
+    await expect(page.getByText(f.issue.summary, { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /Back to/ }).first()).toHaveAttribute(
+      "href",
+      `/maintenance?record=issue&id=${f.issue.id}`,
+    );
+    await expect(editor.getByText("Form status and recovery details", { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(editor.getByRole("group", { name: "Form actions", exact: true })).toBeVisible();
+    for (const [theme, width] of [
+      ["light", 1280],
+      ["dark", 390],
+    ] as const) {
+      await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await editor.screenshot({ path: testInfo.outputPath(`${key}-${theme}.png`) });
+    }
+    await page.evaluate(axe.source);
+    expect(
+      await page.evaluate(async () =>
+        (
+          await window.axe.run(".command-editor", {
+            runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
+          })
+        ).violations.map((item) => item.id),
+      ),
+    ).toEqual([]);
+  }
+  await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
+  await page
+    .getByRole("combobox", { name: "More issue actions", exact: true })
+    .selectOption("maintenance.appointment.create");
+  await expect(page).toHaveURL(/workflow=maintenance.appointment.create/);
 });
 
 test("issue edit keeps stale-revision recovery available without routine recovery disclosures", async ({
@@ -1252,7 +1387,7 @@ test("operational cost replacement and paid Expense association never copy or cr
   await openAction(page, "maintenance.cost.create", f.issue.id);
   await page.getByLabel("Context kind (required)").selectOption("operator_estimate");
   await page.getByLabel("Label (required)").fill("Rough repair estimate");
-  await page.getByLabel("Amount (required)").fill("150.00");
+  await page.getByLabel("Amount (USD) (required)").fill("150.00");
   await page.getByLabel("Observed on (required)").fill(f.property.effectiveLocalDate);
   await save(page, "Record cost context");
   let current = await get<Schemas["IssueResponse"]>(
@@ -1268,7 +1403,7 @@ test("operational cost replacement and paid Expense association never copy or cr
   await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
   await page.getByRole("link", { name: "Replace cost context", exact: true }).click();
   await expect(page.getByLabel("Context kind (required)")).toHaveValue("operator_estimate");
-  await page.getByLabel("Amount (required)").fill("175.00");
+  await page.getByLabel("Amount (USD) (required)").fill("175.00");
   await save(page, "Record cost context");
   const categories = await get<
     Schemas["app__modules__finance__api__expense_router__CategoryResponse"][]
@@ -1286,7 +1421,7 @@ test("operational cost replacement and paid Expense association never copy or cr
     description: "Confirmed paid repair",
   });
   await openAction(page, "maintenance.expense.link", f.issue.id);
-  await page.getByLabel("Expense id (required)").selectOption(paid.id);
+  await page.getByLabel("Paid expense (required)").selectOption(paid.id);
   await save(page, "Link paid expense");
   current = await get<Schemas["IssueResponse"]>(request, `/api/maintenance-issues/${f.issue.id}`);
   expect(current.costContexts).toHaveLength(2);
@@ -1402,7 +1537,7 @@ test("Reported partial work and operator verification remain distinct from resol
   );
   await openAction(page, "maintenance.journal.record", f.issue.id);
   await page
-    .getByRole("combobox", { name: "Assignment id", exact: true })
+    .getByRole("combobox", { name: "Provider assignment", exact: true })
     .selectOption(assignment.id);
   await page.getByLabel("Entry kind (required)").selectOption("work_completed");
   await page.getByLabel("Source kind (required)").selectOption("provider_report");
@@ -1787,9 +1922,7 @@ test("lost manual recording response recovers one communication and one follow-u
   });
   await page.getByRole("button", { name: "Create conversation", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
-  await expect(
-    page.getByText("This is the original committed response.", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Conversation saved", exact: true })).toBeVisible();
   expect(calls).toBe(1);
   expect(original?.followUpTasks).toHaveLength(1);
   const rows = await get<Schemas["CommunicationPage"]>(
@@ -1798,6 +1931,285 @@ test("lost manual recording response recovers one communication and one follow-u
   );
   expect(rows.items).toHaveLength(1);
   expect(rows.items[0].id).toBe(original?.id);
+});
+
+test("Owner concerns are discoverable from Owners and Maintenance with owner-prefilled creation", async ({
+  page,
+  request,
+}) => {
+  const property = await home(request);
+  const ownerId = property.ownerships[0].partyId!;
+  const concern = await post<Schemas["ConcernMutationResponse"]>(request, "/api/owner-concerns", {
+    expectedRevision: 0,
+    idempotencyKey: crypto.randomUUID(),
+    ownerPartyId: ownerId,
+    propertyId: property.id,
+    concernType: "general_rental",
+    summary: "Concern discoverability example",
+    description: "Owner requests an update",
+    raisedAtUtc: property.asOf,
+    priority: "normal",
+  });
+  await page.goto("/owners");
+  await page.getByRole("link", { name: "Owner concerns", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Owner concerns", exact: true })).toBeVisible();
+  const tabs = page.getByRole("navigation", { name: "Maintenance views" });
+  await expect(tabs.getByRole("link", { name: "Owner concerns", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await tabs.getByRole("link", { name: "Issues", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Maintenance", exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole("navigation", { name: "Maintenance views" })
+      .getByRole("link", { name: "Issues", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await page.goto(`/owners/${ownerId}/overview`);
+  const concerns = page.getByRole("region", { name: "concerns section", exact: true });
+  await expect(
+    concerns.getByText("Concern discoverability example", { exact: true }),
+  ).toBeVisible();
+  await concerns.getByRole("link", { name: "View all concerns", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`tab=concerns&ownerId=${ownerId}`));
+  await expect(page.getByRole("link", { name: /Concern discoverability example/ })).toHaveAttribute(
+    "href",
+    new RegExp(concern.id),
+  );
+  await page.getByRole("link", { name: "Record concern", exact: true }).click();
+  await expect(page.getByLabel("Owner (required)")).toHaveValue(ownerId);
+  await expect(page.getByRole("link", { name: /Back to/ }).first()).toHaveAttribute(
+    "href",
+    `/maintenance?tab=concerns&ownerId=${ownerId}`,
+  );
+  await page.goto(`/owners/${ownerId}/overview`);
+  await page
+    .getByRole("region", { name: "concerns section", exact: true })
+    .getByRole("link", { name: "Record concern", exact: true })
+    .click();
+  await expect(page.getByLabel("Owner (required)")).toHaveValue(ownerId);
+  await expect(page.getByRole("link", { name: /Back to/ }).first()).toHaveAttribute(
+    "href",
+    `/owners/${ownerId}/overview`,
+  );
+});
+
+test("concern filter order and conditional suite and lease controls follow the selected context", async ({
+  page,
+  request,
+}, testInfo) => {
+  const residential = await home(request);
+  const office = await post<Schemas["PropertyMutationResponse"]>(request, "/api/properties", {
+    displayName: `Concern filter office ${crypto.randomUUID()}`,
+    addressLine1: "20 Demo Street",
+    city: "Portland",
+    region: "OR",
+    postalCode: "97201",
+    countryCode: "US",
+    propertyType: "office",
+    inventoryLayout: "office_suites",
+    spaces: [{ displayName: "Suite A" }, { displayName: "Suite B" }],
+    ownerships: [{ ownerKind: "local_operator" }],
+    expectedPropertyRevision: 0,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  await page.goto("/maintenance?tab=concerns");
+  const form = page.getByRole("form", { name: "Owner concern filters" });
+  const suite = form.getByRole("combobox", { name: "Suite", exact: true });
+  const period = form.getByRole("combobox", { name: "Lease period", exact: true });
+  await expect(suite).toHaveCount(0);
+  await expect(period).toHaveCount(0);
+  await form.getByLabel("Property", { exact: true }).fill(office.displayName);
+  await form.getByRole("button", { name: office.displayName, exact: true }).click();
+  await expect(suite).toBeVisible();
+  await expect(form.getByRole("button", { name: /^Clear (property|owner|tenant)$/ })).toHaveCount(
+    0,
+  );
+  expect(
+    await form
+      .locator('input[type="search"], select')
+      .evaluateAll((controls) =>
+        controls
+          .slice(0, 4)
+          .map((control) =>
+            control instanceof HTMLSelectElement
+              ? control.name
+              : (control as HTMLInputElement).labels?.[0]?.textContent?.trim(),
+          ),
+      ),
+  ).toEqual(["Owner", "Property", "spaceId", "concernType"]);
+  await suite.selectOption(office.spaces[1].id);
+  await expect(page).toHaveURL(new RegExp(`spaceId=${office.spaces[1].id}`));
+  const type = form.getByRole("combobox", { name: "Concern type", exact: true });
+  for (const value of ["lease", "tenant"]) {
+    await type.selectOption(value);
+    await expect(period).toBeVisible();
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const propertyBox = await form.getByLabel("Property", { exact: true }).boundingBox();
+      const suiteBox = await suite.boundingBox();
+      const typeBox = await type.boundingBox();
+      const periodBox = await period.boundingBox();
+      expect(propertyBox && suiteBox && typeBox && periodBox).toBeTruthy();
+      expect(Math.abs(suiteBox!.x - propertyBox!.x)).toBeLessThan(2);
+      expect(suiteBox!.y).toBeGreaterThanOrEqual(propertyBox!.y + propertyBox!.height);
+      expect(Math.abs(periodBox!.x - typeBox!.x)).toBeLessThan(2);
+      expect(periodBox!.y).toBeGreaterThanOrEqual(typeBox!.y + typeBox!.height);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      if (value === "lease") {
+        await form.screenshot({ path: testInfo.outputPath(`conditional-filters-${width}.png`) });
+      }
+    }
+  }
+  for (const value of ["vacancy", "general_rental", ""]) {
+    await type.selectOption(value);
+    await expect(period).toHaveCount(0);
+  }
+  await form.getByLabel("Property", { exact: true }).fill(residential.displayName);
+  await form.getByRole("button", { name: residential.displayName, exact: true }).click();
+  await expect(suite).toHaveCount(0);
+  await expect(page).not.toHaveURL(/spaceId=/);
+  await form.getByLabel("Property", { exact: true }).fill("");
+  await expect(page).not.toHaveURL(/propertyId=/);
+  await expect(form.getByLabel("Property", { exact: true })).toHaveValue("");
+});
+
+test("concern filters use names and bounded owner-property lease periods", async ({
+  page,
+  request,
+}, testInfo) => {
+  const property = await home(request);
+  const other = await home(request);
+  const ownerId = property.ownerships[0].partyId!;
+  const ownerName = property.ownerships[0].party!.displayName;
+  const tenant = await post<Schemas["TenantMutationResponse"]>(request, "/api/tenants", {
+    expectedRevision: 0,
+    idempotencyKey: crypto.randomUUID(),
+    partyKind: "individual",
+    displayName: `Concern filter tenant ${crypto.randomUUID()}`,
+    officialIds: [{ documentType: "passport", issuingCountry: "US", lastFour: "TEST" }],
+  });
+  const leaseIds = new Set<string>();
+  for (let index = 0; index < 26; index++) {
+    const start = new Date(Date.UTC(2027, index, 1)).toISOString().slice(0, 10);
+    const end = new Date(Date.UTC(2027, index + 1, 1)).toISOString().slice(0, 10);
+    const lease = await post<Schemas["LeaseMutationResponse"]>(request, "/api/leases", {
+      expectedLeaseRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+      spaceId: property.spaces[0].id,
+      leaseKind: "residential",
+      contractStartsOn: start,
+      contractEndsOn: end,
+      occupancyStartsOn: start,
+      initialTerm: {
+        baseRentMinor: 100000,
+        currencyCode: "USD",
+        paymentFrequency: "monthly",
+        paymentDueDay: 1,
+        agreedSecurityDepositMinor: 0,
+      },
+      participants: [{ tenantPartyId: tenant.id, participantRole: "primary_tenant" }],
+    });
+    leaseIds.add(lease.id);
+  }
+  await page.goto("/maintenance?tab=concerns");
+  const filters = page.getByRole("form", { name: "Owner concern filters" });
+  await expect(
+    filters.getByText(/Property ID|Owner identity ID|Concern Space ID|Concern Tenant ID/),
+  ).toHaveCount(0);
+  await filters.getByLabel("Property", { exact: true }).fill(property.displayName);
+  await filters.getByRole("button", { name: property.displayName, exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`propertyId=${property.id}`));
+  await filters.getByLabel("Owner", { exact: true }).fill(ownerName);
+  await filters.getByRole("button", { name: ownerName, exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`ownerId=${ownerId}`));
+  await filters.getByRole("combobox", { name: "Concern type", exact: true }).selectOption("lease");
+  const periods = filters.getByRole("combobox", { name: "Lease period", exact: true });
+  await expect(periods.locator("option")).toHaveCount(26);
+  const firstPage = await periods
+    .locator("option")
+    .evaluateAll((items) => items.map((item) => (item as HTMLOptionElement).value).filter(Boolean));
+  expect(firstPage).toHaveLength(25);
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await filters.screenshot({
+        path: testInfo.outputPath(`concern-filters-${theme}-${width}.png`),
+      });
+    }
+  }
+  await page.evaluate(axe.source);
+  expect(
+    await page.evaluate(async () =>
+      (
+        await window.axe.run('form[aria-label="Owner concern filters"]', {
+          runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
+        })
+      ).violations.map((item) => item.id),
+    ),
+  ).toEqual([]);
+  await expect(periods).not.toContainText("2027-02-01 – 2027-03-01");
+  await filters.getByRole("button", { name: "More lease periods", exact: true }).click();
+  await expect(periods.locator("option")).toHaveCount(2);
+  const last = await periods.locator("option").last().getAttribute("value");
+  expect(new Set([...firstPage, last])).toEqual(leaseIds);
+  await periods.selectOption(last);
+  await expect(page).toHaveURL(new RegExp(`leaseId=${last}`));
+  await filters.getByLabel("Tenant", { exact: true }).fill(tenant.displayName);
+  await filters.getByRole("button", { name: tenant.displayName, exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`tenantPartyId=${tenant.id}`));
+  await page.reload();
+  await expect(filters.getByLabel("Owner", { exact: true })).toHaveValue(ownerName);
+  await expect(filters.getByLabel("Tenant", { exact: true })).toHaveValue(tenant.displayName);
+  await expect(periods).toHaveValue(last!);
+  await expect(
+    filters.getByRole("button", { name: /^Clear (property|owner|tenant)$/ }),
+  ).toHaveCount(0);
+  await filters.getByLabel("Tenant", { exact: true }).fill("");
+  await expect(page).not.toHaveURL(/tenantPartyId=/);
+  await expect(periods).toHaveValue(last!);
+  const overviewRoute = `**/api/operator/owners/${ownerId}/overview?*`;
+  await page.route(overviewRoute, (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: { code: "temporary", message: "Lease choices unavailable" } }),
+    }),
+  );
+  await page.reload();
+  await expect(
+    filters.getByText("Lease periods are unavailable. Try again.", { exact: true }),
+  ).toBeVisible();
+  await filters.getByRole("combobox", { name: "Status", exact: true }).selectOption("open");
+  await expect(page).toHaveURL(new RegExp(`leaseId=${last}`));
+  await page.unroute(overviewRoute);
+  await filters.getByRole("button", { name: "Retry lease periods", exact: true }).click();
+  await expect(
+    filters.getByText("Lease periods are unavailable. Try again.", { exact: true }),
+  ).toHaveCount(0);
+  await filters.getByLabel("Owner", { exact: true }).fill(other.ownerships[0].party!.displayName);
+  await filters
+    .getByRole("button", { name: other.ownerships[0].party!.displayName, exact: true })
+    .click();
+  await expect(page).not.toHaveURL(/leaseId=|tenantPartyId=/);
+  await expect(periods.locator("option")).toHaveCount(1);
+  await expect(
+    filters.getByText("No matching lease periods on this page.", { exact: true }),
+  ).toBeVisible();
+  await filters.getByLabel("Owner", { exact: true }).fill("");
+  await expect(page).not.toHaveURL(/ownerId=/);
+  await expect(filters.getByLabel("Owner", { exact: true })).toHaveValue("");
+  await expect(periods.locator("option")).toHaveCount(26);
+  await filters.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await expect(page).toHaveURL(/\/maintenance\?tab=concerns$/);
+  await expect(filters.getByLabel("Property", { exact: true })).toHaveValue("");
+  await expect(periods).toHaveCount(0);
 });
 
 test("Owner concern resolution preserves claim context and independent follow-up", async ({
@@ -1868,7 +2280,7 @@ test("Lost lifecycle response reconciles original receipt without another transi
   await openAction(page, "maintenance.issue.resolve", f.issue.id);
   await page.getByLabel("I confirm this lifecycle change").check();
   await page.getByLabel("Reason (required)").fill("Repair reviewed and accepted");
-  await page.getByRole("button", { name: "Save resolve maintenance issue", exact: true }).click();
+  await page.getByRole("button", { name: "Resolve issue", exact: true }).click();
   await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
   await page.getByRole("button", { name: "Check original result" }).click();
   await expect(
@@ -1920,10 +2332,10 @@ test("Provider quotes, assignment and ending remain independent of paid expenses
     idempotencyKey: crypto.randomUUID(),
   });
   await openAction(page, "maintenance.quote.create", f.issue.id);
-  await page.getByLabel("Provider party id (required)").selectOption(provider.party.id);
+  await page.getByLabel("Provider (required)").selectOption(provider.party.id);
   await page.getByLabel("Label (required)").fill("Sink repair quote");
   await page.getByLabel("Scope summary (required)").fill("Repair leaking pipe");
-  await page.getByLabel("Amount (required)").fill("100.00");
+  await page.getByLabel("Amount (USD) (required)").fill("100.00");
   await page.getByLabel("Received on (required)").fill(f.property.effectiveLocalDate);
   await page.getByLabel("Earliest work start on").first().fill(f.property.effectiveLocalDate);
   await expect(
@@ -1942,8 +2354,8 @@ test("Provider quotes, assignment and ending remain independent of paid expenses
   await comparison
     .getByRole("link", { name: "Review assignment for Sink repair quote", exact: true })
     .click();
-  await expect(page.getByLabel("Provider party id (required)")).toHaveValue(provider.party.id);
-  await expect(page.getByRole("combobox", { name: "Quote id", exact: true })).toHaveValue(
+  await expect(page.getByLabel("Provider (required)")).toHaveValue(provider.party.id);
+  await expect(page.getByRole("combobox", { name: "Quote", exact: true })).toHaveValue(
     quoted.quotes[0].id,
   );
   await save(page, "Assign provider");
@@ -1969,8 +2381,8 @@ test("Provider quotes, assignment and ending remain independent of paid expenses
   await save(page, "Withdraw quote");
   await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
   await page.getByRole("link", { name: "Replace withdrawn quote", exact: true }).click();
-  await expect(page.getByLabel("Provider party id (required)")).toHaveValue(provider.party.id);
-  await page.getByLabel("Amount (required)").fill("110.00");
+  await expect(page.getByLabel("Provider (required)")).toHaveValue(provider.party.id);
+  await page.getByLabel("Amount (USD) (required)").fill("110.00");
   await save(page, "Record provider quote");
   const replaced = await get<Schemas["IssueResponse"]>(
     request,
@@ -2003,7 +2415,7 @@ test("avoided Provider direct assignment and lost-response reassignment preserve
     officialIds: [{ documentType: "license", issuingCountry: "US", lastFour: "TEST" }],
   });
   await openAction(page, "maintenance.assignment.create", f.issue.id);
-  await page.getByLabel("Provider party id (required)").selectOption(avoided.party.id);
+  await page.getByLabel("Provider (required)").selectOption(avoided.party.id);
   await expect(
     page.getByRole("region", { name: "Quote and Provider selection review" }),
   ).toContainText("marked avoid");
@@ -2023,7 +2435,7 @@ test("avoided Provider direct assignment and lost-response reassignment preserve
   expect(assigned.assignments[0].providerSelectionStatusSnapshot).toBe("avoid");
   await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
   await page.getByRole("link", { name: "Review reassignment", exact: true }).click();
-  await page.getByLabel("Provider party id (required)").selectOption(alternate.party.id);
+  await page.getByLabel("Provider (required)").selectOption(alternate.party.id);
   await page.getByLabel("Direct assignment confirmed", { exact: true }).check();
   await page
     .getByRole("textbox", { name: "Selection reason", exact: true })

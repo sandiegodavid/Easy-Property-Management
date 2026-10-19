@@ -29,6 +29,7 @@ from app.modules.maintenance.domain.models import (
     CostCreate,
     IssueCreate,
     MaintenanceConflictError,
+    MaintenanceError,
     QuoteCreate,
     ReporterAttribution,
     ReporterCorrection,
@@ -62,6 +63,127 @@ def context():
         yield fixture
     finally:
         fixture.doCleanups()
+
+
+def test_combined_issue_edit_is_one_revision_and_original_replay(context):
+    issue = context.issue()
+    values = {
+        "summary": "Clarified repair",
+        "reporter": {"role": "staff", "subjectKind": "local_operator"},
+        "reporter_correction_reason": "Staff received the original report",
+    }
+    key = str(uuid4())
+    result = context.service.patch_issue(
+        issue["id"], values, expected_revision=1, idempotency_key=key
+    )
+    assert result["revision"] == 2
+    assert result["summary"] == "Clarified repair"
+    assert result["reporter"]["role"] == "staff"
+    context.service.patch_issue(
+        issue["id"],
+        {"summary": "Later edit"},
+        expected_revision=2,
+        idempotency_key=str(uuid4()),
+    )
+    assert (
+        context.service.patch_issue(issue["id"], values, expected_revision=1, idempotency_key=key)
+        == result
+    )
+    with pytest.raises(MaintenanceConflictError):
+        context.service.patch_issue(
+            issue["id"],
+            {**values, "summary": "Changed retry"},
+            expected_revision=1,
+            idempotency_key=key,
+        )
+    context.workspace.open()
+
+
+@pytest.mark.parametrize("reason", [None, "", " " * 3, "x" * 1001])
+def test_combined_issue_edit_requires_bounded_correction_reason(context, reason):
+    issue = context.issue()
+    with pytest.raises(MaintenanceError):
+        context.service.patch_issue(
+            issue["id"],
+            {
+                "summary": "Must not persist",
+                "reporter": {"role": "staff", "subjectKind": "local_operator"},
+                "reporter_correction_reason": reason,
+            },
+            expected_revision=1,
+            idempotency_key=str(uuid4()),
+        )
+    assert context.service.detail(issue["id"])["summary"] == issue["summary"]
+    assert context.service.detail(issue["id"])["revision"] == 1
+
+
+def test_combined_issue_edit_rolls_back_on_audit_failure(context):
+    issue = context.issue()
+    key = str(uuid4())
+    values = {
+        "summary": "Atomic edit",
+        "reporter": {"role": "staff", "subjectKind": "local_operator"},
+        "reporter_correction_reason": "Correct attribution",
+    }
+    with patch.object(context.service, "_audit", side_effect=RuntimeError("audit unavailable")):
+        with pytest.raises(RuntimeError):
+            context.service.patch_issue(
+                issue["id"], values, expected_revision=1, idempotency_key=key
+            )
+    current = context.service.detail(issue["id"])
+    assert current["summary"] == issue["summary"]
+    assert current["reporter"] == issue["reporter"]
+    assert current["revision"] == 1
+    result = context.service.patch_issue(
+        issue["id"], values, expected_revision=1, idempotency_key=key
+    )
+    assert result["revision"] == 2
+    context.workspace.open()
+
+
+def test_combined_issue_edit_rejects_unrelated_reporter_and_missing_correction_evidence(context):
+    issue = context.issue()
+    with pytest.raises(MaintenanceConflictError):
+        context.service.patch_issue(
+            issue["id"],
+            {
+                "summary": "Must not persist",
+                "reporter": {
+                    "role": "owner",
+                    "subjectKind": "party",
+                    "partyId": context.provider(),
+                },
+                "reporter_correction_reason": "Check relationship",
+            },
+            expected_revision=1,
+            idempotency_key=str(uuid4()),
+        )
+    assert context.service.detail(issue["id"])["summary"] == issue["summary"]
+    result = context.service.patch_issue(
+        issue["id"],
+        {
+            "reporter": {"role": "staff", "subjectKind": "local_operator"},
+            "reporter_correction_reason": "Correct operator role",
+        },
+        expected_revision=1,
+        idempotency_key=str(uuid4()),
+    )
+    context.workspace.open()
+    engine = create_sqlite_engine(context.workspace.paths.database)
+    try:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("DROP TRIGGER audit_events_no_update")
+            connection.execute(
+                text(
+                    "UPDATE audit_events SET action='updated' WHERE correlation_id=:id AND action='reporter_corrected'"
+                ),
+                {"id": result["operationId"]},
+            )
+        with pytest.raises(MigrationSchemaError):
+            with engine.connect() as connection:
+                validate_maintenance_schema(connection)
+    finally:
+        engine.dispose()
 
 
 def test_provider_id_is_checked_in_assignment_transaction_after_replay(context):
@@ -608,8 +730,15 @@ def test_schema_and_retained_evidence_tampering_rejected(context, tamper):
 
 def test_encrypted_restore_retains_original_receipts_and_source_reader(context):
     issue = context.issue()
-    context.service.patch_issue(
-        issue["id"], {"summary": "Later"}, expected_revision=1, idempotency_key=str(uuid4())
+    edited = context.service.patch_issue(
+        issue["id"],
+        {
+            "summary": "Later",
+            "reporter": {"role": "staff", "subjectKind": "local_operator"},
+            "reporter_correction_reason": "Corrected original attribution",
+        },
+        expected_revision=1,
+        idempotency_key=str(uuid4()),
     )
     archive = Path(context.temp.name) / "commands.epm-backup"
     backup = BackupService(
@@ -627,6 +756,8 @@ def test_encrypted_restore_retains_original_receipts_and_source_reader(context):
     receipt = restored.command_receipt(issue["operationId"])
     assert receipt["response"] == issue
     assert restored.detail(issue["id"])["revision"] == 2
+    assert restored.detail(issue["id"])["reporter"]["role"] == "staff"
+    assert restored.command_receipt(edited["operationId"])["response"] == edited
     engine = create_sqlite_engine(database)
     try:
         with engine.connect() as connection:

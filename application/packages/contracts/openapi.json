@@ -17504,6 +17504,29 @@
             ],
             "title": "Priority"
           },
+          "reporter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReporterInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reporterCorrectionReason": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reportercorrectionreason"
+          },
           "summary": {
             "anyOf": [
               {

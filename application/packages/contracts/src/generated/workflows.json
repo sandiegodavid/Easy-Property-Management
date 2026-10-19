@@ -2520,6 +2520,91 @@
           ],
           "title": "Priority"
         },
+        "reporter": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "historicalSelectionConfirmed": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Historicalselectionconfirmed"
+                },
+                "historicalSelectionReason": {
+                  "anyOf": [
+                    {
+                      "maxLength": 1000,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Historicalselectionreason"
+                },
+                "partyId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Partyid"
+                },
+                "role": {
+                  "enum": [
+                    "owner",
+                    "tenant",
+                    "manager",
+                    "staff"
+                  ],
+                  "title": "Role",
+                  "type": "string"
+                },
+                "subjectKind": {
+                  "enum": [
+                    "party",
+                    "local_operator"
+                  ],
+                  "title": "Subjectkind",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "role",
+                "subjectKind"
+              ],
+              "title": "ReporterInput",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reporterCorrectionReason": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reportercorrectionreason"
+        },
         "summary": {
           "anyOf": [
             {

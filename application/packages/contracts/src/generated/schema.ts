@@ -11459,6 +11459,9 @@ export interface components {
             idempotencyKey: string;
             /** Priority */
             priority?: ("low" | "normal" | "high" | "urgent") | null;
+            reporter?: components["schemas"]["ReporterInput"] | null;
+            /** Reportercorrectionreason */
+            reporterCorrectionReason?: string | null;
             /** Summary */
             summary?: string | null;
         };

@@ -815,6 +815,18 @@ a {
 a:hover {
   text-decoration-thickness: 2px;
 }
+.concern-create-link {
+  display: inline-block;
+  padding: 0.5rem 0.75rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--control-border);
+  border-radius: 0.4375rem;
+  text-decoration: none;
+}
+.concern-create-link:hover {
+  background: var(--accent-soft);
+}
 button,
 input,
 select,
@@ -1976,6 +1988,23 @@ a.directory-coverage-card:focus-visible {
   gap: 0.5rem;
   min-width: 0;
 }
+.concern-filter-group {
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+  min-width: 0;
+}
+.workflow-action-select {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--type-small);
+}
+.workflow-action-select select {
+  max-width: 100%;
+  margin: 0;
+}
 .maintenance-directory-filters input,
 .maintenance-directory-filters select {
   box-sizing: border-box;
@@ -2080,12 +2109,6 @@ a.directory-coverage-card:focus-visible {
   padding: 2rem 1.25rem;
   text-align: center;
   color: var(--muted);
-}
-.maintenance-directory-footer {
-  margin-top: 2rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
-  font-size: var(--type-small);
 }
 .lease-directory-heading,
 .lease-directory-card-heading {

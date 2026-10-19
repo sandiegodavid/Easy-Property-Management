@@ -103,6 +103,8 @@ class CommunicationCorrectionForm(CommunicationCreateForm):
 
 
 class IssueChanges(Contract):
+    reporter: ReporterForm | None = None
+    reporterCorrectionReason: str | None = Field(None, max_length=1000)
     summary: str | None = Field(None, max_length=240)
     description: str | None = Field(None, max_length=10000)
     category: (

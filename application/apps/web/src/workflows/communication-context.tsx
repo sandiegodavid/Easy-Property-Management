@@ -93,7 +93,7 @@ export function CommunicationContext({
   const [input, setInput] = useState("");
   const [search, setSearch] = useState("");
   const parties = useQuery({
-    enabled: Array.isArray(values.participants),
+    enabled: Array.isArray(values.participants) && search.length >= 2,
     queryKey: scope.key("communication-party-selection", search),
     queryFn: async ({ signal }) =>
       readResult(

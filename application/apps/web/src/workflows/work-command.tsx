@@ -13,7 +13,7 @@ import { loadWorkRecord, workChildren } from "./work-records";
 import { workUrl, type WorkKind } from "./work-links";
 import { CommunicationContext } from "./communication-context";
 import { MaintenanceContext } from "./maintenance-context";
-import { ReporterContext, reporterProblem } from "./reporter-context";
+import { ReporterContext, reporterProblem, reporterChanged } from "./reporter-context";
 import { QuoteCommandContext, assignmentProblem, quoteProblem } from "./quote-context";
 import { JournalCommandContext, journalProblem } from "./work-journal";
 import { ConcernContext, ConcernOwnerSearch, concernProblem } from "./concern-context";
@@ -40,8 +40,18 @@ async function source(
   target?: string,
   signal?: AbortSignal,
   journalCursor?: string,
+  ownerId?: string,
 ): Promise<Source> {
   const result: Source = { revision: 0, value: {}, children: [], choices: {} };
+  if (definition.formKey === "owner_concern.create" && ownerId) {
+    const owner = readResult(
+      await api.GET("/api/parties/{party_id}", {
+        signal,
+        params: { path: { party_id: ownerId } },
+      }),
+    );
+    result.choices.ownerPartyId = [{ id: owner.id, label: owner.displayName }];
+  }
   if (definition.sourceKind) {
     if (!target) throw new Error("Select the owning record before this command.");
     result.value = await loadWorkRecord(sourceKind(definition), target, signal);
@@ -59,6 +69,21 @@ async function source(
         id: scalar(item.id),
         label: `${scalar(item.providerDisplayNameSnapshot)} · ${item.endedAt ? "Ended" : "Current"}`,
       }));
+      result.choices.replacesAssignmentId = workChildren(result.value, "assignments")
+        .filter((item) => !item.endedAt)
+        .map((item) => ({ id: scalar(item.id), label: scalar(item.providerDisplayNameSnapshot) }));
+      result.choices.replacesQuoteId = workChildren(result.value, "quotes")
+        .filter((item) => !!item.withdrawnAt)
+        .map((item) => ({
+          id: scalar(item.id),
+          label: `${scalar(item.providerDisplayNameSnapshot)} · ${scalar(item.label)}`,
+        }));
+      result.choices.replacesCostContextId = workChildren(result.value, "costContexts")
+        .filter((item) => !!item.voidedAt)
+        .map((item) => ({
+          id: scalar(item.id),
+          label: `${scalar(item.label)} · ${scalar(item.contextKind).replaceAll("_", " ")}`,
+        }));
       if (definition.formKey === "maintenance.journal.record") {
         const page = readResult(
           await api.GET("/api/maintenance-issues/{issue_id}/work-journal", {
@@ -187,10 +212,17 @@ export function WorkCommand() {
       target,
       child,
       params.get("journalCursor"),
+      params.get("ownerId"),
     ),
     enabled: !!definition,
     queryFn: ({ signal }) =>
-      source(definition!, target, signal, params.get("journalCursor") ?? undefined),
+      source(
+        definition!,
+        target,
+        signal,
+        params.get("journalCursor") ?? undefined,
+        params.get("ownerId") ?? undefined,
+      ),
     retry: false,
   });
   if (
@@ -247,6 +279,7 @@ export function WorkCommand() {
     initial = { priority: "normal", reporter: { role: "manager", subjectKind: "local_operator" } };
   if (definition.formKey === "owner_concern.create") {
     initial.priority = "normal";
+    if (!resume && params.get("ownerId")) initial.ownerPartyId = params.get("ownerId");
     if (params.get("independentReview") === "true" && !resume) {
       const retained = record(record(location.state).concernReview);
       for (const key of [
@@ -283,7 +316,7 @@ export function WorkCommand() {
       initial.replacesConcernId = priorConcern.data.id;
     }
   }
-  if (definition.formKey === "maintenance.reporter.correct") {
+  if (["maintenance.reporter.correct", "maintenance.issue.patch"].includes(definition.formKey)) {
     const reporter = record(context.value.reporter);
     initial.reporter = {
       role: reporter.role,
@@ -381,30 +414,44 @@ export function WorkCommand() {
     id: scalar(item.partyId),
     label: scalar(item.partyDisplayName),
   }));
-  const parentTarget = target
-    ? workUrl(sourceKind(definition), target)
-    : definition.formKey.startsWith("task.")
-      ? "/tasks"
-      : definition.formKey.startsWith("communication.")
-        ? "/conversations"
-        : "/maintenance";
+  const parentTarget =
+    definition.formKey === "communication.create" && communicationIssue.data
+      ? workUrl("issue", communicationIssue.data.id)
+      : target
+        ? workUrl(sourceKind(definition), target)
+        : definition.formKey.startsWith("task.")
+          ? "/tasks"
+          : definition.formKey.startsWith("communication.")
+            ? "/conversations"
+            : definition.formKey === "owner_concern.create" && params.get("ownerId")
+              ? `/owners/${params.get("ownerId")}/overview`
+              : "/maintenance";
   const choices = {
     ...context.choices,
     ...(identities.length || contextualParty.length
-      ? { partyId: [...contextualParty, ...identities], ownerPartyId: identities }
+      ? {
+          partyId: [...contextualParty, ...identities],
+          ownerPartyId: [...(context.choices.ownerPartyId ?? []), ...identities],
+        }
       : {}),
   };
   return (
     <div
       className={
-        ["maintenance.issue.create", "owner_concern.create", "maintenance.issue.patch"].includes(
-          definition.formKey,
-        )
+        definition.formKey.startsWith("maintenance.") ||
+        definition.formKey === "owner_concern.create" ||
+        definition.formKey === "communication.create"
           ? "maintenance-create-command"
           : undefined
       }
     >
       <ParentBackLink to={parentTarget} />
+      {!completed && communicationIssue.data && (
+        <div className="selected-command-context">
+          <strong>{communicationIssue.data.summary}</strong>
+          <span>Linked maintenance issue</span>
+        </div>
+      )}
       {!completed && (
         <>
           {loaded.error && (
@@ -413,51 +460,58 @@ export function WorkCommand() {
               no new change can be submitted.
             </p>
           )}
-          {definition.formKey === "maintenance.issue.patch" && (
-            <>
-              <div className="selected-command-context">
-                <strong>{scalar(context.value.summary)}</strong>
-                <span>{scalar(context.value.status).replaceAll("_", " ")}</span>
-              </div>
-              <MaintenanceContext
-                formKey={definition.formKey}
-                values={initial}
-                source={context.value}
+          {definition.formKey.startsWith("maintenance.") &&
+            definition.formKey !== "maintenance.issue.create" && (
+              <>
+                <div className="selected-command-context">
+                  <strong>{scalar(context.value.summary)}</strong>
+                  <span>{scalar(context.value.status).replaceAll("_", " ")}</span>
+                </div>
+                <MaintenanceContext
+                  formKey={definition.formKey}
+                  values={initial}
+                  source={context.value}
+                />
+              </>
+            )}
+          {!definition.formKey.startsWith("maintenance.") &&
+            definition.formKey !== "communication.create" &&
+            ![
+              "maintenance.issue.create",
+              "owner_concern.create",
+              "maintenance.issue.patch",
+            ].includes(definition.formKey) && (
+              <>
+                <p>
+                  Choices are bounded to the first 100 relevant records. Use an existing contextual
+                  identity; server validation decides effective relationships and
+                  historical-selection eligibility.
+                </p>
+                <Facts
+                  value={context.value}
+                  fields={["summary", "subject", "title", "status", "revision", "priority"]}
+                />
+              </>
+            )}
+          {!(
+            definition.formKey === "communication.create" &&
+            params.get("entityType") === "maintenance_issue"
+          ) &&
+            [
+              "communication.create",
+              "communication.patch",
+              "communication.correct",
+              "maintenance.reporter.correct",
+            ].includes(definition.formKey) && (
+              <IdentityLookup
+                onSelect={(id, displayName) =>
+                  setIdentities((current) => [
+                    ...current.filter((item) => item.id !== id),
+                    { id, label: displayName },
+                  ])
+                }
               />
-            </>
-          )}
-          {![
-            "maintenance.issue.create",
-            "owner_concern.create",
-            "maintenance.issue.patch",
-          ].includes(definition.formKey) && (
-            <>
-              <p>
-                Choices are bounded to the first 100 relevant records. Use an existing contextual
-                identity; server validation decides effective relationships and historical-selection
-                eligibility.
-              </p>
-              <Facts
-                value={context.value}
-                fields={["summary", "subject", "title", "status", "revision", "priority"]}
-              />
-            </>
-          )}
-          {[
-            "communication.create",
-            "communication.patch",
-            "communication.correct",
-            "maintenance.reporter.correct",
-          ].includes(definition.formKey) && (
-            <IdentityLookup
-              onSelect={(id, displayName) =>
-                setIdentities((current) => [
-                  ...current.filter((item) => item.id !== id),
-                  { id, label: displayName },
-                ])
-              }
-            />
-          )}
+            )}
         </>
       )}
       <CommandLoader
@@ -479,9 +533,15 @@ export function WorkCommand() {
                 )
               : definition.formKey === "maintenance.quote.create"
                 ? !quoteProblem(values)
-                : !["maintenance.issue.create", "maintenance.reporter.correct"].includes(
-                    definition.formKey,
-                  ) || !reporterProblem(values)
+                : ![
+                    "maintenance.issue.create",
+                    "maintenance.reporter.correct",
+                    "maintenance.issue.patch",
+                  ].includes(definition.formKey) ||
+                  (!reporterProblem(values) &&
+                    (definition.formKey !== "maintenance.issue.patch" ||
+                      !reporterChanged(values, context.value.reporter) ||
+                      !!scalar(values.reporterCorrectionReason, "").trim()))
         }
         choicesForValues={(values) =>
           definition.formKey === "maintenance.assignment.create"
@@ -522,6 +582,7 @@ export function WorkCommand() {
                                   id: owner.partyId!,
                                   label: owner.party!.displayName,
                                 })) ?? []),
+                              ...(context.choices.ownerPartyId ?? []),
                               ...identities,
                             ].map((item) => [item.id, item]),
                           ).values(),
@@ -553,7 +614,7 @@ export function WorkCommand() {
             />
           ) : definition.formKey.startsWith("maintenance.") ? (
             <>
-              {definition.formKey !== "maintenance.issue.patch" && (
+              {definition.formKey === "maintenance.issue.create" && (
                 <MaintenanceContext
                   formKey={definition.formKey}
                   values={values}
@@ -569,9 +630,11 @@ export function WorkCommand() {
               {["maintenance.quote.create", "maintenance.assignment.create"].includes(
                 definition.formKey,
               ) && <QuoteCommandContext values={values} source={context.value} />}
-              {["maintenance.issue.create", "maintenance.reporter.correct"].includes(
-                definition.formKey,
-              ) && (
+              {[
+                "maintenance.issue.create",
+                "maintenance.reporter.correct",
+                "maintenance.issue.patch",
+              ].includes(definition.formKey) && (
                 <ReporterContext
                   values={values}
                   source={context.value}
@@ -647,12 +710,20 @@ export function WorkCommand() {
               throw new Error("Select a quote from this issue and Provider.");
           }
           if (
-            ["maintenance.issue.create", "maintenance.reporter.correct"].includes(
-              definition.formKey,
-            )
+            [
+              "maintenance.issue.create",
+              "maintenance.reporter.correct",
+              "maintenance.issue.patch",
+            ].includes(definition.formKey)
           ) {
             const problem = reporterProblem(values);
             if (problem) throw new Error(problem);
+            if (
+              definition.formKey === "maintenance.issue.patch" &&
+              reporterChanged(values, context.value.reporter) &&
+              !scalar(values.reporterCorrectionReason, "").trim()
+            )
+              throw new Error("Give a reason for correcting the reporter.");
           }
           const selectedChild = definition.childKey
             ? scalar(values[definition.childKey], child)
