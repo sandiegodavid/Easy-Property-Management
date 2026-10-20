@@ -437,8 +437,9 @@ li { margin: .3rem 0; }
 <ul>
 <li><strong>Two instances must never run at once:</strong> one app per workspace (a lockfile</li>
 </ul>
-<p>prevents double-start); two agents are detected via distinct <code>agent_id</code>s in their</p>
-<p>heartbeats and trigger a dashboard warning, not silent cooperation. Cloud-synced</p>
+<p>prevents double-start); two agents claiming the same role are detected via their</p>
+<p>heartbeats and trigger a dashboard warning, not silent cooperation (different</p>
+<p>roles is a supported topology, §7). Cloud-synced</p>
 <p>folders (Dropbox/iCloud) as the <em>workspace location</em> are discouraged — partial</p>
 <p>SQLite syncs corrupt; keep the workspace on local disk and let <em>backups</em> live in</p>
 <p>the cloud.</p>
@@ -544,6 +545,97 @@ li { margin: .3rem 0; }
 <p>state machine in the app; the agent reads, enriches, and drafts; the human makes every</p>
 <p>judgment call — including sending every message. Draft/assist everywhere, auto-send</p>
 <p>nowhere.</p>
+<p>### Sidecar configuration — intake and lifecycle are independent</p>
+<p>AI is a sidecar to the workflow, never a dependency of it. Intake triage (§4) and</p>
+<p>lifecycle assist (this section) are <strong>independent configuration toggles</strong>, per</p>
+<p>operator (and per property where it makes sense):</p>
+<ul>
+<li><code>intake_enabled</code> (per source, in the triage config): the agent scans channels and</li>
+</ul>
+<p>proposes new issues.</p>
+<ul>
+<li><code>lifecycle_assist_enabled</code>: the agent drafts, enriches, and monitors open issues.</li>
+<li>All four combinations are valid: neither (a fully manual app), intake only,</li>
+</ul>
+<p><strong>lifecycle only</strong> (the operator enters issues by hand; the agent still drafts</p>
+<p>acknowledgments, monitors vendor replies, and runs the payment checks), or both.</p>
+<p>Guarantees that keep the sidecar a sidecar:</p>
+<ul>
+<li><strong>Every agent-assisted step has a manual path.</strong> The operator can type the</li>
+</ul>
+<p>acknowledgment, enter a bid reply by hand, record an appointment, or log a</p>
+<p>payment — same state machine, same artifacts. The agent only changes whose labor</p>
+<p>produces the draft.</p>
+<ul>
+<li><strong>The state machine never branches on how an issue was created.</strong> Issues record a</li>
+</ul>
+<p><code>source</code> (manual / agent proposal) for the audit trail, but transitions,</p>
+<p>timers, and reminders are identical.</p>
+<ul>
+<li><strong>Toggles can flip mid-lifecycle.</strong> Enabling assist on an existing manual issue</li>
+</ul>
+<p>just adds it to <code>issues.json</code>; disabling assist leaves pending drafts in place</p>
+<p>(they're app data), lets outstanding requests expire harmlessly, and the operator</p>
+<p>continues manually.</p>
+<ul>
+<li><strong>Lifecycle-only mode narrows the agent's watch.</strong> With intake off, the agent</li>
+</ul>
+<p>does not scan for new issues — it monitors only the channel threads attached to</p>
+<p>open issues (from <code>issues.json</code>) and answers <code>requests/</code>.</p>
+<p><strong>Different agents per role.</strong> The operator may assign different agents to intake</p>
+<p>and lifecycle (<code>agents: {intake, lifecycle}</code> in <code>agent-bridge.json</code>). Plausible</p>
+<p>reasons: a cheap, always-on agent fits high-volume triage while a stronger model</p>
+<p>suits judgment-heavy lifecycle drafting; the mailbox may live where one agent runs</p>
+<p>while lifecycle work stays on a local agent; or the operator pilots a new agent on</p>
+<p>one role while the proven one keeps the other. Role rules: only the intake agent</p>
+<p>writes intake proposals and consumes their acks; only the lifecycle agent consumes</p>
+<p><code>requests/</code> and writes lifecycle proposals; each files its own heartbeat</p>
+<p>(<code>heartbeats/&lt;agent_id&gt;.json</code>). Two agents claiming the <em>same</em> role is a</p>
+<p>misconfiguration the dashboard flags; different roles is a supported topology.</p>
+<p>Security dividend: inbound mail is untrusted content, so isolating intake contains</p>
+<p>the prompt-injection blast radius — the lifecycle agent works from curated app</p>
+<p>exports (issues, request contexts), never raw mail.</p>
+<p>### Execution tiers — local LLM vs. agent</p>
+<p>Not all assist needs the agent. The dividing line is <strong>where the data lives</strong>: if</p>
+<p>everything a task needs is already inside the app, a local LLM (running on the</p>
+<p>operator's machine — e.g. Ollama/MLX, configured app-side) does it; if the task</p>
+<p>must reach outside the app (channels, web), it's the agent's job.</p>
+<p>| Task | Local LLM | Agent | Why |</p>
+<p>|---|---|---|---|</p>
+<p>| Acknowledgment / follow-up / closure drafts | ✓ | ✓ | issue data only |</p>
+<p>| Assessment draft | ✓ | ✓ | app supplies history as context |</p>
+<p>| Weekly digest, preventive insights | ✓ | ✓ | pure app data |</p>
+<p>| Bid normalization (quotes pasted/entered) | ✓ | — | text already in the app |</p>
+<p>| Payment-check narrative | ✓ | — | checks themselves are deterministic app logic |</p>
+<p>| Photo read (photo uploaded to the app) | ✓ | ✓ | vision model, either side |</p>
+<p>| Channel monitoring (vendor/tenant replies) | — | ✓ | needs channel access |</p>
+<p>| Scheduling coordination across parties | — | ✓ | messages live in channels |</p>
+<p>| Vendor web search | — | ✓ | needs the web |</p>
+<p>| Intake triage | — | ✓ | needs channel access (a local model can still classify a message the operator pastes into the app manually) |</p>
+<p>Design rules:</p>
+<ul>
+<li><strong>The local LLM is an app feature, not a bridge participant.</strong> The app calls it</li>
+</ul>
+<p>directly (config in <code>agent-bridge.json</code>: enabled, endpoint, model). Its drafts</p>
+<p>land in the same <code>drafts</code> table and the same review UX — "AI drafts, human</p>
+<p>decides" holds regardless of which engine drafted.</p>
+<ul>
+<li><strong>Routing is per task type</strong>, with a setting (`draft_engine: local | agent |</li>
+</ul>
+<p>auto`): auto prefers local (faster, private, free) and falls back to the agent via</p>
+<p><code>requests/</code> when local is off or unavailable. Channel-bound tasks always route</p>
+<p>to the agent.</p>
+<ul>
+<li><strong>Degradation is graceful in every combination:</strong> agent only, local only, both,</li>
+</ul>
+<p>or neither — the workflow is unchanged; only the drafting labor moves. A weaker</p>
+<p>local model's cost shows up as more operator editing, never as errors shipped,</p>
+<p>because every draft is reviewed.</p>
+<ul>
+<li><strong>Privacy dividend:</strong> with local drafting, tenant names, photos, and issue</li>
+</ul>
+<p>details never leave the operator's machine for the large class of tasks that</p>
+<p>don't need the outside world. The agent sees only what its channel work requires.</p>
 <p>### State machine</p>
 <p><code>new</code> → <code>acknowledged</code> → <code>assessing</code> → (<code>inspection_scheduled</code> →) <code>awaiting_bids</code> →</p>
 <p><code>vendor_selected</code> → <code>scheduled</code> → <code>in_progress</code> → <code>reported_done</code> → <code>verified</code> →</p>
@@ -787,10 +879,11 @@ li { margin: .3rem 0; }
 <p>"agent didn't respond" on the issue and offers manual drafting — the operator is</p>
 <p>never blocked waiting on the agent.</p>
 <ol>
-<li><strong>Addressing.</strong> Requests are unaddressed in v1 (one active agent assumption, §4);</li>
+<li><strong>Addressing.</strong> Only the agent assigned the lifecycle role consumes <code>requests/</code></li>
 </ol>
-<p>if multiple agents are ever supported, requests gain an <code>agent_id</code> and each agent</p>
-<p>consumes only its own.</p>
+<p>(§7, Sidecar configuration). An agent confirms its role assignment — set in its</p>
+<p>own setup, echoed in its heartbeat — before consuming; the intake agent never</p>
+<p>touches <code>requests/</code>.</p>
 <p>### Data model (app side)</p>
 <p><code>issues</code> (state, property, category, urgency, vendor, quote, timestamps), <code>issue_events</code></p>
 <p>(append-only audit log), <code>drafts</code> (issue, kind, text, status:</p>
@@ -938,6 +1031,25 @@ li { margin: .3rem 0; }
 <p>control. The agent drafts tenant acknowledgments and assists through the full issue</p>
 <p>lifecycle (§7); the operator reviews and sends every outbound message. Draft/assist</p>
 <p>everywhere, auto-send nowhere.</p>
+<ol>
+<li><strong>AI as a sidecar.</strong> Intake triage and lifecycle assist are independent toggles —</li>
+</ol>
+<p>an operator can skip agent intake entirely (manual issue entry) and still use the</p>
+<p>agent through the §7 lifecycle. The workflow must be complete with no agent at</p>
+<p>all; the agent is labor, not infrastructure.</p>
+<ol>
+<li><strong>Two execution tiers.</strong> Lifecycle assist that needs only app data (drafts,</li>
+</ol>
+<p>assessments, digests, insights) can run on a local LLM on the operator's</p>
+<p>machine; tasks needing the outside world (channel coordination, monitoring,</p>
+<p>web search) require the agent. Routing per task type, local preferred when</p>
+<p>available (§7 execution tiers).</p>
+<ol>
+<li><strong>Different agents per role are allowed.</strong> Intake and lifecycle may run on</li>
+</ol>
+<p>different agents (capability/cost fit, where each runs, gradual migration) —</p>
+<p>role assignment lives in <code>agent-bridge.json</code>; the dashboard flags only</p>
+<p>same-role conflicts.</p>
 <h2>13. Design rationale — why it's built this way</h2>
 <p>Decisions, recorded with their reasons, so future work doesn't re-litigate them:</p>
 <ul>
@@ -1006,4 +1118,26 @@ li { margin: .3rem 0; }
 </ul>
 <p>record. The agent does bounded work per cycle and reports health; it never owns a</p>
 <p>promise about the future.</p>
+<ul>
+<li><strong>AI as a sidecar, independently toggleable</strong> — intake triage and lifecycle assist</li>
+</ul>
+<p>are separate configuration switches because the workflow must be complete with no</p>
+<p>agent at all. An operator who distrusts automated intake can still want drafting</p>
+<p>help on issues they entered by hand; coupling the two would force an all-or-</p>
+<p>nothing choice nobody asked for. The agent is labor, not infrastructure.</p>
+<ul>
+<li><strong>A local LLM tier exists</strong> — because most lifecycle drafting needs nothing</li>
+</ul>
+<p>outside the app's own data. Routing those tasks to a local model keeps tenant</p>
+<p>data on the operator's machine, costs nothing per call, and works with no agent</p>
+<p>at all; reserving the external agent for channel and web work spends its access</p>
+<p>(and the operator's trust) only where it's actually required.</p>
+<ul>
+<li><strong>Agents are assigned per role, not per product</strong> — intake and lifecycle are</li>
+</ul>
+<p>different jobs (high-volume classification of untrusted inbound content vs.</p>
+<p>judgment-heavy drafting from curated data), so there's no reason one agent must</p>
+<p>do both. Splitting them buys capability/cost fit and a real security boundary:</p>
+<p>a prompt-injected email can only ever reach the intake agent, whose worst case</p>
+<p>is a bad proposal in a review queue.</p>
 </body></html>
