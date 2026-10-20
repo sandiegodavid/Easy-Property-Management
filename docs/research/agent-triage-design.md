@@ -1,920 +1,282 @@
-# Agent Triage for Property-Maintenance Intake — Design
-*Designed 2026-10-19 with David. Status: design only, not yet filed to Linear.*
-
-## 1. What it is
-
-An agent that watches the channels tenants and vendors already use — email (multiple
-mailboxes), SMS, and call transcripts — triages maintenance-related messages, and proposes
-structured maintenance issues. A human operator reviews and approves every proposal. The app
-never touches email directly; triage runs on the agent side, which holds the channel access.
-
-Product sentence: *every channel your tenants already use, one review queue.*
-Sales sentence: *never miss a maintenance emergency* (backed by the audit trail in §6).
-
-## 2. Architecture fit
-
-- Respects the standing decision: the app does no mail plumbing (no OAuth, polling, message
-  store). All channel access lives with the agent, via whatever channel integrations that agent provides (device commands, connectors, plugins).
-- Transport is the existing file bridge, with strict file ownership: `agent-bridge.json`
-  is the app's own configuration — written and read by the app only; the agent never
-  touches it. The app writes reference/config files into `.agent-bridge/` for the agent to
-  consume (e.g. `properties.json`); the agent writes proposal-only JSON files to
-  `.agent-bridge/inbox/` for the app to consume. The app validates, dedupes by idempotency
-  key, and stages into a review queue; nothing is committed until the operator approves;
-  ack files confirm receipt; heartbeat mtime is the dead-man's switch.
-- The bridge is agent-agnostic: any agent implementing the file contract works.
-
-## 3. Agent neutrality
-
-The design is agent-neutral: it supports Muse, ChatGPT, Grok Bot, and any agent
-that can implement the file contract. There are no Muse-specific APIs, protocols, or
-assumptions anywhere in this design.
-
-- The agent's contract is three file operations: consume the app-exported files in
-  `.agent-bridge/` (reference data, triage config), write proposal JSON files to
-  `.agent-bridge/inbox/`, and update the heartbeat. `agent-bridge.json` is app-side
-  only — the agent never reads it. Every agent above can do this.
-- Per-agent differences are confined to two places: how the agent reaches the user's
-  channels (email, SMS) and how it reaches the bridge folder. Triage logic, proposal
-  schemas, and the human-approval model are identical for all agents.
-- Certification tiers: Muse is the certified reference agent (the one dogfooded
-  during development); other agents are supported through the BYO-beta path, guarded
-  by schema validation and the quarantine list (§6).
-- If an agent gains MCP support later, §11 covers the MCP transport option — same
-  semantics, different transport.
-
-## 4. Intake flow
-
-![Intake flow](diagrams/01-intake-flow.png)
-
-1. Operator enables "triage" per property (or globally). The app stores the settings in
-   `agent-bridge.json` (app-side config: watched mailboxes, SMS/call sources, categories,
-   urgency rules) and exports the agent-facing parts as `.agent-bridge/triage.json` for
-   the agent to consume, alongside `properties.json`.
-2. App exports read-only reference data for the agent: `.agent-bridge/properties.json`
-   (property id, address, units), regenerated on every property change, so the agent can
-   resolve "123 Main St #4" without guessing.
-3. Agent polls each configured source on its cadence, keeping per-source watermarks on its
-   own side. For each candidate message it writes one proposal file to
-   `.agent-bridge/inbox/`.
-4. App validates schema → dedupes by idempotency key → checks near-duplicates against open
-   issues (same property + similar summary within N days, across all sources and mailboxes
-   → "possible duplicate," never auto-merged) → stages into the maintenance review queue
-   with triage metadata and confidence visible.
-5. Operator approves (creates the issue), edits, or dismisses. App writes ack files with the
-   decision; agent uses acks to avoid re-proposing and marks items handled on its side.
-6. Stale heartbeat → app shows "triage offline," falls back to manual entry.
-
-**Step 4 in detail — the ingestion pipeline (app side)**
-
-The app watches `.agent-bridge/inbox/` (poll every ~30s; OS file watcher where
-available). The agent writes each proposal atomically — `*.tmp` then rename to
-`*.json` — so the app only picks up settled files.
-
-1. **Parse.** JSON-decode; on failure move the file to `.agent-bridge/quarantine/` and
-   log the error. Never silently skip.
-2. **Schema-validate** against the shipped proposal schema (in `agent-pack/`).
-   Missing/invalid fields → quarantine with the specific violations listed.
-3. **Idempotency check.** Look up `idempotency_key` in the app's processed-proposals
-   table (SQLite — the source of truth). Already seen with identical content →
-   duplicate delivery: make sure the ack file exists (rewrite if missing) and drop.
-   Same key but different content → conflict: quarantine + flag (indicates an agent
-   bug; should never happen).
-4. **Sequence check.** Per source/mailbox, track the high-water `seq`. `seq` ≤
-   high-water → out-of-order duplicate, handled as in (3). `seq` > high-water + 1 →
-   record the gap, raise a "missing proposals" alert on the health dashboard, but keep
-   processing — one missing file never blocks the queue.
-5. **Near-duplicate detection.** Against open issues and issues created in the last 14
-   days: same `property_id` + same category + within N days + summary word-overlap
-   above threshold → stage as "possible duplicate" linked to the existing issue.
-   Deterministic heuristic in v1 (no LLM in the app); the operator merges or keeps
-   separate. Never auto-merge.
-6. **Enrich & route.** Resolve `property_id` → property record for display. Buckets:
-   - `classification: ignore` + high confidence → auto-dismiss (logged, recoverable
-     from the dismissed filter, acked).
-   - `classification: ignore` + low confidence → review queue (the agent might be
-     wrong about an emergency).
-   - confidence < threshold → "needs review" bucket.
-   - `property_id` null → "unassigned" bucket for manual routing.
-   - otherwise → main review queue, sorted by urgency then recency.
-7. **Stage.** Insert into the proposals table (all fields + raw JSON reference + status
-   `pending`), move the inbox file to `.agent-bridge/processed/` (30-day retention),
-   update the high-water mark, emit UI updates (queue badge, emergency push
-   notification).
-8. **Crash recovery.** On startup, reconcile: any inbox file missing from the
-   processed table gets ingested; any ingested proposal lacking an ack file gets
-   acked.
-
-**Step 5 in detail — acks (app → agent)**
-
-For every consumed proposal the app writes `.agent-bridge/acks/<proposal-id>.ack.json`:
-
-- `proposal_id`, `idempotency_key`, `seq` — link back to the proposal
-- `status`: `received` → later updated in place to `approved` | `edited` |
-  `dismissed` | `auto_dismissed` | `merged_duplicate` | `quarantined`
-- `result_issue_id` — the created issue's id, when approved/edited
-- `corrections` — {field: corrected_value} when the operator edited (the learning
-  signal)
-- `dismiss_reason` — operator-selected reason when dismissed
-- `acked_at`, `decided_at` timestamps
-
-Two moments: the ack file is created with `status: received` at ingest time — this is
-how the agent knows delivery succeeded and can stop rewriting the proposal. It is
-updated in place when the operator decides.
-
-How the agent consumes acks (on its own cadence, polling `.agent-bridge/acks/`):
-
-- `received` → mark delivered, stop re-sending the proposal.
-- `approved` / `edited` → optionally mark the source message handled on the agent
-  side (archive/label the email per the operator's agent-side settings; never delete).
-- `edited` → read `corrections` and adjust future behavior (e.g. remember
-  sender-specific property mappings). Learning lives on the agent side; the app only
-  supplies the signal.
-- `dismissed` / `merged_duplicate` → don't re-propose similar items; tune
-  classification.
-- Acks are informational — the app is the system of record, so a missed ack never
-  corrupts anything. The app garbage-collects ack files older than 30 days; the agent
-  is expected to consume well within that window.
-
-**Agent-side ack consumption runbook** (ships in the agent pack — every agent
-implements this same procedure)
-
-The agent keeps its own state (location of its choosing — never in the bridge): per-source
-watermarks, `proposals_sent` ({proposal_id: {idempotency_key, seq, sent_at}}), an ack
-cursor ({ack_id: last seen status}), and learned corrections.
-
-Each cycle runs in this order — acks first, then source scanning — so corrections and
-dismissals take effect before new messages are classified:
-
-1. **Discover.** List `.agent-bridge/acks/*.ack.json`; pick up files whose status is
-   newer than the cursor. Acks are monotonic (`received` → decided), so the agent
-   always acts on the latest status it sees; re-reading is harmless.
-2. **Classify by status.**
-   - `received` → mark the proposal delivered; remove from the rewrite set. Do *not*
-     mark the source message handled yet — the operator hasn't decided.
-   - `approved` → mark the source message handled on the agent side per the
-     operator's agent-side settings (e.g. apply a "triaged" label, archive it —
-     never delete). Drop from the rewrite set.
-   - `edited` → same as approved, plus ingest `corrections` into learned state:
-     e.g. a corrected `property_id` for sender S becomes a sender→property override
-     that outranks future inference; a corrected `category` tunes classification for
-     similar messages.
-   - `dismissed` → mark handled; record the `dismiss_reason` as a negative signal
-     (e.g. "not-maintenance" from this sender → lower propensity to propose similar).
-   - `merged_duplicate` → informational; note the dedupe pattern.
-   - `quarantined` → bug signal: the agent's own proposal failed schema validation.
-     Re-read the schema from the agent pack before writing the next proposal; if
-     quarantines recur, surface it in the heartbeat's `last_error`.
-3. **Rewrite unacked proposals (at-least-once delivery).** Any proposal in
-   `proposals_sent` with no `received` ack after N cycles (~45 min) is rewritten —
-   same `idempotency_key`, same `seq` (never a new seq, or the app's gap detection
-   fires). Cap at ~5 rewrites, then stop and report in the heartbeat
-   (`"proposal X unacked after 5 rewrites — app may be down"`).
-4. **Clean up.** If a proposal file still sits in `inbox/` but its ack exists, the
-   app's move to `processed/` must have failed — the agent may remove the stale file.
-   (Normally the app moves it; this is just belt-and-suspenders.)
-5. **Learn, don't get taught.** The app never pushes model updates — it only
-   publishes labeled outcomes (acks). The agent turns `corrections` and
-   `dismiss_reason`s into its own rules. This keeps agents swappable: any agent can
-   implement its own learning while the contract stays identical.
-6. **Report health** in the heartbeat: `acks_pending` (app-written, not yet
-   consumed), `proposals_unacked` count, `quarantine_hits`. These let the dashboard
-   distinguish "agent is behind" from "app is behind."
-
-**Step 6 in detail — heartbeat & agent health**
-
-The agent writes `.agent-bridge/heartbeat.json` atomically (tmp + rename) on every
-poll cycle, and at least every 5 minutes while running. Contents:
-
-- `agent_id` (stable instance id), `agent_kind` (Muse / chatgpt / grok / other —
-  display only), `agent_version`, `pack_version` (which agent-pack version the agent
-  loaded)
-- `ts` (ISO 8601 timestamp) and `seq` (monotonic counter — the app trusts `seq` over
-  wall clock, so clock skew can't fake liveness)
-- `sources`: per-source status — {`source_id`, `last_poll_at`, `last_poll_ok`,
-  `last_error` (optional), `last_proposal_seq_written`}
-- `pending_proposals`: proposals written but not yet acked, as the agent sees it —
-  the app cross-checks this against its own counts (another reconciliation signal)
-
-App-side monitoring (the app re-checks every ~60s; thresholds live in
-`agent-bridge.json`, operator-adjustable):
-
-- age < 2× expected interval → **online** (green)
-- 2×–4× → **degraded** (amber, show last-seen time)
-- > 4× (default ~45 min) → **offline** (red): banner in the app, manual entry stays
-  fully available. Nothing is lost — unprocessed messages wait in the mailbox, and
-  the agent's watermarks are on its side.
-- Content is validated, not just mtime: if mtime advances but `ts`/`seq` stall, the
-  agent is alive but wedged → degraded ("agent stuck"). If `ts` skews far from the
-  app clock, warn, but rely on mtime + `seq`.
-
-Health dashboard surfacing: status pill, last-seen ("3 min ago"), agent kind +
-pack-version mismatch nudge, and a per-source table (mailbox X polled 12 min ago ✓;
-mailbox Y — auth error, action needed). Alerting: one push notification when offline
-exceeds ~1 hour, and one when a source reports an error (expired mailbox auth is the
-common real-world case) — never a stream of repeats.
-
-Failure modes this covers: agent process dead (heartbeat goes stale); agent alive but
-one source failing (per-source error while the overall heartbeat stays fresh →
-"degraded: 1 of 3 mailboxes failing"); agent wedged (seq stall); app restart (status
-recomputed from the file immediately — no in-memory state to lose).
-
-Recovery: when the agent returns, it resumes from its own watermarks and writes any
-missed proposals; the app's sequence-gap check (step 4) verifies nothing was lost,
-and the dashboard confirms it ("back online — caught up: 14 proposals received").
-
-Heartbeat is advisory only: it never gates writes, and a stale or forged heartbeat
-can at worst produce a wrong status display — never corrupt data. If multiple agents
-are ever used, each writes `.agent-bridge/heartbeats/<agent_id>.json` and the
-dashboard shows one row per agent.
-
-**Independent lifecycles — shutdown & catch-up**
-
-App and agent start and stop fully independently; neither holds irreplaceable
-in-memory state. Three durable stores make any restart a reconcile, not a recovery:
-the app's SQLite DB (system of record for proposals and decisions), the agent's own
-state file (source watermarks, proposals sent, learned corrections), and the bridge
-directory itself (durable transport — files wait as long as needed). Restart order
-never matters.
-
-*App restart (agent kept working meanwhile):*
-1. Reload the processed-proposals table, per-source high-water marks, and the review
-   queue — all persisted, so shutdown loses nothing, including undecided proposals.
-2. Scan `inbox/`: every file not in the processed table runs through the ingestion
-   pipeline (step 4), in (source, seq) order. Proposals the agent wrote during the
-   outage are simply waiting files.
-3. Repair acks: any ingested proposal lacking an ack file gets one now; any decision
-   whose ack update didn't land is re-written (acks are idempotent).
-4. Recompute agent status from `heartbeat.json` immediately — no warm-up. Then run
-   garbage collection (processed files / ack files past their retention window,
-   only after confirming they're in the DB).
-
-*Agent restart (app kept working meanwhile):*
-1. Reload its own state (watermarks, `proposals_sent`, ack cursor, corrections).
-2. Consume acks **first**: during the outage the operator may have approved, edited,
-   or dismissed a whole batch — the agent applies all of it (mark handled, ingest
-   corrections) before scanning anything.
-3. Reconcile `proposals_sent`: no `received` ack → rewrite (same key, same seq);
-   received but undecided for days → leave it (it's the operator's queue; surface the
-   count in the heartbeat).
-4. Refresh reference data: re-read `properties.json` and `triage.json` — the operator
-   may have added a property or changed categories during the outage.
-5. Catch up on sources from the watermarks: messages that arrived during the outage
-   are triaged now. Watermark discipline: advance only *after* the proposal file is
-   durably written, so a crash mid-scan can't skip a message. Process chronologically,
-   batched per cycle, with catch-up progress in the heartbeat ("catching up: 212
-   messages") — the app sorts the resulting queue by urgency anyway.
-6. Write a fresh heartbeat immediately on startup, before the first cycle completes,
-   so the app shows "agent is back" within a minute.
-
-*Extended downtime (hours to days):*
-- App down, agent up: proposals accumulate in `inbox/` (small JSON files — harmless);
-  the agent rewrites unacked proposals up to its cap, then simply waits. Nothing lost,
-  nothing duplicated (idempotency keys).
-- Agent down, app up: heartbeat goes stale → offline banner; the operator works the
-  existing queue and manual entry. Unprocessed messages wait safely in the mailboxes
-  (the agent never deletes), bounded only by the mailbox's own retention.
-- Ack GC vs. a long-stopped agent: individual ack files are GC'd after 90 days
-  (configurable), but the app also maintains `.agent-bridge/acks/digest.json` — a
-  compact, never-GC'd ledger of {proposal_id: final status} for every decided
-  proposal, regenerated on each decision. On restart the agent reconciles against the
-  digest, so full catch-up is always possible no matter how long it was down.
-- All timestamps are UTC ISO 8601 for display/aging only; `seq` numbers are the
-  ordering truth.
-
-**Expectations (the SLA)**
-
-This is a local-first, bring-your-own-agent system — there is no uptime percentage to
-promise. The expectations are about latency, durability, and one quality bar:
-
-- **Freshness (normal operation, defaults):** the agent polls sources every ~15 min
-  (`poll_cadence_hint`), so a message typically becomes a proposal within ~10 min and
-  in the worst case ~20 min; the app picks up proposals within ~1 min of landing in
-  `inbox/`. End-to-end, email → review queue: typically ≤ ~10 min, worst ~20 min.
-  Emergency proposals push-notify the operator the moment they land in the queue.
-- **Explicitly NOT real-time:** email triage is not a life-safety channel. A burst-pipe
-  email can sit for the length of a poll cycle. Tenants with true emergencies should
-  be calling, not emailing — the design's job is to make sure the email is never
-  *lost*, not to make it instant. (Shortening the poll cadence trades agent cost for
-  latency; it's the operator's knob.)
-- **Durability (the hard guarantee):** zero loss across any restart combination.
-  Every message the agent saw becomes exactly one proposal; every operator decision
-  is recorded and eventually reflected to the agent (per-proposal acks + the digest).
-  "Eventually" after a restart = within one reconciliation pass: the app's catch-up is
-  effectively immediate; the agent's backlog drains over a few cycles (batched,
-  progress shown in the heartbeat).
-- **The one hard quality bar: emergency recall.** A real emergency classified as
-  routine is the worst failure this system can make, so classification errs toward
-  over-flagging: false-positive emergencies are acceptable and expected,
-  false-negative emergencies are treated as defects and reviewed via the corrections
-  in acks. Other accuracy measures (category precision, duplicate-flag precision) are
-  Phase 3 metrics — tracked and tuned, not guaranteed.
-- **Operator side:** no SLA on human decisions, but undecided proposals older than
-  ~48h escalate (see §6), and every stage's timestamps are recorded, so where time
-  went is always answerable after the fact.
-
-**Backup & migration**
-
-The entire system lives in one workspace folder (app DB, `agent-bridge.json`,
-`.agent-bridge/`, the agent pack) — so backup and migration are one folder, one
-operation. The agent keeps its own state (source watermarks, proposals sent, ack
-cursor, learned corrections) at `.agent-bridge/agent-state.json`, in the format the
-agent pack specifies; the app never touches it except to include it in backups.
-
-- **Backup (app feature):** one-click "Back up now" in Settings plus automatic
-  scheduled backups (daily, keep N) → a timestamped, password-encrypted zip of the
-  workspace, saved to a folder the operator chooses (local disk, external drive, or
-  cloud). Encryption is on by default — backups contain tenant names, addresses,
-  and issue details; losing the password means losing the backup, and the app says
-  so plainly. Mailboxes themselves are never backed up (they live at the provider);
-  watermarks reference provider message ids, which is all the restore needs.
-- **Restore / migrate:** install the app on the new computer → "Restore from backup"
-  in the setup wizard → the app unpacks, verifies (DB integrity check, schema
-  version, required files present), and runs its normal startup reconcile — so even
-  a backup taken mid-flight converges: inbox files get ingested, acks repaired,
-  agent status recomputed. Then shut down the old instance and point the agent at
-  the new workspace path; it resumes from `agent-state.json` exactly where it left
-  off — no re-triage of old mail, no lost learning. Health dashboard green +
-  heartbeat fresh + review queue intact = migration verified.
-- **First run on a fresh agent** (no state to restore): the agent only looks back
-  `first_run_lookback_days` (in `triage.json`, operator-set, default 7) instead of
-  triaging years of mailbox history.
-- **Two instances must never run at once:** one app per workspace (a lockfile
-  prevents double-start); two agents claiming the same role are detected via their
-  heartbeats and trigger a dashboard warning, not silent cooperation (different
-  roles is a supported topology, §7). Cloud-synced
-  folders (Dropbox/iCloud) as the *workspace location* are discouraged — partial
-  SQLite syncs corrupt; keep the workspace on local disk and let *backups* live in
-  the cloud.
-
-**Bridge file contents (App → Agent)**
-
-`.agent-bridge/properties.json` — reference data so the agent can resolve mentions.
-Regenerated by the app on every property change; read-only for the agent. Per property:
-`property_id` (the app's internal id), `address` (street, city, state, zip), `units`
-(list of unit designations), `aliases` (nicknames tenants or vendors use, e.g. "the Elm
-St duplex"). Purpose: turn "123 Main St #4" into a `property_id` without guessing.
-
-`.agent-bridge/triage.json` — the agent-facing triage configuration, exported from the
-app's settings whenever the operator changes them:
-- `mailboxes`: list of {`mailbox_id`, account, labels/folders, `enabled`}
-- `sms_sources` / `voice_sources`: which threads, numbers, or voicemail boxes to watch,
-  plus enabled flags
-- `categories`: the taxonomy [{`id`, `label`}] — app defaults plus the operator's
-  customizations
-- `urgency_rules`: keyword lists per urgency level (`emergency` / `urgent` / `routine`),
-  operator-editable
-- `confidence_threshold`: proposals below this go to the "needs review" bucket
-- `poll_cadence_hint`: advisory (e.g. every 15 minutes); the agent decides its own rhythm
-- `first_run_lookback_days`: how far back a fresh agent scans on first run (default 7)
-
-Purpose: tells the agent *what to watch* and *how to classify*. Everything the agent
-needs to know about the operator's intent arrives through these two files — never
-through `agent-bridge.json`.
-
-`.agent-bridge/vendors.json` — the vendor book (lifecycle, §7): per vendor `vendor_id`,
-name, trades, service areas, preferred flag, past jobs (count, avg cost, avg response
-time, operator rating). Regenerated on change; read-only for the agent.
-
-`.agent-bridge/issues.json` — the open-issue watch list (lifecycle, §7): per issue
-`issue_id`, property, category, state, vendor, tenant channel reference.
-Regenerated on every state change; read-only for the agent. The agent uses it to
-know which issues to monitor for updates and which to draft for.
-
-`.agent-bridge/requests/` — work orders from app to agent: the app writes
-{`request_id`, `type` (draft_acknowledgment, draft_followup, draft_bid_request,
-nudge, ...), `issue_id`, context}; the agent consumes them on its cycle (after
-acks, before source scanning) and answers with a `draft` proposal carrying
-`in_response_to: request_id`.
-
-## 5. Proposal schema (per message)
-
-![Proposal lifecycle](diagrams/02-proposal-lifecycle.png)
-
-- `type`: `maintenance-triage`
-- `idempotency_key`: derived from channel message id (email message-id, SMS id, etc.)
-- `seq`: per-source sequence number (see §6)
-- `source`: `email` | `sms` | `voice` | `manual`; plus `mailbox_id` for email
-- `classification`: `new-request` | `vendor-reply` | `chatter` | `ignore` (with reason)
-- Extracted: `property_id` (or null → "unassigned" bucket), unit, `category`, `urgency`
-  (`emergency` | `urgent` | `routine`), `summary`, suggested trade/vendor
-- `confidence`: 0–1; below threshold → "needs review" bucket, never auto-anything
-- Channel metadata: sender, subject/timestamp, short snippet (≤500 chars), and a reference
-  (message-id) to open the original. Full bodies stay out of the app database.
-
-SMS nuance: group by sender within a time window first, so a six-text saga becomes one
-proposal. Voice nuance: transcripts only (voicemail / call summaries); score confidence a
-notch lower since speech-to-text is lossy; urgency from keywords
-("flooding", "no heat", "locked out").
-
-Categories come from the app's taxonomy, which ships with sensible defaults and is fully
-customizable by the operator (rename, add, remove per portfolio). Proposals carry the
-matched category so customizations stay debuggable.
-
-## 6. Reliability — prove nothing gets dropped
-
-![Reliability guarantees](diagrams/03-reliability.png)
-
-- **Sequence numbers**: per-source `seq` on every proposal; app tracks highest seen; gaps
-  raise a "missing proposals" alert. Drops become loud events.
-- **Reconciliation reports**: agent periodically writes a summary proposal —
-  "last 24h, mailbox X: 47 scanned, 12 proposed, 33 ignored (reasons), 2 deduped." App
-  compares against received. Numbers must reconcile.
-- **Ack or it didn't happen**: every proposal ends approved/edited/dismissed; un-acked
-  proposals aging past ~48h escalate in the review queue.
-- **Quarantine, not silence**: schema-invalid files go to a visible quarantine list with the
-  parse error.
-- **At-least-once delivery, idempotent app**: agent may rewrite a proposal if unsure it was
-  picked up; app dedupes by idempotency key. Duplicates harmless, drops impossible by design.
-- **Per-source heartbeats**: last-poll timestamp per mailbox/SMS source; a dead Outlook
-  connection shows up instead of going quiet.
-- **Pipeline health view + audit trail**: "this week — 132 messages scanned across
-  3 mailboxes, 28 issues created, 0 dropped, 0 unreviewed over 48h," plus full per-proposal
-  lifecycle history. This is the landlord-facing proof.
-
-## 7. After intake — the issue lifecycle
-
-![Issue lifecycle swimlane](diagrams/04-lifecycle-swimlane.png)
-
-Pattern at every stage: **AI drafts, human decides, app remembers.** Each issue is a
-state machine in the app; the agent reads, enriches, and drafts; the human makes every
-judgment call — including sending every message. Draft/assist everywhere, auto-send
-nowhere.
-
-### Sidecar configuration — intake and lifecycle are independent
-
-AI is a sidecar to the workflow, never a dependency of it. Intake triage (§4) and
-lifecycle assist (this section) are **independent configuration toggles**, per
-operator (and per property where it makes sense):
-
-- `intake_enabled` (per source, in the triage config): the agent scans channels and
-  proposes new issues.
-- `lifecycle_assist_enabled`: the agent drafts, enriches, and monitors open issues.
-- All four combinations are valid: neither (a fully manual app), intake only,
-  **lifecycle only** (the operator enters issues by hand; the agent still drafts
-  acknowledgments, monitors vendor replies, and runs the payment checks), or both.
-
-Guarantees that keep the sidecar a sidecar:
-
-- **Every agent-assisted step has a manual path.** The operator can type the
-  acknowledgment, enter a bid reply by hand, record an appointment, or log a
-  payment — same state machine, same artifacts. The agent only changes whose labor
-  produces the draft.
-- **The state machine never branches on how an issue was created.** Issues record a
-  `source` (manual / agent proposal) for the audit trail, but transitions,
-  timers, and reminders are identical.
-- **Toggles can flip mid-lifecycle.** Enabling assist on an existing manual issue
-  just adds it to `issues.json`; disabling assist leaves pending drafts in place
-  (they're app data), lets outstanding requests expire harmlessly, and the operator
-  continues manually.
-- **Lifecycle-only mode narrows the agent's watch.** With intake off, the agent
-  does not scan for new issues — it monitors only the channel threads attached to
-  open issues (from `issues.json`) and answers `requests/`.
-
-**Different agents per role.** The operator may assign different agents to intake
-and lifecycle (`agents: {intake, lifecycle}` in `agent-bridge.json`). Plausible
-reasons: a cheap, always-on agent fits high-volume triage while a stronger model
-suits judgment-heavy lifecycle drafting; the mailbox may live where one agent runs
-while lifecycle work stays on a local agent; or the operator pilots a new agent on
-one role while the proven one keeps the other. Role rules: only the intake agent
-writes intake proposals and consumes their acks; only the lifecycle agent consumes
-`requests/` and writes lifecycle proposals; each files its own heartbeat
-(`heartbeats/<agent_id>.json`). Two agents claiming the *same* role is a
-misconfiguration the dashboard flags; different roles is a supported topology.
-Security dividend: inbound mail is untrusted content, so isolating intake contains
-the prompt-injection blast radius — the lifecycle agent works from curated app
-exports (issues, request contexts), never raw mail.
-
-### Execution tiers — local LLM vs. agent
-
-Not all assist needs the agent. The dividing line is **where the data lives**: if
-everything a task needs is already inside the app, a local LLM (running on the
-operator's machine — e.g. Ollama/MLX, configured app-side) does it; if the task
-must reach outside the app (channels, web), it's the agent's job.
-
-| Task | Local LLM | Agent | Why |
-|---|---|---|---|
-| Acknowledgment / follow-up / closure drafts | ✓ | ✓ | issue data only |
-| Assessment draft | ✓ | ✓ | app supplies history as context |
-| Weekly digest, preventive insights | ✓ | ✓ | pure app data |
-| Bid normalization (quotes pasted/entered) | ✓ | — | text already in the app |
-| Payment-check narrative | ✓ | — | checks themselves are deterministic app logic |
-| Photo read (photo uploaded to the app) | ✓ | ✓ | vision model, either side |
-| Channel monitoring (vendor/tenant replies) | — | ✓ | needs channel access |
-| Scheduling coordination across parties | — | ✓ | messages live in channels |
-| Vendor web search | — | ✓ | needs the web |
-| Intake triage | — | ✓ | needs channel access (a local model can still classify a message the operator pastes into the app manually) |
-
-Design rules:
-
-- **The local LLM is an app feature, not a bridge participant.** The app calls it
-  directly (config in `agent-bridge.json`: enabled, endpoint, model). Its drafts
-  land in the same `drafts` table and the same review UX — "AI drafts, human
-  decides" holds regardless of which engine drafted.
-- **Routing is per task type**, with a setting (`draft_engine: local | agent |
-  auto`): auto prefers local (faster, private, free) and falls back to the agent via
-  `requests/` when local is off or unavailable. Channel-bound tasks always route
-  to the agent.
-- **Degradation is graceful in every combination:** agent only, local only, both,
-  or neither — the workflow is unchanged; only the drafting labor moves. A weaker
-  local model's cost shows up as more operator editing, never as errors shipped,
-  because every draft is reviewed.
-- **Privacy dividend:** with local drafting, tenant names, photos, and issue
-  details never leave the operator's machine for the large class of tasks that
-  don't need the outside world. The agent sees only what its channel work requires.
-
-### State machine
-
-`new` → `acknowledged` → `assessing` → (`inspection_scheduled` →) `awaiting_bids` →
-`vendor_selected` → `scheduled` → `in_progress` → `reported_done` → `verified` →
-`awaiting_payment` → `paid` → `closed`. Side states: `on_hold` (waiting on tenant,
-parts, or owner), `declined` (operator decides no action — reason required, tenant
-notified via draft), `reopened` (tenant reports still broken → back to `assessing`,
-history preserved). Every transition records actor, timestamp, and artifact in an
-append-only `issue_events` audit log — the same audit trail that backs the
-"never miss an emergency" claim.
-
-### Stage workflows
-
-- **Acknowledge.** Trigger: issue created. The agent drafts the tenant acknowledgment
-  from issue data (what was reported, expected next step, rough timing); the operator
-  reviews/edits and sends from their own channel, then marks "sent" in the app. The
-  app starts the response clock at issue creation and flags acknowledgments that pass
-  the operator's target (configurable, e.g. 4 business hours; emergencies get an
-  immediate push reminder).
-- **Assess.** The agent enriches from app data — property history and equipment
-  memory ("water heater installed 2019; two prior leak issues at this property") —
-  and proposes likely cause, urgency, and fix-vs-replace leaning. The operator
-  confirms or corrects; corrections ride back in acks and teach the agent, exactly
-  like triage corrections.
-- **Inspect (optional).** The agent drafts the inspection request (vendor or
-  self-inspection checklist for the tenant, with photo asks); the operator approves
-  and sends; the app tracks the appointment and attaches returned photos/notes to
-  the issue.
-- **Bids / dispatch.** Two paths: a preferred vendor gets a direct dispatch draft;
-  otherwise the agent drafts one bid-request text reused per vendor. Vendor replies
-  arrive as proposals linked to the issue (see Integration) and the app normalizes
-  them into a side-by-side comparison (price, ETA, warranty, exclusions). The
-  operator picks — money and trust decisions are always human.
-- **Execute & monitor.** The agent watches the channels for vendor/tenant updates
-  ("parts delayed," "can come Thursday") and proposes status updates + revised ETAs
-  against the issue. The operator confirms notable changes; routine ones are
-  one-tap. The app flags jobs stuck `in_progress` past their ETA.
-- **Verify.** Vendor reports done → the agent drafts a completion summary and a
-  tenant confirmation request; the operator sends; the tenant's reply is triaged as
-  an update to *this* issue, not a new one. Operator or tenant confirmation moves the
-  issue to `verified`; a "still broken" reply reopens it.
-- **Pay.** The invoice (email or vendor message) arrives as a linked proposal; the
-  agent drafts the payment record (vendor, amount, invoice ref). The app checks the
-  amount against the approved quote — variance beyond a threshold (e.g. >10%)
-  is highlighted before the operator approves. Approval writes the ledger entry
-  against the property.
-- **Close.** Closure checklist: work verified, invoice paid (or explicitly waived),
-  tenant notified. The agent drafts the closure summary; the app archives the issue
-  with its full event history and updates equipment memory ("water heater replaced
-  2026-10") — which feeds the next issue's Assess stage.
-
-### Leveraging agent capabilities per stage
-
-**Assess — how the agent gets app data.** Three mechanisms, in order of preference:
-
-1. **Request-scoped context (v1 default).** When the app issues a `draft_assessment`
-   work request, it embeds exactly what the agent needs in the request's context
-   block: the issue's history at this property (past issues in the same category,
-   dates, vendors, costs, resolutions), the equipment record (install dates,
-   warranties), and open related issues. Bounded, fresh, no bulk export — and a
-   privacy feature: the agent only ever sees what the app chose to hand it.
-2. **Standing exports.** `.agent-bridge/vendors.json` (new): per vendor — trades,
-   service areas, preferred flags, past jobs (count, avg cost, avg response time,
-   operator rating). Equipment inventory rides inside `properties.json`.
-   Regenerated on change, like everything else.
-3. **App MCP queries (future, §11).** Live tools (`get_issue_history`,
-   `get_equipment`, `get_vendor_ledger`) replace exports when the agent gains an
-   MCP client. Same data, fresher; the file contract stays as the fallback.
-
-**Inspect & Verify — timing coordination.** The agent drafts the scheduling
-messages (proposed windows to vendor/tenant); their replies arrive as linked
-proposals; the agent parses the agreed time and proposes an `appointment` artifact
-(who, when, where) that the app tracks and reminds on. The app can include the
-operator's busy blocks in the request context so the agent doesn't propose clashing
-windows. Multi-party back-and-forth (tenant proposes, vendor counter-proposes) is
-mediated through drafts — the operator confirms the final time. For verification,
-the app auto-issues a tenant-confirmation draft request when the vendor reports
-done, and a nudge request if the tenant stays silent past the deadline.
-
-**Bids — vendor sourcing approach.** Two tiers, human-gated between them:
-
-1. **App data first.** From `vendors.json` + issue history, the agent ranks known
-   vendors for the trade/area: preferred flags, then past performance (response
-   time, cost vs. quote, operator ratings). This covers the common case and needs
-   no web access.
-2. **Web search for the unknown.** New trade, new area, or no satisfactory known
-   vendor → the agent searches the web and returns a shortlist marked
-   **unverified**: name, contact, review summary, source links. It never contacts
-   anyone; the operator picks who receives the bid request. Bid replies are
-   normalized by the agent into the comparison table (price, ETA, warranty,
-   exclusions), and the app adds one column the agent can't: *cost vs. your
-   portfolio average for this trade* — so an $800 faucet job that's 2.3× your
-   normal plumbing cost jumps out.
-
-**Pay — the agent double-checks for safety.** The agent's payment-record draft
-carries a checks block the operator sees before approving:
-
-- `quote_match`: invoice amount vs. approved quote (variance highlighted past ~10%)
-- `duplicate_invoice`: same invoice number/amount/vendor already paid? (the
-  classic double-pay)
-- `vendor_details_match`: do the payment instructions match the vendor on file? A
-  **changed bank account is a blaring red flag** (the standard business-email
-  compromise) — the draft says so in plain words.
-- `job_verified`: was the work confirmed done before this invoice is paid?
-
-App-side enforcement behind it: no payment record without a linked verified issue
-(unless the operator overrides with a written reason), deterministic duplicate
-invoice-number check, and an operator-set "large amount" threshold (e.g. $5k) that
-shows an extra-care banner. Human approves, always.
-
-**Other leverage** (same pattern everywhere — agent proposes, operator decides):
-
-- **Photo triage.** Tenants send leak photos; a vision-capable agent does a
-  first-pass read ("supply-line leak under the sink, not the faucet") attached to
-  the proposal. The operator still diagnoses.
-- **Preventive insights.** The agent mines issue history for patterns ("3 of 5
-  properties had water-heater failures this year; Elm St's unit is 12") and proposes
-  `insight` items — non-urgent, dismissible, convertible into planned work.
-- **Seasonal prep.** Before rainy season, the agent drafts a per-property checklist
-  (gutters, heaters) from equipment memory.
-- **Weekly digest.** The app issues a scheduled `digest` request; the agent drafts
-  the week in maintenance (opened/closed/stuck/awaiting-decision) for the operator's
-  coffee.
-- **Document lookup.** On a dispute ("who pays for this?"), the app attaches the
-  relevant lease/HOA excerpts to the request context and the agent drafts a
-  plain-language read. Assist only — interpretation stays human.
-
-### Integration — same bridge, no new transport
-
-The lifecycle reuses the bridge primitives; three extensions carry it:
-
-- **Linked proposals.** Lifecycle artifacts arrive as proposal files in `inbox/`
-  with two extra fields: `kind` (`status_update`, `bid_response`, `invoice`,
-  `tenant_reply`, `draft`) and `relates_to_issue_id`. The app stages them on the
-  issue's timeline (not the intake review queue) for operator approval.
-- **Issue watch list (App → Agent).** The app exports `.agent-bridge/issues.json` —
-  every open issue the agent should monitor or draft for: issue id, property,
-  category, state, vendor, tenant channel reference. Regenerated on every state
-  change, same pattern as `properties.json`.
-- **Work requests (App → Agent).** When the operator clicks "draft acknowledgment"
-  (or a timer fires — e.g. a stuck-job nudge), the app writes a request file to
-  `.agent-bridge/requests/` {`request_id`, `type`, `issue_id`, context}. The agent
-  consumes requests on its cycle (acks first, then requests, then source scanning)
-  and answers with a `draft` proposal carrying `in_response_to: request_id`. The
-  operator reviews the draft in the issue view, edits, sends it themselves, and
-  marks it sent — the agent later sees the sent message in the channel and closes
-  the loop.
-- **Timers are app-side.** Acknowledgment targets, bid-response deadlines, stuck-job
-  thresholds, and payment-due dates live in the app, which raises reminders and can
-  auto-issue draft requests. The agent never owns a deadline.
-
-### Agent-side work-request runbook (ships in the agent pack)
-
-**Core design (in full):** the governing rule is **closed loop** — every `request_id`
-gets exactly one response, a `draft` proposal or a `request_error`. Silence is never
-a valid outcome, because the operator must be able to tell "agent is working on it"
-from "it fell on the floor." Cycle order: acks first, then requests, then source
-scanning. No guessing: unknown request types, missing issue context, or an expired
-request (each carries an `expires_at`) get a `request_error`, never a fabricated
-draft; soft gaps become bracketed placeholders like `[TIME]` for the operator to
-fill. Crash-safe: the response's idempotency key is deterministic
-(`req-<request_id>`), so if the agent dies after writing but before recording it,
-re-answering on restart is a duplicate the app dedupes — never a second draft. The
-operator stays unblocked: the app deletes unconsumed requests to cancel them, and if
-the agent is alive but a request goes unanswered for ~an hour, the issue flags
-"agent didn't respond" and offers manual drafting.
-
-The agent consumes requests on its cycle — acks first, then requests, then source
-scanning — tracking answered requests in its own state. The governing rule is
-**closed loop: every `request_id` gets exactly one response.** Silence is never a
-valid outcome, because the app (and the operator) must be able to distinguish
-"agent is working on it" from "it fell on the floor."
-
-1. **Discover & order.** List `.agent-bridge/requests/*.request.json`; process
-   `priority: high` first, then FIFO by `created_at`.
-2. **Validate.** Schema-check the request. An unknown `type`, or a hard context gap
-   (no such issue in `issues.json`, no tenant channel reference), is answered with a
-   `request_error` proposal — never a guess.
-3. **Check expiry.** Each request carries `expires_at` (set by the app per type —
-   e.g. an acknowledgment draft is useless after a day). Expired on pickup →
-   `request_error` with `error: expired`; do not draft.
-4. **Assemble context.** Build the draft only from: the request's context block,
-   `issues.json`, `properties.json`, the channel thread the agent can see, and its
-   learned corrections (tone, names, property quirks). Never invent facts — a soft
-   gap (e.g. no appointment window given) becomes a bracketed placeholder for the
-   operator to fill, like `[TIME]`; a hard gap is step 2's error.
-5. **Respond.** Write one proposal to `inbox/`: {`kind: draft`,
-   `in_response_to: request_id`, `relates_to_issue_id`, draft {channel, recipient
-   ref, subject, body}, notes}. Its `idempotency_key` is deterministic —
-   `req-<request_id>` — so if the agent crashes after writing but before recording
-   the answer, re-answering on restart is a duplicate the app dedupes, not a second
-   draft.
-6. **Cancellation.** The operator cancels by deleting the request in the app; the
-   app deletes unconsumed request files, and discards (with reason) any draft that
-   already arrived. No tombstones needed.
-7. **Timeout visibility (app side).** If the heartbeat shows the agent alive but a
-   request stays unanswered beyond its window (default ~1 hour), the app flags
-   "agent didn't respond" on the issue and offers manual drafting — the operator is
-   never blocked waiting on the agent.
-8. **Addressing.** Only the agent assigned the lifecycle role consumes `requests/`
-   (§7, Sidecar configuration). An agent confirms its role assignment — set in its
-   own setup, echoed in its heartbeat — before consuming; the intake agent never
-   touches `requests/`.
-
-### Data model (app side)
-
-`issues` (state, property, category, urgency, vendor, quote, timestamps), `issue_events`
-(append-only audit log), `drafts` (issue, kind, text, status:
-drafted/approved/sent/discarded), `payments` (issue → ledger entry), plus the
-equipment-memory table the Assess stage reads. All of it is in the workspace backup
-(§4), so the full lifecycle history migrates with everything else.
-
-## 8. Bundling — ship the contract, not the agent
-
-- **Versioned agent pack** shipped with the app (`agent-pack/v1/`): everything an agent
-  needs to implement the contract — (1) the inbox write spec: proposal schemas, atomic
-  write rule (tmp + rename), filename convention, sequence/idempotency discipline;
-  (2) the heartbeat spec: file format, cadence, per-source status fields; (3) the ack
-  consumption runbook (step 5): per-status actions, rewrite rule, learning from
-  corrections; (4) the triage instructions: how to classify, urgency rules, when to
-  propose vs. ignore; (5) the reference-data format: how to read `properties.json`,
-  `triage.json`, and `issues.json`; (6) the lifecycle integration: linked proposal
-  kinds (`status_update`, `bid_response`, `invoice`, `tenant_reply`, `draft`), the
-  `relates_to_issue_id` field; (7) the work-request runbook: discovery and ordering,
-  validation and expiry, the closed-loop rule (exactly one response per
-  `request_id`, via `draft` or `request_error`), deterministic idempotency
-  (`req-<request_id>`), context-assembly rules, cancellation semantics. App stamps
-  expected pack version in `agent-bridge.json`.
-- **Setup wizard** in the React UI: linked agent? bridge folder? heartbeat alive? Then a
-  "send test proposal" round-trip. Five-minute onboarding for non-technical landlords.
-- **Health dashboard**: heartbeat age, proposals in flight, ack latency, pack version
-  match/mismatch with update nudge.
-- Agent updates are file copies, never reinstalls. A hosted zero-setup agent tier is a
-  separate future product decision — not now.
-
-## 9. Phased build
-
-- **Phase 1**: proposal schema, `properties.json` + `triage.json` exports, review-queue
-  UI for triage proposals, ack flow, setup wizard.
-- **Phase 2**: cross-source/cross-mailbox semantic dedupe, vendor/trade suggestion,
-  confidence tuning from operator corrections, per-source health.
-- **Phase 3**: metrics (triage precision, time from message to created issue), reconciliation
-  reports, pipeline health view, feeding approve/dismiss decisions back into the agent prompt.
-
-## 10. UX — it just works, and they trust it
-
-Users are landlords/property managers, not engineers. Never expose bridge internals:
-"your assistant" not "the Muse agent," "connection" not "heartbeat," "suggestions" not
-"proposals." Use landlord vocabulary throughout: properties, units, tenants, vendors.
-
-- **The review queue is the product.** One-tap approve / edit / dismiss per suggestion,
-  batch actions ("approve all high-confidence"), and a plain-language "why this was
-  flagged" on each item. Undo window on every action. Must work well on a phone —
-  landlords triage from job sites.
-- **Calibrated trust.** Show confidence honestly; visually distinguish low-confidence
-  items. Start conservative — everything needs approval. Only after the user sees it
-  working, offer opt-in conveniences like auto-create rules ("routine issues for
-  property X go straight through"), reversible at any time.
-- **Invisible plumbing.** The setup wizard hides everything: green checks, a test
-  round-trip, no mention of JSON or folders. Per-agent and per-mailbox settings live
-  under Settings, not in the daily flow.
-- **Graceful failure.** Offline agent → clear banner ("triage paused — new messages will
-  be picked up on reconnect"), never silent. Quarantine and unassigned-property buckets
-  are visible and actionable. Empty states teach: "No new maintenance messages —
-  last checked 12 min ago."
-- **Feedback loop.** One-tap corrections ("wrong property," "wrong category," "not
-  maintenance") — as easy as approving. Corrections fix the data now and tune the
-  agent over time.
-- **Urgency-aware notifications.** Emergencies push immediately; routine items batch
-  into a digest. Plus a weekly "what your assistant caught" summary (e.g. "3 emergencies
-  triaged, average 4 min to your review") — this is what converts skeptics.
-
-## 11. MCP — where it could fit (future, not v1)
-
-The file bridge exists because the current Muse agent has no MCP client and no raw
-localhost HTTP/SSE path — only its declared device commands. MCP lost v1 on that
-constraint, not on merit. The natural future shape: the app runs a local MCP server
-exposing the same proposal semantics as tools (`list_properties`,
-`propose_maintenance_issue`, `get_issue_status`), as an *alternate transport* alongside
-the file bridge, not a replacement.
-
-Pros:
-- Industry-standard interop story: "works with any MCP client" is arguably stronger
-  than a bespoke file format for the agent-agnostic goal.
-- No polling: direct tool calls replace the inbox-watch cadence; lower latency, no
-  partial-write edge cases.
-- Richer reads: agent queries app data on demand (property history, vendors) instead of
-  relying on exported snapshots like `properties.json`.
-- Rides ecosystem momentum instead of maintaining a custom contract alone.
-
-Cons:
-- Doesn't work with the current agent at all — no MCP client, no localhost path. The
-  binding constraint is unchanged.
-- Harder to inspect: files are dumb, visible, auditable (open the inbox folder and look).
-  MCP traffic needs tool-call logging to get the same auditability the reliability story
-  (§6) depends on.
-- The approval guarantee gets weaker: with files, "agent cannot commit" is structural —
-  it can only write to the inbox. With MCP you must carefully expose only `propose_*`
-  tools and never `create_*`; the boundary becomes convention instead of physics.
-- More moving parts: server lifecycle, auth, versioning — versus writing JSON to a folder.
-
-Recommendation: keep the file bridge as v1 and the lowest-common-denominator transport
-(every agent can read/write files). Keep proposal semantics transport-agnostic so an MCP
-server can be added later with identical semantics. Revisit when the agent gains an MCP
-client or a second certified agent demands it.
-
-## 12. Decisions (from David, 2026-10-19)
-
-1. **Which mailboxes?** The operator/property manager decides — it's per-customer
-   configuration in the setup wizard and Settings, not a product-level decision. The
-   design supports any number of mailboxes per customer.
-2. **Categories?** The app ships an initial category taxonomy; the user can customize
-   it (rename, add, remove) per portfolio. Triage proposals carry both the matched
-   category and the raw text so customizations stay debuggable.
-3. **Draft after intake?** Yes — leverage AI as much as possible while keeping human
-   control. The agent drafts tenant acknowledgments and assists through the full issue
-   lifecycle (§7); the operator reviews and sends every outbound message. Draft/assist
-   everywhere, auto-send nowhere.
-4. **AI as a sidecar.** Intake triage and lifecycle assist are independent toggles —
-   an operator can skip agent intake entirely (manual issue entry) and still use the
-   agent through the §7 lifecycle. The workflow must be complete with no agent at
-   all; the agent is labor, not infrastructure.
-5. **Two execution tiers.** Lifecycle assist that needs only app data (drafts,
-   assessments, digests, insights) can run on a local LLM on the operator's
-   machine; tasks needing the outside world (channel coordination, monitoring,
-   web search) require the agent. Routing per task type, local preferred when
-   available (§7 execution tiers).
-6. **Different agents per role are allowed.** Intake and lifecycle may run on
-   different agents (capability/cost fit, where each runs, gradual migration) —
-   role assignment lives in `agent-bridge.json`; the dashboard flags only
-   same-role conflicts.
-
-
-## 13. Design rationale — why it's built this way
-
-Decisions, recorded with their reasons, so future work doesn't re-litigate them:
-
-- **File bridge as the transport** — because the agent (Muse today) has no MCP
-  client and no raw HTTP path to localhost — only declared device commands — so
-  files are the lowest common denominator every agent can do. Side benefits turned
-  out to be load-bearing: files are inspectable by a non-technical operator, and
-  they double as durability (a proposal file simply waits; no message broker, no
-  in-flight state to lose).
-- **The app does no mail plumbing** (standing decision) — OAuth, polling, and the
-  message store stay on the agent side. The app stays local-first and simple, and
-  channel credentials never enter the app at all.
-- **Agent proposes, app drafts, operator sends — no automatic outbound.** The agent
-  will eventually misread something; messages and money cross a trust boundary that
-  needs a human. It also makes every agent equally safe to plug in, since the blast
-  radius of a bad agent is bounded by the review queue.
-- **Strict file ownership** (`agent-bridge.json` is app-side only; the agent never
-  touches it) — the agent's contract is three operations, not N files to
-  understand. The smaller the contract, the more agents can implement it faithfully.
-- **Two-moment acks** (`received` at ingest, decision later) — delivery confirmation
-  and human judgment happen on different timelines. The agent needs the first
-  immediately (to stop rewriting); the second can take days. One ack file with a
-  monotonic status serves both.
-- **Closed-loop work requests** — silence is ambiguous: "agent is working on it" and
-  "it fell on the floor" look identical without a response. Exactly-one-response
-  per request makes every loop auditable and every stall visible.
-- **Deterministic idempotency keys** (`req-<request_id>`) — crash-safety without
-  coordination. Re-doing work after a crash is safe because duplicates collapse to
-  one; neither side needs to ask the other "did you already do this."
-- **Sequence numbers as the ordering truth** — wall clocks skew, travel across
-  timezones, and lie; a monotonic counter can't fake liveness and can't silently
-  skip. Timestamps are for display; seq is for truth.
-- **Recall over precision for emergencies** — a missed emergency is the one
-  unforgivable failure in this system; a false alarm is one tap to dismiss. So
-  classification is deliberately biased toward over-flagging, and low-confidence
-  `ignore`s still go to the review queue.
-- **One-folder backup** — migration becomes copy, not reconfiguration. The agent's
-  watermarks and learned corrections travel with the data, so nothing is re-triaged
-  and nothing is re-learned on a new machine.
-- **The app never teaches the agent** — it only publishes labeled outcomes (acks,
-  digests). Each agent turns those into its own rules. This asymmetry is what keeps
-  agents swappable: Muse today, anything tomorrow, same contract.
-- **Timers are app-side, never agent-side** — deadlines belong to the system of
-  record. The agent does bounded work per cycle and reports health; it never owns a
-  promise about the future.
-- **AI as a sidecar, independently toggleable** — intake triage and lifecycle assist
-  are separate configuration switches because the workflow must be complete with no
-  agent at all. An operator who distrusts automated intake can still want drafting
-  help on issues they entered by hand; coupling the two would force an all-or-
-  nothing choice nobody asked for. The agent is labor, not infrastructure.
-- **A local LLM tier exists** — because most lifecycle drafting needs nothing
-  outside the app's own data. Routing those tasks to a local model keeps tenant
-  data on the operator's machine, costs nothing per call, and works with no agent
-  at all; reserving the external agent for channel and web work spends its access
-  (and the operator's trust) only where it's actually required.
-- **Agents are assigned per role, not per product** — intake and lifecycle are
-  different jobs (high-volume classification of untrusted inbound content vs.
-  judgment-heavy drafting from curated data), so there's no reason one agent must
-  do both. Splitting them buys capability/cost fit and a real security boundary:
-  a prompt-injected email can only ever reach the intake agent, whose worst case
-  is a bad proposal in a review queue.
+# Agent triage for property maintenance
+
+Status: proposed design, 2026-10-20. The assistant connection and source-backed issue review described here are not claims of shipped behavior. [INGEST-002](../active/INGEST-002_DESIGN.md) owns issue review; [MCP-001](../active/MCP-001_DESIGN.md) owns the shared assistant boundary. This note explores EPM-initiated assistance, channel discovery, and a possible local file adapter for that boundary.
+
+This is the readable, current design. The [original detailed draft](archive/agent-triage-design-original-2026-10-19.md), including its four diagrams, remains available for historical detail. Where the two differ, this document and the linked domain designs govern; the original contains several proposals that later review superseded.
+
+## The experience we want
+
+A tenant emails, “Water is leaking under the kitchen sink,” with a photo. An assistant that the operator connected to that mailbox finds the message and suggests an issue. EPM retains the original message and relied-on photo, then shows them beside the suggestion. The operator can correct the property, space, reporter, category, or priority before deciding what belongs in the official record.
+
+There is **one review queue for submitted suggestions**. The operator can create an issue, link the source to an existing issue, apply selected changes to an existing issue, dismiss it as no issue, or discard the proposal for rework. The assistant's confidence never makes that decision. Manual issue entry remains available when no assistant is connected.
+
+The product idea is “messages from the channels tenants and providers already use, in one place for review.” The stronger promise “never miss a maintenance emergency” is **not supported by an agent merely reporting consecutive proposal numbers**. The product must show source coverage and unknown gaps honestly. Email and SMS scanning are not emergency-response channels; an urgent alert can only follow discovery and admission of a message.
+
+An assistant may later help acknowledge, assess, coordinate, compare quotes, verify, and close work. The recurring pattern is **assistant drafts, operator decides, EPM records**. Every outbound message remains operator-sent, and each official change goes through its owning module. The app remains useful with intake assistance off, lifecycle assistance off, or both off.
+
+### At a glance
+
+| Concern | Owner |
+| --- | --- |
+| Mail, SMS, and call-transcript access; provider checkpoints; interpretation | The separately authorized assistant. EPM holds no channel credentials or mailbox poller. |
+| Connection grants, bounded context exports, source admission, retained evidence, receipts, audit, and health display | EPM, through Intake, AI Governance, and the shared assistant boundary. |
+| Official issues, appointments, quotes, assignments, work journal, and paid spending | Their existing EPM domains, after an operator-approved command. |
+| What is watched and what becomes official | The operator. |
+
+## 1. What the operator configures and sees
+
+The operator chooses the source mailboxes, labels, SMS threads or numbers, and call-transcript sources. They can scope the connection to selected properties and units, permitted reads, proposal types, data classes, and an expiry. A property-level enablement option can narrow a broader connection. No channel is enabled by default. Settings explain what EPM exports and what the assistant itself can see through its separately granted channel access.
+
+Intake triage and lifecycle help are independent switches. All four combinations are valid: fully manual; intake only; lifecycle help on manually entered issues; or both. The first assistance opportunity can be a contextual **Draft follow-up** on an existing issue using a qualified EPM-invoked model, without pairing an external assistant or granting mailbox access. An on-device model needs no external disclosure; a hosted model still needs its task-specific disclosure permission. Connected-assistant setup appears when the chosen task actually needs its channel or ongoing work capabilities. A change mid-issue does not alter the official issue lifecycle. Disabling assistance leaves already admitted drafts for operator disposition and cancels pending agent work requests. A global AI pause and per-connection pause/revoke control EPM-mediated access and submissions. They cannot retract data already disclosed or stop an independently scheduled mailbox scan; the UI must say that clearly.
+
+Daily screens use property-management language: “assistant,” “connection,” “suggestions,” and “last checked.” They do not require an operator to understand JSON, sequence counters, or heartbeat files. Suggestions stay in EPM's review queue; drafts and follow-up help stay on the relevant issue, where the operator can inspect, edit, and decide. Settings holds connection grants and troubleshooting, not a second daily work queue in the assistant's app. The queue makes evidence and uncertainty easy to inspect, with quick actions to approve, edit, dismiss, or request rework. Low-confidence suggestions and unresolved property, space, or reporter matches are visibly distinguished and cannot be presented as ready for one-tap approval. A suggestion offers direct corrections such as “wrong property,” “wrong category,” or “not maintenance,” with the source visible while editing; a correction is an operator decision, not a silent learning rule. An unmatched-property view groups suggestions that need an explicit property choice. A separate connection-problem view shows quarantined submissions with safe reasons and next steps—correct the adapter, grant, or source data and resubmit through admission; a malformed or unauthorized file cannot be promoted into review by clicking it. The queue needs a good phone layout, since operators may triage away from a desk. Batch review can reduce clicks, but each selected item still receives an explicit, visible operator decision; it is not an auto-create rule. A decision's correction history and the relevant original source remain inspectable. Any undo affordance must use the owning domain's supported correction or replacement action rather than erase an audit event.
+
+The first run should set a realistic expectation: early suggestions may need property and category corrections, and every suggestion still needs review. EPM retains those corrections and may publish bounded feedback to an authorized assistant, but improvement over time must be measured; neither the setup flow nor report card should claim automatic learning or a guaranteed accuracy curve.
+
+The same screen distinguishes “nothing new to review” from “a source has not been checked.” For example: “Gmail last fully checked at 9:15; Outlook needs reconnection; no known gaps in Gmail's verified interval.” It displays last contact, last complete scan per source, unresolved intervals, queue age, and connection or source errors separately. A persistent, dismissible degraded/offline banner explains what is affected, the last verified scan, and the relevant reconnect or manual-entry action without promising that unseen messages will be found later. Connection detail shows pending submissions, the oldest unacknowledged item, admission-receipt delay, pack compatibility, and per-source progress separately; receipt delay measures EPM handoff, not mailbox discovery. An empty state can say “No new maintenance suggestions; last complete check 12 minutes ago” only when that is true. One non-repeating alert for a prolonged outage or source authorization error is preferable to repeated notifications. Urgent *admitted* suggestions may notify immediately; routine items can collect into a digest. A weekly “what the assistant caught” summary can report measured outcomes, not guessed coverage.
+
+For a local assistant, setup and connection status must say that scans may stop when its computer sleeps, shuts down, loses access, or the assistant is not running. On return, show a catch-up state and its verified source interval; provider pagination and retention determine how much can actually be recovered. Do not promise that every message missed during an outage will be found. Manual EPM entry remains available throughout.
+
+### A trust ladder, not a required sequence
+
+Operators may enter at any level that solves their immediate problem. A new customer seeking quote help should not have to use automated intake first. What changes between levels is the task and access granted, not whether human approval is required.
+
+| Level | Operator-facing outcome | Access and boundary |
+| --- | --- | --- |
+| 0. Use EPM manually | Record and manage work without an assistant. | No assistant access. |
+| 1. Help me write | Draft a reply or summary from app data. | A registered on-device model can do this without external disclosure. |
+| 2. Watch selected sources | Suggest issues from selected messages. | Explicit read access to the selected source accounts; every submitted candidate enters EPM review. |
+| 3. Track the back-and-forth | Surface linked tenant/provider updates and draft coordination messages. | Read only permitted issue threads and bounded EPM context. |
+| 4. Help with bidding | Suggest known providers, source an unverified shortlist, draft requests, and compare replies. | Additional bounded context or web access as needed; operator chooses contacts and sends messages. |
+
+The onboarding question can be “What brings you here?” and offer the matching capability directly. A level includes only its necessary technical prerequisites: bidding may need drafting and linked-thread monitoring, but not automated intake. Contextual invitations should follow demonstrated need (many manual issues, repetitive replies, or a difficult comparison), be dismissible, and include “Don't suggest this again” for that invitation type until the operator resets it in Settings. A report card can show actual correction rate and time saved once enough observations exist; it cannot invent claims such as “47 of 50 right” before evidence exists. A guided first run, exact scope receipt, test suggestion, and prominent pause control make entry possible without requiring the user to earn trust through unrelated levels. Settings provides a plain-language “What this assistant can see now” view with granted sources, property/data scope, roles, expiry, and recent EPM-mediated exports, submissions, and decisions, plus pause and revoke. It distinguishes EPM-mediated activity from whatever the assistant can do independently through its channel accounts. Certification can help only after a real conformance test. Social proof must be evidence-based, not assumed.
+
+Earlier drafts proposed unlocking reduced supervision after a run of accurate suggestions: batch approvals, standing draft approvals, and routine auto-creation. **The current initial contract does not permit automatic issue dismissal, creation, update, outbound sending, or spending.** Convenience can improve review ergonomics, but any future reduced-supervision rule needs its own backlog, explicit consent, domain policy, and evidence. A day-one user of a complex feature still gets the full help with close review, visible activity, and easy reversal.
+
+## 2. How a channel message reaches the record
+
+```mermaid
+flowchart LR
+  A[Authorized source account] --> B[Assistant scans with checkpoint]
+  B --> C[Original evidence and proposal]
+  C --> D[EPM verifies connection and retains source]
+  D --> E[Operator compares and decides]
+  E --> F[Owning domain command and durable receipt]
+  F --> G[Assistant reads decision feedback]
+```
+
+1. **Discover.** The assistant scans its authorized channel accounts with provider-supported pagination, overlap, and durable per-source checkpoints. Each discovered message receives a disposition: submitted, excluded with a reason, or pending retry. The assistant does not advance past an unresolved page.
+2. **Prepare.** For a candidate, it packages the bounded original message or transcript, provider/account/message identity, occurrence time and time zone, participants, and each attachment on which the suggestion relied. A separate typed proposal describes the likely issue and uncertainty. A source ID and short snippet help the preview but do not replace reviewable evidence.
+3. **Submit.** The transport authenticates the writer and carries the source plus proposal through the shared assistant admission service. EPM checks the current grant, pause, scope, schema, sizes, action registration, and idempotency before Intake retains evidence and AI Governance stages the external proposal. External admission does not run another model.
+4. **Review.** The operator compares the exact retained source revision, attachment set, governed input, and proposal. An unresolved property, space, reporter, category, priority, or event time stays unresolved until the operator supplies valid values. Possible duplicate issues are shown as suggestions, never merged automatically.
+5. **Decide.** [INGEST-002](../active/INGEST-002_DESIGN.md) applies exactly one selected outcome: create; link without changing an issue; update only selected mutable fields and link; dismiss as no issue; or discard the proposal for rework while leaving the source unprocessed. Source and target revisions are checked in the transaction; a stale comparison returns to review.
+6. **Acknowledge.** EPM records an authoritative admission and decision receipt and publishes a retryable projection to the assistant. If channel permissions and operator settings allow it, the assistant may label or archive the exact source message after the final outcome; it must not delete it.
+
+### Details that affect classification
+
+The assistant may classify a message as a new request, provider reply, unrelated chatter, or likely non-maintenance, with a reason. It may exclude clearly unrelated scanned messages before submission, but scan reports count those exclusions and preserve reasons. A submitted candidate labeled “ignore” still receives an operator decision, especially if it has possible emergency cues. An uncertain property goes into an unassigned review bucket; low confidence gets a prominent review cue. The queue may sort by admitted urgency and recency, without treating the assistant's urgency as official.
+
+For SMS, a six-text conversation can be grouped into one queue item, but each text retains its own provider identity and original evidence. A voice suggestion uses an actual transcript with provenance; speech recognition uncertainty is visible, and relied-on audio is retained under [Files](../modules/files.md) if allowed by the source contract. Terms such as “flooding,” “no heat,” or “locked out” can raise a review flag; keywords alone cannot make an official priority. Cross-mailbox or cross-source duplicates are only hints. A deterministic first-pass heuristic can compare property, category, recency (for example 14 days), and summary overlap; the operator decides whether to link or create. A future semantic matcher may improve candidate ranking without changing that rule.
+
+The assistant can use exported addresses, units, and aliases such as “the Elm St duplex” to suggest a match. It must not convert a sender or nickname into an authoritative Property ID without review. The proposal uses Maintenance's fixed issue category vocabulary and `low`, `normal`, `high`, `urgent` priorities. Provider trade/category, Finance expense category, and custom operator language are separate concepts; a transport-specific category list cannot redefine Maintenance policy.
+
+### The proposed envelope
+
+The versioned submission carries a stable intent ID, connection-scoped idempotency key, source kind, verified provider/account/message identifiers, per-source *proposal* sequence, canonical payload fingerprint, evidence manifest, and typed issue proposal. The proposal has bounded summary and description, reporter/property/space text copied or inferred from the source, suggested category and priority, rationale, confidence, and explicit unknowns. An optional existing-issue candidate has its own reason and provenance. The effective connection and grant identity come from the verified transport, not from `agent_id` inside the JSON.
+
+Evidence follows [Intake](../modules/intake.md) and File limits: bounded subject and plain-text body or transcript, original participants and event time, qualified source identity, and relied-on attachments. Provider content is untrusted. Corrections append retained Intake revisions; they do not rewrite the original. The source revision and fingerprint cited by the proposal must be the ones the operator sees during review.
+
+## 3. The proposed local file adapter
+
+File exchange is a **candidate transport**, not a new business boundary. [MCP-001](../active/MCP-001_DESIGN.md) supplies the connection, grant, admission, receipt, health, and audit semantics. A file adapter calls those same services; it never writes Intake, AI Governance, Maintenance, or Finance tables directly. Muse is the first file-adapter qualification trial because its reported file commands make this plausible. Its actual unattended schedule, access to the chosen local folder, and trustworthy writer isolation still need testing. If it cannot meet them, output can be imported manually; EPM must not present that as a live connected assistant.
+
+EPM creates and manages one exchange per connection inside the selected workspace, for example `integrations/assistant-exchange/<connection-id>/`. The operator chooses and backs up one EPM workspace, rather than maintaining a second exchange location. The assistant receives access only to its connection's exchange subfolder, never the workspace root. EPM binds the folder to the workspace and connection IDs in app-owned settings and presents the external assistant's folder authorization as part of the same connection setup. The assistant platform may still require its own permission prompt. The recoverable exchange state joins the normal encrypted workspace backup as specified below. This follows the [Muse adapter boundary](META_MUSE_RESEARCH.md#exchange-directory-and-access).
+
+Automatic admission requires an exchange isolated per connection and tested operating-system attribution of the actual writer. File ownership, directory permissions, and read/write separation must enforce the granted role and data scope; a sibling directory is not an access boundary if the assistant can read the workspace as the same OS user. Setup must verify that the assistant can reach only its exchange subfolder. If a product cannot enforce and demonstrate that scope and attribution, automatic file exchange stays disabled and the operator uses manual handoff. Knowing the folder path, writing valid JSON, or claiming an `agent_id` is not authentication. The app verifies writer, connection, active grant, scope, registered action, pause state, and bounds on every admission and before every export. Two agents may be assigned to intake and lifecycle roles separately; each gets its own grant and exchange. Same-role or overlapping-source claims are surfaced and resolved through EPM grants, not trusted heartbeat labels. Role separation limits prompt-injection exposure only if the data and OS permissions are truly separate.
+
+EPM's authoritative settings, including any `agent-bridge.json`, remain app-only. The assistant never reads or edits that file. An agent-facing export is a scoped, versioned projection, not a copy of app settings.
+
+| File or record | Writer | Content and use |
+| --- | --- | --- |
+| `properties.json` | EPM | Permitted Property IDs, addresses, unit designations, and aliases; hints for matching, refreshed after relevant changes. |
+| `triage.json` | EPM | Selected source accounts/filters, requested cadence, first-run lookback, classification hints, and relevant taxonomy labels. The assistant reports what it actually used. |
+| `issues.json` | EPM | Optional bounded open-issue watch list and thread references, only with a lifecycle grant. Current issue facts and revisions remain source-owned. |
+| `providers.json` | EPM | Optional permitted Provider trade, area, preference, and bounded history for later assistance; not a complete unscoped vendor book. |
+| `inbox/*.json` | Assistant | Completed source evidence and proposal; write `*.tmp`, then atomically rename. |
+| `acks/*.ack.json` | EPM | Versioned projections of durable admission and later operator-decision receipts. |
+| `quarantine/` | EPM | Visible malformed, oversized, unauthorized, or conflicting files with safe error detail. |
+| `requests/` | EPM | Optional later drafting requests, state versions, and cancellation tombstones. |
+| `state/` | Assistant, if supported | Portable provider checkpoints, pending-submission ledger, and receipt cursor for recovery. EPM backs up only a validated, completed snapshot; it cannot recover hidden agent state or account credentials. |
+
+### Delivering the integration
+
+Ship a versioned **assistant contract pack** with EPM, separate from any third-party assistant installation. Its manifest names the contract version, supported transport and action schemas, and the files' digests. The pack contains the proposal/evidence and result schemas; file-publication and idempotency rules for the file transport; scoped export formats; receipt status and correction-feedback handling; health and source-coverage reporting; classification guidance with uncertainty and urgency examples; and the request runbook for each registered lifecycle action. It describes behavior to implement, not a claim that a named assistant already performs it. Agent-specific adapters or setup instructions can add product details without changing EPM's admission and review contract. A transport that does not use files needs its own transport instructions, while sharing the same grant, action, result, and review semantics.
+
+Setup is a short, task-specific sequence:
+
+1. **Choose the job.** The operator selects a concrete assistant and task, such as drafting on an existing issue or watching a selected mailbox. EPM shows only the access that task requires; drafting does not request mailbox access.
+2. **Preflight EPM.** Before sending the operator to another app, EPM checks its workspace, managed exchange if needed, contract/action version, and proposed grant. It creates the scoped exchange and presents non-secret connection instructions only when these checks pass.
+3. **Authorize the assistant.** EPM guides the operator through the exact folder or channel permission required by that product, then returns to the test. EPM cannot install the external assistant or grant its channel accounts on the operator's behalf.
+4. **Prove the round trip.** A synthetic request or proposal and durable receipt test connection identity, submission, and acknowledgment without creating an official issue or communication. File exchange also requires independently qualified subfolder isolation and writer attribution; a test file or heartbeat cannot prove either. Drafting, source access, scheduling, and catch-up are enabled only after their separate checks pass. A draft test does not establish that a mailbox is being watched.
+
+The wizard identifies the failing stage—assistant unavailable, folder permission/isolation, EPM grant, source-account permission, unsupported version, submission, or missing receipt—and gives a plain-language next action with **Retry test**. Routine recovery may republish a receipt or refresh an export from EPM's durable state, but it must not silently widen access, repeat an uncertain outbound action, or relabel an unverified scan as complete. An unqualified capability remains unavailable with manual handoff offered where appropriate. The connection-problem view links to the same guidance for later failures: **Reconnect source** opens the assistant's account-permission instructions, **Update adapter** shows the required version, and **Retry test** checks the repaired connection. These actions do not pretend EPM can change external permissions itself. Backup failures stay in EPM's normal backup guidance; the assistant connection must not imply it can recover a lost backup key or external account access. This is an onboarding target, not a promise of five-minute setup across all assistants.
+
+EPM records the contract version and adapter identity demonstrated by the connection and shows a specific mismatch or failed-capability status in Settings. On an EPM or pack update, a compatible connection may continue under an explicitly supported version range; an incompatible one pauses automatic submissions or requests until its adapter is updated and the relevant round trip passes again. Do not infer an assistant upgrade merely because the pack was replaced. Pack delivery may be a file copy for a file-capable assistant, but installation and updates remain product-specific. Connection health continues to distinguish version/contact status from actual per-source scan coverage.
+
+### Admission, acknowledgments, and feedback
+
+EPM watches for completed inbox files while running, using an OS watcher with periodic reconciliation where useful. It parses JSON, validates schema and bounds, verifies the actual writer and grant, and then checks idempotency. An identical key and fingerprint within a connection returns the original receipt; a changed payload under the same key is a conflict. If two connections claim the same provider message, Intake may deduplicate only when the account identity is verified; otherwise the UI offers a duplicate hint. A proposal `seq` gap warns of a missing submission file without blocking other files.
+
+Within the owning transaction rules, admission retains source evidence, stages the proposal, stores the receipt and audit, and advances durable submission progress. Moving the file to `processed/` and publishing the ack occur **after** commit. If either file step fails, startup reconciliation repairs it from durable state. Malformed or unauthorized files are quarantined visibly and are not called “received for review.” An exact replay cannot create a second source, draft, or issue.
+
+The first receipt means `accepted_for_review`. A later version records `approved_committed`, `dismissed`, or `superseded`, with the selected INGEST-002 mode and stable result IDs only after the domain transaction commits. A rejected admission includes safe retry guidance. The app stores the receipt before projecting an ack file. The assistant consumes acks before scanning a source again: it stops resending accepted submissions, then uses final outcomes to avoid re-proposing the exact message. It may apply a channel label or archive action only under its separate channel permission and operator setting. It never removes an EPM-owned inbox, ack, or quarantine file.
+
+The earlier design treated edited-property feedback as a sender-to-property override and “not maintenance” as a sender exclusion. That would turn one operator correction into a broad, unreviewed rule. **Current design:** corrections and dismiss reasons are bounded examples for future suggestions. A durable sender mapping or exclusion needs a separate, explicit operator confirmation, limited source and property scope, expiry, and a way to revoke it. EPM publishes labeled outcomes; it does not push model updates to the assistant.
+
+Acks are transport projections, while EPM's database is the authority. Terminal files may be collected after **90 days** only if an authorized, bounded receipt-resync operation can reconstruct missed outcomes. The old proposal for a never-collected `acks/digest.json` is unnecessary and would grow without bound. An agent down longer than retention reauthorizes and resynchronizes instead of assuming its local cursor is complete.
+
+The assistant retries an unacknowledged submission with the **same bytes, key, fingerprint, and proposal sequence**, with backoff. A working target is to report repeated failure after roughly five attempts rather than silently drop it; the exact interval is a qualified-agent setting, not a correctness guarantee. If the app has accepted it but the ack file is missing, EPM republishes the same receipt. A final decision may arrive days after the admission ack. The assistant retains pending-submission state until it has an admission receipt and enough information for its own source disposition.
+
+### Connection and source health are different
+
+A heartbeat may report agent instance, kind, pack version, observed poll cycle, source statuses, pending submissions, and errors. The app can show the time of its own last authenticated contact, but neither a file mtime nor a replayed agent counter proves fresh source coverage. Agent timestamps can have clock skew; EPM's receipt time is used for app-observed contact. A stale heartbeat is advisory: it never gates a valid authorized write and does not replace grant validation.
+
+Each source report includes the actual account/filter scope, poll ID, last fully successful scan, provider checkpoint range, scanned/submitted/excluded/retry counts, failed pages, and unresolved intervals. EPM reconciles submitted counts with admitted submissions. A connection can be online while one mailbox has an expired authorization; the UI should say “degraded: 1 of 3 sources failing.” A fresh heartbeat with unchanged source progress is not “caught up.” Thresholds for degraded/offline display and a one-time alert can be configurable; a suggested baseline is two expected intervals for degraded and four for offline. The UI uses measured intervals and clear last-seen times instead of a hard-coded claim that a 15-minute scan always finishes in ten minutes.
+
+Proposal sequence numbers expose only gaps between submissions. They cannot detect a message the assistant never discovered or excluded incorrectly. The assistant therefore persists provider checkpoints, paginates, overlaps after interruption, records a disposition per discovered message, and never advances past unresolved work. Reports such as “47 scanned, 12 submitted, 33 excluded, 2 pending retry” are useful if scope and intervals are known. EPM can compare receipts with submissions and display uncertainty, but cannot claim “zero dropped” merely because counts reconcile. A rolling last-24-hours search is inadequate after longer downtime; provider retention and a fresh-agent lookback create honest coverage limits. False-negative emergency samples should be evaluated during qualification.
+
+Normal scanning may be requested every 15 minutes and EPM may admit an already-written local file within about a minute while open, but provider latency, agent scheduling, offline devices, and review time vary. A burst-pipe email may wait a full cycle or more. Tenant-facing guidance must direct immediate emergencies to an appropriate immediate channel. Emergency recall should be an evaluation priority, with classification biased to surface uncertain danger; it is not a guarantee. Category and duplicate precision, time to proposal, and time to operator decision are measured separately. Items pending operator review around 48 hours can receive a follow-up reminder; that is not an agent-delivery failure.
+
+## 4. Restart, cancellation, and restore
+
+Three durable areas have different owners: EPM's database for admitted evidence, proposals, decisions and receipts; the assistant's own provider checkpoints and pending work; and exchange files as retryable transport. Neither process should depend on irreplaceable in-memory state. Restart order does not matter to the EPM admission contract, but complete source catch-up depends on the assistant and provider.
+
+| Situation | Required recovery |
+| --- | --- |
+| EPM stops before admission | Re-scan the inbox on startup; validate the current grant and process normally. |
+| Admission commits, then file move or ack write fails | Use durable result to move/republish; an exact replay receives the same receipt. |
+| Assistant stops after writing but before receiving an ack | Reload pending state and retry the identical submission. |
+| Assistant misses final decisions during a long outage | Reauthorize if necessary and resync bounded permitted receipts. |
+| Scan fails mid-page | Keep the checkpoint before unresolved messages; retry with overlap, report partial coverage. |
+| Assistant is down for days | Manual EPM workflow continues; the source provider retains messages only according to its own policy, so coverage outside retention is marked unknown. |
+| EPM is down while the assistant works | Files may accumulate within explicit disk limits; the assistant reports unacknowledged submissions and does not invent successful delivery. |
+
+On EPM startup, reload persisted review state, ingest eligible waiting files, repair receipt projections, recompute health, and collect transport files only after their durable results and retention rules are checked. On assistant startup, read final receipts first, refresh grant-scoped exports, reconcile pending submissions, then resume each source from its durable checkpoint with pagination and overlap. It can report “catching up: 212 messages” if it has a valid count. It must not report “all caught up” before every authorized source scan has completed and unresolved intervals are displayed.
+
+The file-adapter implementation must extend EPM's existing encrypted, consistent workspace archive to include recoverable state from the managed exchange. Include completed, unadmitted inbox files and validated portable `state/` snapshots where the assistant supports them. EPM's database remains authoritative for admitted evidence, decisions, receipts, and request state; exports, acknowledgment projections, heartbeats, and temporary files may be regenerated. Capture only atomically completed regular files within the assigned subfolder, reject symlink escapes, and verify size and digest so a concurrent assistant write cannot silently produce a partial backup. If a consistent capture cannot be made, the backup fails clearly and publishes no archive labeled complete. There is one EPM backup operation, with no separate exchange backup for the operator. It cannot contain the provider mailbox, assistant account credentials, cloud memory, or hidden agent checkpoints. Cloud-synced folders remain unsuitable as a live SQLite workspace; backup archives may be stored in a chosen external location under the app's backup policy. A workspace lock prevents two EPM writers. Multiple assistants with overlapping source roles must be resolved through grants and coverage checks, not assumed to cooperate silently.
+
+Restore invalidates live assistant grants and quarantines restored unadmitted files; it never admits them under a new grant automatically. EPM recreates scoped exports and receipt projections from durable records after the operator reauthorizes the connection and confirms the actual account and filters. A portable checkpoint, if present, is reconciled with EPM receipts and the provider before use; an assistant without exportable state needs a provider-supported lookback and overlap. A fresh assistant may offer a configurable first-run lookback, for example seven days, with older time clearly labeled outside verified coverage. Outstanding EPM work requests are recovered from their durable status and reconciled or cancelled rather than reissued blindly. One workspace backup makes EPM's exchange files portable, but does not imply exact continuation of the assistant's external state. After restore, verify the review queue, receipt history, source coverage, and new authenticated contact before calling the connection healthy.
+
+## 5. Assistance on existing issues
+
+Lifecycle assistance is a sidecar. An issue created manually and one created from reviewed Intake evidence follow the **same Maintenance workflows**. The assistant may supply a draft or suggestion wherever a registered action and operator review exist. Enabling lifecycle help on an older issue can add it to a bounded, permissioned watch projection; disabling it does not strand the operator. In lifecycle-only mode the assistant watches explicitly linked open-issue threads and work requests, rather than scanning every channel message for new issues.
+
+### EPM-initiated work requests
+
+This subsection describes **EPM asking an assistant to help with an existing issue**, such as drafting a tenant follow-up. It is the opposite direction from intake: in intake, the assistant finds an external message and submits a suggestion to EPM; here, EPM starts a bounded task and waits for a draft or an error. The two capabilities can be built independently. An operator-triggered, tightly scoped request may be the better first assistant integration: it provides useful help without requiring mailbox discovery, source-coverage claims, or unsolicited-message triage. The request exchange described here is not yet implemented.
+
+For example, the operator clicks “Draft follow-up” on an issue. EPM records a request containing the issue's current revision, the relevant facts the assistant is allowed to see, the requested draft type, and an expiry. EPM publishes that request to the assigned assistant. The assistant either returns a draft for operator review or explains why it cannot complete the task. The operator may edit and send the message through their own channel; the assistant's response never sends it or changes the issue by itself.
+
+The request/response file exchange is available only after that specific action is registered with AI Governance and its owning domain. EPM stores the request ID, connection, type, issue revision, bounded context, creation and expiry times, and state version. The request file is a projection of this record. The assistant uses a stable response key derived from its connection and request ID. Retries may happen, but EPM accepts **at most one terminal response for the current request version**. “Exactly one response” is the assistant runbook's aim, not a guarantee an unreliable assistant can make.
+
+On each cycle, the assistant reads receipts first, then processes requests by priority and creation time, then scans sources. It checks the request type, grant, issue context, and expiry. It drafts only from supplied context, permitted reference exports, and authorized channel threads. Missing essential facts produce a typed error; a minor gap can appear as an operator-fillable placeholder such as `[TIME]`, never an invented fact. Possible future request types include acknowledgment, follow-up, bid-request, and digest drafts, each registered separately.
+
+If the operator cancels, EPM durably changes the request to `canceled` and publishes a versioned tombstone. Deleting a file alone cannot cancel work the assistant may already have read. A late answer is rejected against current request state. If there is no usable response by an example timeout of one hour, EPM shows `timed_out` and offers manual drafting; a new attempt uses a new request ID. EPM's Tasks or other owning module holds any real-world deadline. Turning off lifecycle assistance cancels pending requests but leaves already admitted drafts for operator disposition.
+
+The earlier proposal added a new chain of issue statuses—`acknowledged`, `assessing`, `awaiting_bids`, `verified`, `awaiting_payment`, `paid`, `closed`—and new `issue_events`, `drafts`, `payments`, and equipment-memory tables. **Those are not EPM's current domain model.** [Maintenance](../modules/maintenance.md) owns its existing issue statuses, appointments, quotes, assignments, costs, and work journal. [Finance](../modules/finance.md) owns actual paid Expenses, not invoice drafts. [Communications](../modules/communications.md) records interactions and does not send. Tasks owns follow-up commitments; Files owns evidence. This design maps useful stages onto those owners instead of creating a second issue lifecycle or ledger.
+
+### What help could look like, stage by stage
+
+| Operator task | Helpful assistant work | Operator and EPM consequence |
+| --- | --- | --- |
+| Acknowledge a new report | Draft a tenant reply from permitted issue context, expected next step, and timing. | Operator edits/sends in their channel and records the interaction. Task reminders can flag an operator-set response target, such as four business hours, with special urgency for admitted emergencies. |
+| Assess | Summarize past issues at the property, known equipment facts if available, and possible cause or fix-versus-replace questions. | Advisory only. Operator confirms Maintenance category/priority or other issue changes. No equipment inventory is assumed to exist. |
+| Inspect | Draft a checklist, photo request, or scheduling note. | Operator sends; Maintenance records an appointment, Files links actual photos and notes. |
+| Seek quotes or dispatch | Suggest a preferred known Provider or an unverified web shortlist; draft consistent requests; extract price, ETA, warranty, and exclusions from replies. | Operator chooses recipients, sends requests, and selects quotes/assignments in Maintenance. A portfolio-average comparison needs a separately specified, valid aggregate. |
+| Monitor work | Identify “parts delayed,” a new proposed time, or a tenant/provider reply in a linked thread. | Operator confirms any issue/journal/appointment changes. Task reminders can flag stale follow-up or missed target dates. |
+| Verify | Draft a completion summary and tenant confirmation request; surface “still broken.” | Operator sends and records confirmation or further work. A reply about the same repair is proposed as an update linked to that issue, not a new issue by default; the operator confirms the link and any Maintenance change. An appointment's completion does not resolve an issue automatically. |
+| Handle invoice | Extract invoice amount and reference; compare with selected quote and recorded paid Expenses; flag duplicate references or changed payment instructions. | Invoice remains evidence/advisory context. Only operator-confirmed actual spending becomes a Finance Expense. No bank instruction in inbound content is authoritative. |
+| Finish | Draft closure summary, tenant update, or work-history note. | Operator reviews a closure checklist of physical outcome, remaining follow-up, invoice/Expense disposition, and tenant communication, then uses Maintenance, Tasks, Communications, Finance, and Files as appropriate. A future equipment record may receive a separately confirmed replacement/update; no equipment inventory or invented “paid” issue status is assumed. |
+
+The assessment request should normally include only what this task needs: relevant same-property and same-category issue dates, verified outcomes, linked Provider work, and costs where available; related open issues; and permitted equipment install dates or warranties **if an equipment source later exists**. These are bounded facts, not an inferred equipment inventory. The assistant can suggest cause, urgency, and fix-versus-replace questions, while the operator confirms any official change. Operator corrections may be published back as scoped, labeled examples under the feedback rules above; a correction does not silently retrain a model or create a standing property rule.
+
+A standing Provider export can contain permitted trades, service areas, preferred flags, and bounded job history when those domains expose them. For known Providers, a future shortlist may explain its ranking using actual preferred state, matching trade/area, and supported past-work measures; do not invent response-time, cost-versus-quote, or operator-rating scores from incomplete records. For an unknown trade or area, web results need source links and an **unverified** label; the assistant never contacts a provider without the operator choosing and sending. A quote comparison can display price, ETA, warranty, and exclusions. A “2.3× normal cost” callout is a later analytic idea, not a number to show until its source, sample size, and calculation are specified.
+
+**Future possibility: bounded Provider-term negotiation.** The first useful capability is preparation: compare offers, identify missing scope, timing, warranty, and exclusions, draft a counteroffer, track replies against the current quote, and recommend a next response. The operator approves and sends every message and makes the final quote and assignment decision. An agent conducting the exchange itself is a separate, later capability because Communications does not currently send and an outbound counteroffer can create expectations beyond a draft. If explored, an operator would authorize a mandate for one issue and named Provider with explicit price and concession bounds, permitted topics and channel, maximum rounds, expiry, and conditions that require immediate handoff. EPM would need a qualified outbound adapter, retained original messages and proposed terms, revision-aware quote matching, per-message authorization and idempotency, a visible stop/revoke control, and recovery after an uncertain send. The agent could ask or counter only within that mandate; acceptance, dispatch, spending, and any change to official records remain operator-confirmed domain commands. Test the draft-and-approve workflow first, then evaluate whether bounded agent-sent counteroffers save enough time to justify the added trust and operational cost. Lease-term negotiation is a separate design question.
+
+Scheduling may involve tenant-proposed and provider-counterproposed windows. The assistant can summarize the back-and-forth and suggest an appointment, while the operator confirms the final time. If the operator's calendar busy blocks are disclosed, that is a separate scoped read. A silent tenant after a completion request may prompt a Task or draft nudge. None of this implies EPM sends a message itself.
+
+For invoice safety, compare the stated amount with the selected quote and show variance (a 10% highlight is a possible UI threshold, not a Finance rule). Check for a likely duplicate invoice reference and whether job completion has been recorded; display a prominent warning if payment instructions differ from known Provider details. A high-dollar banner (for example $5,000) could direct extra operator attention. These are **advisory checks** until a Finance design explicitly owns them. They do not create a payment record, forbid unrelated Expenses, or establish that a bank account is valid.
+
+Additional later opportunities include photo interpretation (“possible supply-line leak”), recurring-failure insights, seasonal property checklists, a weekly opened/closed/stuck/awaiting-decision digest, and a plain-language reading of a lease or HOA excerpt. Each requires an explicit data source, scope, registered action, review route, and privacy check. An insight can be dismissed or converted into planned work only through the relevant Task or Maintenance command. Document interpretation remains advisory.
+
+### How each task gets its context and tools
+
+Choose an execution path from the **work required**, not a vendor name. Three questions are separate: What information and tools does the task need? Who starts it—EPM after an operator action, the operator in an agent conversation, or an assigned schedule? Which model or agent product performs it? An EPM-initiated “Draft follow-up” can use a registered model call or a bounded request to a connected agent; an agent discovering new mail needs separately authorized channel access and reliable source scanning.
+
+| Work | EPM records sufficient? | Illustrative performer |
+| --- | --- | --- |
+| Draft an acknowledgment, follow-up, assessment, closure note, digest, or preventive suggestion from permitted EPM context | Yes | An app-invoked on-device model, such as a qualified Gemma runtime; a hosted OpenAI GPT, Claude, Grok, or Muse Wonder model through its API; or a connected task agent given the same bounded context. |
+| Normalize a quote or interpret a photo already retained in EPM | Yes, if the chosen model supports that input | A qualified local or hosted model, or an agent through a separately authorized request. The output remains a reviewed suggestion. |
+| Read a tenant/provider thread, scan mail, coordinate through external channels, or search the web | No | A qualified agent with the needed channel/web tools and explicit grants. A model API call alone does not supply those tools. |
+
+The product names refer to different layers:
+
+| Layer | Examples | Meaning for EPM |
+| --- | --- | --- |
+| **Model used by EPM** | On-device Gemma; hosted [OpenAI GPT models through the OpenAI API](https://developers.openai.com/api/docs/guides/text), Claude or Grok models through their APIs, or Meta [Muse Wonder](https://dev.meta.ai/docs/overview) | EPM owns the call, governed input, output, and review. The model may run locally or through an API. It can also power an agent harness, but the model name alone says nothing about tools, scheduling, or EPM access. |
+| **Operator-invoked task agent or assistant** | [Codex or ChatGPT Work](https://learn.chatgpt.com/docs/use-chatgpt), [Claude Cowork or Claude Code](https://claude.com/resources/guides/claude-cowork-product-guide/product-overview), [Grok](https://docs.x.ai/grok/overview), or Meta's [Muse](https://ai.meta.com/muse/) | The operator asks for a specific task. The agent may use a model, tools, and its own harness; EPM still needs a qualified connection and an EPM review before accepting its result. “Claude” or “Grok” alone does not identify whether this means a model API or a user-facing product. |
+| **Agent assigned ongoing work** | A [ChatGPT dot](https://learn.chatgpt.com/docs/dots), [Grok Bot](https://docs.x.ai/grok-bot/overview), Muse, or a suitably configured scheduled task in another agent product | The agent may initiate a check or follow-up between conversations. EPM must separately verify the actual schedule, source coverage, connection identity, and proposal delivery. These abilities are not inferred from the product label. |
+
+These rows are **roles, not exclusive product buckets**: Muse or Grok Bot can answer a direct request as well as work on an ongoing assignment; a scheduled Claude Cowork task can recur; a model such as Muse Wonder can run inside a harness without becoming the Muse personal agent. For each EPM connection, record the concrete product/client, model and execution environment when verifiable, initiation mode, transport, granted sources/data classes, and demonstrated capabilities separately. A chat approval or agent-side action never substitutes for EPM's operator review.
+
+**ChatGPT is a product, not the model API.** [ChatGPT Chat, ChatGPT Work, and Codex](https://learn.chatgpt.com/docs/use-chatgpt), plus [dots](https://learn.chatgpt.com/docs/dots), are user-facing ways to work with OpenAI agents; EPM calling an OpenAI GPT model through the API is a separate integration and authorization path. A ChatGPT product connection does not automatically provide an OpenAI API credential, and an API credential does not connect an operator's ChatGPT conversations or dot.
+
+An app-only task need not leave the device if a suitable local model is configured. Sending it to a hosted model or agent requires the task's explicit disclosure permission; a local-model failure must not silently trigger cloud fallback. Channel-bound work needs the assistant's separately authorized account access. Different agents may serve intake and lifecycle roles for cost or capability fit, but only actually isolated grants and context exports reduce exposure to hostile inbound text. A heartbeat's claimed role is not security; overlapping source or role assignments need visible resolution.
+
+## 6. Which integration to try
+
+### Agent neutrality
+
+**EPM's application contract is agent-neutral.** Connection grants, bounded work requests and context reads, source and proposal admission, operator review, durable receipts, audit, pause, and revocation retain the same meaning whichever qualified agent is connected. EPM's official records use application-owned identities and provenance; they do not require Muse, Dot, Codex, Claude, or Grok-specific fields or workflows. An adapter translates a particular product and transport into this contract without gaining a separate path to official domain writes. The operator may use no agent, change a connection, or assign different qualified agents to different roles without changing the underlying Maintenance workflow.
+
+Agent neutrality **does not mean universal compatibility**. Products differ in scheduling, channel access, local file access, MCP support, and recovery. Each connection advertises only capabilities demonstrated for its actual client, version, permissions, and transport; unsupported actions stay unavailable. A direct work-request capability can qualify independently of scheduled message discovery. No agent is the mandatory default, and switching agents never silently carries over a grant or disclosed data.
+
+A candidate for scheduled intake must prove source discovery and catch-up, trustworthy admission, scope and pause behavior, complete evidence transfer, receipts, and restart recovery in a real integration test. Schema validation alone is not qualification.
+
+**Muse: first file-adapter trial.** The reported `files.read`, `files.write`, and rename-style capabilities suggest it could exchange local files without MCP or localhost HTTP. We still need to verify actual local-folder reachability, OS writer attribution, unattended operation, and source coverage. If isolation or scheduling fails, the safe path is manual import of its suggestions, clearly labeled as such. The earlier phrase “Muse is the certified reference agent” was premature; certification follows qualification, not a design choice.
+
+**ChatGPT Dot: strong next candidate, not first.** [OpenAI's Dot documentation](https://learn.chatgpt.com/docs/dots) describes an ongoing cloud agent; [computer and app access](https://learn.chatgpt.com/docs/dots/computers-and-apps), [local computer access](https://learn.chatgpt.com/docs/enterprise/cloud-local-access), and [controls](https://learn.chatgpt.com/docs/dots/controls) make connected-app discovery and operator follow-up worth testing. This does **not** prove it can meet this exact isolated-folder, source-checkpoint, receipt, and unattended-scheduling contract. The user's product judgment is that membership cost and present adoption make it a later priority. A connected local computer needs to be online with the ChatGPT desktop app running, and Dot's task context is not exclusively local. A future hosted EPM could separately test an authenticated remote MCP plugin; [MCP Events](https://developers.openai.com/plugins/build/mcp-events) may trigger tasks but do not themselves supply original source evidence. Dot approval never replaces EPM approval. These are the reasons Dot is a strong next candidate despite not leading the first trial.
+
+**Other assistants.** Any assistant, including a future Grok or another tool, can be evaluated against the same contract. The original claim that every named agent could already perform the three file operations was too broad. Per-agent differences include channel access, the actual bridge transport, scheduling, and recovery behavior—not just model quality. A candidate may use qualified local MCP instead of file exchange if it has a suitable client.
+
+**MCP.** [MCP-001](../active/MCP-001_DESIGN.md) already plans a qualified local MCP client over the shared proposal-only boundary. It is a parallel transport, not a future rewrite of review semantics. Direct calls may lower handoff latency and permit scoped live reads, but require authentication, lifecycle management, and auditable tool calls. A server must expose proposal or request tools through its registered actions, never unrestricted domain writes. File exchange offers inspectable, durable files but brings watcher, attribution, and retention work. Muse's reported lack of an MCP client explains the file trial; it does not make MCP inappropriate for ChatGPT or another client. A hosted remote MCP endpoint is a separate deployment and security decision.
+
+## 7. Delivery order and validation
+
+The original phased plan began with unsolicited message intake. A lower-risk first integration may be an operator-initiated request on an existing issue. This is a sequencing recommendation to validate with operators, not a dependency between the two capabilities:
+
+1. Register one bounded “Draft follow-up” action with its owning domain and AI Governance. Give it an operator trigger, governed context, draft/error result, review and manual-send path, cancellation, timeout, and retry tests. A qualified EPM-invoked model can provide the first version without an assistant connection, INGEST-002, or mailbox access.
+2. For a connected-agent version, establish the relevant MCP-001 connection, grant, disclosure, result, and audit boundary, then qualify its transport and assistant in a synthetic workspace. Test identity, scope, pause/revoke, stale issue revision, retry, cancellation race, timeout, restart, and duplicate response. Compare its value with the EPM-invoked draft for the same task; external disclosure needs a reason beyond merely producing text.
+3. Complete INGEST-002's exact-evidence issue review before accepting assistant-discovered maintenance messages. Then qualify channel discovery and the file or MCP submission path with disposable source accounts: filters, scheduling, OS isolation where applicable, complete evidence, catch-up, receipt recovery, and unknown coverage.
+4. Add measured intake health and quality views: per-source coverage, queue aging, emergency recall samples, triage precision, correction rate, duplicate-hint quality, and time from source to proposal and from proposal to decision. Do not advertise unsupported “zero dropped” numbers.
+5. Evaluate Dot as the next candidate when cost and product adoption fit. Test connected-computer access separately from any hosted remote MCP deployment. Add other lifecycle actions one at a time with their domain owners and review handlers.
+
+| Validation area | Cases |
+| --- | --- |
+| Happy paths | Operator starts a bounded request on an existing issue → assistant returns a draft or typed error → operator reviews and sends manually. Separately, complete source → evidence → suggestion → each of the five INGEST-002 outcomes → correct domain result and final receipt. Manual-only and lifecycle-only modes remain usable. |
+| Invalid combinations | Unknown or misattributed writer; paused, expired or wrong-role grant; out-of-scope property/source; ambiguous space/reporter; unregistered action; malformed or oversized evidence; missing relied-on attachment; stale source or issue. |
+| Idempotency and retry | Exact submission replay; changed content under same key; qualified duplicate provider message across connections; missed ack; failed file move; late or duplicate work-request answer. |
+| Transaction rollback | Admission or operator-decision failure leaves no partial official result; a committed receipt can repair its file projection. |
+| Persistence and schema | Closed versions; exact source/revision links; grants, poll reports, receipts, decisions, and audit survive restart with bounded retention. |
+| Backup and restore | One encrypted EPM backup includes completed pending exchange files and validated portable state; concurrent writes cannot enter partially. Cached projections and usable grants do not survive. Restored pending files remain quarantined until a new grant and reconciliation; hidden assistant state needs source catch-up. |
+| Query budget | Review queue, detail, and health use bounded source-owned reads without per-row evidence, issue, or Provider queries. |
+| Coverage and safety | Partial pages, failed filters, source outages, retention expiry, overlapping mailboxes, false-negative emergency samples, and urgent items awaiting review show actual uncertainty. |
+
+## 8. Why the boundaries matter
+
+File exchange was proposed because the initial Muse capabilities reportedly reach files but not a local MCP or HTTP endpoint. Atomic files can wait through an outage and are easy to inspect, but they do not authenticate themselves. Two-moment receipts separate delivery from human judgment. Stable idempotency keys make retries safe. Source checkpoints and per-message dispositions, not proposal sequences alone, make missing coverage visible. Operator correction feedback improves future suggestions without silently changing authority. EPM-owned deadlines and manual paths keep the workflow alive without an assistant.
+
+There is another possible product shape: let an agent own the whole workflow and use EPM as a record API, with chat as the main interface. That would make cross-app reasoning easy and let agent behavior evolve rapidly, but the app could not guarantee its own review gate, deadlines, complete audit, or recovery if those lived only in the agent. The earlier comparison called this “agent outside” versus “agent inside.” For EPM's current local-first, operator-controlled design, the app owns records, domain rules, decisions, and timers; assistants provide bounded labor. A future agent-facing UI can still call the same proposal-only boundary. Giving it direct create, payment, or send powers would be a separate architecture and product decision.
+
+The earlier design's useful intuition survives: use assistants where they remove repetitive work, let an operator see why they suggested something, and make pausing easy. The correction is to make every assurance demonstrable—what evidence was retained, which source interval was actually checked, which connection wrote the file, what the operator decided, and which domain committed the result.

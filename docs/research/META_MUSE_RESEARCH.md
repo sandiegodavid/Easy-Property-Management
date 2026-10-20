@@ -66,7 +66,7 @@ File exchange is the candidate transport for the personal Muse Agent because the
 
 ### Exchange directory and access
 
-Use an operator-approved directory per connection, outside authoritative storage. Publish only bounded configuration, authorized context, and receipts. Do not grant access to SQLite, workspace archives, the attachments tree, or internal logs. The earlier `muse-bridge.json` and `.muse-bridge/heartbeat.json` examples are discussion sketches; the proposed layout is:
+EPM creates a managed directory per connection inside the selected workspace, such as `integrations/assistant-exchange/<connection-id>/`. This keeps setup and backup under one EPM workspace. The external assistant must be granted access to that subfolder alone, never the workspace root or sibling connections. Its own platform may require an authorization prompt during EPM's connection setup. Publish only bounded configuration, authorized context, and receipts; do not expose SQLite, workspace archives, attachments, or internal logs. The earlier `muse-bridge.json` and `.muse-bridge/heartbeat.json` examples are discussion sketches; the proposed per-connection layout is:
 
 | Directory | Purpose |
 | --- | --- |
@@ -76,8 +76,9 @@ Use an operator-approved directory per connection, outside authoritative storage
 | `receipts/` | Versioned admission/rejection and final review/commit outcomes, separate from the watched inbox. |
 | `health/` | Structured poll reports with unique IDs, acknowledged configuration, outcome, and sanitized errors. |
 | `processed/`, `error/` | Transport recovery copies governed by an explicit cleanup policy, not the authoritative review history. |
+| `state/` | Optional completed, portable checkpoint and pending-submission snapshot supplied by a qualified assistant for recovery. |
 
-A writable folder, filename, claimed agent name, or content hash does not authenticate Muse. Verify OS read/write isolation and trustworthy writer attribution before enabling automatic admission. Broad workspace permissions defeat scoped exports. If the actual assistant cannot be confined to the exchange, use explicit manual export/import and label attribution unverified. Never place reusable bearer secrets in JSON files as a substitute for authentication.
+A writable folder, filename, claimed agent name, or content hash does not authenticate Muse. A subfolder inside the workspace is not itself a security boundary: a same-user process may still reach its siblings. Verify enforceable subfolder-only read/write isolation and trustworthy writer attribution before enabling automatic admission. If the actual assistant cannot be confined to the exchange, use explicit manual export/import and label attribution unverified. Never place reusable bearer secrets in JSON files as a substitute for authentication.
 
 ### Publication, admission, and receipts
 
@@ -109,7 +110,7 @@ For urgent or ambiguous items, Muse may also notify the operator after discovery
 
 Revocation stops new app exports and admission, but cannot stop Muse's independent schedule, revoke its mailbox access, or retract copies already read. Remove app-owned exported context where possible. Existing admitted drafts remain available under the shared review rules.
 
-Retained evidence, submission outcomes, receipts, and review history belong in the normal encrypted workspace backup. Live exchange folders, cached exports, device paths, and usable authorization do not. Restore requires a fresh grant and exchange-directory validation; never replay old files as newly authorized work. Define cleanup only after durable retention and receipt recovery are established.
+The file-adapter implementation must include completed, unadmitted inbox files and validated portable `state/` snapshots in the normal encrypted, consistent EPM workspace backup. Retained evidence, submission outcomes, receipts, and review history remain in their authoritative EPM stores. Cached exports, temporary files, device paths, and usable authorization need not be restored. Capture only complete regular files within the connection's folder, reject symlink escapes, and verify size and digest; a racing write must be retried or cause the backup to fail without publishing an archive labeled complete. The operator performs one EPM backup, not a separate bridge backup. This cannot preserve Muse's mailbox, account credentials, cloud memory, or any checkpoint Muse does not export. On restore, revoke prior grants, quarantine pending files until fresh authorization and reconciliation, regenerate exports and receipts, and verify source catch-up before reporting healthy coverage. Define cleanup only after durable retention and receipt recovery are established.
 
 Local file handoff does not establish local inference: Muse's discovery and processing may still use cloud services. Apply the connection's data-disclosure permission before publishing context.
 

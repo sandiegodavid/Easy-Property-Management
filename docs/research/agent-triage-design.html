@@ -16,7 +16,6 @@ li { margin: .3rem 0; }
 
 </style></head><body>
 <h1>Agent Triage for Property-Maintenance Intake — Design</h1>
-<p><em>Designed 2026-10-19 with David. Status: design only, not yet filed to Linear.</em></p>
 <h2>1. What it is</h2>
 <p>An agent that watches the channels tenants and vendors already use — email (multiple</p>
 <p>mailboxes), SMS, and call transcripts — triages maintenance-related messages, and proposes</p>
@@ -936,6 +935,94 @@ li { margin: .3rem 0; }
 <p>Users are landlords/property managers, not engineers. Never expose bridge internals:</p>
 <p>"your assistant" not "the Muse agent," "connection" not "heartbeat," "suggestions" not</p>
 <p>"proposals." Use landlord vocabulary throughout: properties, units, tenants, vendors.</p>
+<p>### The trust ladder — progressive agent involvement</p>
+<p>Agent involvement is a ladder the user climbs as confidence grows. Each rung unlocks a</p>
+<p>concrete outcome and asks for a concrete, bounded permission. The architecture already</p>
+<p>supports every rung independently (§7 sidecar + execution tiers + per-role agents);</p>
+<p>this is how it's <em>presented</em>.</p>
+<ul>
+<li><strong>Rung 0 — Just the app.</strong> Full manual workflow. The floor every user can trust.</li>
+<li><strong>Rung 1 — Help me write.</strong> Drafting assist on app data only (local LLM can power</li>
+</ul>
+<p>it; nothing leaves the machine). Asks for: nothing external. Sells itself: "Stop</p>
+<p>typing the same replies."</p>
+<ul>
+<li><strong>Rung 2 — Watch my inbox.</strong> Read-only channel access; the assistant proposes</li>
+</ul>
+<p>issues from maintenance mail. Asks for: read one mailbox/label — it can never</p>
+<p>send, delete, or see anything else. Sells itself: "Never miss a maintenance</p>
+<p>emergency."</p>
+<ul>
+<li><strong>Rung 3 — Track the back-and-forth.</strong> The assistant monitors open-issue threads</li>
+</ul>
+<p>and drafts coordination replies and scheduling. Asks for: read access scoped to</p>
+<p>issue threads. Sells itself: "It keeps track of vendors and tenants for you."</p>
+<ul>
+<li><strong>Rung 4 — Run the bidding legwork.</strong> Vendor sourcing, bid requests, quote</li>
+</ul>
+<p>comparisons, counter-offer drafts and negotiation tracking — every outbound still</p>
+<p>operator-sent. Asks for: nothing new technically; it's a trust step, not an</p>
+<p>access step. Sells itself: "Better prices, less phone tag."</p>
+<p>Presentation rules (the actual design challenge):</p>
+<ol>
+<li><strong>Outcomes, not permissions.</strong> One page — "What should your assistant do?" —</li>
+</ol>
+<p>stacked cards in landlord language, each with a real example of what it did for</p>
+<p>someone and one honest sentence about what it can see at that rung. Never a</p>
+<p>settings page of scopes and toggles.</p>
+<ol>
+<li><strong>Ask in moments of demonstrated value, not at setup.</strong> Ship everyone at rung</li>
+</ol>
+<p>0–1. Offer the next rung contextually, right after the user felt the pain it</p>
+<p>removes: five manually entered issues in a week → intake offer; ten drafts sent</p>
+<p>nearly unedited → coordination offer; a bid comparison that saved money →</p>
+<p>negotiation offer. Every offer is dismissible permanently ("don't ask again"),</p>
+<p>never blocking, never nagged twice.</p>
+<ol>
+<li><strong>Evidence before escalation.</strong> Each upsell carries the assistant's report card:</li>
+</ol>
+<p>"Right 47 of the last 50 times; your average edit is 6 seconds." Trust is earned</p>
+<p>with receipts, not promises.</p>
+<ol>
+<li><strong>Reversibility is the trust engine.</strong> Every rung: one-tap pause, one-tap</li>
+</ol>
+<p>revoke, and a plain-language "what your assistant can see right now" receipt</p>
+<p>page (sources, roles, recent actions). Plus one global pause button. Users</p>
+<p>climb faster when retreat is free.</p>
+<ol>
+<li><strong>Never default-on access.</strong> Channel access is always an explicit opt-in at the</li>
+</ol>
+<p>moment of value — no setup-wizard dark patterns, no "recommended: everything."</p>
+<p><strong>Entry at any rung.</strong> The ladder is a map, not a gated staircase — some users arrive</p>
+<p><em>because of</em> rung 4. Forcing them through 1–3 first would lose exactly the users the</p>
+<p>feature exists for. So the model splits two things:</p>
+<ul>
+<li><strong>Capability access is instant and self-selected.</strong> The onboarding asks one</li>
+</ul>
+<p>question — "What brings you here?" — and sets up exactly that bundle: missed-email</p>
+<p>pain → rung 2; end-to-end repair help → rungs 3–4; "just a better system for now"</p>
+<p>→ rungs 0–1. Enabling a rung silently includes its technical prerequisites</p>
+<p>(rung 4 includes drafting and thread tracking) and says so on the card; it never</p>
+<p>pulls in unrelated rungs (rung 4 does not require intake — manual entry works).</p>
+<ul>
+<li><strong>Reduced supervision is what's earned.</strong> Everyone, day 1 or day 300, approves</li>
+</ul>
+<p>every send — that's not the variable. The variable is convenience: batch</p>
+<p>approvals, auto-create rules for routine issues, standing approvals for narrow</p>
+<p>draft types. Those unlock per capability after demonstrated accuracy (e.g. 30</p>
+<p>consecutive proposals with no material correction), for new and veteran users</p>
+<p>alike. A day-1 rung-4 user gets the full legwork on probation terms: tighter</p>
+<p>confidence thresholds, an after-action digest of everything the assistant did,</p>
+<p>and caps (e.g. bid requests to 3 vendors) that the app offers to relax as the</p>
+<p>report card builds.</p>
+<ul>
+<li><strong>No personal history? Borrow trust.</strong> Day-1 jumpers get the substitutes:</li>
+</ul>
+<p>certification ("this agent passed the pack conformance tests"), the transparency</p>
+<p>receipt page, social proof on the card, and a guided first run — the first issue</p>
+<p>at a new rung is a walkthrough that explains each step as it happens. And the</p>
+<p>exit is advertised as loudly as the feature: "Pause anytime. Nothing is ever</p>
+<p>sent without your tap."</p>
 <ul>
 <li><strong>The review queue is the product.</strong> One-tap approve / edit / dismiss per suggestion,</li>
 </ul>
@@ -1133,6 +1220,20 @@ li { margin: .3rem 0; }
 <p>at all; reserving the external agent for channel and web work spends its access</p>
 <p>(and the operator's trust) only where it's actually required.</p>
 <ul>
+<li><strong>Access is instant; autonomy is earned</strong> — a user drawn by rung 4 on day 1 is</li>
+</ul>
+<p>the feature's best customer, not an edge case, so capabilities are never gated</p>
+<p>behind tenure. What <em>is</em> gated is reduced supervision (batch approvals,</p>
+<p>auto-create rules), because that's the part that can actually hurt someone —</p>
+<p>and it's earned per capability by demonstrated accuracy, which a veteran and a</p>
+<p>newcomer accumulate the same way.</p>
+<ul>
+<li><strong>Involvement is sold as outcomes and earned in moments</strong> — users grant access</li>
+</ul>
+<p>when they have just felt the pain it removes, with an accuracy report card as</p>
+<p>evidence and one-tap reversal as insurance. A permissions page asks for trust up</p>
+<p>front, before any value exists; the ladder never does.</p>
+<ul>
 <li><strong>Agents are assigned per role, not per product</strong> — intake and lifecycle are</li>
 </ul>
 <p>different jobs (high-volume classification of untrusted inbound content vs.</p>
@@ -1140,4 +1241,52 @@ li { margin: .3rem 0; }
 <p>do both. Splitting them buys capability/cost fit and a real security boundary:</p>
 <p>a prompt-injected email can only ever reach the intake agent, whose worst case</p>
 <p>is a bad proposal in a review queue.</p>
+<h2>14. Alternative: "Agent outside" — the app as a tool</h2>
+<p>This document designs "Agent inside": the app owns the workflow, the agent assists</p>
+<p>at defined points. The mirror image keeps the app dumb — a data and capability</p>
+<p>layer — and lets the agent drive it as a tool (typically via MCP, §11).</p>
+<p>Responsibility division:</p>
+<p>| Concern | App (tool) | Agent (driver) |</p>
+<p>|---|---|---|</p>
+<p>| Data of record | Storage + integrity invariants | Reads/writes via tools; caches at most |</p>
+<p>| Business rules | Data-level guards only (no double payment, referential integrity) | All workflow logic: categories, urgency, escalation |</p>
+<p>| Lifecycle | Stores issue state as a field | Owns transitions, timers, reminders |</p>
+<p>| Channels | None | Owns access, dedupe, watermarks |</p>
+<p>| Human approval | Records decisions as data | Presents, asks, enforces — by behavior, not by app gate |</p>
+<p>| Audit trail | Append-only log the agent can write to | Responsible for writing it; completeness is voluntary |</p>
+<p>| UX | Record viewer, connection admin | The agent's chat/UI <em>is</em> the product surface |</p>
+<p>| Reliability | API uptime, data durability | Retries, catch-up, no-dropped-email — everything else |</p>
+<p>| Evolution | Stable API, slow change | Behavior evolves via prompts; no app release needed |</p>
+<p>What changes, honestly:</p>
+<ul>
+<li><strong>Trust inverts.</strong> With a dumb app, "the operator approves before anything is</li>
+</ul>
+<p>sent" cannot be enforced by the app — sending is the agent's act in its own</p>
+<p>world. The guarantee degrades from physics to convention (prompts). A</p>
+<p>hallucinated or prompt-injected tool call writes straight into the record of a</p>
+<p>business.</p>
+<ul>
+<li><strong>Stickiness flips.</strong> The app becomes replaceable (any tool exposing the same</li>
+</ul>
+<p>API); the agent's prompts, learnings, and habits become the product. Cross-tool</p>
+<p>reasoning gets easy — the agent correlates an issue with the calendar and the</p>
+<p>mailbox natively, no exported busy blocks.</p>
+<ul>
+<li><strong>Failures concentrate in the agent.</strong> Agent down → timers, monitoring, and</li>
+</ul>
+<p>catch-up stop with it (nothing in the app notices). Two agents → write</p>
+<p>conflicts are the agents' problem to solve.</p>
+<ul>
+<li><strong>Fit.</strong> Agent outside suits agent-platform vendors and technical users who</li>
+</ul>
+<p>live in chat. Our users are non-technical landlords who need the workflow</p>
+<p>carried for them — and our current agent has no MCP client, so outside isn't</p>
+<p>implementable today. Inside works with the agent we have.</p>
+<ul>
+<li><strong>Convergence.</strong> The proposal semantics of this design map 1:1 onto tool calls</li>
+</ul>
+<p>(<code>propose_issue</code>, <code>propose_draft</code>, <code>propose_status_update</code>, …). If a future</p>
+<p>agent ecosystem demands it, the app can expose the same contract as MCP tools</p>
+<p>and offer an outside mode for power users — without redesigning the inside</p>
+<p>product. The contract discipline is what keeps that door open.</p>
 </body></html>
