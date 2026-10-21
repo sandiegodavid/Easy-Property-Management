@@ -4,9 +4,9 @@
 
 This preliminary design preserves the confirmed follow-up product decisions and technical handoffs moved from UI-001. It is the working design for UI-002, not an implementation-complete specification. Decision IDs and original validation scenario numbers remain stable. Dedicated domain designs own backend policy; [ARCHITECTURE.md](../ARCHITECTURE.md) governs the stack and trust boundaries. No domain scope changes are made by this split.
 
-UI-002 follows UI-001 and DASH-001. Its prerequisites are LEGAL-001, HOA-001, DATA-002, DATA-003, INGEST-002, and MCP-001. Deliver legal matters, HOA notices/shared repairs, Excel/Google Sheets intake, retained-evidence issue-proposal review, and connected-assistant setup/health. Extend existing workspaces, search, information review, and Home through supported source contracts. DASH-003 retains the broader ingestion/voice/assistant attention dashboard scope.
+UI-002 follows UI-001 and DASH-001. Its prerequisites are LEGAL-001, HOA-001, DATA-002, DATA-003, and INGEST-002. Deliver legal matters, HOA notices/shared repairs, Excel/Google Sheets intake, and retained-evidence issue-proposal review. Connected-assistant setup and health move to UI-003; an EPM-invoked Draft follow-up can be delivered independently by AI-DRAFT-001. Extend existing workspaces, search, information review, and Home through supported source contracts. DASH-003 retains broader ingestion/voice/assistant attention aggregation.
 
-Reuse [UI-001's shell, navigation, components, accessibility, client architecture, and recovery contracts](../ui/frontend-architecture.md). Do not duplicate that specification or implement domain policy in the browser. Backend readiness and UI delivery registration must both permit a route. Unsupported deep links explain the missing capability and offer a safe return. Do not claim legal/HOA, import, or assistant coverage before its UI is delivered.
+Reuse [UI-001's shell, navigation, components, accessibility, client architecture, and recovery contracts](../ui/frontend-architecture.md). Do not duplicate that specification or implement domain policy in the browser. Backend readiness and UI delivery registration must both permit a route. Unsupported deep links explain the missing capability and offer a safe return. Do not claim legal/HOA or import capability before its UI is delivered, or source-review availability before a producer and the INGEST-002 workflow qualify.
 
 ## Domain terms
 
@@ -76,7 +76,7 @@ Inside the expanded shared-repair case, show:
 
 Preparing the follow-up uses the selected correspondence and latest commitment to draft a message. Review shows the proposed content, supporting records, and intended changes together. Draft approval and message sending are distinct actions. Keep the next follow-up and unresolved repair visible until separately updated or physically verified; an assistant's work status never establishes repair completion.
 
-The actions sit inside expanded content per [UI-001 D35](../ui/operator-experience.md). AI-assisted preparation follows D46's availability and review controls and the owning drafting feature; drafting availability is not guaranteed by UI-002 alone.
+The actions sit inside expanded content per [UI-001 D35](../ui/operator-experience.md). AI-assisted preparation follows [UI-003's D46 connection boundary](UI-003_DESIGN_preliminary.md) when a connected assistant is used and the owning AI-DRAFT-001 action in either execution path; drafting availability is not guaranteed by UI-002 alone.
 
 ### Spreadsheet intake
 
@@ -96,36 +96,9 @@ Support local Excel uploads and direct Google Sheets selection through read-only
 
 MVP imports create new valid records or explicitly link/skip existing ones after duplicate review. Linking means reusing the selected identity or record to satisfy a relationship; it does not authorize changing its existing fields or merging identities. Conflicting or ambiguous matches require resolution before affected rows can commit. Preserve property-to-owner relationships through explicit mapping. Present row-level validation errors and final import results, including created, linked, skipped, and failed outcomes. Retry only unfinished work without duplicating successful writes. General existing-record overwrite/update behavior is deferred.
 
-### D46 (UI-002): Add connected assistants independently of built-in AI
+### Assistant boundary with UI-003
 
-Settings → **AI assistance** adds a **Connected assistants** card alongside UI-001's **Built-in AI** card. Model-provider and assistant selection are independent. Shared controls extend governance without authorizing official writes. Built-in model setup remains specified in UI-001.
-
-### Connected-assistant setup
-
-Explain: “Let an assistant bring relevant messages and propose work for your review.” List configured connections with the actual assistant/client name, connection method, allowed property/account scope, and status. Add connection offers validated local MCP clients and a separately verified file-exchange option for Muse Agent; unvalidated candidates show Setup not verified. More than one connection is permitted, but warn about overlapping scheduled mailbox coverage. Model-provider selection and assistant selection never change one another.
-
-Setup follows choose client → inspect capabilities → select scope/data disclosure → test with synthetic evidence and a proposal → enable. No universal assistant API-key box. Grant creation is explicit; the assistant cannot approve its own scope. Show technical transport details only when needed for setup or troubleshooting. File exchange does not imply on-device inference. If the required file isolation is unavailable, offer manual import instead of pretending scoped automation is safe.
-
-For scheduled discovery show last contact, last successful poll, requested versus acknowledged interval/configuration, failed/partial polling, and pending proposals. For interactive clients show last activity and connection-test status; do not invent a polling schedule. Use Not configured / Setup required / Ready / Paused / Needs attention / Revoked, with a reason and recovery action. “Connected” does not mean all messages have been found. Restoring a workspace displays historical connection details with Setup required.
-
-### Shared control and proposal review
-
-**Pause all AI assistance** stops new model calls, assistant reads/exports, and proposal admission. Explain that prior disclosures cannot be recalled and the assistant may still run its independent schedules. In-flight work may already have left the device; late results must pass current governance before admission. Existing drafts remain available for explicit operator review, edit, dismissal, and source-checked approval. Pausing one connection does not pause the other connections; revocation is a separate explicit action.
-
-Per-action controls expose enablement, daily caps, registered model limits, and a read-only redaction profile summary. Assistant proposals use admission/payload limits rather than invented token budgets. Missing usage is Unknown. None of these controls approve a draft.
-
-Show “Drafts awaiting review” with a count and link to the normal contextual queue. Each draft labels **Generated with [provider/model] · On this device/Cloud service** or **Proposed by [assistant connection] · [connection method]**. Distinguish verified connection identity from assistant-reported model details. Source, exact bounded governed input, AI suggestion, and operator edits remain separate. A file handoff must never be labeled local inference. Show stale evidence and paused/revoked source warnings; no generic approval bypasses a stale-source conflict.
-
-### Integration acceptance scenarios
-
-- Choose local assistance with a Muse file connection, then change only the model to a hosted option; assistant scope stays unchanged and cloud disclosure is required.
-- Choose Meta Model API with a different compatible MCP assistant; neither credential grants the other connection's access.
-- Test unavailable runtime, missing credential, unsupported modality, rejected disclosure, provider change, and restore; show truthful recovery/manual options.
-- Pause globally and per connection; existing drafts stay visible, new requests are blocked at the appropriate boundary, and assistant scheduling is not falsely reported stopped.
-- Review proposals from two assistants with duplicate source evidence; show source provenance and duplicate handling without two official records.
-- Use full-summary-bar mouse/keyboard expansion in both themes; input controls inside expanded panels never toggle the parent.
-
-The comparison demo uses clearly labeled simulated setup, tests, and review states. It makes no external calls and stores no credentials; it does not prove that any listed integration is implemented.
+Connected-assistant setup, grants, preflight, health and recovery belong to [UI-003](UI-003_DESIGN_preliminary.md). UI-002 provides the same source-backed INGEST-002 review whether a qualified proposal came from a built-in model or an assistant; neither producer bypasses its five operator decisions. Contextual HOA follow-up drafting is conditional on the separately registered AI-DRAFT-001 action and its operator review, not a UI-002 promise of a connected assistant.
 
 ## Feature ownership and backend readiness
 
@@ -139,7 +112,6 @@ Dedicated contracts take precedence over product descriptions where they provide
 | DATA-003 | [Read-Only Google Sheets Intake](DATA-003_DESIGN.md) | Google Sheets authorization and immutable source snapshots. |
 | HOA-002 | [Deferred Association Management](HOA-002_DESIGN.md) | Post-MVP association documents/profiles and approval workflows. |
 | INGEST-002 | [Issue Proposal Review](INGEST-002_DESIGN.md) | Retained-evidence comparison, operator decisions, and atomic issue-review outcomes. |
-| MCP-001 | [Assistant Integration](MCP-001_DESIGN.md) | Scoped access, grants, source/proposal submission, receipts, pause/revocation, and health. |
 
 CONN-001 authorization is required through DATA-003 for read-only Sheets intake. DATA-001 retains broader later import/update scope. HOA-002 retains broader association management after MVP. Moving a UI workflow does not mark a backend feature implemented.
 
@@ -204,7 +176,7 @@ Add `features/legal`, `features/hoa`, and `features/imports` under the existing 
 | `/hoa/notices/:noticeId` | HOA violation-notice workflow and explicit closure. |
 | `/imports/:importId/review` | Frozen spreadsheet snapshot, mapping, duplicate decisions, validation, and commit result. |
 | `/ai/review/:draftId` | Extend the existing typed review route with INGEST-002 issue-proposal handlers, retained evidence, provenance, and atomic outcome presentation. |
-| `/settings/:section?` | Add Import data, Google Sheets authorization, and Connected assistants sections. |
+| `/settings/:section?` | Add Import data and Google Sheets authorization; connected-assistant Settings belong to UI-003. |
 | `/maintenance/issues/:issueId/:section?` | Extend issue detail with shared HOA repair context. |
 
 Legal matters are contextual links within Leasing and the related property/lease. HOA notices are contextual property links; shared repairs appear in each affected managed-property workspace. Add owner context without duplicating source records. Do not add permanent Legal or HOA destinations.
@@ -221,19 +193,19 @@ Register legal/HOA sources and typed contextual targets through their owning bac
 
 ### Implementation sequence and readiness
 
-1. Verify UI-001, DASH-001, and all six backend prerequisites, including revision/idempotency, evidence and transaction contracts.
+1. Verify UI-001, DASH-001, and the five named backend prerequisites, including revision/idempotency, evidence and transaction contracts.
 2. Implement contextual legal/HOA routes and source-action adapters, then Excel/Sheets snapshot review and results using common import components.
-3. Add connected-assistant setup and governance/health, then INGEST-002 proposal review and outcome handlers.
+3. Add INGEST-002 proposal review and outcome handlers independently of assistant connection setup.
 4. Register ready capabilities and extend Home, search and information review through backend contracts.
 5. Run real temporary-workspace integration, accessibility, failure/recovery, and UI-001 regression checks. Fixtures and simulated setup do not prove readiness.
 
-Before each workflow is enabled, verify initial/empty/unavailable/stale states, supported narrow layouts, keyboard operation, and a real critical read/write path. UI-002 remains a follow-up MVP slice; approval of this preliminary design does not make a domain capability ready.
+Before each workflow is enabled, verify initial/empty/unavailable/stale states, supported narrow layouts, keyboard operation, and a real critical read/write path. UI-002 remains a follow-up MVP slice; approval of this preliminary design does not make a domain capability ready. UI-003 separately qualifies connected-assistant controls and source-health claims.
 
 ## Validation matrix
 
 | Area | Required validation |
 | --- | --- |
-| Happy paths | Legal milestones/closure; HOA response and physical verification; Excel/Sheets snapshot mapping and authorized import; assistant setup and proposal review. |
+| Happy paths | Legal milestones/closure; HOA response and physical verification; Excel/Sheets snapshot mapping and authorized import; exact-evidence issue-proposal review. |
 | Invalid combinations | Ambiguous identities, unresolved relationships, stale evidence, unsupported source/client, unconfirmed coverage, unavailable/paused/revoked capability. |
 | Idempotency and retry | Lost responses, duplicate sources, unfinished-row retry, durable receipts, original operation keys, no duplicated imports/issues. |
 | Transaction rollback | Failed approval/import operation exposes no partial official state beyond the owning domain's declared atomicity; stage/result distinctions remain explicit. |

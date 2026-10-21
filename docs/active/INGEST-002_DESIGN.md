@@ -34,7 +34,7 @@ INGEST-002 provides:
 - atomic coordination across Maintenance, AI Governance, Intake, and Audit;
 - bounded issue lookup for manual target selection when optional matching is unavailable;
 - retained-data, exact-schema, backup/restore, and audit validation; and
-- the feature-specific contract consumed later by UI-002, MCP-001, ISSUE-AI-001/002, VOICE-AI-001, and DASH-003.
+- the feature-specific contract consumed later by UI-002, ASST-INTAKE-001, ISSUE-AI-001/002, VOICE-AI-001, and DASH-003.
 
 INGEST-002 does not provide:
 
@@ -60,7 +60,7 @@ An operator may still record an issue directly through Maintenance when no retai
 | FILE-001 | Owns source file metadata, hashes, availability, and bytes. INGEST-002 reads source attachment projections; it does not copy file metadata or create issue file links automatically. |
 | ISSUE-AI-001 | Optional producer of the issue proposal payload from retained evidence. It is not required for operator review of an external proposal. |
 | ISSUE-AI-002 | Optional provider of property, space, party, and possible-existing-issue candidates. Its absence must leave manual lookup usable. |
-| MCP-001 | Later authenticates and admits external proposals through the same registered payload and review contract. It never approves its own proposal. |
+| ASST-001 / ASST-INTAKE-001 | Later authenticate the connection and qualify source-backed external proposal admission through the same registered payload and review contract. MCP and file exchange are alternative transports; neither approves its own proposal. |
 | UI-002 | Delivers the comparison and decision workflow after the backend contracts are complete. |
 | DASH-003 | Later composes unprocessed sources, live reviews, stale proposals, and ingestion failures through bounded read contracts. |
 
@@ -370,7 +370,7 @@ INGEST-002 backend/API scope is complete when:
 11. Review queues and issue provenance use bounded, set-based reads with fixed query budgets.
 12. Exact-schema/data validation and encrypted backup/restore preserve complete review and source-to-issue history with stable IDs.
 
-The overall operator workflow remains pending until UI-002 delivers the comparison and decision page. MCP-001 and ISSUE-AI-001 may then submit compatible proposals without changing approval semantics.
+The overall operator workflow remains pending until UI-002 delivers the comparison and decision page. ASST-INTAKE-001 or ISSUE-AI-001 may then submit compatible proposals without changing approval semantics.
 
 ## Resolved contradictions and decisions
 
@@ -382,7 +382,7 @@ One issue proposal cannot currently be registered honestly as create, update, an
 
 ### 2. “Submitted draft” has no producer in INGEST-002's hard dependency set
 
-AI-GOV-001 intentionally registers no production action. ISSUE-AI-001 is optional and MCP-001 follows INGEST-002. Therefore INGEST-002 can register and review the schema but cannot receive a production proposal until a later producer is enabled.
+AI-GOV-001 intentionally registers no production issue-intake action. ISSUE-AI-001 is optional and ASST-INTAKE-001 follows INGEST-002. Therefore INGEST-002 can register and review the schema but cannot receive a production proposal until a later producer is enabled. The independent AI-DRAFT-001 follow-up action on an existing issue does not produce an INGEST-002 issue-intake proposal.
 
 **Decision:** keep direct MAINT-001 operator entry as the no-AI path; a manually authored source-backed draft is not part of INGEST-002 and must not be represented as an AI run. Implement INGEST-002 with deterministic contract tests and enable its queue only when a registered producer exists. UI-002 must show a truthful unavailable or empty state rather than implying extraction is active; UI-001 does not expose this review workflow. If a neutral source-backed manual-draft workflow is needed later, it requires its own domain owner and design.
 

@@ -19,7 +19,7 @@ FastAPI · loopback transport policy · packaged web assets
     └─ OS credential store / host credentials, outside portable data
 ```
 
-The backend and core UI-001 browser workflows are implemented, including Money, Maintenance, Tasks/communications, search and information review, manual Intake and capability-gated AI Settings/review. [Current UI guides](ui/operator-experience.md) describe behavior; [validation evidence](ui/validation.md) records completed packaged-browser and restart/restore acceptance. Home aggregation remains DASH-001 and legal/HOA, spreadsheet intake, issue-proposal review and assistant setup remain UI-002. The [product brief](PRODUCT_BRIEF.md) describes intended scope and the [backlog](FEATURE_BACKLOG.md) tracks delivery; production AI availability remains separately registered and gated.
+The backend and core UI-001 browser workflows are implemented, including Money, Maintenance, Tasks/communications, search and information review, manual Intake and capability-gated AI Settings/review. [Current UI guides](ui/operator-experience.md) describe behavior; [validation evidence](ui/validation.md) records completed packaged-browser and restart/restore acceptance. DASH-001 Home aggregation is delivered. Legal/HOA, spreadsheet intake and issue-proposal review remain UI-002; connected-assistant setup/health move to UI-003. A bounded EPM-invoked drafting action may be delivered independently of assistant connection. The [product brief](PRODUCT_BRIEF.md) describes intended scope and the [backlog](FEATURE_BACKLOG.md) tracks delivery; production AI availability remains separately registered and gated.
 
 ## Ownership map
 
@@ -81,7 +81,7 @@ One server owns the writer lock. SQLite suits the local single-operator workload
 
 The production AI action/adapter/redaction/source registries are currently empty. Governance infrastructure, configuration and synthetic tests do not establish production model or assistant capability. Built-in models use registered provider-neutral ports and explicit cloud/device disclosure. Assistant transports require separate grants/adapters and reviewed proposals; no vendor is mandatory.
 
-Research and planned feature designs describe candidate hosted/local models, MCP/file transports, read-only Sheets and Universal Reader experiments. These proposals do not alter current authority, or gate manual workflows. See [active work](active/README.md) and [research](research/README.md).
+Research and planned feature designs separate an EPM-invoked draft action, a shared assistant boundary, alternative local MCP/file transports, and later qualified source discovery. File exchange is a conditional adapter with a managed workspace subfolder and portable-backup extension, not a deployed capability. Read-only Sheets and Universal Reader remain separate proposals. None alters current authority or gates manual workflows. See [active work](active/README.md) and [research](research/README.md).
 
 ## Frontend and deployment
 

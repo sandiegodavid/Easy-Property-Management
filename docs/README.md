@@ -42,7 +42,7 @@ For a specific change, read its owning module, relevant shared platform contract
 
 ## Delivery, decisions and research
 
-[Feature backlog](FEATURE_BACKLOG.md) owns feature status, outcome and dependencies. [Current UI guides](ui/operator-experience.md), [workflows](ui/workflows.md), [frontend architecture](ui/frontend-architecture.md) and [validation evidence](ui/validation.md) describe completed core browser and Home delivery. [Active designs](active/README.md) contain proposed changes and UI-002 extensions. Completion requires its acceptance gate, not merely a guide or design approval.
+[Feature backlog](FEATURE_BACKLOG.md) owns feature status, outcome and dependencies. [Current UI guides](ui/operator-experience.md), [workflows](ui/workflows.md), [frontend architecture](ui/frontend-architecture.md) and [validation evidence](ui/validation.md) describe completed core browser and Home delivery. [Active designs](active/README.md) contain proposed domain changes, UI-002 follow-up workflows and UI-003 connected-assistant work. Completion requires its acceptance gate, not merely a guide or design approval.
 
 [Decisions](DECISIONS.md) preserves agreed rationale, including future product decisions. [Roadmap](ROADMAP.md) groups intended delivery. [Research](research/README.md) contains dated external investigations and experiments; findings need verification before implementing a changing provider/runtime capability.
 
