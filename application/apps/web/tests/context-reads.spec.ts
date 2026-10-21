@@ -471,6 +471,61 @@ test("property cards show the scheduled leasing date", async ({ page, request })
     has: page.getByRole("heading", { name: "Scheduled leasing date", exact: true }),
   });
   await expect(card).toContainText("Open for leasing later · 2099-05-01");
+  await expect(card).toContainText("Active · Single-family home · Whole home · Managed for owner");
+  await expect(card).not.toContainText("single_family_home");
+  await expect(card).not.toContainText("available_on");
+});
+
+test.describe("context list presentation", () => {
+  test.use({ timezoneId: "America/Los_Angeles", locale: "en-US" });
+
+  for (const [instant, local] of [
+    ["2026-01-02T07:30:00Z", "Jan 1, 2026, 11:30 PM"],
+    ["2026-07-02T07:30:00Z", "Jul 2, 2026, 12:30 AM"],
+  ] as const) {
+    test(`context tasks show readable states and local instants for ${instant}`, async ({
+      page,
+      request,
+    }) => {
+      const item = await property(request, `Local context ${instant}`);
+      const created = await request.post("/api/tasks", {
+        data: {
+          title: "Context deadline",
+          relatedEntityType: "property",
+          relatedEntityId: item.id,
+          status: "in_progress",
+          priority: "high",
+          isAllDay: false,
+          dueAtUtc: instant,
+          dueTimezone: "America/Los_Angeles",
+          expectedRevision: 0,
+          idempotencyKey: crypto.randomUUID(),
+        },
+      });
+      expect(created.ok(), await created.text()).toBeTruthy();
+      await page.route(`**/api/operator/properties/${item.id}/overview?*`, async (route) => {
+        const response = await route.fetch();
+        const data = (await response.json()) as Schema["OverviewResponse"];
+        const tasks = data.sections.tasks;
+        if (tasks?.kind === "tasks" && tasks.items?.[0]) tasks.items[0].followUpAtUtc = instant;
+        await route.fulfill({ json: data });
+      });
+      await page.goto(`/properties/${item.id}/overview`);
+      const tasks = page.getByRole("region", { name: "Tasks", exact: true });
+      await expect(tasks).toContainText("Status: In progress");
+      await expect(tasks).toContainText("High");
+      const times = tasks.locator("time");
+      await expect(times).toHaveCount(2);
+      await expect(times).toHaveText([
+        `${local} · America/Los_Angeles`,
+        `${local} · America/Los_Angeles`,
+      ]);
+      for (const time of await times.all())
+        expect(Date.parse((await time.getAttribute("datetime"))!)).toBe(Date.parse(instant));
+      await expect(tasks).not.toContainText(instant);
+      await expect(tasks).not.toContainText("in_progress");
+    });
+  }
 });
 
 test("property setup keeps configuration and actions without duplicating overview", async ({

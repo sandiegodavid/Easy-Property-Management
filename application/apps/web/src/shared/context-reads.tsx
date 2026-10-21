@@ -28,9 +28,19 @@ type Scope = "current" | "former" | "all";
 type RentalUnit = { id: string; displayName: string; status: string };
 const label = (value: string) =>
   value
-    .replace(/([a-z])([A-Z])/g, (_, a, b) => `${a} ${b.toLowerCase()}`)
+    .replace(/([a-z])([A-Z])/g, (_: string, a: string, b: string) => `${a} ${b.toLowerCase()}`)
     .replaceAll("_", " ")
     .replace(/^\w/, (character) => character.toUpperCase());
+const propertyLabels: Record<string, string> = {
+  single_family_home: "Single-family home",
+  single_space: "Whole home",
+  whole_office: "Whole office",
+  office_suites: "Office suites",
+  self_owned: "Self-owned",
+  managed_for_owner: "Managed for owner",
+  mixed: "Co-owned",
+};
+const propertyLabel = (value: string) => propertyLabels[value] ?? label(value);
 class ReadFailure extends Error {
   constructor(
     readonly status: number,
@@ -359,7 +369,7 @@ export function Directory({
                     </Link>
                   </h3>
                   <p>
-                    {item.partyKind} · {item.archived ? "Archived" : "Active"} ·{" "}
+                    {label(item.partyKind)} · {item.archived ? "Archived" : "Active"} ·{" "}
                     {item.propertyCount} related properties ({relationship})
                   </p>
                   <ul>
@@ -368,7 +378,7 @@ export function Directory({
                         <Link to={`/properties/${property.id}/overview`}>
                           {property.displayName}
                         </Link>{" "}
-                        · {property.addressLine1}, {property.city} · {property.status}
+                        · {property.addressLine1}, {property.city} · {label(property.status)}
                       </li>
                     ))}
                   </ul>
@@ -406,8 +416,8 @@ export function Directory({
                       .join(", ")}
                   </p>
                   <p>
-                    {item.status} · {item.propertyType} · {item.inventoryLayout} ·{" "}
-                    {item.ownershipContext}
+                    {label(item.status)} · {propertyLabel(item.propertyType)} ·{" "}
+                    {propertyLabel(item.inventoryLayout)} · {propertyLabel(item.ownershipContext)}
                   </p>
                   {item.needsAttention && (
                     <p>
@@ -752,10 +762,10 @@ function SectionContents({
             {"title" in item && <strong>{item.title}</strong>}
             {"summary" in item && <strong>{item.summary}</strong>}
             {"subject" in item && <strong>{item.subject}</strong>}
-            {"status" in item && <p>Status: {item.status}</p>}
+            {"status" in item && <p>Status: {label(item.status)}</p>}
             {"occupancy" in item && (
               <p>
-                {item.occupancy} · {item.availability}
+                {statusLabel(item.occupancy)} · {statusLabel(item.availability)}
                 {item.needsAttention && " · Needs attention"}
               </p>
             )}
@@ -785,7 +795,7 @@ function SectionContents({
             {"occupancyStartsOn" in item && (
               <>
                 <p>
-                  {item.leaseKind} · Occupancy from {item.occupancyStartsOn} · Move-out{" "}
+                  {label(item.leaseKind)} · Occupancy from {item.occupancyStartsOn} · Move-out{" "}
                   {item.actualMoveOutOn ?? "not recorded"}
                 </p>
                 <LeaseTenants lease={item} />
@@ -793,7 +803,7 @@ function SectionContents({
             )}
             {"occurredAtUtc" in item && (
               <p>
-                {item.channel} · {item.direction} ·{" "}
+                {label(item.channel)} · {label(item.direction)} ·{" "}
                 <time dateTime={item.occurredAtUtc}>
                   {formatHomeTemporal({ at: item.occurredAtUtc, timeZone: item.occurredTimezone })}
                 </time>
@@ -801,9 +811,21 @@ function SectionContents({
             )}
             {"dueAtUtc" in item && (
               <p>
-                {item.priority} · {item.taskDeadlineState} · {item.dueAtUtc ?? "No deadline"}
+                {label(item.priority)} · {label(item.taskDeadlineState)} ·{" "}
+                {item.dueAtUtc ? (
+                  <time dateTime={item.dueAtUtc}>{formatHomeTemporal({ at: item.dueAtUtc })}</time>
+                ) : (
+                  "No deadline"
+                )}
                 {item.waitingForLabel && ` · Waiting for ${item.waitingForLabel}`}
-                {item.followUpAtUtc && ` · Follow-up ${item.followUpAtUtc}`}
+                {item.followUpAtUtc && (
+                  <>
+                    {" · Follow-up "}
+                    <time dateTime={item.followUpAtUtc}>
+                      {formatHomeTemporal({ at: item.followUpAtUtc })}
+                    </time>
+                  </>
+                )}
               </p>
             )}
             {"target" in item && !("leaseKind" in item) && !("ownerKind" in item) && (
@@ -811,10 +833,11 @@ function SectionContents({
             )}
             {"area" in item && (
               <p>
-                {item.area} · {item.availability} · {item.state ?? "State unavailable"} ·{" "}
-                {item.causes.join(", ")}
+                {label(item.area)} · {label(item.availability)} ·{" "}
+                {item.state ? label(item.state) : "State unavailable"} ·{" "}
+                {item.causes.map(label).join(", ")}
                 <Link to={`/coverage/${item.subjectKind}/${item.subjectId}/${item.area}`}>
-                  Review {item.area} information
+                  Review {label(item.area)} information
                 </Link>
               </p>
             )}
@@ -959,7 +982,7 @@ function OverviewSection({
               canStartLeases={canManageProperty}
             />
           </AsyncRegion>
-          {section.kind !== "coverage" && <p>Source: {section.sourceKind}</p>}
+          {section.kind !== "coverage" && <p>Source: {label(section.sourceKind)}</p>}
           {"nextCursor" in section && section.nextCursor && (
             <button onClick={() => setPage({ cursor: section.nextCursor ?? undefined })}>
               Next {heading.toLowerCase()}
@@ -1137,7 +1160,7 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
         <>
           {result.data.subject.kind !== "property" && (
             <p>
-              {result.data.subject.partyKind} ·{" "}
+              {label(result.data.subject.partyKind)} ·{" "}
               {result.data.subject.archived ? "Archived" : "Active"}
             </p>
           )}
