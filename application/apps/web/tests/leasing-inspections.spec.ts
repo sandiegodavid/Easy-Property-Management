@@ -147,7 +147,7 @@ test("property pages remain usable when tenant previews are unavailable", async 
   await expect(page.getByText("Unexpected Application Error!", { exact: true })).toHaveCount(0);
   await page
     .getByRole("navigation", { name: "property sections", exact: true })
-    .getByRole("link", { name: "leases", exact: true })
+    .getByRole("link", { name: "Leases", exact: true })
     .click();
   await expect(page).toHaveURL(`/properties/${f.property.id}/leases`);
   const leases = page.getByRole("region", { name: "Leases", exact: true });

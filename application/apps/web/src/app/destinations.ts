@@ -90,6 +90,18 @@ export const ownerSections = [
   "conversations",
   "details",
 ] as const;
+export const contextSectionLabels = {
+  overview: "Overview",
+  units: "Units",
+  properties: "Properties",
+  leases: "Leases",
+  money: "Money",
+  maintenance: "Maintenance",
+  conversations: "Conversations",
+  documents: "Documents",
+  setup: "Property setup",
+  details: "Details",
+} satisfies Record<(typeof propertySections)[number] | (typeof ownerSections)[number], string>;
 type ContextTarget =
   | { kind: "property"; id: string; section?: (typeof propertySections)[number] }
   | { kind: "owner"; id: string; section?: (typeof ownerSections)[number] };

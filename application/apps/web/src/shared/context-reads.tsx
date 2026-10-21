@@ -1104,7 +1104,6 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
   });
   return (
     <>
-      {kind === "owner" && <h2>{tab}</h2>}
       <SourceDetail />
       {kind === "owner" && (
         <DynamicFilterForm

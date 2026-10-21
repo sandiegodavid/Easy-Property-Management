@@ -758,7 +758,7 @@ test("independent task continuations and explicit whole-property money use compo
   expect(reads[1]).toContain("cursor=");
   await page
     .getByRole("navigation", { name: "property sections", exact: true })
-    .getByRole("link", { name: "money", exact: true })
+    .getByRole("link", { name: "Money", exact: true })
     .click();
   await expect(page.getByText("Choose an explicit period to read money activity.")).toBeVisible();
   const money = page.getByRole("region", { name: "Money", exact: true });
@@ -837,7 +837,7 @@ test("section failure never becomes an empty result and date errors retain input
   await expect(page.getByRole("region", { name: "Owners", exact: true })).toContainText("1 owner");
   await page
     .getByRole("navigation", { name: "property sections", exact: true })
-    .getByRole("link", { name: "maintenance", exact: true })
+    .getByRole("link", { name: "Maintenance", exact: true })
     .click();
   const maintenance = page.getByRole("region", { name: "Maintenance", exact: true });
   await expect(maintenance).toContainText("This source is unavailable");
@@ -847,7 +847,7 @@ test("section failure never becomes an empty result and date errors retain input
   await expect(maintenance).not.toContainText("0 matching records");
   await page
     .getByRole("navigation", { name: "property sections", exact: true })
-    .getByRole("link", { name: "money", exact: true })
+    .getByRole("link", { name: "Money", exact: true })
     .click();
   await page.getByLabel("Money from").fill("2026-02-01");
   await page.getByLabel("Money through").fill("2026-01-01");

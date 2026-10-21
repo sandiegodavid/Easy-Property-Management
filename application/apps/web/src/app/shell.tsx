@@ -24,6 +24,7 @@ import {
   destination,
   ownerSections,
   propertySections,
+  contextSectionLabels,
   contextPath,
 } from "./destinations";
 import { PreferencesProvider, PreferenceSettings, usePreferences } from "./preferences";
@@ -359,13 +360,9 @@ function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
         <nav className="page-tabs" aria-label={`${kind} sections`}>
           {sections.map((section) => (
             <NavLink key={section} state={navigationState} to={`${section}?${params.toString()}`}>
-              {kind === "property" && section === "setup"
-                ? "Property setup"
-                : kind === "property" && section === "units"
-                  ? property.data
-                    ? propertyUnitsLabel(property.data.inventoryLayout)
-                    : "Units"
-                  : section}
+              {kind === "property" && section === "units" && property.data
+                ? propertyUnitsLabel(property.data.inventoryLayout)
+                : contextSectionLabels[section]}
             </NavLink>
           ))}
         </nav>
