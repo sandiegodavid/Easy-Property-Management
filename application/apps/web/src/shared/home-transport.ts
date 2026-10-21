@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "@epm/contracts";
 import type { components, paths } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
+import { usePreferences } from "../app/preferences";
 import { readResult } from "../workflows/reads";
 
 type Schemas = components["schemas"];
@@ -120,20 +121,19 @@ function useRead<T>(
   ready: boolean,
   key: readonly unknown[],
   load: (signal: AbortSignal) => Promise<T>,
-  options?: { refreshDelay?: (value: T | undefined) => number | false },
+  options?: { refreshDelay?: (value: T | undefined) => number | false; interval?: number },
 ): HomeRead<T> {
   const query = useQuery<T>({
     queryKey: key,
     enabled: ready,
     retry: false,
-    // Home's live attention read is its own freshness contract. Other reads
-    // remain manually refreshed or invalidated by their owning commands.
+    // Home reads refresh while visible; continuation pages retain their capture.
     refetchOnWindowFocus: options?.refreshDelay ? "always" : false,
     refetchInterval: options?.refreshDelay
       ? (current) => options.refreshDelay?.(current.state.data) ?? false
       : false,
     refetchIntervalInBackground: false,
-    staleTime: options?.refreshDelay ? 60_000 : 0,
+    staleTime: options?.refreshDelay ? (options.interval ?? 300_000) : 0,
     queryFn: ({ signal }) => deadline(signal, load),
   });
   const { refetch } = query;
@@ -167,13 +167,13 @@ function useRead<T>(
   };
 }
 
-function liveRefreshDelay(value: Attention | undefined) {
+function liveRefreshDelay(value: Attention | undefined, interval: number) {
   const transition = value?.nextTransitionAt ? Date.parse(value.nextTransitionAt) : Number.NaN;
-  if (!Number.isFinite(transition)) return 60_000;
-  // Keep the ordinary minute check, but never wait past a source-declared
+  if (!Number.isFinite(transition)) return interval;
+  // Keep the configured check, but never wait past a source-declared
   // follow-up/deadline transition. A small floor avoids an immediate retry loop
   // while the server publishes the next transition.
-  return Math.min(60_000, Math.max(1_000, transition - Date.now()));
+  return Math.min(interval, Math.max(1_000, transition - Date.now()));
 }
 
 class HomePageFailure extends Error {
@@ -241,6 +241,8 @@ export function useHomeItems(
 
 export function useHomeReads(filters: HomeFilters) {
   const { scope, bootstrap } = useWorkspace();
+  const { homeRefreshMinutes } = usePreferences();
+  const interval = homeRefreshMinutes * 60_000;
   const ready = bootstrap.capabilities.includes("operator.home");
   const full = useRead(
     ready,
@@ -263,6 +265,7 @@ export function useHomeReads(filters: HomeFilters) {
         scope.runtimeEpoch,
         filters.propertyId,
       ),
+    { interval, refreshDelay: () => interval },
   );
   const live = useRead(
     ready,
@@ -279,7 +282,7 @@ export function useHomeReads(filters: HomeFilters) {
         scope.runtimeEpoch,
         filters.propertyId,
       ),
-    { refreshDelay: liveRefreshDelay },
+    { interval, refreshDelay: (value) => liveRefreshDelay(value, interval) },
   );
   return {
     full,

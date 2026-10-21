@@ -6,7 +6,7 @@ import { useWorkspace } from "../app/workspace-gate";
 import { normalizeApiError } from "./mutations";
 import { PageAsOf } from "./page-as-of";
 import { leaseLastCoveredOn } from "./lease-dates";
-import { formatHomeTemporal } from "./home-time";
+import { formatHomeTemporal, formatHomeTime } from "./home-time";
 
 type Conversation = components["schemas"]["CommunicationResponse"];
 type Source = {
@@ -16,6 +16,14 @@ type Source = {
 };
 const readable = (value: string) =>
   value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+const recordLabels: Record<string, string> = {
+  space: "Rental unit",
+  lease: "Lease",
+  task: "Task",
+  maintenance_issue: "Maintenance issue",
+  communication: "Conversation",
+  owner_concern: "Owner concern",
+};
 
 type ConversationPresentation = {
   id: string;
@@ -107,9 +115,7 @@ async function readSource(kind: string, id: string, signal: AbortSignal): Promis
       return {
         title: item.displayName,
         facts: {
-          Property: item.propertyId,
-          Status: item.status,
-          Revision: item.revision,
+          Status: readable(item.status),
           "Effective local date": item.effectiveLocalDate,
           "As of": item.asOf,
         },
@@ -120,10 +126,9 @@ async function readSource(kind: string, id: string, signal: AbortSignal): Promis
         await api.GET("/api/leases/{lease_id}", { signal, params: { path: { lease_id: id } } }),
       );
       return {
-        title: `${item.leaseKind} lease`,
+        title: `${readable(item.leaseKind)} lease`,
         facts: {
-          Status: item.status,
-          Revision: item.leaseRevision,
+          Status: readable(item.status),
           "Contract starts": item.contractStartsOn,
           "Lease end (last covered day)": leaseLastCoveredOn(item.contractEndsOn),
           "Occupancy starts": item.occupancyStartsOn,
@@ -139,16 +144,16 @@ async function readSource(kind: string, id: string, signal: AbortSignal): Promis
       return {
         title: item.title,
         facts: {
-          Status: item.status,
-          Revision: item.revision,
-          Priority: item.priority,
+          Status: readable(item.status),
+          Priority: readable(item.priority),
           Notes: item.notes,
-          Deadline: item.dueAtUtc,
-          "Deadline time zone": item.dueTimezone,
-          "Deadline state": item.taskDeadlineState,
+          Deadline: item.dueAtUtc
+            ? formatHomeTemporal({ at: item.dueAtUtc, timeZone: item.dueTimezone })
+            : null,
+          "Deadline status": item.taskDeadlineState ? readable(item.taskDeadlineState) : null,
           "Waiting for": item.waitingForLabel,
-          "Follow-up": item.followUpAt,
-          "Follow-up state": item.followUpState,
+          "Follow-up": item.followUpAt ? formatHomeTime(item.followUpAt) : null,
+          "Follow-up status": item.followUpState ? readable(item.followUpState) : null,
           "As of": item.asOf,
         },
       };
@@ -162,7 +167,11 @@ async function readSource(kind: string, id: string, signal: AbortSignal): Promis
       );
       return {
         title: item.summary,
-        facts: { Status: item.status, Priority: item.priority, Category: item.category },
+        facts: {
+          Status: readable(item.status),
+          Priority: readable(item.priority),
+          Category: readable(item.category),
+        },
       };
     }
     case "communication": {
@@ -187,11 +196,15 @@ async function readSource(kind: string, id: string, signal: AbortSignal): Promis
       );
       return {
         title: item.summary,
-        facts: { Status: item.status, Priority: item.priority, Type: item.concernType },
+        facts: {
+          Status: readable(item.status),
+          Priority: readable(item.priority),
+          Type: readable(item.concernType),
+        },
       };
     }
     default:
-      throw new Error("Unsupported source kind.");
+      throw new Error("This record type cannot be displayed here.");
   }
 }
 export function SourceDetail() {
@@ -213,21 +226,16 @@ export function SourceDetail() {
   return (
     <section
       id="source-detail"
-      aria-label="Source detail"
+      aria-label="Record details"
       className={kind === "communication" ? "conversation-detail" : "context-section"}
     >
       <header className={kind === "communication" ? "conversation-detail-heading" : undefined}>
-        <h3>{kind === "communication" ? "Conversation detail" : "Source detail"}</h3>
-        {kind !== "communication" && (
-          <p>
-            {kind} · {id}
-          </p>
-        )}
+        <h3>{recordLabels[kind] ?? "Record"} details</h3>
         <Link state={state} to={`?${back.toString()}`}>
-          {kind === "communication" ? "Close conversation" : "Close source detail"}
+          {kind === "communication" ? "Close conversation" : "Close details"}
         </Link>
       </header>
-      {result.isPending && <p role="status">Loading source…</p>}
+      {result.isPending && <p role="status">Loading record…</p>}
       {result.error && (
         <div role="alert">
           {result.error.message}
@@ -236,7 +244,7 @@ export function SourceDetail() {
               void result.refetch();
             }}
           >
-            Retry source
+            Retry record
           </button>
         </div>
       )}
@@ -249,12 +257,12 @@ export function SourceDetail() {
               <PageAsOf asOf={result.data.facts["As of"]} priority={1} />
             )}
             <h4>{result.data.title}</h4>
-            {kind === "lease" && <Link to={`/leases/${id}/details`}>Open Lease workflow</Link>}
+            {kind === "lease" && <Link to={`/leases/${id}/details`}>View lease</Link>}
             {["task", "maintenance_issue", "communication", "owner_concern"].includes(kind) && (
               <Link
                 to={`${kind === "task" ? "/tasks" : kind === "communication" ? "/conversations" : "/maintenance"}?record=${kind === "maintenance_issue" ? "issue" : kind === "owner_concern" ? "concern" : kind}&id=${id}`}
               >
-                Open work workflow
+                View {recordLabels[kind]?.toLowerCase() ?? "record"}
               </Link>
             )}
             <dl>

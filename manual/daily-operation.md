@@ -41,7 +41,7 @@ Home includes unresolved obligations on archived properties. All-properties scop
 
 The default money period is the full calendar month selected from server UTC time; it is not month-to-date. Property business dates use their stored time zones. Cross-zone appointments show their zone. Different sections may have different captured times.
 
-Home loads asynchronously. **Refresh Home** starts a read; use Retry for a failed section. Live attention checks run on entry, focus, changes, due transitions and periodically while visible. New work can display **New items need attention**; use the offered update action while preserving your current form. Older lists and unavailable sources must not be read as an all-clear. No Dashboard cron or closed-app alert service is installed.
+Home loads asynchronously. **Refresh Home** starts a read; use Retry for a failed section. Checks for items needing action run on entry, focus, changes, due transitions and periodically while visible. New work can display **New items need attention**; use the offered update action while preserving your current form. Older lists and unavailable sources must not be read as an all-clear. No Dashboard cron or closed-app alert service is installed.
 
 ## Information review
 

@@ -133,10 +133,9 @@ test("AI draft detail separates governed input and blocks unsupported or stale a
   await expect(page.getByRole("heading", { name: "Review AI draft" })).toBeVisible();
   await expect(page.getByText("sha256:local", { exact: true })).toBeVisible();
   await expect(page.getByText("runtime 1 · quantization Q4", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: draft.supersedesDraftId! })).toHaveAttribute(
-    "href",
-    `/ai/review/${draft.supersedesDraftId}`,
-  );
+  await expect(
+    page.getByRole("link", { name: "View the draft this one replaces" }),
+  ).toHaveAttribute("href", `/ai/review/${draft.supersedesDraftId}`);
   await page.getByText("Registered confidence and provenance", { exact: true }).click();
   await expect(
     page.locator("pre").filter({ hasText: "registered synthetic assessment" }),

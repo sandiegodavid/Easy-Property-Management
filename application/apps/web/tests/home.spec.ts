@@ -6,7 +6,9 @@ test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
 test("available Home omits redundant footer guidance and fallback shortcuts", async ({ page }) => {
   await page.goto("/home");
   await expect(page.getByRole("tab", { name: "Needs action", exact: true })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Task attention" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Task deadlines and follow-ups" })).toHaveCount(
+    0,
+  );
   await expect(page.getByText("Hiding a destination does not hide its obligations.")).toHaveCount(
     0,
   );

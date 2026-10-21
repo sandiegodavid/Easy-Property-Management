@@ -12,6 +12,10 @@ import { Facts, History, readResult } from "./reads";
 type Report = components["schemas"]["ReportResponse"];
 type Lease = components["schemas"]["LeaseResponse"];
 type Template = components["schemas"]["TemplateResponse"];
+const reportKindLabels: Record<Report["reportKind"], string> = {
+  pre_move_in: "Move-in",
+  post_move_out: "Move-out",
+};
 
 export function InspectionList({ lease }: { lease: Lease }) {
   const { scope } = useWorkspace();
@@ -49,7 +53,7 @@ export function InspectionList({ lease }: { lease: Lease }) {
       {reports.data?.reports.map((report) => (
         <p key={report.id}>
           <Link to={`/inspections/${report.id}`}>
-            {report.reportKind.replaceAll("_", " ")} · {report.walkthroughOn} · {report.status}
+            {reportKindLabels[report.reportKind]} · {report.walkthroughOn} · {report.status}
           </Link>
         </p>
       ))}
@@ -135,7 +139,7 @@ function ReportRecord({ id }: { id: string }) {
       <ParentBackLink to={`/leases/${item.leaseId}/inspections`}>
         ← Back to lease inspections
       </ParentBackLink>
-      <h2>{item.reportKind.replaceAll("_", " ")} inspection</h2>
+      <h2>{reportKindLabels[item.reportKind]} inspection</h2>
       <Facts
         value={item}
         fields={[
@@ -533,7 +537,7 @@ function InspectionCommand() {
               report && (
                 <p key={report.id}>
                   <Link to={`/inspections/${report.id}`}>
-                    {report.reportKind.replaceAll("_", " ")} evidence
+                    {reportKindLabels[report.reportKind]} evidence
                   </Link>
                 </p>
               ),

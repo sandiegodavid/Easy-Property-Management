@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "@epm/contracts";
@@ -10,6 +10,16 @@ import { PageAsOf } from "./page-as-of";
 
 type Group = components["schemas"]["SearchGroup"];
 type Target = components["schemas"]["SearchTarget"];
+const searchGroupLabels: Record<Group["kind"], string> = {
+  properties: "Properties",
+  spaces: "Rental units",
+  owners: "Owners",
+  tenants: "Tenants",
+  leases: "Leases",
+  communications: "Conversations",
+  maintenance: "Maintenance issues",
+  tasks: "Tasks",
+};
 function searchTarget(target: Target) {
   const id = encodeURIComponent(target.entityId);
   switch (target.entityType) {
@@ -57,8 +67,8 @@ function SearchGroup({ initial, q, archived }: { initial: Group; q: string; arch
   });
   const group = cursor === undefined && !refreshed ? initial : result.data?.groups[initial.kind];
   return (
-    <section aria-label={`${initial.kind} search results`}>
-      <h3>{initial.kind}</h3>
+    <section aria-label={`${searchGroupLabels[initial.kind]} search results`}>
+      <h3>{searchGroupLabels[initial.kind]}</h3>
       {result.error ? (
         <>
           <p role="alert">{result.error.message} Restart this group with the same filters.</p>
@@ -82,7 +92,7 @@ function SearchGroup({ initial, q, archived }: { initial: Group; q: string; arch
               else setRefreshed(true);
             }}
           >
-            Retry {group.kind} search
+            Retry {searchGroupLabels[group.kind].toLowerCase()} search
           </button>
         </>
       ) : (
@@ -111,11 +121,13 @@ function SearchGroup({ initial, q, archived }: { initial: Group; q: string; arch
           </ul>
           {group.nextCursor && (
             <button onClick={() => setCursor(group.nextCursor ?? undefined)}>
-              Next {group.kind} results
+              Next {searchGroupLabels[group.kind].toLowerCase()} results
             </button>
           )}
           {cursor && (
-            <button onClick={() => setCursor(undefined)}>First {group.kind} results</button>
+            <button onClick={() => setCursor(undefined)}>
+              First {searchGroupLabels[group.kind].toLowerCase()} results
+            </button>
           )}
         </>
       )}
@@ -123,6 +135,7 @@ function SearchGroup({ initial, q, archived }: { initial: Group; q: string; arch
   );
 }
 export function MetadataSearch() {
+  const searchId = useId();
   const { scope } = useWorkspace();
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
@@ -156,9 +169,10 @@ export function MetadataSearch() {
   return (
     <>
       <h2>Search</h2>
-      <label>
-        Search metadata
+      <label htmlFor={searchId}>
+        Search records
         <input
+          id={searchId}
           value={input}
           maxLength={240}
           onChange={(event) => setEntry({ query: q, value: event.target.value })}
@@ -177,9 +191,7 @@ export function MetadataSearch() {
         />
         Include archived records
       </label>
-      <p>
-        Searches registered record metadata. Bodies, evidence and file content are not searched.
-      </p>
+      <p>Searches names and record details. Message text and file contents are not searched.</p>
       <SourceDetail />
       {q.trim().length < 2 ? (
         <p>Enter at least two characters.</p>

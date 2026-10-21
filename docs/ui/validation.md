@@ -285,7 +285,7 @@ October 14, 2026: **8 focused packaged Home browser cases passed** in `home-layo
 
 | Validation area | Proof / result |
 | --- | --- |
-| Transition / visible minute | Passed: live attention refetches at its returned `nextTransitionAt`; a response with no transition receives the 60-second visible check. Browser code does not classify the due work itself. |
+| Transition / visible interval | Home refreshes its cards at the saved browser interval (default 5 minutes); live attention also refetches at its returned `nextTransitionAt` when sooner. Browser code does not classify the due work itself. |
 | Focus / coalescing | Passed: several focus events while one live request is in flight leave one request for the same workspace/runtime/scope query key. Existing late-scope cancellation prevents old responses applying. |
 | Protected interaction | Passed: an expanded attention disclosure stays open through the staged transition refresh. Newly qualifying work remains announced with its exact latest total until the operator chooses **Show updated list**. |
 | Assurance / failure | Passed: in-flight, stale, timed-out and failed live checks do not state an all-clear; prior refresh failure retains its original capture and input. Existing source-command invalidation uses the shared workspace query client. |

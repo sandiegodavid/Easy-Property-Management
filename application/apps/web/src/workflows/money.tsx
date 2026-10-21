@@ -25,6 +25,16 @@ const tabs = [
   "categories",
   "reporting",
 ] as const;
+const tabLabels: Record<(typeof tabs)[number], string> = {
+  rent: "Rent",
+  receipts: "Received rent",
+  expenses: "Expenses",
+  deposits: "Deposits",
+  checks: "Scheduled checks",
+  reports: "Owner reports",
+  categories: "Expense categories",
+  reporting: "Reporting",
+};
 export function MoneyWorkspace() {
   const [params] = useSearchParams();
   if (params.get("workflow") === "file.link.archive")
@@ -74,18 +84,7 @@ export function MoneyWorkspace() {
           next.delete("sourceRevision");
           return (
             <Link key={item} to={`/money?${next}`} aria-current={tab === item ? "page" : undefined}>
-              {
-                {
-                  rent: "Rent",
-                  receipts: "Received rent",
-                  expenses: "Expenses",
-                  deposits: "Deposits",
-                  checks: "Scheduled checks",
-                  reports: "Owner reports",
-                  categories: "Expense categories",
-                  reporting: "Reporting",
-                }[item]
-              }
+              {tabLabels[item]}
             </Link>
           );
         })}
@@ -468,7 +467,7 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
     groups.set(group, [...(groups.get(group) ?? []), item]);
   }
   return (
-    <section aria-label={`${tab} records`}>
+    <section aria-label={`${tabLabels[tab]} records`}>
       <MoneyScope />
       {tab === "expenses" && <ExpenseFilters />}
       {tab === "deposits" && <DepositFilters />}
@@ -756,7 +755,7 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
                             expectedAmountMinor: "Expected",
                             receivedAmountMinor: "Money received",
                             outstandingAmountMinor: "Still due",
-                            timelinessStatus: "Needs attention",
+                            timelinessStatus: "Payment timing",
                             settlementStatus: "Settlement",
                           }
                         : undefined

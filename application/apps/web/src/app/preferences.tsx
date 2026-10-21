@@ -1,4 +1,11 @@
-import { useLayoutEffect, useState, type ReactNode, createContext, useContext } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type ReactNode,
+  createContext,
+  useContext,
+} from "react";
 import { api } from "@epm/contracts";
 import { Link } from "react-router-dom";
 import type { components } from "@epm/contracts/generated";
@@ -6,6 +13,13 @@ import { useWorkspace } from "./workspace-gate";
 import { defaultOrder, destination } from "./destinations";
 import { mutation, MutationFailure } from "../shared/mutations";
 import { applyAppearance, preferredAppearance } from "./theme";
+import {
+  homeRefreshChoices,
+  homeRefreshKey,
+  preferredHomeRefresh,
+  saveHomeRefresh,
+  type HomeRefreshMinutes,
+} from "./home-refresh";
 
 type Preferences = components["schemas"]["PreferenceResponse"];
 type Command = components["schemas"]["PreferenceInput"];
@@ -29,6 +43,24 @@ function usePreferenceState() {
   const [message, setMessage] = useState("");
   const [conflict, setConflict] = useState(false);
   const [attempt, setAttempt] = useState<Command | null>(null);
+  const [homeRefreshMinutes, setHomeRefresh] = useState(preferredHomeRefresh);
+  const [homeRefreshMessage, setHomeRefreshMessage] = useState("");
+  useEffect(() => {
+    const changed = (event: StorageEvent) => {
+      if (event.key === homeRefreshKey || event.key === null)
+        setHomeRefresh(preferredHomeRefresh());
+    };
+    window.addEventListener("storage", changed);
+    return () => window.removeEventListener("storage", changed);
+  }, []);
+  function setHomeRefreshMinutes(minutes: HomeRefreshMinutes) {
+    setHomeRefresh(minutes);
+    setHomeRefreshMessage(
+      saveHomeRefresh(minutes)
+        ? "Home refresh preference saved for this browser."
+        : "Home refresh changed for this session, but could not be saved in this browser.",
+    );
+  }
   const writable =
     scope.canWrite &&
     bootstrap.preferencesState === "available" &&
@@ -92,7 +124,20 @@ function usePreferenceState() {
       setPending(false);
     }
   }
-  return { draft, setDraft, writable, pending, message, conflict, attempt, save, loadCurrent };
+  return {
+    draft,
+    setDraft,
+    writable,
+    pending,
+    message,
+    conflict,
+    attempt,
+    save,
+    loadCurrent,
+    homeRefreshMinutes,
+    setHomeRefreshMinutes,
+    homeRefreshMessage,
+  };
 }
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
@@ -106,8 +151,20 @@ export function usePreferences() {
 }
 
 export function PreferenceSettings() {
-  const { draft, setDraft, writable, pending, message, conflict, attempt, save, loadCurrent } =
-    usePreferences();
+  const {
+    draft,
+    setDraft,
+    writable,
+    pending,
+    message,
+    conflict,
+    attempt,
+    save,
+    loadCurrent,
+    homeRefreshMinutes,
+    setHomeRefreshMinutes,
+    homeRefreshMessage,
+  } = usePreferences();
   const editable = writable && !pending && !attempt;
   const middle = draft.destinationOrder.filter((id) => !destination(id)?.fixed);
   function move(index: number, delta: number) {
@@ -120,9 +177,16 @@ export function PreferenceSettings() {
   return (
     <>
       <h2>Appearance and navigation</h2>
-      <p>
-        <Link to="/settings/provider-categories">Provider categories</Link>
-      </p>
+      <nav aria-label="Settings sections">
+        <ul>
+          <li>
+            <Link to="/settings/provider-categories">Provider categories</Link>
+          </li>
+          <li>
+            <Link to="/settings/ai">AI assistance</Link>
+          </li>
+        </ul>
+      </nav>
       {!writable && (
         <p>Preference editing requires available preferences and workspace write access.</p>
       )}
@@ -139,6 +203,34 @@ export function PreferenceSettings() {
             {appearance === "light" ? "Light" : "Dark"}
           </label>
         ))}
+      </fieldset>
+      <fieldset>
+        <legend>Home</legend>
+        <label htmlFor="home-refresh-frequency">Automatic refresh</label>
+        <select
+          id="home-refresh-frequency"
+          name="homeRefreshMinutes"
+          value={homeRefreshMinutes}
+          onChange={(event) => {
+            const minutes = homeRefreshChoices.find(
+              (value) => value === Number(event.target.value),
+            );
+            if (minutes !== undefined) setHomeRefreshMinutes(minutes);
+          }}
+          aria-describedby="home-refresh-help"
+        >
+          {homeRefreshChoices.map((minutes) => (
+            <option key={minutes} value={minutes}>
+              Every {minutes} {minutes === 1 ? "minute" : "minutes"}
+              {minutes === 5 ? " (default)" : ""}
+            </option>
+          ))}
+        </select>
+        <p id="home-refresh-help" className="ui-muted">
+          Saved automatically for this browser. Home refreshes at this interval while open. Needs
+          action may update sooner when a deadline or follow-up becomes due.
+        </p>
+        {homeRefreshMessage && <p role="status">{homeRefreshMessage}</p>}
       </fieldset>
       <fieldset disabled={!editable}>
         <legend>Navigation</legend>
@@ -181,7 +273,12 @@ export function PreferenceSettings() {
             </li>
           ))}
         </ol>
-        <button onClick={() => setDraft({ ...defaults, revision: draft.revision })}>
+        <button
+          onClick={() => {
+            setDraft({ ...defaults, revision: draft.revision });
+            setHomeRefreshMinutes(5);
+          }}
+        >
           Restore defaults
         </button>
       </fieldset>

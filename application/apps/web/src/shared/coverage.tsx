@@ -270,7 +270,7 @@ function ReviewEditor({
     state.command === "committed";
   return (
     <section className="information-review-editor" aria-label="Information review form">
-      <h3>Review {current.area}</h3>
+      <h3>Review {words(current.area)}</h3>
       <p className="information-review-intro">
         Record your review of the information shown above. This does not change the underlying
         records.

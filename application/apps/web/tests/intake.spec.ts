@@ -41,7 +41,9 @@ test("manual source admission resumes a saved draft and reconciles a lost respon
   request,
 }) => {
   await page.goto("/conversations");
-  await page.getByRole("link", { name: "Retained source evidence", exact: true }).click();
+  await page.getByRole("link", { name: "Imported records", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Imported records", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Imported records", exact: true })).toBeVisible();
   await page.getByText("Retain evidence", { exact: true }).click();
   await page.getByRole("link", { name: "Retain source", exact: true }).click();
   await input(page, "Private source testimony");
@@ -52,7 +54,7 @@ test("manual source admission resumes a saved draft and reconciles a lost respon
   await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
   await page.goto("/settings/recovery");
   await expect(page.getByText("Private source testimony", { exact: true })).toHaveCount(0);
-  await page.getByRole("link", { name: "Resume intake.source.admit", exact: true }).click();
+  await page.getByRole("link", { name: "Resume: Retain source", exact: true }).click();
   await expect(page.getByLabel("Body (required)")).toHaveValue("Private source testimony");
   let writes = 0;
   await page.route("**/api/intake/sources", async (route) => {
@@ -65,7 +67,7 @@ test("manual source admission resumes a saved draft and reconciles a lost respon
   await page.getByRole("button", { name: "Retain source", exact: true }).click();
   await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume intake.source.admit", exact: true }).click();
+  await page.getByRole("link", { name: "Resume: Retain source", exact: true }).click();
   await page.getByRole("button", { name: "Check original result" }).click();
   await expect(page.locator(".saved-item")).toBeVisible();
   expect(writes).toBe(1);
@@ -103,7 +105,7 @@ test("multipart import preserves ordered roles and rejects changed bytes after f
   await page.getByRole("button", { name: "Save unfinished form" }).click();
   await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume intake.source.import", exact: true }).click();
+  await page.getByRole("link", { name: "Resume: Import source evidence", exact: true }).click();
   await page
     .getByLabel("Source attachment files", { exact: true })
     .setInputFiles([{ ...files[0], buffer: Buffer.from("Changed source") }, files[1]]);

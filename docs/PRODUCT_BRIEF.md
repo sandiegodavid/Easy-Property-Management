@@ -63,7 +63,7 @@ Users can inspect, back up, open, or move the workspace through **Settings → D
 - Every aggregate report must open the records behind the number.
 - AI may draft and summarize, but users must approve anything sent, signed, or committed.
 - AI-created issue records remain drafts until the local operator reviews and approves them against the original message.
-- Voice-note audio is an input to transcription rather than a required permanent record; retain the editable transcript, AI summary, and operator review history.
+- The post-MVP voice-note extension treats audio as an input to transcription rather than a required permanent record; it retains the editable transcript, AI summary, and operator review history.
 - Residential lease decisions use consistent, documented criteria and must not use familial status or another protected characteristic. Household information is limited to lawful occupancy and lease-administration needs.
 - Applicant credit and financial evidence is collected for a stated purpose with consent, redacted where practical, and assigned a retention or deletion date.
 - Jurisdiction-based notice alerts show the rule source, effective date, and last verification and require operator confirmation; they are planning aids, not legal advice.

@@ -140,7 +140,7 @@ function parentLabel(href: string) {
   if (path === "/settings/recovery") return "Unfinished forms";
   if (path === "/leasing" && url.searchParams.has("templates")) return "Inspection templates";
   if (path === "/conversations" && url.searchParams.get("intake") === "true")
-    return "source directory";
+    return "Imported records";
   if (path === "/maintenance" && url.searchParams.get("tab") === "concerns")
     return "Owner concerns";
   if (url.searchParams.has("workflow"))

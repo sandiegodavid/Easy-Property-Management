@@ -29,7 +29,7 @@
 
 ## Home and lists
 
-Slow reads should leave navigation and typing available. Review each section's capture/check time; a successful live attention check does not refresh another section's money or information-review timestamp. Use Retry or Refresh Home after transient failure. Known stale/failed attention means issues may be missing; inspect source workflows directly.
+Slow reads should leave navigation and typing available. Review each section's capture/check time; a successful check for items needing action does not refresh another section's money or information-review timestamp. Use Retry or Refresh Home after transient failure. An outdated or unavailable Needs action list may omit issues; inspect source workflows directly.
 
 Use the **New items need attention** update action to show new ordering; your current editor may remain visible separately. View all uses full server counts. If a collection changed/expired, Restart with the retained filters instead of combining old and new pages. Verify Property, horizon, period, status and archived filters before concluding a record is missing.
 

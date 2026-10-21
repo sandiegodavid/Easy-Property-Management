@@ -28,9 +28,9 @@ async function ready(page: Page) {
   await expect(
     page.getByRole("region", { name: "Recorded money", exact: true }).locator(".home-capture time"),
   ).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: "Live Home attention", exact: true }),
-  ).toContainText("As of");
+  await expect(page.getByRole("region", { name: "Home action list", exact: true })).toContainText(
+    "As of",
+  );
 }
 
 async function latency(page: Page, name: string) {
@@ -58,7 +58,7 @@ test("Home live reads meet local p95 and shell-feedback gates without a snapshot
     let previousCapture: string | null | undefined;
     const liveCapture = () =>
       document
-        .querySelector('[aria-label="Live Home attention"] .home-capture time')
+        .querySelector('[aria-label="Home action list"] .home-capture time')
         ?.getAttribute("datetime");
     const mark = (name: string, startTime: number) => {
       if (performance.getEntriesByName(name).length === 0) performance.mark(name, { startTime });
@@ -137,9 +137,9 @@ test("Home live reads meet local p95 and shell-feedback gates without a snapshot
     );
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await refreshed;
-    await expect(
-      page.getByRole("region", { name: "Live Home attention", exact: true }),
-    ).toContainText("As of");
+    await expect(page.getByRole("region", { name: "Home action list", exact: true })).toContainText(
+      "As of",
+    );
     refresh.push(await latency(page, "home-refresh"));
   }
 

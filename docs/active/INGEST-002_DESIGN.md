@@ -26,7 +26,7 @@ INGEST-002 provides:
 
 - the production issue-proposal payload contract registered with AI Governance;
 - a source-backed review queue and detail composition;
-- exact source-revision, provenance, transcript/body, attachment, governed-input, proposal, operator-edit, and optional match-candidate comparison;
+- exact source-revision, provenance, supported message content, attachment, governed-input, proposal, operator-edit, and optional match-candidate comparison;
 - explicit operator resolution of all facts required by MAINT-001 and MAINT-004;
 - create, link-only, bounded update, no-issue dismissal, and rework dispositions;
 - optimistic review concurrency and command idempotency;
@@ -34,7 +34,7 @@ INGEST-002 provides:
 - atomic coordination across Maintenance, AI Governance, Intake, and Audit;
 - bounded issue lookup for manual target selection when optional matching is unavailable;
 - retained-data, exact-schema, backup/restore, and audit validation; and
-- the feature-specific contract consumed later by UI-002, ASST-INTAKE-001, ISSUE-AI-001/002, VOICE-AI-001, and DASH-003.
+- the feature-specific contract consumed later by UI-002, ASST-INTAKE-001, DASH-003, and separately scoped post-MVP source extensions.
 
 INGEST-002 does not provide:
 
@@ -58,9 +58,7 @@ An operator may still record an issue directly through Maintenance when no retai
 | MAINT-004 / Maintenance | Owns authoritative reporter attribution and its relationship validation. Extracted reporter text is only a proposal. |
 | AUDIT-001 | Records correlated review, outcome, Intake, AI, and Maintenance events according to each owner's policy. Audit is not the source-to-result link or idempotency store. |
 | FILE-001 | Owns source file metadata, hashes, availability, and bytes. INGEST-002 reads source attachment projections; it does not copy file metadata or create issue file links automatically. |
-| ISSUE-AI-001 | Optional producer of the issue proposal payload from retained evidence. It is not required for operator review of an external proposal. |
-| ISSUE-AI-002 | Optional provider of property, space, party, and possible-existing-issue candidates. Its absence must leave manual lookup usable. |
-| ASST-001 / ASST-INTAKE-001 | Later authenticate the connection and qualify source-backed external proposal admission through the same registered payload and review contract. MCP and file exchange are alternative transports; neither approves its own proposal. |
+| ASST-001 / ASST-INTAKE-001 | Later authenticate the connection and qualify source-backed external proposal admission through the same registered payload and review contract. The assistant may propose property, space, reporter, or existing-issue candidates; INGEST-002 retains manual selection and review authority. MCP and file exchange are alternative transports; neither approves its own proposal. |
 | UI-002 | Delivers the comparison and decision workflow after the backend contracts are complete. |
 | DASH-003 | Later composes unprocessed sources, live reviews, stale proposals, and ingestion failures through bounded read contracts. |
 
@@ -72,7 +70,7 @@ This follows the modular-monolith rules in `ARCHITECTURE.md`: source modules exp
 
 One issue review is identified by an AI Governance draft whose registered action is the issue-intake action and whose source is one `intake_source` revision. The source revision and fingerprint in the run are immutable. Review detail also loads the current source projection so the operator can see whether that evidence is still current.
 
-The proposal is not the official issue. It may contain unknown, incomplete, or incorrect facts. A base review must remain possible without ISSUE-AI-002 matches.
+The proposal is not the official issue. It may contain unknown, incomplete, or incorrect facts. A base review must remain possible without assistant-supplied matches.
 
 ### Proposed issue payload
 
@@ -90,7 +88,7 @@ The production payload uses a versioned, closed schema. Unknown fields fail vali
 | `reporterRole` | Nullable proposed `owner`, `tenant`, `manager`, or `staff`. The operator must select a valid MAINT-004 subject and role before create. |
 | `propertyText`, `spaceText` | Nullable bounded source-derived descriptors. They are not stable Portfolio IDs. |
 
-ISSUE-AI-002 candidates remain a separate projection with candidate identity, reason, provenance, and confidence. They do not become fields in the retained source and do not silently replace operator selections.
+Optional assistant-supplied candidates remain a separate projection with candidate identity, reason, provenance, and confidence. They do not become fields in the retained source and do not silently replace operator selections.
 
 ### Resolved review input
 
@@ -277,7 +275,7 @@ Typed conflicts include:
 
 UI-002 renders INGEST-002 as a substantial review page, not a compact inline commit form. The page should:
 
-- show source evidence beside the editable proposal, with attachments and transcript/body clearly identified;
+- show source evidence beside the editable proposal, with attachments and supported message content clearly identified;
 - show provider/model or assistant-connection provenance accurately;
 - distinguish source text, governed input, generated proposal, operator edits, and official current issue values;
 - allow manual property, space, reporter, and existing-issue lookup even when optional matching is unavailable;
@@ -305,7 +303,7 @@ The full-summary-bar disclosure behavior from UI-001 may be used for queue items
 - Queue pages use one bounded AI draft/outcome query and set-based source-summary reads; they do not load full evidence bodies.
 - Detail loads one draft/run, one exact source revision, one current source projection, a bounded attachment projection, optional bounded candidates, and at most one selected issue detail.
 - Issue provenance uses one batch reader keyed by issue IDs; Maintenance does not query Intake or AI tables per list row.
-- Existing-issue selection uses Maintenance's indexed bounded list/search contract. ISSUE-AI-002 is an optional ranking aid, not a query requirement.
+- Existing-issue selection uses Maintenance's indexed bounded list/search contract. Assistant-supplied candidates are optional ranking aids, not a query requirement.
 - No provider call, file-byte read, or external connection occurs inside write transactions.
 
 ## Current implementation findings and readiness gaps
@@ -370,7 +368,7 @@ INGEST-002 backend/API scope is complete when:
 11. Review queues and issue provenance use bounded, set-based reads with fixed query budgets.
 12. Exact-schema/data validation and encrypted backup/restore preserve complete review and source-to-issue history with stable IDs.
 
-The overall operator workflow remains pending until UI-002 delivers the comparison and decision page. ASST-INTAKE-001 or ISSUE-AI-001 may then submit compatible proposals without changing approval semantics.
+The overall operator workflow remains pending until UI-002 delivers the comparison and decision page. ASST-INTAKE-001 may then submit compatible proposals without changing approval semantics.
 
 ## Resolved contradictions and decisions
 
@@ -382,7 +380,7 @@ One issue proposal cannot currently be registered honestly as create, update, an
 
 ### 2. “Submitted draft” has no producer in INGEST-002's hard dependency set
 
-AI-GOV-001 intentionally registers no production issue-intake action. ISSUE-AI-001 is optional and ASST-INTAKE-001 follows INGEST-002. Therefore INGEST-002 can register and review the schema but cannot receive a production proposal until a later producer is enabled. The independent AI-DRAFT-001 follow-up action on an existing issue does not produce an INGEST-002 issue-intake proposal.
+AI-GOV-001 intentionally registers no production issue-intake action. ISSUE-AI-001/002 are superseded, and ASST-INTAKE-001 follows INGEST-002. Therefore INGEST-002 can register and review the schema but cannot receive a production proposal until a later producer is enabled. The independent AI-DRAFT-001 follow-up action on an existing issue does not produce an INGEST-002 issue-intake proposal.
 
 **Decision:** keep direct MAINT-001 operator entry as the no-AI path; a manually authored source-backed draft is not part of INGEST-002 and must not be represented as an AI run. Implement INGEST-002 with deterministic contract tests and enable its queue only when a registered producer exists. UI-002 must show a truthful unavailable or empty state rather than implying extraction is active; UI-001 does not expose this review workflow. If a neutral source-backed manual-draft workflow is needed later, it requires its own domain owner and design.
 

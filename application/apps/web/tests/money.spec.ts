@@ -400,18 +400,19 @@ test("Money lists present rent and expenses as readable cards", async ({ page, r
       .getByRole("link", { name: "Rent", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   const rent = page
-    .getByRole("region", { name: "rent records", exact: true })
+    .getByRole("region", { name: "Rent records", exact: true })
     .getByRole("article")
     .first();
   await expect(rent.getByRole("heading", { name: "Rent due" })).toBeVisible();
   await expect(rent.getByText("Expected", { exact: true })).toBeVisible();
+  await expect(rent.getByText("Payment timing", { exact: true })).toBeVisible();
   await expect(rent.getByText("USD 1000.00", { exact: true }).first()).toBeVisible();
   await expect(
     rent.getByRole("link", { name: "Review amounts and receipt allocations" }),
   ).toBeVisible();
   await page.goto(`/money?tab=expenses&propertyId=${f.property.id}`);
   const card = page
-    .getByRole("region", { name: "expenses records", exact: true })
+    .getByRole("region", { name: "Expenses records", exact: true })
     .getByRole("article");
   await expect(card.getByRole("heading", { name: "Plumber" })).toBeVisible();
   await expect(card).toContainText(f.property.displayName);
@@ -555,7 +556,7 @@ test("paid Expense creation selects Property Space Provider and a Party payer wi
   await page.getByLabel("Date paid from", { exact: true }).fill(f.today);
   await page.getByLabel("Date paid to", { exact: true }).fill(f.today);
   await page.getByRole("combobox", { name: "Evidence", exact: true }).selectOption("false");
-  const directory = page.getByRole("region", { name: "expenses records", exact: true });
+  const directory = page.getByRole("region", { name: "Expenses records", exact: true });
   await expect(directory).toContainText("USD 101.03");
   await expect(directory).toContainText(f.property.displayName);
 });
@@ -1020,7 +1021,7 @@ test("receipt totals prevent unmatched money and allocate one payment across two
   await page.getByRole("combobox", { name: "Settlement", exact: true }).selectOption("partial");
   await expect(
     page
-      .getByRole("region", { name: "rent records", exact: true })
+      .getByRole("region", { name: "Rent records", exact: true })
       .getByText("Still due", { exact: true }),
   ).toHaveCount(1);
   await page
@@ -1177,7 +1178,7 @@ test("lost expense response reconciles once and evidence failure leaves spending
   await page.goto("/settings/recovery");
   expect(recoveryId).toBeTruthy();
   await page
-    .getByRole("link", { name: "Resume finance.expense.create", exact: true })
+    .getByRole("link", { name: "Resume: Record paid expense", exact: true })
     .and(page.locator(`a[href*="resume=${recoveryId}"]`))
     .click();
   await page.getByRole("button", { name: "Check original result" }).click();
@@ -1910,7 +1911,7 @@ test("deposit duplicate refunds require separate-payment review and preserve rep
   await page
     .getByRole("combobox", { name: "Unresolved deposit balance", exact: true })
     .selectOption("true");
-  await expect(page.getByRole("region", { name: "deposits records", exact: true })).toContainText(
+  await expect(page.getByRole("region", { name: "Deposits records", exact: true })).toContainText(
     "USD 400.00",
   );
 });
@@ -2109,9 +2110,7 @@ test("settlement evidence, child deletion recovery and partial refunds preserve 
   await page.getByRole("button", { name: "Save delete settlement credit", exact: true }).click();
   await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
   await page.goto("/settings/recovery");
-  await page
-    .getByRole("link", { name: "Resume finance.deposit_credit.delete", exact: true })
-    .click();
+  await page.getByRole("link", { name: "Resume: Delete settlement credit", exact: true }).click();
   await page.getByRole("button", { name: "Check original result" }).click();
   await expect(page.getByText("This is the original committed response.")).toBeVisible();
   expect(calls).toBe(1);
@@ -2409,7 +2408,7 @@ test("supporting evidence can be reselected after restart and metadata retains v
   const saved = (await (await savedResponse).json()) as Schemas["RecoveryResponse"];
   await page.goto("/settings/recovery");
   await page
-    .getByRole("link", { name: "Resume file.upload", exact: true })
+    .getByRole("link", { name: "Resume: Attach supporting evidence", exact: true })
     .and(page.locator(`[href*="resume=${saved.id}"]`))
     .click();
   await page.getByLabel("Evidence file (required)").setInputFiles(bytes);

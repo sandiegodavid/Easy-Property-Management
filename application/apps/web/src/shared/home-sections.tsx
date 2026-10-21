@@ -61,7 +61,7 @@ function HomeRegion({
     state = {
       kind: "stale",
       asOf: capture.asOf,
-      message: `Stale — ${read.message ?? "Updated attention is available. Showing the previous list until you choose to update it."}`,
+      message: `Stale — ${read.message ?? "An updated list is available. Showing the previous list until you choose to update it."}`,
       recovery: retry,
     };
   else if (read.updating)

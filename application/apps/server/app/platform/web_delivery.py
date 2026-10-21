@@ -77,7 +77,6 @@ MONEY_VIEWS = {"rent", "expenses", "deposits", "scheduled-checks", "owner-report
 SETTINGS_SECTIONS = {
     "appearance",
     "navigation",
-    "workspace",
     "ai",
     "recovery",
     "provider-categories",

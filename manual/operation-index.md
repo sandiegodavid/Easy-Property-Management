@@ -10,7 +10,7 @@ Use this index for uncommon actions. Action names below are checked against the 
 | --- | --- |
 | Install/build/package, configure a new/existing workspace, start/stop/restart/update | [Installation](installation.md) |
 | Open the synthetic demo | [Practice](installation.md#5-practice-with-synthetic-data) |
-| Home filters, refresh, live attention, View all, inventory and source drill-down | [Daily operation](daily-operation.md) |
+| Home filters, refresh, checks for items needing action, View all, inventory and source drill-down | [Daily operation](daily-operation.md) |
 | Search, archived filters, directory restart, expand/collapse | [Daily operation](daily-operation.md#navigate-and-find-records) |
 | Save/resume unfinished form, check original result, retry original attempt, discard when permitted | [Recovery](daily-operation.md#save-resume-and-correct), [troubleshooting](troubleshooting.md) |
 | Show/hide/reorder navigation, Light/Dark, restore/save preferences | [Settings](settings-and-ai.md#appearance-and-navigation) |
@@ -264,7 +264,7 @@ Use this index for uncommon actions. Action names below are checked against the 
 - Record conversation
 - Correct recorded conversation
 
-### Retained source evidence
+### Imported records
 
 [How to use these actions](tasks-and-evidence.md)
 

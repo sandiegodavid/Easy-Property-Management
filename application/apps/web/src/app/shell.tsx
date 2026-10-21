@@ -314,6 +314,7 @@ function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
   const [params] = useSearchParams();
   const location = useLocation();
   const sections = kind === "property" ? propertySections : ownerSections;
+  const moneyHref = `/money?${kind === "property" ? "propertyId" : "ownerId"}=${encodeURIComponent(id)}`;
   const navigationState: unknown = location.state;
   if (contextPath({ kind, id }) === "/home") return <Unavailable />;
   return (
@@ -341,21 +342,14 @@ function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
               </p>
             )}
           </div>
-          {kind === "property" && (
-            <button
-              type="button"
-              onClick={() =>
-                void navigate(`/money?propertyId=${encodeURIComponent(id)}`, {
-                  state: sourceNavigationState(
-                    undefined,
-                    `/money?propertyId=${encodeURIComponent(id)}`,
-                  ),
-                })
-              }
-            >
-              View in Money
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() =>
+              void navigate(moneyHref, { state: sourceNavigationState(undefined, moneyHref) })
+            }
+          >
+            View in Money
+          </button>
         </div>
         <nav className="page-tabs" aria-label={`${kind} sections`}>
           {sections.map((section) => (
@@ -366,9 +360,6 @@ function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
             </NavLink>
           ))}
         </nav>
-        {kind === "owner" && (
-          <Link to={`/money?ownerId=${encodeURIComponent(id)}`}>View in Money</Link>
-        )}
       </div>
       {kind === "property" ? (
         <div className="property-workspace-content" role="region" aria-label="Property content">
@@ -539,7 +530,6 @@ export function ApplicationShell() {
                     {["appearance", "navigation"].map((section) => (
                       <Route key={section} path={section} element={<PreferenceSettings />} />
                     ))}
-                    <Route path="workspace" element={<PendingPage title="Workspace settings" />} />
                     <Route path="ai" element={<AiGovernanceSettings />} />
                     <Route path="provider-categories" element={<ProviderWorkspace catalogOnly />} />
                   </>

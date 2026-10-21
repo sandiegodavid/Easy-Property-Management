@@ -352,7 +352,7 @@ test("new owner contacts save with ownership and remain visible after reopening"
       ).violations.map((item) => item.id),
     ),
   ).toEqual([]);
-  await page.getByRole("link", { name: "← Back to change ownership", exact: true }).click();
+  await page.getByRole("link", { name: "← Back to Change ownership", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`portfolio.ownerships.replace&target=${property.id}`));
 });
 

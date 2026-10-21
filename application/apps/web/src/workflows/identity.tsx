@@ -73,7 +73,7 @@ export function IdentityWorkspace() {
   if (definition) {
     if (definition.sourceKind && !target) return <p role="alert">Select an identity first.</p>;
     if (definition.sourceKind === "tenant" && definition.formKey !== "tenant.designate") {
-      if (tenant.isPending) return <p role="status">Loading Tenant revision…</p>;
+      if (tenant.isPending) return <p role="status">Loading tenant preferences…</p>;
       if (tenant.error) return <p role="alert">{tenant.error.message}</p>;
     }
     const contact = party.data?.contactMethods?.find((item) => item.id === child);
@@ -135,9 +135,8 @@ export function IdentityWorkspace() {
             </>
           ) : (
             <p>
-              Identity and contact changes use the Party revision. Tenant preferences and lifecycle
-              use the separate Tenant revision. Archiving a preferred contact requires an explicit
-              replacement or clear decision for each owning role.
+              Name and contact changes are saved separately from tenant preferences. Before removing
+              a preferred contact, choose a replacement or confirm that no preference is needed.
             </p>
           ))}
         {!completed && definition.formKey === "tenant.profile.patch" && (

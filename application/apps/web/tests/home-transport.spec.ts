@@ -80,7 +80,7 @@ test("live attention starts independently, defaults use server month and navigat
   });
   try {
     await page.goto("/home");
-    await expect(page.getByRole("region", { name: "Live Home attention" })).toContainText("As of");
+    await expect(page.getByRole("region", { name: "Home action list" })).toContainText("As of");
     await expect(page.getByText("Loading Home summary…", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Filters", exact: true }).click();
     await expect(page.getByLabel("Money from", { exact: true })).toHaveValue("2028-02-01");
@@ -130,7 +130,9 @@ test("scope changes cancel old reads and discard a late summary", async ({ page,
     await page.goto(`/home?propertyId=${first.id}`);
     await expect.poll(() => oldStarted).toBe(true);
     await page.getByRole("button", { name: "Filters", exact: true }).click();
-    await page.getByLabel("Property ID", { exact: false }).fill(second.id);
+    await page
+      .getByRole("combobox", { name: "Property", exact: true })
+      .selectOption({ label: second.displayName });
     await expect.poll(() => latestCapture).not.toBe("");
     const summary = page.getByRole("region", { name: "Recorded money", exact: true });
     await expect(summary.locator(".home-capture time")).toHaveAttribute("datetime", latestCapture);
@@ -138,14 +140,238 @@ test("scope changes cancel old reads and discard a late summary", async ({ page,
     release();
     await expect.poll(() => oldFinished).toBe(true);
     await expect(summary.locator(".home-capture time")).toHaveAttribute("datetime", latestCapture);
-    await expect(page.getByLabel("Property ID", { exact: false })).toHaveValue(second.id);
+    await expect(page.getByRole("combobox", { name: "Property", exact: true })).toHaveValue(
+      second.id,
+    );
+    await expect(page.locator(".home-scope")).toContainText(`Scope: ${second.displayName}.`);
+    await expect(page.locator(".home-scope")).not.toContainText(second.id);
   } finally {
     release();
   }
 });
 
+test("Home property dropdown loads bounded pages automatically and filters clear together", async ({
+  page,
+  request,
+}) => {
+  const first = await property(request, `Picker first ${crypto.randomUUID()}`);
+  const second = await property(request, `Picker archived ${crypto.randomUUID()}`);
+  const excluded = await property(request, `No Home items ${crypto.randomUUID()}`);
+  const calendarOnly = await property(request, `Calendar only ${crypto.randomUUID()}`);
+  const reviewOnly = await property(request, `Review only ${crypto.randomUUID()}`);
+  const upcomingOnly = await property(request, `Upcoming only ${crypto.randomUUID()}`);
+  const taskResponse = await request.post("/api/tasks", {
+    data: {
+      title: "Picker task",
+      relatedEntityType: "property",
+      relatedEntityId: first.id,
+      expectedRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(taskResponse.ok()).toBe(true);
+  const templateResponse = await request.get(
+    `/api/operator/home/items?collection=needs_action&propertyId=${first.id}&horizonDays=90&limit=100`,
+  );
+  const template = (await templateResponse.json()) as Schemas["CollectionResponse"];
+  if (template.result.status !== "available") throw new Error("Task fixture unavailable.");
+  const task = template.result.items[0];
+  const selections: URL[] = [];
+  await page.route("**/api/operator/home/items?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.has("propertyId") || url.searchParams.get("limit") !== "100")
+      return route.continue();
+    selections.push(url);
+    const collection = url.searchParams.get("collection") as Schemas["HomeItem"]["collection"];
+    const horizonDays = Number(url.searchParams.get("horizonDays"));
+    const later = url.searchParams.has("cursor");
+    const other =
+      collection === "appointments"
+        ? calendarOnly
+        : collection === "information_review"
+          ? reviewOnly
+          : collection === "upcoming" && horizonDays === 90
+            ? upcomingOnly
+            : collection === "waiting"
+              ? first
+              : undefined;
+    await route.fulfill({
+      json: {
+        ...template,
+        scope: { kind: "portfolio", propertyId: null },
+        result: {
+          ...template.result,
+          collection,
+          viewAllTarget: {
+            collection,
+            horizonDays,
+            scope: { kind: "portfolio", propertyId: null },
+          },
+          items:
+            collection === "needs_action"
+              ? [
+                  {
+                    ...task,
+                    key: later ? "picker-second" : task.key,
+                    propertyId: later ? second.id : first.id,
+                    propertyName: later ? second.displayName : first.displayName,
+                    propertyArchived: later,
+                  },
+                ]
+              : other
+                ? [
+                    {
+                      ...task,
+                      key: `${collection}:${other.id}`,
+                      collection,
+                      propertyId: other.id,
+                      propertyName: other.displayName,
+                      propertyArchived: false,
+                    },
+                  ]
+                : [],
+          matchingTotal: collection === "needs_action" ? 2 : other ? 1 : 0,
+          nextCursor: collection === "needs_action" && !later ? "picker-next-page" : null,
+        },
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(
+    `/home?propertyId=${first.id}&horizonDays=90&fromOn=2020-01-01&throughOn=2020-01-31`,
+  );
+  await expect(page.locator(".home-scope")).toContainText(first.displayName);
+  expect(selections).toHaveLength(0);
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
+  const picker = page.getByRole("combobox", { name: "Property", exact: true });
+  await expect(picker.getByRole("option", { name: first.displayName, exact: true })).toHaveCount(1);
+  await expect(
+    picker.getByRole("option", { name: `${second.displayName} · Archived`, exact: true }),
+  ).toHaveCount(1);
+  await expect(picker).toHaveValue(first.id);
+  for (const property of [calendarOnly, reviewOnly, upcomingOnly]) {
+    await expect(
+      picker.getByRole("option", { name: property.displayName, exact: true }),
+    ).toHaveCount(1);
+  }
+  await expect(picker.getByRole("option", { name: excluded.displayName, exact: true })).toHaveCount(
+    0,
+  );
+  await expect(page.locator('label[for="' + (await picker.getAttribute("id")) + '"]')).toHaveClass(
+    "ui-sr-only",
+  );
+  await picker.selectOption(upcomingOnly.id);
+  await page.getByLabel("Upcoming horizon").selectOption("7");
+  await expect(picker.locator("option:checked")).toHaveText(
+    `${upcomingOnly.displayName} · No Home items`,
+  );
+  await page.getByLabel("Upcoming horizon").selectOption("30");
+  await expect(page).toHaveURL(new RegExp(`propertyId=${upcomingOnly.id}.*horizonDays=30`));
+  await page.getByLabel("Upcoming horizon").selectOption("90");
+  await expect(
+    picker.getByRole("option", { name: upcomingOnly.displayName, exact: true }),
+  ).toHaveCount(1);
+  await picker.selectOption(second.id);
+  await expect(page.locator(".home-scope")).toContainText(second.displayName);
+  await expect(page.locator(".home-scope")).not.toContainText(second.id);
+  await expect(page.getByRole("searchbox", { name: "Find a property" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Next properties", exact: true })).toHaveCount(0);
+  const controls = [
+    picker,
+    page.getByLabel("Upcoming horizon"),
+    page.getByLabel("Money from"),
+    page.getByLabel("Money through"),
+    page.getByRole("button", { name: "Clear filters", exact: true }),
+  ];
+  const boxes = await Promise.all(controls.map((control) => control.boundingBox()));
+  expect(boxes.every((box) => box !== null)).toBe(true);
+  const bottoms = boxes.map((box) => box!.y + box!.height);
+  expect(Math.max(...bottoms) - Math.min(...bottoms)).toBeLessThan(2);
+  const bootstrap = await request.get("/api/operator/bootstrap");
+  const { serverTimeUtc } = (await bootstrap.json()) as Schemas["BootstrapResponse"];
+  const defaults = homeFilters(new URLSearchParams(), serverTimeUtc);
+  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await expect(page.locator(".home-scope")).toContainText("Scope: All properties.");
+  await expect(page).not.toHaveURL(/propertyId=/);
+  await expect(page.getByLabel("Upcoming horizon")).toHaveValue("7");
+  await expect(page.getByLabel("Money from")).toHaveValue(defaults.fromOn);
+  await expect(page.getByLabel("Money through")).toHaveValue(defaults.throughOn);
+  await expect(
+    picker.getByRole("option", { name: upcomingOnly.displayName, exact: true }),
+  ).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("button", { name: "Clear filters", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+  expect(
+    selections.every(
+      (url) => url.searchParams.get("limit") === "100" && !url.searchParams.has("propertyId"),
+    ),
+  ).toBe(true);
+  expect(new Set(selections.map((url) => url.searchParams.get("collection")))).toEqual(
+    new Set(["needs_action", "waiting", "upcoming", "appointments", "information_review"]),
+  );
+  expect(selections.some((url) => url.searchParams.get("horizonDays") === "90")).toBe(true);
+  expect(selections.some((url) => url.searchParams.get("horizonDays") === "7")).toBe(true);
+  expect(selections.some((url) => url.searchParams.get("cursor") === "picker-next-page")).toBe(
+    true,
+  );
+  await page.unrouteAll({ behavior: "wait" });
+});
+
+test("Home property choices do not use partial lists when a source fails and can be retried", async ({
+  page,
+  request,
+}) => {
+  const selected = await property(request, `Retain selected scope ${crypto.randomUUID()}`);
+  let fail = true;
+  await page.route("**/api/operator/home/items?*", (route) => {
+    const url = new URL(route.request().url());
+    return fail &&
+      !url.searchParams.has("propertyId") &&
+      url.searchParams.get("limit") === "100" &&
+      url.searchParams.get("collection") === "waiting"
+      ? route.fulfill({ status: 503, json: { detail: "Unavailable" } })
+      : route.continue();
+  });
+  await page.goto(`/home?propertyId=${selected.id}`);
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
+  const picker = page.getByRole("combobox", { name: "Property", exact: true });
+  await expect(
+    page.getByText("Property choices unavailable. Try again.", { exact: true }),
+  ).toBeVisible();
+  await expect(picker).toHaveValue(selected.id);
+  await expect(page.locator(".home-scope")).toContainText(selected.displayName);
+  await expect(
+    page.getByText("No properties have Home items for this horizon.", { exact: true }),
+  ).toHaveCount(0);
+  fail = false;
+  await page.getByRole("button", { name: "Retry properties", exact: true }).click();
+  await expect(
+    page.getByText("Property choices unavailable. Try again.", { exact: true }),
+  ).toHaveCount(0);
+  await expect(picker).toHaveValue(selected.id);
+  await page.unrouteAll({ behavior: "wait" });
+});
+
+test("unavailable property names never disclose IDs or silently widen Home scope", async ({
+  page,
+  request,
+}) => {
+  const selected = await property(request, `Unavailable picker ${crypto.randomUUID()}`);
+  await page.route(`**/api/properties/${selected.id}`, (route) =>
+    route.fulfill({ status: 503, json: { detail: "Unavailable" } }),
+  );
+  await page.goto(`/home?propertyId=${selected.id}`);
+  await expect(page.locator(".home-scope")).toContainText("Selected property (name unavailable)");
+  await expect(page.locator(".home-scope")).not.toContainText(selected.id);
+  await expect(page).toHaveURL(new RegExp(`propertyId=${selected.id}`));
+});
+
 test("missing readiness suppresses Home reads and runtime mismatches withhold results", async ({
   page,
+  request,
 }) => {
   let homeReads = 0;
   page.on("request", (request) => {
@@ -169,16 +395,21 @@ test("missing readiness suppresses Home reads and runtime mismatches withhold re
   ).toBeVisible();
   expect(homeReads).toBe(0);
   await page.unroute("**/api/operator/bootstrap");
+  const bootstrap = (await (
+    await request.get("/api/operator/bootstrap")
+  ).json()) as Schemas["BootstrapResponse"];
+  const filters = homeParams(homeFilters(new URLSearchParams(), bootstrap.serverTimeUtc));
+  const response = await request.get(`/api/operator/home?${filters}`);
+  expect(response.ok(), await response.text()).toBe(true);
+  const result = (await response.json()) as Schemas["HomeResponse"];
   await page.route("**/api/operator/home?*", async (route) => {
-    const response = await route.fetch();
-    const result = (await response.json()) as Schemas["HomeResponse"];
     await route.fulfill({ json: { ...result, runtimeEpoch: crypto.randomUUID() } });
   });
   await page.reload();
   await expect(page.getByRole("region", { name: "Home summary" })).toContainText(
     "no longer matches",
   );
-  await expect(page.getByRole("region", { name: "Live Home attention" })).toContainText("As of");
+  await expect(page.getByRole("region", { name: "Home action list" })).toContainText("As of");
 });
 
 test("money and horizon changes restart only full Home while retaining live capture", async ({
@@ -195,7 +426,7 @@ test("money and horizon changes restart only full Home while retaining live capt
   await expect(
     page.getByRole("region", { name: "Recorded money", exact: true }).locator(".home-capture time"),
   ).toBeVisible();
-  const live = page.getByRole("region", { name: "Live Home attention" });
+  const live = page.getByRole("region", { name: "Home action list" });
   await expect(live).toContainText("As of");
   const capture = await live.textContent();
   await page.getByRole("button", { name: "Filters", exact: true }).click();

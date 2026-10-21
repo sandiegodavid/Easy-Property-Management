@@ -8,6 +8,16 @@ import { recoveryApi } from "./recovery";
 import { Link } from "react-router-dom";
 import { workflows } from "@epm/contracts/workflows";
 import { workflowUrl } from "../workflows/command";
+import type { components } from "@epm/contracts/generated";
+import { formatHomeTime } from "./home-time";
+
+const statusLabels: Record<components["schemas"]["RecoveryMetadata"]["status"], string> = {
+  active: "Draft saved",
+  outcome_unknown: "Submission needs checking",
+  reconciled: "Submission checked",
+  discarded: "Discarded",
+  expired: "Expired",
+};
 
 // Bounded metadata only. Feature editors load their own allowlisted payloads.
 export function RecoveryPage() {
@@ -53,7 +63,7 @@ export function RecoveryPage() {
       <h2>Unfinished forms</h2>
       <p>
         Saved forms are not official records. Files and credentials must be selected again after
-        restart. An unresolved attempt must be reconciled before another submission.
+        restart. If a submission was interrupted, check its result before submitting again.
       </p>
       {records.isPending && <p role="status">Loading unfinished forms…</p>}
       {records.error && <p role="alert">{records.error.message}</p>}
@@ -64,37 +74,46 @@ export function RecoveryPage() {
           <p>{records.data.matchingTotal} forms</p>
           {records.data.items.length === 0 && <p>No unfinished forms on this page.</p>}
           <ul>
-            {records.data.items.map((record) => (
-              <li key={record.id}>
-                {record.formKey} · {record.status} · Saved {record.savedAt}
-                {record.status === "outcome_unknown" && (
-                  <button
-                    disabled={pending || !scope.canWrite}
-                    onClick={() => {
-                      void reconcile(record.id);
-                    }}
-                  >
-                    Reconcile attempt
-                  </button>
-                )}
-                {record.formKey === "coverage.review" &&
-                  ["active", "outcome_unknown"].includes(record.status) && (
-                    <Link to={`/coverage/reviews/${record.id}`}>Resume information review</Link>
+            {records.data.items.map((record) => {
+              const workflow = workflows.find((workflow) => workflow.formKey === record.formKey);
+              const title =
+                workflow?.title ??
+                (record.formKey === "coverage.review" ? "Information review" : "Saved form");
+              return (
+                <li key={record.id}>
+                  <h3>{title}</h3>
+                  <p>
+                    {statusLabels[record.status]} · Saved{" "}
+                    <time dateTime={record.savedAt}>{formatHomeTime(record.savedAt)}</time>
+                  </p>
+                  {record.status === "outcome_unknown" && (
+                    <button
+                      disabled={pending || !scope.canWrite}
+                      onClick={() => {
+                        void reconcile(record.id);
+                      }}
+                    >
+                      Check submission
+                    </button>
                   )}
-                {workflows.some((workflow) => workflow.formKey === record.formKey) &&
-                ["active", "outcome_unknown"].includes(record.status) ? (
-                  <Link
-                    to={`${workflowUrl(record.formKey, record.sourceId ?? undefined)}&resume=${record.id}`}
-                  >
-                    Resume {record.formKey}
-                  </Link>
-                ) : (
-                  record.status === "active" && (
-                    <span> — Resume from the owning workflow when its editor is available.</span>
-                  )
-                )}
-              </li>
-            ))}
+                  {record.formKey === "coverage.review" &&
+                    ["active", "outcome_unknown"].includes(record.status) && (
+                      <Link to={`/coverage/reviews/${record.id}`}>Resume: {title}</Link>
+                    )}
+                  {workflow && ["active", "outcome_unknown"].includes(record.status) ? (
+                    <Link
+                      to={`${workflowUrl(record.formKey, record.sourceId ?? undefined)}&resume=${record.id}`}
+                    >
+                      Resume: {title}
+                    </Link>
+                  ) : (
+                    record.status === "active" && (
+                      <span> — Resume from the owning workflow when its editor is available.</span>
+                    )
+                  )}
+                </li>
+              );
+            })}
           </ul>
           {records.data.nextCursor && (
             <button onClick={() => setCursor(records.data.nextCursor ?? undefined)}>

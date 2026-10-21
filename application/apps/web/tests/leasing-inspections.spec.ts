@@ -625,7 +625,7 @@ test("draft edits resume and execution uses independent Lease and Space revision
   await page.getByRole("button", { name: "Save unfinished form", exact: true }).click();
   await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume lease.patch", exact: true }).last().click();
+  await page.getByRole("link", { name: "Resume: Edit lease draft", exact: true }).last().click();
   await expect(page.getByRole("textbox", { name: "Notes", exact: true })).toHaveValue(
     "Saved lease draft",
   );
@@ -786,7 +786,7 @@ test("removed participants resume original-result recovery without another remov
     page.getByText("Draft saved · Command outcome_unknown", { exact: true }),
   ).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume lease.participant.remove", exact: true }).click();
+  await page.getByRole("link", { name: "Resume: Remove lease participant", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toContainText(
     receipt!.operationId,
@@ -1155,6 +1155,9 @@ test("inspection evidence resumes with original bytes and reconciles a lost resp
     draft = await report(request, f);
   const observation = draft.areas[0].observations[0];
   await page.goto(`/inspections/${draft.id}`);
+  await expect(
+    page.getByRole("heading", { name: "Move-in inspection", exact: true }),
+  ).toBeVisible();
   await page.getByRole("link", { name: "Attach evidence for Counter" }).click();
   await page.getByLabel("Evidence file (required)").setInputFiles({
     name: "counter.txt",
@@ -1165,7 +1168,7 @@ test("inspection evidence resumes with original bytes and reconciles a lost resp
   await page.getByRole("button", { name: "Save unfinished form" }).click();
   await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume inspection.evidence.attach", exact: true }).click();
+  await page.getByRole("link", { name: "Resume: Attach inspection evidence", exact: true }).click();
   await page.getByLabel("Evidence file (required)").setInputFiles({
     name: "counter.txt",
     mimeType: "text/plain",

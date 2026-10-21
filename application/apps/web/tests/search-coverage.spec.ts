@@ -57,7 +57,29 @@ test("bounded search groups preserve continuations and open typed targets", asyn
     if (entry.url().includes("/api/operator/search")) calls.push(entry.url());
   });
   await page.goto(`/search?q=${name}`);
-  const group = page.getByRole("region", { name: "tasks search results" });
+  await expect(page.getByLabel("Search records", { exact: true })).toHaveValue(name);
+  await expect(
+    page.getByText(
+      "Searches names and record details. Message text and file contents are not searched.",
+    ),
+  ).toBeVisible();
+  for (const heading of [
+    "Properties",
+    "Rental units",
+    "Owners",
+    "Tenants",
+    "Leases",
+    "Conversations",
+    "Maintenance issues",
+    "Tasks",
+  ]) {
+    await expect(
+      page
+        .getByRole("region", { name: `${heading} search results`, exact: true })
+        .getByRole("heading", { name: heading, exact: true }),
+    ).toBeVisible();
+  }
+  const group = page.getByRole("region", { name: "Tasks search results" });
   await expect(group).toContainText("11 matches");
   await expect(group.getByRole("link")).toHaveCount(10);
   const first = await group.getByRole("link").allTextContents();
@@ -71,6 +93,56 @@ test("bounded search groups preserve continuations and open typed targets", asyn
   await page.goBack();
   await expect(group.getByRole("link")).toHaveCount(1);
   await expect(page).toHaveURL(/tasksCursor=/);
+});
+
+test("record details hide internal IDs and revisions and format statuses and deadlines", async ({
+  page,
+  request,
+}) => {
+  const item = await property(request, "Readable rental unit");
+  await page.goto(`/search?sourceType=space&sourceId=${item.spaces[0].id}`);
+  const panel = page.getByRole("region", { name: "Record details", exact: true });
+  await expect(
+    panel.getByRole("heading", { name: "Rental unit details", exact: true }),
+  ).toBeVisible();
+  await expect(panel.getByText("Active", { exact: true })).toBeVisible();
+  await expect(panel).not.toContainText(item.id);
+  await expect(panel).not.toContainText(item.spaces[0].id);
+  await expect(panel.getByText("Revision", { exact: true })).toHaveCount(0);
+  const deadline = "2026-01-02T12:00:00Z";
+  const created = await request.post("/api/tasks", {
+    data: {
+      title: "Readable deadline",
+      priority: "normal",
+      isAllDay: false,
+      dueAtUtc: deadline,
+      dueTimezone: "America/Los_Angeles",
+      expectedRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(created.ok(), await created.text()).toBeTruthy();
+  const task = (await created.json()) as Schema["TaskResponse"];
+  await page.goto(`/search?sourceType=task&sourceId=${task.id}`);
+  await expect(panel.getByRole("heading", { name: "Task details", exact: true })).toBeVisible();
+  await expect(panel.getByText("Open", { exact: true })).toBeVisible();
+  await expect(panel).not.toContainText(task.id);
+  await expect(panel).not.toContainText(deadline);
+  await expect(panel).not.toContainText(/no_deadline|not_due|follow_up|Revision/);
+  const localDeadline = await page.evaluate(
+    (value) =>
+      new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
+        new Date(value),
+      ),
+    deadline,
+  );
+  await expect(panel).toContainText(localDeadline);
+  await expect(panel.getByRole("link", { name: "View task", exact: true })).toHaveAttribute(
+    "href",
+    `/tasks?record=task&id=${task.id}`,
+  );
+  await panel.getByRole("link", { name: "Close details", exact: true }).click();
+  await expect(panel).toHaveCount(0);
 });
 
 test("search failure is independent and stale continuations restart with filters", async ({
@@ -99,7 +171,7 @@ test("search failure is independent and stale continuations restart with filters
     await route.fulfill({ json: data });
   });
   await page.goto("/search?q=Search54%20independent&includeArchived=true");
-  await expect(page.getByRole("region", { name: "tasks search results" })).toContainText(
+  await expect(page.getByRole("region", { name: "Tasks search results" })).toContainText(
     "unavailable",
   );
   const retry = page.waitForRequest(
@@ -109,7 +181,7 @@ test("search failure is independent and stale continuations restart with filters
   );
   await page.getByRole("button", { name: "Retry tasks search" }).click();
   await retry;
-  const group = page.getByRole("region", { name: "properties search results" });
+  const group = page.getByRole("region", { name: "Properties search results" });
   await expect(group.getByRole("link")).toHaveAttribute("href", `/properties/${item.id}/overview`);
   await group.getByRole("button", { name: "Next properties results" }).click();
   await expect(group.getByRole("alert")).toBeVisible();
@@ -134,7 +206,7 @@ test("search failure is independent and stale continuations restart with filters
   await restartedResponse;
   expect(fresh.searchParams.get("q")).toBe("Search54 independent");
   expect(fresh.searchParams.get("includeArchived")).toBe("true");
-  await expect(page.getByLabel("Search metadata")).toHaveValue("Search54 independent");
+  await expect(page.getByLabel("Search records")).toHaveValue("Search54 independent");
   await expect(page.getByLabel("Include archived records")).toBeChecked();
 });
 
@@ -152,7 +224,7 @@ test("archived metadata remains opt-in and opens the retained contextual record"
   });
   expect(archived.ok(), await archived.text()).toBe(true);
   await page.goto("/search?q=Archived%20OPS%20acceptance%20property");
-  const group = page.getByRole("region", { name: "properties search results" });
+  const group = page.getByRole("region", { name: "Properties search results" });
   await expect(group).toContainText("0 matches");
   await page.getByLabel("Include archived records").click();
   await expect(page.getByLabel("Include archived records")).toBeChecked();
@@ -181,6 +253,11 @@ test("maintenance review commits a source-bound receipt and dirty forms resume",
     "needs review",
   );
   await page.getByRole("button", { name: "Review maintenance information" }).click();
+  await expect(
+    page
+      .getByRole("region", { name: "Information review form", exact: true })
+      .getByRole("heading", { name: "Review maintenance", exact: true }),
+  ).toBeVisible();
   await page.getByLabel("Review reason").fill("Checked maintenance records");
   const saving = page.waitForResponse(
     (response) =>
@@ -611,7 +688,7 @@ test("coverage absence, membership failure and hidden destinations remain truthf
       .getByRole("link", { name: "Properties" }),
   ).toHaveCount(0);
   await page
-    .getByRole("region", { name: "properties search results" })
+    .getByRole("region", { name: "Properties search results" })
     .getByRole("link", { name: "Coverage54 availability" })
     .click();
   await expect(

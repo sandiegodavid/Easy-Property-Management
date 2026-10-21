@@ -23,12 +23,12 @@ function InventoryPage({ occupancy }: { occupancy: "vacant" | "unknown" }) {
   const next = new URLSearchParams(params);
   if (read.value?.nextCursor) next.set("cursor", read.value.nextCursor);
   return (
-    <section aria-label="Home inventory spaces">
+    <section aria-label="Home rental-unit inventory">
       <HomeBackLink fallback="/home">Return Home</HomeBackLink>
-      <h2>{occupancy === "vacant" ? "Vacant spaces" : "Unknown occupancy"}</h2>
+      <h2>{occupancy === "vacant" ? "Vacant rental units" : "Unknown occupancy"}</h2>
       <p>
-        Active Properties and Spaces only. Counts describe recorded occupancy, not availability or
-        verified physical condition. Unknown occupancy never counts as vacant.
+        Active properties and rental units only. Counts describe recorded occupancy, not leasing
+        status or verified physical condition. Unknown occupancy never counts as vacant.
       </p>
       <button disabled={read.updating} onClick={restart}>
         Restart inventory with current filters
@@ -46,17 +46,17 @@ function InventoryPage({ occupancy }: { occupancy: "vacant" | "unknown" }) {
         read.value && (
           <>
             <p>
-              {read.value.matchingTotal} matching {occupancy} spaces · As of{" "}
+              {read.value.matchingTotal} matching {occupancy} rental units · As of{" "}
               <time dateTime={read.value.asOf}>{formatHomeTime(read.value.asOf)}</time>
             </p>
-            {read.value.items.length === 0 && <p>No matching spaces at this capture.</p>}
+            {read.value.items.length === 0 && <p>No matching rental units at this capture.</p>}
             <ul>
               {read.value.items.map((item) => (
                 <li key={item.spaceId}>
                   {item.propertyName} / {item.spaceName} · {item.occupancy} · Local date{" "}
                   {item.effectiveLocalDate} · {item.timeZone}{" "}
                   <HomeSourceLink to={`/properties/${item.propertyId}/units`}>
-                    Review current Property and Space status
+                    Review occupancy and leasing status
                   </HomeSourceLink>
                 </li>
               ))}

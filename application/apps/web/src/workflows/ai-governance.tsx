@@ -1330,8 +1330,9 @@ export function AiDraftReview() {
         </dl>
         {draft.supersedesDraftId && (
           <p>
-            Replaces draft:{" "}
-            <Link to={`/ai/review/${draft.supersedesDraftId}`}>{draft.supersedesDraftId}</Link>
+            <Link to={`/ai/review/${draft.supersedesDraftId}`}>
+              View the draft this one replaces
+            </Link>
           </p>
         )}
       </section>

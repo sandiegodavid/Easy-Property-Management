@@ -21,6 +21,6 @@
 | Quote / cost context / expense | Offered price / operational estimate or work-reported amount / actual confirmed paid spending. |
 | Waiting / follow-up / reminder | External dependency context / when to revisit it / a separate reminder record. None rewrites the original deadline. |
 | Information review | Whether the app has enough recorded information for an area and whether it needs review. States reflect missing, needs-review, recorded or non-applicable information—not insurance/service coverage, continuous monitoring, legal compliance or physical inspection certification. |
-| Captured / checked / stale | When a read was taken / a successful attention check / retained results whose currency is uncertain or invalidated. |
+| Captured / checked / stale | When a read was taken / a successful check for items needing action / retained results whose currency is uncertain or invalidated. |
 | Archive / void / correct | Retain inactive context / explicitly reverse the allowed record / record reviewed correction with history. |
 | Retained source | Preserved submitted message/transcript/file evidence, distinct from a conversation or approved issue. |

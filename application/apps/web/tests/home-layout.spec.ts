@@ -38,9 +38,9 @@ async function ready(page: Page) {
   await expect(page.getByRole("region", { name: "Recorded money", exact: true })).toContainText(
     "USD",
   );
-  await expect(
-    page.getByRole("region", { name: "Live Home attention", exact: true }),
-  ).toContainText("As of");
+  await expect(page.getByRole("region", { name: "Home action list", exact: true })).toContainText(
+    "As of",
+  );
 }
 
 test("day heading uses local date and truthful complete, partial and empty action counts", async ({
@@ -419,7 +419,7 @@ test("live attention refreshes at a declared transition, coalesces focus checks 
   }
 });
 
-test("live attention performs the minute check while Home remains visible", async ({
+test("Home refresh defaults to five minutes for summary and attention", async ({
   page,
   request,
 }) => {
@@ -427,12 +427,94 @@ test("live attention performs the minute check while Home remains visible", asyn
   const data = await fixtures(request);
   data.live.nextTransitionAt = null;
   let liveReads = 0;
+  let fullReads = 0;
+  await page.route("**/api/operator/home?*", async (route) => {
+    fullReads += 1;
+    await route.fulfill({ json: data.full });
+  });
   await page.route("**/api/operator/home/attention?*", async (route) => {
     liveReads += 1;
     await route.fulfill({ json: data.live });
   });
   await page.goto(`/home?${period}`);
   await expect.poll(() => liveReads).toBe(1);
+  await expect.poll(() => fullReads).toBe(1);
   await page.clock.runFor(60_100);
+  expect(liveReads).toBe(1);
+  expect(fullReads).toBe(1);
+  await page.clock.fastForward(240_000);
   await expect.poll(() => liveReads).toBe(2);
+  await expect.poll(() => fullReads).toBe(2);
+});
+
+test("Home refresh interval saves in Settings, survives reload and drives both read timers", async ({
+  page,
+  request,
+}) => {
+  await page.clock.install({ time: new Date("2026-10-15T12:00:00Z") });
+  const data = await fixtures(request);
+  data.live.nextTransitionAt = null;
+  let liveReads = 0,
+    fullReads = 0;
+  await page.route("**/api/operator/home/attention?*", async (route) => {
+    liveReads++;
+    await route.fulfill({ json: data.live });
+  });
+  await page.route("**/api/operator/home?*", async (route) => {
+    fullReads++;
+    await route.fulfill({ json: data.full });
+  });
+  await page.goto("/settings");
+  const setting = page.getByRole("combobox", { name: "Automatic refresh", exact: true });
+  await expect(setting).toHaveAccessibleDescription(
+    "Saved automatically for this browser. Home refreshes at this interval while open. Needs action may update sooner when a deadline or follow-up becomes due.",
+  );
+  await expect(setting).toHaveValue("5");
+  await setting.selectOption("1");
+  await expect(
+    page.getByText("Home refresh preference saved for this browser.", { exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(setting).toHaveValue("1");
+  await page
+    .getByRole("navigation", { name: "Primary navigation", exact: true })
+    .getByRole("link", { name: "Home", exact: true })
+    .click();
+  await expect.poll(() => liveReads).toBe(1);
+  await expect.poll(() => fullReads).toBe(1);
+  await page.clock.fastForward(60_100);
+  await expect.poll(() => liveReads).toBe(2);
+  await expect.poll(() => fullReads).toBe(2);
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect.poll(() => liveReads).toBe(3);
+  await expect.poll(() => fullReads).toBe(3);
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  await setting.selectOption("15");
+  const previousLive = liveReads,
+    previousFull = fullReads;
+  await page.goto(`/home?${period}`);
+  await expect.poll(() => liveReads).toBe(previousLive + 1);
+  await expect.poll(() => fullReads).toBe(previousFull + 1);
+  await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeEnabled();
+  const liveBefore = liveReads,
+    fullBefore = fullReads;
+  await page.clock.fastForward(300_100);
+  expect(liveReads).toBe(liveBefore);
+  expect(fullReads).toBe(fullBefore);
+  await page.clock.fastForward(600_000);
+  await expect.poll(() => liveReads).toBe(liveBefore + 1);
+  await expect.poll(() => fullReads).toBe(fullBefore + 1);
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Restore defaults", exact: true }).click();
+  await expect(setting).toHaveValue("5");
+  await page.reload();
+  await expect(setting).toHaveValue("5");
+});
+
+test("invalid stored Home refresh intervals fall back to five minutes", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("epm.home-refresh-minutes", "-10"));
+  await page.goto("/settings");
+  await expect(page.getByRole("combobox", { name: "Automatic refresh", exact: true })).toHaveValue(
+    "5",
+  );
 });

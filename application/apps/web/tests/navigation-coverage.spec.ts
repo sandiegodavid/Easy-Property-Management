@@ -90,6 +90,13 @@ test("owner workspace tabs open every section and View in Money keeps the owner"
   const ownerName = `Owner Tabs ${token}`;
   const { ownerId } = await propertyWithOwner(request, `Owner tabs ${token}`, ownerName);
   await page.goto(`/owners/${ownerId}/overview`);
+  await expect(page.getByText("Person · Active", { exact: true })).toBeVisible();
+  await expect(page.locator("#workspace-content")).not.toContainText("Source:");
+  const money = page.getByRole("button", { name: "View in Money", exact: true });
+  await expect(
+    page.locator(".directory-heading").getByRole("button", { name: "View in Money" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "View in Money", exact: true })).toHaveCount(0);
   const tabs = page.getByRole("navigation", { name: "owner sections", exact: true });
   await expect(tabs.getByRole("link")).toHaveText([
     "Overview",
@@ -120,7 +127,7 @@ test("owner workspace tabs open every section and View in Money keeps the owner"
       ownerName,
     ]);
   }
-  await page.getByRole("link", { name: "View in Money", exact: true }).click();
+  await money.click();
   await expect(page).toHaveURL(`/money?ownerId=${ownerId}`);
 });
 
@@ -186,7 +193,7 @@ test("Money views tabs switch sections by click and mark the active tab", async 
   ] as const) {
     await views.getByRole("link", { name: label, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`[?&]tab=${tab}(&|$)`));
-    await expect(page.getByRole("region", { name: `${tab} records`, exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: `${label} records`, exact: true })).toBeVisible();
     await expect(views.getByRole("link", { name: label, exact: true })).toHaveAttribute(
       "aria-current",
       "page",
@@ -222,14 +229,20 @@ test("owners directory search narrows to the matching owner and opens its overvi
   await search.fill(token);
   await expect(alphaLink).toBeVisible();
   await expect(betaLink).toBeVisible();
+  await expect(page.locator("#workspace-content")).toContainText("Person · Active");
+  await expect(page.locator("#workspace-content")).toContainText("(Current)");
   await search.fill(alpha.ownerName);
   await expect(alphaLink).toBeVisible();
   await expect(betaLink).toHaveCount(0);
+  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await expect(page).toHaveURL("/owners");
+  await expect(search).toHaveValue("");
+  await expect(betaLink).toBeVisible();
   await alphaLink.click();
   await expect(page).toHaveURL(new RegExp(`/owners/${alpha.ownerId}/overview([?#]|$)`));
 });
 
-test("settings index links to provider categories and section routes render settings", async ({
+test("settings index links to implemented sections and removed placeholders stay unavailable", async ({
   page,
 }) => {
   await page.goto("/settings");
@@ -241,6 +254,17 @@ test("settings index links to provider categories and section routes render sett
   await expect(page.locator("#workspace-content h2").first()).toHaveText("Provider categories");
   await page.getByRole("link", { name: "← Back to Settings", exact: true }).click();
   await expect(page).toHaveURL("/settings");
+  const settings = page.getByRole("navigation", { name: "Settings sections", exact: true });
+  await expect(settings.getByRole("link")).toHaveText(["Provider categories", "AI assistance"]);
+  await settings.getByRole("link", { name: "AI assistance", exact: true }).click();
+  await expect(page).toHaveURL("/settings/ai");
+  await expect(
+    page.getByRole("heading", { name: "Built-in AI assistance", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "← Back to Settings", exact: true }).click();
+  await expect(page).toHaveURL("/settings");
+  const removed = await page.goto("/settings/workspace");
+  expect(removed?.status()).toBe(404);
   for (const section of ["navigation", "appearance"]) {
     await page.goto(`/settings/${section}`);
     await expect(page.locator("#workspace-content h2").first()).toHaveText(

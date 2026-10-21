@@ -23,9 +23,7 @@ function homeRegion(page: Page, name: string) {
   return page.getByRole("region", { name, exact: true });
 }
 
-test("home page shows the day heading, work queue tabs and summary scope", async ({
-  page,
-}) => {
+test("home page shows the day heading, work queue tabs and summary scope", async ({ page }) => {
   await page.goto("/home");
   await expect(page.getByRole("heading", { name: "Your day, in view", exact: true })).toBeVisible();
   const queue = page.getByRole("tablist", { name: "Work queue", exact: true });
@@ -68,7 +66,7 @@ test("work queue tabs switch panels", async ({ page }) => {
 
   await queue.getByRole("tab", { name: "Needs action", exact: true }).click();
   await expect(homeRegion(page, "Needs action")).toBeVisible();
-  await expect(homeRegion(page, "Live Home attention")).toBeVisible();
+  await expect(homeRegion(page, "Home action list")).toBeVisible();
 });
 
 test("filters button discloses the home filter form", async ({ page }) => {
@@ -83,9 +81,7 @@ test("filters button discloses the home filter form", async ({ page }) => {
   await expect(filters.getByLabel("Upcoming horizon")).toBeVisible();
   await expect(filters.getByLabel("Money from")).toBeVisible();
   await expect(filters.getByLabel("Money through")).toBeVisible();
-  await expect(
-    filters.getByText("Money dates apply only to Recorded money."),
-  ).toBeVisible();
+  await expect(filters.getByText("Money dates apply only to Recorded money.")).toBeVisible();
 });
 
 test("side collections link to full collection views", async ({ page }) => {

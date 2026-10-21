@@ -1,11 +1,13 @@
 import { DynamicFilterForm } from "./dynamic-filter-form";
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { AsyncRegion } from "@epm/ui";
 import { useWorkspace } from "../app/workspace-gate";
 import { homeFilters, homeParams, useHomeReads } from "./home-transport";
 import { HomeCollection, HomeSummaries, LiveAttention } from "./home-sections";
 import { DisclosureHelp } from "./home-disclosure-help";
+import { HomePropertyFilter, HomePropertyName } from "./home-property-filter";
 import { useHomeScroll } from "./home-navigation";
 import type { components } from "@epm/contracts/generated";
 
@@ -56,7 +58,8 @@ function DayHeading({
 }
 
 function HomeTransport() {
-  const { bootstrap } = useWorkspace();
+  const { bootstrap, scope } = useWorkspace();
+  const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams();
   const filters = homeFilters(params, bootstrap.serverTimeUtc);
   const normalized = homeParams(filters).toString();
@@ -91,7 +94,13 @@ function HomeTransport() {
               Property, upcoming horizon, and money period
             </small>
           </div>
-          <button disabled={reads.full.updating || reads.live.updating} onClick={reads.refresh}>
+          <button
+            disabled={reads.full.updating || reads.live.updating}
+            onClick={() => {
+              reads.refresh();
+              void queryClient.invalidateQueries({ queryKey: scope.key("home-property-choices") });
+            }}
+          >
             Refresh
           </button>
         </div>
@@ -102,8 +111,8 @@ function HomeTransport() {
             <p role="alert">Home summary unavailable: {reads.full.message}</p>
           ) : null}
           <p className="home-scope">
-            Scope: {filters.propertyId ?? "All properties"}. Unresolved obligations can include
-            archived properties; unlinked Tasks appear only in All properties.
+            Scope: <HomePropertyName propertyId={filters.propertyId} />. Unresolved obligations can
+            include archived properties; unlinked tasks appear only in All properties.
           </p>
         </section>
       </div>
@@ -124,39 +133,63 @@ function HomeTransport() {
             });
           }}
         >
+          <div className="home-filter-fields">
+            <HomePropertyFilter
+              propertyId={filters.propertyId}
+              horizonDays={filters.horizonDays}
+              enabled={showFilters}
+            />
+            <label>
+              Upcoming horizon
+              <select name="horizonDays" defaultValue={filters.horizonDays}>
+                <option value="7">7 days</option>
+                <option value="30">30 days</option>
+                <option value="90">90 days</option>
+              </select>
+            </label>
+            <label>
+              Money from
+              <input
+                type="date"
+                name="fromOn"
+                defaultValue={filters.fromOn}
+                aria-describedby="home-money-filter-hint"
+              />
+            </label>
+            <label>
+              Money through
+              <input
+                type="date"
+                name="throughOn"
+                defaultValue={filters.throughOn}
+                aria-describedby="home-money-filter-hint"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={(event) => {
+                const defaults = homeParams(
+                  homeFilters(new URLSearchParams(), bootstrap.serverTimeUtc),
+                );
+                const form = event.currentTarget.form!;
+                form.reset();
+                for (const name of ["horizonDays", "fromOn", "throughOn"]) {
+                  const control = form.elements.namedItem(name);
+                  if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement)
+                    control.value = defaults.get(name) ?? "";
+                }
+                setParams(defaults, {
+                  replace: true,
+                  preventScrollReset: true,
+                });
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
           <p id="home-money-filter-hint" className="ui-muted home-filter-explanation">
             Money dates apply only to Recorded money. They do not hide overdue or unresolved work.
           </p>
-          <label>
-            Property ID (blank for all properties)
-            <input name="propertyId" defaultValue={filters.propertyId ?? ""} />
-          </label>
-          <label>
-            Upcoming horizon
-            <select name="horizonDays" defaultValue={filters.horizonDays}>
-              <option value="7">7 days</option>
-              <option value="30">30 days</option>
-              <option value="90">90 days</option>
-            </select>
-          </label>
-          <label>
-            Money from
-            <input
-              type="date"
-              name="fromOn"
-              defaultValue={filters.fromOn}
-              aria-describedby="home-money-filter-hint"
-            />
-          </label>
-          <label>
-            Money through
-            <input
-              type="date"
-              name="throughOn"
-              defaultValue={filters.throughOn}
-              aria-describedby="home-money-filter-hint"
-            />
-          </label>
         </DynamicFilterForm>
       </div>
       <div className="home-grid">
@@ -203,7 +236,7 @@ function HomeTransport() {
             aria-labelledby="home-tab-0"
             hidden={tab !== "Needs action"}
           >
-            <section aria-label="Live Home attention" className="home-live">
+            <section aria-label="Home action list" className="home-live">
               <LiveAttention
                 showDisclosureHint={false}
                 allItems={tab === "Needs action"}
@@ -284,14 +317,14 @@ export function Home() {
         <>
           <DayHeading unavailable />
           <AsyncRegion
-            title="Home attention and calendar"
+            title="Home action list and calendar"
             state={{
               kind: "unavailable",
               message:
                 "The combined Home work queue and calendar are not available yet. Open a source workflow to review its current records.",
             }}
           />
-          <nav aria-label="Task attention">
+          <nav aria-label="Task deadlines and follow-ups">
             <Link to="/tasks">Task deadlines and reminders</Link>{" "}
             <Link to="/tasks?followUps=true">Waiting and follow-ups</Link>
           </nav>

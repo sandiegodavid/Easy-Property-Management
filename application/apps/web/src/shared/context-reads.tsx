@@ -327,18 +327,16 @@ export function Directory({
           </>
         )}
 
-        {kind === "property" && (
-          <button
-            type="button"
-            onClick={(event) => {
-              event.currentTarget.form?.reset();
-              setSearchDraft({ key: "", value: "" });
-              setParams({}, { replace: true, preventScrollReset: true });
-            }}
-          >
-            Clear filters
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={(event) => {
+            event.currentTarget.form?.reset();
+            setSearchDraft({ key: "", value: "" });
+            setParams({}, { replace: true, preventScrollReset: true });
+          }}
+        >
+          Clear filters
+        </button>
       </DynamicFilterForm>
       {result.error ? (
         <ReadError
@@ -369,8 +367,9 @@ export function Directory({
                     </Link>
                   </h3>
                   <p>
-                    {label(item.partyKind)} · {item.archived ? "Archived" : "Active"} ·{" "}
-                    {item.propertyCount} related properties ({relationship})
+                    {item.partyKind === "individual" ? "Person" : "Organization"} ·{" "}
+                    {item.archived ? "Archived" : "Active"} · {item.propertyCount} related
+                    properties ({label(relationship)})
                   </p>
                   <ul>
                     {item.properties.map((property) => (
@@ -474,7 +473,7 @@ export function Directory({
                             {space.availability === "available_on" && space.availableOn && (
                               <> · {space.availableOn}</>
                             )}
-                            {space.needsAttention && " · Needs attention"}
+                            {space.needsAttention && " · Status needs review"}
                           </li>
                         ))}
                       </ul>
@@ -544,7 +543,16 @@ async function readOverview(
   if (!response.data) throw new ReadFailure(response.response.status, response.error);
   return response.data;
 }
-function SourceLink({ target }: { target: Schema["EntityTarget"] }) {
+const sourceLinkLabels: Record<Schema["EntityTarget"]["entityType"], string> = {
+  property: "View property",
+  space: "View rental unit",
+  lease: "View lease",
+  task: "View task",
+  maintenance_issue: "View maintenance issue",
+  communication: "View conversation",
+  owner_concern: "View owner concern",
+};
+function SourceLink({ target, name }: { target: Schema["EntityTarget"]; name?: string }) {
   const location = useLocation();
   const state: unknown = location.state;
   const [params] = useSearchParams();
@@ -557,9 +565,8 @@ function SourceLink({ target }: { target: Schema["EntityTarget"] }) {
       : `?${next.toString()}#source-detail`;
   return (
     <Link to={to} state={state}>
-      {target.entityType === "communication"
-        ? "View conversation"
-        : `View source ${target.entityType} ${target.entityId}`}
+      {sourceLinkLabels[target.entityType]}
+      {name && <span className="ui-sr-only"> for {name}</span>}
     </Link>
   );
 }
@@ -622,11 +629,11 @@ function PropertyLeases({
   }
   return (
     <>
-      <p>Manage agreements, tenants and lease history for this property.</p>
+      <p>Manage leases, tenants and lease history for this property.</p>
       <p>
         {section.matchingTotal} matching {section.matchingTotal === 1 ? "lease" : "leases"}.
         {section.nextCursor &&
-          " More agreements may appear under the same rental on the next page."}
+          " More leases may appear under the same rental unit on the next page."}
       </p>
       <div className="property-lease-groups">
         {[...groups.values()].map(({ unit, leases }) => (
@@ -766,7 +773,7 @@ function SectionContents({
             {"occupancy" in item && (
               <p>
                 {statusLabel(item.occupancy)} · {statusLabel(item.availability)}
-                {item.needsAttention && " · Needs attention"}
+                {item.needsAttention && " · Status needs review"}
               </p>
             )}
             {"ownerKind" in item && (
@@ -829,7 +836,20 @@ function SectionContents({
               </p>
             )}
             {"target" in item && !("leaseKind" in item) && !("ownerKind" in item) && (
-              <SourceLink target={item.target} />
+              <SourceLink
+                target={item.target}
+                name={
+                  "title" in item
+                    ? item.title
+                    : "summary" in item
+                      ? item.summary
+                      : "subject" in item
+                        ? item.subject
+                        : "displayName" in item
+                          ? item.displayName
+                          : undefined
+                }
+              />
             )}
             {"area" in item && (
               <p>
@@ -982,7 +1002,6 @@ function OverviewSection({
               canStartLeases={canManageProperty}
             />
           </AsyncRegion>
-          {section.kind !== "coverage" && <p>Source: {label(section.sourceKind)}</p>}
           {"nextCursor" in section && section.nextCursor && (
             <button onClick={() => setPage({ cursor: section.nextCursor ?? undefined })}>
               Next {heading.toLowerCase()}
@@ -1160,7 +1179,7 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
         <>
           {result.data.subject.kind !== "property" && (
             <p>
-              {label(result.data.subject.partyKind)} ·{" "}
+              {result.data.subject.partyKind === "individual" ? "Person" : "Organization"} ·{" "}
               {result.data.subject.archived ? "Archived" : "Active"}
             </p>
           )}

@@ -162,13 +162,7 @@ export function IdentityDetail({
   );
   return (
     <section className="person-detail" aria-label="Person or organization details">
-      <ParentBackLink to={back}>
-        {back.startsWith("/properties?")
-          ? "← Back to change ownership"
-          : back.startsWith("/tenants")
-            ? "← Back to Tenants"
-            : "← Back to people"}
-      </ParentBackLink>
+      <ParentBackLink to={back} />
       <header className="person-detail-heading">
         <div>
           <p className="person-detail-kind">

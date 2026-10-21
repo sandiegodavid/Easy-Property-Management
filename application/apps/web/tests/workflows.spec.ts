@@ -254,6 +254,14 @@ test("identity contacts and Tenant preferences use their displayed source revisi
   await expect(page).toHaveURL(
     new RegExp(`/tenants\\?workflow=tenant.profile.patch&target=${identity.id}`),
   );
+  await expect(
+    page.getByText("Name and contact changes are saved separately from tenant preferences.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(page.getByText(/Party revision|owning role|separate Tenant revision/)).toHaveCount(
+    0,
+  );
   await page.getByLabel("Do not contact", { exact: true }).check();
   await saved(page, "Edit tenant preferences");
   const tenant = await request.get(`/api/tenants/${identity.id}`);
@@ -602,6 +610,63 @@ test("new Provider identity is created through the saved form and remains separa
   );
 });
 
+test("identity return links name actual destinations instead of People", async ({
+  page,
+  request,
+}) => {
+  const identity = await party(request, `Return label ${crypto.randomUUID()}`);
+  for (const [href, name] of [
+    ["/owners", "Owners"],
+    ["/providers", "Providers"],
+    ["/tenants", "Tenants"],
+  ]) {
+    await page.goto(`/parties?identity=${identity.id}`);
+    await page.evaluate(
+      (returnTo) => history.replaceState({ ...history.state, usr: { returnTo } }, ""),
+      href,
+    );
+    await page.reload();
+    await expect(
+      page.getByRole("link", { name: `← Back to ${name}`, exact: true }),
+    ).toHaveAttribute("href", href);
+    await expect(page.getByRole("link", { name: "← Back to people", exact: true })).toHaveCount(0);
+  }
+});
+
+test("provider record dates use local time without revision counters", async ({
+  page,
+  request,
+}) => {
+  const created = await provider(request, `Readable dates ${crypto.randomUUID()}`);
+  const archived = await request.post(`/api/providers/${created.party.id}/archive`, {
+    data: {
+      confirmed: true,
+      expectedRevision: created.profile.revision,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(archived.ok(), await archived.text()).toBeTruthy();
+  const current = (await (
+    await request.get(`/api/providers/${created.party.id}`)
+  ).json()) as Schema["ProviderResponse"];
+  await page.goto(`/providers/${created.party.id}/details`);
+  const summary = page.getByText("Record details and history", { exact: true });
+  await summary.click();
+  const details = page.locator("details.record-detail-section").filter({ has: summary });
+  await expect(details.getByText("Revision", { exact: true })).toHaveCount(0);
+  for (const value of [current.profile.updatedAt, current.profile.archivedAt!]) {
+    const local = await page.evaluate(
+      (instant) =>
+        new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
+          new Date(instant),
+        ),
+      value,
+    );
+    await expect(details).toContainText(local);
+    await expect(details).not.toContainText(value);
+  }
+});
+
 test("existing shared identity becomes a Provider without duplicating identity and keeps lifecycle history", async ({
   page,
   request,
@@ -793,7 +858,7 @@ test("saved forms resume after reload with the original fields", async ({ page, 
   await page.getByText("Form status and recovery details", { exact: true }).click();
   await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume party.patch", exact: true }).click();
+  await page.getByRole("link", { name: "Resume: Edit identity", exact: true }).click();
   await expect(page.getByLabel("Display name (required)")).toHaveValue(
     "Slice50 recovered identity",
   );
@@ -813,7 +878,7 @@ test("saved occupancy corrections recover their child context before timeline va
   await page.getByRole("button", { name: "Save unfinished form" }).click();
   await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume portfolio.occupancy.correct", exact: true }).click();
+  await page.getByRole("link", { name: "Resume: Correct occupancy", exact: true }).click();
   await expect(page.getByLabel("Reason (required)")).toHaveValue(
     "Clarify the original observation",
   );

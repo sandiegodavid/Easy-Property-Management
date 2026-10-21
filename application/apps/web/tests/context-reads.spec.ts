@@ -63,6 +63,10 @@ test("property leases group drafts by rental with bounded pages and contextual c
   await page.goto(`/properties/${property.id}/leases`);
   const section = page.getByRole("region", { name: "leases section", exact: true });
   await expect(section).toContainText("12 matching leases");
+  await expect(section).toContainText(
+    "More leases may appear under the same rental unit on the next page.",
+  );
+  await expect(section).not.toContainText("agreements");
   await expect(
     section.getByRole("checkbox", { name: "Include past, future and draft leases" }),
   ).toBeChecked();
@@ -419,8 +423,10 @@ test("property conversations use local timestamps without displaying communicati
   const row = page.locator(".context-item-cards > li").filter({ hasText: "Property update call" });
   await expect(row.locator("time")).toHaveText(localTime);
   await expect(row).not.toContainText(communication.id);
-  await row.getByRole("link", { name: "View conversation", exact: true }).click();
-  const detail = page.getByRole("region", { name: "Source detail", exact: true });
+  await row
+    .getByRole("link", { name: "View conversation for Property update call", exact: true })
+    .click();
+  const detail = page.getByRole("region", { name: "Record details", exact: true });
   await expect(
     detail.getByRole("heading", { name: "Property update call", exact: true }),
   ).toBeVisible();
@@ -797,17 +803,34 @@ test("independent task continuations and explicit whole-property money use compo
   await page.goto(`/properties/${item.id}/overview`);
   const tasks = page.getByRole("region", { name: "Tasks", exact: true });
   await expect(tasks).toContainText("11 matching records");
-  await expect(tasks.getByRole("link", { name: /View source task/ })).toHaveCount(10);
+  await expect(tasks.getByRole("link", { name: /^View task for Section task / })).toHaveCount(10);
+  await expect(tasks).not.toContainText("View source");
+  for (const link of await tasks.getByRole("link", { name: /^View task for / }).all()) {
+    await expect(link).not.toContainText(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+    );
+    expect(
+      new URL((await link.getAttribute("href"))!, "http://localhost").searchParams.get(
+        "sourceType",
+      ),
+    ).toBe("task");
+  }
   await tasks
-    .getByRole("link", { name: /View source task/ })
+    .getByRole("link", { name: /^View task for Section task / })
     .first()
     .click();
-  await expect(page.getByRole("region", { name: "Source detail", exact: true })).toContainText(
+  await expect(page.getByRole("region", { name: "Record details", exact: true })).toContainText(
     "Section task",
   );
-  await page.getByRole("link", { name: "Close source detail" }).click();
+  const record = page.getByRole("region", { name: "Record details", exact: true });
+  await expect(record.getByRole("heading", { name: "Task details", exact: true })).toBeVisible();
+  await expect(record).not.toContainText(
+    /Revision|task_deadline|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+  );
+  await expect(record.getByRole("link", { name: "View task", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Close details" }).click();
   await page.getByRole("button", { name: "Next tasks", exact: true }).click();
-  await expect(tasks.getByRole("link", { name: /View source task/ })).toHaveCount(1);
+  await expect(tasks.getByRole("link", { name: /^View task for Section task / })).toHaveCount(1);
   expect(reads).toHaveLength(2);
   expect(reads[1]).toContain("section=tasks");
   expect(reads[1]).toContain("cursor=");

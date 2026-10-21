@@ -149,7 +149,7 @@ test("preferences persist through reload, hiding and reordering keep contextual 
     .click();
   await expect(page).toHaveURL(/\/owners$/);
   await page.goto("/owners/00000000-0000-4000-8000-000000000001/money");
-  await page.getByRole("link", { name: "View in Money" }).click();
+  await page.getByRole("button", { name: "View in Money" }).click();
   await expect(page).toHaveURL(/\/money\?ownerId=/);
   await page.getByRole("button", { name: "Remove owner filter" }).click();
   await expect(page).toHaveURL(/\/money$/);

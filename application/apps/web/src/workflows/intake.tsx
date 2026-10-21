@@ -28,23 +28,23 @@ export function IntakeWorkspace() {
   const back = new URLSearchParams(params);
   back.delete("source");
   return (
-    <section aria-label="Retained Intake sources">
+    <section aria-label="Imported records">
       {!params.has("source") && !params.has("workflow") && (
         <ParentBackLink to="/conversations">← Back to Conversations</ParentBackLink>
       )}
       {params.has("source") && !params.has("workflow") && (
-        <ParentBackLink to={`/conversations?${back}`}>← Back to source directory</ParentBackLink>
+        <ParentBackLink to={`/conversations?${back}`}>← Back to Imported records</ParentBackLink>
       )}
       {!params.has("workflow") && (
         <>
-          <h2>Retained source evidence</h2>
+          <h2>Imported records</h2>
           <p>
             Manual evidence is an unverified claim. Retaining or reviewing it does not send a
             message, create an issue, or establish that work occurred.
           </p>
           <nav className="page-tabs" aria-label="Source views">
             <Link to="/conversations?intake=true" aria-current="page">
-              Source directory
+              Imported records
             </Link>
             <Link to="/conversations">Recorded conversations</Link>
           </nav>

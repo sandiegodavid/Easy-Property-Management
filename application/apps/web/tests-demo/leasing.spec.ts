@@ -79,9 +79,7 @@ test("maple house lease shows terms and participants", async ({ page }) => {
   const card = leaseCardFor(page, "Maple House");
   await card.getByRole("link").first().click();
   await expect(page).toHaveURL(/\/leases\/[^/]+\/details$/);
-  await expect(
-    page.getByRole("heading", { name: "Residential lease", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Residential lease", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "← Back to Leasing", exact: true })).toBeVisible();
 
   const context = page.getByRole("region", { name: "Lease property", exact: true });
@@ -125,7 +123,7 @@ test("lease detail links to its money records", async ({ page }) => {
   await moneyLink.click();
   await expect(page).toHaveURL(/\/money\?leaseId=[^&]+$/);
   await expect(page.getByText(/Showing this lease.s records./)).toBeVisible();
-  const rent = page.getByRole("region", { name: "rent records", exact: true });
+  const rent = page.getByRole("region", { name: "Rent records", exact: true });
   await expect(rent.getByRole("article")).toHaveCount(2);
 });
 

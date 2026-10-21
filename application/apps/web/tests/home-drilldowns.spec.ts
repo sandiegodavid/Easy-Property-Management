@@ -167,12 +167,13 @@ test("vacant and unknown totals open exact active-space views with frozen pages 
     await page.goto(`/home?propertyId=${home.id}`);
     const region = page.getByRole("region", { name: "Inventory", exact: true });
     await region.getByRole("link", { name: `1 — ${label}`, exact: true }).click();
-    const inventory = page.getByRole("region", { name: "Home inventory spaces", exact: true });
-    await expect(inventory).toContainText(`1 matching ${kind} spaces`);
+    const inventory = page.getByRole("region", { name: "Home rental-unit inventory", exact: true });
+    await expect(inventory).toContainText(`1 matching ${kind} rental units`);
+    await expect(inventory).toContainText("Active properties and rental units only.");
     await expect(inventory).toContainText(home.displayName);
     const back = page.url();
     await inventory
-      .getByRole("link", { name: "Review current Property and Space status", exact: true })
+      .getByRole("link", { name: "Review occupancy and leasing status", exact: true })
       .click();
     await expect(page).toHaveURL(new RegExp(`/properties/${home.id}/units`));
     await page
@@ -183,9 +184,9 @@ test("vacant and unknown totals open exact active-space views with frozen pages 
   await page.goto(`/home/inventory?occupancy=unknown&limit=1`);
   const seen: string[] = [];
   while (true) {
-    const inventory = page.getByRole("region", { name: "Home inventory spaces", exact: true });
+    const inventory = page.getByRole("region", { name: "Home rental-unit inventory", exact: true });
     const current = inventory.getByRole("link", {
-      name: "Review current Property and Space status",
+      name: "Review occupancy and leasing status",
       exact: true,
     });
     await expect(current).toHaveCount(1);
@@ -218,8 +219,8 @@ test("inventory conflicts and provider failure never look empty, while a success
     .getByRole("button", { name: "Restart inventory with current filters", exact: true })
     .click();
   await expect(
-    page.getByRole("region", { name: "Home inventory spaces", exact: true }),
-  ).toContainText("1 matching unknown spaces");
+    page.getByRole("region", { name: "Home rental-unit inventory", exact: true }),
+  ).toContainText("1 matching unknown rental units");
   await page.route("**/api/operator/home/inventory?*", (route) =>
     route.fulfill({
       status: 503,
@@ -228,12 +229,12 @@ test("inventory conflicts and provider failure never look empty, while a success
   );
   await page.goto(`/home/inventory?occupancy=vacant&propertyId=${home.id}`);
   await expect(page.getByRole("alert")).toContainText("No count can be inferred");
-  await expect(page.getByText("No matching spaces at this capture.")).toHaveCount(0);
+  await expect(page.getByText("No matching rental units at this capture.")).toHaveCount(0);
   await page.unroute("**/api/operator/home/inventory?*");
   await page
     .getByRole("button", { name: "Restart inventory with current filters", exact: true })
     .click();
-  await expect(page.getByText("No matching spaces at this capture.")).toBeVisible();
+  await expect(page.getByText("No matching rental units at this capture.")).toBeVisible();
 });
 
 test("coverage resolves through the actual Space source and acknowledging review does not fill gaps", async ({

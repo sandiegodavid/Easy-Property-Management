@@ -12,6 +12,7 @@ import { Facts, History, readResult } from "./reads";
 import { WorkJournal } from "./work-journal";
 import type { Choices } from "./fields";
 import { OfficialIdList } from "../shared/official-identification";
+import { formatHomeTime } from "../shared/home-time";
 
 type Category = components["schemas"]["app__modules__vendors__api__router__CategoryResponse"];
 
@@ -340,7 +341,14 @@ export function ProviderWorkspace({ catalogOnly = false }: { catalogOnly?: boole
         <WorkJournal id={target} provider />
         <details className="record-detail-section">
           <summary>Record details and history</summary>
-          <Facts value={item.profile} fields={["revision", "updatedAt", "archivedAt"]} />
+          <Facts
+            value={{
+              updatedAt: formatHomeTime(item.profile.updatedAt),
+              archivedAt: item.profile.archivedAt ? formatHomeTime(item.profile.archivedAt) : null,
+            }}
+            fields={["updatedAt", "archivedAt"]}
+            verbatim
+          />
           <History kind="provider_profile" id={target} />
           {active && (
             <CommandLinks target={target} keys={["provider.archive"]} title="Archive provider" />
@@ -376,58 +384,141 @@ export function ProviderWorkspace({ catalogOnly = false }: { catalogOnly?: boole
       </section>
     );
   return (
-    <>
-      <h2>Provider categories</h2>
-      <p>
-        Categories organize the directory and later recommendations. Services describe specific
-        offerings or practice areas. Legal / Attorney is a category; legal engagements belong to
-        their own workflow, not Maintenance assignments.
+    <div className="provider-category-page">
+      <header className="provider-category-heading">
+        <div>
+          <h2>Provider categories</h2>
+          <p className="ui-muted">Organize providers by the kind of work they do.</p>
+        </div>
+        <CommandLinks
+          keys={["provider.category.create"]}
+          title="Add category"
+          labels={{ "provider.category.create": "Add category" }}
+          collapsible={false}
+          asButtons
+        />
+      </header>
+      <p className="provider-category-guidance">
+        Categories group providers, such as Plumbing or Legal / Attorney. Services describe specific
+        offerings or practice areas within a provider’s profile.
       </p>
-      <CommandLinks keys={["provider.category.create"]} title="Add category" />
-      <details open>
-        <summary>Category administration</summary>
-        {categories.isPending && <p role="status">Loading categories…</p>}
-        {categories.error && <p role="alert">{categories.error.message}</p>}
-        {(["active", "archived"] as const).map((state) => (
+      {categories.isPending && <p role="status">Loading categories…</p>}
+      {categories.error && (
+        <p role="alert">
+          Categories are unavailable.{" "}
+          <button type="button" onClick={() => void categories.refetch()}>
+            Retry categories
+          </button>
+        </p>
+      )}
+      {(["active", "archived"] as const).map((state) => {
+        const items = categories.data?.filter((category) =>
+          state === "active" ? !category.archivedAt : !!category.archivedAt,
+        );
+        return (
           <section
             key={state}
+            className="provider-category-section"
             aria-label={`${state === "active" ? "Active" : "Archived"} Provider categories`}
           >
-            <h3>{state === "active" ? "Active categories" : "Archived categories"}</h3>
-            {categories.data
-              ?.filter((category) =>
-                state === "active" ? !category.archivedAt : !!category.archivedAt,
-              )
-              .map((category) => (
-                <article key={category.id}>
-                  <h4>{category.displayName}</h4>
-                  <Facts
-                    value={category}
-                    fields={[
-                      "revision",
-                      "description",
-                      "displayOrder",
-                      "effectiveProviderCount",
-                      "archivedAt",
-                      "archiveReason",
-                    ]}
-                  />
-                  <CommandLinks
-                    target={category.id}
-                    keys={
-                      category.archivedAt
-                        ? ["provider.category.restore"]
-                        : ["provider.category.patch", "provider.category.archive"]
-                    }
-                    title={`Category ${category.displayName}`}
-                  />
-                  <History kind="provider_category" id={category.id} />
-                </article>
-              ))}
+            <header className="provider-category-section-heading">
+              <h3>{state === "active" ? "Active categories" : "Archived categories"}</h3>
+              {items && (
+                <span className="provider-category-count">
+                  {items.length} {items.length === 1 ? "category" : "categories"}
+                </span>
+              )}
+            </header>
+            {state === "archived" && (
+              <p className="ui-muted">
+                Archived categories are kept for history and can be restored. They are not used to
+                group active providers.
+              </p>
+            )}
+            {items?.length === 0 && (
+              <p className="provider-category-empty">
+                {state === "active"
+                  ? "No active categories. Add a category to start organizing providers."
+                  : "No archived categories."}
+              </p>
+            )}
+            {!!items?.length && (
+              <ul className="provider-category-grid">
+                {items.map((category) => (
+                  <li key={category.id}>
+                    <ProviderCategoryCard category={category} canWrite={scope.canWrite} />
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
-        ))}
-      </details>
-    </>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProviderCategoryCard({ category, canWrite }: { category: Category; canWrite: boolean }) {
+  const archived = !!category.archivedAt;
+  return (
+    <article className="provider-category-card" aria-labelledby={`category-${category.id}`}>
+      <header>
+        <h4 id={`category-${category.id}`}>{category.displayName}</h4>
+        <span className="provider-category-state">{archived ? "Archived" : "Active"}</span>
+      </header>
+      {category.description && (
+        <p className="provider-category-description">{category.description}</p>
+      )}
+      {!archived && (
+        <p className="provider-category-providers">
+          {category.effectiveProviderCount > 0 ? (
+            <Link to={`/providers?categoryId=${category.id}`}>
+              {category.effectiveProviderCount}{" "}
+              {category.effectiveProviderCount === 1 ? "provider" : "providers"}
+              <span className="ui-sr-only"> in {category.displayName}</span>
+            </Link>
+          ) : (
+            "No active providers"
+          )}
+        </p>
+      )}
+      {category.archivedAt && (
+        <div className="provider-category-archive">
+          <p>
+            Archived{" "}
+            <time dateTime={category.archivedAt}>{formatHomeTime(category.archivedAt)}</time>
+          </p>
+          {category.archiveReason && <p>{category.archiveReason}</p>}
+        </div>
+      )}
+      {canWrite && (
+        <nav className="provider-category-actions" aria-label={`${category.displayName} actions`}>
+          {(archived ? ["restore"] : ["patch", "archive"]).map((action) => (
+            <Link
+              key={action}
+              className={
+                action === "archive"
+                  ? "provider-category-action provider-category-action-subtle"
+                  : "provider-category-action"
+              }
+              to={`/providers?workflow=provider.category.${action}&target=${category.id}`}
+              state={{ returnTo: "/settings/provider-categories" }}
+            >
+              {action === "patch"
+                ? "Edit category"
+                : action === "archive"
+                  ? "Archive category"
+                  : "Restore category"}
+              <span className="ui-sr-only"> {category.displayName}</span>
+            </Link>
+          ))}
+        </nav>
+      )}
+      <footer className="provider-category-footer">
+        <span className="ui-muted">Display order: {category.displayOrder}</span>
+        <History kind="provider_category" id={category.id} presentation="timeline" />
+      </footer>
+    </article>
   );
 }
 

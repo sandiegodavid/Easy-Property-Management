@@ -10,11 +10,11 @@ Hidden destinations remain under More and contextual links. Hiding Owners can si
 
 **Provider categories** manages the provider catalog, not Maintenance or expense categories. **Unfinished forms** in the header opens saved-input/recovery; see [daily operation](daily-operation.md#save-resume-and-correct).
 
-Workspace backup/location administration currently uses installer commands; do not expect the Workspace Settings placeholder to move data.
+Workspace backup/location administration uses installer commands; there is no Workspace Settings page.
 
 ## Built-in AI availability
 
-Open `/settings/ai` on the local application. Settings supports Off, On this device and Cloud service configuration. Choices come from qualified registrations. The current production installation has no registered production adapters/actions/approval handlers; no model is downloaded by entering a label or key. Manual workflows remain available without AI.
+Open **Settings → AI assistance**. Settings supports Off, On this device and Cloud service configuration. Choices come from qualified registrations. The current production installation has no registered production adapters/actions/approval handlers; no model is downloaded by entering a label or key. Manual workflows remain available without AI.
 
 When a release supplies a registered capability:
 
@@ -39,4 +39,6 @@ External-effect operations can have uncertain results. Follow original-key looku
 
 ## Dashboard scheduling
 
-Current Home uses live reads. Conditional snapshot caching was skipped after performance validation; no Dashboard cron job is installed. Independent scheduling and its Settings UI are post-MVP proposals, so there is no refresh-frequency setting to configure now. Use **Refresh Home** and heed checked/stale/unavailable indicators.
+Under **Settings → Home**, choose **Automatic refresh**: every 1, 5, 10, 15 or 30 minutes. The default is **5 minutes**. This browser preference saves automatically and survives reloads; it is not included in workspace backups. Home refreshes its cards while visible, and Needs action may update sooner when a deadline or follow-up becomes due. Use **Refresh** to check immediately.
+
+Home uses live reads, not a snapshot cache or a Dashboard cron job. Background scheduling independent of an open browser remains deferred.

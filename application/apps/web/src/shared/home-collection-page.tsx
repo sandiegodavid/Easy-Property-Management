@@ -1,13 +1,16 @@
 import { DynamicFilterForm } from "./dynamic-filter-form";
 import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useParams, useSearchParams } from "react-router-dom";
 import { useWorkspace } from "../app/workspace-gate";
 import { HomeCollection } from "./home-sections";
 import { collections, collectionTitles, HomeBackLink, useHomeScroll } from "./home-navigation";
 import { homeFilters, homeParams, useHomeItems } from "./home-transport";
+import { HomePropertyFilter, HomePropertyName } from "./home-property-filter";
 
 function CollectionPage({ collection }: { collection: (typeof collections)[number] }) {
-  const { bootstrap } = useWorkspace();
+  const { bootstrap, scope } = useWorkspace();
+  const queryClient = useQueryClient();
   const [params, setParams] = useSearchParams(),
     location = useLocation();
   const navigationState: unknown = location.state;
@@ -36,6 +39,7 @@ function CollectionPage({ collection }: { collection: (typeof collections)[numbe
     if (params.toString() !== query) setParams(query, { replace: true, state: navigationState });
   }, [params, query, setParams, navigationState]);
   function restart() {
+    void queryClient.invalidateQueries({ queryKey: scope.key("home-property-choices") });
     const next = new URLSearchParams(query);
     next.delete("cursor");
     if (cursor)
@@ -53,8 +57,8 @@ function CollectionPage({ collection }: { collection: (typeof collections)[numbe
       </HomeBackLink>
       <h2>{collectionTitles[collection]}</h2>
       <p>
-        Scope: {filters.propertyId ?? "All properties"} · Horizon: {filters.horizonDays} days. Each
-        page uses the capture shown below.
+        Scope: <HomePropertyName propertyId={filters.propertyId} /> · Horizon: {filters.horizonDays}{" "}
+        days. Each page uses the capture shown below.
       </p>
       <DynamicFilterForm
         aria-label="Collection filters"
@@ -74,10 +78,7 @@ function CollectionPage({ collection }: { collection: (typeof collections)[numbe
           });
         }}
       >
-        <label>
-          Property ID (blank for all properties)
-          <input name="propertyId" defaultValue={filters.propertyId ?? ""} />
-        </label>
+        <HomePropertyFilter propertyId={filters.propertyId} horizonDays={filters.horizonDays} />
         <label>
           Upcoming horizon
           <select name="horizonDays" defaultValue={filters.horizonDays}>

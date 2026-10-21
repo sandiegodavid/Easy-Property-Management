@@ -71,7 +71,7 @@ export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
                 : "Maintenance and owner concerns"}
           </h2>
           <p>
-            Recording a conversation does not send a message. Completing a Task or appointment does
+            Recording a conversation does not send a message. Completing a task or appointment does
             not resolve an issue or verify physical work.
           </p>
           <nav className="page-tabs" aria-label="Work views">
@@ -83,7 +83,7 @@ export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
             >
               Conversations
             </Link>{" "}
-            <Link to="/conversations?intake=true">Retained source evidence</Link>{" "}
+            <Link to="/conversations?intake=true">Imported records</Link>{" "}
             <Link to="/tasks" aria-current={current === "task" ? "page" : undefined}>
               Tasks
             </Link>

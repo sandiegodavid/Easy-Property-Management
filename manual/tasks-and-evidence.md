@@ -39,7 +39,7 @@ This is a manual ledger. Recording an email, call or message does not send it, f
 
 ## Retain source evidence
 
-Open **Conversations → Retained source evidence** (`/conversations?intake=true`). This is evidence retention, separate from the conversation ledger.
+Open **Conversations → Imported records** (`/conversations?intake=true`). This is evidence retention, separate from the conversation ledger.
 
 - **Retain source:** enter the actual source channel, occurrence context, participants and retained content. Describe provenance truthfully; a pasted item is not automatically authenticated external delivery.
 - **Import source evidence:** select the supported evidence files/content and preserve their ordered roles. This is not Excel/property import.
@@ -60,4 +60,4 @@ Retaining evidence does not automatically create a Maintenance issue or recorded
 4. Open metadata/history and download only when content is available.
 5. Archive the association with required reason/confirmation when incorrect or no longer active. This is not a general permanent-delete action.
 
-Do not place files manually into managed `files/` or edit database rows. Recovery saves the expected name/size/hash, not bytes; reselect the original file after restart. General Property Documents and Workspace Settings placeholder pages are not substitutes for the available contextual file actions or installer commands.
+Do not place files manually into managed `files/` or edit database rows. Recovery saves the expected name/size/hash, not bytes; reselect the original file after restart. Use the available contextual file actions for evidence and installer commands for workspace administration, not the general Property Documents placeholder.

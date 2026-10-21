@@ -122,7 +122,9 @@ test("View all keeps preview capture and exact total, bounds pages and preserves
   ).toBeVisible();
   const firstKeys = body.result.items.map((item) => item.key);
   const nextResponse = page.waitForResponse(
-    (result) => new URL(result.url()).pathname === "/api/operator/home/items",
+    (result) =>
+      new URL(result.url()).pathname === "/api/operator/home/items" &&
+      new URL(result.url()).searchParams.get("propertyId") === property.id,
   );
   await page.getByRole("link", { name: "Next →", exact: true }).click();
   const next = (await (await nextResponse).json()) as Schema["CollectionResponse"];
@@ -168,6 +170,7 @@ test("View all keeps preview capture and exact total, bounds pages and preserves
   const maximum = page.waitForResponse(
     (result) =>
       new URL(result.url()).pathname === "/api/operator/home/items" &&
+      new URL(result.url()).searchParams.get("propertyId") === property.id &&
       new URL(result.url()).searchParams.get("limit") === "100",
   );
   const all = (await (await maximum).json()) as Schema["CollectionResponse"];
@@ -190,6 +193,7 @@ test("one-row pages have no gaps and filter changes discard incompatible continu
   const other = await seed(request, 0);
   const keys: string[] = [];
   await page.route("**/api/operator/home/items?*", async (route) => {
+    if (!new URL(route.request().url()).searchParams.has("propertyId")) return route.continue();
     const response = await route.fetch();
     const result = (await response.json()) as Schema["CollectionResponse"];
     if (result.result.status === "available")
@@ -208,14 +212,18 @@ test("one-row pages have no gaps and filter changes discard incompatible continu
   const changed = page.waitForResponse((result) => {
     const url = new URL(result.url());
     return (
-      url.pathname === "/api/operator/home/items" && url.searchParams.get("horizonDays") === "90"
+      url.pathname === "/api/operator/home/items" &&
+      url.searchParams.get("horizonDays") === "90" &&
+      url.searchParams.get("propertyId") === property.id
     );
   });
   await page.getByLabel("Upcoming horizon").selectOption("90");
   expect(new URL((await changed).url()).searchParams.has("cursor")).toBe(false);
   await expect(page).not.toHaveURL(/cursor=/);
   const continued = page.waitForResponse(
-    (result) => new URL(result.url()).pathname === "/api/operator/home/items",
+    (result) =>
+      new URL(result.url()).pathname === "/api/operator/home/items" &&
+      new URL(result.url()).searchParams.get("propertyId") === property.id,
   );
   await page.getByRole("link", { name: "Next →" }).click();
   await continued;
@@ -224,9 +232,17 @@ test("one-row pages have no gaps and filter changes discard incompatible continu
       new URL(result.url()).pathname === "/api/operator/home/items" &&
       new URL(result.url()).searchParams.get("propertyId") === other.property.id,
   );
-  await page.getByLabel("Property ID", { exact: false }).fill(other.property.id);
+  await page
+    .getByRole("combobox", { name: "Property", exact: true })
+    .selectOption({ label: other.property.displayName });
   expect(new URL((await rescope).url()).searchParams.has("cursor")).toBe(false);
   await expect(action.getByText("0 items", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Home collection page" })).toContainText(
+    `Scope: ${other.property.displayName}`,
+  );
+  await expect(page.getByRole("region", { name: "Home collection page" })).not.toContainText(
+    other.property.id,
+  );
 });
 
 test("changed sources and changed runtime cursors require a fresh restart with the same filters", async ({
