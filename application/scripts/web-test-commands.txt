@@ -15,6 +15,7 @@ npm run test:web -- apps/web/tests/home.spec.ts
 npm run test:web -- apps/web/tests/intake.spec.ts
 npm run test:web -- apps/web/tests/leasing-inspections.spec.ts
 npm run test:web -- apps/web/tests/money.spec.ts
+npm run test:web -- apps/web/tests/navigation-coverage.spec.ts
 npm run test:web -- apps/web/tests/ownership-shares.spec.ts
 npm run test:web -- apps/web/tests/page-tabs.spec.ts
 npm run test:web -- apps/web/tests/parent-navigation.spec.ts

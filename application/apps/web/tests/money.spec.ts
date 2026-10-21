@@ -2466,6 +2466,9 @@ test("explicit-period reporting uses backend totals and source drill-down withou
   await page.getByText("Explore the records behind these totals", { exact: true }).click();
   await page.getByRole("link", { name: "View expenses paid records", exact: true }).click();
   await expect(page.getByText("Total USD 120.01", { exact: false })).toBeVisible();
+  await expect(page.locator(".reporting-source-row .reporting-contribution")).toContainText(
+    "USD 120.01",
+  );
   await page.getByRole("link", { name: "View source record", exact: true }).click();
   await expect(page.getByRole("region", { name: "Money record", exact: true })).toContainText(
     "Actual paid repair",

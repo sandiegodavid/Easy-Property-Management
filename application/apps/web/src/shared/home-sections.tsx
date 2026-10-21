@@ -382,7 +382,7 @@ export function HomeSummaries({
         unavailable={money?.status === "unavailable" ? money.reasonCode : undefined}
       >
         {money?.status === "available" && (
-          <dl>
+          <dl className="home-metric-tiles">
             {money.metrics.map((metric) => (
               <div key={metric.target.metric}>
                 <dt>{metrics[metric.target.metric]}</dt>
@@ -390,7 +390,11 @@ export function HomeSummaries({
                   <HomeSourceLink
                     to={`/money?${new URLSearchParams({ tab: "reporting", metric: metric.target.metric, fromOn: metric.target.fromOn, throughOn: metric.target.throughOn, propertyState: metric.target.propertyState, sourceRevision: money.capture.sourceRevision, ...(metric.target.scope.propertyId ? { propertyId: metric.target.scope.propertyId } : {}) })}`}
                   >
-                    USD {metric.amount} — View {metrics[metric.target.metric]} sources
+                    <span className="home-metric-value">USD {metric.amount}</span>
+                    <span className="visually-hidden"> — </span>
+                    <span className="home-metric-action">
+                      View {metrics[metric.target.metric]} sources
+                    </span>
                   </HomeSourceLink>
                 </dd>
               </div>
@@ -419,12 +423,14 @@ export function HomeSummaries({
         {inventory?.status === "available" && (
           <>
             <p>Active properties only.</p>
-            <dl>
+            <dl className="home-metric-tiles">
               <div>
-                <dt>Vacant spaces</dt>
+                <dt>Vacant rental units</dt>
                 <dd>
                   <HomeSourceLink to={inventoryUrl(inventory.vacant)}>
-                    {inventory.vacant.count} — View vacant spaces
+                    <span className="home-metric-value">{inventory.vacant.count}</span>
+                    <span className="visually-hidden"> — </span>
+                    <span className="home-metric-action">View vacant rental units</span>
                   </HomeSourceLink>
                 </dd>
               </div>
@@ -432,7 +438,9 @@ export function HomeSummaries({
                 <dt>Unknown occupancy</dt>
                 <dd>
                   <HomeSourceLink to={inventoryUrl(inventory.unknown)}>
-                    {inventory.unknown.count} — View unknown occupancy
+                    <span className="home-metric-value">{inventory.unknown.count}</span>
+                    <span className="visually-hidden"> — </span>
+                    <span className="home-metric-action">View unknown occupancy</span>
                   </HomeSourceLink>
                 </dd>
               </div>

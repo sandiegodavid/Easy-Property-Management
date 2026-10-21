@@ -529,7 +529,7 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
               }))}
             />
           ) : (
-            <ul className={kind === "issue" ? "maintenance-issue-grid" : undefined}>
+            <ul className={kind === "issue" ? "maintenance-issue-grid" : "work-directory-grid"}>
               {result.data.items.map((item) => (
                 <li key={item.id}>
                   {kind === "issue" && "reporter" in item ? (
@@ -560,12 +560,18 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                       </span>
                     </Link>
                   ) : (
-                    <>
-                      <Link to={workUrl(kind, item.id)}>
-                        {scalar(record(item).summary ?? record(item).subject ?? record(item).title)}
-                      </Link>{" "}
-                      · {item.status}
-                      {"priority" in item && ` · ${item.priority}`}
+                    <article className="work-directory-card">
+                      <header className="work-directory-card-heading">
+                        <h3>
+                          <Link to={workUrl(kind, item.id)}>
+                            {scalar(
+                              record(item).summary ?? record(item).subject ?? record(item).title,
+                            )}
+                          </Link>
+                        </h3>
+                        <span className="maintenance-issue-status">{workLabel(item.status)}</span>
+                      </header>
+                      <WorkDirectoryFacts kind={kind} value={record(item)} />
                       {kind === "task" && (
                         <>
                           <TaskOutcome value={record(item)} />
@@ -573,15 +579,17 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                             <details>
                               <summary>Task details and completion</summary>
                               <p>
-                                Task deadline: {scalar(record(item).dueAtUtc) || "No due date"} ·{" "}
-                                {scalar(record(item).dueTimezone)}
+                                Task deadline:{" "}
+                                {record(item).dueAtUtc
+                                  ? formatHomeTime(scalar(record(item).dueAtUtc))
+                                  : "No due date"}
                               </p>
                               <TaskCompletion value={record(item)} />
                             </details>
                           )}
                         </>
                       )}
-                    </>
+                    </article>
                   )}
                 </li>
               ))}
@@ -617,6 +625,41 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
 
 function workLabel(value: string) {
   return value.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase());
+}
+
+function WorkDirectoryFacts({ kind, value }: { kind: WorkKind; value: Record<string, unknown> }) {
+  const facts =
+    kind === "task"
+      ? [
+          ["Priority", workLabel(scalar(value.priority))],
+          ["Due", value.dueAtUtc ? formatHomeTime(scalar(value.dueAtUtc)) : "No due date"],
+          ["Related to", scalar(value.relatedLabel)],
+        ]
+      : kind === "communication"
+        ? [
+            ["Channel", workLabel(scalar(value.channel))],
+            ["Direction", workLabel(scalar(value.direction))],
+            ["Occurred", value.occurredAtUtc ? formatHomeTime(scalar(value.occurredAtUtc)) : ""],
+          ]
+        : [
+            ["Property", scalar(value.propertyDisplayNameSnapshot)],
+            ["Owner", scalar(value.ownerDisplayNameSnapshot)],
+            ["Concern", workLabel(scalar(value.concernType))],
+            ["Priority", workLabel(scalar(value.priority))],
+            ["Raised", value.raisedAtUtc ? formatHomeTime(scalar(value.raisedAtUtc)) : ""],
+          ];
+  return (
+    <dl className="work-directory-facts">
+      {facts
+        .filter(([, text]) => text)
+        .map(([label, text]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{text}</dd>
+          </div>
+        ))}
+    </dl>
+  );
 }
 
 function TaskQuickAdd() {

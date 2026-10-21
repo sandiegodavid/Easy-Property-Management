@@ -1211,8 +1211,13 @@ test("inspection acknowledgments and finalization remain distinct from move-out"
   await save(page, "Finalize inspection");
   await page.goto(`/inspections/${draft.id}`);
   await expect(page.getByRole("link", { name: "Attach evidence for Counter" })).toHaveCount(0);
-  await page.getByText("Report actions", { exact: true }).click();
-  await expect(page.getByRole("link", { name: "Correct finalized inspection" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Correct finalized inspection" })).toBeVisible();
+  const reportDetail = page.getByRole("region", { name: "Inspection report", exact: true });
+  await expect(reportDetail).not.toContainText(draft.spaceId);
+  await expect(reportDetail.locator(".readable-facts").first()).not.toContainText("Revision");
+  await expect(
+    reportDetail.getByRole("link", { name: f.tenant.displayName, exact: true }),
+  ).toHaveAttribute("href", `/tenants?identity=${f.tenant.id}`);
   const lease = await request.get(`/api/leases/${f.lease.id}`);
   expect(((await lease.json()) as Schemas["LeaseResponse"]).status).toBe("executed");
 });

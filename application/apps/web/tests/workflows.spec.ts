@@ -1244,4 +1244,12 @@ test("Provider area, work, reference and reputation forms record independently o
   expect(current.workHistory[0].summary).toBe("Fixture work history");
   expect(current.references[0].referenceName).toBe("Prior client");
   expect(current.reputationLinks[0].url).toBe("https://example.com/profile");
+  await page.goto(`/providers/${id}/details`);
+  for (const name of ["Portland metro", "Fixture work history", "Prior client", "Directory"]) {
+    const child = page
+      .locator(".child-record-card")
+      .filter({ has: page.getByRole("heading", { name, exact: true }) });
+    await expect(child).toBeVisible();
+    await expect(child.locator(".record-pill")).toHaveText("Active");
+  }
 });

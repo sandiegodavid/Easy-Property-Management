@@ -12,6 +12,7 @@ import { CheckContext } from "./check-context";
 import { RentExpectationDetail } from "./rent-expectation-detail";
 import { RentReceiptDetail } from "./rent-receipt-detail";
 import { ExpenseDetail, ExpenseCategoryDetail } from "./expense-detail";
+import { EvidenceItem } from "./evidence-item";
 
 export type MoneyKind =
   | "expectation"
@@ -647,21 +648,21 @@ function MoneyEvidence({
             !item.archivedAt &&
             !item.archived_at;
           return (
-            <p key={scalar(item.linkId ?? item.id ?? fileId)}>
-              {scalar(item.originalName ?? item.original_name, "Retained evidence")} ·{" "}
-              {scalar(
-                item.storageState ?? item.storage_state,
-                "Open metadata to verify availability",
-              )}
+            <EvidenceItem
+              key={scalar(item.linkId ?? item.id ?? fileId)}
+              name={scalar(item.originalName ?? item.original_name, "Supporting evidence")}
+              state={history ? "Archived association" : available ? "Available" : "Unavailable"}
+            >
               {history && (
-                <>
-                  {" "}
-                  · Archived association:{" "}
+                <p className="evidence-item-note">
+                  Archived association:{" "}
                   {scalar(item.archiveReason ?? item.archive_reason, "Retained history")}
-                </>
+                </p>
               )}
               {!history && !available && (
-                <span> · Content availability must be verified before opening.</span>
+                <p className="evidence-item-note">
+                  Content availability must be verified before opening.
+                </p>
               )}
               {available && <a href={`/api/files/${fileId}/content`}>Download evidence</a>}{" "}
               <Link to={`/money?file=${fileId}`}>Evidence metadata and history</Link>
@@ -679,7 +680,7 @@ function MoneyEvidence({
                   Archive deposit evidence association
                 </Link>
               )}
-            </p>
+            </EvidenceItem>
           );
         })}
     </section>

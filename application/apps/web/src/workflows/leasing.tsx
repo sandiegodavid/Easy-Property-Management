@@ -9,8 +9,9 @@ import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks, CommandLoader } from "./command";
 import { useSaveCompletion } from "./saved-command";
-import { Facts, History, readResult } from "./reads";
+import { History, readResult } from "./reads";
 import { InspectionList } from "./inspections";
+import { ReadableFacts } from "./readable-facts";
 import { LeaseDocuments } from "./lease-documents";
 import { MoneyFacts } from "./money-presentation";
 import { PageAsOf } from "../shared/page-as-of";
@@ -310,37 +311,42 @@ function LeaseRecord({ id }: { id: string }) {
             <Link to={`/money?leaseId=${id}`}>View rent and deposits →</Link>
           </div>
           {!item.terms.length && <p>No rent terms recorded.</p>}
-          {item.terms.map((term) => (
-            <MoneyFacts
-              key={term.id}
-              value={{
-                ...term,
-                effectiveOn: leaseDate(term.effectiveOn),
-                paymentDueDay:
-                  term.paymentFrequency === "monthly" && term.paymentDueDay !== null
-                    ? `Day ${term.paymentDueDay} of each month`
-                    : term.paymentDueDay,
-                lastCoveredOn: term.endsOn
-                  ? leaseDate(leaseLastCoveredOn(term.endsOn)!)
-                  : "Ongoing",
-              }}
-              labels={{
-                effectiveOn: "Applies from",
-                lastCoveredOn: "Through",
-                baseRentMinor: "Rent",
-                paymentFrequency: "Frequency",
-                paymentDueDay: "Due day",
-                agreedSecurityDepositMinor: "Agreed security deposit",
-              }}
-              fields={[
-                "effectiveOn",
-                "lastCoveredOn",
-                "baseRentMinor",
-                "paymentFrequency",
-                "paymentDueDay",
-                "agreedSecurityDepositMinor",
-              ]}
-            />
+          {item.terms.map((term, index) => (
+            <article className="child-record-card lease-rent-term" key={term.id}>
+              <h4>
+                Rent terms from {leaseDate(term.effectiveOn)}
+                {item.terms.length > 1 ? ` · Period ${index + 1}` : ""}
+              </h4>
+              <MoneyFacts
+                value={{
+                  ...term,
+                  effectiveOn: leaseDate(term.effectiveOn),
+                  paymentDueDay:
+                    term.paymentFrequency === "monthly" && term.paymentDueDay !== null
+                      ? `Day ${term.paymentDueDay} of each month`
+                      : term.paymentDueDay,
+                  lastCoveredOn: term.endsOn
+                    ? leaseDate(leaseLastCoveredOn(term.endsOn)!)
+                    : "Ongoing",
+                }}
+                labels={{
+                  effectiveOn: "Applies from",
+                  lastCoveredOn: "Through",
+                  baseRentMinor: "Rent",
+                  paymentFrequency: "Frequency",
+                  paymentDueDay: "Due day",
+                  agreedSecurityDepositMinor: "Agreed security deposit",
+                }}
+                fields={[
+                  "effectiveOn",
+                  "lastCoveredOn",
+                  "baseRentMinor",
+                  "paymentFrequency",
+                  "paymentDueDay",
+                  "agreedSecurityDepositMinor",
+                ]}
+              />
+            </article>
           ))}
         </section>
       </div>
@@ -357,8 +363,9 @@ function LeaseRecord({ id }: { id: string }) {
         </summary>
         {!item.renewalOptions.length && <p>No renewal options recorded.</p>}
         {item.renewalOptions.map((option) => (
-          <article key={option.id}>
-            <Facts
+          <article className="child-record-card" key={option.id}>
+            <h4>Renewal from {leaseDate(option.proposedStartsOn)}</h4>
+            <ReadableFacts
               value={{
                 ...option,
                 proposedStartsOn: leaseDate(option.proposedStartsOn),
@@ -544,11 +551,14 @@ function TerminationCases({ lease }: { lease: Lease }) {
         {cases.error && <p role="alert">{cases.error.message}</p>}
         {cases.data?.length === 0 && <p>No early termination requests recorded.</p>}
         {cases.data?.map((item) => (
-          <article key={item.id}>
-            <Facts
+          <article className="child-record-card termination-case" key={item.id}>
+            <header className="child-record-heading">
+              <h4>Requested end: {leaseDate(item.requestedTerminationOn)}</h4>
+              <span className="record-pill">{item.status.replaceAll("_", " ")}</span>
+            </header>
+            <ReadableFacts
               value={item}
               fields={[
-                "status",
                 "reason",
                 "noticeReceivedOn",
                 "requestedTerminationOn",
@@ -580,25 +590,33 @@ function TerminationCases({ lease }: { lease: Lease }) {
               />
             )}
             {item.proposals.map((p) => (
-              <MoneyFacts
-                key={p.id}
-                value={p}
-                fields={[
-                  "status",
-                  "proposalVersion",
-                  "proposedTerminationOn",
-                  "expectedMoveOutOn",
-                  "rentResponsibilityEndsOn",
-                  "terminationFeeMinor",
-                  "currencyCode",
-                  "feeWaived",
-                  "replacementTenantCondition",
-                  "accessArrangement",
-                  "otherTerms",
-                  "responseDueOn",
-                  "decidedOn",
-                ]}
-              />
+              <section className="termination-proposal" key={p.id}>
+                <header className="child-record-heading">
+                  <h5>Proposal {p.proposalVersion}</h5>
+                  <span className="record-pill">{p.status.replaceAll("_", " ")}</span>
+                </header>
+                <MoneyFacts
+                  value={p}
+                  labels={{
+                    terminationFeeMinor: "Termination fee",
+                    proposedTerminationOn: "Proposed lease end",
+                    rentResponsibilityEndsOn: "Rent responsibility through",
+                  }}
+                  fields={[
+                    "proposedTerminationOn",
+                    "expectedMoveOutOn",
+                    "rentResponsibilityEndsOn",
+                    "terminationFeeMinor",
+                    "currencyCode",
+                    "feeWaived",
+                    "replacementTenantCondition",
+                    "accessArrangement",
+                    "otherTerms",
+                    "responseDueOn",
+                    "decidedOn",
+                  ]}
+                />
+              </section>
             ))}
             <LeaseDocuments
               leaseId={lease.id}

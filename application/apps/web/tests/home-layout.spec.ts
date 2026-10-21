@@ -109,11 +109,17 @@ test("Home renders every region, exact totals, keyboard source disclosure and bo
     await expect(page.getByRole("region", { name, exact: true })).toBeVisible();
   }
   await page.getByRole("tab", { name: "Needs action", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Recorded money", exact: true }).locator(".home-metric-value"),
+  ).toHaveCount(5);
+  await expect(
+    page.getByRole("region", { name: "Inventory", exact: true }).locator(".home-metric-value"),
+  ).toHaveCount(2);
   const current = await fixtures(request);
   if (current.live.needsAction.status !== "available") throw new Error("Live fixture unavailable");
   const action = page.getByRole("region", { name: "Needs action", exact: true });
   await expect(action.getByRole("link", { name: /^View all Needs action/ })).toHaveText(
-    `View all Needs action (${current.live.needsAction.matchingTotal} items)`,
+    `View all Needs action (${current.live.needsAction.matchingTotal} ${current.live.needsAction.matchingTotal === 1 ? "item" : "items"})`,
   );
   const row = action.getByRole("button", { name: new RegExp(task.title) });
   await row.focus();
@@ -238,7 +244,7 @@ test("independent section failures never fabricate counts or an all-clear", asyn
   await expect(action.getByRole("heading", { level: 4 })).toHaveCount(0);
   await expect(page.getByText("No immediate actions in recorded information.")).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Inventory", exact: true })).toContainText(
-    "Vacant spaces",
+    "Vacant rental units",
   );
   await page.getByRole("tab", { name: "Waiting", exact: true }).click();
   await expect(page.getByRole("region", { name: "Waiting", exact: true })).toContainText(

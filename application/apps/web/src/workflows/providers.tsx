@@ -13,6 +13,7 @@ import { WorkJournal } from "./work-journal";
 import type { Choices } from "./fields";
 import { OfficialIdList } from "../shared/official-identification";
 import { formatHomeTime } from "../shared/home-time";
+import { ReadableFacts } from "./readable-facts";
 
 type Category = components["schemas"]["app__modules__vendors__api__router__CategoryResponse"];
 
@@ -262,11 +263,20 @@ export function ProviderWorkspace({ catalogOnly = false }: { catalogOnly?: boole
           <p>Categories describe this provider’s services, not an engagement or endorsement.</p>
           {!item.categories.length && <p className="record-detail-note">None recorded.</p>}
           {item.categories.map((category) => (
-            <article key={category.assignmentId}>
-              <Facts
+            <article className="child-record-card" key={category.assignmentId}>
+              <header className="child-record-heading">
+                <h4>{category.displayName}</h4>
+                <span className="record-pill">
+                  {category.assignmentArchivedAt
+                    ? "Assignment archived"
+                    : category.archivedAt
+                      ? "Category archived"
+                      : "Active"}
+                </span>
+              </header>
+              <ReadableFacts
                 value={category}
                 fields={[
-                  "displayName",
                   "description",
                   ...(category.assignmentArchivedAt
                     ? ["assignmentArchivedAt", "assignmentArchiveReason"]
@@ -563,13 +573,28 @@ function ProviderChildren({
       )}
       {rows.length === 0 && <p className="record-detail-note">None recorded.</p>}
       {rows.map((row) => (
-        <article key={row.id}>
-          <Facts
+        <article className="child-record-card" key={row.id}>
+          <header className="child-record-heading">
+            <h4>
+              {scalar(
+                record(row).displayName ??
+                  record(row).summary ??
+                  record(row).referenceName ??
+                  record(row).sourceName,
+                title.replace(/s$/, ""),
+              )}
+            </h4>
+            <span className="record-pill">{row.archivedAt ? "Archived" : "Active"}</span>
+          </header>
+          <ReadableFacts
             value={row}
             fields={[...fields, "archivedAt"].filter(
-              (key) => !key.endsWith("Id") && record(row)[key] != null && record(row)[key] !== "",
+              (key) =>
+                !key.endsWith("Id") &&
+                !["displayName", "summary", "referenceName", "sourceName"].includes(key) &&
+                record(row)[key] != null &&
+                record(row)[key] !== "",
             )}
-            verbatim={kind === "reputation_link"}
           />
           {kind === "reputation_link" && (
             <>

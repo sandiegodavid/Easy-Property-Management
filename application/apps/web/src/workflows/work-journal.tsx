@@ -4,11 +4,31 @@ import { Link } from "react-router-dom";
 import { api } from "@epm/contracts";
 import { record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
-import { Facts, readResult } from "./reads";
+import { readResult } from "./reads";
+import { ReadableFacts } from "./readable-facts";
+import { EvidenceItem } from "./evidence-item";
 import { workflowUrl } from "./command";
 import { workUrl } from "./work-links";
 import { communicationLocalTime } from "./communication-context";
 import { formatHomeTime } from "../shared/home-time";
+
+function workDuration(seconds: number) {
+  const units = [
+    [86400, "day"],
+    [3600, "hour"],
+    [60, "minute"],
+    [1, "second"],
+  ] as const;
+  let remaining = Math.floor(Math.abs(seconds));
+  const parts: string[] = [];
+  for (const [size, name] of units) {
+    const count = Math.floor(remaining / size);
+    if (count) parts.push(`${count} ${name}${count === 1 ? "" : "s"}`);
+    remaining %= size;
+  }
+  const duration = parts.join(" ") || "0 seconds";
+  return seconds < 0 ? `${duration} before assignment` : duration;
+}
 
 export function journalProblem(values: Record<string, unknown>, terminal: boolean) {
   const correction = values.entryKind === "correction";
@@ -106,92 +126,101 @@ export function WorkJournal({ id, provider = false }: { id: string; provider?: b
       {result.isPending && <p role="status">Loading work journal…</p>}
       {result.error && <p role="alert">Work journal unavailable: {result.error.message}</p>}
       {result.data?.items.length === 0 && <p>No work entries on this page.</p>}
-      {result.data?.items.map((item) => (
-        <article key={item.id}>
-          <Facts
-            value={
-              provider
-                ? item
-                : {
-                    ...item,
-                    occurredAtUtc: communicationLocalTime(item),
-                    recordedAtUtc: formatHomeTime(item.recordedAtUtc),
-                  }
-            }
-            fields={[
-              "summary",
-              "effectiveKind",
-              "sourceKind",
-              "assignmentId",
-              "providerDisplayNameSnapshot",
-              "occurredAtUtc",
-              "occurredTimezone",
-              "recordedAtUtc",
-              "detail",
-              "outcomeStatus",
-              "outcomeSummary",
-              "followUpRequired",
-              "operatorVerified",
-              "isEffective",
-              "correctsEntryId",
-              "correctionReason",
-              "assignedAt",
-              "quotedEarliestWorkStartOn",
-              "quotedEstimatedWorkFinishOn",
-              "recordedAssignmentToWorkStartSeconds",
-            ].filter(
-              (field) =>
-                provider ||
-                (!field.endsWith("Id") &&
-                  field !== "occurredTimezone" &&
-                  record(item)[field] != null),
-            )}
-          />
-          {provider && <p>Recorded local occurrence: {communicationLocalTime(item)}</p>}
-          {!item.isEffective && (
-            <p>Superseded factual entry; retained for context, not current completion.</p>
-          )}
-          {provider ? (
-            <Link to={workUrl("issue", item.issueId)}>
-              Review owning issue: {item.issueSummary}
-            </Link>
-          ) : (
-            <>
-              {item.files
-                .filter((file) => !file.archivedAt)
-                .map((file) => (
-                  <p key={file.id}>
-                    <Link to={`/money?file=${file.fileId}`}>
-                      Review evidence metadata: {file.originalName}
-                    </Link>
-                    {!file.available && " · Content unavailable; opening disabled"}{" "}
-                    <Link
-                      to={`/maintenance?workflow=file.link.archive&target=${file.id}&issueId=${id}${cursorQuery}`}
-                    >
-                      Archive evidence association
-                    </Link>
-                  </p>
-                ))}
-              {item.isEffective && (
-                <p>
-                  <Link
-                    to={`${workflowUrl("maintenance.journal.record", id)}&correctsEntryId=${item.id}${cursorQuery}`}
-                  >
-                    Correct work entry: {item.summary}
-                  </Link>
-                  {" · "}
-                  <Link
-                    state={{ returnTo: workUrl("issue", id) }}
-                    to={`${workflowUrl("file.upload")}&entityType=maintenance_work_journal_entry&entityId=${item.id}`}
-                  >
-                    Attach work evidence
-                  </Link>
-                </p>
+      <ol className="work-journal-timeline">
+        {result.data?.items.map((item) => (
+          <li key={item.id}>
+            <article>
+              <time dateTime={item.occurredAtUtc}>{communicationLocalTime(item)}</time>
+              <header className="child-record-heading">
+                <h4>{item.summary}</h4>
+                <span className="record-pill">
+                  {item.isEffective ? "Current record" : "Superseded"}
+                </span>
+              </header>
+              <ReadableFacts
+                value={{
+                  ...item,
+                  recordedAtUtc: formatHomeTime(item.recordedAtUtc),
+                  recordedAssignmentToWorkStartSeconds:
+                    item.recordedAssignmentToWorkStartSeconds == null
+                      ? null
+                      : workDuration(item.recordedAssignmentToWorkStartSeconds),
+                }}
+                fields={[
+                  "effectiveKind",
+                  "sourceKind",
+                  "assignmentId",
+                  "providerDisplayNameSnapshot",
+                  "occurredTimezone",
+                  "recordedAtUtc",
+                  "detail",
+                  "outcomeStatus",
+                  "outcomeSummary",
+                  "followUpRequired",
+                  "operatorVerified",
+                  "correctsEntryId",
+                  "correctionReason",
+                  "assignedAt",
+                  "quotedEarliestWorkStartOn",
+                  "quotedEstimatedWorkFinishOn",
+                  "recordedAssignmentToWorkStartSeconds",
+                ].filter(
+                  (field) =>
+                    !field.endsWith("Id") &&
+                    field !== "occurredTimezone" &&
+                    record(item)[field] != null,
+                )}
+              />
+              {!item.isEffective && (
+                <p>Superseded factual entry; retained for context, not current completion.</p>
               )}
-            </>
-          )}
-        </article>
-      ))}
+              {provider ? (
+                <Link to={workUrl("issue", item.issueId)}>
+                  Review owning issue: {item.issueSummary}
+                </Link>
+              ) : (
+                <>
+                  {item.files
+                    .filter((file) => !file.archivedAt)
+                    .map((file) => (
+                      <EvidenceItem
+                        key={file.id}
+                        name={file.originalName}
+                        state={file.available ? "Available" : "Unavailable"}
+                      >
+                        <Link to={`/money?file=${file.fileId}`}>
+                          Review evidence metadata: {file.originalName}
+                        </Link>
+                        {!file.available && " · Content unavailable; opening disabled"}{" "}
+                        <Link
+                          to={`/maintenance?workflow=file.link.archive&target=${file.id}&issueId=${id}${cursorQuery}`}
+                        >
+                          Archive evidence association
+                        </Link>
+                      </EvidenceItem>
+                    ))}
+                  {item.isEffective && (
+                    <p>
+                      <Link
+                        to={`${workflowUrl("maintenance.journal.record", id)}&correctsEntryId=${item.id}${cursorQuery}`}
+                      >
+                        Correct work entry: {item.summary}
+                      </Link>
+                      {" · "}
+                      <Link
+                        state={{ returnTo: workUrl("issue", id) }}
+                        to={`${workflowUrl("file.upload")}&entityType=maintenance_work_journal_entry&entityId=${item.id}`}
+                      >
+                        Attach work evidence
+                      </Link>
+                    </p>
+                  )}
+                </>
+              )}
+            </article>
+          </li>
+        ))}
+      </ol>
       {result.data?.nextCursor && (
         <button onClick={() => setCursor(result.data.nextCursor!)}>Older work entries</button>
       )}

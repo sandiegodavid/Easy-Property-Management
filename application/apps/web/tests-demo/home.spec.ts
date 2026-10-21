@@ -102,9 +102,9 @@ test("inventory summary links vacant and unknown occupancy", async ({ page }) =>
   await page.goto("/home");
   const inventory = homeRegion(page, "Inventory");
   await expect(inventory.getByText("Active properties only.", { exact: true })).toBeVisible();
-  await expect(inventory.getByText("Vacant spaces", { exact: true })).toBeVisible();
+  await expect(inventory.getByText("Vacant rental units", { exact: true })).toBeVisible();
   await expect(inventory.getByText("Unknown occupancy", { exact: true })).toBeVisible();
-  const vacant = inventory.getByRole("link", { name: /View vacant spaces/ });
+  const vacant = inventory.getByRole("link", { name: /View vacant rental units/ });
   await expect(vacant).toBeVisible();
   await expect(vacant).toHaveAttribute("href", /\/home\/inventory/);
   const unknown = inventory.getByRole("link", { name: /View unknown occupancy/ });

@@ -8,8 +8,11 @@ import type { components } from "@epm/contracts/generated";
 import { workflows } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks, CommandLoader } from "./command";
-import { Facts, readResult } from "./reads";
+import { readResult } from "./reads";
 import { label } from "./fields";
+import { ReadableFacts } from "./readable-facts";
+import { formatHomeTime } from "../shared/home-time";
+import { ImportedEvidence } from "./imported-evidence";
 
 type Source = components["schemas"]["SourceDetailResponse"];
 
@@ -166,32 +169,29 @@ function SourceDirectory() {
       )}
       {!loaded.error && loaded.data && (
         <>
-          <p>
-            {loaded.data.items.length} sources on this bounded page. Source evidence opens through
-            an audited read.
-          </p>
+          <p>{loaded.data.items.length} imported records on this page.</p>
           {!loaded.data.items.length && <p>No sources match these filters.</p>}
-          <ul>
+          <ul className="work-directory-grid">
             {loaded.data.items.map((item) => (
-              <li key={item.sourceId}>
-                <Link to={`/conversations?${params.toString()}&source=${item.sourceId}`}>
-                  {item.sourceKind} · {item.occurredAtUtc}
-                </Link>
-                <Facts
-                  value={item}
+              <li className="work-directory-card" key={item.sourceId}>
+                <h3>
+                  <Link to={`/conversations?${params.toString()}&source=${item.sourceId}`}>
+                    {label(item.sourceKind.replaceAll("_", " "))} ·{" "}
+                    {formatHomeTime(item.occurredAtUtc)}
+                  </Link>
+                </h3>
+                <ReadableFacts
+                  value={{ ...item, ...item.provenance }}
                   fields={[
-                    "sourceId",
                     "channel",
                     "technicalStatus",
                     "attentionStatus",
-                    "sourceRevision",
                     "attachmentCount",
                     "receivedAtUtc",
+                    "originSystem",
+                    "accountIdentityState",
+                    "submitterKind",
                   ]}
-                />
-                <Facts
-                  value={item.provenance}
-                  fields={["originSystem", "accountIdentityState", "submitterKind"]}
                 />
               </li>
             ))}
@@ -246,20 +246,11 @@ function SourceDetail({ id }: { id: string }) {
     );
   const item = loaded.data;
   return (
-    <section aria-label="Source evidence detail">
-      <Facts
-        value={item}
-        fields={[
-          "sourceId",
-          "sourceRevision",
-          "technicalStatus",
-          "failureCode",
-          "attentionStatus",
-          "supersedesSourceId",
-          "supersededBySourceId",
-        ]}
-      />
+    <section className="imported-record-detail" aria-label="Source evidence detail">
+      <ReadableFacts value={item} fields={["technicalStatus", "failureCode", "attentionStatus"]} />
       <CommandLinks
+        asButtons
+        collapsible={false}
         target={id}
         keys={
           item.technicalStatus === "ready"
@@ -280,83 +271,56 @@ function SourceDetail({ id }: { id: string }) {
           Open replacement source
         </Link>
       )}
-      <h3>Retained evidence</h3>
-      <Facts
-        value={item.evidence}
-        fields={[
-          "subject",
-          "body",
-          "occurredAtUtc",
-          "occurredAtContext",
-          "provider",
-          "conversationRef",
-          "externalSourceId",
-        ]}
-      />
-      <h3>Participants</h3>
-      {item.evidence.participants.map((participant, index) => (
-        <Facts key={index} value={participant} fields={["role", "display", "address"]} />
-      ))}
-      <h3>Attachments</h3>
-      {item.attachments.map((entry) => (
-        <div key={entry.fileLinkId}>
-          <p>
-            {entry.displayOrder + 1} · {entry.role}
-          </p>
-          {entry.file ? (
-            <>
-              <Facts
-                value={entry.file}
-                fields={[
-                  "original_name",
-                  "media_type",
-                  "size_bytes",
-                  "content_sha256",
-                  "storage_state",
-                  "verified_at",
-                ]}
-              />
-              {item.technicalStatus !== "failed" && entry.file.storage_state === "available" ? (
-                <a href={`/api/files/${entry.file.file_id}/content`} download>
-                  Download {entry.file.original_name}
-                </a>
-              ) : (
-                <p>Content unavailable; opening is disabled.</p>
-              )}
-            </>
-          ) : (
-            <p>Attachment metadata unavailable.</p>
-          )}
-        </div>
-      ))}
-      <h3>Retained revision history</h3>
-      {item.revisions.map((revision) => (
-        <div key={revision.id}>
-          <Facts
-            value={revision}
-            fields={["id", "number", "kind", "createdAt", "correctionReason"]}
-          />
-          <button onClick={() => setRevisionId(revision.id)}>
-            Read retained revision {revision.number}
-          </button>
-        </div>
-      ))}
-      {revisionId && (
-        <RetainedRevision key={`${id}:${revisionId}`} sourceId={id} revisionId={revisionId} />
-      )}
-      <h3>Operation history</h3>
-      {item.operations.map((operation, index) => (
-        <Facts key={index} value={operation} fields={["type", "outcome", "createdAt"]} />
-      ))}
-      <h3>Duplicate candidates</h3>
-      {item.duplicateCandidates.map((candidate) => (
-        <p key={candidate.candidateSourceId}>
-          <Link to={`/conversations?intake=true&source=${candidate.candidateSourceId}`}>
-            Review candidate source
-          </Link>{" "}
-          · {candidate.reason} · {candidate.disposition}
+      {item.supersedesSourceId && (
+        <p>
+          <Link to={`/conversations?intake=true&source=${item.supersedesSourceId}`}>
+            View the imported record this replaces
+          </Link>
         </p>
-      ))}
+      )}
+      <ImportedEvidence
+        evidence={item.evidence}
+        attachments={item.attachments}
+        downloadsAllowed={item.technicalStatus !== "failed"}
+      />
+      <section className="record-detail-block" aria-label="Evidence revision history">
+        <h3>Retained revision history</h3>
+        {item.revisions.map((revision) => (
+          <div className="record-detail-row" key={revision.id}>
+            <ReadableFacts
+              value={revision}
+              fields={["number", "kind", "createdAt", "correctionReason"]}
+            />
+            <button onClick={() => setRevisionId(revision.id)}>
+              Read retained revision {revision.number}
+            </button>
+          </div>
+        ))}
+        {revisionId && (
+          <RetainedRevision key={`${id}:${revisionId}`} sourceId={id} revisionId={revisionId} />
+        )}
+      </section>
+      <details className="record-detail-block">
+        <summary>Operation history ({item.operations.length})</summary>
+        {item.operations.map((operation, index) => (
+          <div className="record-detail-row" key={index}>
+            <ReadableFacts value={operation} fields={["type", "outcome", "createdAt"]} />
+          </div>
+        ))}
+      </details>
+      <section className="record-detail-block" aria-label="Possible duplicate records">
+        <h3>Duplicate candidates</h3>
+        {!item.duplicateCandidates.length && <p>No possible duplicates recorded.</p>}
+        {item.duplicateCandidates.map((candidate) => (
+          <p key={candidate.candidateSourceId}>
+            <Link to={`/conversations?intake=true&source=${candidate.candidateSourceId}`}>
+              Review candidate source
+            </Link>{" "}
+            · {label(candidate.reason.replaceAll("_", " "))} ·{" "}
+            {label(candidate.disposition.replaceAll("_", " "))}
+          </p>
+        ))}
+      </section>
     </section>
   );
 }
@@ -387,36 +351,15 @@ function RetainedRevision({ sourceId, revisionId }: { sourceId: string; revision
       ) : (
         loaded.data && (
           <>
-            <Facts
+            <ReadableFacts
               value={loaded.data}
-              fields={[
-                "revisionNumber",
-                "revisionKind",
-                "revisionCreatedAt",
-                "correctionReason",
-                "fingerprint",
-              ]}
+              fields={["revisionNumber", "revisionKind", "revisionCreatedAt", "correctionReason"]}
             />
-            <Facts
-              value={loaded.data.evidence}
-              fields={["subject", "body", "occurredAtUtc", "occurredAtContext"]}
+            <ImportedEvidence
+              evidence={loaded.data.evidence}
+              attachments={loaded.data.attachments}
+              historical
             />
-            {loaded.data.evidence.participants.map((participant, index) => (
-              <Facts key={index} value={participant} fields={["role", "display", "address"]} />
-            ))}
-            {loaded.data.attachments.map((attachment) => (
-              <div key={attachment.fileLinkId}>
-                <Facts value={attachment} fields={["role", "displayOrder"]} />
-                {attachment.file ? (
-                  <Facts
-                    value={attachment.file}
-                    fields={["original_name", "content_sha256", "storage_state", "verified_at"]}
-                  />
-                ) : (
-                  <p>Attachment metadata unavailable.</p>
-                )}
-              </div>
-            ))}
             {(loaded.data.historyTruncated || loaded.data.attachmentsTruncated) && (
               <p>
                 This bounded read is incomplete; additional retained history or attachments are not

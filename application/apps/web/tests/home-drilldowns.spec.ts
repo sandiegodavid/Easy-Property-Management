@@ -161,7 +161,7 @@ test("vacant and unknown totals open exact active-space views with frozen pages 
   });
   expect(classified.ok(), await classified.text()).toBe(true);
   for (const [home, kind, label] of [
-    [vacant, "vacant", "View vacant spaces"],
+    [vacant, "vacant", "View vacant rental units"],
     [unknown, "unknown", "View unknown occupancy"],
   ] as const) {
     await page.goto(`/home?propertyId=${home.id}`);

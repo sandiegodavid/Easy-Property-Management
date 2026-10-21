@@ -2,6 +2,64 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 import type { components } from "@epm/contracts/generated";
 
 type Schema = components["schemas"];
+test("imported messages show named source participants and preserve plain text in both revisions", async ({
+  page,
+  request,
+}, testInfo) => {
+  const response = await request.post("/api/intake/sources", {
+    data: {
+      sourceKind: "email_message",
+      channel: "email",
+      subject: "Reported water leak",
+      body: "Line_one\nLine_two",
+      occurredAtUtc: occurred,
+      originSystem: "local_operator",
+      participants: [
+        { role: "sender", display: "Taylor Example", address: "taylor@example.test" },
+        { role: "recipient", address: "owner@example.test" },
+        { role: "observer" },
+      ],
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(response.ok(), await response.text()).toBe(true);
+  const created = (await response.json()) as Schema["SourceMutationResponse"];
+  await page.goto(`/conversations?intake=true&source=${created.sourceId}`);
+  const current = page.getByRole("article", { name: "Imported evidence", exact: true });
+  await expect(
+    current.getByRole("heading", { name: "Reported water leak", exact: true }),
+  ).toBeVisible();
+  await expect(current.locator(".imported-message-participants strong")).toHaveText([
+    "Taylor Example",
+    "owner@example.test",
+    "Participant name not supplied",
+  ]);
+  await expect(current.locator(".imported-message-body p")).toHaveText("Line_one\nLine_two");
+  await expect(current.locator("dd")).not.toContainText(["Line_one"]);
+  await page.getByRole("button", { name: "Read retained revision 1", exact: true }).click();
+  const historical = page.getByRole("article", {
+    name: "Historical imported evidence",
+    exact: true,
+  });
+  await expect(historical.locator(".imported-message-body p")).toHaveText("Line_one\nLine_two");
+  await expect(historical.locator(".imported-message-participants strong")).toHaveText([
+    "Taylor Example",
+    "owner@example.test",
+    "Participant name not supplied",
+  ]);
+  for (const theme of ["light", "dark"])
+    for (const width of [1280, 390]) {
+      await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await page.screenshot({
+        path: testInfo.outputPath(`intake-message-${theme}-${width}.png`),
+        fullPage: true,
+      });
+    }
+});
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
 const occurred = "2026-01-02T12:00:00-05:00";
 async function source(request: APIRequestContext, body: string, originSystem = "local_operator") {
@@ -115,12 +173,39 @@ test("multipart import preserves ordered roles and rejects changed bytes after f
   await save(page, "import source evidence");
   await page.getByRole("link", { name: "Back to source evidence", exact: true }).click();
   await expect(page.getByRole("region", { name: "Source evidence detail" })).toContainText(
-    "raw_source",
+    "Raw source",
   );
+  const attachments = page.getByRole("region", { name: "Evidence attachments", exact: true });
+  await expect(attachments).not.toContainText("raw_source");
+  await expect(attachments).toContainText("Source attachment");
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+    }
+  }
   const id = new URL(page.url()).searchParams.get("source")!;
   const detail = (await (
     await request.get(`/api/intake/sources/${id}`)
   ).json()) as Schema["SourceDetailResponse"];
+  const hash = detail.attachments[0].file!.content_sha256;
+  await expect(attachments.getByText(hash, { exact: true })).not.toBeVisible();
+  await attachments.getByText("File verification details", { exact: true }).first().click();
+  await expect(attachments.getByText(hash, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Read retained revision 1", exact: true }).click();
+  const historicalAttachments = page.getByRole("region", {
+    name: "Historical evidence attachments",
+    exact: true,
+  });
+  await expect(historicalAttachments.getByText(hash, { exact: true })).not.toBeVisible();
+  await historicalAttachments
+    .getByText("File verification details", { exact: true })
+    .first()
+    .click();
+  await expect(historicalAttachments.getByText(hash, { exact: true })).toBeVisible();
   expect(detail.attachments.map((entry) => entry.role)).toEqual([
     "raw_source",
     "source_attachment",
@@ -158,6 +243,9 @@ test("correction, dismissal, reopening and supersession retain source history", 
   expect(detail.evidence.body).toBe("Corrected evidence");
   expect(detail.revisions).toHaveLength(2);
   await page.goto(`/conversations?intake=true&source=${original.sourceId}`);
+  const evidence = page.getByRole("region", { name: "Source evidence detail", exact: true });
+  await expect(evidence).not.toContainText(original.sourceId);
+  await expect(evidence).toContainText("Superseded");
   await expect(page.getByRole("region", { name: "Source evidence detail" })).toContainText(
     "Clarify original testimony",
   );
@@ -195,7 +283,11 @@ test("audited detail failure withholds evidence and directory reads have no per-
     if (item.url().includes("/api/intake/sources")) reads.push(item.url());
   });
   await page.goto("/conversations?intake=true&channel=internal&hasDuplicate=false");
-  await expect(page.getByText("sources on this bounded page", { exact: false })).toBeVisible();
+  await expect(page.getByText("imported records on this page", { exact: false })).toBeVisible();
+  const rows = page.locator(".work-directory-card");
+  await expect(rows.first()).toBeVisible();
+  await expect(rows.first()).not.toContainText("Source id");
+  await expect(rows.first()).not.toContainText("Source revision");
   expect(reads).toHaveLength(1);
   expect(reads[0]).toContain("limit=25");
   expect(reads[0]).toContain("channel=internal");
@@ -337,14 +429,14 @@ test("source directory continuation preserves filters without gaps or detail req
     if (item.url().includes("/api/intake/sources")) reads.push(item.url());
   });
   await page.goto(`/conversations?intake=true&originSystem=${origin}&channel=internal`);
-  await expect(page.getByText(/^25 sources on this bounded page/)).toBeVisible();
+  await expect(page.getByText(/^25 imported records on this page/)).toBeVisible();
   const first = await page
     .locator('a[href*="&source="]')
     .evaluateAll((links) =>
       links.map((link) => new URL((link as HTMLAnchorElement).href).searchParams.get("source")),
     );
   await page.getByRole("button", { name: "Next sources", exact: true }).click();
-  await expect(page.getByText(/^5 sources on this bounded page/)).toBeVisible();
+  await expect(page.getByText(/^5 imported records on this page/)).toBeVisible();
   const second = await page
     .locator('a[href*="&source="]')
     .evaluateAll((links) =>

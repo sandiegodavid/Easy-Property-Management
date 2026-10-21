@@ -8,6 +8,8 @@ import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks, CommandLoader, workflowUrl } from "./command";
 import { Facts, History, readResult } from "./reads";
+import { ReadableFacts } from "./readable-facts";
+import { EvidenceItem } from "./evidence-item";
 
 type Report = components["schemas"]["ReportResponse"];
 type Lease = components["schemas"]["LeaseResponse"];
@@ -32,7 +34,7 @@ export function InspectionList({ lease }: { lease: Lease }) {
   return (
     <section aria-label="Lease inspections">
       <h3>Inspections</h3>
-      <Facts
+      <ReadableFacts
         value={reports.data?.attention ?? lease.inspectionAttention}
         fields={["preMoveIn", "postMoveOut"]}
       />
@@ -51,11 +53,17 @@ export function InspectionList({ lease }: { lease: Lease }) {
       )}
       {reports.data?.reports.length === 0 && <p>No inspection reports recorded.</p>}
       {reports.data?.reports.map((report) => (
-        <p key={report.id}>
-          <Link to={`/inspections/${report.id}`}>
-            {reportKindLabels[report.reportKind]} · {report.walkthroughOn} · {report.status}
-          </Link>
-        </p>
+        <article className="child-record-card" key={report.id}>
+          <header className="child-record-heading">
+            <h4>
+              <Link to={`/inspections/${report.id}`}>
+                {reportKindLabels[report.reportKind]} inspection · {report.walkthroughOn}
+              </Link>
+            </h4>
+            <span className="record-pill">{report.status}</span>
+          </header>
+          <ReadableFacts value={report} fields={["conductedBy", "finalizedAt"]} />
+        </article>
       ))}
     </section>
   );
@@ -135,17 +143,15 @@ function ReportRecord({ id }: { id: string }) {
     );
   const item = report.data;
   return (
-    <section aria-label="Inspection report">
+    <section className="inspection-report" aria-label="Inspection report">
       <ParentBackLink to={`/leases/${item.leaseId}/inspections`}>
         ← Back to lease inspections
       </ParentBackLink>
       <h2>{reportKindLabels[item.reportKind]} inspection</h2>
-      <Facts
+      <ReadableFacts
         value={item}
         fields={[
           "status",
-          "revision",
-          "spaceId",
           "walkthroughOn",
           "conductedBy",
           "tenantPresence",
@@ -161,6 +167,8 @@ function ReportRecord({ id }: { id: string }) {
         deposit deductions.
       </p>
       <CommandLinks
+        asButtons
+        collapsible={false}
         target={id}
         keys={
           item.status === "draft"
@@ -182,59 +190,123 @@ function ReportRecord({ id }: { id: string }) {
         </Link>
       )}
       {item.areas.map((area) => (
-        <article key={area.id}>
+        <article className="record-detail-block" key={area.id}>
           <h3>{area.displayName}</h3>
           <p>{area.notes}</p>
-          {area.observations.map((observation) => (
-            <section key={observation.id} aria-label={observation.itemName}>
-              <h4>{observation.itemName}</h4>
-              <Facts
-                value={observation}
-                fields={[
-                  "conditionState",
-                  "cleanlinessState",
-                  "observedOn",
-                  "isCompleted",
-                  "notes",
-                ]}
-              />
-              {item.status === "draft" && (
-                <Link
-                  to={`${workflowUrl("inspection.evidence.attach", observation.id)}&report=${id}`}
-                >
-                  Attach evidence for {observation.itemName}
-                </Link>
-              )}
-              {observation.files.map((file) => (
-                <p key={file.id}>
-                  {file.originalName} · {file.storageState}{" "}
-                  <Link to={`/money?file=${file.id}`}>
-                    Metadata and history: {file.originalName}
-                  </Link>{" "}
-                  {file.available ? (
-                    <a href={`/api/files/${file.id}/content`}>Download {file.originalName}</a>
-                  ) : (
-                    <span>Content unavailable; opening disabled.</span>
-                  )}
-                  {item.status === "draft" &&
-                    file.links
-                      .filter((link) => link.entityId === observation.id && !link.archivedAt)
-                      .map((link) => (
-                        <Link key={link.id} to={workflowUrl("file.link.archive", link.id)}>
-                          Archive evidence association for {file.originalName}
-                        </Link>
-                      ))}
-                </p>
-              ))}
-            </section>
-          ))}
+          <div className="inspection-observation-grid">
+            {area.observations.map((observation) => (
+              <section
+                className="child-record-card"
+                key={observation.id}
+                aria-label={observation.itemName}
+              >
+                <h4>{observation.itemName}</h4>
+                <ReadableFacts
+                  value={observation}
+                  fields={[
+                    "conditionState",
+                    "cleanlinessState",
+                    "observedOn",
+                    "isCompleted",
+                    "notes",
+                  ]}
+                />
+                {item.status === "draft" && (
+                  <Link
+                    to={`${workflowUrl("inspection.evidence.attach", observation.id)}&report=${id}`}
+                  >
+                    Attach evidence for {observation.itemName}
+                  </Link>
+                )}
+                {observation.files.map((file) => (
+                  <EvidenceItem key={file.id} name={file.originalName} state={file.storageState}>
+                    <Link to={`/money?file=${file.id}`}>
+                      Metadata and history: {file.originalName}
+                    </Link>{" "}
+                    {file.available ? (
+                      <a href={`/api/files/${file.id}/content`}>Download {file.originalName}</a>
+                    ) : (
+                      <span>Content unavailable; opening disabled.</span>
+                    )}
+                    {item.status === "draft" &&
+                      file.links
+                        .filter((link) => link.entityId === observation.id && !link.archivedAt)
+                        .map((link) => (
+                          <Link key={link.id} to={workflowUrl("file.link.archive", link.id)}>
+                            Archive evidence association for {file.originalName}
+                          </Link>
+                        ))}
+                  </EvidenceItem>
+                ))}
+              </section>
+            ))}
+          </div>
         </article>
       ))}
-      <h3>Acknowledgments</h3>
-      {item.acknowledgments.map((ack) => (
-        <Facts key={ack.id} value={ack} fields={["leaseParticipantId", "status", "notes"]} />
-      ))}
+      <InspectionAcknowledgments report={item} />
       <History kind="condition_report" id={id} />
+    </section>
+  );
+}
+
+function InspectionAcknowledgments({ report }: { report: Report }) {
+  const { scope } = useWorkspace();
+  const participants = useQuery({
+    queryKey: scope.key("inspection-acknowledgment-names", report.leaseId),
+    enabled: report.acknowledgments.length > 0,
+    retry: false,
+    queryFn: async ({ signal }) => {
+      const lease = readResult(
+        await api.GET("/api/leases/{lease_id}", {
+          signal,
+          params: { path: { lease_id: report.leaseId } },
+        }),
+      );
+      const ids = [...new Set(lease.participants.map((participant) => participant.tenantPartyId))];
+      const names = new Map<string, string>();
+      for (let offset = 0; offset < ids.length; offset += 100) {
+        const rows = readResult(
+          await api.GET("/api/parties/names", {
+            signal,
+            params: { query: { ids: ids.slice(offset, offset + 100) } },
+          }),
+        );
+        for (const row of rows) names.set(row.id, row.displayName);
+      }
+      return new Map(
+        lease.participants.map((participant) => [
+          participant.id,
+          { partyId: participant.tenantPartyId, name: names.get(participant.tenantPartyId) },
+        ]),
+      );
+    },
+  });
+  return (
+    <section className="record-detail-block">
+      <h3>Acknowledgments</h3>
+      {participants.error && (
+        <p role="alert">Participant names are unavailable. Acknowledgments remain visible.</p>
+      )}
+      {!report.acknowledgments.length && <p>No acknowledgments recorded.</p>}
+      {report.acknowledgments.map((ack) => {
+        const participant = participants.data?.get(ack.leaseParticipantId);
+        return (
+          <article className="child-record-card" key={ack.id}>
+            <h4>
+              {participant ? (
+                <Link to={`/tenants?identity=${participant.partyId}`}>
+                  {participant.name ?? "Participant name unavailable"}
+                </Link>
+              ) : participants.isLoading ? (
+                "Loading participant name…"
+              ) : (
+                "Participant name unavailable"
+              )}
+            </h4>
+            <ReadableFacts value={ack} fields={["status", "notes"]} />
+          </article>
+        );
+      })}
     </section>
   );
 }

@@ -42,6 +42,8 @@ export function readResult<T>(response: { data?: T; error?: unknown; response: R
     throw new Error(normalizeApiError(response.response.status, response.error).message);
   return response.data;
 }
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function Facts({
   value,
   fields,
@@ -54,22 +56,39 @@ export function Facts({
   const values = record(value);
   return (
     <dl className="workflow-facts">
-      {fields.map((key) => (
-        <div key={key}>
-          <dt>{label(key)}</dt>
-          <dd>
-            {values[key] === null || values[key] === undefined
-              ? "Not recorded"
-              : typeof values[key] === "boolean"
-                ? values[key]
-                  ? "Yes"
-                  : "No"
-                : verbatim
-                  ? scalar(values[key])
-                  : historyValue(key, values[key])}
-          </dd>
-        </div>
-      ))}
+      {fields.map((key) => {
+        const raw = values[key];
+        const text =
+          raw === null || raw === undefined
+            ? "Not recorded"
+            : typeof raw === "boolean"
+              ? raw
+                ? "Yes"
+                : "No"
+              : verbatim
+                ? scalar(raw)
+                : historyValue(key, raw);
+        const isStatus =
+          typeof raw === "string" && (/(?:Status|Kind|State)$/.test(key) || key === "status");
+        const isId =
+          typeof raw === "string" && uuidPattern.test(raw) && (key.endsWith("Id") || key === "id");
+        return (
+          <div key={key}>
+            <dt>{label(key)}</dt>
+            <dd>
+              {isStatus ? (
+                <span className="workflow-fact-status" data-status={raw}>
+                  {text}
+                </span>
+              ) : isId ? (
+                <span className="workflow-fact-id">{text}</span>
+              ) : (
+                text
+              )}
+            </dd>
+          </div>
+        );
+      })}
     </dl>
   );
 }

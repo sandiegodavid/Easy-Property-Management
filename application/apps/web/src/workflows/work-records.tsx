@@ -13,8 +13,24 @@ import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks, workflowUrl } from "./command";
 import { Facts, History, readResult } from "./reads";
 import { TaskOutcome } from "./task-controls";
+import { ReadableFacts } from "./readable-facts";
+import { EvidenceItem } from "./evidence-item";
 
 import { workUrl, type WorkKind } from "./work-links";
+function humanWorkLabel(value: unknown) {
+  return scalar(value)
+    .replaceAll("_", " ")
+    .replace(/^./, (letter) => letter.toUpperCase());
+}
+function taskDeadlineLabel(value: Record<string, unknown>) {
+  if (!value.dueAtUtc) return "No due date";
+  if (value.isAllDay && value.dueTimezone)
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: "long",
+      timeZone: scalar(value.dueTimezone),
+    }).format(new Date(scalar(value.dueAtUtc)));
+  return formatHomeTime(scalar(value.dueAtUtc));
+}
 export async function loadWorkRecord(
   kind: WorkKind,
   id: string,
@@ -59,16 +75,6 @@ export async function loadWorkRecord(
 export function workChildren(value: Record<string, unknown>, key: string) {
   return Array.isArray(value[key]) ? (value[key] as unknown[]).map(record) : [];
 }
-const common = [
-  "status",
-  "priority",
-  "revision",
-  "summary",
-  "description",
-  "createdAt",
-  "updatedAt",
-  "updatedAtUtc",
-];
 export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
   const { scope } = useWorkspace();
   const result = useQuery({
@@ -118,7 +124,6 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
           {!!value.propertyId && kind !== "issue" && (
             <CoverageLinks propertyId={scalar(value.propertyId)} />
           )}
-          {kind !== "communication" && kind !== "issue" && <Facts value={value} fields={common} />}
           {!!value.propertyId && kind !== "issue" && (
             <p>
               <Link to={`/properties/${scalar(value.propertyId)}/maintenance`}>
@@ -138,32 +143,37 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
           )}
           {kind === "task" && (
             <>
-              <TaskOutcome value={value} />
-              <p>
-                Waiting preserves the original deadline and urgency. Reminder acknowledgement is not
-                Task completion. Setting waiting context again replaces whom or what is awaited;
-                rescheduling only changes or removes the follow-up date.
-              </p>
-              <Facts
-                value={value}
-                fields={[
-                  "title",
-                  "notes",
-                  "dueAtUtc",
-                  "dueTimezone",
-                  "taskDeadlineState",
-                  "isAllDay",
-                  "isWaiting",
-                  "waitingForKind",
-                  "waitingForLabel",
-                  "followUpAt",
-                  "followUpTimezone",
-                  "followUpState",
-                  "followUpDueToday",
-                  "followUpActionable",
-                  "outcomeNote",
-                ]}
-              />
+              <section className="record-detail-panel task-summary-panel" aria-label="Task details">
+                <header className="child-record-heading">
+                  <h3>Task details</h3>
+                  <div className="record-badges">
+                    <span className="record-pill">{humanWorkLabel(value.status)}</span>
+                    <span className="record-pill">{humanWorkLabel(value.priority)} priority</span>
+                  </div>
+                </header>
+                <p className="task-deadline">
+                  <span>Deadline</span>
+                  <strong>{taskDeadlineLabel(value)}</strong>
+                </p>
+                <p className="task-deadline-state">
+                  {value.isAllDay ? "All-day task · " : ""}
+                  {value.taskDeadlineState !== "none" && humanWorkLabel(value.taskDeadlineState)}
+                  {value.dueTimezone ? ` · Deadline time zone: ${scalar(value.dueTimezone)}` : ""}
+                </p>
+                {!!value.notes && <p className="record-narrative">{scalar(value.notes)}</p>}
+                <TaskOutcome value={value} />
+              </section>
+              {!!value.isWaiting && (
+                <section className="child-record-card" aria-label="Waiting and follow-up">
+                  <h3>Waiting and follow-up</h3>
+                  <ReadableFacts
+                    value={value}
+                    fields={["waitingForLabel", "followUpAt", "followUpTimezone", "followUpState"]}
+                  />
+                  {!value.followUpAt && <p>No follow-up scheduled.</p>}
+                  <p>Waiting does not change this task’s deadline.</p>
+                </section>
+              )}
               <RelatedLink
                 kind={scalar(value.relatedEntityType)}
                 id={scalar(value.relatedEntityId)}
@@ -311,27 +321,35 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
           {kind === "concern" && (
             <>
               <p>
-                A concern is an Owner's recorded claim, not a derived property status. Follow-up
+                A concern records what an owner reported, not a confirmed property status. Follow-up
                 completion does not resolve it.
               </p>
-              <Facts
-                value={value}
-                fields={[
-                  "concernType",
-                  "ownerDisplayNameSnapshot",
-                  "propertyDisplayNameSnapshot",
-                  "spaceDisplayNameSnapshot",
-                  "leaseDisplaySnapshot",
-                  "tenantDisplayNameSnapshot",
-                  "raisedAtUtc",
-                  "propertyTimezoneSnapshot",
-                  "observedOccupancyStatus",
-                  "observedAvailabilityStatus",
-                  "observedAvailableOn",
-                  "resolutionSummary",
-                  "dismissalReason",
-                ]}
-              />
+              <section className="record-detail-panel concern-detail-panel">
+                <h3>Reported concern</h3>
+                <ReadableFacts
+                  value={value}
+                  fields={[
+                    "status",
+                    "priority",
+                    "concernType",
+                    "ownerDisplayNameSnapshot",
+                    "propertyDisplayNameSnapshot",
+                    "spaceDisplayNameSnapshot",
+                    "leaseDisplaySnapshot",
+                    "tenantDisplayNameSnapshot",
+                    "raisedAtUtc",
+                    "propertyTimezoneSnapshot",
+                    "observedOccupancyStatus",
+                    "observedAvailabilityStatus",
+                    "observedAvailableOn",
+                    "resolutionSummary",
+                    "dismissalReason",
+                  ]}
+                />
+                {!!value.description && (
+                  <p className="record-narrative">{scalar(value.description)}</p>
+                )}
+              </section>
               {value.status === "dismissed" && !record(value.successor).id && (
                 <p>
                   <Link to={`${workflowUrl("owner_concern.create")}&replacesConcernId=${id}`}>
@@ -339,10 +357,29 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                   </Link>
                 </p>
               )}
-              <Facts
-                value={value.currentSourceState}
-                fields={Object.keys(record(value.currentSourceState))}
-              />
+              <details className="record-detail-block">
+                <summary>Current property and lease information</summary>
+                <ReadableFacts
+                  value={value.currentSourceState}
+                  fields={[
+                    "ownerDisplayName",
+                    "propertyDisplayName",
+                    "propertyStatus",
+                    "spaceDisplayName",
+                    "spaceStatus",
+                    "occupancyStatus",
+                    "availabilityStatus",
+                    "availableOn",
+                    "leaseStatus",
+                    "leaseActualMoveOutOn",
+                    "tenantDisplayName",
+                    ...(value.tenantPartyId
+                      ? ["tenantArchived", "tenantProfileActive", "tenantParticipationActive"]
+                      : []),
+                    ...(record(value.currentSourceState).ownerArchived ? ["ownerArchived"] : []),
+                  ]}
+                />
+              </details>
               {!!value.originatingCommunicationId && (
                 <p>
                   <Link to={workUrl("communication", scalar(value.originatingCommunicationId))}>
@@ -380,12 +417,19 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                     : ["owner_concern.open"]
                 }
               />
-              {workChildren(value, "followUpTasks").map((item) => (
-                <p key={scalar(item.id)}>
-                  <Link to={workUrl("task", scalar(item.id))}>{scalar(item.title)}</Link> ·{" "}
-                  {scalar(item.status)}
-                </p>
-              ))}
+              <section className="record-detail-block">
+                <h3>Follow-up tasks</h3>
+                {!workChildren(value, "followUpTasks").length && (
+                  <p>No follow-up tasks recorded.</p>
+                )}
+                {workChildren(value, "followUpTasks").map((item) => (
+                  <div className="record-detail-row" key={scalar(item.id)}>
+                    <Link to={workUrl("task", scalar(item.id))}>{scalar(item.title)}</Link> ·{" "}
+                    {scalar(item.status).replaceAll("_", " ")}
+                    <ReadableFacts value={item} fields={["dueAtUtc", "priority"]} />
+                  </div>
+                ))}
+              </section>
               <section aria-label="Recent concern conversations">
                 <p>
                   {scalar(value.linkedCommunicationCount, "0")} retained conversation links; recent
@@ -564,17 +608,16 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
           <section className="issue-detail-section" aria-label="Follow-up tasks">
             <h3>Follow-up tasks</h3>
             {workChildren(value, "tasks").map((item) => (
-              <div key={scalar(item.id)}>
-                <Link to={workUrl("task", scalar(item.id))}>{scalar(item.title)}</Link> ·{" "}
-                {scalar(item.status)}
-                <Facts
-                  value={{
-                    ...item,
-                    dueAtUtc: item.dueAtUtc ? formatHomeTime(scalar(item.dueAtUtc)) : null,
-                  }}
-                  fields={["dueAtUtc", "dueTimezone"]}
-                />
-              </div>
+              <article className="child-record-card issue-child-card" key={scalar(item.id)}>
+                <header className="child-record-heading">
+                  <h4>
+                    <Link to={workUrl("task", scalar(item.id))}>{scalar(item.title)}</Link>
+                  </h4>
+                  <span className="record-pill">{humanWorkLabel(item.status)}</span>
+                </header>
+                <ReadableFacts value={item} fields={["dueAtUtc", "dueTimezone"]} />
+                {!item.dueAtUtc && <p>No due date.</p>}
+              </article>
             ))}
           </section>
         )}
@@ -646,31 +689,75 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
                 <article
                   key={scalar(item.id)}
                   id={key === "appointments" ? `appointment-${scalar(item.id)}` : undefined}
-                  className={key === "appointments" ? "maintenance-appointment-card" : undefined}
+                  className={
+                    key === "appointments"
+                      ? "maintenance-appointment-card"
+                      : "child-record-card issue-child-card"
+                  }
                 >
+                  {key !== "appointments" && (
+                    <header className="child-record-heading">
+                      <h4>
+                        {key === "assignments"
+                          ? scalar(item.providerDisplayNameSnapshot, "Provider assignment")
+                          : key === "costContexts"
+                            ? scalar(item.label, "Estimate or cost note")
+                            : scalar(
+                                record(item.expense).payeeSnapshot,
+                                "Paid expense — summary unavailable",
+                              )}
+                      </h4>
+                      <span className="record-pill">
+                        {item.archivedAt
+                          ? "Archived association"
+                          : item.voidedAt
+                            ? "Voided"
+                            : item.endedAt
+                              ? "Ended"
+                              : key === "expenseLinks"
+                                ? humanWorkLabel(record(item.expense).lifecycleStatus ?? "Linked")
+                                : "Active"}
+                      </span>
+                    </header>
+                  )}
                   {key === "costContexts" ? (
                     <MoneyFacts
-                      value={item}
+                      value={{
+                        ...item,
+                        contextKind: scalar(item.contextKind)
+                          .replaceAll("_", " ")
+                          .replace(/^\w/, (letter) => letter.toUpperCase()),
+                        ...(item.voidedAt
+                          ? { voidedAt: formatHomeTime(scalar(item.voidedAt)) }
+                          : {}),
+                      }}
                       fields={(fields as string[]).filter(
-                        (field) => item[field] != null && !field.endsWith("Id"),
+                        (field) =>
+                          item[field] != null && field !== "label" && !field.endsWith("Id"),
                       )}
                     />
                   ) : key === "appointments" ? (
                     <MaintenanceAppointment item={item} />
+                  ) : key === "expenseLinks" ? (
+                    <>
+                      <MoneyFacts
+                        value={item.expense}
+                        fields={["netAmountMinor", "occurredOn"]}
+                        labels={{ netAmountMinor: "Net paid expense", occurredOn: "Paid on" }}
+                      />
+                      <ReadableFacts
+                        value={item}
+                        fields={["createdAt", "archivedAt", "archiveReason"]}
+                      />
+                    </>
                   ) : (
-                    <Facts
-                      value={Object.fromEntries(
-                        Object.entries(item).map(([field, data]) => [
-                          field,
-                          field.endsWith("AtUtc") || field.endsWith("At")
-                            ? data
-                              ? formatHomeTime(scalar(data))
-                              : data
-                            : data,
-                        ]),
-                      )}
+                    <ReadableFacts
+                      value={item}
                       fields={(fields as string[]).filter(
-                        (field) => item[field] != null && !field.endsWith("Id"),
+                        (field) =>
+                          item[field] != null &&
+                          field !== "providerDisplayNameSnapshot" &&
+                          !field.endsWith("Id"),
                       )}
                     />
                   )}
@@ -714,8 +801,8 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
                     !item.endedAt &&
                     (key !== "appointments" || item.status === "scheduled") && (
                       <CommandLinks
-                        asButtons={key === "appointments"}
-                        collapsible={key !== "appointments"}
+                        asButtons
+                        collapsible={false}
                         labels={{
                           "maintenance.appointment.update": "Reschedule",
                           "maintenance.appointment.finish": "Record outcome",
@@ -723,7 +810,7 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
                         target={id}
                         child={scalar(item.id)}
                         keys={actions as string[]}
-                        title={`Actions for ${scalar(item.label ?? item.purpose ?? item.providerDisplayNameSnapshot ?? item.id)}`}
+                        title={`Actions for ${scalar(item.label ?? item.purpose ?? item.providerDisplayNameSnapshot, String(title))}`}
                       />
                     )}
                 </article>
@@ -806,28 +893,34 @@ function TaskReminders({ id, active }: { id: string; active: boolean }) {
       ),
   });
   return (
-    <section aria-label="Task reminders" id="task-reminders">
+    <section className="record-detail-block" aria-label="Task reminders" id="task-reminders">
       <h3>Reminders</h3>
       {result.error && <p role="alert">Reminders unavailable: {result.error.message}</p>}
+      {result.isPending && <p role="status">Loading reminders…</p>}
+      {result.data?.length === 0 && <p>No reminders scheduled.</p>}
       {result.data?.length === 100 && (
         <p>Showing the first 100 reminders; this is not the complete history.</p>
       )}
       {result.data?.map((item) => (
-        <article key={item.id}>
-          <Facts
-            value={item}
-            fields={["remindAtUtc", "status", "acknowledgedAtUtc", "dismissedAtUtc"]}
-          />
+        <article className="child-record-card task-reminder-card" key={item.id}>
+          <header className="child-record-heading">
+            <h4>Reminder · {formatHomeTime(item.remindAtUtc)}</h4>
+            <span className="record-pill">{humanWorkLabel(item.status)}</span>
+          </header>
+          <ReadableFacts value={item} fields={["acknowledgedAtUtc", "dismissedAtUtc"]} />
           {active && item.status === "pending" && (
             <CommandLinks
+              asButtons
+              collapsible={false}
               target={id}
               child={item.id}
               keys={["task.reminder.acknowledge", "task.reminder.dismiss"]}
-              title={`Reminder actions ${item.remindAtUtc}`}
+              title={`Reminder actions ${formatHomeTime(item.remindAtUtc)}`}
             />
           )}
         </article>
       ))}
+      <p>Acknowledging a reminder does not complete the task.</p>
     </section>
   );
 }
@@ -837,7 +930,11 @@ function EvidenceLinks({ items, issueId }: { items: Record<string, unknown>[]; i
       {items
         .filter((item) => !item.archivedAt)
         .map((item) => (
-          <p key={scalar(item.id)}>
+          <EvidenceItem
+            key={scalar(item.id)}
+            name={scalar(item.originalName, "Supporting document")}
+            state={item.available === false ? "Unavailable" : scalar(item.storageState, "")}
+          >
             <Link to={`/money?file=${scalar(item.fileId)}`}>
               Review evidence metadata: {scalar(item.originalName)}
             </Link>
@@ -849,7 +946,7 @@ function EvidenceLinks({ items, issueId }: { items: Record<string, unknown>[]; i
                 Archive evidence association
               </Link>
             )}
-          </p>
+          </EvidenceItem>
         ))}
     </section>
   );

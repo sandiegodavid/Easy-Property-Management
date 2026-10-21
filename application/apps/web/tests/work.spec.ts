@@ -3,6 +3,130 @@ import type { components } from "@epm/contracts/generated";
 import axe from "axe-core";
 
 type Schemas = components["schemas"];
+test("Task summary panels distinguish undated and all-day deadlines without boolean fact dumps", async ({
+  page,
+  request,
+}, testInfo) => {
+  for (const allDay of [false, true]) {
+    const created = await post<Schemas["TaskCreationResponse"]>(request, "/api/tasks", {
+      title: allDay ? "All-day property review" : "Undated property review",
+      priority: "normal",
+      isAllDay: allDay,
+      ...(allDay ? { dueAtUtc: "2026-10-22T07:00:00Z", dueTimezone: "America/Los_Angeles" } : {}),
+      expectedRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+    });
+    await page.goto(`/tasks?record=task&id=${created.id}`);
+    const panel = page.getByRole("region", { name: "Task details", exact: true });
+    await expect(panel.locator(".record-pill")).toHaveText(["Open", "Normal priority"]);
+    await expect(panel.locator("dt")).toHaveCount(0);
+    await expect(panel.getByText("Yes", { exact: true })).toHaveCount(0);
+    if (allDay) {
+      await expect(panel).toContainText("All-day task");
+      const expected = await page.evaluate(() =>
+        new Intl.DateTimeFormat(undefined, {
+          dateStyle: "long",
+          timeZone: "America/Los_Angeles",
+        }).format(new Date("2026-10-22T07:00:00Z")),
+      );
+      await expect(panel.locator(".task-deadline strong")).toHaveText(expected);
+    } else {
+      await expect(panel.locator(".task-deadline strong")).toHaveText("No due date");
+      await expect(panel).not.toContainText("All-day task");
+    }
+    for (const theme of ["light", "dark"])
+      for (const width of [1280, 390]) {
+        await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+        await page.setViewportSize({ width, height: 900 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        await page.screenshot({
+          path: testInfo.outputPath(`task-summary-${allDay}-${theme}-${width}.png`),
+          fullPage: true,
+        });
+      }
+  }
+});
+test("Task, conversation and owner concern directories show readable responsive cards", async ({
+  page,
+}) => {
+  const timestamp = "2026-10-21T14:30:00Z";
+  const cases = [
+    {
+      path: "/tasks",
+      api: "/api/tasks",
+      item: {
+        title: "Arrange boiler service",
+        status: "in_progress",
+        priority: "high",
+        dueAtUtc: timestamp,
+        relatedLabel: "Alder House",
+      },
+      title: "Arrange boiler service",
+      labels: ["In progress", "High", "Alder House"],
+    },
+    {
+      path: "/conversations",
+      api: "/api/communications",
+      item: {
+        subject: "Service appointment confirmed",
+        status: "recorded",
+        channel: "in_person",
+        direction: "inbound",
+        occurredAtUtc: timestamp,
+      },
+      title: "Service appointment confirmed",
+      labels: ["Recorded", "In person", "Inbound"],
+    },
+    {
+      path: "/maintenance?tab=concerns",
+      api: "/api/owner-concerns",
+      item: {
+        summary: "Owner requests an update",
+        status: "in_progress",
+        priority: "normal",
+        concernType: "general_rental",
+        propertyDisplayNameSnapshot: "Alder House",
+        ownerDisplayNameSnapshot: "Alex Owner",
+        raisedAtUtc: timestamp,
+      },
+      title: "Owner requests an update",
+      labels: ["In progress", "General rental", "Alder House", "Alex Owner"],
+    },
+  ];
+  for (const entry of cases) {
+    await page.route(`**${entry.api}?*`, (route) =>
+      route.fulfill({
+        json: {
+          items: [{ id: "00000000-0000-4000-8000-000000000099", ...entry.item }],
+          nextCursor: null,
+        },
+      }),
+    );
+    await page.goto(entry.path);
+    const card = page
+      .locator(".work-directory-card")
+      .filter({ has: page.getByRole("link", { name: entry.title, exact: true }) });
+    await expect(card).toBeVisible();
+    for (const text of entry.labels) await expect(card).toContainText(text);
+    await expect(card).not.toContainText(timestamp);
+    await expect(card).not.toContainText("in_progress");
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+      await page.setViewportSize({ width: 390, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+    }
+    if (entry.path === "/tasks") {
+      await card.getByText("Task details and completion", { exact: true }).click();
+      await expect(
+        card.getByRole("checkbox", { name: "Complete Task: Arrange boiler service" }),
+      ).toBeVisible();
+    }
+  }
+});
 async function checkCreateLayout(page: Page, info: TestInfo, name: string) {
   const form = page.locator(".maintenance-create-command");
   await expect(
@@ -708,6 +832,12 @@ test("Waiting preserves deadline and urgency; clearing is not completion", async
   expect(waiting.dueAtUtc).toBe(original.dueAtUtc);
   await page.goto(`/tasks?record=task&id=${original.id}`);
   await expect(page.getByText("Plumber reply", { exact: true })).toBeVisible();
+  const taskDetails = page.getByRole("region", { name: "Task details", exact: true });
+  await expect(taskDetails).not.toContainText("Revision");
+  await expect(taskDetails).toContainText("Urgent");
+  await expect(
+    page.getByRole("region", { name: "Waiting and follow-up", exact: true }),
+  ).not.toContainText(waiting.followUpAt!);
   await openAction(page, "task.waiting.clear", original.id);
   await page.getByLabel("I confirm this lifecycle change").check();
   await save(page, "Clear waiting context");
@@ -758,6 +888,16 @@ test("Waiting replacement and date removal retain deadline, reminder and unsched
     request,
     `/api/tasks/${original.id}/reminders`,
   );
+  await page.goto(`/tasks?record=task&id=${original.id}`);
+  const reminderList = page.getByRole("region", { name: "Task reminders", exact: true });
+  await expect(reminderList).toContainText("Pending");
+  await expect(reminderList.locator(".task-reminder-card .child-record-heading h4")).toContainText(
+    "Reminder",
+  );
+  await expect(reminderList).not.toContainText(reminders[0].remindAtUtc);
+  await expect(
+    reminderList.getByRole("button", { name: "Acknowledge reminder", exact: true }),
+  ).toBeVisible();
   expect(reminders.find((item) => item.id === reminder.reminder!.id)?.status).toBe("pending");
   await page.goto("/tasks?followUps=true&state=unscheduled");
   await page
@@ -971,7 +1111,15 @@ test("Task row completion requires confirmation and terminal history shows the r
   const directory = page.getByRole("region", { name: "Work directory" });
   const history = directory.getByRole("listitem").filter({ hasText: original.title });
   await expect(history).toContainText("Confirmed response received");
-  await expect(history).toContainText(completed.completedAtUtc!);
+  await expect(history).toContainText(
+    await page.evaluate((at) => {
+      const formatter = new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+      return `${formatter.format(new Date(at))} · ${formatter.resolvedOptions().timeZone}`;
+    }, completed.completedAtUtc!),
+  );
   await expect(history.getByRole("checkbox")).toHaveCount(0);
   await history.getByRole("link", { name: original.title }).click();
   await expect(page.getByRole("region", { name: "Task outcome history" })).toContainText(
@@ -990,7 +1138,13 @@ test("Task row completion requires confirmation and terminal history shows the r
   );
   const cancelledResult = await get<Schemas["TaskResponse"]>(request, `/api/tasks/${cancelled.id}`);
   await expect(page.getByRole("region", { name: "Work directory" })).toContainText(
-    cancelledResult.cancelledAtUtc!,
+    await page.evaluate((at) => {
+      const formatter = new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+      return `${formatter.format(new Date(at))} · ${formatter.resolvedOptions().timeZone}`;
+    }, cancelledResult.cancelledAtUtc!),
   );
 });
 
@@ -1432,6 +1586,26 @@ test("operational cost replacement and paid Expense association never copy or cr
     current.costContexts.find((item) => item.replacesCostContextId === original.id)?.amountMinor,
   ).toBe(17500);
   expect(current.expenseLinks[0].expenseId).toBe(paid.id);
+  const expenseDetailReads: string[] = [];
+  page.on("request", (entry) => {
+    if (new URL(entry.url()).pathname === `/api/expenses/${paid.id}`)
+      expenseDetailReads.push(entry.url());
+  });
+  await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
+  const costCards = page
+    .getByRole("region", { name: "Estimates and cost notes", exact: true })
+    .locator(".issue-child-card");
+  await expect(
+    costCards.getByRole("heading", { name: "Rough repair estimate", exact: true }),
+  ).toHaveCount(2);
+  const expenseCard = page
+    .getByRole("region", { name: "Linked paid expenses", exact: true })
+    .locator(".issue-child-card");
+  await expect(
+    expenseCard.getByRole("heading", { name: "Paid repair worker", exact: true }),
+  ).toBeVisible();
+  await expect(expenseCard).toContainText("USD 120.00");
+  expect(expenseDetailReads).toEqual([]);
   await openAction(page, "maintenance.expense.archive", f.issue.id, current.expenseLinks[0].id);
   await page.getByLabel("Reason (required)").fill("Wrong issue association, retain paid spending");
   await page.getByLabel("I confirm this lifecycle change").check();
@@ -1480,6 +1654,14 @@ test("appointment rescheduling and follow-up filtering preserve independent issu
   expect(current.status).toBe("open");
   expect(current.tasks).toHaveLength(1);
   expect(current.appointments[0].scheduledTimezone).toBe("America/Los_Angeles");
+  await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
+  const followUpCard = page
+    .getByRole("region", { name: "Follow-up tasks", exact: true })
+    .locator(".issue-child-card");
+  await expect(
+    followUpCard.getByRole("heading", { name: "Review leak appointment", exact: true }),
+  ).toBeVisible();
+  await expect(followUpCard.locator(".record-pill")).toHaveText("Open");
   await page.goto(`/maintenance?propertyId=${f.property.id}`);
   await page
     .getByRole("combobox", { name: "Issue category", exact: true })
@@ -1613,7 +1795,19 @@ test("Journal correction retains evidence and reconciles a lost completion respo
     },
   });
   expect(uploaded.status(), await uploaded.text()).toBe(201);
+  const journalUrl = `**/api/maintenance-issues/${f.issue.id}/work-journal?*`;
+  await page.route(journalUrl, async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as Schemas["WorkJournalPageResponse"];
+    body.items[0].recordedAssignmentToWorkStartSeconds = 90061;
+    await route.fulfill({ response, json: body });
+  });
   await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
+  const timeline = page.locator(".work-journal-timeline");
+  await expect(timeline).toContainText("1 day 1 hour 1 minute 1 second");
+  await expect(timeline).not.toContainText(entry.id);
+  await expect(timeline.locator(".evidence-item")).toContainText("completion.txt");
+  await page.unroute(journalUrl);
   await page.getByRole("link", { name: "Archive evidence association", exact: true }).click();
   await page
     .getByLabel("Reason (required)")
@@ -2378,6 +2572,13 @@ test("Provider quotes, assignment and ending remain independent of paid expenses
   );
   expect(assigned.expenseLinks).toHaveLength(0);
   expect(assigned.status).toBe("open");
+  await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
+  await expect(
+    page
+      .getByRole("region", { name: "Provider assignments", exact: true })
+      .locator(".issue-child-card")
+      .getByRole("heading", { name: provider.party.displayName, exact: true }),
+  ).toBeVisible();
   await openAction(page, "maintenance.assignment.end", f.issue.id, assigned.assignments[0].id);
   await page.getByLabel("I confirm this lifecycle change").check();
   await page.getByLabel("Reason (required)").fill("Engagement ended");
@@ -2511,6 +2712,21 @@ test("Owner concern create and edit use effective relationship validation", asyn
   expect(
     (await get<Schemas["ConcernResponse"]>(request, `/api/owner-concerns/${id}`)).summary,
   ).toBe("Updated owner request");
+  await page.route(`**/api/owner-concerns/${id}`, async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as Schemas["ConcernResponse"] & {
+      currentSourceState: Schemas["CurrentSourceState"] & { internalDiagnostic?: string };
+    };
+    body.currentSourceState.internalDiagnostic = "do-not-show-source-internals";
+    await route.fulfill({ response, json: body });
+  });
+  await page.goto(`/maintenance?record=concern&id=${id}`);
+  await expect(page.locator(".concern-detail-panel")).toContainText("Manual owner request");
+  await expect(page.locator(".concern-detail-panel")).not.toContainText("Revision");
+  await page.getByText("Current property and lease information", { exact: true }).click();
+  await expect(page.getByRole("region", { name: "Work record", exact: true })).not.toContainText(
+    "do-not-show-source-internals",
+  );
 });
 
 test("Owner concern duplicate review requires an independent reason and never merges", async ({

@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { workflowUrl } from "./command";
+import { formatHomeTime } from "../shared/home-time";
 
 export function TaskCompletion({ value }: { value: Record<string, unknown> }) {
   const navigate = useNavigate();
@@ -33,7 +34,9 @@ export function TaskOutcome({ value }: { value: Record<string, unknown> }) {
     <section aria-label="Task outcome history">
       <p>
         {value.status === "completed" ? "Completed at" : "Cancelled at"}:{" "}
-        {scalar(value.completedAtUtc ?? value.cancelledAtUtc)}
+        {value.completedAtUtc || value.cancelledAtUtc
+          ? formatHomeTime(scalar(value.completedAtUtc ?? value.cancelledAtUtc))
+          : "Not recorded"}
       </p>
       <p>Outcome note: {scalar(value.outcomeNote) || "No outcome note recorded"}</p>
       <p>This retained outcome is read-only.</p>

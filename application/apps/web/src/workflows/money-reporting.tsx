@@ -10,6 +10,7 @@ import { useWorkspace } from "../app/workspace-gate";
 import { readResult } from "./reads";
 import { MoneyFacts, moneyRecordUrl } from "./money-records";
 import { MoneyScope } from "./money";
+import { ReadableFacts } from "./readable-facts";
 
 type Metric = components["schemas"]["Metric"];
 const metricNames: Record<string, string> = {
@@ -171,7 +172,11 @@ export function MoneyReporting() {
           </p>
           <div className="money-reporting-totals">
             {(["operating", "depositActivity", "depositObligations"] as const).map((name) => (
-              <section className="record-detail-panel" key={name} aria-label={name}>
+              <section
+                className="record-detail-panel reporting-totals-panel"
+                key={name}
+                aria-label={name}
+              >
                 <h4>
                   {
                     {
@@ -230,11 +235,18 @@ export function MoneyReporting() {
           <div className="money-reporting-properties">
             {properties.data.items.map((item) => (
               <article className="record-detail-panel" key={item.propertyId}>
-                <Link
-                  to={`/money?${new URLSearchParams({ ...Object.fromEntries([...params].filter(([key]) => key !== "cursor")), propertyId: item.propertyId, sourceRevision: properties.data.summary.sourceRevision })}`}
-                >
-                  {item.propertyName} · {item.propertyState}
-                </Link>
+                <header className="child-record-heading">
+                  <h4>
+                    <Link
+                      to={`/money?${new URLSearchParams({ ...Object.fromEntries([...params].filter(([key]) => key !== "cursor")), propertyId: item.propertyId, sourceRevision: properties.data.summary.sourceRevision })}`}
+                    >
+                      {item.propertyName}
+                    </Link>
+                  </h4>
+                  <span className="record-pill">
+                    {item.propertyState === "active" ? "Active" : "Archived"}
+                  </span>
+                </header>
                 <p>
                   <Link to={`/properties/${item.propertyId}/money`}>Property context</Link>
                 </p>
@@ -278,10 +290,18 @@ export function MoneyReporting() {
                       : undefined;
             return (
               <article className="reporting-source-row" key={`${item.sourceKind}:${item.sourceId}`}>
-                <p>
-                  {item.sourceKind.replaceAll("_", " ")} · {item.businessOn} · USD{" "}
-                  {item.contribution} · {item.lifecycle.replaceAll("_", " ")}
-                </p>
+                <header className="child-record-heading">
+                  <h4>{metricName(item.sourceKind.replaceAll("_", " "))}</h4>
+                  <strong className="reporting-contribution">USD {item.contribution}</strong>
+                </header>
+                <ReadableFacts
+                  value={{
+                    businessOn: item.businessOn,
+                    status: item.lifecycle,
+                    reason: item.reason,
+                  }}
+                  fields={["businessOn", "status", "reason"]}
+                />
                 {url && <Link to={url}>View source record</Link>}
               </article>
             );
@@ -294,7 +314,8 @@ export function MoneyReporting() {
           <p>{accounts.data.matchingTotal} deposit accounts</p>
           <MoneyFacts value={accounts.data.totals} fields={Object.keys(accounts.data.totals)} />
           {accounts.data.items.map((item) => (
-            <article key={item.accountId}>
+            <article className="child-record-card deposit-obligation-card" key={item.accountId}>
+              <h4>Deposit obligation</h4>
               <Link to={moneyRecordUrl("deposit", item.accountId)}>
                 Open deposit obligation source
               </Link>
