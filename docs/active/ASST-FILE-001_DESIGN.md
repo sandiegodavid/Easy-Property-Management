@@ -2,7 +2,7 @@
 
 ## Status and boundary
 
-Proposed optional adapter design, October 20, 2026. The [agent triage proposal](../research/agent-triage-design.md#3-the-proposed-local-file-adapter) and [Muse research](../research/META_MUSE_RESEARCH.md#proposed-file-exchange-adapter) motivate a file-capable assistant trial. This backlog owns only the transport and its workspace/backup lifecycle; [ASST-001](ASST-001_DESIGN.md) owns grants, requests, admission, results, receipts and audit. It is independent of the MCP protocol. Muse capabilities are unverified until an end-to-end qualification; no file-capable product is assumed to have a trustworthy schedule or writer identity.
+Proposed optional adapter design, October 20, 2026. The [agent triage design](agent-triage-design.md#3-the-proposed-local-file-adapter) and [Muse research](../research/META_MUSE_RESEARCH.md#proposed-file-exchange-adapter) motivate a file-capable assistant trial. This backlog owns only the transport and its workspace/backup lifecycle; [ASST-001](ASST-001_DESIGN.md) owns grants, requests, admission, results, receipts and audit. It is independent of the MCP protocol. Muse capabilities are unverified until an end-to-end qualification; no file-capable product is assumed to have a trustworthy schedule or writer identity.
 
 ## Managed exchange and access
 

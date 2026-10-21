@@ -2,7 +2,7 @@
 
 ## Status and allocation
 
-Preliminary design, October 20, 2026. UI-003 extends the delivered UI-001 shell for the [shared assistant boundary](ASST-001_DESIGN.md) and the [agent triage proposal](../research/agent-triage-design.md#1-what-the-operator-configures-and-sees). UI-002 continues to own INGEST-002 issue-review pages, legal/HOA and spreadsheet intake. AI-DRAFT-001 can put an EPM-invoked **Draft follow-up** on an issue before UI-003 or any assistant connection exists. UI-003 adds the connected alternative without creating another daily work surface or approval path.
+Preliminary design, October 20, 2026. UI-003 extends the delivered UI-001 shell for the [shared assistant boundary](ASST-001_DESIGN.md) and the [agent triage design](agent-triage-design.md#1-what-the-operator-configures-and-sees). UI-002 continues to own INGEST-002 issue-review pages, legal/HOA and spreadsheet intake. AI-DRAFT-001 can put an EPM-invoked **Draft follow-up** on an issue before UI-003 or any assistant connection exists. UI-003 adds the connected alternative without creating another daily work surface or approval path.
 
 This carries UI-002's earlier D46 decision: Connected assistants appear beside, and remain independent of, Built-in AI in Settings. Choosing a model never grants assistant access; changing an assistant never changes the selected model or its disclosure destination.
 

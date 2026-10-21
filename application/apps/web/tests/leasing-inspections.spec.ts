@@ -141,14 +141,24 @@ test("property pages remain usable when tenant previews are unavailable", async 
     );
     await route.fulfill({ json: { ...body, sections } });
   });
-  for (const tab of ["overview", "leases"]) {
-    await page.goto(`/properties/${f.property.id}/${tab}`);
-    const leases = page.getByRole("region", { name: "leases", exact: true });
-    await expect(leases).toContainText("Tenant details are unavailable here.");
-    await expect(leases.getByRole("link", { name: "View lease", exact: true })).toBeVisible();
-    await expect(page.getByText("Unexpected Application Error!", { exact: true })).toHaveCount(0);
-    await expect(leases.getByText("Tenants: None recorded", { exact: true })).toHaveCount(0);
-  }
+  await page.goto(`/properties/${f.property.id}/overview`);
+  await expect(page.getByRole("region", { name: "Owners", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Leases", exact: true })).toHaveCount(0);
+  await expect(page.getByText("Unexpected Application Error!", { exact: true })).toHaveCount(0);
+  await page
+    .getByRole("navigation", { name: "property sections", exact: true })
+    .getByRole("link", { name: "leases", exact: true })
+    .click();
+  await expect(page).toHaveURL(`/properties/${f.property.id}/leases`);
+  const leases = page.getByRole("region", { name: "Leases", exact: true });
+  await expect(leases).toContainText("Tenant details are unavailable here.");
+  await expect(page.getByText("Unexpected Application Error!", { exact: true })).toHaveCount(0);
+  await expect(leases.getByText("Tenants: None recorded", { exact: true })).toHaveCount(0);
+  const leaseLink = leases.getByRole("link", { name: "View lease", exact: true });
+  await expect(leaseLink).toHaveAttribute("href", `/leases/${f.lease.id}/details`);
+  await leaseLink.click();
+  await expect(page).toHaveURL(`/leases/${f.lease.id}/details`);
+  await expect(page.getByRole("region", { name: "Lease workspace", exact: true })).toBeVisible();
 });
 
 test("Lease documents resume with original bytes and reconcile one committed upload", async ({

@@ -1,0 +1,56 @@
+PRE-EXISTING FRONTEND VALIDATION BLOCKERS
+Observed: 2026-10-20 during backend API cleanup Slice 2
+Source baseline: 75613d37d772404ccc293a7c62b558d02b636901
+Status: open; recorded only, not fixed by the API cleanup.
+
+1. [P2] Untyped regular-expression capture used as a string
+
+File: application/apps/web/src/shared/context-reads.tsx:31
+Code: .replace(/([a-z])([A-Z])/g, (_, a, b) => `${a} ${b.toLowerCase()}`)
+
+From application/, reproduce with npm run lint.
+ESLint reports:
+  31:54  @typescript-eslint/no-unsafe-call
+         Unsafe call of an any typed value.
+  31:56  @typescript-eslint/no-unsafe-member-access
+         Unsafe member access .toLowerCase on an any value.
+
+The string-replacement callback leaves capture arguments implicitly typed as
+any; b is used as a string without establishing its type. Type or narrow the
+capture arguments while preserving the label transformation. Do not suppress
+or relax either configured rule. Run npm run lint, npm run format:check and
+npm run typecheck after the separate fix.
+
+This source file was not modified by Slice 2. The generated-contract comparison
+shows only removal of the contact-list GET operation, with all surviving
+operations and component schemas unchanged. No causal link to this lint failure
+was identified. npm run typecheck passed (152 source files); that does not make
+the stricter lint check pass.
+
+2. [P3] Existing demo-browser files fail the repository formatting gate
+
+From application/, reproduce with npm run format:check.
+Prettier reports these nine unchanged files:
+  apps/web/tests-demo/home.spec.ts
+  apps/web/tests-demo/leasing.spec.ts
+  apps/web/tests-demo/maintenance.spec.ts
+  apps/web/tests-demo/money.spec.ts
+  apps/web/tests-demo/owners.spec.ts
+  apps/web/tests-demo/properties.spec.ts
+  apps/web/tests-demo/providers.spec.ts
+  apps/web/tests-demo/README.md
+  apps/web/tests-demo/tenants.spec.ts
+
+Prettier reported file-level formatting differences, not source line locations.
+Format these files in a separate scoped change, inspect the diff for accidental
+test/documentation changes, and rerun the configured checks. Do not exclude the
+files from formatting or weaken the gate. Slice 2 did not edit these files.
+
+VALIDATION ACCOUNTING
+
+Both commands were executed and FAILED; neither check is marked passed or
+silently skipped. They remain unresolved repository-wide gates, separate from
+the focused API cleanup's backend/browser tests and passing typecheck/build.
+No implementation change, formatting rewrite or rule suppression was made for
+these blockers. This is a targeted record of observed failures, not a general
+frontend code review.

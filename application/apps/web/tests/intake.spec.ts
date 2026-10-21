@@ -111,7 +111,7 @@ test("multipart import preserves ordered roles and rejects changed bytes after f
   await page.getByLabel("Source attachment files", { exact: true }).setInputFiles(files);
   await expect(page.getByLabel("Attachment 1 role")).toHaveValue("raw_source");
   await save(page, "import source evidence");
-  await page.getByRole("link", { name: "Open current source evidence" }).click();
+  await page.getByRole("link", { name: "Back to source evidence", exact: true }).click();
   await expect(page.getByRole("region", { name: "Source evidence detail" })).toContainText(
     "raw_source",
   );

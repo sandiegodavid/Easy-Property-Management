@@ -90,7 +90,7 @@ Never invent required fields, infer ownership shares, or silently merge ambiguou
 
 #### D44: Support Excel uploads and direct read-only Google Sheets import
 
-Support local Excel uploads and direct Google Sheets selection through read-only authorization. Let the operator select the spreadsheet and worksheet and review a captured source snapshot before import. Import exactly the reviewed snapshot; rereading changed source values requires a new preview. Do not require a sheet to be published publicly, modify the source sheet, or introduce ongoing synchronization in MVP. Source authorization does not create an application user account; credentials follow existing local secure-storage boundaries.
+Support local Excel uploads and, during new-workspace onboarding, direct Google Sheets selection through temporary read-only authorization. Let the operator select the spreadsheet and worksheet and review a captured source snapshot before import. Import exactly the reviewed snapshot; rereading changed source values requires a new preview and fresh authorization if the prior session ended. Disconnect after source acquisition completes or is canceled; mapping, review and commit use the captured snapshot. Do not require a sheet to be published publicly, modify the source sheet, or introduce ongoing synchronization in MVP. Source authorization does not create an application user account; credentials follow existing local secure-storage boundaries.
 
 #### D45: Create, link, or skip; never silently overwrite
 
@@ -113,7 +113,7 @@ Dedicated contracts take precedence over product descriptions where they provide
 | HOA-002 | [Deferred Association Management](HOA-002_DESIGN.md) | Post-MVP association documents/profiles and approval workflows. |
 | INGEST-002 | [Issue Proposal Review](INGEST-002_DESIGN.md) | Retained-evidence comparison, operator decisions, and atomic issue-review outcomes. |
 
-CONN-001 authorization is required through DATA-003 for read-only Sheets intake. DATA-001 retains broader later import/update scope. HOA-002 retains broader association management after MVP. Moving a UI workflow does not mark a backend feature implemented.
+DATA-003 owns temporary read-only Sheets authorization during onboarding intake. DATA-001 retains broader later import/update scope. HOA-002 retains broader association management after MVP. Moving a UI workflow does not mark a backend feature implemented.
 
 ### INGEST-002 — issue-review readiness and recovery (former Slice 40)
 
@@ -176,7 +176,7 @@ Add `features/legal`, `features/hoa`, and `features/imports` under the existing 
 | `/hoa/notices/:noticeId` | HOA violation-notice workflow and explicit closure. |
 | `/imports/:importId/review` | Frozen spreadsheet snapshot, mapping, duplicate decisions, validation, and commit result. |
 | `/ai/review/:draftId` | Extend the existing typed review route with INGEST-002 issue-proposal handlers, retained evidence, provenance, and atomic outcome presentation. |
-| `/settings/:section?` | Add Import data and Google Sheets authorization; connected-assistant Settings belong to UI-003. |
+| `/settings/:section?` | Add onboarding Import data entry and temporary Google Sheets source authorization; connected-assistant Settings belong to UI-003. |
 | `/maintenance/issues/:issueId/:section?` | Extend issue detail with shared HOA repair context. |
 
 Legal matters are contextual links within Leasing and the related property/lease. HOA notices are contextual property links; shared repairs appear in each affected managed-property workspace. Add owner context without duplicating source records. Do not add permanent Legal or HOA destinations.

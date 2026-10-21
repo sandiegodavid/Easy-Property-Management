@@ -10,8 +10,10 @@ import pytest
 from fastapi import FastAPI
 from app.platform.testing_client import LocalApiClient as TestClient
 from sqlalchemy import event, text
+from sqlalchemy.engine import Engine
 
-from app.modules.parties.api.router import build_router
+from app.bootstrap.api import create_app
+from app.modules.parties.api.router import ContactResponse, build_router
 from app.modules.parties.application.service import (
     ContactMethodCommand,
     ContactReferenceResolution,
@@ -533,6 +535,82 @@ def test_http_contract_required_fields_conflict_and_union_recovery(identities):
     )
     assert stale.status_code == 409 and stale.json()["detail"]["current"]["revision"] == 2
     assert client.post(endpoint, json={**payload, "expectedRevision": True}).status_code == 422
+
+
+@pytest.mark.parametrize("contact_count", [1, 10])
+def test_party_detail_replaces_contact_list_without_losing_history_or_query_bounds(
+    identities, tmp_path, contact_count
+):
+    workspace, identity, _ = identities
+    party = identity.create(
+        PartyCreateCommand("individual", "Contact history"),
+        contacts=(
+            *(
+                ContactMethodCommand("email", f"contact{index}@example.test")
+                for index in range(contact_count)
+            ),
+            ContactMethodCommand("phone", "5035550199"),
+        ),
+        expected_revision=0,
+        idempotency_key=str(uuid4()),
+    )
+    contacts = PartyContactService(identity.unit_of_work)
+    phone = next(item for item in contacts.list(party["id"]) if item["methodKind"] == "phone")
+    contacts.archive(
+        party["id"],
+        phone["id"],
+        confirmed=True,
+        expected_revision=1,
+        idempotency_key=str(uuid4()),
+    )
+    expected = [
+        ContactResponse.model_validate(item).model_dump(mode="json")
+        for item in contacts.list(party["id"])
+    ]
+    config = tmp_path / "contact-api.json"
+    config.write_text(json.dumps({"localWorkspacePath": str(workspace.paths.root)}))
+    app = create_app(config)
+    path = "/api/parties/{party_id}/contact-methods"
+    methods = app.openapi()["paths"][path]
+    assert "get" not in methods
+    assert methods["post"]["operationId"] == "addPartyContactMethod"
+    assert not any(
+        getattr(route, "path", None) == path and "GET" in (getattr(route, "methods", None) or ())
+        for route in app.routes
+    )
+    with TestClient(app) as client:
+        endpoint = f"/api/parties/{party['id']}/contact-methods"
+        removed = client.get(endpoint)
+        assert removed.status_code == 405
+        assert "text/html" not in removed.headers.get("content-type", "")
+        statements = []
+
+        def capture(connection, cursor, statement, parameters, context, many):
+            statements.append(statement.lstrip().upper())
+
+        event.listen(Engine, "before_cursor_execute", capture)
+        try:
+            response = client.get(f"/api/parties/{party['id']}")
+        finally:
+            event.remove(Engine, "before_cursor_execute", capture)
+        assert response.status_code == 200, response.text
+        assert response.json()["contactMethods"] == expected
+        assert len([sql for sql in statements if sql.startswith("SELECT")]) <= 6
+        assert not any(sql.startswith(("INSERT", "UPDATE", "DELETE")) for sql in statements)
+        assert sum(item["isPrimary"] for item in expected if item["status"] == "active") == 1
+        assert next(item for item in expected if item["id"] == phone["id"])["archivedAt"]
+        assert client.get(f"/api/parties/{uuid4()}").status_code == 404
+        added = client.post(
+            endpoint,
+            json={
+                "methodKind": "phone",
+                "value": "5035550133",
+                "expectedRevision": 2,
+                "idempotencyKey": str(uuid4()),
+            },
+        )
+        assert added.status_code == 201, added.text
+        assert added.json()["isPrimary"] is True
 
 
 def test_contact_retained_history_rejects_tampered_owner_evidence(identities):

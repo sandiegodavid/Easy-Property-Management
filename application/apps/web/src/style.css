@@ -3007,6 +3007,7 @@ a.directory-coverage-card:focus-visible {
 .space-archive-command .command-form-actions button[type="submit"] {
   background: var(--warning-soft);
   border-color: var(--warning-border);
+  color: var(--text);
 }
 .command-editor,
 .workflow-actions,

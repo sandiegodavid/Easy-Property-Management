@@ -67,7 +67,7 @@ Local LLM inference is feasible through an evaluated runtime: Ollama documents J
 ## Proposed reader architecture
 
 ```text
-Excel through FILE-001       Read-only Google Sheets through CONN-001
+Excel through FILE-001       Read-only Google Sheets through UR-003
            \                         /
             Immutable local source snapshot
                          |
@@ -100,7 +100,7 @@ Capture a structural snapshot, not just a rectangle of strings. Include stable s
 
 openpyxl's `data_only` option returns a cached formula result rather than evaluating the formula. A missing cache must produce a visible issue; cache freshness cannot generally be proven locally. Do not recalculate by opening the customer file in Excel automatically. Read-only mode is useful for bounded memory, but reported worksheet dimensions can be wrong; parser qualification must test this. [Workbook loading](https://openpyxl.readthedocs.io/en/stable/api/openpyxl.reader.excel.html), [Optimized reading](https://openpyxl.readthedocs.io/en/stable/optimized.html).
 
-UR-003 independently acquires Sheets snapshots through CONN-001, without calling DATA-003 or DATA-002. Retain layout metadata as well as values where needed. The API supports selected ranges/field masks; cell data distinguishes entered, effective, and formatted values. This is preferable to discarding all structure before interpretation. Read-only authorization remains required. [Spreadsheet retrieval](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/get), [Cell data](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/cells).
+UR-003 independently owns temporary read-only Sheets authorization and snapshots, without calling DATA-003 or DATA-002. It may reuse shared OS credential-store mechanics. Retain layout metadata as well as values where needed. The API supports selected ranges/field masks; cell data distinguishes entered, effective, and formatted values. This is preferable to discarding all structure before interpretation. Read-only authorization remains required. [Spreadsheet retrieval](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/get), [Cell data](https://developers.google.com/workspace/sheets/api/reference/rest/v4/spreadsheets/cells).
 
 A locally frozen capture is immutable; it is not automatically a remote point-in-time snapshot across multiple fetches. Prefer one bounded fetch where feasible. If larger captures need several calls, document consistency detection/retry and show capture timing. Never substitute live Sheet values during confirmation. Batch reads and bounded backoff should respect Google's quotas. [Sheets limits](https://developers.google.com/workspace/sheets/api/limits).
 
@@ -297,7 +297,7 @@ The supplied [Spreadsheet_Import_Approach.pdf](../../biz/Spreadsheet_Import_Appr
 | Staged entities, pp. 3–4, Figure 3 | Properties/owners/providers, then units/leases, then maintenance/history; defer balances | Initial entity set agrees. Subsequent stages are ideas, not changes to DATA items or preauthorized UR scope. Every new official entity/action needs separate domain decisions. |
 | Common-source adapters and concierge pilots, pp. 3–4 | Export adapters, setup assistance, consented anonymized samples, template fallback | Adopt concierge fixture collection and a template fallback as evaluation tactics. Add source-specific recipes only after actual samples justify them; export layouts must be verified. Charging setup fees is a business decision, not a technical requirement. |
 | Spreadsheet details, p. 4 | Epochs, formats, merges, hidden content, colors, legacy files, CSV | Agree on test cases. Preserve colors as cues; require an explicit legend before assigning business meaning. Format support is qualified separately from arbitrary layout support. A numeric cell may lose leading zeros/precision; text storage itself does not cause that loss. |
-| Sheets, p. 4 | Read-only snapshots, selected-file/export routes, narrow authorization | Agree. UR-003 has its own capture contract and uses CONN-001 directly. XLSX exported manually can enter UR-001. A multi-fetch local snapshot must not be presented as an automatically atomic remote capture. |
+| Sheets, p. 4 | Read-only snapshots, selected-file/export routes, narrow authorization | Agree. UR-003 owns its authorization and capture contract independently of DATA-003. XLSX exported manually can enter UR-001. A multi-fetch local snapshot must not be presented as an automatically atomic remote capture. |
 | Jev fit, pp. 5–6 | Useful classifier/selector, not full ETL; possibly unnecessary at onboarding volumes | Agree. Jev remains optional. Compare it with heuristics and LLM plans before adding a production vendor or verifier. Its typed output does not prove mapping correctness. |
 | Privacy, p. 6, Figure 5 | Minimize/mask; obtain consent; retention/training terms not established | Agree on controls. The existing primary-source research above supplies the missing distinction: documented no-training, purpose-based standard retention, enterprise zero retention by arrangement, and no established local model deployment. |
 | Benchmark, pp. 6–8, Figure 6 | 20–30 messy sheets; correctness at fixed review burden, confidence, cost, privacy; 98% hypothesis | Adopt 20–30 workbooks as an initial pilot corpus, stratified by layouts and separated into tuning/held-out subsets. Report uncertainty and counts; that size does not establish production reliability. The 98% target is a hypothesis for mapping suggestions, not an import authorization policy. Also measure record/field omissions, wrong links, exact-value fidelity, and post-import errors. |
@@ -322,7 +322,7 @@ The [experimental backlog](../FEATURE_BACKLOG.md#experimental--universal-reader-
 | --- | --- | --- |
 | UR-001 | Corpus, XLSX snapshots, profiling, regions, constrained transforms, manual/deterministic candidates, coverage, baseline measurements | Standalone fixtures/CLI; no official writes or DATA prerequisite |
 | UR-002 | Governed LLM/Jev planning and optional verification comparison | UR-001 + AI-GOV-001; provider-qualified, no import permission |
-| UR-003 | Read-only Sheets source and capture consistency | UR-001 + CONN-001; own snapshot adapter, no DATA source path |
+| UR-003 | Read-only Sheets source and capture consistency | UR-001 + shared local credential/audit foundations; own authorization and snapshot adapter, no DATA source path |
 | UR-004 | Durable staging, revisions, recipes, CLI/API review, decisions, audit, portability | Own import experiment schema; foundation capabilities only; no official writes |
 | UR-005 | Exact reviewed authorization, domain-owned coordinated import, durable outcomes/retry | UR-004 + existing Party/Portfolio/Provider capabilities; no DATA commit engine |
 | UR-006 | Opt-in experimental onboarding/review UI and operator pilot | UR-005 + UI-001; separate experimental routes, not an amendment to UI-001 |

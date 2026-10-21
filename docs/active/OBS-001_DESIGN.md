@@ -12,6 +12,21 @@ Instrument the browser, API and scheduled local maintenance process at stable bo
 
 Local logs and timing records use a bounded ring/rotation policy with a documented default seven-day retention and size cap. Capture safe error codes, component, version, timestamp, duration and correlation ID; redact headers, request/response bodies, file names/paths, free text, credentials and source evidence. A diagnostic export in Settings lets the operator preview included categories and save a redacted package on explicit request. Export failure and storage-full states must not block business commands. No console or telemetry failure may change a domain transaction result. Accessibility and theme behavior remain owned by OPS-001/UI-001.
 
+### Home performance measurements and user-data safety
+
+Passively measure the operator's actual Home experience with their existing data. Use the measurement categories in [test_home_performance.py](../../application/apps/server/app/modules/operator/tests/test_home_performance.py) as a reference, not as a workload to run. Keep backend HTTP measurements separate from browser render/navigation timings; neither substitutes for the other.
+
+| Measurement | Required evidence |
+| --- | --- |
+| Complete HTTP latency | Initial Home, independent attention and collection-page duration in milliseconds; report observed durations and p95 with sample count and observation period. Label first-open observations separately from subsequent reads; do not describe them as machine cold-boot measurements. |
+| Worker and snapshot cost | Worker-queue wait and complete deferred read-transaction duration, with separate p95 values; do not confuse queue wait with database time or add independently calculated percentiles. |
+| Query and output bounds | Observe SELECT/WITH counts against existing ceilings: initial Home 64, attention 24, collection pages and continuations 24, initial plus attention 88 combined. Record bounded output counts without retaining item content. Report only collections and continuations actually requested. |
+| Parallel reads | Combined SELECT count and elapsed time when initial Home and attention requests naturally overlap. Report paired observations and sample count; do not generate extra requests or claim a p95 from one observation. |
+
+Use DASH-001's one-second p95 Home/collection target as a diagnostic reference, not a claim that every installation meets it. Summaries use a bounded observation window and state their sample count; absent observations are not evidence of passing performance. Keep instrumentation overhead small and separate from measured application work.
+
+On a user workspace, passively observe already-requested Home reads using the existing deferred snapshot and worker boundaries. Do not create Tasks, expectations, audit events, receipts, recovery records or diagnostic rows in the business database; do not change source revisions, read markers, preferences, attachments, manifest or workspace locator. Keep bounded local timing/count records in the separate diagnostic store, without SQL text, bound parameters, result content or business totals. No synthetic load or extra background Home polling is authorized. Failure to collect a measurement is unavailable evidence, not zero latency or a successful query-budget check. Only the previously allowlisted coarse latency buckets may enter optional product reporting.
+
 ## Optional product reporting and theme metric
 
 Settings → Privacy & diagnostics explains the exact allowlist and offers a separate **Share product usage** opt-in, off by default. Setup may configure a product-owner collector endpoint and provision a revocable per-installation upload credential in the operating-system credential store; neither the collector nor a credential is required to run EPM. Do not embed a shared write secret in the shipped app. The reporting identifier is a random machine-local pseudonym, is excluded from workspace backup, and is used only to replace that installation's latest state and deduplicate retries. Restore, move to another machine or missing credential requires fresh opt-in; it must not silently resume reporting. Turning reporting off stops usage uploads, drops queued reports and requests deletion of that identifier's retained state; retain only what is needed to retry deletion until acknowledged, and show a recoverable error if deletion cannot be confirmed.
@@ -22,8 +37,8 @@ The collector accepts only authenticated, schema-versioned allowlisted reports; 
 
 ## Ordered delivery
 
-1. Define closed event/metric schemas, redaction tests, correlation propagation, retention/rotation, and a local diagnostic export. Measure instrumentation overhead and set a small fixed budget.
-2. Add browser/API boundary timings and failures, plus local Settings status and export preview. Confirm normal, offline, storage-full and restart behavior without transmitting anything.
+1. Define closed event/metric schemas, including the passive Home measurements above, redaction tests, correlation propagation, retention/rotation, and a local diagnostic export. Set a small fixed instrumentation-overhead budget.
+2. Add browser/API boundary timings and failures, plus local Settings status and export preview. Confirm normal, offline, storage-full and restart behavior without transmitting anything or modifying business data to gather measurements.
 3. Add the consent/credential lifecycle and minimal collector with authenticated upsert, deletion, rate limits and aggregate query. Keep all outgoing payloads inspectable against the closed schema.
 4. Add theme current-state reporting and the 30-day aggregate view. Verify Light default versus explicit Light, Dark selection, opt-out, restore and retry behavior before using the figures for product decisions.
 
@@ -38,3 +53,5 @@ The collector accepts only authenticated, schema-versioned allowlisted reports; 
 | Persistence/schema | Closed local/remote schemas, bounded retention, no sensitive payload in logs/export/network; latest theme plus explicit/default distinction. |
 | Backup/restore | Workspace backup excludes reporting credential/ID and does not silently re-enable reporting on another machine; local diagnostics follow documented portability policy. |
 | Query budget | Instrumentation adds no per-record source reads; bounded aggregate queries and negligible request/UI latency overhead. |
+| Home performance | Actual requested Home/attention/collection reads produce HTTP/worker/snapshot timings and query counts; naturally overlapping reads have paired measurements. Bounded summaries state sample count and period, and never infer success for unobserved paths. |
+| User-data safety | Passive diagnostics leave business rows, revisions, audit/receipt history, attachments, manifest and locator unchanged, including on measurement/export failure. No generated workload or data changes are used to obtain measurements. |

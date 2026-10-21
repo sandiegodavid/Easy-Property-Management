@@ -2828,8 +2828,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Contacts */
-        get: operations["listPartyContactMethods"];
+        get?: never;
         put?: never;
         /** Add Contact */
         post: operations["addPartyContactMethod"];
@@ -30678,46 +30677,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PartyConflictResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    listPartyContactMethods: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                party_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["app__modules__parties__api__router__ContactResponse"][];
-                };
-            };
-            /** @description Local transport rejected. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TransportErrorResponse"];
                 };
             };
             /** @description Validation Error */

@@ -1,0 +1,307 @@
+BACKEND API CLEANUP PLAN AND VERIFICATION
+Date: 2026-10-20
+Status: Slices 1 and 2 implemented. Slice 2 focused checks passed; repository-wide
+frontend lint/format gates remain blocked by unchanged files (see Slice 2 results).
+
+Slice 2 results: BACKEND_API_CLEANUP_SLICE_2_RESULTS.txt. One HTTP GET wrapper
+removed; three other allowlisted removals remain. Existing validation failures
+are recorded in PRE_EXISTING_FRONTEND_VALIDATION_BLOCKERS.txt.
+
+Slice 1 evidence, per-operation dispositions, the bounded removal allowlist and
+actual validation results are in BACKEND_API_CLEANUP_SLICE_1_MANIFEST.txt.
+That manifest governs later slices: 4 eligible HTTP-wrapper removals, 21 retained
+operations and 7 deferred operations. Deferred items are not approved deletions.
+Keep every API used by application/demo/, as explicitly requested by the user.
+Protect method/path pairs, including POST commands sharing candidate GET URLs.
+
+Companion inventory: BACKEND_API_CLEANUP_INVENTORY.txt in this directory.
+That inventory identifies 32 candidate operations, not 32 approved deletions.
+This plan does not authorize deleting operational capabilities or redesigning
+recovery contracts. Implement only after the cleanup scope is approved.
+
+GOAL AND NON-GOALS
+
+Reduce redundant HTTP surface and genuinely unreachable supporting code while
+preserving operator workflows, source-owned ports, original-result recovery,
+audit history, bounded reads, and portable workspace validation.
+
+Do not change the database baseline, drop stored receipts, migrate workspaces,
+add compatibility aliases, expose previously gated UI controls, or implement
+missing Settings features as part of this cleanup. Internal application APIs
+are not unused merely because their equivalent HTTP route has no SPA caller.
+Use disposable test workspaces; never test cleanup against operator data.
+
+SLICE 1: REFRESH EVIDENCE AND AGREE THE REMOVAL MANIFEST
+
+1. Record the implementation base commit and existing working-tree changes.
+   Preserve unrelated work. Re-export the composed OpenAPI contract without
+   opening SQLite or initializing a workspace; compare it with the inventory's
+   historical 341-operation baseline rather than assuming the count is current.
+2. Trace method plus path through frontend source, generated workflow dispatch,
+   dynamic href/download construction, source-owned result readers, bootstrap,
+   demo/setup/maintenance scripts, module guides, manual, and active designs.
+   Generated types and test calls establish contracts/coverage, not live usage.
+3. Check intended non-SPA consumers, including installer/maintenance tooling and
+   planned integrations. If a documented contract requires the route, either
+   retain it or obtain an explicit contract-change decision first.
+4. Maintain a per-operation manifest with these fields:
+   method/path; operation ID; owning router; identified consumers; replacement;
+   behavioral differences; remove/retain/defer decision and rationale; affected
+   tests/docs; verification result. Every one of the 32 candidates must receive
+   a disposition, but none must be removed merely to reach a target count.
+
+Exit: an explicit allowlist of removals. Unknown consumers or unequal behavior
+mean retain/defer, not deletion. Record new adjacent candidates separately.
+
+Completed: see the Slice 1 manifest for the refreshed contract, demo protection,
+32 individual decisions and executed checks. That manifest is the pre-removal
+baseline; subsequent changes are recorded by the implementation slice results.
+
+SLICE 2: LEASING, PARTY AND TENANT REDUNDANT READS
+
+Evaluate these four candidates independently:
+- GET /api/leases -> /api/leases/directory.
+- GET /api/parties -> named selection/search and individual Party reads.
+- GET /api/tenants -> /api/operator/tenants and metadata search.
+- GET /api/parties/{party_id}/contact-methods -> Party detail contactMethods.
+
+Before removal, compare filters, archive/history scope, empty results, selected
+record hydration, ordering, bounds, and availability when the workspace is busy
+or unavailable. A paginated summary is not automatically equivalent to full
+detail; prove that callers can obtain the fields they actually need without an
+unbounded fetch or one detail request per row.
+
+Focused verification:
+- Relevant Lease, Party/contact and Tenant HTTP/service tests.
+- Named selection and directory pagination, including Unicode names, filter
+  changes, selected records outside the current page, and archived records.
+- SPA tenant browsing, owner/contact selection, Leasing directory and contact
+  add/edit/archive/restore. Preserve POST on any path losing only its GET.
+- Assert declared query upper bounds for representative small and large pages;
+  no per-row hydration and no client-side fetch-all replacement.
+
+Exit: only approved reads removed; current create/edit/detail flows unchanged.
+
+Completed: only GET /api/parties/{party_id}/contact-methods removed, with Party
+detail as its contact read. The other three Slice 2 candidates remain deferred.
+See BACKEND_API_CLEANUP_SLICE_2_RESULTS.txt for 84 backend and 3 browser passes,
+the exact contract delta, query/history proofs and outstanding global checks.
+
+SLICE 3: FINANCE REDUNDANT READS
+
+Evaluate these three candidates independently:
+- GET /api/leases/{lease_id}/security-deposit.
+- GET /api/money/summary.
+- GET /api/properties/{property_id}/money-summary.
+
+Prove direct deposit-account reads and Money/Property compositions preserve
+lease/property membership, missing-account behavior, archived scope, signed
+amounts, period semantics, captured asOf/sourceRevision, total counts and drill-
+down. Do not calculate totals by adding the visible page or by fetching every
+page. Keep POST /api/leases/{lease_id}/security-deposit: it is a different,
+actively used command, not a removal candidate.
+
+Focused verification:
+- finance/tests/test_money_summary.py and affected deposit tests.
+- operator/tests/test_home_money.py and affected Property Money compositions.
+- Money browser cases for reporting, scoped Property/Lease views, deposit
+  creation/detail, pagination, stale continuations and source drill-down.
+- Counts and totals under one snapshot; unavailable sections are not zero.
+
+Exit: no lost financial visibility, changed totals, or new aggregate queries.
+
+SLICE 4: RECEIPT LOOKUP CONSOLIDATION, BY OWNING BOUNDARY
+
+Use the inventory's 17 alternate lookup routes as candidates, not a directive
+to impose one global URL convention. Keep lookup-by-key wherever it is needed
+to recover a committed command whose response and operation ID were lost.
+Keep lookup-by-operation-ID wherever saved results, contextual navigation or
+documented consumers use it. Both can be legitimate in the same module.
+
+Recommended bounded order:
+4a. Parties, Tenants, Providers/categories and Expense categories.
+4b. Intake, Files, Inspections and Owner concerns.
+4c. Portfolio inventory/status and Leasing coordinated operations.
+4d. AI command/external operations and Operator preferences/form operations.
+
+For each batch:
+- Trace application/apps/web/src/workflows/workflow-result.ts, command.tsx,
+  ai-governance.tsx, shared recovery code and bootstrap result-reader adapters.
+  A UI using one lookup does not prove that another lookup is unnecessary for
+  an outcome-unknown path.
+- Record retained namespaces, input identities, response wrappers, original
+  snapshot semantics, error mappings and readiness checks before changing HTTP.
+- Remove an alias only when all required recovery paths remain reachable. Keep
+  application recovery functions used by OPS or other owning workflows.
+- Do not replace original receipts with current detail, add automatic retries,
+  or consolidate independent Lease/Space or Property/status revisions.
+
+Focused verification for every affected command family:
+- Same key/payload returns the original result after later record changes.
+- Changed payload under the same key conflicts; stale revision stays typed.
+- Simulate commit followed by lost response, reload/restart, and reconcile via
+  the original key without knowing the operation ID. One mutation, revision
+  change and required audit chain; no repeated publication/provider call.
+- Existing rollback/failure-injection coverage still proves no partial result.
+- Unknown receipts return the documented absent-result response, not current
+  state or a rerun. Recovery GETs perform no business writes or external calls.
+- Focused encrypted restore proves original receipts and their result references
+  remain recoverable with stable IDs/audit correlations after reopening.
+
+Exit: fewer aliases only where justified; no reduction in recovery guarantees.
+
+SLICE 5: EXPLICITLY RETAIN OR DEFER OPERATIONAL ENDPOINTS
+
+Do not delete these eight routes in the initial cleanup:
+- Files integrity-attention and storage verification: retain safety functions;
+  absent Settings wiring is a separate product task.
+- Operator recovery-forms: defer until deciding whether runtime discovery is
+  required or bundled contracts fully replace it.
+- Operator recovery/expire: retain until maintenance ownership/trigger and
+  retention behavior are explicitly decided.
+- Audit events: retain until deciding whether global activity is a supported
+  operator/diagnostic capability.
+- Workspace status, HTTP initialize, and health: retain until installer and
+  diagnostic contracts are explicitly checked and their owners approve removal.
+
+This slice records decisions only; it does not build replacement interfaces or
+perform verification/expiry against real data. Preserve dynamic file downloads
+and generated appointment cancellation, which were excluded false positives.
+
+SLICE 6: REMOVE ONLY SUPPORT CODE MADE UNREACHABLE BY APPROVED REMOVALS
+
+After each route batch, trace router imports, response models, serializers,
+application methods, query protocols/adapters and tests. Remove a symbol only
+if it has no remaining direct, dynamic, cross-module or registered consumer.
+Do not delete source-owned services merely because they no longer have an HTTP
+wrapper. Shared models may still be needed by mutations or retained validators.
+
+Replace tests targeting removed endpoints with replacement-contract and route-
+absence assertions where appropriate. Preserve the business-rule, rollback,
+privacy and recovery assertions; do not just delete the failing tests.
+Update affected module/manual/active-contract references without erasing
+historical design evidence or duplicating the complete API schema in prose.
+
+SLICE 7: CONTRACT GENERATION, INTEGRATION AND HANDOFF
+
+1. Regenerate OpenAPI, schema types and workflow dispatch using the existing
+   scripts. Never hand-edit generated output.
+2. Compare before/after method-path and operation-ID sets. The exact difference
+   must equal the approved removal manifest. Retained operation IDs, request/
+   response/error contracts and mutation methods must be unchanged unless an
+   explicit contract decision says otherwise. Unrelated component churn needs
+   explanation; unreachable generated components may disappear naturally.
+3. Verify removed methods have no registered route or OpenAPI operation. Under
+   allowed local transport, requests must not be served as successful SPA HTML
+   or matched to an unintended parameter route. Expect 404 when the resource
+   path disappears, or 405 if other methods still own that exact path; investigate
+   other routing outcomes rather than hard-coding 404 for every removal.
+4. Run affected focused backend/browser checks and the required lint/build
+   gates below. Run a full suite only if explicitly requested or a demonstrated
+   changed integration boundary requires it; record the reason if needed.
+5. Re-export/check contracts without a workspace. Finish with no live-workspace
+   initialization, unrelated edits or accidental database/schema changes.
+6. Update the inventory dispositions and report removed/retained/deferred routes,
+   changed tests/docs, actual commands/results and remaining decisions. Do not
+   mark planned or unexecuted verification as passed.
+
+VERIFICATION MATRIX
+
+Happy paths:
+  Surviving directories, names/contact selection, Money/Lease/Property context,
+  downloads, appointment cancellation and original-result detail still work.
+
+Invalid combinations:
+  Invalid IDs/filters/limits, missing records, archived eligibility, busy/not-ready
+  workspaces, membership violations and stale cursors retain typed behavior.
+
+Idempotency and retry:
+  Original key recovers unknown outcomes across reload/restart and later edits;
+  payload mismatch conflicts; one effect/receipt/audit chain. No fallback to a
+  new key or reconstruction from mutable current records.
+
+Transaction rollback:
+  Required audit/result failure leaves no partial business effects; coordinated
+  Lease/Portfolio and File publication cleanup remain atomic/accounted for.
+  Reuse relevant existing fault-injection tests and add cases only for changed
+  recovery or transaction wiring.
+
+Persistence/schema:
+  Current-schema and retained-data validation accept representative receipts and
+  audit history before/after cleanup; no schema migration/table/trigger changes.
+  HTTP removals do not remove retained-data validators or operation records.
+
+Backup/restore:
+  Focused encrypted round trip compares stable IDs, original response snapshots,
+  correlations and evidence references for affected receipt families; credentials
+  remain excluded and new runtime epochs invalidate old view continuations.
+  Route-only read removals may reuse shared existing portability coverage; record
+  why no new portable format test is needed, rather than claiming it was rerun.
+
+Query budget/N+1:
+  Replacement reads remain bounded and set-based; matching totals use complete
+  predicates in the same snapshot. Check query upper bounds, not an incidental
+  exact query decomposition. No all-pages or per-row-detail browser workaround.
+
+Routing/contracts/security:
+  Only approved method-paths/operation IDs disappear. Surviving methods on shared
+  paths remain functional; parameter routes do not absorb removed static paths.
+  Local Host/Origin policy, readiness guards and no-workspace export remain intact.
+
+Browser integration:
+  Named navigation and saved-result links resolve; lost-response recovery, filters,
+  paging and relevant reload behavior remain intact. No raw IDs/locators/secrets
+  become visible because a replacement returns a different response shape.
+
+EXECUTION COMMANDS AND TEST SELECTION
+
+Run commands from application/. These are planned commands, not executed results.
+
+For affected backend modules, select the relevant tests from:
+- leases/tests/test_leases.py and test_command_readiness.py.
+- parties/tests/test_identity_commands.py and test_contact_commands.py.
+- tenants/tests/test_tenants.py and test_command_readiness.py.
+- finance/tests/test_money_summary.py, test_category_command_readiness.py,
+  and affected deposit tests.
+- portfolio/tests/test_inventory_readiness.py and test_command_readiness.py.
+- files, intake, inspections, vendors, owner_management and ai_governance
+  tests/test_command_readiness.py (plus their affected API/contract tests).
+- operator/tests/test_endpoint_contracts.py, test_recovery_composition.py and
+  the corresponding identity/provider/inventory/file/intake/inspection/concern/
+  AI recovery tests for the changed batch.
+- workspace/tests/test_backup_service.py and platform/tests/test_web_delivery.py
+  when portability or API-versus-SPA routing is affected.
+
+Backend command pattern:
+  node scripts/python.mjs -m pytest apps/server/app/modules/<module>/tests/<file>.py -q
+  Run the relevant platform tests with their corresponding path.
+  Run ruff check and ruff format --check on every changed Python file using
+  pyproject.toml. Preserve all configured rules.
+
+Contract/frontend gates whenever generated or frontend files change:
+  npm run contracts:generate
+  npm run contracts:check
+  npm run lint
+  npm run format:check
+  npm run typecheck
+  npm run build
+
+Focused browser command pattern (choose affected cases with --grep):
+  npm run test:web -- apps/web/tests/<suite>.spec.ts --grep '<affected cases>'
+  Relevant suites include workflows, leasing-inspections, money, context-reads,
+  portfolio-status, intake, ai-governance, recovery-page, restart-restore and
+  delivery. Do not run the entire acceptance suite by default.
+  If packaged delivery changes, package via scripts/package_web.py using the
+  existing Python launcher, then run the relevant packaged-delivery smoke tests.
+
+Final whitespace gate from repository root:
+  git diff --check
+
+DEFINITION OF DONE
+
+Every inventory candidate has an evidence-backed disposition. Approved deletions
+and only those deletions are reflected in runtime routes, generated contracts,
+tests and current documentation. Focused gates pass with recorded results; any
+blocked check is explicitly incomplete. Recovery, audit, portability, security,
+bounded reads and operator-visible capabilities are preserved. Operational
+integration gaps remain separately listed, not silently removed or expanded.

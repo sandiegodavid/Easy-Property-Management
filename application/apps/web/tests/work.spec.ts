@@ -356,7 +356,10 @@ test("issue appointments and provider quotes are readable, comparable and retain
   await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
   const appointments = page.getByRole("region", { name: "Appointments", exact: true });
   await expect(
-    appointments.getByRole("heading", { name: "Inspect the leaking sink" }),
+    appointments.getByRole("heading", { name: "Inspect the leaking sink", exact: true }),
+  ).toBeVisible();
+  await expect(
+    appointments.getByRole("heading", { name: "Cancelled visit", exact: true }),
   ).toBeVisible();
   await expect(appointments).toContainText("Use the side entrance");
   await expect(appointments.getByRole("button", { name: "Reschedule", exact: true })).toHaveCount(
@@ -2256,11 +2259,21 @@ test("Work directory failures remain unavailable while Task summary can succeed"
       body: JSON.stringify({ detail: { code: "temporary", message: "Directory busy" } }),
     }),
   );
-  await page.goto("/tasks");
-  await expect(page.getByRole("alert")).toContainText("Directory busy");
-  await expect(page.getByRole("region", { name: "Task deadlines and reminders" })).toContainText(
-    "As of",
+  const loadedSummary = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/tasks/summary",
   );
+  await page.goto("/tasks");
+  const response = await loadedSummary;
+  expect(response.ok(), await response.text()).toBe(true);
+  const summary =
+    (await response.json()) as Schemas["app__modules__tasks__api__router__TaskSummaryResponse"];
+  await expect(page.getByRole("alert")).toContainText("Directory busy");
+  await expect(
+    page
+      .getByRole("region", { name: "Task deadlines and reminders", exact: true })
+      .getByRole("heading", { name: `Due reminders · ${summary.dueRemindersTotal}`, exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".page-as-of time")).toHaveAttribute("datetime", summary.asOf);
   await expect(
     page.getByText("No matching recorded items on this page.", { exact: false }),
   ).not.toBeVisible();
@@ -2716,7 +2729,7 @@ test("Lost concern follow-up recovers one Task while recorded conversation histo
     await route.fetch();
     await route.abort("failed");
   });
-  await page.getByRole("button", { name: "Create concern follow-up", exact: true }).click();
+  await page.getByRole("button", { name: "Save create concern follow-up", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(calls).toBe(1);

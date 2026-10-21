@@ -107,7 +107,7 @@ test("filtered directory returns preserve filters and click-time scroll through 
   const detail = await selected.getAttribute("href");
   await selected.click();
   await expect(page.locator(".parent-back-link")).toHaveAttribute("href", directory);
-  await page.getByRole("link", { name: "Edit issue", exact: true }).click();
+  await page.getByRole("button", { name: "Edit issue", exact: true }).click();
   await expect(page.locator(".parent-back-link")).toHaveAttribute("href", detail!);
   await expect(page.locator(".parent-back-link")).toHaveText("← Back to maintenance issue");
   await page

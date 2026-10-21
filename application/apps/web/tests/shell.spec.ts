@@ -234,7 +234,25 @@ test("unknown save outcomes retry only explicitly with the original request", as
 
 test("narrow navigation, keyboard operation, nested history and unsupported sections", async ({
   page,
+  request,
 }) => {
+  const created = await request.post("/api/properties", {
+    headers: { Origin: "http://127.0.0.1:18744" },
+    data: {
+      displayName: "Narrow navigation home",
+      addressLine1: "10 Maple Street",
+      city: "Portland",
+      region: "OR",
+      postalCode: "97201",
+      countryCode: "US",
+      propertyType: "single_family_home",
+      ownerships: [{ ownerKind: "local_operator" }],
+      expectedPropertyRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+    },
+  });
+  expect(created.ok(), await created.text()).toBe(true);
+  const property = (await created.json()) as components["schemas"]["PropertyMutationResponse"];
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/home");
   const navigation = page.locator(".narrow-nav > summary");
@@ -243,12 +261,21 @@ test("narrow navigation, keyboard operation, nested history and unsupported sect
   await page.getByRole("link", { name: "Properties", exact: true }).click();
   await expect(page).toHaveURL(/\/properties$/);
   await expect(page.locator(".narrow-nav")).not.toHaveAttribute("open", "");
-  await page.goto("/properties/00000000-0000-4000-8000-000000000001/units");
-  await page.getByRole("link", { name: "Property setup", exact: true }).click();
+  await page.goto(`/properties/${property.id}/units`);
+  const sections = page.getByRole("navigation", { name: "property sections", exact: true });
+  await sections.getByRole("link", { name: "Property setup", exact: true }).click();
+  await expect(page).toHaveURL(`/properties/${property.id}/setup`);
   await page.goBack();
-  await expect(page).toHaveURL(/\/units$/);
+  await expect(page).toHaveURL(`/properties/${property.id}/units`);
   await page.reload();
-  await expect(page.getByRole("heading", { name: "units", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: property.displayName, exact: true }),
+  ).toBeVisible();
+  await expect(sections.getByRole("link", { name: "Home", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(page.getByRole("region", { name: "Property home", exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );

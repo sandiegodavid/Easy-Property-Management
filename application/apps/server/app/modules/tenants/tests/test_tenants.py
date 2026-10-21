@@ -453,7 +453,7 @@ class TenantTests(unittest.TestCase):
             self.assertEqual(response.status_code, 201)
             self.assertEqual(response.json()["extension"], "42")
             self.assertEqual(
-                client.get(f"/api/parties/{owner.id}/contact-methods").json()[0]["id"],
+                client.get(f"/api/parties/{owner.id}").json()["contactMethods"][0]["id"],
                 response.json()["id"],
             )
             self.assertEqual(

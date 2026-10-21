@@ -33,6 +33,11 @@ async function ready(page: Page) {
   ).toContainText("As of");
 }
 
+async function latency(page: Page, name: string) {
+  await page.waitForFunction((mark) => performance.getEntriesByName(mark).length > 0, name);
+  return page.evaluate((mark) => performance.getEntriesByName(mark).at(-1)!.startTime, name);
+}
+
 test("Home live reads meet local p95 and shell-feedback gates without a snapshot cache", async ({
   page,
   request,
@@ -44,25 +49,76 @@ test("Home live reads meet local p95 and shell-feedback gates without a snapshot
   const refresh: number[] = [];
   const shell: number[] = [];
 
+  // Record rendered readiness in the browser, not the test runner: locator
+  // assertion polling and protocol round trips are not application latency.
+  // Navigation starts at zero, so the first (cold) document remains measured.
+  await page.addInitScript(() => {
+    let shellStarted: number | undefined;
+    let refreshStarted: number | undefined;
+    let previousCapture: string | null | undefined;
+    const liveCapture = () =>
+      document
+        .querySelector('[aria-label="Live Home attention"] .home-capture time')
+        ?.getAttribute("datetime");
+    const mark = (name: string, startTime: number) => {
+      if (performance.getEntriesByName(name).length === 0) performance.mark(name, { startTime });
+    };
+    const observer = new MutationObserver(() => {
+      requestAnimationFrame(() => {
+        const now = performance.now();
+        const heading = document.querySelector("h2");
+        if (shellStarted !== undefined && heading?.textContent === "Your day, in view")
+          mark("home-shell", now - shellStarted);
+        if (
+          document
+            .querySelector(".home-money-note")
+            ?.closest("section")
+            ?.querySelector(".home-capture time") &&
+          liveCapture()
+        )
+          mark("home-ready", now);
+        if (document.querySelector('[aria-label="Home collection page"] .home-capture time'))
+          mark("collection-ready", now);
+        const capture = liveCapture();
+        if (refreshStarted !== undefined && capture && capture !== previousCapture)
+          mark("home-refresh", now - refreshStarted);
+      });
+    });
+    observer.observe(document, { subtree: true, childList: true, attributes: true });
+    document.addEventListener(
+      "click",
+      (event) => {
+        if (!(event.target instanceof Element)) return;
+        if (event.target.closest('a[href="/home"]')) {
+          performance.clearMarks("home-shell");
+          shellStarted = performance.now();
+        }
+        if (event.target.closest("button")?.textContent?.trim() === "Refresh") {
+          performance.clearMarks("home-refresh");
+          previousCapture = liveCapture();
+          refreshStarted = performance.now();
+        }
+      },
+      true,
+    );
+  });
+
   for (let index = 0; index < 10; index += 1) {
-    let started = performance.now();
     await page.goto(`/home?${period}`);
     await ready(page);
-    initial.push(performance.now() - started);
+    initial.push(await latency(page, "home-ready"));
 
     const attention = page.getByRole("region", { name: "Needs action", exact: true });
     await attention.getByRole("button", { name: new RegExp(sample.title) }).click();
     await attention.getByRole("link", { name: "View", exact: true }).click();
     await expect(page).toHaveURL(/\/tasks\?record=task/);
-    started = performance.now();
     await page.getByRole("link", { name: "Home", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Your day, in view", exact: true }),
     ).toBeVisible();
-    shell.push(performance.now() - started);
+    shell.push(await latency(page, "home-shell"));
     await ready(page);
 
-    started = performance.now();
     await page.goto(`/home/collections/needs_action?horizonDays=7&${period}`);
     await expect(
       page.getByRole("region", { name: "Home collection page", exact: true }),
@@ -70,11 +126,10 @@ test("Home live reads meet local p95 and shell-feedback gates without a snapshot
     await expect(
       page.getByRole("region", { name: "Needs action", exact: true }).getByText(/^\d+ items?$/),
     ).toBeVisible();
-    collection.push(performance.now() - started);
+    collection.push(await latency(page, "collection-ready"));
 
     await page.goto(`/home?${period}`);
     await ready(page);
-    started = performance.now();
     const refreshed = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname === "/api/operator/home/attention" &&
@@ -85,7 +140,7 @@ test("Home live reads meet local p95 and shell-feedback gates without a snapshot
     await expect(
       page.getByRole("region", { name: "Live Home attention", exact: true }),
     ).toContainText("As of");
-    refresh.push(performance.now() - started);
+    refresh.push(await latency(page, "home-refresh"));
   }
 
   const measurements = {

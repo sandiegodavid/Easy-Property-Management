@@ -104,11 +104,11 @@ test("every Home money metric opens matching Finance contributions with its expl
     expect(url.searchParams.get("throughOn")).toBe(metric.target.throughOn);
     expect(url.searchParams.getAll("propertyIds")).toEqual([home.id]);
     await expect(page.getByRole("region", { name: "Money reporting", exact: true })).toContainText(
-      `Backend total USD ${metric.amount}`,
+      `${data.matchingTotal} source records · Total USD ${metric.amount}`,
     );
     if (data.items.length)
       await expect(
-        page.getByRole("link", { name: "Open contribution source", exact: true }).first(),
+        page.getByRole("link", { name: "View source record", exact: true }).first(),
       ).toBeVisible();
     else await expect(page.getByText("No records in this reporting view.")).toBeVisible();
     await expect(page.getByText(/not profit, bank balance or amounts due to owners/)).toBeVisible();
@@ -246,10 +246,11 @@ test("coverage resolves through the actual Space source and acknowledging review
   await page.getByRole("link", { name: "Review information", exact: true }).click();
   await expect(page.getByText(/Review occupancy and leasing status\. If either/)).toBeVisible();
   const source = page.getByRole("link", {
-    name: "Review occupancy and leasing status",
+    name: "Set occupancy and leasing status",
     exact: true,
   });
-  await expect(source).toHaveAttribute("href", `/properties/${home.id}/units`);
+  const classificationUrl = `/properties?workflow=portfolio.space.classify&target=${home.spaces[0].id}`;
+  await expect(source).toHaveAttribute("href", classificationUrl);
   await page.getByRole("button", { name: "Add review note", exact: true }).click();
   await page.getByLabel("Review reason").fill("Acknowledged missing recorded classification");
   await page.getByRole("button", { name: "Record review", exact: true }).click();
@@ -258,7 +259,9 @@ test("coverage resolves through the actual Space source and acknowledging review
     page.getByRole("region", { name: "occupancy information review", exact: true }),
   ).toContainText("missing required information");
   await source.click();
-  await expect(page.getByRole("region", { name: "Property home", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(classificationUrl);
+  await expect(page.getByRole("heading", { name: "Classify home", exact: true })).toBeVisible();
+  await expect(page.getByText(home.displayName, { exact: true })).toBeVisible();
 });
 
 test("cross-zone agenda uses operator local time and retains source time-zone context", async ({

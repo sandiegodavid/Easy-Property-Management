@@ -1181,13 +1181,22 @@ test("lost expense response reconciles once and evidence failure leaves spending
     .and(page.locator(`a[href*="resume=${recoveryId}"]`))
     .click();
   await page.getByRole("button", { name: "Check original result" }).click();
-  await expect(page.getByText("This is the original committed response.")).toBeVisible();
+  const savedExpense = page.getByRole("region", { name: "Expense saved", exact: true });
+  await expect(
+    savedExpense.getByRole("heading", { name: "Expense saved", exact: true }),
+  ).toBeVisible();
+  await expect(savedExpense).toContainText("Receipt plumber");
+  await expect(savedExpense).toContainText("Paid repair");
+  await expect(savedExpense).toContainText("120.01");
   expect(calls).toBe(1);
   const expenses = await get<Schemas["ExpensePageResponse"]>(
     request,
     `/api/expenses?propertyId=${f.property.id}`,
   );
   expect(expenses.items).toHaveLength(1);
+  await expect(
+    savedExpense.getByRole("link", { name: "Back to expense", exact: true }),
+  ).toHaveAttribute("href", `/money?record=expense&id=${expenses.items[0].id}`);
   await page.goto(
     `/money?workflow=file.upload&entityType=expense&entityId=${expenses.items[0].id}`,
   );
@@ -2405,12 +2414,7 @@ test("supporting evidence can be reselected after restart and metadata retains v
     .click();
   await page.getByLabel("Evidence file (required)").setInputFiles(bytes);
   await save(page, "Attach supporting evidence");
-  await page
-    .getByRole("link", {
-      name: /^(Open current money record|Back to (expense|deposit account|rent receipt|prepaid check|owner rent report|expense category))$/,
-      exact: true,
-    })
-    .click();
+  await page.getByRole("link", { name: "Back to evidence", exact: true }).click();
   await expect(page.getByRole("region", { name: "Evidence metadata", exact: true })).toContainText(
     "Verified at",
   );

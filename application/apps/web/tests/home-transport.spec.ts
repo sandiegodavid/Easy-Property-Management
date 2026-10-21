@@ -82,6 +82,7 @@ test("live attention starts independently, defaults use server month and navigat
     await page.goto("/home");
     await expect(page.getByRole("region", { name: "Live Home attention" })).toContainText("As of");
     await expect(page.getByText("Loading Home summary…", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Filters", exact: true }).click();
     await expect(page.getByLabel("Money from", { exact: true })).toHaveValue("2028-02-01");
     await expect(page.getByLabel("Money through", { exact: true })).toHaveValue("2028-02-29");
     expect(fullRequests).toHaveLength(1);
@@ -89,8 +90,12 @@ test("live attention starts independently, defaults use server month and navigat
     expect(fullRequests[0].searchParams.get("fromOn")).toBe("2028-02-01");
     expect(fullRequests[0].searchParams.get("throughOn")).toBe("2028-02-29");
     expect(liveRequests[0].searchParams.has("fromOn")).toBe(false);
-    await page.getByRole("link", { name: "Task deadlines and reminders" }).click();
-    await expect(page).toHaveURL(/\/tasks$/);
+    await page
+      .getByRole("navigation", { name: "Primary navigation", exact: true })
+      .getByRole("link", { name: "Properties", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/properties$/);
+    await expect(page.getByRole("heading", { name: "Properties", exact: true })).toBeVisible();
   } finally {
     release();
   }

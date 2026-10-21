@@ -2,7 +2,7 @@
 
 ## Status and boundary
 
-Proposed feature design, October 20, 2026. [Agent triage research](../research/agent-triage-design.md#5-assistance-on-existing-issues) motivates a useful first AI action that needs no connected assistant or mailbox permission. AI-GOV-001 provides generation, limits, disclosure, pause, provenance, review and original-result mechanics; Maintenance supplies issue facts; Communications records interactions but does not send. This item registers one production action and its operator workflow. It does not implement ASST-001, MCP, file exchange, intake review, or outbound delivery.
+Proposed feature design, October 20, 2026. The [agent triage design](agent-triage-design.md#5-assistance-on-existing-issues) motivates a useful first AI action that needs no connected assistant or mailbox permission. AI-GOV-001 provides generation, limits, disclosure, pause, provenance, review and original-result mechanics; Maintenance supplies issue facts; Communications records interactions but does not send. This item registers one production action and its operator workflow. It does not implement ASST-001, MCP, file exchange, intake review, or outbound delivery.
 
 ## Operator outcome
 

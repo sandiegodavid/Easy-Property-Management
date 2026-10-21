@@ -106,7 +106,9 @@ test("Settings manages categories separately from Services, retains assignments 
   expect(detail.categories).toHaveLength(2);
   expect(detail.services.map((item) => item.displayName)).toEqual(["Lease review practice"]);
   await page.goto(`/providers?categoryState=uncategorized&categoryId=${custom.id}`);
-  await expect(page.getByText(/No .*Providers/i)).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "No providers found", exact: true }),
+  ).toBeVisible();
   const uncategorized = await request.post("/api/providers", {
     data: {
       party: { partyKind: "organization", displayName: "Unclassified provider" },
@@ -124,9 +126,8 @@ test("Settings manages categories separately from Services, retains assignments 
   ).toHaveCount(0);
   await expect(
     page
-      .getByRole("article")
-      .filter({ has: page.getByRole("link", { name: "Unclassified provider", exact: true }) })
-      .getByText("Uncategorized", { exact: true }),
+      .getByRole("link", { name: "Unclassified provider", exact: true })
+      .getByText("No categories assigned", { exact: true }),
   ).toBeVisible();
 });
 

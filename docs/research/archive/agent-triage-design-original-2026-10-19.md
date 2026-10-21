@@ -1,4 +1,4 @@
-> Historical draft retained verbatim for detail and design history. Its claims and diagrams are superseded where the [current design](../agent-triage-design.md) differs.
+> Historical draft retained for detail and design history. Its claims and diagrams are superseded where the [current design](../../active/agent-triage-design.md) differs.
 
 # Agent Triage for Property-Maintenance Intake — Design
 

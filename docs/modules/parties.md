@@ -20,7 +20,7 @@ Party archival consults every registered active-role guard inside the writer tra
 
 ## API and disclosure
 
-`/api/parties` owns identity and `/api/parties/{id}/contact-methods` owns contacts. `/operations/{id}` and `/operations/by-key/{key}` recover original responses. Global activity uses the registered redacted policy; contextual detail/history supplies permitted data. Shared identities survive role archival and remain retained for historical references.
+`/api/parties` owns identity; `GET /api/parties/{id}` includes active and archived contacts in `contactMethods`. `/api/parties/{id}/contact-methods` owns contact creation and child mutation routes, not a separate contact-list GET. `/operations/{id}` and `/operations/by-key/{key}` recover original responses. Global activity uses the registered redacted policy; contextual detail/history supplies permitted data. Shared identities survive role archival and remain retained for historical references.
 
 Read-only `GET /api/parties/selection` supplies bounded identity-only choices for owning workflows such as deposit payer/recipient selection. It defaults to 25, caps at 100, excludes archived identities unless explicitly requested, supports Unicode-normalized name search and uses the same stable ID ordering for cursor comparison and continuation. Each page is one SQL query with LIMIT before hydration; it loads no contact or role records.
 

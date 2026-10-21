@@ -2,7 +2,7 @@
 
 ## Status and ownership
 
-Proposed feature design, October 20, 2026, based on [agent triage research](../research/agent-triage-design.md). This is the application contract for qualified connected assistants. [MCP-001](MCP-001_DESIGN.md) and [ASST-FILE-001](ASST-FILE-001_DESIGN.md) are alternative transports. A model API connection remains separate under AI-GOV-001. No assistant product is presumed available or required for manual EPM use.
+Proposed feature design, October 20, 2026, based on the [agent triage design](agent-triage-design.md). This is the application contract for qualified connected assistants. [MCP-001](MCP-001_DESIGN.md) and [ASST-FILE-001](ASST-FILE-001_DESIGN.md) are alternative transports. A model API connection remains separate under AI-GOV-001. No assistant product is presumed available or required for manual EPM use.
 
 ASST-001 establishes the shared boundary independently of the business actions that use it. The first proposed connected action is a bounded EPM-initiated request for the registered AI-DRAFT-001 follow-up action, once that action exists. Scheduled channel discovery and retained-source issue proposals are gated behind [ASST-INTAKE-001](ASST-INTAKE-001_DESIGN.md) and INGEST-002. Either capability can qualify independently. No agent receives direct create, assignment, payment, sending, signing, or approval commands.
 

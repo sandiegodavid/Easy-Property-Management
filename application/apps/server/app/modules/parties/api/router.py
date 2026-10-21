@@ -350,15 +350,6 @@ def build_router(
             )
         )
 
-    @router.get(
-        "/{party_id}/contact-methods",
-        response_model=list[ContactResponse],
-        operation_id="listPartyContactMethods",
-    )
-    def list_contacts(party_id: UUID):
-        ready()
-        return invoke(lambda: service.list(str(party_id)))
-
     @router.post(
         "/{party_id}/contact-methods",
         status_code=status.HTTP_201_CREATED,

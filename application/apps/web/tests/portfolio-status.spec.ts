@@ -1260,7 +1260,7 @@ test("unknown Space review classifies independent occupancy and future availabil
   await expect(
     card.locator("dt").getByRole("button", { name: "Change leasing status", exact: true }),
   ).toBeVisible();
-  await expect(card.getByRole("button", { name: "Edit home", exact: true })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Edit Home", exact: true })).toBeVisible();
   await expect(card.getByText("Home settings", { exact: true })).toHaveCount(0);
   await expect(card.getByRole("button", { name: "Archive home", exact: true })).toHaveCount(0);
   await expect(card.locator("summary")).toHaveText(["History"]);
@@ -1386,13 +1386,13 @@ test("Portfolio summary drill-down and combined status filters use source facts"
     }),
   ).toBeVisible();
   await page
-    .getByRole("combobox", { name: "ownership Context", exact: true })
+    .getByRole("combobox", { name: "Ownership context", exact: true })
     .selectOption("self_owned");
-  await page.getByRole("combobox", { name: "occupancy", exact: true }).selectOption("vacant");
+  await page.getByRole("combobox", { name: "Occupancy", exact: true }).selectOption("vacant");
   await page
     .getByRole("combobox", { name: "Leasing status", exact: true })
     .selectOption("available_now");
-  await page.getByRole("combobox", { name: "needs Attention", exact: true }).selectOption("false");
+  await page.getByRole("combobox", { name: "Needs attention", exact: true }).selectOption("false");
   await expect(page.getByRole("button", { name: "Apply filters", exact: true })).toHaveCount(0);
   await expect(page.getByText("1 matching properties", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: vacant.displayName, exact: true })).toBeVisible();
@@ -1575,6 +1575,7 @@ test("stale availability retains edits and an interrupted write reconciles its o
   await expect(
     page.getByRole("combobox", { name: "Leasing status (required)", exact: true }),
   ).toHaveValue("available_now");
+  await page.getByText("Form status and recovery details", { exact: true }).click();
   await page.getByRole("button", { name: "Review current source", exact: true }).click();
   await page.getByRole("button", { name: "Keep my edits with this reviewed revision" }).click();
   let writes = 0;

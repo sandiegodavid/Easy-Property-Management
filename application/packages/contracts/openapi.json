@@ -61086,61 +61086,6 @@
       }
     },
     "/api/parties/{party_id}/contact-methods": {
-      "get": {
-        "operationId": "listPartyContactMethods",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "party_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Party Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/app__modules__parties__api__router__ContactResponse"
-                  },
-                  "title": "Response Listpartycontactmethods",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TransportErrorResponse"
-                }
-              }
-            },
-            "description": "Local transport rejected."
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "List Contacts",
-        "tags": [
-          "parties"
-        ]
-      },
       "post": {
         "operationId": "addPartyContactMethod",
         "parameters": [

@@ -2,7 +2,7 @@
 
 ## Status and dependencies
 
-Proposed feature design, October 20, 2026. [Agent triage research](../research/agent-triage-design.md#2-how-a-channel-message-reaches-the-record) defines the desired behavior. INGEST-001 retains original evidence; INGEST-002 owns the five operator decisions and atomic issue consequences; ASST-001 owns authenticated admission, grants, durable receipts and health. This feature qualifies discovery through **one** working transport, either MCP-001 or ASST-FILE-001. It does not require both and does not grant the assistant official issue-write or outbound-send authority.
+Proposed feature design, October 20, 2026. The [agent triage design](agent-triage-design.md#2-how-a-channel-message-reaches-the-record) defines the desired behavior. INGEST-001 retains original evidence; INGEST-002 owns the five operator decisions and atomic issue consequences; ASST-001 owns authenticated admission, grants, durable receipts and health. This feature qualifies discovery through **one** working transport, either MCP-001 or ASST-FILE-001. It does not require both and does not grant the assistant official issue-write or outbound-send authority.
 
 ## Channel discovery and evidence
 

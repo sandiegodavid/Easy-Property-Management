@@ -213,7 +213,7 @@ test("property overview shares review cards, puts them first and identifies suit
   await expect(section).toContainText("1 item needs review");
   await cards
     .filter({ hasText: "Suite 202" })
-    .getByRole("link", { name: /Review occupancy/ })
+    .getByRole("link", { name: "Review Occupancy Suite 202 Recorded", exact: true })
     .click();
   await expect(page).toHaveURL(`/coverage/space/${item.spaces[1].id}/occupancy`);
 });
@@ -505,9 +505,9 @@ test("property setup keeps configuration and actions without duplicating overvie
   await expect(details.getByRole("heading", { name: "Property setup", exact: true })).toHaveCount(
     0,
   );
-  await expect(
-    details.getByRole("button", { name: "Change ownership", exact: true }),
-  ).toBeVisible();
+  await expect(details.getByRole("button", { name: "Change ownership", exact: true })).toHaveCount(
+    0,
+  );
   await expect(
     details.getByRole("button", { name: "Archive property", exact: true }),
   ).toBeVisible();
@@ -543,6 +543,15 @@ test("property setup keeps configuration and actions without duplicating overvie
   );
   await edit.click();
   await expect(page).toHaveURL(new RegExp(`workflow=portfolio.property.patch&target=${item.id}`));
+  await page.goto(`/properties/${item.id}/overview`);
+  const owners = page.getByRole("region", { name: "Owners section", exact: true });
+  const ownershipAction = owners.getByRole("button", { name: "Change ownership", exact: true });
+  await expect(owners.getByRole("heading", { name: "Owners", exact: true })).toBeVisible();
+  await expect(ownershipAction).toBeVisible();
+  await ownershipAction.click();
+  await expect(page).toHaveURL(
+    new RegExp(`workflow=portfolio.ownerships.replace&target=${item.id}`),
+  );
 });
 
 test("property owner counts include You and co-owners", async ({ page, request }) => {
@@ -563,7 +572,10 @@ test("property owner counts include You and co-owners", async ({ page, request }
     .getByRole("listitem")
     .filter({ has: page.getByRole("heading", { name: "Ownership counts Sole", exact: true }) });
   await expect(
-    soleCard.getByRole("region", { name: "Owners", exact: true }).getByText("You", { exact: true }),
+    soleCard
+      .getByRole("region", { name: "Owners", exact: true })
+      .getByRole("listitem")
+      .filter({ hasText: /^You\s*·\s*Share not recorded$/ }),
   ).toBeVisible();
   const mixedCard = page
     .getByRole("listitem")
@@ -571,7 +583,8 @@ test("property owner counts include You and co-owners", async ({ page, request }
   await expect(
     mixedCard
       .getByRole("region", { name: "Owners", exact: true })
-      .getByText("You", { exact: true }),
+      .getByRole("listitem")
+      .filter({ hasText: /^You\s*·\s*Share not recorded$/ }),
   ).toBeVisible();
   await expect(page.getByText("10 owners · 1 rental unit", { exact: true })).toBeVisible();
   const remaining = page.getByRole("link", { name: "+5 more owners", exact: true });
@@ -617,10 +630,10 @@ test("property owner counts include You and co-owners", async ({ page, request }
   await expect(inactiveCard).toBeVisible();
   await inactiveCard.click();
   await expect(page).toHaveURL(/\/properties\?q=Ownership/);
-  await expect(maintenance.locator(".directory-coverage-area")).toHaveText("Review maintenance");
+  await expect(maintenance.locator(".directory-coverage-area")).toHaveText("Review Maintenance");
   await expect(maintenance.locator(".directory-coverage-state")).toHaveText("Needs review");
   await expect(
-    maintenance.getByRole("link", { name: "Review maintenance Needs review", exact: true }),
+    maintenance.getByRole("link", { name: "Review Maintenance Needs review", exact: true }),
   ).toHaveAttribute("href", `/coverage/property/${ten.id}/maintenance`);
   await expect(maintenance.locator("a .directory-coverage-state")).toHaveCount(1);
   await maintenance.locator(".directory-coverage-state").click();

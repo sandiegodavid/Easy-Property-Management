@@ -6,6 +6,7 @@ export function MaintenanceAppointment({ item }: { item: Record<string, unknown>
   return (
     <div className="maintenance-appointment">
       <header>
+        <h3>{scalar(item.purpose, "Appointment")}</h3>
         <span className="maintenance-record-status">
           {scalar(item.status).replaceAll("_", " ")}
         </span>

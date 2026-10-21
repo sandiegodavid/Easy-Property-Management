@@ -2,6 +2,8 @@
 
 This index lists active designs and remaining work. The [backlog](../FEATURE_BACKLOG.md) is authoritative for status and dependencies.
 
+The [agent triage design](agent-triage-design.md) is the accepted direction for remaining assistant-related backlog. Its feature designs below own implementation details; the document does not describe shipped behavior.
+
 ## Remaining interface work
 
 - [UI-002 preliminary design](UI-002_DESIGN_preliminary.md): legal/HOA, spreadsheet intake and source-backed issue review.

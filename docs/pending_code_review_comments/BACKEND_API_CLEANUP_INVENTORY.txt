@@ -1,0 +1,160 @@
+BACKEND API CLEANUP CANDIDATE INVENTORY
+Date: 2026-10-20
+
+Slice 1 follow-up: see BACKEND_API_CLEANUP_SLICE_1_MANIFEST.txt for refreshed
+evidence and individual decisions. Its 4-remove/21-retain/7-defer manifest
+supersedes the tentative assessments below. APIs used by application/demo/
+are protected. Slice 2 subsequently removed only the contact-list GET wrapper;
+see BACKEND_API_CLEANUP_SLICE_2_RESULTS.txt. Other observations below are the
+historical inventory, not a claim that the removed GET remains registered.
+
+Scope and limitations
+
+Static inventory of the checked-in 341-operation OpenAPI surface, compared with
+SPA source, generated workflow dispatch, dynamic URLs, backend composition,
+scripts, and demo consumers. Thirty-two HTTP operations have no identified
+current SPA caller. Tests and generated declarations alone are not production
+usage. Absence of a repository caller does not prove an API is safe to delete;
+external consumers and documented recovery/operational contracts still require
+confirmation. No implementation changes or tests were performed for this inventory.
+
+1. REDUNDANT READ CANDIDATES (7)
+
+These are the strongest initial cleanup candidates because the current SPA uses
+overlapping reads. Confirm response semantics and documented consumers before
+removing any route.
+
+- GET /api/leases
+  Alternative: /api/leases/directory.
+  Reference: application/apps/server/app/modules/leases/api/router.py:424
+
+- GET /api/parties
+  Alternative: named selection/search and individual Party reads.
+  Reference: application/apps/server/app/modules/parties/api/router.py:268
+
+- GET /api/tenants
+  Alternative: /api/operator/tenants and metadata search.
+  Reference: application/apps/server/app/modules/tenants/api/router.py:228
+
+- GET /api/parties/{party_id}/contact-methods
+  Alternative: Party detail already includes contact methods.
+  Reference: application/apps/server/app/modules/parties/api/router.py:354
+
+- GET /api/leases/{lease_id}/security-deposit
+  Alternative: current UI reads deposit accounts directly.
+  Reference: application/apps/server/app/modules/finance/api/deposit_router.py
+
+- GET /api/money/summary
+  Alternative: reporting obtains its summary through /api/money/properties.
+  Reference: application/apps/server/app/modules/finance/api/money_router.py
+
+- GET /api/properties/{property_id}/money-summary
+  Alternative: Property overview composition and scoped reporting.
+  Reference: application/apps/server/app/modules/finance/api/money_router.py:242
+
+2. ALTERNATE RECEIPT LOOKUP CANDIDATES (17)
+
+These GET routes have no identified current SPA caller. The SPA generally uses
+another lookup, by operation ID or idempotency key, for the same command family.
+Decide the recovery contract before consolidating routes. Removing an HTTP alias
+does not justify removing durable receipts, idempotency checks, or transaction-
+aware recovery ports.
+
+Current frontend lookup choices:
+application/apps/web/src/workflows/workflow-result.ts:4
+
+AI Governance:
+- GET /api/ai/command-operations/{operation_id}
+- GET /api/ai/external-operations/{operation_id}
+  Reference: application/apps/server/app/modules/ai_governance/api/router.py
+
+Expense categories:
+- GET /api/expense-categories/operations/{operation_id}
+  Reference: application/apps/server/app/modules/finance/api/expense_router.py:462
+
+Files:
+- GET /api/files/commands/{operation_id}
+  Reference: application/apps/server/app/modules/files/api/router.py
+
+Inspections:
+- GET /api/inspection-commands/by-key/{key}
+  Reference: application/apps/server/app/modules/inspections/api/router.py:371
+
+Intake:
+- GET /api/intake/sources/operations/{operation_id}
+  Reference: application/apps/server/app/modules/intake/api/router.py:283
+
+Leasing:
+- GET /api/leases/{lease_id}/operations/by-key
+  Reference: application/apps/server/app/modules/leases/api/router.py:479
+
+Operator:
+- GET /api/operator/operations/{key}
+  Reference: application/apps/server/app/modules/operator/api/router.py
+
+Owner concerns:
+- GET /api/owner-concerns/operations/{operation_id}
+  Reference: application/apps/server/app/modules/owner_management/api/router.py:365
+
+Parties and Tenants:
+- GET /api/parties/operations/by-key/{key}
+  Reference: application/apps/server/app/modules/parties/api/router.py:281
+- GET /api/tenants/operations/by-key/{key}
+  Reference: application/apps/server/app/modules/tenants/api/router.py:236
+
+Providers and categories:
+- GET /api/providers/operations/by-key/{key}
+- GET /api/provider-categories/operations/by-key/{key}
+  Reference: application/apps/server/app/modules/vendors/api/router.py
+
+Portfolio inventory:
+- GET /api/portfolio/inventory-operations/by-key
+- GET /api/properties/{property_id}/inventory-operations/by-key
+  Reference: application/apps/server/app/modules/portfolio/api/router.py:600
+
+Portfolio status:
+- GET /api/portfolio/status-operations/{operation_id}
+- GET /api/spaces/{space_id}/status-operations/{idempotency_key}
+  Reference: application/apps/server/app/modules/portfolio/api/router.py:644
+
+3. UNWIRED OR OPERATIONAL APIS (8)
+
+Retain these pending an explicit product/operational decision. They are not
+established deletion findings merely because they lack SPA callers.
+
+- GET /api/files/integrity-attention
+  Operational safety feature; missing Settings integration, not obvious dead code.
+- POST /api/files/verify
+  Storage verification and reconciliation; retain.
+  Reference: application/apps/server/app/modules/files/api/router.py
+
+- GET /api/operator/recovery-forms
+  Runtime schema discovery; potentially redundant with bundled contracts.
+- POST /api/operator/recovery/expire
+  Recovery maintenance operation; no current SPA trigger.
+  Reference: application/apps/server/app/modules/operator/api/router.py:236
+
+- GET /api/audit/events
+  Global activity capability; contextual history uses the entity-specific route.
+  Reference: application/apps/server/app/modules/audit/api/router.py:57
+
+- GET /api/workspace
+  Diagnostic workspace information.
+- POST /api/workspace/initialize
+  HTTP setup surface; CLI initialization exists.
+- GET /health
+  Readiness/diagnostic endpoint; lack of a SPA caller is expected.
+  Reference: application/apps/server/app/modules/workspace/api/router.py:40
+
+EXCLUDED FALSE POSITIVES
+
+- GET /api/files/{file_id}/content is used through dynamically constructed links.
+- POST /api/maintenance-appointments/{appointment_id}/cancel is used through
+  generated workflow dispatch.
+
+RECOMMENDED SEQUENCE
+
+Review the seven redundant reads first, then standardize receipt lookup
+conventions. Keep operational and safety APIs separate from unused-code cleanup.
+Any approved removal should update OpenAPI/generated contracts, relevant tests,
+and documentation without removing the underlying business/recovery guarantees.
