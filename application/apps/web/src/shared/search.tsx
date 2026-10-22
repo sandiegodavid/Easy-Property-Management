@@ -100,22 +100,24 @@ function SearchGroup({ initial, q, archived }: { initial: Group; q: string; arch
           <PageAsOf asOf={group.asOf} priority={1} />
           <p>{group.matchingTotal} matches</p>
           {!group.items?.length && <p>No matching records on this page.</p>}
-          <ul>
+          <ul className="result-card-list">
             {group.items?.map((hit) => (
-              <li key={hit.sourceId}>
-                <Link
-                  to={
-                    hit.sourceType === "space"
-                      ? `?${new URLSearchParams([...params, ["sourceType", "space"], ["sourceId", hit.sourceId]])}#source-detail`
-                      : searchTarget(hit.target)
-                  }
-                >
-                  {hit.label}
-                </Link>
-                <p>
-                  {hit.context}
-                  {hit.archived && " · Archived"}
-                </p>
+              <li className="child-record-card search-result-card" key={hit.sourceId}>
+                <header className="child-record-heading">
+                  <h4>
+                    <Link
+                      to={
+                        hit.sourceType === "space"
+                          ? `?${new URLSearchParams([...params, ["sourceType", "space"], ["sourceId", hit.sourceId]])}#source-detail`
+                          : searchTarget(hit.target)
+                      }
+                    >
+                      {hit.label}
+                    </Link>
+                  </h4>
+                  {hit.archived && <span className="record-pill">Archived</span>}
+                </header>
+                <p>{hit.context}</p>
               </li>
             ))}
           </ul>

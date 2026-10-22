@@ -391,7 +391,7 @@ async function property(request: APIRequestContext, name: string, owners?: (stri
 test("property conversations use local timestamps without displaying communication IDs", async ({
   page,
   request,
-}) => {
+}, testInfo) => {
   const item = await property(request, "Conversation timestamps");
   const instant = "2026-10-01T18:30:00Z";
   const response = await request.post("/api/communications", {
@@ -422,7 +422,19 @@ test("property conversations use local timestamps without displaying communicati
   }, instant);
   const row = page.locator(".context-item-cards > li").filter({ hasText: "Property update call" });
   await expect(row.locator("time")).toHaveText(localTime);
+  await expect(row.locator(".context-row-heading h4")).toHaveText("Property update call");
+  await expect(row.locator(".context-row-heading .record-pill")).toHaveText("Recorded");
+  await expect(row.locator("dt")).toContainText(["Channel", "Direction", "Occurred"]);
   await expect(row).not.toContainText(communication.id);
+  for (const theme of ["light", "dark"])
+    for (const width of [1280, 390]) {
+      await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await row.screenshot({ path: testInfo.outputPath(`context-row-${theme}-${width}.png`) });
+    }
   await row
     .getByRole("link", { name: "View conversation for Property update call", exact: true })
     .click();
@@ -518,7 +530,7 @@ test.describe("context list presentation", () => {
       });
       await page.goto(`/properties/${item.id}/overview`);
       const tasks = page.getByRole("region", { name: "Tasks", exact: true });
-      await expect(tasks).toContainText("Status: In progress");
+      await expect(tasks.locator(".context-row-heading .record-pill")).toHaveText("In progress");
       await expect(tasks).toContainText("High");
       const times = tasks.locator("time");
       await expect(times).toHaveCount(2);

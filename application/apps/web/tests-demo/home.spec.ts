@@ -77,11 +77,18 @@ test("filters button discloses the home filter form", async ({ page }) => {
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
   const filters = page.locator("#home-filters");
   await expect(filters).toBeVisible();
-  await expect(filters.getByLabel("Property ID (blank for all properties)")).toBeVisible();
+  const property = filters.getByRole("combobox", { name: "Property", exact: true });
+  await expect(property).toBeVisible();
+  await expect(property).toHaveValue("");
+  await expect(property.locator("option:checked")).toHaveText("All properties");
   await expect(filters.getByLabel("Upcoming horizon")).toBeVisible();
   await expect(filters.getByLabel("Money from")).toBeVisible();
   await expect(filters.getByLabel("Money through")).toBeVisible();
   await expect(filters.getByText("Money dates apply only to Recorded money.")).toBeVisible();
+  await expect(filters.getByRole("button", { name: "Clear filters", exact: true })).toBeVisible();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(filters).toBeHidden();
 });
 
 test("side collections link to full collection views", async ({ page }) => {

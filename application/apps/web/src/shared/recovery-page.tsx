@@ -73,44 +73,53 @@ export function RecoveryPage() {
           <PageAsOf asOf={records.data.asOf} />
           <p>{records.data.matchingTotal} forms</p>
           {records.data.items.length === 0 && <p>No unfinished forms on this page.</p>}
-          <ul>
+          <ul className="result-card-list">
             {records.data.items.map((record) => {
               const workflow = workflows.find((workflow) => workflow.formKey === record.formKey);
               const title =
                 workflow?.title ??
                 (record.formKey === "coverage.review" ? "Information review" : "Saved form");
               return (
-                <li key={record.id}>
-                  <h3>{title}</h3>
+                <li className="child-record-card recovery-form-card" key={record.id}>
+                  <header className="child-record-heading">
+                    <h3>{title}</h3>
+                    <span className="record-pill" data-status={record.status}>
+                      {statusLabels[record.status]}
+                    </span>
+                  </header>
                   <p>
-                    {statusLabels[record.status]} · Saved{" "}
-                    <time dateTime={record.savedAt}>{formatHomeTime(record.savedAt)}</time>
+                    Saved <time dateTime={record.savedAt}>{formatHomeTime(record.savedAt)}</time>
                   </p>
-                  {record.status === "outcome_unknown" && (
-                    <button
-                      disabled={pending || !scope.canWrite}
-                      onClick={() => {
-                        void reconcile(record.id);
-                      }}
-                    >
-                      Check submission
-                    </button>
-                  )}
-                  {record.formKey === "coverage.review" &&
-                    ["active", "outcome_unknown"].includes(record.status) && (
-                      <Link to={`/coverage/reviews/${record.id}`}>Resume: {title}</Link>
+                  <div className="result-card-actions">
+                    {record.status === "outcome_unknown" && (
+                      <button
+                        disabled={pending || !scope.canWrite}
+                        onClick={() => {
+                          void reconcile(record.id);
+                        }}
+                      >
+                        Check submission
+                      </button>
                     )}
-                  {workflow && ["active", "outcome_unknown"].includes(record.status) ? (
-                    <Link
-                      to={`${workflowUrl(record.formKey, record.sourceId ?? undefined)}&resume=${record.id}`}
-                    >
-                      Resume: {title}
-                    </Link>
-                  ) : (
-                    record.status === "active" && (
-                      <span> — Resume from the owning workflow when its editor is available.</span>
-                    )
-                  )}
+                    {record.formKey === "coverage.review" &&
+                      ["active", "outcome_unknown"].includes(record.status) && (
+                        <Link to={`/coverage/reviews/${record.id}`}>Resume: {title}</Link>
+                      )}
+                    {workflow && ["active", "outcome_unknown"].includes(record.status) ? (
+                      <Link
+                        to={`${workflowUrl(record.formKey, record.sourceId ?? undefined)}&resume=${record.id}`}
+                      >
+                        Resume: {title}
+                      </Link>
+                    ) : (
+                      record.status === "active" && (
+                        <span>
+                          {" "}
+                          — Resume from the owning workflow when its editor is available.
+                        </span>
+                      )
+                    )}
+                  </div>
                 </li>
               );
             })}

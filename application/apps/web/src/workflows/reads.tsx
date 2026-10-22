@@ -96,7 +96,7 @@ export function History({
   kind,
   id,
   snapshotFields,
-  presentation,
+  presentation = "timeline",
 }: {
   kind: string;
   id: string;
@@ -146,11 +146,7 @@ export function History({
                   ? "You"
                   : label(scalar(event.actorKind).replaceAll("_", " "))}
               </p>
-              {!!event.reason && (
-                <p className="property-history-reason">
-                  {scalar(event.reason).replaceAll("_", " ")}
-                </p>
-              )}
+              {!!event.reason && <p className="property-history-reason">{scalar(event.reason)}</p>}
             </>
           ) : (
             <Facts value={event} fields={["action", "occurredAt", "actorKind", "reason"]} />

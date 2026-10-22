@@ -172,16 +172,17 @@ test("grouped previews expose nested reminders and every linked Task through bou
     .getByRole("link", { name: "Review all linked Tasks and their reminders", exact: true })
     .click();
   const directory = page.getByRole("region", { name: "Work directory", exact: true });
-  await expect(directory.locator("ul > li > a")).toHaveCount(25);
-  const first = await directory.locator("ul > li > a").allTextContents();
+  const taskLinks = directory.getByRole("heading", { level: 3 }).getByRole("link");
+  await expect(taskLinks).toHaveCount(25);
+  const first = await taskLinks.allTextContents();
   await page.getByRole("button", { name: "Next work page", exact: true }).click();
-  await expect(directory.locator("ul > li > a")).toHaveCount(1);
-  const last = await directory.locator("ul > li > a").allTextContents();
+  await expect(taskLinks).toHaveCount(1);
+  const last = await taskLinks.allTextContents();
   expect(new Set([...first, ...last]).size).toBe(26);
-  await directory.locator("ul > li > a").click();
+  expect([...first, ...last].sort()).toEqual(tasks.map((task) => task.title).sort());
+  await taskLinks.click();
   const reminders = page.getByRole("region", { name: "Task reminders", exact: true });
-  await reminders.getByText(/^Reminder actions/).click();
-  await reminders.getByRole("link", { name: "Acknowledge reminder", exact: true }).click();
+  await reminders.getByRole("button", { name: "Acknowledge reminder", exact: true }).click();
   await page.getByLabel("I confirm this lifecycle change").check();
   await save(page, "Acknowledge reminder");
   await expect(

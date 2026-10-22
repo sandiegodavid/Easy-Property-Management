@@ -665,6 +665,11 @@ test("provider record dates use local time without revision counters", async ({
     await expect(details).toContainText(local);
     await expect(details).not.toContainText(value);
   }
+  const history = details.locator("details.property-history");
+  await history.locator("summary").first().click();
+  await expect(history).toContainText("Recorded changes, newest first.");
+  await expect(history.locator(".property-history-event-heading time").first()).toBeVisible();
+  await expect(history.locator(".property-history-changes").first()).toBeVisible();
 });
 
 test("existing shared identity becomes a Provider without duplicating identity and keeps lifecycle history", async ({
@@ -994,11 +999,13 @@ test("category assignment and archive preserve effective counts and contextual r
   await saved(page, "Assign category");
   await page.goto("/providers");
   await page.getByRole("link", { name: "Manage provider categories", exact: true }).click();
-  const section = page
-    .getByRole("heading", { name: "Slice50 specialist", exact: true })
-    .locator("..");
-  await expect(section).toContainText("Effective provider count");
-  await expect(section.locator("dd").filter({ hasText: /^1$/ })).toHaveCount(2); // Revision and source-owned count.
+  const section = page.getByRole("article", { name: "Slice50 specialist", exact: true });
+  const providerCount = section.getByRole("link", {
+    name: "1 provider in Slice50 specialist",
+    exact: true,
+  });
+  await expect(providerCount).toBeVisible();
+  await expect(providerCount).toHaveAttribute("href", `/providers?categoryId=${category.id}`);
   await page.goto(`/providers?workflow=provider.category.archive&target=${category.id}`);
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
   await page.getByLabel("Reason (required)").fill("Replaced by a more precise category");
@@ -1105,8 +1112,14 @@ test("manual reputation sources retain safe external pointers and contextual lif
     .filter({ hasText: "https://reputation.example/google_updated" });
   await expect(historyRow).toContainText("Revised private context");
   await historyRow.getByText("History", { exact: true }).click();
-  await expect(historyRow.getByText("archived", { exact: true })).toBeVisible();
-  await historyRow.getByText("After change", { exact: true }).last().click();
+  await expect(
+    historyRow.locator(".property-history-event-heading strong").filter({ hasText: /^Archived$/ }),
+  ).toBeVisible();
+  await historyRow
+    .locator(".property-history > article")
+    .filter({ has: page.getByText("Created", { exact: true }) })
+    .getByText("After change", { exact: true })
+    .click();
   await expect(historyRow).toContainText("https://reputation.example/google_reviews");
   expect(externalRequests).toBe(0);
   await page.goto(

@@ -171,6 +171,10 @@ test("vacant and unknown totals open exact active-space views with frozen pages 
     await expect(inventory).toContainText(`1 matching ${kind} rental units`);
     await expect(inventory).toContainText("Active properties and rental units only.");
     await expect(inventory).toContainText(home.displayName);
+    await expect(inventory.locator(".inventory-result-card .record-pill")).toHaveText(
+      kind === "unknown" ? "Needs occupancy classification" : "Vacant",
+    );
+    await expect(inventory.locator(".inventory-result-card h3")).toHaveText(home.displayName);
     const back = page.url();
     await inventory
       .getByRole("link", { name: "Review occupancy and leasing status", exact: true })

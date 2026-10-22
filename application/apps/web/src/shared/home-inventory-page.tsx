@@ -50,11 +50,26 @@ function InventoryPage({ occupancy }: { occupancy: "vacant" | "unknown" }) {
               <time dateTime={read.value.asOf}>{formatHomeTime(read.value.asOf)}</time>
             </p>
             {read.value.items.length === 0 && <p>No matching rental units at this capture.</p>}
-            <ul>
+            <ul className="result-card-list">
               {read.value.items.map((item) => (
-                <li key={item.spaceId}>
-                  {item.propertyName} / {item.spaceName} · {item.occupancy} · Local date{" "}
-                  {item.effectiveLocalDate} · {item.timeZone}{" "}
+                <li className="child-record-card inventory-result-card" key={item.spaceId}>
+                  <header className="child-record-heading">
+                    <h3>{item.propertyName}</h3>
+                    <span className="record-pill">
+                      {item.occupancy === "unknown" ? "Needs occupancy classification" : "Vacant"}
+                    </span>
+                  </header>
+                  <p className="inventory-unit-name">{item.spaceName}</p>
+                  <dl className="context-row-facts">
+                    <div>
+                      <dt>Property-local date</dt>
+                      <dd>{item.effectiveLocalDate}</dd>
+                    </div>
+                    <div>
+                      <dt>Time zone</dt>
+                      <dd>{item.timeZone}</dd>
+                    </div>
+                  </dl>
                   <HomeSourceLink to={`/properties/${item.propertyId}/units`}>
                     Review occupancy and leasing status
                   </HomeSourceLink>

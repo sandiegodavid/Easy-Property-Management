@@ -765,75 +765,159 @@ function SectionContents({
       <ul className="context-item-cards">
         {section.items?.map((item, index) => (
           <li key={"id" in item ? item.id : index}>
-            {"displayName" in item && <strong>{item.displayName}</strong>}
-            {"title" in item && <strong>{item.title}</strong>}
-            {"summary" in item && <strong>{item.summary}</strong>}
-            {"subject" in item && <strong>{item.subject}</strong>}
-            {"status" in item && <p>Status: {label(item.status)}</p>}
-            {"occupancy" in item && (
-              <p>
-                {statusLabel(item.occupancy)} · {statusLabel(item.availability)}
-                {item.needsAttention && " · Status needs review"}
-              </p>
-            )}
-            {"ownerKind" in item && (
-              <>
-                <strong>
-                  {propertyContext ? (
-                    item.ownerKind === "local_operator" ? (
-                      "You"
-                    ) : item.partyId ? (
-                      <Link to={`/owners/${item.partyId}/overview`}>
-                        {item.ownerName ?? "Owner"}
-                      </Link>
+            <header className="context-row-heading">
+              <h4>
+                {"displayName" in item && item.displayName}
+                {"title" in item && item.title}
+                {"summary" in item && item.summary}
+                {"subject" in item && item.subject}
+                {"area" in item && label(item.area)}
+                {"ownerKind" in item && (
+                  <>
+                    {propertyContext ? (
+                      item.ownerKind === "local_operator" ? (
+                        "You"
+                      ) : item.partyId ? (
+                        <Link to={`/owners/${item.partyId}/overview`}>
+                          {item.ownerName ?? "Owner"}
+                        </Link>
+                      ) : (
+                        (item.ownerName ?? "Owner")
+                      )
                     ) : (
-                      (item.ownerName ?? "Owner")
-                    )
-                  ) : (
-                    <Link to={`/properties/${item.propertyId}/overview`}>{item.propertyName}</Link>
-                  )}
-                </strong>
-                <p>Ownership share: {ownershipShareLabel(item.sharePercent)}</p>
-                <p>
-                  {label(item.relationshipState)} · {item.startsOn} to {item.endsOn ?? "ongoing"}
-                </p>
-              </>
+                      <Link to={`/properties/${item.propertyId}/overview`}>
+                        {item.propertyName}
+                      </Link>
+                    )}
+                  </>
+                )}
+              </h4>
+              <div className="record-badges">
+                {"status" in item && <span className="record-pill">{label(item.status)}</span>}
+                {"relationshipState" in item && (
+                  <span className="record-pill">{label(item.relationshipState)}</span>
+                )}
+                {"occupancy" in item && (
+                  <span className="record-pill">{statusLabel(item.occupancy)}</span>
+                )}
+                {"area" in item && (
+                  <span className="record-pill">
+                    {item.state ? label(item.state) : "State unavailable"}
+                  </span>
+                )}
+              </div>
+            </header>
+            {"ownerKind" in item && (
+              <dl className="context-row-facts">
+                <div>
+                  <dt>Ownership share</dt>
+                  <dd>{ownershipShareLabel(item.sharePercent)}</dd>
+                </div>
+                <div>
+                  <dt>From</dt>
+                  <dd>{item.startsOn}</dd>
+                </div>
+                <div>
+                  <dt>Through</dt>
+                  <dd>{item.endsOn ?? "Ongoing"}</dd>
+                </div>
+              </dl>
+            )}
+            {"occupancy" in item && (
+              <dl className="context-row-facts">
+                <div>
+                  <dt>Leasing status</dt>
+                  <dd>{statusLabel(item.availability)}</dd>
+                </div>
+                {item.needsAttention && (
+                  <div>
+                    <dt>Status review</dt>
+                    <dd>Needs review</dd>
+                  </div>
+                )}
+              </dl>
             )}
             {"occupancyStartsOn" in item && (
               <>
-                <p>
-                  {label(item.leaseKind)} · Occupancy from {item.occupancyStartsOn} · Move-out{" "}
-                  {item.actualMoveOutOn ?? "not recorded"}
-                </p>
+                <dl className="context-row-facts">
+                  <div>
+                    <dt>Lease type</dt>
+                    <dd>{label(item.leaseKind)}</dd>
+                  </div>
+                  <div>
+                    <dt>Occupancy from</dt>
+                    <dd>{item.occupancyStartsOn}</dd>
+                  </div>
+                  <div>
+                    <dt>Move-out</dt>
+                    <dd>{item.actualMoveOutOn ?? "Not recorded"}</dd>
+                  </div>
+                </dl>
                 <LeaseTenants lease={item} />
               </>
             )}
             {"occurredAtUtc" in item && (
-              <p>
-                {label(item.channel)} · {label(item.direction)} ·{" "}
-                <time dateTime={item.occurredAtUtc}>
-                  {formatHomeTemporal({ at: item.occurredAtUtc, timeZone: item.occurredTimezone })}
-                </time>
-              </p>
+              <dl className="context-row-facts">
+                <div>
+                  <dt>Channel</dt>
+                  <dd>{label(item.channel)}</dd>
+                </div>
+                <div>
+                  <dt>Direction</dt>
+                  <dd>{label(item.direction)}</dd>
+                </div>
+                <div>
+                  <dt>Occurred</dt>
+                  <dd>
+                    <time dateTime={item.occurredAtUtc}>
+                      {formatHomeTemporal({
+                        at: item.occurredAtUtc,
+                        timeZone: item.occurredTimezone,
+                      })}
+                    </time>
+                  </dd>
+                </div>
+              </dl>
             )}
             {"dueAtUtc" in item && (
-              <p>
-                {label(item.priority)} · {label(item.taskDeadlineState)} ·{" "}
-                {item.dueAtUtc ? (
-                  <time dateTime={item.dueAtUtc}>{formatHomeTemporal({ at: item.dueAtUtc })}</time>
-                ) : (
-                  "No deadline"
+              <dl className="context-row-facts">
+                <div>
+                  <dt>Priority</dt>
+                  <dd>{label(item.priority)}</dd>
+                </div>
+                <div>
+                  <dt>Deadline status</dt>
+                  <dd>{label(item.taskDeadlineState)}</dd>
+                </div>
+                <div>
+                  <dt>Deadline</dt>
+                  <dd>
+                    {item.dueAtUtc ? (
+                      <time dateTime={item.dueAtUtc}>
+                        {formatHomeTemporal({ at: item.dueAtUtc })}
+                      </time>
+                    ) : (
+                      "No deadline"
+                    )}
+                  </dd>
+                </div>
+                {item.waitingForLabel && (
+                  <div>
+                    <dt>Waiting for</dt>
+                    <dd>{item.waitingForLabel}</dd>
+                  </div>
                 )}
-                {item.waitingForLabel && ` · Waiting for ${item.waitingForLabel}`}
                 {item.followUpAtUtc && (
-                  <>
-                    {" · Follow-up "}
-                    <time dateTime={item.followUpAtUtc}>
-                      {formatHomeTemporal({ at: item.followUpAtUtc })}
-                    </time>
-                  </>
+                  <div>
+                    <dt>Follow-up</dt>
+                    <dd>
+                      <time dateTime={item.followUpAtUtc}>
+                        {formatHomeTemporal({ at: item.followUpAtUtc })}
+                      </time>
+                    </dd>
+                  </div>
                 )}
-              </p>
+              </dl>
             )}
             {"target" in item && !("leaseKind" in item) && !("ownerKind" in item) && (
               <SourceLink
@@ -852,14 +936,19 @@ function SectionContents({
               />
             )}
             {"area" in item && (
-              <p>
-                {label(item.area)} · {label(item.availability)} ·{" "}
-                {item.state ? label(item.state) : "State unavailable"} ·{" "}
-                {item.causes.map(label).join(", ")}
+              <div className="context-row-review">
+                <p>{label(item.availability)}</p>
+                {!!item.causes.length && (
+                  <ul>
+                    {item.causes.map((cause) => (
+                      <li key={cause}>{label(cause)}</li>
+                    ))}
+                  </ul>
+                )}
                 <Link to={`/coverage/${item.subjectKind}/${item.subjectId}/${item.area}`}>
                   Review {label(item.area)} information
                 </Link>
-              </p>
+              </div>
             )}
           </li>
         ))}

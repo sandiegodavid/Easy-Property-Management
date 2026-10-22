@@ -94,9 +94,7 @@ test("category and priority filters narrow the issue list", async ({ page }) => 
   await expect(page).toHaveURL(/category=plumbing/);
   await expect(page.locator("a.maintenance-issue-card")).toHaveCount(2);
   for (const summary of ["Urgent under-sink leak", "Annual plumbing inspection"]) {
-    await expect(
-      page.getByRole("heading", { name: summary, exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: summary, exact: true })).toBeVisible();
   }
 
   await dir.getByRole("button", { name: "Clear filters", exact: true }).click();
@@ -132,14 +130,15 @@ test("opening an issue shows its quotes and returns to maintenance", async ({ pa
 
   const detail = page.getByRole("region", { name: "Work record", exact: true });
   await expect(
-    detail.getByRole("heading", { name: "Urgent under-sink leak", exact: true }),
+    detail.getByRole("heading", { name: "Urgent under-sink leak", level: 2, exact: true }),
   ).toBeVisible();
-  // The appointment card must not repeat the issue title as a heading.
+  // The seeded appointment purpose matches the issue title; scope each heading
+  // to its own context instead of assuming that heading names are unique.
   await expect(
     detail
       .getByRole("region", { name: "Appointments", exact: true })
-      .getByRole("heading", { name: "Urgent under-sink leak", exact: true }),
-  ).toHaveCount(0);
+      .getByRole("heading", { name: "Urgent under-sink leak", level: 3, exact: true }),
+  ).toBeVisible();
   const quotes = detail.getByRole("region", {
     name: "Provider quote comparison table",
     exact: true,

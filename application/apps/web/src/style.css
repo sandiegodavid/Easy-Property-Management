@@ -1581,6 +1581,55 @@ a.directory-coverage-card:focus-visible {
   display: block;
   font-size: 1rem;
 }
+.context-row-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.context-row-heading h4 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.context-row-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: 0.75rem 1rem;
+  margin-block: 1rem;
+}
+.context-row-facts dt {
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+.context-row-facts dd {
+  margin: 0.25rem 0 0;
+  overflow-wrap: anywhere;
+}
+.result-card-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 1rem;
+  padding: 0;
+  list-style: none;
+}
+.result-card-list > .child-record-card {
+  margin: 0;
+}
+.result-card-list :is(h3, h4) {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.result-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.inventory-unit-name {
+  margin-block: 0.75rem;
+  color: var(--muted);
+}
 .context-item-cards > li > p {
   margin-block: 0.5rem;
 }

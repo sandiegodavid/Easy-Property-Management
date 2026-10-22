@@ -51,9 +51,7 @@ test("owner search filters by name", async ({ page }) => {
 
   await search.fill("Morgan");
   await expect(page.getByText("1 matching owners", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("link", { name: "Morgan Chen (Demo)", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Morgan Chen (Demo)", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Sam Rivera (Demo)", exact: true })).toHaveCount(0);
   await expect(page).toHaveURL(/q=Morgan/);
 });
@@ -63,7 +61,7 @@ test("owner cards show related property counts and bounded previews", async ({ p
 
   const morgan = cardFor(page, "Morgan Chen (Demo)");
   await expect(
-    morgan.getByText("individual · Active · 5 related properties (current)"),
+    morgan.getByText("Person · Active · 5 related properties (Current)", { exact: true }),
   ).toBeVisible();
   await expect(morgan.getByText("Showing a bounded property preview.")).toBeVisible();
   await expect(morgan.getByRole("link", { name: "View related properties" })).toBeVisible();
@@ -80,7 +78,7 @@ test("owner cards show related property counts and bounded previews", async ({ p
 
   const daniel = cardFor(page, "Daniel Kim (Demo)");
   await expect(
-    daniel.getByText("individual · Active · 1 related properties (current)"),
+    daniel.getByText("Person · Active · 1 related properties (Current)", { exact: true }),
   ).toBeVisible();
   await expect(
     daniel.getByRole("link", { name: "Sequoia House — Ten Owners", exact: true }),

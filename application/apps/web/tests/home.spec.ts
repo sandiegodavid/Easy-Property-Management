@@ -78,8 +78,8 @@ test("Home explains aggregate availability and shared Task rows reach real sourc
   await page.getByRole("link", { name: "Waiting and follow-ups" }).click();
   const waitingSection = page.getByRole("region", { name: "Waiting", exact: true });
   const waitingSummary = waitingSection.getByRole("button", { name: new RegExp(title) });
-  await expect(waitingSummary).toContainText("unscheduled");
-  await expect(waitingSummary).toContainText("overdue");
+  await expect(waitingSummary).toContainText("Unscheduled");
+  await expect(waitingSummary).toContainText("Waiting for Contractor · Overdue");
   await waitingSummary.click();
   await expect(
     waitingSection.getByRole("link", { name: "Review Task and follow-up" }),

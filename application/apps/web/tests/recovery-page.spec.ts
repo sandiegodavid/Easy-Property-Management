@@ -51,7 +51,7 @@ test.describe("unfinished form presentation", () => {
   ] as const) {
     test(`saved workflows use human titles, states and local time for ${instant}`, async ({
       page,
-    }) => {
+    }, testInfo) => {
       const states = [
         ["active", "Draft saved"],
         ["outcome_unknown", "Submission needs checking"],
@@ -88,6 +88,8 @@ test.describe("unfinished form presentation", () => {
         await expect(
           row.getByRole("heading", { name: "Report maintenance issue", exact: true }),
         ).toBeVisible();
+        await expect(row).toHaveClass(/recovery-form-card/);
+        await expect(row.locator(".record-pill")).toHaveText(text);
         await expect(row.locator("time")).toHaveText(`${local} · America/Los_Angeles`);
         await expect(row.locator("time")).toHaveAttribute("datetime", instant);
         await expect(row).not.toContainText("maintenance.issue.create");
@@ -107,6 +109,18 @@ test.describe("unfinished form presentation", () => {
         ).toHaveCount(status === "outcome_unknown" ? 1 : 0);
       }
       await expect(page.locator("#workspace-content")).not.toContainText("outcome_unknown");
+      for (const theme of ["light", "dark"])
+        for (const width of [1280, 390]) {
+          await page.evaluate((value) => (document.documentElement.dataset.theme = value), theme);
+          await page.setViewportSize({ width, height: 900 });
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
+          await page.screenshot({
+            path: testInfo.outputPath(`unfinished-${theme}-${width}.png`),
+            fullPage: true,
+          });
+        }
     });
   }
 });

@@ -53,7 +53,7 @@ test("page navigation shares Property Detail tab styling and scrolls within narr
       document.documentElement.dataset.theme = value;
     }, theme);
     const reference = page.getByRole("navigation", { name: "property sections", exact: true });
-    await expect(reference.locator('[aria-current="page"]')).toHaveText("overview");
+    await expect(reference.locator('[aria-current="page"]')).toHaveText("Overview");
     const expected = await appearance(reference.locator('[aria-current="page"]'));
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
@@ -61,21 +61,21 @@ test("page navigation shares Property Detail tab styling and scrolls within narr
         {
           path: `/properties/${property.id}/overview`,
           nav: "property sections",
-          active: "overview",
+          active: "Overview",
           next: "Property setup",
         },
         {
           path: `/owners/${ownerId}/overview`,
           nav: "owner sections",
-          active: "overview",
-          next: "money",
+          active: "Overview",
+          next: "Money",
         },
         { path: "/money", nav: "Money views", active: "Rent", next: "Reporting" },
         { path: "/tasks", nav: "Work views", active: "Tasks", next: "Conversations" },
         {
           path: "/conversations?intake=true",
           nav: "Source views",
-          active: "Source directory",
+          active: "Imported records",
           next: "Recorded conversations",
         },
       ]) {

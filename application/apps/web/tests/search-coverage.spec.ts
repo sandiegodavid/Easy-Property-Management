@@ -82,6 +82,7 @@ test("bounded search groups preserve continuations and open typed targets", asyn
   const group = page.getByRole("region", { name: "Tasks search results" });
   await expect(group).toContainText("11 matches");
   await expect(group.getByRole("link")).toHaveCount(10);
+  await expect(group.locator(".search-result-card .child-record-heading")).toHaveCount(10);
   const first = await group.getByRole("link").allTextContents();
   await group.getByRole("button", { name: "Next tasks results" }).click();
   await expect(group.getByRole("link")).toHaveCount(1);
@@ -230,6 +231,7 @@ test("archived metadata remains opt-in and opens the retained contextual record"
   await expect(page.getByLabel("Include archived records")).toBeChecked();
   await expect(group).toContainText("1 matches");
   await expect(group).toContainText("Archived");
+  await expect(group.locator(".search-result-card .record-pill")).toHaveText("Archived");
   await group.getByRole("link", { name: "Archived OPS acceptance property", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Archived OPS acceptance property", exact: true }),

@@ -6,7 +6,9 @@ usage() {
 Usage: create_web_test_command_list.sh OUTPUT_FILE
 
 Create a file containing one `npm run test:web` command for each
-apps/web/tests/*.spec.ts file, sorted alphabetically by filename.
+apps/web/tests/*.spec.ts file, sorted alphabetically by filename. Each command
+is chained with `&&`, so execution stops on the first failure without exiting
+the current shell. Copy the complete list or a contiguous suffix of it.
 OUTPUT_FILE is resolved from the current directory and must not already exist.
 HELP
 }
@@ -41,7 +43,14 @@ if [[ -z "$sorted_names" ]]; then
   exit 1
 fi
 
-printf '%s\n' "$sorted_names" |
-  sed 's#^#npm run test:web -- apps/web/tests/#' > "$output_file"
-command_count="$(printf '%s\n' "$sorted_names" | wc -l | tr -d ' ')"
+spec_count="$(printf '%s\n' "$sorted_names" | wc -l | tr -d ' ')"
+command_count=$((spec_count + 3))
+while IFS= read -r test_name; do
+  printf 'npm run test:web -- apps/web/tests/%s && \\\n' "$test_name"
+done <<< "$sorted_names" > "$output_file"
+{
+  printf 'npm run test:components && \\\n'
+  printf 'npm run test:recovery && \\\n'
+  printf 'npm run test:demo\n'
+} >> "$output_file"
 printf 'Wrote %s test commands to %s\n' "$command_count" "$output_file"

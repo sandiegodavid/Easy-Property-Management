@@ -2498,9 +2498,18 @@ test("reporting drill-down retains its period and scope without reusing another 
   );
   const reporting = page.getByRole("region", { name: "Money reporting", exact: true });
   const propertyLink = reporting.getByRole("link", {
-    name: `${f.property.displayName} · active`,
+    name: f.property.displayName,
     exact: true,
   });
+  await expect(propertyLink).toBeVisible();
+  await expect(
+    reporting
+      .getByRole("article")
+      .filter({
+        has: page.getByRole("link", { name: f.property.displayName, exact: true }),
+      })
+      .locator(".record-pill"),
+  ).toHaveText("Active");
   const propertyHref = new URL((await propertyLink.getAttribute("href"))!, page.url());
   expect(propertyHref.searchParams.get("propertyId")).toBe(f.property.id);
   expect(propertyHref.searchParams.get("fromOn")).toBe(f.today);

@@ -3,6 +3,81 @@ import type { components } from "@epm/contracts/generated";
 import axe from "axe-core";
 
 type Schemas = components["schemas"];
+test("Task summary reminders and expanded follow-ups format instants in the browser time zone", async ({
+  page,
+  request,
+}) => {
+  const original = await task(request);
+  const instant = "2026-10-21T14:30:00Z";
+  await page.route("**/api/tasks/summary?*", async (route) => {
+    const response = await route.fetch();
+    const summary =
+      (await response.json()) as Schemas["app__modules__tasks__api__router__TaskSummaryResponse"];
+    await route.fulfill({
+      response,
+      json: {
+        ...summary,
+        dueRemindersTotal: 1,
+        dueReminders: [
+          {
+            id: "00000000-0000-4000-8000-000000000099",
+            taskId: original.id,
+            taskTitle: original.title,
+            remindAtUtc: instant,
+            status: "pending",
+          },
+        ],
+      },
+    });
+  });
+  await page.goto("/tasks");
+  const reminder = page.locator(".due-reminder-card");
+  const local = await page.evaluate((at) => {
+    const formatter = new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+    return `${formatter.format(new Date(at))} · ${formatter.resolvedOptions().timeZone}`;
+  }, instant);
+  await expect(reminder.locator("time")).toHaveText(local);
+  await expect(reminder.locator("time")).toHaveAttribute("datetime", instant);
+  await expect(reminder).not.toContainText(instant);
+  const deadlines = page.getByRole("region", { name: "Task deadlines and reminders", exact: true });
+  await deadlines
+    .getByRole("button", { name: new RegExp(original.title) })
+    .first()
+    .click();
+  await expect(deadlines.getByText(/^Task deadline:/)).not.toContainText(original.dueAtUtc!);
+  await expect(deadlines.getByText(/^Task deadline:/)).toContainText("America/Los_Angeles");
+  await page.route("**/api/tasks/follow-ups?*", (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            ...original,
+            followUpAt: instant,
+            followUpTimezone: "America/New_York",
+            dueAtUtc: instant,
+            dueTimezone: "America/New_York",
+            followUpState: "due",
+            taskDeadlineState: "overdue",
+            waitingForLabel: "Contractor reply",
+          },
+        ],
+        asOf: instant,
+        matchingTotal: 1,
+        nextCursor: null,
+      },
+    }),
+  );
+  await page.goto("/tasks?followUps=true");
+  const directory = page.getByRole("region", { name: "Work directory", exact: true });
+  await directory.getByRole("button", { name: new RegExp(original.title) }).click();
+  await expect(directory.getByText(/^Follow-up:/)).toContainText(local);
+  await expect(directory.getByText(/^Task deadline:/)).toContainText(local);
+  await expect(directory).toContainText("Source time zone: America/New_York");
+  await expect(directory).not.toContainText(instant);
+});
 test("Task summary panels distinguish undated and all-day deadlines without boolean fact dumps", async ({
   page,
   request,
@@ -1745,7 +1820,7 @@ test("Reported partial work and operator verification remain distinct from resol
   expect(after.assignments[0].endedAt).toBeNull();
   await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
   await expect(page.getByRole("region", { name: "Work journal", exact: true })).toContainText(
-    "partially completed",
+    "Partially completed",
   );
   await expect(page.getByRole("region", { name: "Work journal", exact: true })).toContainText(
     "Quoted earliest work start on",
@@ -3130,9 +3205,21 @@ test("Narrow Task actions are keyboard accessible without hiding their deadline"
   const value = await task(request);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/tasks?record=task&id=${value.id}`);
-  await expect(page.getByText(value.dueAtUtc!, { exact: true })).toBeVisible();
+  const localDeadline = await page.evaluate((instant) => {
+    const formatter = new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+    return `${formatter.format(new Date(instant))} · ${formatter.resolvedOptions().timeZone}`;
+  }, value.dueAtUtc!);
+  const details = page.getByRole("region", { name: "Task details", exact: true });
+  const deadline = details.locator(".task-deadline strong");
+  await expect(deadline).toHaveText(localDeadline);
+  await expect(deadline).toBeVisible();
+  await expect(details).not.toContainText(value.dueAtUtc!);
   await page.getByText("Actions", { exact: true }).click();
   await page.getByRole("link", { name: "Set waiting context", exact: true }).focus();
+  await expect(deadline).toHaveText(localDeadline);
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Set waiting context" })).toBeVisible();
   await expect(page.getByLabel("Waiting for label")).toBeEnabled();

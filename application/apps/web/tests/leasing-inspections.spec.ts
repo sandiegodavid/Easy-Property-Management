@@ -416,7 +416,7 @@ test("commercial Lease execution and milestones support narrow keyboard review i
     );
     await expect(
       page.getByRole("region", { name: "Lease inspections", exact: true }),
-    ).toContainText("not due");
+    ).toContainText("Not due");
     await expect(page.getByRole("region", { name: "Lease workspace", exact: true })).toContainText(
       "USD 1000.00",
     );

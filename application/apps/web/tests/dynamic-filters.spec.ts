@@ -99,7 +99,7 @@ test("Intake timestamp filters wait for a complete offset before requesting sour
     if (new URL(request.url()).pathname === "/api/intake/sources") requests.push(request.url());
   });
   await page.goto("/conversations?intake=true");
-  await expect(page.getByText(/sources on this bounded page/)).toBeVisible();
+  await expect(page.getByText(/^\d+ imported records on this page\.$/)).toBeVisible();
   const from = page.getByRole("textbox", { name: "Received from", exact: true });
   await from.fill("2026-10-");
   await page.getByRole("combobox", { name: "Channel", exact: true }).selectOption("email");

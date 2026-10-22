@@ -44,7 +44,12 @@ test("property creation records an explicit sole-owner share", async ({ page }) 
   await page.getByRole("button", { name: "Create property", exact: true }).click();
   await page.getByRole("link", { name: "Back to property", exact: true }).click();
   await expect(page).toHaveURL(/\/properties\/[^/]+\/overview$/);
-  await expect(page.getByText("Ownership share: 100%", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .locator(".context-row-facts > div")
+      .filter({ has: page.getByText("Ownership share", { exact: true }) })
+      .locator("dd"),
+  ).toHaveText(["100%"]);
 });
 
 test("share edits validate totals, survive draft recovery and reconcile one committed write", async ({
@@ -141,7 +146,12 @@ test("share edits validate totals, survive draft recovery and reconcile one comm
   const ownerId = property.ownerships.find((item) => item.partyId)!.partyId!;
   for (const path of [`/properties/${property.id}/overview`, `/owners/${ownerId}/overview`]) {
     await page.goto(path);
-    await expect(page.getByText("Ownership share: 50%", { exact: true }).first()).toBeVisible();
+    await expect(
+      page
+        .locator(".context-row-facts > div")
+        .filter({ has: page.getByText("Ownership share", { exact: true }) })
+        .locator("dd"),
+    ).toHaveText(path.startsWith("/properties/") ? ["50%", "50%"] : ["50%"]);
   }
   await page.goto(`/properties?q=${encodeURIComponent(property.displayName)}`);
   await expect(page.getByRole("region", { name: "Owners", exact: true })).toContainText("50%");

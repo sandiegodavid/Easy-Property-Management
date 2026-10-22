@@ -98,6 +98,7 @@ test("manual source admission resumes a saved draft and reconciles a lost respon
   page,
   request,
 }) => {
+  const originSystem = `recovery-test-${crypto.randomUUID()}`;
   await page.goto("/conversations");
   await page.getByRole("link", { name: "Imported records", exact: true }).click();
   await expect(page.getByRole("region", { name: "Imported records", exact: true })).toBeVisible();
@@ -105,6 +106,7 @@ test("manual source admission resumes a saved draft and reconciles a lost respon
   await page.getByText("Retain evidence", { exact: true }).click();
   await page.getByRole("link", { name: "Retain source", exact: true }).click();
   await input(page, "Private source testimony");
+  await page.getByLabel("Origin system (required)", { exact: true }).fill(originSystem);
   await page.getByRole("button", { name: "Add participants entry" }).click();
   await page.getByLabel("Role (required)").fill("reporter");
   await page.getByLabel("Address", { exact: true }).fill("private@example.test");
@@ -114,6 +116,9 @@ test("manual source admission resumes a saved draft and reconciles a lost respon
   await expect(page.getByText("Private source testimony", { exact: true })).toHaveCount(0);
   await page.getByRole("link", { name: "Resume: Retain source", exact: true }).click();
   await expect(page.getByLabel("Body (required)")).toHaveValue("Private source testimony");
+  await expect(page.getByLabel("Origin system (required)", { exact: true })).toHaveValue(
+    originSystem,
+  );
   let writes = 0;
   await page.route("**/api/intake/sources", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
@@ -136,11 +141,14 @@ test("manual source admission resumes a saved draft and reconciles a lost respon
   await expect(page.getByRole("region", { name: "Source evidence detail" })).toContainText(
     occurred,
   );
-  const records = await request.get("/api/intake/sources?originSystem=local_operator&limit=25");
-  expect(
-    ((await records.json()) as Schema["app__modules__intake__api__responses__SourcePageResponse"])
-      .items,
-  ).toHaveLength(1);
+  const sourceId = new URL(page.url()).searchParams.get("source");
+  expect(sourceId).toBeTruthy();
+  const records = await request.get(`/api/intake/sources?originSystem=${originSystem}&limit=25`);
+  expect(records.ok(), await records.text()).toBe(true);
+  const retained =
+    (await records.json()) as Schema["app__modules__intake__api__responses__SourcePageResponse"];
+  expect(retained.items.map((item) => item.sourceId)).toEqual([sourceId]);
+  expect(retained.nextCursor).toBeNull();
 });
 
 test("multipart import preserves ordered roles and rejects changed bytes after form recovery", async ({
