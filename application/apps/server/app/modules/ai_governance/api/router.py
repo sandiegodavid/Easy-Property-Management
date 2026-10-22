@@ -521,13 +521,4 @@ def build_router(
         ready()
         return invoke(lambda: configuration.command_result(idempotency_key=str(key)))
 
-    @router.get(
-        "/command-operations/{operation_id}",
-        response_model=AiCommandReceiptResponse,
-        operation_id="getAiCommandOperation",
-    )
-    def command_by_id(operation_id: UUID):
-        ready()
-        return invoke(lambda: configuration.command_result(operation_id=str(operation_id)))
-
     return router

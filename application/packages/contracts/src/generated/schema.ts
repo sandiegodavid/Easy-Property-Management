@@ -17,23 +17,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/ai/command-operations/{operation_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Command By Id */
-        get: operations["getAiCommandOperation"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/ai/connections": {
         parameters: {
             query?: never;
@@ -621,23 +604,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/expense-categories/operations/{operation_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Category Operation */
-        get: operations["getExpenseCategoryOperation"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/expense-categories/{category_id}": {
         parameters: {
             query?: never;
@@ -1044,23 +1010,6 @@ export interface paths {
         };
         /** Receipt By Key */
         get: operations["getIntakeCommandReceiptByKey"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/intake/sources/operations/{operation_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Receipt */
-        get: operations["getIntakeCommandReceipt"];
         put?: never;
         post?: never;
         delete?: never;
@@ -20950,55 +20899,6 @@ export interface operations {
             };
         };
     };
-    getAiCommandOperation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                operation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AiCommandReceiptResponse"];
-                };
-            };
-            /** @description Local transport rejected. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TransportErrorResponse"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AiConflictResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     listAiConnections: {
         parameters: {
             query?: never;
@@ -23130,55 +23030,6 @@ export interface operations {
             };
         };
     };
-    getExpenseCategoryOperation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                operation_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["app__modules__finance__api__expense_router__CategoryMutationResponse"];
-                };
-            };
-            /** @description Local transport rejected. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TransportErrorResponse"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExpenseConflictResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     patchExpenseCategory: {
         parameters: {
             query?: never;
@@ -24511,55 +24362,6 @@ export interface operations {
             header?: never;
             path: {
                 idempotency_key: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CorrectionResponse"] | components["schemas"]["SourceMutationResponse"];
-                };
-            };
-            /** @description Local transport rejected. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TransportErrorResponse"];
-                };
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["app__modules__intake__api__responses__ConflictResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    getIntakeCommandReceipt: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                operation_id: string;
             };
             cookie?: never;
         };

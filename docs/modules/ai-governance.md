@@ -20,7 +20,7 @@ Each registered action currently declares one approval effect (`create`, `update
 
 Settings support provider-neutral connections and allowed action limits. Keys are write-only through the API and live in the OS credential store, keyed separately from portable workspace records. Backups never contain provider credentials. Restore requires reconfiguration/authorization.
 
-Credential updates/deletion and connection probes have their own external-operation recovery. A lost response is unknown, not proof of rollback. Recover by original operation/key and explicitly acknowledge unknown outcome where required; never automatically retry a keyring/provider call. Ordinary configuration/draft commands use owning revisions, UUID keys and immutable receipt lookup.
+Credential updates/deletion and connection probes have their own external-operation recovery. A lost response is unknown, not proof of rollback. Recover by original operation/key and explicitly acknowledge unknown outcome where required; never automatically retry a keyring/provider call. Ordinary configuration/draft commands use owning revisions, UUID keys and immutable receipt lookup through `GET /api/ai/command-operations/by-key/{key}`. Application-level operation-ID recovery remains available to source-owned readers; external operations retain both HTTP ID/key reads.
 
 ## API and integration
 

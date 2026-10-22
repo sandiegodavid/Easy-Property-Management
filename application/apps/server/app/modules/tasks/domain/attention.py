@@ -40,7 +40,7 @@ def at_or_before(value, captured):
     return value is not None and datetime.fromisoformat(value) <= datetime.fromisoformat(captured)
 
 
-def next_transition(due, zone, all_day, follow_up, follow_up_zone, reminder, captured):
+def next_transition(due, zone, all_day, follow_up, reminder, captured):
     now = datetime.fromisoformat(captured)
     candidates = []
     if due is not None:

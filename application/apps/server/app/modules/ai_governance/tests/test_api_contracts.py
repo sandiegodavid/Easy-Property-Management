@@ -9,7 +9,11 @@ from app.platform.testing_client import LocalApiClient as TestClient
 from pydantic import ValidationError
 from sqlalchemy import event
 
-from app.modules.ai_governance.api.responses import DraftDetailResponse, SettingsResponse
+from app.modules.ai_governance.api.responses import (
+    AiCommandReceiptResponse,
+    DraftDetailResponse,
+    SettingsResponse,
+)
 from app.modules.ai_governance.api.router import build_router
 
 
@@ -200,7 +204,7 @@ def test_invalid_typed_inputs_and_envelopes_fail_closed(ai_http):
 
 
 def test_slice29_recovery_conflicts_and_required_command_metadata(ai_http):
-    _, client = ai_http
+    fixture, client = ai_http
     settings = client.get("/api/ai/settings").json()
     key = str(uuid4())
     request = {"expectedRevision": settings["revision"], "idempotencyKey": key, "killSwitch": True}
@@ -221,14 +225,18 @@ def test_slice29_recovery_conflicts_and_required_command_metadata(ai_http):
     assert by_key.status_code == 200
     assert by_key.json()["result"] == original
     assert (
-        client.get(f"/api/ai/command-operations/{original['operationId']}").json() == by_key.json()
+        AiCommandReceiptResponse.model_validate(
+            fixture.configuration.command_result(operation_id=original["operationId"])
+        ).model_dump(mode="json")
+        == by_key.json()
     )
     conflict = client.put("/api/ai/settings", json={**request, "idempotencyKey": str(uuid4())})
     assert conflict.status_code == 409
     assert conflict.json()["detail"]["revision"] == changed.json()["revision"]
     assert conflict.json()["detail"]["current"]["killSwitch"] is False
     assert client.put("/api/ai/settings", json={"killSwitch": True}).status_code == 422
-    assert client.get(f"/api/ai/command-operations/{uuid4()}").status_code == 404
+    assert client.get(f"/api/ai/command-operations/{original['operationId']}").status_code == 404
+    assert client.get(f"/api/ai/command-operations/by-key/{uuid4()}").status_code == 404
     assert client.get("/api/ai/command-operations/by-key/invalid").status_code == 422
 
 
@@ -251,7 +259,4 @@ def test_slice29_openapi_enforces_command_contracts(ai_http):
         schema["paths"]["/api/ai/command-operations/by-key/{key}"]["get"]["operationId"]
         == "getAiCommandByKey"
     )
-    assert (
-        schema["paths"]["/api/ai/command-operations/{operation_id}"]["get"]["operationId"]
-        == "getAiCommandOperation"
-    )
+    assert "/api/ai/command-operations/{operation_id}" not in schema["paths"]

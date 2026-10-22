@@ -1,10 +1,16 @@
 """Exact Tenant command schema and retained, correlated revision history."""
 
 import json
-from datetime import UTC, datetime
-from uuid import UUID
 
-from sqlalchemy import CheckConstraint, UniqueConstraint, inspect, text
+from sqlalchemy import text
+
+from app.platform.command_validation import (
+    canonical_uuid as _uuid,
+    canonical_utc as _utc,
+    profile_timestamps,
+    receipt_payload,
+    validate_receipt_schema,
+)
 
 from app.modules.parties.application.identity_commands import canonical, fingerprint
 from app.modules.tenants.application.commands import TenantCommand, receipt_audit
@@ -22,78 +28,14 @@ from app.modules.tenants.infrastructure.sqlalchemy_models import (
 from app.platform.migration_errors import MigrationSchemaError
 
 
-def _sql(value):
-    return "".join(str(value).lower().split())
-
-
-def _uuid(value):
-    if str(UUID(value)) != value:
-        raise ValueError("Noncanonical UUID.")
-
-
-def _utc(value):
-    instant = datetime.fromisoformat(value)
-    if (
-        instant.tzinfo is None
-        or instant.utcoffset() != UTC.utcoffset(instant)
-        or instant.isoformat() != value
-    ):
-        raise ValueError("Noncanonical UTC timestamp.")
-    return instant
-
-
 def validate_commands(connection):
     try:
-        _schema(connection)
+        validate_receipt_schema(
+            connection, TenantCommandOperationModel.__table__, TENANT_COMMAND_TRIGGERS
+        )
         _data(connection)
     except (ValueError, KeyError, TypeError, TenantError) as error:
         raise MigrationSchemaError("Tenant command history is incompatible.") from error
-
-
-def _schema(connection):
-    inspector, table = inspect(connection), TenantCommandOperationModel.__table__
-    columns = inspector.get_columns(table.name)
-    if {c["name"] for c in columns} != set(table.c.keys()) or any(
-        str(c["type"]) != str(table.c[c["name"]].type)
-        or (not c["primary_key"] and c["nullable"] != table.c[c["name"]].nullable)
-        for c in columns
-    ):
-        raise ValueError("Receipt columns differ.")
-    if inspector.get_pk_constraint(table.name)["constrained_columns"] != ["id"]:
-        raise ValueError("Receipt primary key differs.")
-    if {_sql(c["sqltext"]) for c in inspector.get_check_constraints(table.name)} != {
-        _sql(c.sqltext) for c in table.constraints if isinstance(c, CheckConstraint)
-    }:
-        raise ValueError("Receipt checks differ.")
-    if {tuple(c["column_names"]) for c in inspector.get_unique_constraints(table.name)} != {
-        tuple(col.name for col in c.columns)
-        for c in table.constraints
-        if isinstance(c, UniqueConstraint)
-    }:
-        raise ValueError("Receipt uniqueness differs.")
-    if {
-        (i["name"], tuple(i["column_names"]), bool(i["unique"]))
-        for i in inspector.get_indexes(table.name)
-    } != {(i.name, tuple(c.name for c in i.columns), bool(i.unique)) for i in table.indexes}:
-        raise ValueError("Receipt indexes differ.")
-    if {
-        (tuple(f["constrained_columns"]), f["referred_table"], tuple(f["referred_columns"]))
-        for f in inspector.get_foreign_keys(table.name)
-    } != {
-        ((fk.parent.name,), fk.column.table.name, (fk.column.name,)) for fk in table.foreign_keys
-    }:
-        raise ValueError("Receipt references differ.")
-    triggers = dict(
-        connection.execute(
-            text(
-                "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='tenant_command_operations'"
-            )
-        ).all()
-    )
-    if {name: _sql(sql) for name, sql in triggers.items()} != {
-        name: _sql(sql) for name, sql in TENANT_COMMAND_TRIGGERS.items()
-    }:
-        raise ValueError("Receipt immutability differs.")
 
 
 def _data(connection):
@@ -118,14 +60,7 @@ def _data(connection):
         for field in ("id", "party_id", "idempotency_key", "correlation_id"):
             _uuid(row[field])
         now = _utc(row["created_at"])
-        request, result = json.loads(row["request_json"]), json.loads(row["result_json"])
-        if (
-            set(request) != {"action", "partyId", "expectedRevision", "payload"}
-            or canonical(request) != row["request_json"]
-            or fingerprint(request) != row["request_fingerprint"]
-            or canonical(result) != row["result_json"]
-        ):
-            raise ValueError("Receipt payload differs.")
+        request, result = receipt_payload(row, canonical, fingerprint)
         command = TenantCommand(
             request["action"],
             request["partyId"],
@@ -182,10 +117,7 @@ def _data(connection):
             or len(state["notes"]) > 4000
         ):
             raise ValueError("Notes differ.")
-        if _utc(state["createdAt"]) > _utc(state["updatedAt"]) or _utc(state["updatedAt"]) > now:
-            raise ValueError("Profile timestamps differ.")
-        if state["archivedAt"] is not None:
-            _utc(state["archivedAt"])
+        profile_timestamps(state, now)
         events = [
             a
             for a in audits

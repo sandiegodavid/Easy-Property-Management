@@ -967,13 +967,17 @@ class MoneySummaryTests(unittest.TestCase):
         with self.finance.unit_of_work.engine.begin() as connection:
             connection.execute(
                 text(
-                    "UPDATE rent_receipts SET currency_code='USD', amount_minor=9223372036854775807 WHERE id=:id"
+                    "UPDATE rent_receipts SET currency_code='USD', "
+                    "amount_minor=9223372036854775807 WHERE id=:id"
                 ),
                 {"id": self.receipt["id"]},
             )
             connection.execute(
                 text(
-                    "INSERT INTO rent_receipts (id,lease_id,idempotency_key,received_on,amount_minor,currency_code,payment_method_kind,created_at) VALUES (:id,:lease,:key,'2026-01-15',1,'USD','cash','2026-01-15T12:00:00+00:00')"
+                    "INSERT INTO rent_receipts (id,lease_id,idempotency_key,received_on,"
+                    "amount_minor,currency_code,payment_method_kind,created_at) "
+                    "VALUES (:id,:lease,:key,'2026-01-15',1,'USD','cash',"
+                    "'2026-01-15T12:00:00+00:00')"
                 ),
                 {"id": str(uuid4()), "lease": self.lease["id"], "key": str(uuid4())},
             )
@@ -1007,9 +1011,10 @@ class MoneySummaryTests(unittest.TestCase):
             time_zone_resolver=BundledAddressTimeZoneResolver(),
         )
         counts = []
-        for target in (1, 50):
-            if target == 50:
-                for index in range(49):
+        larger_scope = 50
+        for target in (1, larger_scope):
+            if target == larger_scope:
+                for index in range(larger_scope - 1):
                     inventory_command(
                         portfolio,
                         "create_property",
@@ -1122,6 +1127,83 @@ class MoneySummaryTests(unittest.TestCase):
             raw.close()
         with self.assertRaises(MoneyUnavailable):
             self.reader.summary(self.query)
+
+    def test_finance_cleanup_deposit_discovery_preserves_absence_and_membership(self):
+        with TestClient(create_app(self.workspace.config.config_path)) as client:
+            lease_path = f"/api/leases/{self.lease['id']}/security-deposit"
+            for lease_id in (self.lease["id"], str(uuid4())):
+                absent = client.get(f"/api/leases/{lease_id}/security-deposit")
+                self.assertEqual(absent.status_code, 404, absent.text)
+                self.assertEqual(absent.json()["detail"]["code"], "finance_not_found")
+                page = client.get("/api/security-deposits", params={"leaseId": lease_id})
+                self.assertEqual(page.status_code, 200, page.text)
+                self.assertEqual(page.json()["items"], [])
+
+            command = {
+                "leaseTermId": self.lease["terms"][0]["id"],
+                "expectedRevision": 0,
+                "idempotencyKey": str(uuid4()),
+            }
+            created = client.post(lease_path, json=command)
+            self.assertEqual(created.status_code, 201, created.text)
+            replay = client.post(lease_path, json=command)
+            self.assertEqual(replay.status_code, 201, replay.text)
+            self.assertEqual(replay.json(), created.json())
+            direct = client.get(lease_path)
+            account = client.get(f"/api/security-deposits/{created.json()['id']}")
+            page = client.get(
+                "/api/security-deposits", params={"leaseId": self.lease["id"], "pageSize": 1}
+            )
+            for response in (direct, account, page):
+                self.assertEqual(response.status_code, 200, response.text)
+            self.assertEqual(direct.json(), account.json())
+            self.assertEqual(page.json()["items"], [direct.json()])
+            self.assertEqual(direct.json()["leaseId"], self.lease["id"])
+            self.assertEqual(direct.json()["propertyId"], self.property_id)
+            self.assertEqual(direct.json()["spaceId"], self.lease["spaceId"])
+
+    def test_finance_cleanup_summaries_preserve_full_totals_outside_visible_page(self):
+        self.record_sources()
+        empty = inventory_command(
+            self.portfolio,
+            "create_property",
+            PropertyCreateCommand(
+                "Empty archived property",
+                "2 Main Street",
+                "Portland",
+                "US",
+                "single_family_home",
+                (OwnershipInput("local_operator"),),
+                region="OR",
+            ),
+        )
+        inventory_command(self.portfolio, "archive_property", empty.id, confirmed=True)
+        with TestClient(create_app(self.workspace.config.config_path)) as client:
+            # All representations capture the same instant, not merely similar totals.
+            client.app.state.money_summary_reader.now = self.reader.now
+            params = {"fromOn": "2026-01-01", "throughOn": "2026-01-31"}
+            summary = client.get("/api/money/summary", params=params)
+            page = client.get("/api/money/properties", params={**params, "pageSize": 1})
+            self.assertEqual(summary.status_code, 200, summary.text)
+            self.assertEqual(page.status_code, 200, page.text)
+            self.assertEqual(page.json()["summary"], summary.json())
+            self.assertEqual(page.json()["matchingTotal"], 2)
+            self.assertEqual(len(page.json()["items"]), 1)
+            self.assertIsNotNone(page.json()["nextCursor"])
+            self.assertEqual(summary.json()["operating"]["rentReceived"], "1200.00")
+            for property_id in (self.property_id, empty.id):
+                scoped = client.get(f"/api/properties/{property_id}/money-summary", params=params)
+                general = client.get(
+                    "/api/money/summary", params={**params, "propertyIds": property_id}
+                )
+                self.assertEqual(scoped.status_code, 200, scoped.text)
+                self.assertEqual(general.status_code, 200, general.text)
+                self.assertEqual(scoped.json(), general.json())
+                self.assertEqual(scoped.json()["scope"]["propertyCount"], 1)
+            for path in ("/api/money/summary", f"/api/properties/{self.property_id}/money-summary"):
+                stale = client.get(path, params={**params, "sourceRevision": "0" * 64})
+                self.assertEqual(stale.status_code, 409, stale.text)
+                self.assertEqual(stale.json()["detail"]["code"], "money_view_changed")
 
     def test_api_contract_and_unknown_filters(self):
         with TestClient(create_app(self.workspace.config.config_path)) as client:

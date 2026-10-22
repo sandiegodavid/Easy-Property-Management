@@ -456,15 +456,6 @@ def build_router(service: ExpenseService, runtime: WorkspaceRuntime) -> APIRoute
         ready()
         return invoke(lambda: service.category_operation_by_key(str(key)))
 
-    @router.get(
-        "/api/expense-categories/operations/{operation_id}",
-        response_model=CategoryMutationResponse,
-        operation_id="getExpenseCategoryOperation",
-    )
-    def category_operation(operation_id: UUID):
-        ready()
-        return invoke(lambda: service.category_operation(str(operation_id)))
-
     @router.post(
         "/api/expenses",
         response_model=ExpenseMutationResponse,

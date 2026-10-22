@@ -417,6 +417,55 @@ class IntakeCommandReadinessTests(TestCase):
         finally:
             event.remove(engine, "before_cursor_execute", record)
 
+    def test_http_key_receipt_commits_audit_before_sensitive_disclosure(self):
+        class Runtime:
+            ready = True
+            can_write = True
+            error = None
+
+        key = str(uuid4())
+        corrected = self.correction(self.source, key)
+        self.correction(corrected, str(uuid4()))
+        app = FastAPI()
+        app.include_router(build_router(self.service, Runtime()))
+        path = f"/api/intake/sources/operations/by-key/{key}"
+        with TestClient(app) as client:
+            response = client.get(path)
+            self.assertEqual(200, response.status_code, response.text)
+            self.assertEqual(corrected, response.json())
+            # A separate connection observes the committed disclosure audit.
+            with sqlite3.connect(self.database) as connection:
+                count = connection.execute(
+                    "SELECT count(*) FROM audit_events WHERE reason='intake_receipt_read'"
+                ).fetchone()[0]
+            self.assertEqual(1, count)
+            with patch.object(
+                self.service.unit_of_work.recorder,
+                "record_change",
+                side_effect=RuntimeError("audit failed"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "audit failed"):
+                    client.get(path)
+            with sqlite3.connect(self.database) as connection:
+                self.assertEqual(
+                    count,
+                    connection.execute(
+                        "SELECT count(*) FROM audit_events WHERE reason='intake_receipt_read'"
+                    ).fetchone()[0],
+                )
+            self.assertEqual(
+                404,
+                client.get(
+                    f"/api/intake/sources/operations/{corrected['operationId']}"
+                ).status_code,
+            )
+            self.assertEqual(
+                404, client.get(f"/api/intake/sources/operations/by-key/{uuid4()}").status_code
+            )
+            self.assertEqual(
+                422, client.get("/api/intake/sources/operations/by-key/invalid").status_code
+            )
+
     def test_api_requires_concurrency_fields_and_exposes_safe_recovery(self):
         class Runtime:
             ready = True

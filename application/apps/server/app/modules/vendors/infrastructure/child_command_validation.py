@@ -29,7 +29,7 @@ from app.modules.vendors.infrastructure.sqlalchemy_models import (
     ProviderReferenceModel,
     ProviderReputationLinkModel,
 )
-from app.modules.vendors.infrastructure.command_validation import _uuid, _utc
+from app.platform.command_validation import canonical_uuid as _uuid, canonical_utc as _utc
 
 SPECS = {
     "service": ("provider_service", ProviderService, ProviderServiceModel, ServiceCommand),

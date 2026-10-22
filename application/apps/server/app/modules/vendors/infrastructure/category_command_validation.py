@@ -23,7 +23,7 @@ from app.modules.vendors.infrastructure.sqlalchemy_models import (
     ProviderCategoryCommandOperationModel,
     ProviderCategoryAssignmentModel,
 )
-from app.modules.vendors.infrastructure.command_validation import _uuid, _utc
+from app.platform.command_validation import canonical_uuid as _uuid, canonical_utc as _utc
 
 
 class CategoryHistory:

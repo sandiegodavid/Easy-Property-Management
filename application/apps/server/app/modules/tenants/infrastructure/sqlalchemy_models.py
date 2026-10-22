@@ -3,7 +3,11 @@
 from sqlalchemy import CheckConstraint, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.platform.sqlalchemy_models import LocalBase
+from app.platform.sqlalchemy_models import (
+    CommandOperationColumns,
+    LocalBase,
+    immutable_command_triggers,
+)
 
 
 class TenantProfileModel(LocalBase):
@@ -31,20 +35,10 @@ class TenantProfileModel(LocalBase):
     )
 
 
-class TenantCommandOperationModel(LocalBase):
+class TenantCommandOperationModel(CommandOperationColumns, LocalBase):
     __tablename__ = "tenant_command_operations"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True)
     party_id: Mapped[str] = mapped_column(ForeignKey("tenant_profiles.party_id"), nullable=False)
-    action: Mapped[str] = mapped_column(String, nullable=False)
-    idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
-    request_json: Mapped[str] = mapped_column(String, nullable=False)
-    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
-    expected_revision: Mapped[int] = mapped_column(nullable=False)
-    resulting_revision: Mapped[int] = mapped_column(nullable=False)
-    result_json: Mapped[str] = mapped_column(String, nullable=False)
-    correlation_id: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[str] = mapped_column(String, nullable=False)
 
     __table_args__ = (
         CheckConstraint(
@@ -66,12 +60,6 @@ class TenantCommandOperationModel(LocalBase):
     )
 
 
-TENANT_COMMAND_TRIGGERS = {
-    f"tenant_command_operations_no_{action}": f"CREATE TRIGGER tenant_command_operations_no_{action} BEFORE {action.upper()} ON tenant_command_operations BEGIN SELECT RAISE(ABORT, 'tenant operations are immutable'); END"
-    for action in ("update", "delete")
-}
-TENANT_COMMAND_TRIGGERS[
-    "tenant_command_operations_no_replace"
-] = """CREATE TRIGGER tenant_command_operations_no_replace BEFORE INSERT ON tenant_command_operations
-WHEN EXISTS (SELECT 1 FROM tenant_command_operations WHERE id = NEW.id OR idempotency_key = NEW.idempotency_key)
-BEGIN SELECT RAISE(ABORT, 'tenant operations are immutable'); END"""
+TENANT_COMMAND_TRIGGERS = immutable_command_triggers(
+    "tenant_command_operations", "tenant operations are immutable"
+)

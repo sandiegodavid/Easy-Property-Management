@@ -3,7 +3,11 @@
 from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.platform.sqlalchemy_models import LocalBase
+from app.platform.sqlalchemy_models import (
+    CommandOperationColumns,
+    LocalBase,
+    immutable_command_triggers,
+)
 
 
 class ProviderProfileModel(LocalBase):
@@ -30,19 +34,9 @@ class ProviderProfileModel(LocalBase):
     )
 
 
-class ProviderCommandOperationModel(LocalBase):
+class ProviderCommandOperationModel(CommandOperationColumns, LocalBase):
     __tablename__ = "provider_command_operations"
-    id: Mapped[str] = mapped_column(String, primary_key=True)
     party_id: Mapped[str] = mapped_column(ForeignKey("provider_profiles.party_id"), nullable=False)
-    action: Mapped[str] = mapped_column(String, nullable=False)
-    idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
-    request_json: Mapped[str] = mapped_column(String, nullable=False)
-    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
-    expected_revision: Mapped[int] = mapped_column(nullable=False)
-    resulting_revision: Mapped[int] = mapped_column(nullable=False)
-    result_json: Mapped[str] = mapped_column(String, nullable=False)
-    correlation_id: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (
         CheckConstraint(
             "action IN ('create','designate','patch','archive','restore','assignment_create','assignment_archive','assignment_restore',"
@@ -71,30 +65,14 @@ class ProviderCommandOperationModel(LocalBase):
     )
 
 
-PROVIDER_COMMAND_TRIGGERS = {
-    f"provider_command_operations_no_{action}": f"CREATE TRIGGER provider_command_operations_no_{action} BEFORE {action.upper()} ON provider_command_operations BEGIN SELECT RAISE(ABORT, 'provider operations are immutable'); END"
-    for action in ("update", "delete")
-}
-PROVIDER_COMMAND_TRIGGERS[
-    "provider_command_operations_no_replace"
-] = """CREATE TRIGGER provider_command_operations_no_replace BEFORE INSERT ON provider_command_operations
-WHEN EXISTS (SELECT 1 FROM provider_command_operations WHERE id = NEW.id OR idempotency_key = NEW.idempotency_key)
-BEGIN SELECT RAISE(ABORT, 'provider operations are immutable'); END"""
+PROVIDER_COMMAND_TRIGGERS = immutable_command_triggers(
+    "provider_command_operations", "provider operations are immutable"
+)
 
 
-class ProviderCategoryCommandOperationModel(LocalBase):
+class ProviderCategoryCommandOperationModel(CommandOperationColumns, LocalBase):
     __tablename__ = "provider_category_command_operations"
-    id: Mapped[str] = mapped_column(String, primary_key=True)
     category_id: Mapped[str] = mapped_column(ForeignKey("provider_categories.id"), nullable=False)
-    action: Mapped[str] = mapped_column(String, nullable=False)
-    idempotency_key: Mapped[str] = mapped_column(String, nullable=False, unique=True)
-    request_json: Mapped[str] = mapped_column(String, nullable=False)
-    request_fingerprint: Mapped[str] = mapped_column(String, nullable=False)
-    expected_revision: Mapped[int] = mapped_column(nullable=False)
-    resulting_revision: Mapped[int] = mapped_column(nullable=False)
-    result_json: Mapped[str] = mapped_column(String, nullable=False)
-    correlation_id: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (
         CheckConstraint("action IN ('create','patch','archive','restore')"),
         CheckConstraint("typeof(expected_revision) = 'integer' AND expected_revision >= 0"),
@@ -113,15 +91,9 @@ class ProviderCategoryCommandOperationModel(LocalBase):
     )
 
 
-CATEGORY_COMMAND_TRIGGERS = {
-    f"provider_category_command_operations_no_{action}": f"CREATE TRIGGER provider_category_command_operations_no_{action} BEFORE {action.upper()} ON provider_category_command_operations BEGIN SELECT RAISE(ABORT, 'category operations are immutable'); END"
-    for action in ("update", "delete")
-}
-CATEGORY_COMMAND_TRIGGERS[
-    "provider_category_command_operations_no_replace"
-] = """CREATE TRIGGER provider_category_command_operations_no_replace BEFORE INSERT ON provider_category_command_operations
-WHEN EXISTS (SELECT 1 FROM provider_category_command_operations WHERE id = NEW.id OR idempotency_key = NEW.idempotency_key)
-BEGIN SELECT RAISE(ABORT, 'category operations are immutable'); END"""
+CATEGORY_COMMAND_TRIGGERS = immutable_command_triggers(
+    "provider_category_command_operations", "category operations are immutable"
+)
 
 
 class ProviderCategoryModel(LocalBase):

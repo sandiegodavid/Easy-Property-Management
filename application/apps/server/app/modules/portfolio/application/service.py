@@ -389,27 +389,9 @@ class PortfolioService:
         needs_attention: bool | None = None,
         as_of: datetime | None = None,
     ) -> list[dict[str, object]]:
-        if status is not None and status not in {"active", "archived"}:
-            raise PortfolioError("Property status is invalid.")
-        if ownership_context_filter is not None and ownership_context_filter not in {
-            "self_owned",
-            "managed_for_owner",
-            "mixed",
-        }:
-            raise PortfolioError("Ownership context is invalid.")
-        if occupancy_filter is not None and occupancy_filter not in {
-            "occupied",
-            "vacant",
-            "unknown",
-        }:
-            raise PortfolioError("Occupancy status is invalid.")
-        if availability_filter is not None and availability_filter not in {
-            "available_now",
-            "available_on",
-            "not_available",
-            "unknown",
-        }:
-            raise PortfolioError("Availability status is invalid.")
+        _validate_property_filters(
+            status, ownership_context_filter, occupancy_filter, availability_filter
+        )
         as_of = as_of or self._instant()
 
         def read(transaction: PortfolioTransaction) -> list[dict[str, object]]:
@@ -470,27 +452,9 @@ class PortfolioService:
     ) -> dict[str, object]:
         if type(page_size) is not int or not 1 <= page_size <= 500:
             raise PortfolioError("Page size must be between 1 and 500.")
-        if status is not None and status not in {"active", "archived"}:
-            raise PortfolioError("Property status is invalid.")
-        if ownership_context_filter is not None and ownership_context_filter not in {
-            "self_owned",
-            "managed_for_owner",
-            "mixed",
-        }:
-            raise PortfolioError("Ownership context is invalid.")
-        if occupancy_filter is not None and occupancy_filter not in {
-            "occupied",
-            "vacant",
-            "unknown",
-        }:
-            raise PortfolioError("Occupancy status is invalid.")
-        if availability_filter is not None and availability_filter not in {
-            "available_now",
-            "available_on",
-            "not_available",
-            "unknown",
-        }:
-            raise PortfolioError("Availability status is invalid.")
+        _validate_property_filters(
+            status, ownership_context_filter, occupancy_filter, availability_filter
+        )
         as_of = self._instant()
         marker = None if cursor is None else _property_cursor(cursor)
 
@@ -1045,6 +1009,31 @@ class PortfolioService:
     ) -> dict[str, object]:
         return {**result, "asOf": as_of.isoformat(), "effectiveLocalDate": effective_on}
 
+    def _finish_manual_status(
+        self,
+        transaction: PortfolioTransaction,
+        space: Space,
+        as_of: datetime,
+        today: str,
+        idempotency_key: str,
+        fingerprint: str,
+        *,
+        availability: SpaceAvailability | None = None,
+    ) -> dict[str, object]:
+        result = self._temporal_status(
+            self._space_status_view(
+                space,
+                transaction.occupancy_periods(space.id),
+                transaction.availability(space.id) if availability is None else availability,
+                effective_on=today,
+            ),
+            as_of,
+            today,
+        )
+        return self._status_mutation_finish(
+            transaction, space, as_of.isoformat(), idempotency_key, fingerprint, result
+        )
+
     def archive_property(
         self, property_id: str, *, confirmed: bool, expected_revision: int, idempotency_key: str
     ) -> dict[str, object]:
@@ -1480,18 +1469,8 @@ class PortfolioService:
                 reason="occupancy_changed",
                 correlation_id=correlation_id,
             )
-            result = self._temporal_status(
-                self._space_status_view(
-                    space,
-                    transaction.occupancy_periods(space_id),
-                    transaction.availability(space_id),
-                    effective_on=today,
-                ),
-                as_of,
-                today,
-            )
-            return self._status_mutation_finish(
-                transaction, space, now, idempotency_key, fingerprint, result
+            return self._finish_manual_status(
+                transaction, space, as_of, today, idempotency_key, fingerprint
             )
 
         return self._manual_status_write(space_id, as_of, write)
@@ -1565,18 +1544,8 @@ class PortfolioService:
                 reason="occupancy_scheduled_cancelled",
                 correlation_id=correlation_id,
             )
-            result = self._temporal_status(
-                self._space_status_view(
-                    space,
-                    transaction.occupancy_periods(space_id),
-                    transaction.availability(space_id),
-                    effective_on=today,
-                ),
-                as_of,
-                today,
-            )
-            return self._status_mutation_finish(
-                transaction, space, now, idempotency_key, fingerprint, result
+            return self._finish_manual_status(
+                transaction, space, as_of, today, idempotency_key, fingerprint
             )
 
         return self._manual_status_write(space_id, as_of, write)
@@ -1666,18 +1635,8 @@ class PortfolioService:
                 reason="occupancy_scheduled_replaced",
                 correlation_id=correlation_id,
             )
-            result = self._temporal_status(
-                self._space_status_view(
-                    space,
-                    transaction.occupancy_periods(space_id),
-                    transaction.availability(space_id),
-                    effective_on=today,
-                ),
-                as_of,
-                today,
-            )
-            return self._status_mutation_finish(
-                transaction, space, now, idempotency_key, fingerprint, result
+            return self._finish_manual_status(
+                transaction, space, as_of, today, idempotency_key, fingerprint
             )
 
         return self._manual_status_write(space_id, as_of, write)
@@ -1760,18 +1719,8 @@ class PortfolioService:
                 reason=command.reason,
                 correlation_id=correlation_id,
             )
-            result = self._temporal_status(
-                self._space_status_view(
-                    space,
-                    transaction.occupancy_periods(space_id),
-                    transaction.availability(space_id),
-                    effective_on=today,
-                ),
-                as_of,
-                today,
-            )
-            return self._status_mutation_finish(
-                transaction, space, now, idempotency_key, fingerprint, result
+            return self._finish_manual_status(
+                transaction, space, as_of, today, idempotency_key, fingerprint
             )
 
         return self._manual_status_write(space_id, as_of, write)
@@ -1890,18 +1839,8 @@ class PortfolioService:
                 reason="occupancy_scheduled_rescheduled",
                 correlation_id=correlation_id,
             )
-            result = self._temporal_status(
-                self._space_status_view(
-                    space,
-                    transaction.occupancy_periods(space_id),
-                    transaction.availability(space_id),
-                    effective_on=today,
-                ),
-                as_of,
-                today,
-            )
-            return self._status_mutation_finish(
-                transaction, space, now, idempotency_key, fingerprint, result
+            return self._finish_manual_status(
+                transaction, space, as_of, today, idempotency_key, fingerprint
             )
 
         return self._manual_status_write(space_id, as_of, write)
@@ -1962,15 +1901,14 @@ class PortfolioService:
                 reason="availability_changed",
                 correlation_id=correlation_id,
             )
-            result = self._temporal_status(
-                self._space_status_view(
-                    space, transaction.occupancy_periods(space_id), updated, effective_on=today
-                ),
+            return self._finish_manual_status(
+                transaction,
+                space,
                 as_of,
                 today,
-            )
-            return self._status_mutation_finish(
-                transaction, space, now, idempotency_key, fingerprint, result
+                idempotency_key,
+                fingerprint,
+                availability=updated,
             )
 
         return self._manual_status_write(space_id, as_of, write)
@@ -2110,18 +2048,14 @@ class PortfolioService:
                     reason="space_initially_classified",
                     correlation_id=correlation_id,
                 )
-            result = self._temporal_status(
-                self._space_status_view(
-                    space,
-                    transaction.occupancy_periods(space_id),
-                    updated_availability,
-                    effective_on=today,
-                ),
+            return self._finish_manual_status(
+                transaction,
+                space,
                 as_of,
                 today,
-            )
-            return self._status_mutation_finish(
-                transaction, space, now, idempotency_key, fingerprint, result
+                idempotency_key,
+                fingerprint,
+                availability=updated_availability,
             )
 
         return self._manual_status_write(space_id, as_of, write)
@@ -2580,6 +2514,28 @@ class PortfolioService:
             "ownerships": [item.to_dict(parties.get(item.party_id)) for item in current],
             "spaces": [item.to_dict() for item in spaces or []],
         }
+
+
+def _validate_property_filters(
+    status, ownership_context_filter, occupancy_filter, availability_filter
+):
+    if status is not None and status not in {"active", "archived"}:
+        raise PortfolioError("Property status is invalid.")
+    if ownership_context_filter is not None and ownership_context_filter not in {
+        "self_owned",
+        "managed_for_owner",
+        "mixed",
+    }:
+        raise PortfolioError("Ownership context is invalid.")
+    if occupancy_filter is not None and occupancy_filter not in {"occupied", "vacant", "unknown"}:
+        raise PortfolioError("Occupancy status is invalid.")
+    if availability_filter is not None and availability_filter not in {
+        "available_now",
+        "available_on",
+        "not_available",
+        "unknown",
+    }:
+        raise PortfolioError("Availability status is invalid.")
 
 
 def _required(value: object, label: str, limit: int) -> str:

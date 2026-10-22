@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from app.bootstrap.api import create_app
 from app.modules.audit.application.recorder import AuditRecorder
 from app.modules.audit.infrastructure.sqlite_repository import SQLiteAuditRepository
+from app.modules.finance.api.expense_router import CategoryMutationResponse
 from app.modules.finance.application.expense_service import ExpenseService
 from app.modules.finance.domain.expense_models import CategoryCreateCommand, CategoryPatchCommand
 from app.modules.finance.domain.models import FinanceConflictError, FinanceError, VoidCommand
@@ -564,13 +565,20 @@ def test_http_metadata_replay_conflict_and_read_only_recovery(category_context):
         with patch.object(
             type(runtime), "can_write", new_callable=lambda: property(lambda _: False)
         ):
-            for path in (
-                f"operations/{created['operationId']}",
-                f"operations/by-key/{payload['idempotencyKey']}",
-            ):
-                recovered = client.get(f"/api/expense-categories/{path}")
-                assert recovered.status_code == 200, recovered.text
-                assert recovered.json() == created
+            recovered = client.get(
+                f"/api/expense-categories/operations/by-key/{payload['idempotencyKey']}"
+            )
+            assert recovered.status_code == 200, recovered.text
+            assert recovered.json() == created
+            assert (
+                CategoryMutationResponse.model_validate(
+                    category_context.expenses.category_operation(created["operationId"])
+                ).model_dump(mode="json")
+                == created
+            )
         assert snapshot(category_context.expenses) == before
-        assert client.get(f"/api/expense-categories/operations/{uuid4()}").status_code == 404
+        assert (
+            client.get(f"/api/expense-categories/operations/{created['operationId']}").status_code
+            == 404
+        )
         assert client.get(f"/api/expense-categories/operations/by-key/{uuid4()}").status_code == 404

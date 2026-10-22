@@ -32,7 +32,7 @@ Prepaid API and unfinished-form contracts apply the same trimmed safe-reference 
 
 ## Actual expenses and refunds
 
-An Expense is confirmed paid spending for one Property and optionally one of its Spaces, with category, durable payee, payer and optional Provider. Categories have their own catalog revision/receipt namespace. Expense/refund commands share Expense revision; category changes never rewrite Expense history.
+An Expense is confirmed paid spending for one Property and optionally one of its Spaces, with category, durable payee, payer and optional Provider. Categories have their own catalog revision/receipt namespace; HTTP recovery uses `GET /api/expense-categories/operations/by-key/{key}`, while application readers retain operation-ID lookup. Expense/refund commands share Expense revision; category changes never rewrite Expense history.
 
 Evidence is linked after the Expense exists through Files. Estimates, invoices not yet paid and recurring payables are outside this actual-spending record. Corrections explicitly void/replace; refunds have their own received date and retained history. Do not use an Expense detail's lifetime net amount as a selected-period total.
 

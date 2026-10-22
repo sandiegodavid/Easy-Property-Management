@@ -278,7 +278,6 @@ class SQLiteTaskAttentionReader:
                 t.c.due_timezone,
                 t.c.is_all_day,
                 t.c.follow_up_at_utc,
-                t.c.follow_up_timezone,
                 reminders.c.next_reminder,
                 captured,
             ).label("next_transition"),
@@ -339,7 +338,7 @@ def _register(connection):
         ("task_attention_boundary", 3, deadline_boundary),
         ("task_attention_horizon", 4, in_horizon),
         ("task_attention_due", 2, at_or_before),
-        ("task_attention_next", 7, next_transition),
+        ("task_attention_next", 6, next_transition),
     ):
         database.create_function(name, count, function, deterministic=True)
 

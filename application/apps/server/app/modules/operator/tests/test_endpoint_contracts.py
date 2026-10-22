@@ -49,6 +49,25 @@ def operations(schema):
 
 
 @pytest.mark.parametrize(
+    "path,operation_id",
+    [
+        ("/api/ai/command-operations/{operation_id}", "getAiCommandOperation"),
+        ("/api/expense-categories/operations/{operation_id}", "getExpenseCategoryOperation"),
+        ("/api/intake/sources/operations/{operation_id}", "getIntakeCommandReceipt"),
+    ],
+)
+def test_cleanup_removed_receipt_wrappers_are_not_registered(contract_app, path, operation_id):
+    schema = contract_app.openapi()
+    assert path not in schema["paths"]
+    assert operation_id not in operations(schema)
+    assert all(getattr(route, "path", None) != path for route in contract_app.routes)
+    # No lifespan: these removed methods cannot reach runtime, SQLite or SPA HTML.
+    response = TestClient(contract_app).get(path.format(operation_id=uuid4()))
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("application/json")
+
+
+@pytest.mark.parametrize(
     "operation_id,revision",
     [
         ("updateAiSettings", "expectedRevision"),
@@ -76,7 +95,7 @@ def test_slice29_commands_require_concurrency_and_original_operation_result(
     assert "409" in command["responses"]
 
 
-@pytest.mark.parametrize("operation_id", ["getAiCommandByKey", "getAiCommandOperation"])
+@pytest.mark.parametrize("operation_id", ["getAiCommandByKey"])
 def test_slice29_receipt_recovery_has_typed_complete_results(contract_app, operation_id):
     schema = contract_app.openapi()
     operation = operations(schema)[operation_id]
@@ -147,11 +166,6 @@ def test_slice28_category_commands_have_exact_metadata_and_flat_results(contract
 @pytest.mark.parametrize(
     "path,operation_id,parameter",
     [
-        (
-            "/api/expense-categories/operations/{operation_id}",
-            "getExpenseCategoryOperation",
-            "operation_id",
-        ),
         (
             "/api/expense-categories/operations/by-key/{key}",
             "getExpenseCategoryOperationByKey",
@@ -524,7 +538,7 @@ def test_cleanup_identity_supports_local_digest_without_provider_locator():
         "getPortfolioStatusOperation",
         "getFinanceCommandOperation",
         "getOwnerRentReportOperation",
-        "getIntakeCommandReceipt",
+        "getIntakeCommandReceiptByKey",
         "get_provider_operation",
         "get_provider_operation_by_key",
         "get_provider_category_operation",

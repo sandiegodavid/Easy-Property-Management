@@ -271,14 +271,18 @@ def test_counts_candidates_reminder_previews_and_queries_stay_bounded(database, 
         event.remove(engine, "before_cursor_execute", capture)
 
 
-def test_waiting_order_unscheduled_then_exact_followup_transition(database):
+@pytest.mark.parametrize("follow_up_zone", ["UTC", "America/Los_Angeles", "Asia/Tokyo"])
+def test_waiting_order_unscheduled_then_exact_followup_transition(database, follow_up_zone):
     engine, reader = database
     future = NOW + timedelta(seconds=1)
-    insert(engine, [task(1, **waiting_fields(future)), task(2, **waiting_fields())])
+    fields = {**waiting_fields(future), "follow_up_timezone": follow_up_zone}
+    insert(engine, [task(1, **fields), task(2, **waiting_fields())])
     with engine.begin() as connection:
         waiting = reader.attention(connection, window("waiting"))
         assert [fact.key.source_id for fact in waiting.candidates] == [identity(2), identity(1)]
         assert waiting.next_transition_at == future
+        assert waiting.candidates[1].follow_up.at == future
+        assert waiting.candidates[1].follow_up.time_zone == follow_up_zone
         facts = reader.facts(connection, window())
         assert "notes" not in facts.c and "outcome_note" not in facts.c
         exact = reader.attention(

@@ -278,15 +278,6 @@ def build_router(service: IntakeService, runtime: WorkspaceRuntime) -> APIRouter
         return call(lambda: service.receipt_by_key(str(idempotency_key)))
 
     @router.get(
-        "/operations/{operation_id}",
-        dependencies=[Depends(ready)],
-        operation_id="getIntakeCommandReceipt",
-        response_model=CommandReceiptResponse,
-    )
-    def receipt(operation_id: UUID):
-        return call(lambda: service.receipt(str(operation_id)))
-
-    @router.get(
         "/{source_id}",
         dependencies=[Depends(ready)],
         operation_id="getIntakeSource",
