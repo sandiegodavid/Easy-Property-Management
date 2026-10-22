@@ -107,6 +107,7 @@ test("record details hide internal IDs and revisions and format statuses and dea
     panel.getByRole("heading", { name: "Rental unit details", exact: true }),
   ).toBeVisible();
   await expect(panel.getByText("Active", { exact: true })).toBeVisible();
+  await expect(panel.locator("dl")).toHaveCSS("display", "grid");
   await expect(panel).not.toContainText(item.id);
   await expect(panel).not.toContainText(item.spaces[0].id);
   await expect(panel.getByText("Revision", { exact: true })).toHaveCount(0);
@@ -265,13 +266,18 @@ test("maintenance review commits a source-bound receipt and dirty forms resume",
     (response) =>
       response.request().method() === "PUT" && response.url().includes("/api/operator/recovery/"),
   );
-  await page.getByRole("button", { name: "Save review form" }).click();
+  await page.getByRole("button", { name: "Save unfinished form" }).click();
   const saved = (await (await saving).json()) as Schema["RecoveryResponse"];
-  await expect(page.getByRole("status").filter({ hasText: "Form saved" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Unfinished form saved" })).toBeVisible();
   await page.goto(`/coverage/reviews/${saved.id}`);
   await expect(page.getByLabel("Review reason")).toHaveValue("Checked maintenance records");
   await page.getByRole("button", { name: "Record review" }).click();
-  await expect(page.getByText(/Original review .*recorded/)).toBeVisible();
+  const confirmation = page.getByText(/^Recorded review: recorded/);
+  await expect(confirmation).toBeVisible();
+  await expect(confirmation).not.toContainText(/[0-9a-f]{8}-[0-9a-f]{4}-/);
+  const captured = confirmation.locator("time");
+  await expect(captured).toHaveAttribute("datetime", /^\d{4}-\d{2}-\d{2}T/);
+  await expect(captured).not.toContainText(/^\d{4}-\d{2}-\d{2}T/);
   const information = page.getByRole("region", { name: "Current information", exact: true });
   await expect(information.locator(".information-review-badge")).toHaveText("recorded");
   await expect(information.getByText("applicable", { exact: true })).toHaveCount(0);
@@ -421,7 +427,7 @@ test("required gaps survive acknowledgment and non-applicability comes from sour
   await expect(page.getByRole("option", { name: "Not applicable", exact: true })).toHaveCount(0);
   await page.getByLabel("Review reason").fill("Reviewed the unknown facts");
   await page.getByRole("button", { name: "Record review" }).click();
-  await expect(page.getByText(/Original review .*missing required information/)).toBeVisible();
+  await expect(page.getByText(/Recorded review: missing required information/)).toBeVisible();
   await page.goto(`/coverage/space/${space.id}/lease`);
   await expect(page.getByRole("region", { name: "lease information review" })).toContainText(
     "not applicable",
@@ -478,7 +484,7 @@ test("missing lease context opens property leases without assuming a new agreeme
   await expect(action).toHaveAttribute("href", `/properties/${item.id}/leases`);
   await expect(information.locator('a[href*="workflow=lease.create"]')).toHaveCount(0);
   await action.click();
-  await expect(page.getByRole("region", { name: "leases section", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Leases section", exact: true })).toBeVisible();
 });
 
 test("missing rent and deposit tracking opens the matching setup form for its lease", async ({
@@ -616,7 +622,7 @@ test("source changes retain review text and require explicit revision review", a
   await expect(page.getByRole("button", { name: "Record review" })).toBeDisabled();
   await page.getByRole("button", { name: "Use displayed evidence revision" }).click();
   await page.getByRole("button", { name: "Record review" }).click();
-  await expect(page.getByText(/Original review .*recorded/)).toBeVisible();
+  await expect(page.getByText(/Recorded review: recorded/)).toBeVisible();
 });
 
 test("lost review response reconciles the original attempt after reload", async ({
@@ -641,7 +647,7 @@ test("lost review response reconciles the original attempt after reload", async 
   expect(recoveryId).toBeTruthy();
   await page.goto(`/coverage/reviews/${recoveryId}`);
   await page.getByRole("button", { name: "Reconcile review" }).click();
-  await expect(page.getByText(/Original review .*recorded/)).toBeVisible();
+  await expect(page.getByText(/Recorded review: recorded/)).toBeVisible();
   const events = await request.get(
     `/api/audit/events/operator_coverage_review/${((await (await request.get(`/api/operator/recovery/${recoveryId}`)).json()) as Schema["RecoveryResponse"]).receipt?.receiptId}`,
   );

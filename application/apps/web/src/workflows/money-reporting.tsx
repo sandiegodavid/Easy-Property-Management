@@ -11,6 +11,7 @@ import { readResult } from "./reads";
 import { MoneyFacts, moneyRecordUrl } from "./money-records";
 import { MoneyScope } from "./money";
 import { ReadableFacts } from "./readable-facts";
+import { formatDate, formatUsd } from "../shared/presentation";
 
 type Metric = components["schemas"]["Metric"];
 const metricNames: Record<string, string> = {
@@ -167,15 +168,21 @@ export function MoneyReporting() {
         <>
           <PageAsOf asOf={properties.data.summary.asOf} />
           <p>
-            {properties.data.matchingTotal} matching properties · Property-local dates {fromOn}{" "}
-            through {throughOn}
+            {properties.data.matchingTotal} matching properties · Property-local dates{" "}
+            {formatDate(fromOn)} through {formatDate(throughOn)}
           </p>
           <div className="money-reporting-totals">
             {(["operating", "depositActivity", "depositObligations"] as const).map((name) => (
               <section
                 className="record-detail-panel reporting-totals-panel"
                 key={name}
-                aria-label={name}
+                aria-label={
+                  {
+                    operating: "Rent and expenses",
+                    depositActivity: "Deposit activity",
+                    depositObligations: "Current deposit obligations",
+                  }[name]
+                }
               >
                 <h4>
                   {
@@ -274,7 +281,7 @@ export function MoneyReporting() {
         <>
           <PageAsOf asOf={sources.data.asOf} />
           <p>
-            {sources.data.matchingTotal} source records · Total USD {sources.data.total}
+            {sources.data.matchingTotal} source records · Total {formatUsd(sources.data.total)}
           </p>
           {sources.data.items.map((item) => {
             const url =
@@ -292,7 +299,7 @@ export function MoneyReporting() {
               <article className="reporting-source-row" key={`${item.sourceKind}:${item.sourceId}`}>
                 <header className="child-record-heading">
                   <h4>{metricName(item.sourceKind.replaceAll("_", " "))}</h4>
-                  <strong className="reporting-contribution">USD {item.contribution}</strong>
+                  <strong className="reporting-contribution">{formatUsd(item.contribution)}</strong>
                 </header>
                 <ReadableFacts
                   value={{

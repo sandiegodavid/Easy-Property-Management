@@ -12,7 +12,6 @@ import {
   dispatchWorkflow,
   record,
   scalar,
-  validateRequest,
   type Workflow,
 } from "@epm/contracts/workflows";
 import { useQuery } from "@tanstack/react-query";
@@ -23,7 +22,6 @@ import type { Recovery } from "../shared/recovery";
 import { clean, Fields, type Choices } from "./fields";
 import { Facts, readResult } from "./reads";
 import { MoneyFacts } from "./money-presentation";
-import { OriginalWorkResult } from "./work-result";
 import { TaskCreateFields } from "./task-fields";
 import { MaintenanceCreateFields } from "./maintenance-create-fields";
 import { GroupedCommandFields } from "./grouped-command-fields";
@@ -32,8 +30,9 @@ import { PropertyEditFields } from "./property-edit-fields";
 import { PropertyCreateFields } from "./property-create-fields";
 import { OwnershipFields } from "./ownership-fields";
 import { ownershipShareProblem } from "../shared/ownership-shares";
-import { SavedCommand, savesItem } from "./saved-command";
-import { loadWorkflowResult } from "./workflow-result";
+import { SavedCommand } from "./saved-command";
+import { FormFeedback, fieldName, validateForm } from "./form-feedback";
+import { DraftSaveStatus, draftSaveLabel } from "../shared/draft-save-status";
 
 const workflowIntroductions: Partial<Record<Workflow["formKey"], string>> = {
   "maintenance.issue.start": "Mark this issue as In progress when work is being handled.",
@@ -467,6 +466,7 @@ function CommandEditor({
     );
   const [id] = useState(() => recovered?.id ?? crypto.randomUUID());
   const [error, setError] = useState<string>();
+  const [feedbackAttempt, setFeedbackAttempt] = useState(0);
   const [review, setReview] = useState<{
     revision: number;
     value: unknown;
@@ -646,6 +646,7 @@ function CommandEditor({
       });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Command failed.");
+      setFeedbackAttempt((attempt) => attempt + 1);
       await scope.client.invalidateQueries({
         predicate: (query) =>
           query.queryKey[0] === scope.workspaceId &&
@@ -761,18 +762,6 @@ function CommandEditor({
             : "Review current source"}
       </button>
     ) : null;
-  const commandStatus = (
-    <>
-      <p>
-        Displayed source revision: {scalar(values[revisionField], String(revision))}. This command
-        retains its original revision and attempt identity.
-      </p>
-      <p role="status">
-        Draft {state.draft} · Command {state.command}
-      </p>
-      {currentSourceAction}
-    </>
-  );
   const saveActions = (
     <>
       <button
@@ -780,7 +769,7 @@ function CommandEditor({
         disabled={!scope.canWrite || selecting || addingOwner || canSubmit?.(values) === false}
       >
         {definition.formKey === "maintenance.issue.patch"
-          ? "Save changes"
+          ? "Save issue changes"
           : definition.formKey === "maintenance.issue.start"
             ? "Start work"
             : definition.formKey === "maintenance.issue.resolve"
@@ -796,7 +785,7 @@ function CommandEditor({
                       : removingContact
                         ? "Remove contact details"
                         : definition.formKey === "party.patch"
-                          ? "Save name"
+                          ? "Save name and identity"
                           : definition.formKey === "portfolio.ownerships.replace"
                             ? "Save ownership change"
                             : editSubject
@@ -807,17 +796,16 @@ function CommandEditor({
       </button>
       <button
         type="button"
-        disabled={addingOwner}
+        disabled={addingOwner || state.draft === "saved" || state.draft === "saving"}
         onClick={() => {
           void action(() => controller.flush());
         }}
       >
-        Save unfinished form
+        {draftSaveLabel(state.draft)}
       </button>
     </>
   );
-  const propertyCreateStatus = state.command === "submitting" ? "Creating property…" : null;
-  if (state.command === "committed" && state.record?.receipt && savesItem(definition.formKey))
+  if (state.command === "committed" && state.record?.receipt)
     return (
       <SavedCommand
         definition={definition}
@@ -864,41 +852,20 @@ function CommandEditor({
                                   : (workflowIntroductions[definition.formKey] ??
                                     "Review the displayed record and make an explicit change. Saved input is an unfinished form, not an official record.")}
       </p>
-      {definition.formKey === "portfolio.property.create" ? (
-        propertyCreateStatus && <p role="status">{propertyCreateStatus}</p>
-      ) : definition.formKey.startsWith("maintenance.") ||
-        definition.formKey === "communication.create" ||
-        (definition.formKey === "file.upload" && values.entityType === "maintenance_issue") ? (
-        <>
-          {state.command === "submitting" && <p role="status">Saving changes…</p>}
-          {(state.command === "rejected" || state.draft === "conflicted") && currentSourceAction}
-        </>
-      ) : [
-          "portfolio.space.classify",
-          "portfolio.availability.change",
-          "portfolio.occupancy.change",
-          "portfolio.space.patch",
-          "portfolio.space.archive",
-          "portfolio.property.patch",
-          "portfolio.ownerships.replace",
-          "party.patch",
-          "party.contact.add",
-          "party.contact.update",
-          "party.contact.archive",
-          "maintenance.issue.create",
-          "finance.expense_category.create",
-          "finance.expense_category.patch",
-          "finance.rent_receipt.create",
-          "owner_concern.create",
-        ].includes(definition.formKey) ? (
-        <details className="space-classification-recovery">
-          <summary>Form status and recovery details</summary>
-          {commandStatus}
-        </details>
-      ) : (
-        commandStatus
-      )}
-      {(error ?? state.error) && <p role="alert">{error ?? state.error}</p>}
+      {(state.command === "rejected" || state.draft === "conflicted") && currentSourceAction}
+      <FormFeedback
+        focusKey={feedbackAttempt}
+        message={
+          [
+            error ?? state.error,
+            ...Object.entries(state.problem?.fieldErrors ?? {}).map(
+              ([name, errors]) => `${fieldName(name)}: ${errors.join(" ")}`,
+            ),
+          ]
+            .filter(Boolean)
+            .join("\n") || undefined
+        }
+      />
       {candidates.length > 0 && (
         <section aria-label="Possible duplicate identities">
           <h3>Review possible duplicate identities</h3>
@@ -953,15 +920,6 @@ function CommandEditor({
           </Link>
         </section>
       )}
-      {state.problem && (
-        <ul>
-          {Object.entries(state.problem.fieldErrors).map(([name, errors]) => (
-            <li key={name}>
-              {name}: {errors.join(" ")}
-            </li>
-          ))}
-        </ul>
-      )}
       {expenseCandidates.length > 0 && (
         <section aria-label="Possible duplicate expenses">
           <h3>Review possible duplicate expenses</h3>
@@ -1002,7 +960,7 @@ function CommandEditor({
               throw new Error("Select the evidence file before submitting.");
             if (requiresRemovalConfirmation && !removalConfirmed)
               throw new Error("Confirm removal of this Lease participant.");
-            validateRequest(definition.schema, {
+            validateForm(definition.schema, {
               ...record(clean(definition.schema, values)),
               idempotencyKey: crypto.randomUUID(),
             });
@@ -1294,7 +1252,19 @@ function CommandEditor({
         {!locked && (
           <div className="command-form-actions" role="group" aria-label="Form actions">
             {saveActions}
+            <DraftSaveStatus
+              draft={state.draft}
+              command={state.command}
+              savedAt={state.record?.savedAt}
+            />
           </div>
+        )}
+        {locked && (
+          <DraftSaveStatus
+            draft={state.draft}
+            command={state.command}
+            savedAt={state.record?.savedAt}
+          />
         )}
       </form>
       {state.command === "outcome_unknown" && (
@@ -1316,15 +1286,6 @@ function CommandEditor({
           </button>
         </>
       )}
-      {state.draft === "failed" && !locked && (
-        <button
-          onClick={() => {
-            void action(() => controller.flush());
-          }}
-        >
-          Retry saving input
-        </button>
-      )}
       {state.draft === "conflicted" && (
         <p>
           Your input is retained. Return to the current record to review its latest revision before
@@ -1333,7 +1294,7 @@ function CommandEditor({
       )}
       {review && (
         <section aria-label="Current source review">
-          <h3>Current source revision {review.revision}</h3>
+          <h3>Current source information</h3>
           {definition.formKey.startsWith("intake.") && (
             <>
               <Facts
@@ -1402,268 +1363,8 @@ function CommandEditor({
           </button>
         </section>
       )}
-      {state.record?.receipt &&
-        (removingContact ? (
-          <p role="status" className="command-success">
-            Contact details removed successfully. History retained.
-          </p>
-        ) : (
-          <section aria-label="Committed result">
-            <h3>Committed result</h3>
-            <p>Operation {state.record.receipt.receiptId}</p>
-            <FactsResult value={state.record.receipt.result} />
-            {definition.formKey.startsWith("intake.") && state.record.attemptKey && (
-              <OriginalIntakeResult attemptKey={state.record.attemptKey} />
-            )}
-            {(definition.formKey.startsWith("task.") ||
-              definition.formKey.startsWith("communication.") ||
-              definition.formKey.startsWith("maintenance.") ||
-              definition.formKey.startsWith("owner_concern.")) &&
-              state.record.attemptKey && (
-                <OriginalWorkResult
-                  definition={definition}
-                  attemptKey={state.record.attemptKey}
-                  operationId={state.record.receipt.receiptId}
-                  sourceId={sourceId}
-                />
-              )}
-            {(definition.formKey.startsWith("lease.") ||
-              definition.formKey.startsWith("inspection.")) && (
-              <OriginalWorkflowResult
-                family={definition.formKey.startsWith("lease.") ? "lease" : "inspection"}
-                operationId={state.record.receipt.receiptId}
-              />
-            )}
-            {(definition.formKey.startsWith("finance.") ||
-              definition.formKey.startsWith("owner_rent_report.") ||
-              definition.formKey === "file.upload") &&
-              state.record.attemptKey && (
-                <OriginalMoneyResult
-                  definition={definition}
-                  attemptKey={state.record.attemptKey}
-                  sourceId={sourceId}
-                />
-              )}
-          </section>
-        ))}
       <RecoveryNavigation controller={controller} blocker={blocker} />
     </section>
-  );
-}
-
-function OriginalIntakeResult({ attemptKey }: { attemptKey: string }) {
-  const { scope } = useWorkspace();
-  const result = useQuery({
-    queryKey: scope.key("original-intake-result", attemptKey),
-    queryFn: async ({ signal }) =>
-      readResult(
-        await api.GET("/api/intake/sources/operations/by-key/{idempotency_key}", {
-          signal,
-          params: { path: { idempotency_key: attemptKey } },
-        }),
-      ),
-    retry: false,
-  });
-  return (
-    <>
-      {result.isPending && <p role="status">Loading original source receipt…</p>}
-      {result.error && (
-        <p role="alert">
-          The command committed, but its original receipt is unavailable: {result.error.message}
-        </p>
-      )}
-      {result.data && (
-        <>
-          <Facts
-            value={result.data}
-            fields={[
-              "sourceId",
-              "technicalStatus",
-              "attentionStatus",
-              "sourceRevision",
-              "operationId",
-            ]}
-          />
-          <p>This is the original committed response.</p>
-          <Link to={`/conversations?intake=true&source=${result.data.sourceId}`}>
-            Open current source evidence
-          </Link>
-        </>
-      )}
-    </>
-  );
-}
-
-function OriginalMoneyResult({
-  definition,
-  attemptKey,
-  sourceId,
-}: {
-  definition: Workflow;
-  attemptKey: string;
-  sourceId?: string;
-}) {
-  const { scope } = useWorkspace();
-  const result = useQuery({
-    queryKey: scope.key("original-money-result", definition.formKey, attemptKey),
-    queryFn: ({ signal }) => loadWorkflowResult(definition.formKey, "", attemptKey, signal),
-  });
-  const item = record(result.data);
-  const kind = definition.formKey.startsWith("owner_rent_report.")
-    ? "report"
-    : definition.formKey.startsWith("finance.expense_category.")
-      ? "category"
-      : definition.formKey.startsWith("finance.expense_refund.")
-        ? "expense"
-        : definition.formKey.startsWith("finance.expense.")
-          ? "expense"
-          : definition.formKey.startsWith("finance.prepaid_check.")
-            ? "check"
-            : definition.formKey.startsWith("finance.rent_receipt.")
-              ? "receipt"
-              : definition.formKey.startsWith("finance.rent_expectation.")
-                ? "expectation"
-                : "deposit";
-  return (
-    <>
-      {result.isPending && <p role="status">Loading original money receipt…</p>}
-      {result.error && (
-        <p role="alert">
-          The money operation is committed; its detailed receipt is unavailable:{" "}
-          {result.error.message}
-        </p>
-      )}
-      {result.data && (
-        <>
-          <MoneyFacts
-            value={item}
-            fields={[
-              "id",
-              "status",
-              "amount",
-              "amountMinor",
-              "receivedOn",
-              "paidOn",
-              "paymentMethodKind",
-              "refundDue",
-              "voidReason",
-              "operationId",
-              "rentLedgerRevision",
-              "expenseRevision",
-              "depositAccountRevision",
-              "reportRevision",
-              "updatedAt",
-            ]}
-          />
-          {Array.isArray(item.items) &&
-            (item.items as unknown[]).map((entry) => (
-              <MoneyFacts
-                key={scalar(record(entry).id)}
-                value={entry}
-                fields={[
-                  "id",
-                  "dueOn",
-                  "periodStartsOn",
-                  "periodEndsOn",
-                  "expectedAmountMinor",
-                  "outstandingAmountMinor",
-                  "lifecycleStatus",
-                ]}
-              />
-            ))}
-          {Array.isArray(item.allocations) &&
-            (item.allocations as unknown[]).map((entry) => (
-              <MoneyFacts
-                key={scalar(record(entry).id)}
-                value={entry}
-                fields={["expectationId", "amountMinor", "expectationDueOn"]}
-              />
-            ))}
-          <p>This is the original committed response.</p>
-          {(item.id || item.expenseId || item.accountId) && (
-            <>
-              {definition.formKey === "finance.expense.create" && item.id && (
-                <p>
-                  Expense saved. Add evidence now or keep the saved expense without attachments.{" "}
-                  <Link
-                    to={`/money?workflow=file.upload&entityType=expense&entityId=${scalar(item.id)}&purpose=receipt`}
-                  >
-                    Add expense evidence
-                  </Link>{" "}
-                  <Link to={`/money?record=expense&id=${scalar(item.id)}`}>
-                    Skip evidence and review saved expense
-                  </Link>
-                </p>
-              )}
-              <Link
-                to={
-                  definition.formKey === "file.upload"
-                    ? `/money?file=${scalar(item.id)}`
-                    : `/money?record=${kind}&id=${scalar(item.expenseId ?? (kind === "deposit" ? (sourceId ?? item.accountId ?? item.id) : item.id))}`
-                }
-              >
-                Open current money record
-              </Link>
-            </>
-          )}
-        </>
-      )}
-    </>
-  );
-}
-
-function OriginalWorkflowResult({
-  family,
-  operationId,
-}: {
-  family: "lease" | "inspection";
-  operationId: string;
-}) {
-  const { scope } = useWorkspace();
-  const result = useQuery({
-    queryKey: scope.key("original-workflow-result", family, operationId),
-    queryFn: async ({ signal }) => {
-      if (family === "lease")
-        return readResult(
-          await api.GET("/api/leases/operations/{operation_id}", {
-            signal,
-            params: { path: { operation_id: operationId } },
-          }),
-        ).response;
-      return readResult(
-        await api.GET("/api/inspection-commands/{operation_id}", {
-          signal,
-          params: { path: { operation_id: operationId } },
-        }),
-      ).result;
-    },
-  });
-  return (
-    <>
-      {result.isPending && <p role="status">Loading original committed snapshot…</p>}
-      {result.error && (
-        <p role="alert">
-          The primary result is committed. Its detailed receipt is unavailable:{" "}
-          {result.error.message}
-        </p>
-      )}
-      {result.data && (
-        <>
-          <Facts
-            value={result.data}
-            fields={["id", "status", "leaseRevision", "revision", "updatedAt", "operationId"]}
-          />
-          {family === "lease" && "spaceId" in result.data && (
-            <Link to={`/leases/${result.data.id}/details`}>
-              Open committed Lease and related setup
-            </Link>
-          )}
-          {family === "inspection" && "leaseId" in result.data && (
-            <Link to={`/inspections/${result.data.id}`}>Open committed inspection</Link>
-          )}
-        </>
-      )}
-    </>
   );
 }
 
@@ -1694,15 +1395,4 @@ async function evidenceMetadata(file: File): Promise<Record<string, unknown>> {
       value.toString(16).padStart(2, "0"),
     ).join(""),
   };
-}
-
-function FactsResult({ value }: { value: unknown }) {
-  const result = record(value);
-  return (
-    <p>
-      Result record {scalar(result.targetId ?? result.resultId ?? result.id, "see owning receipt")}{" "}
-      · Revision {scalar(result.revision ?? result.resultingRevision, "see owning receipt")} ·{" "}
-      {scalar(result.status, "committed")}
-    </p>
-  );
 }

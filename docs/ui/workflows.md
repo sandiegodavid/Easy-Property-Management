@@ -6,9 +6,30 @@ Each workflow uses the owning module's commands, revisions, confirmation rules a
 
 Standalone record create/edit workflows replace their editor with `SavedCommand`/`SavedItem`: a contextual success heading, readable saved business data, and an explicit **Back to [item]** button. Property creation/editing no longer redirect automatically. Return navigation targets the item (or its owning record for a child) without adding the completed form as a new parent. Embedded Task quick-add, AI connection creation and AI draft edits use the same presentation inside their enclosing content, without page navigation. AI controls allow an explicit new connection or return to draft review.
 
-Completion appears only after the existing command/recovery contract acknowledges success. Details come from the immutable owning receipt, not a fresh mutable item read. If that read fails, keep the success confirmation and offer a read-only retry; never resubmit the mutation. Unknown outcomes and validation/conflict failures keep the original form and recovery actions. Lifecycle commands, filter forms, immediate settings toggles and write-only credential controls retain their existing behavior.
+Completion appears only after the existing command/recovery contract acknowledges success. Details come from the immutable owning receipt, not a fresh mutable item read. If that read fails, keep the success confirmation and offer a read-only retry; never resubmit the mutation. Unknown outcomes and validation/conflict failures keep the original form and recovery actions. Lifecycle commands use the same saved-data presentation with a contextual completion heading. Filter forms, immediate settings toggles and write-only credential controls retain their existing behavior.
+
+Forms collect missing-field feedback with operator labels and move focus to the error summary after a failed submission. Routine chrome omits source revisions, attempt identities and API field/unit boilerplate. Information review uses the same bottom action row: **Record review** and **Save unfinished form**. Calendar dates display as `Oct 1, 2026` without changing their source day; instants use browser-local time; monetary displays use grouped `USD 1,950.00` while request values retain their original numeric units.
+
+Every recoverable form shows saving, saved or failed feedback beside its action row. **Unfinished form saved** includes the saved time; the draft-save button reads **Saved** until another edit needs saving. Date/time filters use browser-local controls and send zoned instants. Settings distinguishes the automatically saved Home refresh interval from appearance and navigation choices saved with **Save preferences**.
+
+**Unfinished forms** lists only active drafts and submissions whose outcome is unknown. Drafts can be discarded directly; unknown submissions must be checked before further action. Reconciliation removes a finished submission from this queue without deleting its audit/recovery record. Original committed responses remain accessible through their owning record's History/recovery contracts, not a duplicate permanent receipt list here. Each form has one resume destination, including Information review.
+
+| Validation boundary | Focused proof |
+| --- | --- |
+| Missing fields, invalid input, focus and no mutation | `form-feedback.spec.ts` |
+| Manual save and autosave acknowledgment beside actions, saved time and button state | `form-feedback.spec.ts`; `search-coverage.spec.ts` |
+| Bounded property choices; local date filters, daylight-saving gaps and retained offsets | `dynamic-filters.spec.ts` |
+| Actionable queue, discard, one review resume link, local saved times | `recovery-page.spec.ts` |
+| Retry/reconciliation and retained receipt after queue removal | Operator `test_command_recovery.py`; `test_operator.py` also covers rollback, schema/backup, bounded pagination and query budget |
+| Review action row and saved-form recovery | `search-coverage.spec.ts` |
+| Named payer choices and inspection participants; existing IDs preserved internally | `money.spec.ts`, `leasing-inspections.spec.ts` |
+| One tenant/provider profile action; ID editing/recovery unchanged | `tenant-ids.spec.ts`, `provider-ids.spec.ts` |
+
+No domain writes, receipt formats, lifecycle rules, schema or backup formats change. List filtering stays in SQL before pagination/counting, and added name lookups use the bounded batch-name port rather than one query per row.
 
 Presentation omits operation/record UUIDs, revisions, fingerprints and raw JSON. Instants use browser-local time; date-only values remain unchanged and minor-unit amounts are formatted as money. Official IDs use the shared masked/reveal presentation. Existing original-result APIs, persistence and backup contracts are unchanged. Superseded one-line success displays, Property redirects and Ownership confirmation-only editor branches are removed.
+
+Money details select business fields by record and child type. Relationships and correction chains use named links instead of UUID facts; optional interest calculations show percentages and labelled days separately. Primary lifecycle actions are visible buttons on the relevant record, not a collapsed Actions group. Secondary destructive actions and history may remain disclosed.
 
 | Area | Delivered journey and boundaries | Authority / implementation |
 | --- | --- | --- |
@@ -24,9 +45,20 @@ Presentation omits operation/record UUIDs, revisions, fingerprints and raw JSON.
 | Repairs | Issues, reporter attribution, appointments, costs, quotes/comparison, assignment, expense links, journal, evidence and follow-up. Task/appointment completion and reported work do not verify physical repair. | [Maintenance](../modules/maintenance.md); [work.tsx](../../application/apps/web/src/workflows/work.tsx) |
 | Tasks and concerns | Task edits/lifecycle/reminders/deletion, independent waiting/follow-ups and owner concerns with related source context. Lost deletion recovers original receipt despite missing live Task. Waiting preserves original urgency/deadline. | [Tasks](../modules/tasks.md), [Owner management](../modules/owner-management.md); [work-records.tsx](../../application/apps/web/src/workflows/work-records.tsx) |
 | Conversations | Manual interaction record/edit/correction/history and optional linked Task. This does not send messages or approve intake proposals. | [Communications](../modules/communications.md); [work.tsx](../../application/apps/web/src/workflows/work.tsx) |
-| Manual Intake | Conversations → Retained source evidence: bounded directory, admission/import/correction/supersession/dismissal/reopening and source history. Full content uses fail-closed audited reads. Ordered file roles/digests are retained; byte recovery needs reselection. Failed/superseded sources retain history with guarded mutations. | [Intake](../modules/intake.md); [intake.tsx](../../application/apps/web/src/workflows/intake.tsx) |
+| Manual Intake | Conversations → Retained sources: bounded directory, admission/import/correction/supersession/dismissal/reopening and source history. Full content uses fail-closed audited reads. Ordered file roles/digests are retained; byte recovery needs reselection. Failed/superseded sources retain history with guarded mutations. | [Intake](../modules/intake.md); [intake.tsx](../../application/apps/web/src/workflows/intake.tsx) |
 | Search and Information review | Grouped literal metadata search, independent paging/retry, typed source links; source-backed gaps/reviews, reasons/dates and recoverable review receipts. Required gaps survive acknowledgment. The UI calls the internal `coverage` feature Information review; URLs and API identifiers are unchanged. | [Operator](../modules/operator.md); [search.tsx](../../application/apps/web/src/shared/search.tsx), [coverage.tsx](../../application/apps/web/src/shared/coverage.tsx) |
 | AI Settings/review | Off/device/cloud choices, registry-bound connections/models/actions, data-class disclosure, write-only secrets, synthetic probes, limits/redaction/global pause; frozen provenance/input, edit/history and saved-payload review. Approval requires registered handler, current source and acknowledged saved version. Secret effects retain explicit uncertainty acknowledgment and original keys. | [AI governance](../modules/ai-governance.md); [ai-governance.tsx](../../application/apps/web/src/workflows/ai-governance.tsx) |
+
+## Completion and record-detail validation
+
+| Boundary | Focused proof |
+| --- | --- |
+| Completion and privacy | `saved-results.spec.ts`, category archival in `workflows.spec.ts`, participant removal in `leasing-inspections.spec.ts`: readable immutable results, no technical identity facts, browser-local instants, narrow/light/dark layouts. |
+| Retry and conflicts | Lost participant removal and Information review responses reconcile once; stale manual status/review inputs remain editable. A saved-detail read failure offers a read-only retry, not another mutation. |
+| Money presentation | `money.spec.ts`: one labelled payment status per allocation, exact money and named related-record links; optional interest detail uses percentages. Check, report and deposit actions are directly reachable. |
+| Action accessibility | `acceptance.spec.ts` plus Task, concern, renewal and inspection workflow tests: visible native buttons, keyboard navigation, narrow layouts and existing lifecycle guards. |
+
+These are presentation-only changes. Persistence/schema, transaction rollback, backup/restore and query-budget contracts are unchanged; saved details still use one existing owning-operation read rather than per-field lookups.
 
 ## Home foundation and deferred work
 

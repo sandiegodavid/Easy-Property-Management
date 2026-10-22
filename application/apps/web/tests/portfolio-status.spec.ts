@@ -1575,7 +1575,6 @@ test("stale availability retains edits and an interrupted write reconciles its o
   await expect(
     page.getByRole("combobox", { name: "Leasing status (required)", exact: true }),
   ).toHaveValue("available_now");
-  await page.getByText("Form status and recovery details", { exact: true }).click();
   await page.getByRole("button", { name: "Review current source", exact: true }).click();
   await page.getByRole("button", { name: "Keep my edits with this reviewed revision" }).click();
   let writes = 0;

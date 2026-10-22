@@ -1,6 +1,8 @@
 import type { components } from "@epm/contracts/generated";
 import { HomeSourceLink } from "./home-navigation";
 import { formatHomeTemporal } from "./home-time";
+import { formatUsd } from "./presentation";
+import { cents } from "../workflows/money-presentation";
 
 type Schema = components["schemas"];
 type Source = Schema["SourceTarget"]["source"];
@@ -111,8 +113,8 @@ export function HomeSourceActions({ item }: { item: Item }) {
       )}
       {item.outstandingMinor != null && (
         <p>
-          Recorded outstanding: {item.currency} {(item.outstandingMinor / 100).toFixed(2)} at
-          capture; review current allocations before recording payment.
+          Recorded outstanding: {formatUsd(cents(item.outstandingMinor))} at capture; review current
+          allocations before recording payment.
         </p>
       )}
       {url ? (

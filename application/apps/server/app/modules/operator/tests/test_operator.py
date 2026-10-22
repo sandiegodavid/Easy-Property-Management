@@ -781,6 +781,18 @@ def test_encrypted_backup_restore_preserves_records_and_replay(foundation):
         form_key="communication.record",
         payload={"subject": "Unfinished", "body": "Private recovery text"},
     )
+    checked = save(service, form_key="communication.record", payload={"subject": "Checked"})
+    service.prepare_attempt(
+        checked["id"],
+        attempt_key=str(uuid4()),
+        request_fingerprint="a" * 64,
+        expected_revision=1,
+        idempotency_key=str(uuid4()),
+    )
+    checked = service.reconcile_recovery(
+        checked["id"], expected_revision=2, idempotency_key=str(uuid4())
+    )
+    assert service.recovery_page()["matchingTotal"] == 1
     tables = ("operator_preferences", "operator_recovery_records", "operator_operations")
     with uow.engine.connect() as connection:
         before = {
@@ -837,6 +849,9 @@ def test_encrypted_backup_restore_preserves_records_and_replay(foundation):
         )
         assert restored_service.operation(preference_key) == original_preference
         assert restored_service.recovery(record["id"])["payload"] == record["payload"]
+        assert restored_service.recovery(checked["id"])["receipt"] == checked["receipt"]
+        assert restored_service.recovery_page()["matchingTotal"] == 1
+        assert [item["id"] for item in restored_service.recovery_page()["items"]] == [record["id"]]
         validate_latest_schema(WorkspacePaths(restored).database)
     finally:
         restored_uow.engine.dispose()

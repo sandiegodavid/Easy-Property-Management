@@ -361,6 +361,12 @@ test("lease details organize names, dates, rent and actions without technical cl
   await execute(request, f);
   await page.reload();
   await expect(workspace.locator(".lease-detail-heading")).toContainText("Signed");
+  await expect(
+    workspace.getByRole("link", { name: "Review and create rent schedule", exact: true }),
+  ).toHaveAttribute(
+    "href",
+    `/money?workflow=finance.rent_expectation.synchronize&target=${f.lease.id}&leaseId=${f.lease.id}`,
+  );
   await expect(workspace.getByRole("link", { name: "Edit lease", exact: true })).toHaveCount(0);
   await expect(
     workspace.getByRole("link", { name: "Record lease end", exact: true }),
@@ -384,7 +390,7 @@ test("unavailable participant names do not hide lease facts or tenant links", as
     participants.getByRole("link", { name: "View tenant details", exact: true }),
   ).toHaveAttribute("href", `/tenants?identity=${f.tenant.id}`);
   await expect(page.getByRole("region", { name: "Rent terms", exact: true })).toContainText(
-    "USD 1000.00",
+    "USD 1,000.00",
   );
 });
 
@@ -418,7 +424,7 @@ test("commercial Lease execution and milestones support narrow keyboard review i
       page.getByRole("region", { name: "Lease inspections", exact: true }),
     ).toContainText("Not due");
     await expect(page.getByRole("region", { name: "Lease workspace", exact: true })).toContainText(
-      "USD 1000.00",
+      "USD 1,000.00",
     );
     await page.evaluate(axe.source);
     const violations = await page.evaluate(async () =>
@@ -623,7 +629,7 @@ test("draft edits resume and execution uses independent Lease and Space revision
   await page.goto(`/leasing?workflow=lease.patch&target=${f.lease.id}`);
   await page.getByLabel("Notes", { exact: true }).fill("Saved lease draft");
   await page.getByRole("button", { name: "Save unfinished form", exact: true }).click();
-  await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   await page.goto("/settings/recovery");
   await page.getByRole("link", { name: "Resume: Edit lease draft", exact: true }).last().click();
   await expect(page.getByRole("textbox", { name: "Notes", exact: true })).toHaveValue(
@@ -686,7 +692,7 @@ test("a complete Lease draft is created through its saved command contract", asy
   await page
     .getByRole("link", { name: /^(Open committed Lease and related setup|Back to lease)$/ })
     .click();
-  await expect(page.getByRole("region", { name: "Lease workspace" })).toContainText("USD 1234.56");
+  await expect(page.getByRole("region", { name: "Lease workspace" })).toContainText("USD 1,234.56");
 });
 
 test("renewal editing and decisions use different request shapes", async ({ page, request }) => {
@@ -701,7 +707,14 @@ test("renewal editing and decisions use different request shapes", async ({ page
   const response = await request.get(`/api/leases/${f.lease.id}`);
   const lease = (await response.json()) as Schemas["LeaseResponse"];
   const option = lease.renewalOptions[0];
-  await page.goto(`/leasing?workflow=lease.renewal.update&target=${f.lease.id}&child=${option.id}`);
+  await page.goto(`/leases/${f.lease.id}/details`);
+  await expect(
+    page.getByRole("button", { name: "Create inspection draft", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Decide renewal option", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Edit renewal option", exact: true }).click();
   await expect(page.getByLabel("Status", { exact: true })).toHaveCount(0);
   await page.getByLabel("Notes", { exact: true }).fill("Review renewal offer");
   await save(page, "Edit renewal option");
@@ -782,23 +795,29 @@ test("removed participants resume original-result recovery without another remov
   );
   await page.getByLabel("I confirm removal of this Lease participant").check();
   await page.getByRole("button", { name: "Save remove lease participant", exact: true }).click();
-  await expect(
-    page.getByText("Draft saved · Command outcome_unknown", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("Submission needs checking", { exact: true })).toBeVisible();
   await page.goto("/settings/recovery");
   await page.getByRole("link", { name: "Resume: Remove lease participant", exact: true }).click();
   await page.getByRole("button", { name: "Check original result", exact: true }).click();
-  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toContainText(
-    receipt!.operationId,
-  );
+  const completion = page.locator(".saved-item");
+  await expect(
+    completion.getByRole("heading", { name: "Remove lease participant — complete", exact: true }),
+  ).toBeVisible();
+  await expect(completion).not.toContainText(receipt!.operationId);
+  await expect(completion).not.toContainText(f.lease.id);
+  await expect(completion).not.toContainText("Revision");
   await expect(
     page.getByRole("link", { name: /^(Open committed Lease and related setup|Back to lease)$/ }),
   ).toBeVisible();
   expect(calls).toBe(1);
   await page.reload();
-  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toContainText(
-    receipt!.operationId,
-  );
+  await expect(
+    completion.getByRole("heading", { name: "Remove lease participant — complete", exact: true }),
+  ).toBeVisible();
+  await expect(completion).not.toContainText(receipt!.operationId);
+  const original = await request.get(`/api/leases/operations/${receipt!.operationId}`);
+  expect(original.ok()).toBe(true);
+  expect(((await original.json()) as { response: unknown }).response).toEqual(receipt);
   expect(calls).toBe(1);
   await page.goto(
     `/leasing?workflow=lease.participant.remove&target=${f.lease.id}&child=${child.id}`,
@@ -835,7 +854,10 @@ test("acknowledgments require only walkthrough-active participants at exclusive 
   const draft = await report(request, f, shift(1));
   await page.goto(`/leasing?workflow=inspection.report.acknowledge&target=${draft.id}`);
   await expect(page.getByLabel("Status (required)")).toHaveCount(1);
-  await expect(page.getByRole("group", { name: new RegExp(f.tenant.id) })).toBeVisible();
+  await expect(page.getByRole("group", { name: new RegExp(f.tenant.displayName) })).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Record inspection acknowledgments", exact: true }),
+  ).not.toContainText(f.tenant.id);
   await expect(page.getByText(new RegExp(former.tenant.id))).toHaveCount(0);
   await expect(page.getByText(new RegExp(future.tenant.id))).toHaveCount(0);
   await page.getByLabel("Status (required)").selectOption("not_requested");
@@ -908,9 +930,8 @@ test("termination negotiation and completion preserve the Lease and Space contra
   await save(page, "Request termination");
   const cases = await request.get(`/api/leases/${f.lease.id}/termination-cases`);
   const item = ((await cases.json()) as Schemas["TerminationCaseResponse"][])[0];
-  await page.goto(
-    `/leasing?workflow=lease.termination.proposal.add&target=${f.lease.id}&child=${item.id}`,
-  );
+  await page.goto(`/leases/${f.lease.id}/details`);
+  await page.getByRole("button", { name: "Add termination proposal", exact: true }).click();
   await page.getByLabel("Proposed termination on (required)").fill(f.today);
   await page.getByLabel("Expected move out on (required)").fill(f.today);
   await save(page, "Add termination proposal");
@@ -1166,7 +1187,7 @@ test("inspection evidence resumes with original bytes and reconciles a lost resp
   });
   await page.getByLabel("Purpose (required)").selectOption("supporting_document");
   await page.getByRole("button", { name: "Save unfinished form" }).click();
-  await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   await page.goto("/settings/recovery");
   await page.getByRole("link", { name: "Resume: Attach inspection evidence", exact: true }).click();
   await page.getByLabel("Evidence file (required)").setInputFiles({

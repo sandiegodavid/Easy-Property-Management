@@ -140,7 +140,7 @@ function parentLabel(href: string) {
   if (path === "/settings/recovery") return "Unfinished forms";
   if (path === "/leasing" && url.searchParams.has("templates")) return "Inspection templates";
   if (path === "/conversations" && url.searchParams.get("intake") === "true")
-    return "Imported records";
+    return "Retained sources";
   if (path === "/maintenance" && url.searchParams.get("tab") === "concerns")
     return "Owner concerns";
   if (url.searchParams.has("workflow"))
@@ -493,7 +493,13 @@ export function HomeReturn() {
   const back = useReturn(),
     location = useLocation();
   if (!back || location.pathname.startsWith("/home")) return null;
-  return <HomeBackLink fallback="/home">Return to Home collection or preview</HomeBackLink>;
+  const collection = collections.find((key) => back.href.startsWith(`/home/collections/${key}`));
+  const title = collection
+    ? collectionTitles[collection]
+    : back.href.startsWith("/home/inventory")
+      ? "Property status"
+      : "Home";
+  return <HomeBackLink fallback="/home">← Back to {title}</HomeBackLink>;
 }
 
 export function useHomeScroll(loaded: boolean) {

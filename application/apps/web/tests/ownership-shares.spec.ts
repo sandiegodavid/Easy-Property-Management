@@ -117,7 +117,7 @@ test("share edits validate totals, survive draft recovery and reconcile one comm
       ),
     ).toEqual([]);
   }
-  await page.getByRole("button", { name: "Save unfinished form", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Saved", exact: true })).toBeDisabled();
   const draft = (await (await saved).json()) as Schema["RecoveryResponse"];
   await expect
     .poll(async () => {

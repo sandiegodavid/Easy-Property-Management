@@ -75,7 +75,7 @@ test("page navigation shares Property Detail tab styling and scrolls within narr
         {
           path: "/conversations?intake=true",
           nav: "Source views",
-          active: "Imported records",
+          active: "Retained sources",
           next: "Recorded conversations",
         },
       ]) {

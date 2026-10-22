@@ -23,7 +23,7 @@ test("tenant IDs are optional on profiles, masked, editable and preserved by rec
   await page.goto(detail);
   const identification = page.getByRole("region", { name: "Official identification", exact: true });
   await expect(identification).toContainText("No official ID recorded");
-  await identification.getByRole("button", { name: "Manage official IDs", exact: true }).click();
+  await page.getByRole("button", { name: "Edit tenant profile", exact: true }).click();
   await page.getByRole("button", { name: "Add official ID", exact: true }).click();
   await page
     .getByRole("combobox", { name: "ID type (required)", exact: true })
@@ -81,7 +81,7 @@ test("tenant IDs are optional on profiles, masked, editable and preserved by rec
   await page.goto(detail);
   await expect(identification).toContainText("Driver’s license");
   await expect(identification).toContainText("Ending in A123");
-  await identification.getByRole("button", { name: "Manage official IDs", exact: true }).click();
+  await page.getByRole("button", { name: "Edit tenant profile", exact: true }).click();
   await expect(suffix).toHaveValue("A123");
   await suffix.fill("B456");
   await page
@@ -91,7 +91,7 @@ test("tenant IDs are optional on profiles, masked, editable and preserved by rec
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   await page.goto(detail);
   await expect(identification).toContainText("Ending in B456");
-  await identification.getByRole("button", { name: "Manage official IDs", exact: true }).click();
+  await page.getByRole("button", { name: "Edit tenant profile", exact: true }).click();
   await page.getByRole("button", { name: "Remove official ID 1", exact: true }).click();
   await page
     .getByRole("group", { name: "Form actions", exact: true })

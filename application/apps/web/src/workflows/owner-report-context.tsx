@@ -7,6 +7,7 @@ import { useWorkspace } from "../app/workspace-gate";
 import { readResult } from "./reads";
 import { MoneyFacts } from "./money-presentation";
 import { ReceiptAllocationContext, receiptBalance } from "./rent-context";
+import { formatDate } from "../shared/presentation";
 
 export function ownerVerificationProblem(
   values: Record<string, unknown>,
@@ -102,12 +103,12 @@ export function OwnerReportContext({
         <>
           <p>
             {context.data.displayName} · {context.data.timeZone} · Current ownership context for
-            payment on {received || "the selected payment date"}
+            payment on {received ? formatDate(received) : "the selected payment date"}
           </p>
           {eligible.map((owner) => (
             <p key={owner.id}>
-              {owner.party?.displayName ?? owner.partyId} · {owner.startsOn} to{" "}
-              {owner.endsOn ?? "current"}
+              {owner.party?.displayName ?? "Owner name unavailable"} · {formatDate(owner.startsOn)}{" "}
+              to {owner.endsOn ? formatDate(owner.endsOn) : "current"}
               {owner.party?.archivedAt && " · Archived identity — historical selection only"}{" "}
               {editableOwner && (
                 <button

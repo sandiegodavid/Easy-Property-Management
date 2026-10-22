@@ -7,6 +7,7 @@ import { HomeSourceActions, homeActionLabel } from "./home-source-actions";
 import { useHomeCardItems } from "./home-card-items";
 import { DisclosureHelp } from "./home-disclosure-help";
 import { formatHomeTime, formatHomeTemporal as temporal } from "./home-time";
+import { formatDate, formatUsd } from "./presentation";
 
 type Schema = components["schemas"];
 type Collection = Schema["AvailableCollection"] | Schema["UnavailableCollection"];
@@ -390,7 +391,7 @@ export function HomeSummaries({
                   <HomeSourceLink
                     to={`/money?${new URLSearchParams({ tab: "reporting", metric: metric.target.metric, fromOn: metric.target.fromOn, throughOn: metric.target.throughOn, propertyState: metric.target.propertyState, sourceRevision: money.capture.sourceRevision, ...(metric.target.scope.propertyId ? { propertyId: metric.target.scope.propertyId } : {}) })}`}
                   >
-                    <span className="home-metric-value">USD {metric.amount}</span>
+                    <span className="home-metric-value">{formatUsd(metric.amount)}</span>
                     <span className="visually-hidden"> — </span>
                     <span className="home-metric-action">
                       View {metrics[metric.target.metric]} sources
@@ -403,7 +404,8 @@ export function HomeSummaries({
         )}
         {moneyPeriod && (
           <p className="home-money-note">
-            Recorded money period: {moneyPeriod.fromOn} through {moneyPeriod.throughOn}.
+            Recorded money period: {formatDate(moneyPeriod.fromOn)} through{" "}
+            {formatDate(moneyPeriod.throughOn)}.
             {money?.status === "available" && (
               <>
                 {" "}

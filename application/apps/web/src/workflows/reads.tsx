@@ -7,10 +7,13 @@ import { normalizeApiError } from "../shared/mutations";
 import { label } from "./fields";
 import { formatHomeTime } from "../shared/home-time";
 import { leasingStatusLabels } from "../shared/leasing-status";
+import { formatDate } from "../shared/presentation";
 
 function historyValue(key: string, value: unknown) {
   if (value === null || value === undefined) return "Not recorded";
   const text = scalar(value);
+  if (/^\d{4}-\d\d-\d\d$/.test(text)) return formatDate(text);
+  if (/^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(text)) return formatHomeTime(text);
   if (key === "availabilityStatus")
     return leasingStatusLabels[text] ?? (text === "unknown" ? "Needs classification" : text);
   if (key === "occupancyStatus") return text === "unknown" ? "Needs classification" : label(text);
@@ -56,39 +59,43 @@ export function Facts({
   const values = record(value);
   return (
     <dl className="workflow-facts">
-      {fields.map((key) => {
-        const raw = values[key];
-        const text =
-          raw === null || raw === undefined
-            ? "Not recorded"
-            : typeof raw === "boolean"
-              ? raw
-                ? "Yes"
-                : "No"
-              : verbatim
-                ? scalar(raw)
-                : historyValue(key, raw);
-        const isStatus =
-          typeof raw === "string" && (/(?:Status|Kind|State)$/.test(key) || key === "status");
-        const isId =
-          typeof raw === "string" && uuidPattern.test(raw) && (key.endsWith("Id") || key === "id");
-        return (
-          <div key={key}>
-            <dt>{label(key)}</dt>
-            <dd>
-              {isStatus ? (
-                <span className="workflow-fact-status" data-status={raw}>
-                  {text}
-                </span>
-              ) : isId ? (
-                <span className="workflow-fact-id">{text}</span>
-              ) : (
-                text
-              )}
-            </dd>
-          </div>
-        );
-      })}
+      {fields
+        .filter((key) => !/revision/i.test(key))
+        .map((key) => {
+          const raw = values[key];
+          const text =
+            raw === null || raw === undefined
+              ? "Not recorded"
+              : typeof raw === "boolean"
+                ? raw
+                  ? "Yes"
+                  : "No"
+                : verbatim
+                  ? scalar(raw)
+                  : historyValue(key, raw);
+          const isStatus =
+            typeof raw === "string" && (/(?:Status|Kind|State)$/.test(key) || key === "status");
+          const isId =
+            typeof raw === "string" &&
+            uuidPattern.test(raw) &&
+            (key.endsWith("Id") || key === "id");
+          return (
+            <div key={key}>
+              <dt>{label(key)}</dt>
+              <dd>
+                {isStatus ? (
+                  <span className="workflow-fact-status" data-status={raw}>
+                    {text}
+                  </span>
+                ) : isId ? (
+                  <span className="workflow-fact-id">{text}</span>
+                ) : (
+                  text
+                )}
+              </dd>
+            </div>
+          );
+        })}
     </dl>
   );
 }

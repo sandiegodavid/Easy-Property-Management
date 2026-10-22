@@ -311,7 +311,7 @@ async function openAction(page: Page, key: string, id: string, child?: string) {
   await expect(page.getByRole("group", { name: "Requested change", exact: true })).toBeVisible();
 }
 
-test("maintenance directory organizes issues, named property search and secondary filters", async ({
+test("maintenance directory organizes issues, named property choices and secondary filters", async ({
   page,
   request,
 }, testInfo) => {
@@ -371,12 +371,11 @@ test("maintenance directory organizes issues, named property search and secondar
   ).toBeVisible();
   await workspace.getByRole("button", { name: "Clear filters", exact: true }).click();
   await expect(page).toHaveURL(/\/maintenance$/);
-  await expect(workspace.getByRole("searchbox", { name: "Property", exact: true })).toHaveValue("");
+  await expect(workspace.getByRole("combobox", { name: "Property", exact: true })).toHaveValue("");
   await expect(workspace.getByRole("combobox", { name: "Status", exact: true })).toHaveValue("");
   await workspace
-    .getByRole("searchbox", { name: "Property", exact: true })
-    .fill(f.property.displayName);
-  await workspace.getByRole("button", { name: f.property.displayName, exact: true }).click();
+    .getByRole("combobox", { name: "Property", exact: true })
+    .selectOption(f.property.id);
   await expect(page).toHaveURL(new RegExp(`propertyId=${f.property.id}`));
   await expect(card).toHaveCount(1);
   await card.click();
@@ -693,7 +692,7 @@ test("Edit issue saves reporter and details atomically and recovers its original
   await reporter
     .getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ })
     .selectOption("staff");
-  const submit = editor.getByRole("button", { name: "Save changes", exact: true });
+  const submit = editor.getByRole("button", { name: "Save issue changes", exact: true });
   await expect(submit).toBeDisabled();
   await editor
     .getByRole("textbox", { name: "Reporter correction reason", exact: true })
@@ -944,8 +943,7 @@ test("Waiting replacement and date removal retain deadline, reminder and unsched
   await page.getByLabel("Follow up timezone", { exact: true }).fill("America/Los_Angeles");
   await save(page, "Set waiting context");
   await page.goto(`/tasks?record=task&id=${original.id}`);
-  await page.getByText("Actions", { exact: true }).click();
-  await page.getByRole("link", { name: "Set waiting context", exact: true }).click();
+  await page.getByRole("button", { name: "Set waiting context", exact: true }).click();
   await page.getByLabel("Waiting for label").fill("Replacement contractor response");
   await save(page, "Set waiting context");
   await openAction(page, "task.waiting.reschedule", original.id);
@@ -1339,7 +1337,7 @@ test("Party owner reporter correction preserves originating communication and re
   const issueId = new URL(page.url()).searchParams.get("id")!;
   await expect(page.locator(".issue-detail-facts")).toContainText(owner.displayName);
   await page.getByRole("link", { name: "Record linked conversation", exact: true }).click();
-  await expect(page.getByLabel("Existing identity (required)")).toHaveValue(ownerId);
+  await expect(page.getByLabel("Person or business (required)")).toHaveValue(ownerId);
   await expect(
     page.getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ }),
   ).toHaveValue("reporter");
@@ -2015,7 +2013,7 @@ test("Conversation draft, optional follow-up and correction retain separate orig
     .fill(new Date(Date.now() - 60000).toISOString());
   await page.getByLabel("Occurred timezone (required)").fill("America/Los_Angeles");
   await page.getByRole("button", { name: "Add participants entry" }).click();
-  await page.getByLabel("Existing identity (required)").fill(ownerId);
+  await page.getByLabel("Person or business (required)").fill(ownerId);
   await page
     .getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ })
     .selectOption("reporter");
@@ -2177,7 +2175,7 @@ test("lost manual recording response recovers one communication and one follow-u
     .fill(new Date(Date.now() - 60000).toISOString());
   await page.getByLabel("Occurred timezone (required)").fill("America/Los_Angeles");
   await page.getByRole("button", { name: "Add participants entry" }).click();
-  await page.getByLabel("Existing identity (required)").fill(ownerId);
+  await page.getByLabel("Person or business (required)").fill(ownerId);
   await page
     .getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ })
     .selectOption("reporter");
@@ -2238,7 +2236,7 @@ test("Owner concerns are discoverable from Owners and Maintenance with owner-pre
       .getByRole("link", { name: "Issues", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   await page.goto(`/owners/${ownerId}/overview`);
-  const concerns = page.getByRole("region", { name: "concerns section", exact: true });
+  const concerns = page.getByRole("region", { name: "Owner concerns section", exact: true });
   await expect(
     concerns.getByText("Concern discoverability example", { exact: true }),
   ).toBeVisible();
@@ -2256,7 +2254,7 @@ test("Owner concerns are discoverable from Owners and Maintenance with owner-pre
   );
   await page.goto(`/owners/${ownerId}/overview`);
   await page
-    .getByRole("region", { name: "concerns section", exact: true })
+    .getByRole("region", { name: "Owner concerns section", exact: true })
     .getByRole("link", { name: "Record concern", exact: true })
     .click();
   await expect(page.getByLabel("Owner (required)")).toHaveValue(ownerId);
@@ -2503,7 +2501,8 @@ test("Owner concern resolution preserves claim context and independent follow-up
   await openAction(page, "owner_concern.follow_up", value.id);
   await page.getByLabel("Title (required)").fill("Reply to Owner");
   await save(page, "Create concern follow-up");
-  await openAction(page, "owner_concern.resolved", value.id);
+  await page.goto(`/maintenance?record=concern&id=${value.id}`);
+  await page.getByRole("button", { name: "Resolve owner concern", exact: true }).click();
   await page.getByLabel("I confirm this lifecycle change").check();
   await page.getByLabel("Summary", { exact: true }).fill("Explained repair timing");
   await save(page, "Resolve owner concern");
@@ -3217,8 +3216,7 @@ test("Narrow Task actions are keyboard accessible without hiding their deadline"
   await expect(deadline).toHaveText(localDeadline);
   await expect(deadline).toBeVisible();
   await expect(details).not.toContainText(value.dueAtUtc!);
-  await page.getByText("Actions", { exact: true }).click();
-  await page.getByRole("link", { name: "Set waiting context", exact: true }).focus();
+  await page.getByRole("button", { name: "Set waiting context", exact: true }).focus();
   await expect(deadline).toHaveText(localDeadline);
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Set waiting context" })).toBeVisible();

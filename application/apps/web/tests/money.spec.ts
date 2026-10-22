@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import type { components } from "@epm/contracts/generated";
 import axe from "axe-core";
+import { formatDate } from "../src/shared/presentation";
 
 type Schemas = components["schemas"];
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
@@ -91,6 +92,35 @@ async function schedule(request: APIRequestContext, f: Awaited<ReturnType<typeof
   );
 }
 
+test("failed Money directory read remains unavailable until an explicit successful retry", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  await schedule(request, f);
+  let unavailable = true;
+  await page.route("**/api/rent-expectations?*", (route) =>
+    unavailable
+      ? route.fulfill({
+          status: 503,
+          json: { detail: { code: "finance_unavailable", message: "Temporarily unavailable" } },
+        })
+      : route.continue(),
+  );
+  await page.goto(`/money?leaseId=${f.lease.id}`);
+  await expect(page.getByRole("alert")).toContainText("Money information is unavailable");
+  await expect(page.getByText("No records match these filters.", { exact: true })).toHaveCount(0);
+  const records = page.getByRole("region", { name: "Rent records", exact: true });
+  await expect(records.getByRole("link", { name: "Rent due", exact: true })).toHaveCount(0);
+  await expect(records.getByText("USD 0.00", { exact: true })).toHaveCount(0);
+  unavailable = false;
+  await page.getByRole("button", { name: "Restart with these filters", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Rent due", exact: true }).first()).toBeVisible();
+  await expect(page.getByText("USD 1,000.00", { exact: true }).first()).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`leaseId=${f.lease.id}`));
+});
+
 test("money editing, category details, expenses and reporting use readable responsive sections", async ({
   page,
   request,
@@ -131,7 +161,9 @@ test("money editing, category details, expenses and reporting use readable respo
     const region = page.getByRole("region", { name: item.region, exact: true });
     await expect(region).toBeVisible();
     if (item.key === "reporting")
-      await expect(region.getByRole("region", { name: "operating", exact: true })).toBeVisible();
+      await expect(
+        region.getByRole("region", { name: "Rent and expenses", exact: true }),
+      ).toBeVisible();
     if (item.key.startsWith("category-") && item.key !== "category-detail") {
       await expect(
         region.getByRole("region", { name: "Category details", exact: true }),
@@ -382,7 +414,7 @@ test("rent payment detail shows named context, exact allocations and retained vo
   await expect(detail.getByRole("link", { name: "Record replacement rent receipt" })).toBeVisible();
   await detail
     .getByRole("link", {
-      name: `${synced.items[0].periodStartsOn} – ${synced.items[0].periodEndsOn}`,
+      name: `${formatDate(synced.items[0].periodStartsOn)} – ${formatDate(synced.items[0].periodEndsOn)}`,
       exact: true,
     })
     .click();
@@ -406,7 +438,7 @@ test("Money lists present rent and expenses as readable cards", async ({ page, r
   await expect(rent.getByRole("heading", { name: "Rent due" })).toBeVisible();
   await expect(rent.getByText("Expected", { exact: true })).toBeVisible();
   await expect(rent.getByText("Payment timing", { exact: true })).toBeVisible();
-  await expect(rent.getByText("USD 1000.00", { exact: true }).first()).toBeVisible();
+  await expect(rent.getByText("USD 1,000.00", { exact: true }).first()).toBeVisible();
   await expect(
     rent.getByRole("link", { name: "Review amounts and receipt allocations" }),
   ).toBeVisible();
@@ -550,8 +582,8 @@ test("paid Expense creation selects Property Space Provider and a Party payer wi
   expect(items[0].paidByPartyId).toBe(f.owner);
   expect(items[0].spaceId).toBe(f.property.spaces[0].id);
   await page.goto(`/money?tab=expenses&propertyId=${f.property.id}`);
-  await page.getByLabel("Provider Party ID", { exact: true }).fill(provider.party.id);
-  await page.getByLabel("Payer Party ID", { exact: true }).fill(f.owner);
+  await page.getByLabel("Provider", { exact: true }).fill(provider.party.id);
+  await page.getByLabel("Payer", { exact: true }).fill(f.owner);
   await page.getByRole("combobox", { name: "Paid by", exact: true }).selectOption("party");
   await page.getByLabel("Date paid from", { exact: true }).fill(f.today);
   await page.getByLabel("Date paid to", { exact: true }).fill(f.today);
@@ -732,7 +764,7 @@ test("rent synchronization and a partial receipt keep allocations and remaining 
   );
   const expectation = expectations.items.find((item) => item.periodStartsOn === f.start)!;
   await page.goto(`/money?record=expectation&id=${expectation.id}`);
-  await expect(page.getByText("USD 1000.00", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("USD 1,000.00", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Rent due", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Rent balance", exact: true })).toContainText(
     "Still due",
@@ -776,6 +808,15 @@ test("rent synchronization and a partial receipt keep allocations and remaining 
   );
   expect(receipts.items).toHaveLength(1);
   expect(receipts.items[0].allocations[0].amountMinor).toBe(40000);
+  const allocations = page.getByRole("region", { name: "Allocation summaries", exact: true });
+  await expect(allocations.getByText("Amount applied", { exact: true })).toBeVisible();
+  await expect(allocations.getByText("USD 400.00", { exact: true })).toBeVisible();
+  await expect(allocations.getByText("Payment status", { exact: true })).toHaveCount(1);
+  await expect(allocations).not.toContainText("Amount minor");
+  await expect(allocations).not.toContainText(receipts.items[0].id);
+  await expect(
+    allocations.getByRole("link", { name: "Recorded receipt for this allocation", exact: true }),
+  ).toHaveAttribute("href", `/money?record=receipt&id=${receipts.items[0].id}`);
   await page.goto(
     `/money?workflow=finance.rent_receipt.create&target=${f.lease.id}&child=${expectation.id}`,
   );
@@ -1031,7 +1072,7 @@ test("receipt totals prevent unmatched money and allocate one payment across two
     .getByRole("link", { name: "Recorded receipt for this allocation", exact: true })
     .click();
   await expect(page.getByRole("region", { name: "Money record", exact: true })).toContainText(
-    "USD 1500.00",
+    "USD 1,500.00",
   );
   await page.setViewportSize({ width: 390, height: 900 });
   for (const theme of ["light", "dark"]) {
@@ -1043,7 +1084,7 @@ test("receipt totals prevent unmatched money and allocate one payment across two
     await expect(page.getByText("Preferences saved.")).toBeVisible();
     await page.goto(`/money?record=receipt&id=${receipts.items[0].id}`);
     await expect(page.getByRole("region", { name: "Money record", exact: true })).toContainText(
-      "USD 1500.00",
+      "USD 1,500.00",
     );
     await page.evaluate(axe.source);
     expect(
@@ -1334,7 +1375,14 @@ for (const mode of ["existing", "create"] as const)
         paymentMethodKind: "bank_transfer",
         allocations: [{ expectationId: synced.items[0].id, amountMinor: 40000 }],
       });
-    await page.goto(`/money?workflow=owner_rent_report.verify&target=${report.id}`);
+    await page.goto(`/money?record=report&id=${report.id}`);
+    await expect(
+      page.getByRole("button", { name: "Edit owner rent report", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Reject owner rent report", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Verify owner rent report", exact: true }).click();
     await page
       .getByLabel(
         mode === "existing"
@@ -1647,18 +1695,16 @@ test("prepaid check scheduling, deposit and return distinguish scheduled money f
     (await get<Schemas["ReceiptPageResponse"]>(request, `/api/rent-receipts?leaseId=${f.lease.id}`))
       .items,
   ).toHaveLength(0);
-  await page.goto(
-    `/money?workflow=finance.prepaid_check.deposit&target=${f.lease.id}&child=${checks.items[0].id}`,
-  );
+  await page.goto(`/money?record=check&id=${checks.items[0].id}`);
+  await page.getByRole("button", { name: "Deposit prepaid check", exact: true }).click();
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
   await save(page, "Deposit prepaid check");
   expect(
     (await get<Schemas["ReceiptPageResponse"]>(request, `/api/rent-receipts?leaseId=${f.lease.id}`))
       .items,
   ).toHaveLength(1);
-  await page.goto(
-    `/money?workflow=finance.prepaid_check.return&target=${f.lease.id}&child=${checks.items[0].id}`,
-  );
+  await page.goto(`/money?record=check&id=${checks.items[0].id}`);
+  await page.getByRole("button", { name: "Return prepaid check", exact: true }).click();
   await page.getByLabel("Reason (required)").fill("Check returned unpaid");
   await page.getByLabel("Returned on (required)").fill(f.today);
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
@@ -1756,6 +1802,11 @@ test("deposit interest review uses exact cents and requires renewed approval for
     overrideReason: "Documented applied adjustment",
   });
   await page.goto(`/money?record=settlement&id=${settlement.id}`);
+  await page.getByText("Interest calculation", { exact: true }).click();
+  await expect(page.getByRole("region", { name: "Credits", exact: true })).toContainText(
+    "Annual interest rate",
+  );
+  await expect(page.getByRole("region", { name: "Credits", exact: true })).toContainText("6%");
   await expect(page.getByRole("region", { name: "Credits", exact: true })).toContainText(
     "USD 4.93",
   );
@@ -1771,6 +1822,7 @@ test("deposit interest review uses exact cents and requires renewed approval for
     await page.getByRole("button", { name: "Save preferences", exact: true }).click();
     await expect(page.getByText("Preferences saved.")).toBeVisible();
     await page.goto(`/money?record=settlement&id=${settlement.id}`);
+    await page.getByText("Interest calculation", { exact: true }).click();
     await expect(page.getByRole("region", { name: "Credits", exact: true })).toContainText(
       "USD 4.93",
     );
@@ -1995,7 +2047,11 @@ test("deposit account receipt and zero-dollar settlement approval/completion are
     request,
     `/api/leases/${f.lease.id}/security-deposit`,
   );
-  await page.goto(`/money?workflow=finance.deposit_settlement.create&target=${account.id}`);
+  await page.goto(`/money?record=deposit&id=${account.id}`);
+  await expect(
+    page.getByRole("button", { name: "Record deposit receipt", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Prepare deposit settlement", exact: true }).click();
   await page.getByLabel("Settlement due on (required)").fill(f.through);
   await page.getByLabel("Eligibility override confirmed", { exact: true }).check();
   await page
@@ -2007,15 +2063,16 @@ test("deposit account receipt and zero-dollar settlement approval/completion are
     `/api/security-deposits/${account.id}`,
   );
   expect(updated.settlementId).toBeTruthy();
-  await page.goto(
-    `/money?workflow=finance.deposit_settlement.approve&target=${account.id}&child=${updated.settlementId}`,
-  );
+  await page.goto(`/money?record=settlement&id=${updated.settlementId}`);
+  await page.getByRole("button", { name: "Approve deposit settlement", exact: true }).click();
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
   await page.getByLabel("Zero dollar closure confirmed", { exact: true }).check();
   await save(page, "Approve deposit settlement");
-  await page.goto(
-    `/money?workflow=finance.deposit_settlement.complete&target=${account.id}&child=${updated.settlementId}`,
-  );
+  await page.goto(`/money?record=settlement&id=${updated.settlementId}`);
+  await expect(
+    page.getByRole("button", { name: "Record deposit refund", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Complete deposit settlement", exact: true }).click();
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
   await save(page, "Complete deposit settlement");
   expect(
@@ -2404,7 +2461,7 @@ test("supporting evidence can be reselected after restart and metadata retains v
       response.ok(),
   );
   await page.getByRole("button", { name: "Save unfinished form" }).click();
-  await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   const saved = (await (await savedResponse).json()) as Schemas["RecoveryResponse"];
   await page.goto("/settings/recovery");
   await page
@@ -2455,11 +2512,11 @@ test("explicit-period reporting uses backend totals and source drill-down withou
   expect(summaries).toBe(0);
   await page.getByLabel("Reporting from (required)").fill(f.today);
   await page.getByLabel("Reporting through (required)").fill(f.today);
-  await expect(page.getByRole("region", { name: "operating", exact: true })).toContainText(
+  await expect(page.getByRole("region", { name: "Rent and expenses", exact: true })).toContainText(
     "USD 120.01",
   );
   expect(summaries).toBe(1);
-  await expect(page.getByRole("region", { name: "operating", exact: true })).toContainText(
+  await expect(page.getByRole("region", { name: "Rent and expenses", exact: true })).toContainText(
     "Rent less net expenses",
   );
   expect(details).toBe(0);
@@ -2554,5 +2611,5 @@ test("independent money read failure is explicit and reporting restart retains p
   await expect(page).not.toHaveURL(/cursor=/);
   await expect(page).toHaveURL(new RegExp(`propertyId=${f.property.id}`));
   await expect(page).toHaveURL(new RegExp(`fromOn=${f.today}`));
-  await expect(page.getByRole("region", { name: "operating", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Rent and expenses", exact: true })).toBeVisible();
 });

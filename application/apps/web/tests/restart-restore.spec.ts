@@ -179,7 +179,7 @@ test("lost response survives a process restart and encrypted restore with the or
     await page.goto(`${origin}/tasks?workflow=task.edit&target=${task.id}`);
     await page.getByLabel("Title", { exact: true }).fill("Private durable form text");
     await page.getByRole("button", { name: "Save unfinished form" }).click();
-    await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
+    await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
     const recoveryResponse = await api.get("/api/operator/recovery?limit=50");
     const recovery = (await recoveryResponse.json()) as Schema["RecoveryPage"];
     const form = recovery.items.find((item) => item.formKey === "task.edit")!;

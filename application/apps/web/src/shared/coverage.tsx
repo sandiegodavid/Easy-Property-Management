@@ -12,6 +12,8 @@ import { mutation } from "./mutations";
 import type { Recovery } from "./recovery";
 import { formatHomeTime } from "./home-time";
 import { propertyUnitsLabel, rentableUnitLabel } from "./property-labels";
+import { DraftSaveStatus, draftSaveLabel } from "./draft-save-status";
+import { FormFeedback } from "../workflows/form-feedback";
 
 type Coverage = components["schemas"]["CoverageResult"];
 type Area = Coverage["area"];
@@ -327,19 +329,31 @@ function ReviewEditor({
               {...form.register("nextReviewOn")}
             />
           </label>
-          <button disabled={changed || current.availability !== "available"}>Record review</button>
         </fieldset>
+        <div className="command-form-actions" role="group" aria-label="Form actions">
+          <button
+            type="submit"
+            disabled={locked || !scope.canWrite || changed || current.availability !== "available"}
+          >
+            Record review
+          </button>
+          <button
+            type="button"
+            disabled={
+              locked || !scope.canWrite || state.draft === "saved" || state.draft === "saving"
+            }
+            onClick={() => void action(() => controller.flush())}
+          >
+            {draftSaveLabel(state.draft)}
+          </button>
+          <DraftSaveStatus
+            draft={state.draft}
+            command={state.command}
+            savedAt={state.record?.savedAt}
+          />
+        </div>
       </form>
-      <p role="status">
-        Form {state.draft} · Review {state.command}
-      </p>
-      {(error || state.error) && <p role="alert">{error ?? state.error}</p>}
-      <button
-        disabled={locked || !scope.canWrite}
-        onClick={() => void action(() => controller.flush())}
-      >
-        Save review form
-      </button>
+      <FormFeedback message={error ?? state.error} />
       {state.command === "outcome_unknown" && (
         <>
           <p>The outcome is unknown. Reconcile or replay the original attempt.</p>
@@ -353,14 +367,14 @@ function ReviewEditor({
       )}
       {receipt && (
         <p>
-          Original review {receipt.operationId}: {words(receipt.state ?? "unavailable")} ·{" "}
-          {receipt.asOf}
+          Recorded review: {words(receipt.state ?? "unavailable")} ·{" "}
+          <time dateTime={receipt.asOf}>{formatHomeTime(receipt.asOf)}</time>
         </p>
       )}
       {original.data && !receipt && (
         <p>
-          Original review {original.data.operationId}: {words(original.data.state ?? "unavailable")}{" "}
-          · {original.data.asOf}
+          Recorded review: {words(original.data.state ?? "unavailable")} ·{" "}
+          <time dateTime={original.data.asOf}>{formatHomeTime(original.data.asOf)}</time>
         </p>
       )}
       {original.error && (
@@ -426,9 +440,9 @@ function CoveragePanel({
     <section className="information-review-panel" aria-label={`${words(area)} information review`}>
       <header className="information-review-heading">
         <div>
-          <h3>
+          <h2>
             {words(area).replace(/^./, (character) => character.toUpperCase())} information review
-          </h3>
+          </h2>
           <p>{explain[area]}</p>
         </div>
         <button onClick={() => void result.refetch()}>Refresh {words(area)} information</button>

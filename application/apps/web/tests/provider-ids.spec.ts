@@ -22,7 +22,7 @@ test("provider IDs retain optional full numbers with explicit reveal and origina
   await page.goto(detail);
   const identification = page.getByRole("region", { name: "Official identification", exact: true });
   await expect(identification).toContainText("No official ID recorded");
-  await identification.getByRole("button", { name: "Manage official IDs", exact: true }).click();
+  await page.getByRole("button", { name: "Edit provider", exact: true }).click();
   await page.getByRole("button", { name: "Add official ID", exact: true }).click();
   await page
     .getByRole("combobox", { name: "ID type (required)", exact: true })
@@ -82,7 +82,7 @@ test("provider IDs retain optional full numbers with explicit reveal and origina
   await expect(identification).toContainText("OR-123456");
   await identification.getByRole("button", { name: "Hide ID number", exact: true }).click();
   await expect(identification).not.toContainText("OR-123456");
-  await identification.getByRole("button", { name: "Manage official IDs", exact: true }).click();
+  await page.getByRole("button", { name: "Edit provider", exact: true }).click();
   await page
     .getByRole("combobox", { name: "ID type (required)", exact: true })
     .selectOption("passport");
@@ -100,7 +100,7 @@ test("provider IDs retain optional full numbers with explicit reveal and origina
   expect(
     await (await request.get(`/api/providers/operations/${original.operationId}`)).json(),
   ).toEqual(original);
-  await identification.getByRole("button", { name: "Manage official IDs", exact: true }).click();
+  await page.getByRole("button", { name: "Edit provider", exact: true }).click();
   await page.getByRole("button", { name: "Remove official ID 1", exact: true }).click();
   await page
     .getByRole("group", { name: "Form actions", exact: true })

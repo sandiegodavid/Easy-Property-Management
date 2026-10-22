@@ -63,6 +63,10 @@ A saved **unfinished form** is input, not an official record. An official Lease/
 
 Use **Save unfinished form** when pausing. **Unfinished forms** in the header lets you resume. Submission uses the action's displayed Save button plus any required confirmations. Wait for its saved result and review the owning record. File bytes and credentials must be selected/entered again after restart.
 
+The form shows **Saving unfinished form…**, then **Unfinished form saved** with the saved time beside the buttons. Once saved, the unfinished-form button reads **Saved**. Editing again makes it available for another save. This confirmation also appears when autosave saves your input.
+
+The list contains only saved drafts and submissions that still need checking. **Discard** abandons a draft without changing the official record. An interrupted submission must be checked first; once its result is confirmed, it leaves this list. Its record and history remain available from the owning page.
+
 After a successful create or edit, the form is replaced by a readable confirmation showing what was saved. Use **Back to property**, **Back to tenant**, or the corresponding item button to open its current page. Property forms no longer take you there automatically. An embedded form shows its confirmation in the same section. Technical operation IDs and revisions are not shown in these confirmations; sensitive ID numbers remain hidden until you choose to reveal them. If saved details cannot load, retry that read—do not save again. An unresolved save keeps its recovery controls until the outcome is confirmed.
 
 If a save outcome is unknown, use **Check original result** before considering **Retry original attempt**. Do not start a second payment/issue/form to work around uncertainty. If another window changed the source, review its latest version while retaining edits. See [troubleshooting](troubleshooting.md).

@@ -17,7 +17,7 @@ export function useSaveCompletion() {
   return { completed: saved === key, onSaved };
 }
 
-export function savesItem(key: string) {
+function savesItem(key: string) {
   if (key.startsWith("portfolio.") && !/\.(property|space)\.(create|patch)$/.test(key))
     return key === "portfolio.ownerships.replace";
   if (key === "communication.draft.record") return false;
@@ -56,7 +56,7 @@ function subject(key: string) {
     ["owner_concern.follow_up", "Follow-up task"],
     ["owner_concern", "Owner concern"],
     ["communication", "Conversation"],
-    ["intake", "Source evidence"],
+    ["intake", "Retained source"],
     ["task.reminder", "Reminder"],
     ["task", "Task"],
     ["inspection.template", "Inspection template"],
@@ -98,6 +98,8 @@ function destination(
     party = record(item.party);
   const id = scalar(item.id ?? item.sourceId, target);
   const parent = scalar(item.partyId ?? party.id ?? profile.partyId, source ?? id);
+  if (/^portfolio\.(occupancy|availability)\./.test(form) || form === "portfolio.space.classify")
+    return { to: back, label: "Back to property" };
   if (form === "file.upload") return { to: `/money?file=${id}`, label: "Back to evidence" };
   if (form.startsWith("portfolio."))
     return {
@@ -115,7 +117,7 @@ function destination(
   if (form.startsWith("intake."))
     return {
       to: `/conversations?intake=true&source=${scalar(item.sourceId, source ?? id)}`,
-      label: "Back to source evidence",
+      label: "Back to retained source",
     };
   if (form.startsWith("lease."))
     return { to: `/leases/${scalar(item.leaseId, source ?? id)}/details`, label: "Back to lease" };
@@ -199,11 +201,14 @@ export function SavedCommand({
         ? "Contact"
         : subject(definition.formKey);
   const edited = /\.(patch|edit|update|correct|replace)$/.test(definition.formKey);
+  const lifecycle = !savesItem(definition.formKey);
   const summary = record(recovery.receipt?.result);
   const target = scalar(summary.targetId ?? summary.resultId ?? summary.id);
   return (
     <SavedItem
-      title={`${name} ${edited ? "updated" : "saved"}`}
+      title={
+        lifecycle ? `${definition.title} — complete` : `${name} ${edited ? "updated" : "saved"}`
+      }
       value={result.data}
       embedded={embedded}
       destination={destination(definition.formKey, result.data, target, sourceId, back)}
@@ -212,8 +217,8 @@ export function SavedCommand({
       {result.error && (
         <div role="alert">
           <p>
-            Your {name.toLowerCase()} was saved, but its details could not be loaded. No new save is
-            needed.
+            {lifecycle ? "Your change is complete" : `Your ${name.toLowerCase()} was saved`}, but
+            its details could not be loaded. No new save is needed.
           </p>
           <button type="button" onClick={() => void result.refetch()}>
             Retry saved {name.toLowerCase()} details

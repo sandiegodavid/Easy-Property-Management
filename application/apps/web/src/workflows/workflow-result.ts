@@ -7,6 +7,13 @@ export async function loadWorkflowResult(
   key: string,
   signal: AbortSignal,
 ): Promise<unknown> {
+  if (/^portfolio\.(occupancy|availability)\./.test(form) || form === "portfolio.space.classify")
+    return readResult(
+      await api.GET("/api/portfolio/status-operations/{operation_id}", {
+        signal,
+        params: { path: { operation_id: operation } },
+      }),
+    ).result;
   if (form.startsWith("portfolio."))
     return readResult(
       await api.GET("/api/portfolio/inventory-operations/{operation_id}", {

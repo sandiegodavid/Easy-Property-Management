@@ -13,6 +13,7 @@ import { RentExpectationDetail } from "./rent-expectation-detail";
 import { RentReceiptDetail } from "./rent-receipt-detail";
 import { ExpenseDetail, ExpenseCategoryDetail } from "./expense-detail";
 import { EvidenceItem } from "./evidence-item";
+import { moneyDetailFields, moneyChildFields } from "./money-detail-fields";
 
 export type MoneyKind =
   | "expectation"
@@ -110,84 +111,6 @@ export async function loadMoneyRecord(
   }
 }
 
-const detailFields = [
-  "status",
-  "lifecycleStatus",
-  "leaseId",
-  "propertyId",
-  "spaceId",
-  "payeeName",
-  "ownerDisplayNameSnapshot",
-  "currentOwnerState",
-  "reportedAtUtc",
-  "propertyTimezoneSnapshot",
-  "receiptLifecycleStatus",
-  "financiallyEffective",
-  "reportRevision",
-  "displayName",
-  "description",
-  "notes",
-  "sourceNote",
-  "reviewNote",
-  "dueOn",
-  "periodStartsOn",
-  "periodEndsOn",
-  "receivedOn",
-  "paidOn",
-  "checkDatedOn",
-  "paymentMethodKind",
-  "paymentMethodLabel",
-  "maskedReference",
-  "otherPaymentMethodNote",
-  "receivedByPartyId",
-  "amountMinor",
-  "expectedAmountMinor",
-  "receivedAmountMinor",
-  "outstandingAmountMinor",
-  "amount",
-  "activeRefundedAmount",
-  "netAmount",
-  "agreedAmount",
-  "activeReceivedAmount",
-  "varianceAmount",
-  "settlementStatus",
-  "timelinessStatus",
-  "scheduleAnchorOn",
-  "isProrated",
-  "prorationNumeratorDays",
-  "prorationDenominatorDays",
-  "responsibilityBoundaryOn",
-  "responsibilityOverrideReason",
-  "receiptLifecycleStatus",
-  "financiallyEffective",
-  "depositEligibility",
-  "reminderStatus",
-  "voidReason",
-  "voidedAt",
-  "priorReportId",
-  "replacementReportId",
-  "replacementReceiptId",
-  "replacesReceiptId",
-  "replacesExpenseId",
-  "replacesPrepaidCheckId",
-  "replacedByPrepaidCheckId",
-  "settlementDueOn",
-  "legalRuleReference",
-  "reviewNotes",
-  "deadlineState",
-  "unresolvedBalance",
-  "replacesSettlementId",
-  "replacedBySettlementId",
-  "refundDue",
-  "receiptTotal",
-  "deductionTotal",
-  "creditTotal",
-  "unsettledReceiptAmount",
-  "inspectionWarnings",
-  "sourceWarnings",
-  "createdAt",
-  "updatedAt",
-];
 export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
   const { scope } = useWorkspace();
   const query = useQuery({
@@ -252,7 +175,12 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
               ? "Paid expense"
               : kind === "receipt"
                 ? "Rent payment"
-                : `${label(kind)} record`}
+                : ({
+                    check: "Scheduled check",
+                    report: "Owner report",
+                    deposit: "Deposit account",
+                    settlement: "Settlement",
+                  }[kind] ?? label(kind))}
       </h2>
       {kind === "expectation" ? (
         <RentExpectationDetail item={item} />
@@ -263,9 +191,38 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
       ) : kind === "category" ? (
         <ExpenseCategoryDetail item={item} />
       ) : (
-        <MoneyFacts value={item} fields={detailFields} />
+        <MoneyFacts
+          value={item}
+          fields={moneyDetailFields[kind]}
+          labels={{
+            ownerDisplayNameSnapshot: "Owner",
+            currentOwnerState: "Current owner status",
+            reportedAtUtc: "Reported",
+            propertyTimezoneSnapshot: "Property time zone",
+            receiptLifecycleStatus: "Payment status",
+            financiallyEffective: "Counts toward received rent",
+            agreedAmount: "Agreed deposit",
+            activeReceivedAmount: "Deposits received",
+            activeRefundedAmount: "Deposits refunded",
+          }}
+        />
       )}
       {kind === "check" && <CheckContext check={item} />}
+      {(kind === "check" || kind === "settlement") && (
+        <nav aria-label="Correction history">
+          {(kind === "check"
+            ? ["replacesPrepaidCheckId", "replacedByPrepaidCheckId"]
+            : ["replacesSettlementId", "replacedBySettlementId"]
+          ).map((key, index) =>
+            item[key] ? (
+              <Link key={key} to={moneyRecordUrl(kind, scalar(item[key]))}>
+                {index === 0 ? "Previous" : "Replacement"}{" "}
+                {kind === "check" ? "check" : "settlement"}
+              </Link>
+            ) : null,
+          )}
+        </nav>
+      )}
       {(leaseId || !!item.propertyId) && (
         <nav aria-label="Related money records">
           {leaseId && <Link to={`/leases/${leaseId}/details`}>View lease</Link>}
@@ -280,8 +237,8 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
           target={leaseId}
           child={id}
           title="Rent ledger actions"
-          collapsible={kind !== "expectation" && kind !== "receipt"}
-          asButtons={kind === "expectation" || kind === "receipt"}
+          collapsible={false}
+          asButtons
           labels={{
             "finance.rent_receipt.create": "Record payment",
             "finance.prepaid_check.create": "Record prepaid check",
@@ -330,6 +287,8 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
       )}
       {kind === "report" && item.status === "pending" && (
         <CommandLinks
+          asButtons
+          collapsible={false}
           keys={["owner_rent_report.patch", "owner_rent_report.verify", "owner_rent_report.reject"]}
           target={id}
         />
@@ -373,6 +332,8 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
       {kind === "deposit" && (
         <>
           <CommandLinks
+            asButtons
+            collapsible={false}
             keys={["finance.deposit_receipt.create", "finance.deposit_settlement.create"]}
             target={id}
           />
@@ -388,6 +349,8 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
         <>
           <Link to={moneyRecordUrl("deposit", accountId)}>Deposit account</Link>
           <CommandLinks
+            asButtons
+            collapsible={false}
             target={accountId}
             child={id}
             keys={
@@ -441,27 +404,39 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
                   <article key={childId}>
                     <MoneyFacts
                       value={child}
-                      fields={[
-                        ...detailFields,
-                        "rationale",
-                        "kind",
-                        "category",
-                        "expectationId",
-                        "receiptId",
-                        "recipientName",
-                        "receivedFromName",
-                        "authorizedBySettlementId",
-                        "reason",
-                        "decision",
-                        "calculatorPrincipal",
-                        "annualRateBasisPoints",
-                        "startsOn",
-                        "endsOn",
-                        "dayCount",
-                        "calculatedAmount",
-                        "overrideReason",
-                      ]}
+                      fields={moneyChildFields[name]}
+                      labels={{
+                        amountMinor: name === "refunds" ? "Refund amount" : "Amount applied",
+                        receiptLifecycleStatus: "Payment status",
+                        financiallyEffective: "Counts toward received rent",
+                      }}
                     />
+                    {name === "credits" && child.calculatorPrincipal != null && (
+                      <details>
+                        <summary>Interest calculation</summary>
+                        <MoneyFacts
+                          value={{
+                            ...child,
+                            annualRate: `${Number(child.annualRateBasisPoints) / 100}%`,
+                          }}
+                          fields={[
+                            "calculatorPrincipal",
+                            "annualRate",
+                            "startsOn",
+                            "endsOn",
+                            "dayCount",
+                            "calculatedAmount",
+                            "overrideReason",
+                          ]}
+                          labels={{
+                            calculatorPrincipal: "Principal",
+                            annualRate: "Annual interest rate",
+                            dayCount: "Days of interest",
+                            calculatedAmount: "Calculated interest",
+                          }}
+                        />
+                      </details>
+                    )}
                     {!!child.expectationId && (
                       <Link to={moneyRecordUrl("expectation", scalar(child.expectationId))}>
                         Allocated expectation
@@ -477,6 +452,8 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
                       !item.voidedAt &&
                       !child.voidedAt && (
                         <CommandLinks
+                          asButtons
+                          collapsible={false}
                           keys={["finance.expense_refund.void"]}
                           target={id}
                           child={childId}
@@ -496,6 +473,8 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
                       item.status === "draft" &&
                       (name === "deductions" || name === "credits") && (
                         <CommandLinks
+                          asButtons
+                          collapsible={false}
                           keys={
                             name === "deductions"
                               ? [
@@ -511,6 +490,8 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
                       )}
                     {kind === "settlement" && name === "refunds" && !child.voidedAt && (
                       <CommandLinks
+                        asButtons
+                        collapsible={false}
                         keys={["finance.deposit_refund.void"]}
                         target={accountId}
                         child={childId}
@@ -565,6 +546,8 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
                                 />
                                 {item.status === "draft" && (
                                   <CommandLinks
+                                    asButtons
+                                    collapsible={false}
                                     keys={["finance.deposit_deduction_source.delete"]}
                                     target={accountId}
                                     child={scalar(fact.id)}
@@ -728,12 +711,16 @@ function DepositHistory({ id }: { id: string }) {
               "receivedByName",
               "lifecycleStatus",
               "voidReason",
-              "replacesReceiptId",
-              "replacedByReceiptId",
             ]}
           />
           {receipt.lifecycleStatus === "active" && (
-            <CommandLinks keys={["finance.deposit_receipt.void"]} target={id} child={receipt.id} />
+            <CommandLinks
+              asButtons
+              collapsible={false}
+              keys={["finance.deposit_receipt.void"]}
+              target={id}
+              child={receipt.id}
+            />
           )}
           {receipt.lifecycleStatus === "voided" && !receipt.replacedByReceiptId && (
             <Link
@@ -748,15 +735,7 @@ function DepositHistory({ id }: { id: string }) {
         <MoneyFacts
           key={refund.id}
           value={refund}
-          fields={[
-            "paidOn",
-            "amount",
-            "recipientName",
-            "lifecycleStatus",
-            "voidReason",
-            "replacesRefundId",
-            "replacedByRefundId",
-          ]}
+          fields={["paidOn", "amount", "recipientName", "lifecycleStatus", "voidReason"]}
         />
       ))}
     </>

@@ -8,7 +8,7 @@ TASK-001 completion on October 12, 2026 passed twelve focused Task browser cases
 
 ## Current Playwright coverage inventory
 
-Inventory captured **October 20, 2026**, using test discovery for all four configurations below. Counts include parameterized cases, not just handwritten `test()` declarations. **Discovery is not execution:** these totals do not establish a current full-suite pass. The delivery evidence elsewhere on this page retains its original validation dates.
+Inventory captured **October 21, 2026**, using test discovery for all four configurations below. Counts include parameterized cases, not just handwritten `test()` declarations. **Discovery is not execution:** these totals do not establish a current full-suite pass. The delivery evidence elsewhere on this page retains its original validation dates.
 
 There is no configured Playwright line/branch or CSS coverage measurement, so no code-coverage percentage is available. Test counts also do not measure the percentage of backend API operations exercised.
 
@@ -16,36 +16,36 @@ There is no configured Playwright line/branch or CSS coverage measurement, so no
 
 | Group | Tests | Spec files | Execution boundary |
 | --- | ---: | ---: | --- |
-| [Packaged application](../../application/playwright.config.ts) | 316 | 33 | Compiled wheel assets with real backend routes and disposable ready/unavailable workspaces; selected scenarios intercept responses to exercise faults or synthetic contracts. |
+| [Packaged application](../../application/playwright.config.ts) | 369 | 37 | Compiled wheel assets with real backend routes and disposable ready/unavailable workspaces; selected scenarios intercept responses to exercise faults or synthetic contracts. |
 | [Shared components](../../application/playwright.components.config.ts) | 8 | 3 | Vite-backed component harness covering disclosures, async states, confirmation/focus, narrow layouts, reduced motion and Lease date presentation. Excludes the recovery spec. |
 | [Recovery integration](../../application/playwright.recovery.config.ts) | 6 | 1 | Recovery harness through Vite with a real disposable backend; autosave, two-tab conflicts, interrupted/cancelled requests, original-key replay and source changes. |
 | [Seeded demo](../../application/playwright.demo.config.ts) | 56 | 8 | Separately started synthetic demo server at port 8001; existing known records, read-only navigation/presentation by default. Not included in `test:web`. |
-| **Total** | **386** | **45** | All configurations currently use Chromium. |
+| **Total** | **439** | **49** | All configurations currently use Chromium. |
 
 The component and recovery configurations select disjoint spec files; their totals do not double-count `recovery.spec.ts`. Some component cases execute controller/date logic rather than a complete browser workflow. The seeded-demo suites are documented separately in their [README](../../application/apps/web/tests-demo/README.md).
 
 ### Packaged application workflow coverage
 
-The following groups partition the 316 discovered cases by spec file. A case can exercise several modules; these are navigation aids, not exhaustive feature-coverage percentages.
+The following groups partition the 369 discovered cases by spec file. A case can exercise several modules; these are navigation aids, not exhaustive feature-coverage percentages.
 
 | Area | Cases | Specs and principal checks |
 | --- | ---: | --- |
-| Home | 41 | Nine `home*.spec.ts` files: local times, layout/disclosure, tabs, filters, live refresh, cancellation/stale responses, independent failure, bounded collections, source drill-down/return, exact totals and a local latency gate. |
-| Property/Owner context and Portfolio status | 41 | `context-reads`, `portfolio-status`, `ownership-shares`: directories/overviews, ownership/contact selection, percentages, occupancy/leasing status, schedules/corrections, query bounds, viewport and current-source recovery. |
-| Shared identity and Provider workflows | 21 | `workflows`: Party contacts/primary selection, Tenant preferences, Provider creation/designation, services/areas/references/reputation, categories, archived history and interrupted/stale command results. Also includes shared Property workflow cases. |
+| Home | 46 | Nine `home*.spec.ts` files: local times, layout/disclosure, tabs, filters, live refresh, cancellation/stale responses, independent failure, bounded collections, source drill-down/return, exact totals and a local latency gate. |
+| Property/Owner context and Portfolio status | 43 | `context-reads`, `portfolio-status`, `ownership-shares`: directories/overviews, ownership/contact selection, percentages, occupancy/leasing status, schedules/corrections, query bounds, viewport and current-source recovery. |
+| Shared identity and Provider workflows | 23 | `workflows`: Party contacts/primary selection, Tenant preferences, Provider creation/designation, services/areas/references/reputation, categories, archived history and interrupted/stale command results. Also includes shared Property workflow cases. |
 | Tenant directory and IDs | 5 | `tenant-directory`, `tenant-ids`: search/browse, bounded continuation, archived/error/empty states, masked identity details and recovery. |
-| Provider categories and IDs | 3 | `provider-categories`, `provider-ids`: category administration/effective assignments, lost-response recovery and explicit reveal of optional full Provider ID numbers. |
+| Provider categories and IDs | 5 | `provider-categories`, `provider-ids`: category administration/effective assignments, lost-response recovery and explicit reveal of optional full Provider ID numbers. |
 | Leasing and Inspections | 30 | `leasing-inspections`: drafts, terms, participants, execution, renewal, end/termination/void, independent Lease/Space revisions, documents, checklists, evidence, acknowledgment/finalization and original-result recovery. |
-| Money | 49 | `money`: reporting/scope/drill-down, expected and received rent, allocations/payment methods, expenses/categories/refunds, deposits/settlements, prepaid checks, owner reports, evidence and duplicate/stale/interrupted submissions. |
-| Maintenance, Tasks and Communications | 54 | `work`: issue/reporter edits, appointments, quotes/assignments, journal corrections, cost/Expense boundaries, Tasks/reminders/waiting/follow-ups, manual communications, owner concerns, lifecycle recovery, bounds and unavailable evidence. |
-| Intake | 7 | `intake`: admission/import, ordered attachment roles, saved-byte checks, correction/dismissal/reopening/supersession, fail-closed evidence disclosure, bounded lists and explicit communication links. |
+| Money | 50 | `money`: reporting/scope/drill-down, expected and received rent, allocations/payment methods, expenses/categories/refunds, deposits/settlements, prepaid checks, owner reports, evidence and duplicate/stale/interrupted submissions. |
+| Maintenance, Tasks and Communications | 57 | `work`: issue/reporter edits, appointments, quotes/assignments, journal corrections, cost/Expense boundaries, Tasks/reminders/waiting/follow-ups, manual communications, owner concerns, lifecycle recovery, bounds and unavailable evidence. |
+| Intake | 8 | `intake`: admission/import, ordered attachment roles, saved-byte checks, correction/dismissal/reopening/supersession, fail-closed evidence disclosure, bounded lists and explicit communication links. |
 | AI Governance | 4 | `ai-governance`: settings/capability gates, governed input/draft review, bounded status pages, cloud disclosure, write-only credentials and uncertain external effects. Synthetic scenarios do not qualify production inference. |
-| Search and information review | 15 | `search-coverage`: bounded grouped metadata search, archived context, source-specific next steps, non-applicability/missing information, source revision conflicts, saved forms and review receipt recovery. |
-| Cross-cutting delivery and interaction | 46 | `acceptance`, `delivery`, `dynamic-filters`, `page-tabs`, `parent-navigation`, `saved-results`, `shell`, `workspace-gate`, `recovery-page`, `restart-restore`: transport/readiness gates, packaged deep links, appearance/navigation, keyboard interaction, saved-result presentation, conflict handling and process restart/encrypted restore. |
+| Search and information review | 16 | `search-coverage`: bounded grouped metadata search, archived context, source-specific next steps, non-applicability/missing information, source revision conflicts, saved forms and review receipt recovery. |
+| Cross-cutting delivery and interaction | 82 | `acceptance`, `delivery`, `detail-interactions`, `dynamic-filters`, `form-feedback`, `form-focus`, `navigation-coverage`, `page-tabs`, `parent-navigation`, `saved-results`, `shell`, `workspace-gate`, `recovery-page`, `restart-restore`: transport/readiness gates, packaged deep links, appearance/navigation, keyboard interaction, saved-result presentation, conflict handling and process restart/encrypted restore. |
 
 ### Seeded-demo coverage
 
-These **56 additional cases** are separate from the 316 packaged-application tests. They inspect the demo portfolio without submitting normal business mutations; create-workflow tests primarily check entry/navigation, not a successful create lifecycle.
+These **56 additional cases** are separate from the 369 packaged-application tests. They inspect the demo portfolio without submitting normal business mutations; create-workflow tests primarily check entry/navigation, not a successful create lifecycle.
 
 | Demo spec | Cases | Principal checks |
 | --- | ---: | --- |
@@ -61,8 +61,8 @@ These **56 additional cases** are separate from the 316 packaged-application tes
 ### Limits of the current evidence
 
 - **Browser engines:** Chromium only; no configured Firefox/WebKit matrix or real-device proof. Narrow desktop viewports are not equivalent to real mobile-browser qualification.
-- **Accessibility and layout:** 14 spec files invoke axe; 20 explicitly configure viewport sizes. These are selected checks, not complete WCAG or every-screen/device coverage.
-- **Visual regression:** 14 spec files capture screenshots, but none uses `toHaveScreenshot` baseline comparisons. Screenshots support inspection; they do not automatically detect pixel regressions.
+- **Accessibility and layout:** 15 spec files invoke axe; 25 explicitly configure viewport sizes. These are selected checks, not complete WCAG or every-screen/device coverage.
+- **Visual regression:** 17 spec files capture screenshots, but none uses `toHaveScreenshot` baseline comparisons. Screenshots support inspection; they do not automatically detect pixel regressions.
 - **Failure/recovery:** substantial workflow coverage exists, but browser scenarios do not replace owning-domain transaction, schema, concurrency and backup tests. One restart/restore spec does not prove every module's portability.
 - **External effects:** mocked/synthetic AI and injected failures verify UI contracts, not real provider transports, credentials, availability or model quality. The demo is not an external integration test.
 - **Run freshness:** no full Playwright suite was executed for this inventory. Discovery found no `test.skip()`/`test.fixme()` calls in the inspected specs; this alone does not prove every execution path runs or passes.
@@ -97,10 +97,15 @@ Create/edit completion (October 18, 2026): shared business-data confirmations re
 
 | Validation area | Focused proof |
 | --- | --- |
-| Happy paths / presentation | `saved-results.spec.ts`: Property create/edit, explicit item returns, embedded Task replacement, light/dark desktop/mobile and axe. Existing identity, Provider, Money, Leasing/Inspection and Intake workflow tests exercise their owning receipt projections. |
+| Happy paths / presentation | `saved-results.spec.ts`: Property create/edit; rent receipt, lease draft, Provider, maintenance issue, owner concern, standalone Task and Tenant creation; explicit item returns and embedded Task replacement. Tenant creation starts at the directory button and finishes at its saved record. Includes light/dark desktop/mobile and axe. |
+| Parent navigation / browser history | `parent-navigation.spec.ts`: Money expectation/receipt, Provider, AI draft, Lease/Inspection and Owner workspace back-link labels, destinations and placement. `dynamic-filters.spec.ts`: Forward restores Provider, Property, Owner and Maintenance filters; directory changes replace history entries. |
+| Disclosure / action rows | `detail-interactions.spec.ts`: issue, Task, Money and Lease disclosures support full-bar click, Enter/Space, independent rows and retained nested states. Primary-submit then unfinished-save ordering covers Money, work, Leasing, category and Intake forms. |
+| Read failures / focus | `money.spec.ts`: a failed directory read cannot become empty or zero; explicit retry restores the actual records. `home-layout.spec.ts`: stale status retains the original capture. `form-focus.spec.ts`: Keep editing restores the navigation trigger; cancelling inline discard restores its button without losing the draft. Shared confirmation-dialog focus is also covered by `components.spec.ts`. |
 | Invalid combinations / retry | Invalid/conflicting submissions do not show success. Interrupted Party edits remain unresolved until reconciliation; a failed immutable-detail read offers a read-only retry with one mutation. A later name change does not overwrite the original confirmation. |
 | Privacy / bounds | Technical identifiers/revisions and raw JSON are omitted; Tenant/Provider ID regressions retain masked details and explicit Provider-number reveal. Receipt reads remain keyed and bounded; collections are capped in the confirmation. |
 | Persistence / rollback / backup | No server, schema, transaction or archive changes. Existing source-owned receipts and recovery contracts remain authoritative; this slice does not claim new backend/backup proofs. |
+
+October 21 contract follow-up: 31 focused packaged-application cases and one recovery integration case passed. The guard test exposed lost focus after **Keep editing**; the guard now focuses its choices when opened and returns focus to the initiating control when cancelled. The focused runs use disposable workspaces; no full-suite execution is claimed.
 
 Focused validation: 21 workflow cases and 32 additional confirmation, recovery, navigation, identity, Money, Leasing/Inspection, Intake and AI cases passed (the corrected ownership-date case was rerun separately). Lint, formatting, type checking and the production build passed; the existing bundle-size warning remains informational. No full application suite was run.
 

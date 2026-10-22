@@ -180,6 +180,8 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
               />
               <CommandLinks
                 target={id}
+                asButtons
+                collapsible={false}
                 keys={
                   active
                     ? [
@@ -264,7 +266,7 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                     {workChildren(value, "followUpTasks").map((item) => (
                       <li key={scalar(item.id)}>
                         <Link to={workUrl("task", scalar(item.id))}>{scalar(item.title)}</Link> ·{" "}
-                        {scalar(item.status)}
+                        {humanWorkLabel(item.status)}
                         {!!item.dueAtUtc && (
                           <p>
                             {formatHomeTemporal({
@@ -405,6 +407,8 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
               )}
               <CommandLinks
                 target={id}
+                asButtons
+                collapsible={false}
                 keys={
                   active
                     ? [
@@ -425,7 +429,7 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                 {workChildren(value, "followUpTasks").map((item) => (
                   <div className="record-detail-row" key={scalar(item.id)}>
                     <Link to={workUrl("task", scalar(item.id))}>{scalar(item.title)}</Link> ·{" "}
-                    {scalar(item.status).replaceAll("_", " ")}
+                    {humanWorkLabel(item.status)}
                     <ReadableFacts value={item} fields={["dueAtUtc", "priority"]} />
                   </div>
                 ))}
@@ -440,7 +444,7 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                     <Link to={workUrl("communication", scalar(item.id))}>
                       {scalar(item.subject)}
                     </Link>{" "}
-                    · {scalar(item.status)}
+                    · {humanWorkLabel(item.status)}
                   </p>
                 ))}
               </section>
@@ -485,7 +489,7 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                     <Link to={workUrl("communication", scalar(item.id))}>
                       {scalar(item.subject)}
                     </Link>{" "}
-                    · {scalar(item.status)}
+                    · {humanWorkLabel(item.status)}
                   </p>
                 ))}
               </section>

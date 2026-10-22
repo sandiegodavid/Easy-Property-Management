@@ -194,7 +194,7 @@ def validate_operator_data(connection):
             _validate_recovery_attempt(row)
             if utc(row["expires_at"]) != utc(row["saved_at"]) + timedelta(days=30):
                 raise ValueError("Invalid acknowledged expiry.")
-            active += row["status"] in {"active", "outcome_unknown", "reconciled"}
+            active += row["status"] in {"active", "outcome_unknown"}
         if active > MAX_ACTIVE_RECOVERY:
             raise ValueError("Recovery capacity exceeded.")
         _validate_operations(connection, preferences, recovery)

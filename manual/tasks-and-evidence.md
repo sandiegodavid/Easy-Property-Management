@@ -39,7 +39,7 @@ This is a manual ledger. Recording an email, call or message does not send it, f
 
 ## Retain source evidence
 
-Open **Conversations → Imported records** (`/conversations?intake=true`). This is evidence retention, separate from the conversation ledger.
+Open **Conversations → Retained sources** (`/conversations?intake=true`). These are preserved imported messages, transcripts and files, separate from the conversation ledger.
 
 - **Retain source:** enter the actual source channel, occurrence context, participants and retained content. Describe provenance truthfully; a pasted item is not automatically authenticated external delivery.
 - **Import source evidence:** select the supported evidence files/content and preserve their ordered roles. This is not Excel/property import.

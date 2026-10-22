@@ -209,16 +209,6 @@ export function ProviderWorkspace({ catalogOnly = false }: { catalogOnly?: boole
         <section className="context-section" aria-label="Official identification">
           <header className="person-detail-section-heading">
             <h3>Official identification</h3>
-            {active && (
-              <CommandLinks
-                target={target}
-                keys={["provider.profile.patch"]}
-                labels={{ "provider.profile.patch": "Manage official IDs" }}
-                title="Manage official IDs"
-                asButtons
-                collapsible={false}
-              />
-            )}
           </header>
           <p>
             Record at least one official ID before assigning maintenance work. Full ID numbers are

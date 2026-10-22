@@ -1,10 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useId } from "react";
 import { api } from "@epm/contracts";
 import { record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { Facts, readResult } from "./reads";
+import { InstantFilter } from "../shared/instant-filter";
 
 export function MaintenanceContext({
   formKey,
@@ -230,19 +231,8 @@ export function MaintenanceFilters() {
             ["appointmentFrom", "Appointment from"],
             ["appointmentTo", "Appointment through"],
           ].map(([key, title]) => (
-            <label key={key}>
-              {title}
-              <input
-                name={key}
-                maxLength={40}
-                placeholder="2026-10-13T12:00:00-07:00"
-                defaultValue={params.get(key) ?? ""}
-              />
-            </label>
+            <InstantFilter key={key} name={key} label={title} value={params.get(key) ?? ""} />
           ))}
-          <p className="maintenance-date-hint">
-            Dates and times must include a time-zone offset, for example 2026-10-18T09:00:00-07:00.
-          </p>
         </div>
       </details>
       <button className="maintenance-clear-filters" type="reset">
@@ -260,14 +250,7 @@ export function MaintenancePropertyFilter() {
   const { scope } = useWorkspace();
   const [params] = useSearchParams();
   const selected = params.get("propertyId") ?? "";
-  const [search, setSearch] = useState("");
-  const [query, setQuery] = useState("");
-  useEffect(() => {
-    const timer = setTimeout(() => setQuery(search.trim()), 300);
-    return () => clearTimeout(timer);
-  }, [search]);
-  const [choice, setChoice] = useState({ id: selected, label: "" });
-  const [looking, setLooking] = useState(false);
+  const id = useId();
   const property = useQuery({
     queryKey: scope.key("maintenance-filter-property", selected),
     enabled: !!selected,
@@ -279,60 +262,52 @@ export function MaintenancePropertyFilter() {
         }),
       ),
   });
-  const results = useQuery({
-    queryKey: scope.key("maintenance-property-search", query),
-    enabled: looking && query.length >= 2 && query === search.trim(),
-    queryFn: async ({ signal }) =>
+  const results = useInfiniteQuery({
+    queryKey: scope.key("maintenance-filter-properties"),
+    staleTime: 30_000,
+    initialPageParam: undefined as string | undefined,
+    queryFn: async ({ signal, pageParam }) =>
       readResult(
-        await api.GET("/api/operator/search", {
+        await api.GET("/api/operator/properties", {
           signal,
-          params: { query: { q: query, group: "properties", limit: 10 } },
+          params: { query: { status: "all", limit: 50, cursor: pageParam } },
         }),
       ),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
   });
+  const choices = results.data?.pages.flatMap((page) => page.items) ?? [];
   return (
     <div className="maintenance-property-filter">
-      <label htmlFor="maintenance-property-search">Property</label>
-      <input type="hidden" name="propertyId" value={choice.id} />
-      <input
-        id="maintenance-property-search"
-        type="search"
-        placeholder="Find a property by name"
-        autoComplete="off"
-        value={looking ? search : choice.label || property.data?.displayName || ""}
-        onChange={(event) => {
-          event.stopPropagation();
-          setSearch(event.target.value);
-          setLooking(true);
-        }}
-      />
-      {looking && (
-        <div className="maintenance-property-results">
-          {search.trim().length < 2 && <p>Enter at least 2 characters.</p>}
-          {results.isFetching && search.trim().length >= 2 && (
-            <p role="status">Finding properties…</p>
-          )}
-          {results.error && <p role="alert">Property search unavailable. Try another search.</p>}
-          {query === search.trim() &&
-            query.length >= 2 &&
-            results.data?.groups.properties?.items?.map((item) => (
-              <button
-                type="button"
-                key={item.sourceId}
-                onClick={(event) => {
-                  const form = event.currentTarget.form;
-                  setChoice({ id: item.sourceId, label: item.label });
-                  setLooking(false);
-                  requestAnimationFrame(() => form?.requestSubmit());
-                }}
-              >
-                {item.label}
-              </button>
-            ))}
-          {query === search.trim() &&
-            query.length >= 2 &&
-            results.data?.groups.properties?.items?.length === 0 && <p>No matching properties.</p>}
-        </div>
+      <label htmlFor={id}>Property</label>
+      <select id={id} name="propertyId" defaultValue={selected} aria-busy={results.isFetching}>
+        <option value="">All properties</option>
+        {selected && !choices.some((item) => item.id === selected) && (
+          <option value={selected}>{property.data?.displayName ?? "Selected property"}</option>
+        )}
+        {choices.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.displayName}
+            {item.status === "archived" ? " · Archived" : ""}
+          </option>
+        ))}
+      </select>
+      {results.isPending && <p role="status">Loading properties…</p>}
+      {results.error && (
+        <p role="alert">
+          Properties unavailable.{" "}
+          <button type="button" onClick={() => void results.refetch()}>
+            Retry properties
+          </button>
+        </p>
+      )}
+      {results.hasNextPage && (
+        <button
+          type="button"
+          disabled={results.isFetching}
+          onClick={() => void results.fetchNextPage()}
+        >
+          Load more properties
+        </button>
       )}
       {selected && property.isError && <span role="alert">Selected property is unavailable.</span>}
     </div>

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { partyNames } from "../shared/party-names";
+import { formatDate } from "../shared/presentation";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useSearchParams } from "react-router-dom";
 import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
@@ -43,6 +45,8 @@ export function InspectionList({ lease }: { lease: Lease }) {
           target={lease.id}
           keys={["inspection.report.create", "inspection.comparison.review"]}
           title="Inspection actions"
+          asButtons
+          collapsible={false}
         />
       )}
       {reports.isPending && <p role="status">Loading inspection reports…</p>}
@@ -440,6 +444,10 @@ async function inspectionSource(definition: Workflow, target?: string, signal?: 
         (p) => p.startsOn <= report.walkthroughOn && (!p.endsOn || p.endsOn > report.walkthroughOn),
       );
       const activeIds = new Set(participants.map((p) => p.id));
+      const names = await partyNames(
+        participants.map((p) => p.tenantPartyId),
+        signal,
+      );
       schema = {
         ...schema,
         properties: {
@@ -453,7 +461,7 @@ async function inspectionSource(definition: Workflow, target?: string, signal?: 
                 p.id,
                 {
                   ...item,
-                  title: `${p.participantRole.replaceAll("_", " ")}: ${p.tenantPartyId} (${p.startsOn} – ${p.endsOn ?? "open"})`,
+                  title: `${names.get(p.tenantPartyId) ?? "Tenant name unavailable"} · ${p.participantRole.replaceAll("_", " ")} (${formatDate(p.startsOn)} – ${p.endsOn ? formatDate(p.endsOn) : "ongoing"})`,
                 },
               ]),
             ),

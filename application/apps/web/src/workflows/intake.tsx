@@ -1,4 +1,5 @@
 import { DynamicFilterForm } from "../shared/dynamic-filter-form";
+import { filterFormData, InstantFilter } from "../shared/instant-filter";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -31,23 +32,23 @@ export function IntakeWorkspace() {
   const back = new URLSearchParams(params);
   back.delete("source");
   return (
-    <section aria-label="Imported records">
+    <section aria-label="Retained sources">
       {!params.has("source") && !params.has("workflow") && (
         <ParentBackLink to="/conversations">← Back to Conversations</ParentBackLink>
       )}
       {params.has("source") && !params.has("workflow") && (
-        <ParentBackLink to={`/conversations?${back}`}>← Back to Imported records</ParentBackLink>
+        <ParentBackLink to={`/conversations?${back}`}>← Back to Retained sources</ParentBackLink>
       )}
       {!params.has("workflow") && (
         <>
-          <h2>Imported records</h2>
+          <h2>Retained sources</h2>
           <p>
             Manual evidence is an unverified claim. Retaining or reviewing it does not send a
             message, create an issue, or establish that work occurred.
           </p>
           <nav className="page-tabs" aria-label="Source views">
             <Link to="/conversations?intake=true" aria-current="page">
-              Imported records
+              Retained sources
             </Link>
             <Link to="/conversations">Recorded conversations</Link>
           </nav>
@@ -126,7 +127,7 @@ function SourceDirectory() {
         className="read-filters"
         onSubmit={(event) => {
           event.preventDefault();
-          const data = new FormData(event.currentTarget);
+          const data = filterFormData(event.currentTarget);
           const next = new URLSearchParams({ intake: "true" });
           for (const [key, value] of data)
             if (typeof value === "string" && value) next.set(key, value);
@@ -139,25 +140,19 @@ function SourceDirectory() {
             <select name={key} defaultValue={params.get(key) ?? ""}>
               <option value="">All</option>
               {values.map((value) => (
-                <option key={value}>{value}</option>
+                <option key={value} value={value}>
+                  {value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase())}
+                </option>
               ))}
             </select>
           </label>
         ))}
-        {["originSystem", "receivedFrom", "receivedTo"].map((key) => (
-          <label key={key}>
-            {label(key)}
-            <input
-              name={key}
-              defaultValue={params.get(key) ?? ""}
-              placeholder={key === "originSystem" ? undefined : "ISO timestamp with offset"}
-              pattern={
-                key === "originSystem"
-                  ? undefined
-                  : "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,6})?)?(Z|\\+\\d{2}:\\d{2}|-\\d{2}:\\d{2})"
-              }
-            />
-          </label>
+        <label>
+          Origin system
+          <input name="originSystem" defaultValue={params.get("originSystem") ?? ""} />
+        </label>
+        {["receivedFrom", "receivedTo"].map((key) => (
+          <InstantFilter key={key} name={key} label={label(key)} value={params.get(key) ?? ""} />
         ))}
       </DynamicFilterForm>
       {loaded.isPending && <p role="status">Loading retained sources…</p>}
@@ -238,7 +233,7 @@ function SourceDetail({ id }: { id: string }) {
     return (
       <>
         <p role="alert">
-          Source evidence unavailable: {loaded.error.message}. Evidence is withheld when its
+          Retained source unavailable: {loaded.error.message}. Evidence is withheld when its
           required audit cannot commit.
         </p>
         <button onClick={() => void loaded.refetch()}>Retry audited evidence read</button>
@@ -246,7 +241,7 @@ function SourceDetail({ id }: { id: string }) {
     );
   const item = loaded.data;
   return (
-    <section className="imported-record-detail" aria-label="Source evidence detail">
+    <section className="imported-record-detail" aria-label="Retained source detail">
       <ReadableFacts value={item} fields={["technicalStatus", "failureCode", "attentionStatus"]} />
       <CommandLinks
         asButtons
@@ -409,7 +404,7 @@ function IntakeCommand() {
   if (loaded.error && params.has("resume") && saved.isPending)
     return <p role="status">Loading original source attempt…</p>;
   if (loaded.error && !originalOnly)
-    return <p role="alert">Source evidence unavailable: {loaded.error.message}</p>;
+    return <p role="alert">Retained source unavailable: {loaded.error.message}</p>;
   const current = loaded.data;
   if (current && current.technicalStatus !== "ready" && !originalOnly)
     return (

@@ -40,6 +40,53 @@ test("packaged recovery route loads bounded metadata with reselection guidance",
   await expect(page.getByText(/Private draft/)).toHaveCount(0);
   expect(reads).toHaveLength(1);
   expect(reads[0]).toContain("limit=50");
+  const card = page
+    .locator("li.recovery-form-card")
+    .filter({ has: page.locator(`a[href*="resume=${ids[0]}"]`) });
+  page.once("dialog", (dialog) => void dialog.accept());
+  await card.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(page.locator(`a[href*="resume=${ids[0]}"]`)).toHaveCount(0);
+  await expect(page.locator(`a[href*="resume=${ids[1]}"]`)).toBeVisible();
+});
+
+test("information review drafts have exactly one resume destination and can be discarded", async ({
+  page,
+}) => {
+  const id = "00000000-0000-4000-8000-000000000599";
+  await page.route("**/api/operator/recovery?*", (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            id,
+            formKey: "coverage.review",
+            status: "active",
+            savedAt: "2026-01-02T07:30:00Z",
+            expiresAt: "2099-01-01T00:00:00Z",
+            schemaVersion: 1,
+            revision: 1,
+            sourceId: null,
+            sourceKind: null,
+            baseSourceRevision: null,
+          },
+        ],
+        matchingTotal: 1,
+        nextCursor: null,
+        asOf: "2026-01-02T07:30:00Z",
+        sourceRevision: "1",
+      },
+    }),
+  );
+  await page.goto("/settings/recovery");
+  await expect(page.getByText("1 form", { exact: true })).toBeVisible();
+  const card = page.locator(".recovery-form-card");
+  await expect(card.getByRole("link")).toHaveCount(1);
+  await expect(card.getByRole("link", { name: "Resume: Information review" })).toHaveAttribute(
+    "href",
+    `/coverage/reviews/${id}`,
+  );
+  await expect(card).not.toContainText("Resume from the owning workflow");
+  await expect(card.getByRole("button", { name: "Discard", exact: true })).toBeVisible();
 });
 
 test.describe("unfinished form presentation", () => {
@@ -55,9 +102,6 @@ test.describe("unfinished form presentation", () => {
       const states = [
         ["active", "Draft saved"],
         ["outcome_unknown", "Submission needs checking"],
-        ["reconciled", "Submission checked"],
-        ["discarded", "Discarded"],
-        ["expired", "Expired"],
       ] as const;
       const records: components["schemas"]["RecoveryMetadata"][] = states.map(([status]) => ({
         id: crypto.randomUUID(),

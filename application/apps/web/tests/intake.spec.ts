@@ -100,9 +100,9 @@ test("manual source admission resumes a saved draft and reconciles a lost respon
 }) => {
   const originSystem = `recovery-test-${crypto.randomUUID()}`;
   await page.goto("/conversations");
-  await page.getByRole("link", { name: "Imported records", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Imported records", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Imported records", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Retained sources", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Retained sources", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Retained sources", exact: true })).toBeVisible();
   await page.getByText("Retain evidence", { exact: true }).click();
   await page.getByRole("link", { name: "Retain source", exact: true }).click();
   await input(page, "Private source testimony");
@@ -111,7 +111,7 @@ test("manual source admission resumes a saved draft and reconciles a lost respon
   await page.getByLabel("Role (required)").fill("reporter");
   await page.getByLabel("Address", { exact: true }).fill("private@example.test");
   await page.getByRole("button", { name: "Save unfinished form" }).click();
-  await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   await page.goto("/settings/recovery");
   await expect(page.getByText("Private source testimony", { exact: true })).toHaveCount(0);
   await page.getByRole("link", { name: "Resume: Retain source", exact: true }).click();
@@ -134,11 +134,11 @@ test("manual source admission resumes a saved draft and reconciles a lost respon
   await page.getByRole("button", { name: "Check original result" }).click();
   await expect(page.locator(".saved-item")).toBeVisible();
   expect(writes).toBe(1);
-  await page.getByRole("link", { name: "Back to source evidence", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Source evidence detail" })).toContainText(
+  await page.getByRole("link", { name: "Back to retained source", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Retained source detail" })).toContainText(
     "private@example.test",
   );
-  await expect(page.getByRole("region", { name: "Source evidence detail" })).toContainText(
+  await expect(page.getByRole("region", { name: "Retained source detail" })).toContainText(
     occurred,
   );
   const sourceId = new URL(page.url()).searchParams.get("source");
@@ -169,7 +169,7 @@ test("multipart import preserves ordered roles and rejects changed bytes after f
   await expect(page.getByLabel("Attachment 1 role")).toBeVisible();
   await page.getByLabel("Attachment 1 role").selectOption("raw_source");
   await page.getByRole("button", { name: "Save unfinished form" }).click();
-  await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   await page.goto("/settings/recovery");
   await page.getByRole("link", { name: "Resume: Import source evidence", exact: true }).click();
   await page
@@ -179,8 +179,8 @@ test("multipart import preserves ordered roles and rejects changed bytes after f
   await page.getByLabel("Source attachment files", { exact: true }).setInputFiles(files);
   await expect(page.getByLabel("Attachment 1 role")).toHaveValue("raw_source");
   await save(page, "import source evidence");
-  await page.getByRole("link", { name: "Back to source evidence", exact: true }).click();
-  await expect(page.getByRole("region", { name: "Source evidence detail" })).toContainText(
+  await page.getByRole("link", { name: "Back to retained source", exact: true }).click();
+  await expect(page.getByRole("region", { name: "Retained source detail" })).toContainText(
     "Raw source",
   );
   const attachments = page.getByRole("region", { name: "Evidence attachments", exact: true });
@@ -251,10 +251,10 @@ test("correction, dismissal, reopening and supersession retain source history", 
   expect(detail.evidence.body).toBe("Corrected evidence");
   expect(detail.revisions).toHaveLength(2);
   await page.goto(`/conversations?intake=true&source=${original.sourceId}`);
-  const evidence = page.getByRole("region", { name: "Source evidence detail", exact: true });
+  const evidence = page.getByRole("region", { name: "Retained source detail", exact: true });
   await expect(evidence).not.toContainText(original.sourceId);
   await expect(evidence).toContainText("Superseded");
-  await expect(page.getByRole("region", { name: "Source evidence detail" })).toContainText(
+  await expect(page.getByRole("region", { name: "Retained source detail" })).toContainText(
     "Clarify original testimony",
   );
   await page.getByRole("button", { name: "Read retained revision 1", exact: true }).click();
@@ -275,7 +275,7 @@ test("correction, dismissal, reopening and supersession retain source history", 
   await expect(historical).toContainText("Revision evidence is withheld");
   await expect(historical).not.toContainText("Original evidence");
   await page.getByRole("link", { name: "Open replacement source" }).click();
-  await expect(page.getByRole("region", { name: "Source evidence detail" })).toContainText(
+  await expect(page.getByRole("region", { name: "Retained source detail" })).toContainText(
     "Replacement evidence",
   );
 });

@@ -996,11 +996,7 @@ function OverviewSection({
   const section = page === null ? initial : result.data?.sections[initial.kind];
   const showHeading = !(kind === "property" && initial.kind === "coverage");
   return (
-    <section
-      id={initial.kind}
-      aria-label={`${initial.kind === "coverage" || initial.kind === "spaces" || (kind === "property" && initial.kind === "relationships") ? heading : initial.kind} section`}
-      className="context-section"
-    >
+    <section id={initial.kind} aria-label={`${heading} section`} className="context-section">
       {result.error ? (
         <>
           {showHeading && <h3>{heading}</h3>}
@@ -1116,7 +1112,7 @@ function LeaseScopeFilter({ value }: { value: Scope }) {
           const next = new URLSearchParams(params);
           next.set("leaseScope", event.target.checked ? "all" : "current");
           next.delete("cursor");
-          setParams(next, { state, preventScrollReset: true });
+          setParams(next, { state, preventScrollReset: true, replace: true });
         }}
       />{" "}
       Include past, future and draft leases
@@ -1141,7 +1137,7 @@ function RelationshipCheckboxes({ value }: { value: Scope }) {
                 value === "all" ? (option === "current" ? "former" : "current") : "all",
               );
               next.delete("cursor");
-              setParams(next, { state: navigationState });
+              setParams(next, { state: navigationState, preventScrollReset: true, replace: true });
             }}
           />
           {option === "current" ? "Current" : "Former"}

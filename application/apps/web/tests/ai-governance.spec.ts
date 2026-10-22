@@ -131,6 +131,13 @@ test("AI draft detail separates governed input and blocks unsupported or stale a
   await page.route(`**/api/ai/drafts/${id}`, (route) => route.fulfill({ json: draft }));
   await page.goto(`/ai/review/${id}`);
   await expect(page.getByRole("heading", { name: "Review AI draft" })).toBeVisible();
+  const back = page.locator(".parent-back-link");
+  await expect(back).toHaveCount(1);
+  await expect(back).toHaveText("← Back to AI assistance");
+  await expect(back).toHaveAttribute("href", "/settings/ai");
+  expect((await back.boundingBox())!.y).toBeLessThan(
+    (await page.getByRole("heading", { name: "Review AI draft" }).boundingBox())!.y,
+  );
   await expect(page.getByText("sha256:local", { exact: true })).toBeVisible();
   await expect(page.getByText("runtime 1 · quantization Q4", { exact: true })).toBeVisible();
   await expect(

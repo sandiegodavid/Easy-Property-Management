@@ -25,13 +25,13 @@ export function reporterProblem(values: Record<string, unknown>) {
     (reporter.role === "manager" || reporter.role === "staff") &&
     reporter.subjectKind !== "local_operator"
   )
-    return "Manager and staff use Local operator in this MVP.";
+    return "Select You when you are reporting as a manager or staff member.";
   if (reporter.role === "tenant" && reporter.subjectKind !== "party")
-    return "Tenant reporters require an existing Party.";
+    return "Choose the tenant reporting this issue.";
   if (reporter.subjectKind === "party" && !reporter.partyId)
-    return "Select the existing reporter Party.";
+    return "Select the person reporting this issue.";
   if (reporter.subjectKind === "local_operator" && (reporter.partyId || historicalFields))
-    return "Local operator attribution cannot include Party or historical-selection fields.";
+    return "When you are the reporter, do not select another person.";
   if (
     historicalFields &&
     !(

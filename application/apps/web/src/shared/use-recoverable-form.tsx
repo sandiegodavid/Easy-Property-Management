@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useForm, type DefaultValues, type FieldValues } from "react-hook-form";
 import { useBlocker } from "react-router-dom";
 import { useWorkspace } from "../app/workspace-gate";
@@ -59,6 +59,13 @@ export function RecoveryNavigation({
 }) {
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
+  const origin = useRef<HTMLElement | null>(null);
+  const firstAction = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    origin.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    firstAction.current?.focus();
+  }, [blocker.state]);
   if (blocker.state !== "blocked") return null;
   const leave = async (discard: boolean) => {
     setPending(true);
@@ -77,6 +84,7 @@ export function RecoveryNavigation({
       <p>Save this unfinished form before leaving, or explicitly discard your edits.</p>
       {error && <p role="alert">{error}</p>}
       <button
+        ref={firstAction}
         disabled={pending}
         onClick={() => {
           void leave(false);
@@ -92,7 +100,13 @@ export function RecoveryNavigation({
       >
         Discard and leave
       </button>
-      <button disabled={pending} onClick={() => blocker.reset()}>
+      <button
+        disabled={pending}
+        onClick={() => {
+          blocker.reset();
+          if (origin.current?.isConnected) origin.current.focus();
+        }}
+      >
         Keep editing
       </button>
     </section>

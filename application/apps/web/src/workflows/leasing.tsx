@@ -282,6 +282,16 @@ function LeaseRecord({ id }: { id: string }) {
           updates the rental's occupancy timeline.
         </p>
       )}
+      {item.status === "executed" && (
+        <p className="lease-detail-note">
+          Rent due entries are created separately from signing the lease.{" "}
+          <Link
+            to={`/money?workflow=finance.rent_expectation.synchronize&target=${id}&leaseId=${id}`}
+          >
+            Review and create rent schedule
+          </Link>
+        </p>
+      )}
       <div className="lease-detail-grid">
         <section aria-label="Lease milestones" className="lease-detail-panel">
           <h3>Dates and occupancy</h3>
@@ -388,6 +398,8 @@ function LeaseRecord({ id }: { id: string }) {
                 child={option.id}
                 keys={["lease.renewal.update", "lease.renewal.decide"]}
                 title={`Renewal ${option.proposedStartsOn}`}
+                asButtons
+                collapsible={false}
               />
             )}
           </article>
@@ -587,6 +599,8 @@ function TerminationCases({ lease }: { lease: Lease }) {
                       : []
                 }
                 title={`Termination actions ${item.requestedTerminationOn}`}
+                asButtons
+                collapsible={false}
               />
             )}
             {item.proposals.map((p) => (
@@ -632,7 +646,7 @@ function TerminationCases({ lease }: { lease: Lease }) {
 }
 
 function LeaseCommand() {
-  const { completed, onSaved } = useSaveCompletion();
+  const { onSaved } = useSaveCompletion();
   const [params] = useSearchParams();
   const definition = workflows.find((item) => item.formKey === params.get("workflow"))!;
   const target = params.get("target") ?? undefined;
@@ -734,13 +748,6 @@ function LeaseCommand() {
     });
   return (
     <>
-      {!completed && (
-        <p>
-          Lease revision: {lease?.leaseRevision ?? 0}
-          {source.data?.space && ` · Space timeline revision: ${source.data.space.revision}`}. These
-          are independent checks; review both before submitting a timeline change.
-        </p>
-      )}
       <CommandLoader
         onSaved={onSaved}
         definition={definition}

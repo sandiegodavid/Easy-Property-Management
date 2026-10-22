@@ -265,7 +265,7 @@ export function SourceDetail() {
                 View {recordLabels[kind]?.toLowerCase() ?? "record"}
               </Link>
             )}
-            <dl>
+            <dl className="workflow-facts">
               {Object.entries(result.data.facts)
                 .filter(([name]) => name !== "As of")
                 .map(([name, value]) => (

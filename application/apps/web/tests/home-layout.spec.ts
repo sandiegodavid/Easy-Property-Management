@@ -344,6 +344,11 @@ test("refresh retains the original capture and form input on failure, and remove
     );
     pending.release();
     await expect(money).toContainText("Stale");
+    await expect(money.getByRole("status")).toContainText(/^Stale — /);
+    await expect(money.locator(".home-capture time")).toHaveAttribute(
+      "datetime",
+      data.full.money.capture.asOf,
+    );
     await expect(money).toContainText("USD");
     await expect(page.getByRole("region", { name: "Needs action", exact: true })).toContainText(
       "Stale",
@@ -473,7 +478,7 @@ test("Home refresh interval saves in Settings, survives reload and drives both r
   await page.goto("/settings");
   const setting = page.getByRole("combobox", { name: "Automatic refresh", exact: true });
   await expect(setting).toHaveAccessibleDescription(
-    "Saved automatically for this browser. Home refreshes at this interval while open. Needs action may update sooner when a deadline or follow-up becomes due.",
+    "This refresh interval saves automatically for this browser. Home refreshes at this interval while open. Needs action may update sooner when a deadline or follow-up becomes due.",
   );
   await expect(setting).toHaveValue("5");
   await setting.selectOption("1");

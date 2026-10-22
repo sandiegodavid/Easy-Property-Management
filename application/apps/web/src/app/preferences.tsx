@@ -227,8 +227,9 @@ export function PreferenceSettings() {
           ))}
         </select>
         <p id="home-refresh-help" className="ui-muted">
-          Saved automatically for this browser. Home refreshes at this interval while open. Needs
-          action may update sooner when a deadline or follow-up becomes due.
+          This refresh interval saves automatically for this browser. Home refreshes at this
+          interval while open. Needs action may update sooner when a deadline or follow-up becomes
+          due.
         </p>
         {homeRefreshMessage && <p role="status">{homeRefreshMessage}</p>}
       </fieldset>
@@ -282,6 +283,7 @@ export function PreferenceSettings() {
           Restore defaults
         </button>
       </fieldset>
+      <p>Use Save preferences to save your appearance and navigation choices.</p>
       <button disabled={!writable || pending || conflict} onClick={() => void save()}>
         {pending ? "Saving…" : attempt ? "Retry save" : "Save preferences"}
       </button>

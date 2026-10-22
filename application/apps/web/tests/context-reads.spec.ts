@@ -61,7 +61,7 @@ test("property leases group drafts by rental with bounded pages and contextual c
     leaseIds.add(((await response.json()) as Schema["LeaseMutationResponse"]).id);
   }
   await page.goto(`/properties/${property.id}/leases`);
-  const section = page.getByRole("region", { name: "leases section", exact: true });
+  const section = page.getByRole("region", { name: "Leases section", exact: true });
   await expect(section).toContainText("12 matching leases");
   await expect(section).toContainText(
     "More leases may appear under the same rental unit on the next page.",
@@ -122,7 +122,9 @@ test("property leases group drafts by rental with bounded pages and contextual c
   expect(new Set([...firstPage, ...secondPage])).toEqual(
     new Set([...leaseIds].map((id) => `/leases/${id}/details`)),
   );
+  const scopeHistoryLength = await page.evaluate(() => history.length);
   await section.getByRole("checkbox", { name: "Include past, future and draft leases" }).click();
+  expect(await page.evaluate(() => history.length)).toBe(scopeHistoryLength);
   await expect(
     section.getByRole("checkbox", { name: "Include past, future and draft leases" }),
   ).not.toBeChecked();
@@ -752,6 +754,7 @@ test("real directories recognize properties and owners, preserve filters and swi
   const former = relationships.getByRole("checkbox", { name: "Former", exact: true });
   await expect(current).toBeChecked();
   await expect(current).toBeDisabled();
+  const filterHistoryLength = await page.evaluate(() => history.length);
   await former.click();
   await expect(page).toHaveURL(/relationshipScope=all/);
   await expect(former).toBeChecked();
@@ -762,6 +765,7 @@ test("real directories recognize properties and owners, preserve filters and swi
   await current.click();
   await former.click();
   await expect(page).toHaveURL(/relationshipScope=current/);
+  expect(await page.evaluate(() => history.length)).toBe(filterHistoryLength);
   await page.getByRole("link", { name: "Property setup", exact: true }).click();
   await expect(page).toHaveURL(/\/setup\?relationshipScope=current/);
   await expect(page.getByRole("region", { name: "Owners", exact: true })).toHaveCount(0);

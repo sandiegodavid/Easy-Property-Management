@@ -1,6 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { components } from "@epm/contracts/generated";
 import axe from "axe-core";
+import {
+  property as makeProperty,
+  lease as makeLease,
+  rent as makeRent,
+} from "./helpers/workflow-contracts";
 
 type Schema = components["schemas"];
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
@@ -11,6 +16,169 @@ async function submit(page: Page) {
     .locator('button[type="submit"]')
     .click();
 }
+
+async function savedContract(
+  page: Page,
+  heading: string,
+  text: string,
+  label: string,
+  target: RegExp,
+) {
+  const result = page.locator(".saved-item");
+  await expect(result.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+  await expect(result).toContainText(text);
+  await expect(page.locator(".command-editor form")).toHaveCount(0);
+  await expect(result).not.toContainText(
+    /\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b|Operation|Revision|\d{4}-\d\d-\d\dT\d\d:/,
+  );
+  const back = result.getByRole("link", { name: label, exact: true });
+  await expect(back).toHaveAttribute("href", target);
+  const destination = await back.getAttribute("href");
+  await back.click();
+  await expect(page).toHaveURL(destination!);
+}
+
+for (const entry of [
+  {
+    workflow: "task.create",
+    path: "/tasks",
+    field: "Title (required)",
+    title: "Task",
+    back: "task",
+    target: /\/tasks\?record=task&id=/,
+  },
+  {
+    workflow: "provider.create",
+    path: "/providers",
+    field: "Display name (required)",
+    title: "Provider",
+    back: "provider",
+    target: /\/providers\/[^/]+\/details$/,
+  },
+  {
+    workflow: "tenant.create",
+    path: "/tenants",
+    field: "Display name (required)",
+    title: "Tenant",
+    back: "tenant",
+    target: /\/tenants\?identity=/,
+  },
+]) {
+  test(`standalone ${entry.title.toLowerCase()} creation confirms saved data and returns to its record`, async ({
+    page,
+  }) => {
+    const name = `${entry.title} saved contract ${crypto.randomUUID().slice(0, 8)}`;
+    if (entry.workflow === "tenant.create") {
+      await page.goto("/tenants");
+      await page.getByRole("button", { name: "Create tenant", exact: true }).click();
+    } else await page.goto(`${entry.path}?workflow=${entry.workflow}`);
+    await page.getByLabel(entry.field, { exact: true }).fill(name);
+    await submit(page);
+    await savedContract(page, `${entry.title} saved`, name, `Back to ${entry.back}`, entry.target);
+  });
+}
+
+test("standalone maintenance issue and owner concern creation retain their saved evidence", async ({
+  page,
+  request,
+}) => {
+  const home = await makeProperty(request);
+  for (const concern of [false, true]) {
+    await page.goto(
+      `/maintenance?workflow=${concern ? "owner_concern.create" : "maintenance.issue.create"}`,
+    );
+    await page
+      .getByRole("combobox", { name: "Property (required)", exact: true })
+      .selectOption(home.id);
+    if (concern) {
+      await page
+        .getByRole("combobox", { name: "Owner (required)", exact: true })
+        .selectOption(home.ownerships[0].partyId);
+      await page
+        .getByRole("combobox", { name: "Concern type (required)", exact: true })
+        .selectOption("general_rental");
+      await page
+        .getByRole("textbox", {
+          name: "Raised at (include time-zone offset) (required)",
+          exact: true,
+        })
+        .fill(home.asOf);
+    } else {
+      await page
+        .getByRole("combobox", { name: "Category (required)", exact: true })
+        .selectOption("plumbing");
+      await page
+        .getByRole("textbox", {
+          name: "Reported at (include time-zone offset) (required)",
+          exact: true,
+        })
+        .fill(home.asOf);
+    }
+    const text = concern ? "Owner asks about inspection" : "Kitchen tap needs repair";
+    await page.getByRole("textbox", { name: "Summary (required)", exact: true }).fill(text);
+    await page
+      .getByRole("textbox", { name: "Description (required)", exact: true })
+      .fill("Reported by the operator for review");
+    await submit(page);
+    await savedContract(
+      page,
+      `${concern ? "Owner concern" : "Maintenance issue"} saved`,
+      text,
+      `Back to ${concern ? "owner concern" : "maintenance issue"}`,
+      concern ? /\/maintenance\?record=concern&id=/ : /\/maintenance\?record=issue&id=/,
+    );
+  }
+});
+
+test("lease draft saved screen contains the agreed rent and returns to the new draft", async ({
+  page,
+  request,
+}) => {
+  const f = await makeLease(request);
+  await page.goto(`/leasing?workflow=lease.create&spaceId=${f.property.spaces[0].id}`);
+  await page.getByLabel("Contract starts on (required)").fill(f.today);
+  await page.getByLabel("Occupancy starts on (required)").fill(f.today);
+  await page.getByLabel("Base rent minor (required)").fill("123456");
+  await page.getByLabel("Payment due day", { exact: true }).fill("1");
+  await page.getByLabel("Tenant party id (required)").fill(f.tenant.id);
+  await page.getByLabel("Participant role (required)").selectOption("primary_tenant");
+  await submit(page);
+  await savedContract(
+    page,
+    "Lease draft saved",
+    "USD 1,234.56",
+    "Back to lease",
+    /\/leases\/[^/]+\/details$/,
+  );
+});
+
+test("rent receipt saved screen confirms the payment once before returning to its receipt", async ({
+  page,
+  request,
+}) => {
+  const f = await makeRent(request);
+  let writes = 0;
+  page.on("request", (entry) => {
+    if (entry.method() === "POST" && new URL(entry.url()).pathname === "/api/rent-receipts")
+      writes++;
+  });
+  await page.goto(
+    `/money?workflow=finance.rent_receipt.create&target=${f.lease.id}&child=${f.expectation.id}`,
+  );
+  await page.getByLabel("Received on (required)").fill(f.today);
+  await page.getByLabel("Amount (USD cents) (required)").nth(0).fill("195000");
+  await page.getByLabel("Amount (USD cents) (required)").nth(1).fill("195000");
+  await page.getByLabel("Payment method kind (required)").selectOption("cash");
+  await submit(page);
+  await savedContract(
+    page,
+    "Rent receipt saved",
+    "USD 1,950.00",
+    "Back to rent receipt",
+    /\/money\?record=receipt&id=/,
+  );
+  expect(writes).toBe(1);
+});
 
 test("standalone property creation and editing show saved data before returning to the item", async ({
   page,

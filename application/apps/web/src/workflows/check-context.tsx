@@ -83,7 +83,7 @@ export function CheckContext({
           )}
           <p>
             Acknowledging a reminder does not deposit the check. Returning a deposited check voids
-            its linked receipt atomically; voiding a scheduled check creates no income. Replacement
+            its linked receipt together; voiding a scheduled check creates no income. Replacement
             preserves the original check and reasons.
           </p>
         </>
@@ -147,7 +147,7 @@ export function CheckFilters() {
       </label>
       {[
         ["spaceId", "Space ID"],
-        ["payerPartyId", "Payer Party ID"],
+        ["payerPartyId", "Payer"],
         ["expectationId", "Expectation ID"],
       ].map(([key, label]) => (
         <label key={key}>

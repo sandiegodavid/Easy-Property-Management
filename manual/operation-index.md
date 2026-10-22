@@ -264,7 +264,7 @@ Use this index for uncommon actions. Action names below are checked against the 
 - Record conversation
 - Correct recorded conversation
 
-### Imported records
+### Retained sources
 
 [How to use these actions](tasks-and-evidence.md)
 

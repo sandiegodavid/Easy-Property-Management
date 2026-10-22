@@ -36,8 +36,7 @@ for (const width of [390, 900, 1440]) {
       await page.getByRole("button", { name: "Save preferences", exact: true }).click();
       await expect(page.getByText("Preferences saved.")).toBeVisible();
       await page.goto(`/tasks?record=task&id=${task.id}`);
-      await page.getByText("Actions", { exact: true }).click();
-      const edit = page.getByRole("link", { name: "Edit task", exact: true });
+      const edit = page.getByRole("button", { name: "Edit task", exact: true });
       await edit.focus();
       await page.keyboard.press("Enter");
       const title = page.getByLabel("Title", { exact: true });

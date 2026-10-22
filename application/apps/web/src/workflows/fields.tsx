@@ -10,7 +10,7 @@ export function label(name: string) {
     confirmed: "I confirm this lifecycle change",
     confirmedNewParty: "I reviewed possible duplicates and confirm this is a new identity",
     doNotContact: "Do not contact",
-    partyId: "Existing identity",
+    partyId: "Person or business",
     inlineParty: "Create owner identity here",
     expectedTenantRevision: "Displayed Tenant revision",
     expectedCategoryRevision: "Displayed category revision",
@@ -354,7 +354,13 @@ export function Fields({
                         ? childShape.enum.map((option) => (
                             <option key={option} value={option}>
                               {leasingStatusLabels[String(option)] ??
-                                String(option).replaceAll("_", " ")}
+                                {
+                                  local_operator: "You",
+                                  party: "Person or business",
+                                  individual: "Person",
+                                  organization: "Organization",
+                                }[String(option)] ??
+                                label(String(option).replaceAll("_", " "))}
                             </option>
                           ))
                         : options?.map((option) => (

@@ -2,6 +2,7 @@ import { record, scalar } from "@epm/contracts/workflows";
 import { formatHomeTime } from "../shared/home-time";
 import { label } from "./fields";
 import { leasingStatusLabels } from "../shared/leasing-status";
+import { formatDate } from "../shared/presentation";
 
 const fieldLabels: Record<string, string> = {
   dueAtUtc: "Due",
@@ -59,13 +60,13 @@ const fieldLabels: Record<string, string> = {
   operatorVerified: "Verified by you",
 };
 
-// Presentation only: preserve narrative text, identifiers and date-only facts verbatim.
+// Presentation only: date-only values keep their source calendar day.
 export function ReadableFacts({ value, fields }: { value: unknown; fields: string[] }) {
   const values = record(value);
   return (
     <dl className="workflow-facts readable-facts">
       {fields
-        .filter((key) => values[key] != null && values[key] !== "")
+        .filter((key) => values[key] != null && values[key] !== "" && !/revision/i.test(key))
         .map((key) => {
           const raw = values[key];
           const text = scalar(raw);
@@ -103,7 +104,9 @@ export function ReadableFacts({ value, fields }: { value: unknown; fields: strin
                       ? leasingStatusLabels[text]
                       : enumeration
                         ? label(text.replaceAll("_", " "))
-                        : text}
+                        : /(?:On|Date|_on|_date)$/.test(key)
+                          ? formatDate(text)
+                          : text}
               </dd>
             </div>
           );

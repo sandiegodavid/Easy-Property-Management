@@ -1,4 +1,5 @@
 import { DynamicFilterForm } from "../shared/dynamic-filter-form";
+import { filterFormData } from "../shared/instant-filter";
 import { useQuery } from "@tanstack/react-query";
 import { PageAsOf } from "../shared/page-as-of";
 import { MaintenanceFilters, MaintenancePropertyFilter } from "./maintenance-context";
@@ -83,7 +84,7 @@ export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
             >
               Conversations
             </Link>{" "}
-            <Link to="/conversations?intake=true">Imported records</Link>{" "}
+            <Link to="/conversations?intake=true">Retained sources</Link>{" "}
             <Link to="/tasks" aria-current={current === "task" ? "page" : undefined}>
               Tasks
             </Link>
@@ -308,7 +309,7 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
           aria-label={kind === "issue" ? "Maintenance filters" : undefined}
           onSubmit={(event) => {
             event.preventDefault();
-            const data = new FormData(event.currentTarget);
+            const data = filterFormData(event.currentTarget);
             const next = new URLSearchParams(params);
             next.delete("cursor");
             for (const key of [
@@ -359,7 +360,7 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
               <option value="">All statuses</option>
               {statuses.map((item) => (
                 <option key={item} value={item}>
-                  {kind === "issue" ? workLabel(item) : item}
+                  {workLabel(item)}
                 </option>
               ))}
             </select>
@@ -401,7 +402,7 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                     <option value="">Any</option>
                     {(options as string[]).map((option) => (
                       <option key={option} value={option}>
-                        {option.replaceAll("_", " ")}
+                        {workLabel(option)}
                       </option>
                     ))}
                   </select>
@@ -442,7 +443,9 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                 <select name="priority" defaultValue={priority ?? ""}>
                   <option value="">All priorities</option>
                   {["low", "normal", "high", "urgent"].map((item) => (
-                    <option key={item}>{item}</option>
+                    <option key={item} value={item}>
+                      {workLabel(item)}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -465,7 +468,9 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                 <select name="state" defaultValue={params.get("state") ?? ""}>
                   <option value="">All follow-ups</option>
                   {["scheduled", "due", "overdue", "unscheduled"].map((item) => (
-                    <option key={item}>{item}</option>
+                    <option key={item} value={item}>
+                      {workLabel(item)}
+                    </option>
                   ))}
                 </select>
               </label>

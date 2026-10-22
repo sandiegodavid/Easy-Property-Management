@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import type { components } from "@epm/contracts/generated";
+import { rent as makeRent, aiDraft } from "./helpers/workflow-contracts";
 
 type Schema = components["schemas"];
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
@@ -40,6 +41,36 @@ test("sidebar destinations have no parent link; secondary pages have a single to
   request,
 }) => {
   const f = await fixture(request);
+  const finance = await makeRent(request);
+  const draft = aiDraft(f.issue.id);
+  await page.route(`**/api/ai/drafts/${draft.id}`, (route) => route.fulfill({ json: draft }));
+  const provider = await post<{ party: { id: string } }>(request, "/api/providers", {
+    party: { partyKind: "individual", displayName: "Navigation provider" },
+    expectedRevision: 0,
+    idempotencyKey: crypto.randomUUID(),
+  });
+  const receipt = await post<{ id: string }>(request, "/api/rent-receipts", {
+    leaseId: finance.lease.id,
+    expectedRevision: finance.rentLedgerRevision,
+    idempotencyKey: crypto.randomUUID(),
+    receivedOn: finance.today,
+    amountMinor: 195000,
+    currencyCode: "USD",
+    paymentMethodKind: "cash",
+    allocations: [{ expectationId: finance.expectation.id, amountMinor: 195000 }],
+  });
+  const inspection = await post<{ id: string }>(
+    request,
+    `/api/leases/${finance.lease.id}/condition-reports`,
+    {
+      expectedRevision: 0,
+      idempotencyKey: crypto.randomUUID(),
+      reportKind: "pre_move_in",
+      walkthroughOn: finance.today,
+      conductedBy: "Operator",
+      areas: [],
+    },
+  );
   for (const path of [
     "/home",
     "/properties",
@@ -58,6 +89,22 @@ test("sidebar destinations have no parent link; secondary pages have a single to
   for (const [path, href, label] of [
     [`/properties/${f.property.id}/overview`, "/properties", "← Back to Properties"],
     [`/maintenance?record=issue&id=${f.issue.id}`, "/maintenance", "← Back to Maintenance"],
+    [`/money?record=expectation&id=${finance.expectation.id}`, "/money", "← Back to Money"],
+    [`/money?record=receipt&id=${receipt.id}`, "/money", "← Back to Money"],
+    [
+      "/money?record=category&id=00000000-0000-4000-8000-000000000201",
+      "/money?tab=categories",
+      "← Back to Expense categories",
+    ],
+    [`/ai/review/${draft.id}`, "/settings/ai", "← Back to AI assistance"],
+    [`/providers/${provider.party.id}/details`, "/providers", "← Back to Providers"],
+    [`/leases/${finance.lease.id}/details`, "/leasing", "← Back to Leasing"],
+    [
+      `/inspections/${inspection.id}`,
+      `/leases/${finance.lease.id}/inspections`,
+      "← Back to lease inspections",
+    ],
+    [`/owners/${finance.property.ownerships[0].partyId}/overview`, "/owners", "← Back to Owners"],
     ["/settings/navigation", "/settings", "← Back to Settings"],
     ["/settings/provider-categories", "/settings", "← Back to Settings"],
     ["/tasks?workflow=task.create", "/tasks", "← Back to Tasks"],
@@ -75,6 +122,8 @@ test("sidebar destinations have no parent link; secondary pages have a single to
     await expect(
       page.getByRole("link", { name: "Return to current record", exact: true }),
     ).toHaveCount(0);
+    await back.click();
+    await expect(page).toHaveURL(href);
   }
 });
 

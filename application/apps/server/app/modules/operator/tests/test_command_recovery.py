@@ -95,6 +95,8 @@ def commands(directory):
 
 def test_lost_response_resolves_real_receipt_without_another_domain_write(commands):
     support, communications, command, key, attempt = commands
+    assert support.recovery_page()["matchingTotal"] == 1
+    assert support.recovery_page()["items"][0]["status"] == "outcome_unknown"
     with pytest.raises(OperatorConflict, match="still unknown"):
         support.reconcile_recovery(attempt["id"], expected_revision=2, idempotency_key=str(uuid4()))
     with pytest.raises(OperatorConflict, match="cannot be discarded"):
@@ -110,6 +112,10 @@ def test_lost_response_resolves_real_receipt_without_another_domain_write(comman
         )
     assert result["receipt"]["sourceId"] == committed["id"]
     assert result["receipt"]["attemptKey"] == key
+    assert support.recovery_page()["matchingTotal"] == 0
+    assert support.recovery_page()["items"] == []
+    assert support.recovery(attempt["id"])["status"] == "reconciled"
+    assert support.unit_of_work.read(lambda tx: tx.active_recovery_count()) == 0
     assert communications.create(command, key, expected_revision=0)["id"] == committed["id"]
 
 

@@ -4,6 +4,7 @@ import { record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { formatHomeTime } from "../shared/home-time";
+import { formatDate, formatUsd } from "../shared/presentation";
 import { cents, MoneyFacts } from "./money-presentation";
 import { readResult } from "./reads";
 
@@ -102,14 +103,14 @@ export function RentReceiptDetail({ item }: { item: Record<string, unknown> }) {
                   <tr key={scalar(allocation.id)}>
                     <th scope="row">
                       <Link to={`/money?record=expectation&id=${scalar(allocation.expectationId)}`}>
-                        {scalar(allocation.expectationPeriodStartsOn)} –{" "}
-                        {scalar(allocation.expectationPeriodEndsOn)}
+                        {formatDate(scalar(allocation.expectationPeriodStartsOn))} –{" "}
+                        {formatDate(scalar(allocation.expectationPeriodEndsOn))}
                       </Link>
                     </th>
-                    <td>{scalar(allocation.expectationDueOn)}</td>
+                    <td>{formatDate(scalar(allocation.expectationDueOn))}</td>
                     <td>
                       {typeof allocation.amountMinor === "number"
-                        ? `USD ${cents(allocation.amountMinor)}`
+                        ? formatUsd(cents(allocation.amountMinor))
                         : "Amount unavailable"}
                     </td>
                   </tr>

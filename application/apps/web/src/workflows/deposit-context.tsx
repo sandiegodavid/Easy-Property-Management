@@ -10,6 +10,7 @@ import { cents, MoneyFacts } from "./money-presentation";
 import { moneyRecordUrl } from "./money-records";
 import { ParentBackLink } from "../shared/home-navigation";
 import { CommandLoader } from "./command";
+import { formatDate, formatUsd } from "../shared/presentation";
 
 function minor(value: unknown) {
   const text = scalar(value, "");
@@ -90,12 +91,12 @@ export function InterestCreditReview({
       {preview ? (
         <>
           <p>
-            {preview.days} days · Calculated interest: USD {preview.amount}
+            {preview.days} days · Calculated interest: {formatUsd(preview.amount)}
           </p>
           <p>
-            Principal: USD {scalar(values.calculatorPrincipal)} · Annual rate:{" "}
-            {scalar(values.annualRateBasisPoints)} basis points · {scalar(values.startsOn)} to{" "}
-            {scalar(values.endsOn)}
+            Principal: {formatUsd(scalar(values.calculatorPrincipal))} · Annual rate:{" "}
+            {Number(values.annualRateBasisPoints) / 100}% · {formatDate(scalar(values.startsOn))} to{" "}
+            {formatDate(scalar(values.endsOn))}
           </p>
           {preview.overflow ? (
             <p role="alert">Calculation exceeds the permitted credit amount.</p>
@@ -269,9 +270,10 @@ export function DepositContext({
           />
           {settlement.status === "draft" && (
             <p>
-              Proposed arithmetic: USD {cents(received)} receipts + USD {cents(credits)} credits −
-              USD {cents(deductions)} deductions = USD {cents(received + credits - deductions)}{" "}
-              refund due. Approval rechecks and freezes the exact receipt set and sources.
+              Proposed arithmetic: {formatUsd(cents(received))} receipts +{" "}
+              {formatUsd(cents(credits))} credits −{formatUsd(cents(deductions))} deductions ={" "}
+              {formatUsd(cents(received + credits - deductions))} refund due. Approval rechecks and
+              freezes the exact receipt set and sources.
             </p>
           )}
           <p>
@@ -288,7 +290,7 @@ export function DepositContext({
             {payerField === "recipientPartyId" ? "Refund recipient" : "Deposit payer"} selection
           </legend>
           <label>
-            Party search
+            Find a person or business
             <input
               maxLength={240}
               value={search}
@@ -304,12 +306,14 @@ export function DepositContext({
           >
             Search deposit Parties
           </button>
-          {parties.error && <p role="alert">Party search unavailable: {parties.error.message}</p>}
+          {parties.error && (
+            <p role="alert">Find a person or business unavailable: {parties.error.message}</p>
+          )}
           {parties.data?.items.map((item) => (
             <p key={item.id}>
-              {item.displayName} {item.archivedAt && "· Archived historical Party"}{" "}
+              {item.displayName} {item.archivedAt && "· Archived person or business"}{" "}
               <button type="button" onClick={() => onChange({ ...values, [payerField]: item.id })}>
-                Use Party {item.displayName}
+                Select {item.displayName}
               </button>
               {formKey === "finance.deposit_receipt.create" && (
                 <button
@@ -329,12 +333,12 @@ export function DepositContext({
           ))}
           {parties.data?.nextCursor && (
             <button type="button" onClick={() => setCursor(parties.data?.nextCursor ?? undefined)}>
-              Next deposit Party results
+              Next people and businesses
             </button>
           )}
           {cursor && (
             <button type="button" onClick={() => setCursor(undefined)}>
-              First deposit Party results
+              First people and businesses
             </button>
           )}
           <p>
@@ -564,7 +568,7 @@ export function DeductionSourceReview({
           </p>
           {preview.outstanding !== null && (
             <p>
-              Recorded outstanding rent: USD {preview.outstanding}. The deduction remains
+              Recorded outstanding rent: {formatUsd(preview.outstanding)}. The deduction remains
               operator-entered.
             </p>
           )}

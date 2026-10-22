@@ -374,12 +374,12 @@ class SQLiteOperatorTransaction:
         return self.connection.execute(
             select(func.count())
             .select_from(OperatorRecoveryModel)
-            .where(OperatorRecoveryModel.status.in_(("active", "outcome_unknown", "reconciled")))
+            .where(OperatorRecoveryModel.status.in_(("active", "outcome_unknown")))
         ).scalar_one()
 
     def recovery_page(self, *, limit, after):
         t = OperatorRecoveryModel.__table__
-        predicates = [t.c.status.in_(("active", "outcome_unknown", "reconciled"))]
+        predicates = [t.c.status.in_(("active", "outcome_unknown"))]
         total = self.connection.execute(
             select(func.count()).select_from(t).where(*predicates)
         ).scalar_one()

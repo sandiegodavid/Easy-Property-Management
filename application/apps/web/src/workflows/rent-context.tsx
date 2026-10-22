@@ -5,6 +5,7 @@ import { record, scalar, fieldSchema, type RequestSchema } from "@epm/contracts/
 import { readResult } from "./reads";
 import { MoneyFacts } from "./money-presentation";
 import { cents } from "./money-presentation";
+import { formatUsd } from "../shared/presentation";
 
 type Preview = components["schemas"]["SchedulePreviewResponse"];
 function scheduleRequest(values: Record<string, unknown>) {
@@ -212,7 +213,9 @@ export function ReceiptAllocationContext({ values }: { values: Record<string, un
           <div key={label}>
             <dt>{label}</dt>
             <dd>
-              {value === undefined ? "Enter valid integer cents" : `USD ${cents(value.toString())}`}
+              {value === undefined
+                ? "Enter valid integer cents"
+                : formatUsd(cents(value.toString()))}
             </dd>
           </div>
         ))}

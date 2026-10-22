@@ -1,3 +1,5 @@
+import { formatDate } from "./presentation";
+
 // Instants are displayed in the operator's browser time zone. Calendar dates
 // remain in their owning source's zone and must never be shifted as instants.
 export function formatHomeTime(instant: string) {
@@ -13,7 +15,7 @@ export function formatHomeTemporal(fact: {
   on?: string | null;
   timeZone?: string | null;
 }) {
-  if (fact.on) return `${fact.on} · All day · ${fact.timeZone}`;
+  if (fact.on) return `${formatDate(fact.on)} · All day · ${fact.timeZone}`;
   if (!fact.at) return "";
   const local = formatHomeTime(fact.at);
   const operatorZone = new Intl.DateTimeFormat().resolvedOptions().timeZone;

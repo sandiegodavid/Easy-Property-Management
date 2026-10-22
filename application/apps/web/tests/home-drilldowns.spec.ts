@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import type { components } from "@epm/contracts/generated";
+import { formatUsd } from "../src/shared/presentation";
 type Schema = components["schemas"];
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
 
@@ -88,7 +89,7 @@ test("every Home money metric opens matching Finance contributions with its expl
     );
     await region
       .getByRole("link", {
-        name: `USD ${metric.amount} — View ${labels[metric.target.metric]} sources`,
+        name: `${formatUsd(metric.amount)} — View ${labels[metric.target.metric]} sources`,
         exact: true,
       })
       .click();
@@ -104,7 +105,7 @@ test("every Home money metric opens matching Finance contributions with its expl
     expect(url.searchParams.get("throughOn")).toBe(metric.target.throughOn);
     expect(url.searchParams.getAll("propertyIds")).toEqual([home.id]);
     await expect(page.getByRole("region", { name: "Money reporting", exact: true })).toContainText(
-      `${data.matchingTotal} source records · Total USD ${metric.amount}`,
+      `${data.matchingTotal} source records · Total ${formatUsd(metric.amount)}`,
     );
     if (data.items.length)
       await expect(
@@ -113,7 +114,11 @@ test("every Home money metric opens matching Finance contributions with its expl
     else await expect(page.getByText("No records in this reporting view.")).toBeVisible();
     await expect(page.getByText(/not profit, bank balance or amounts due to owners/)).toBeVisible();
     await page
-      .getByRole("link", { name: "Return to Home collection or preview", exact: true })
+      .locator(".workspace-toolbar")
+      .getByRole("link", {
+        name: /^← Back to (Home|Needs action|Waiting|Upcoming|Calendar and appointments|Information review|Property status)$/,
+        exact: true,
+      })
       .click();
     await expect(page).toHaveURL(new RegExp(`propertyId=${home.id}`));
   }
@@ -181,7 +186,11 @@ test("vacant and unknown totals open exact active-space views with frozen pages 
       .click();
     await expect(page).toHaveURL(new RegExp(`/properties/${home.id}/units`));
     await page
-      .getByRole("link", { name: "Return to Home collection or preview", exact: true })
+      .locator(".workspace-toolbar")
+      .getByRole("link", {
+        name: /^← Back to (Home|Needs action|Waiting|Upcoming|Calendar and appointments|Information review|Property status)$/,
+        exact: true,
+      })
       .click();
     await expect(page).toHaveURL(back);
   }

@@ -8,6 +8,7 @@ import { cents, MoneyFacts } from "./money-presentation";
 import { Facts, readResult } from "./reads";
 import { CommandLinks, workflowUrl } from "./command";
 import { formatHomeTime } from "../shared/home-time";
+import { formatUsd } from "../shared/presentation";
 
 export function assignmentProblem(values: Record<string, unknown>) {
   if (
@@ -106,9 +107,9 @@ export function QuoteCommandContext({
       )}
       {!!values.replacesAssignmentId && (
         <p>
-          Reassignment atomically ends the current assignment and creates a replacement; both
-          records and reasons remain retained. It does not resolve the issue or change Tasks,
-          appointments, journals or expenses.
+          Reassignment ends the current assignment and creates a replacement; both records and
+          reasons remain retained. It does not resolve the issue or change Tasks, appointments,
+          journals or expenses.
         </p>
       )}
     </section>
@@ -186,9 +187,7 @@ export function QuoteComparison({
                     )}
                   </th>
                   <td>{quote.scopeSummary}</td>
-                  <td className="quote-total">
-                    {quote.currencyCode} {cents(quote.amountMinor)}
-                  </td>
+                  <td className="quote-total">{formatUsd(cents(quote.amountMinor))}</td>
                   <td>
                     {quote.earliestWorkStartOn && quote.estimatedWorkFinishOn ? (
                       <p>

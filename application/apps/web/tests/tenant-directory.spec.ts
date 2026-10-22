@@ -181,8 +181,10 @@ test("browse tenants pages without gaps and preserves browse on return and archi
   });
   await page.goto("/tenants");
   const directory = page.getByRole("region", { name: "Tenant directory", exact: true });
+  const browseHistoryLength = await page.evaluate(() => history.length);
   await directory.getByRole("button", { name: "Browse tenants", exact: true }).click();
   await expect(page).toHaveURL(/browse=true/);
+  expect(await page.evaluate(() => history.length)).toBe(browseHistoryLength);
   const cards = directory.locator(".tenant-directory-card");
   await expect(cards).toHaveCount(20);
   const seen: string[] = [];

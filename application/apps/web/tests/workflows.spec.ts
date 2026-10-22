@@ -58,15 +58,9 @@ async function saved(page: Page, title: string) {
     await expect(page).toHaveURL(/\/properties\/[^/]+\/overview$/);
     return;
   }
-  await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
-  if (await page.locator(".saved-item").count()) {
-    await expect(page.getByText(/^Operation /)).toHaveCount(0);
-    await expect(page.getByText(/^Result record /)).toHaveCount(0);
-    return;
-  }
-  if (!(await page.getByText("Draft saved · Command committed", { exact: true }).isVisible()))
-    await page.getByText("Form status and recovery details", { exact: true }).click();
-  await expect(page.getByText("Draft saved · Command committed", { exact: true })).toBeVisible();
+  await expect(page.locator(".saved-item")).toBeVisible();
+  await expect(page.getByText(/^Operation /)).toHaveCount(0);
+  await expect(page.getByText(/^Result record /)).toHaveCount(0);
 }
 
 test("progressive property creation opens the new property overview", async ({ page, request }) => {
@@ -217,7 +211,7 @@ test("identity contacts and Tenant preferences use their displayed source revisi
       await page.setViewportSize({ width, height: 900 });
       for (const [panel, title, action] of [
         [contacts, "Contact details", "Add contact details"],
-        [preferences, "Tenant preferences", "Edit tenant preferences"],
+        [preferences, "Tenant preferences", "Edit tenant profile"],
       ] as const) {
         const heading = await panel
           .getByRole("heading", { name: title, exact: true })
@@ -250,7 +244,7 @@ test("identity contacts and Tenant preferences use their displayed source revisi
   expect((await archive.boundingBox())!.y).toBeGreaterThan(
     (await preferences.boundingBox())!.y + (await preferences.boundingBox())!.height,
   );
-  await preferences.getByRole("button", { name: "Edit tenant preferences", exact: true }).click();
+  await preferences.getByRole("button", { name: "Edit tenant profile", exact: true }).click();
   await expect(page).toHaveURL(
     new RegExp(`/tenants\\?workflow=tenant.profile.patch&target=${identity.id}`),
   );
@@ -399,8 +393,7 @@ test("shared contact primary edits recover interrupted results and preserve stal
   await page.getByLabel("Label", { exact: true }).fill("Retained primary edit");
   await expect(page.getByLabel("Label", { exact: true })).toHaveValue("Retained primary edit");
   await page.getByRole("button", { name: "Save unfinished form", exact: true }).click();
-  await page.getByText("Form status and recovery details", { exact: true }).click();
-  await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   const changed = await request.patch(`/api/parties/${identity.id}`, {
     data: {
       displayName: "Newer shared name",
@@ -840,7 +833,7 @@ test("saved forms resume after reload with the original fields", async ({ page, 
   ).toHaveAttribute("href", `/parties?identity=${identity.id}`);
   await expect(page.getByRole("heading", { name: "Edit name", exact: true })).toBeVisible();
   await expect(page.locator(".command-form-actions button")).toHaveText([
-    "Save name",
+    "Save name and identity",
     "Save unfinished form",
   ]);
   await expect(
@@ -860,8 +853,7 @@ test("saved forms resume after reload with the original fields", async ({ page, 
   }
   await page.getByLabel("Display name (required)").fill("Slice50 recovered identity");
   await page.getByRole("button", { name: "Save unfinished form" }).click();
-  await page.getByText("Form status and recovery details", { exact: true }).click();
-  await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   await page.goto("/settings/recovery");
   await page.getByRole("link", { name: "Resume: Edit identity", exact: true }).click();
   await expect(page.getByLabel("Display name (required)")).toHaveValue(
@@ -881,7 +873,7 @@ test("saved occupancy corrections recover their child context before timeline va
   );
   await page.getByLabel("Reason (required)").fill("Clarify the original observation");
   await page.getByRole("button", { name: "Save unfinished form" }).click();
-  await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   await page.goto("/settings/recovery");
   await page.getByRole("link", { name: "Resume: Correct occupancy", exact: true }).click();
   await expect(page.getByLabel("Reason (required)")).toHaveValue(
@@ -948,8 +940,7 @@ test("stale identity changes retain input without dispatching an official write"
   await page.goto(`/parties?workflow=party.patch&target=${identity.id}`);
   await page.getByLabel("Display name (required)").fill("My retained edits");
   await page.getByRole("button", { name: "Save unfinished form" }).click();
-  await page.getByText("Form status and recovery details", { exact: true }).click();
-  await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   const changed = await request.patch(`/api/parties/${identity.id}`, {
     data: {
       displayName: "Newer operator name",
@@ -962,7 +953,7 @@ test("stale identity changes retain input without dispatching an official write"
   page.on("request", (entry) => {
     if (entry.method() === "PATCH" && entry.url().endsWith(`/api/parties/${identity.id}`)) writes++;
   });
-  await page.getByRole("button", { name: "Save name", exact: true }).click();
+  await page.getByRole("button", { name: "Save name and identity", exact: true }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByLabel("Display name (required)")).toHaveValue("My retained edits");
   expect(writes).toBe(0);
@@ -971,7 +962,7 @@ test("stale identity changes retain input without dispatching an official write"
     "Newer operator name",
   );
   await page.getByRole("button", { name: "Keep my edits with this reviewed revision" }).click();
-  await expect(page.getByText("Draft saved · Command editing", { exact: true })).toBeVisible();
+  await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   await expect(page.getByLabel("Display name (required)")).toHaveValue("My retained edits");
   await saved(page, "Name");
   const response = await request.get(`/api/parties/${identity.id}`);
@@ -1010,6 +1001,16 @@ test("category assignment and archive preserve effective counts and contextual r
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
   await page.getByLabel("Reason (required)").fill("Replaced by a more precise category");
   await saved(page, "Archive provider category");
+  const completion = page.locator(".saved-item");
+  await expect(
+    completion.getByRole("heading", { name: "Archive provider category — complete", exact: true }),
+  ).toBeVisible();
+  await expect(completion).toContainText("Replaced by a more precise category");
+  await expect(completion).not.toContainText(category.id);
+  await expect(completion).not.toContainText("Operation");
+  await expect(completion).not.toContainText("Revision");
+  await expect(completion).not.toContainText(/\d{4}-\d{2}-\d{2}T\d{2}:/);
+  await expect(completion).toContainText("America/Los_Angeles");
   await page.goto(`/providers/${id}/details?history=true`);
   await expect(
     page.getByText("Replaced by a more precise category", { exact: true }),

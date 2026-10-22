@@ -32,6 +32,8 @@ Search is bounded literal metadata matching with typed targets, independent sour
 
 Registered forms hold incomplete input before a domain draft/command exists, with source identity and schema version. Limits are 64 KiB serialized UTF-8, 100 active records and 30 days since acknowledged save. Credentials, raw file bytes and raw Intake evidence are excluded. Unresolved outcomes count toward capacity and cannot expire/discard automatically.
 
+The recovery directory, its total and active capacity count include only `active` and `outcome_unknown` records. Reconciled submissions retain their server-side receipt/audit evidence but leave the actionable queue and no longer consume draft capacity. Drafts may be discarded directly from the directory; an unknown outcome must be reconciled first. Existing pagination, retained-data and backup contracts are unchanged.
+
 Save is acknowledged and revision-safe. Preparing an attempt validates complete fields and computes the source-owned semantic fingerprint; it does not dispatch the business command. Reconcile reads the owning immutable original receipt. Unknown outcomes retain the exact key before any new attempt. Domain drafts stay source-owned; attachment recovery retains metadata/hash and requires matching byte reselection.
 
 ## Implementation navigation

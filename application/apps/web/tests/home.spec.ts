@@ -58,8 +58,7 @@ test("Home explains aggregate availability and shared Task rows reach real sourc
   await panel.getByRole("link", { name: "Review Task and actions" }).click();
   await expect(page).toHaveURL(new RegExp(task.id));
   await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible();
-  await page.getByText("Actions", { exact: true }).click();
-  await page.getByRole("link", { name: "Start task", exact: true }).click();
+  await page.getByRole("button", { name: "Start task", exact: true }).click();
   await page.getByRole("button", { name: "Save start task", exact: true }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   const current = await request.get(`/api/tasks/${task.id}`);

@@ -13,7 +13,10 @@ import { loadMoneyRecord, MoneyFacts, moneyRecordUrl, type MoneyKind } from "./m
 import { ExpenseContext } from "./expense-context";
 import { CheckContext } from "./check-context";
 import { OwnerReportContext, ownerVerificationProblem } from "./owner-report-context";
-import { type Choices } from "./fields";
+import { label, type Choices } from "./fields";
+import { partyNames } from "../shared/party-names";
+import { formatDate, formatUsd } from "../shared/presentation";
+import { cents } from "./money-presentation";
 import {
   DepositContext,
   InterestCreditReview,
@@ -78,7 +81,7 @@ async function commandSource(
     }
     source.choices.leaseTermId = lease.terms.map((term) => ({
       id: term.id,
-      label: `${term.effectiveOn} · ${term.paymentFrequency}`,
+      label: `${formatDate(term.effectiveOn)} · ${label(term.paymentFrequency)}`,
     }));
     source.choices.expectationId = expectations.items
       .filter(
@@ -89,11 +92,15 @@ async function commandSource(
       )
       .map((item) => ({
         id: item.id,
-        label: `${item.periodStartsOn} – ${item.periodEndsOn} · ${item.outstandingAmountMinor} cents outstanding`,
+        label: `${formatDate(item.periodStartsOn)} – ${formatDate(item.periodEndsOn)} · ${formatUsd(cents(item.outstandingAmountMinor))} outstanding`,
       }));
+    const names = await partyNames(
+      lease.participants.map((item) => item.tenantPartyId),
+      signal,
+    );
     source.choices.payerPartyId = lease.participants.map((item) => ({
       id: item.tenantPartyId,
-      label: `${item.tenantPartyId} · ${item.startsOn} – ${item.endsOn ?? "ongoing"}`,
+      label: `${names.get(item.tenantPartyId) ?? "Tenant name unavailable"} · ${formatDate(item.startsOn)} – ${item.endsOn ? formatDate(item.endsOn) : "ongoing"}`,
     }));
     if (definition.formKey === "finance.rent_receipt.create") {
       const suggestion = await api.GET(
@@ -138,7 +145,7 @@ async function commandSource(
           )
           .map((receipt) => ({
             id: receipt.id,
-            label: `${receipt.receivedOn} · ${receipt.amountMinor} cents · check`,
+            label: `${formatDate(receipt.receivedOn)} · ${formatUsd(cents(receipt.amountMinor))} · Check`,
           }));
       }
     }
@@ -223,7 +230,7 @@ async function commandSource(
       );
       source.choices.expectationId = expectations.items.map((item) => ({
         id: item.id,
-        label: `${item.periodStartsOn} · ${item.outstandingAmountMinor} cents outstanding`,
+        label: `${formatDate(item.periodStartsOn)} · ${formatUsd(cents(item.outstandingAmountMinor))} outstanding`,
       }));
       source.choices.existingReceiptId = receipts.items
         .filter(
@@ -241,7 +248,7 @@ async function commandSource(
         )
         .map((item) => ({
           id: item.id,
-          label: `${item.receivedOn} · ${item.amountMinor} cents · ${item.paymentMethodKind}`,
+          label: `${formatDate(item.receivedOn)} · ${formatUsd(cents(item.amountMinor))} · ${label(item.paymentMethodKind.replaceAll("_", " "))}`,
         }));
     }
   }
@@ -251,7 +258,7 @@ async function commandSource(
     );
     source.choices.leaseTermId = lease.terms.map((term) => ({
       id: term.id,
-      label: `${term.effectiveOn} · ${term.paymentFrequency}`,
+      label: `${formatDate(term.effectiveOn)} · ${label(term.paymentFrequency)}`,
     }));
   }
   if (definition.formKey.startsWith("finance.expense.") && !definition.formKey.endsWith(".void")) {
@@ -633,7 +640,6 @@ export function MoneyCommand() {
               <MoneyFacts
                 value={selected ?? state.value}
                 fields={[
-                  "id",
                   "status",
                   "amountMinor",
                   "outstandingAmountMinor",
@@ -644,14 +650,6 @@ export function MoneyCommand() {
                   "voidedAt",
                 ]}
               />
-              <p>
-                Amounts ending in Minor are integer USD cents. Decimal amounts require exactly two
-                decimal places. Allocation amounts must total the receipt; review the displayed
-                outstanding balance.
-              </p>
-              {state.ledgerRevision !== undefined && (
-                <p>Displayed rent-ledger revision: {state.ledgerRevision}</p>
-              )}
             </>
           )}
           {verification && (
@@ -680,12 +678,6 @@ export function MoneyCommand() {
                 income.
               </p>
             </fieldset>
-          )}
-          {!tidy && (
-            <p>
-              Pickers show at most 100 records. Use a contextual record link if the needed
-              expectation is outside this selection.
-            </p>
           )}
         </>
       )}

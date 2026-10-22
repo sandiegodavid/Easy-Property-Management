@@ -14,6 +14,8 @@ import { ExpenseEvidenceArchive, ExpenseFilters } from "./expense-context";
 import { DepositFilters, DepositEvidenceArchive } from "./deposit-context";
 import { CheckFilters } from "./check-context";
 import { OwnerReportFilters } from "./owner-report-context";
+import { partyNames } from "../shared/party-names";
+import { formatDate } from "../shared/presentation";
 
 const tabs = [
   "rent",
@@ -187,7 +189,6 @@ function FileMetadata({ id }: { id: string }) {
               "originalName",
               "mediaType",
               "sizeBytes",
-              "contentSha256",
               "storageState",
               "verifiedAt",
               "createdAt",
@@ -453,6 +454,16 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
       ),
   });
   const groups = new Map<string, Record<string, unknown>[]>();
+  const payerIds = [
+    ...new Set(
+      items.flatMap((item) => (typeof item.paidByPartyId === "string" ? [item.paidByPartyId] : [])),
+    ),
+  ].sort();
+  const payers = useQuery({
+    queryKey: scope.key("expense-payer-names", payerIds),
+    enabled: tab === "expenses" && payerIds.length > 0,
+    queryFn: ({ signal }) => partyNames(payerIds, signal),
+  });
   for (const item of items) {
     const group =
       tab === "categories"
@@ -726,7 +737,7 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
                           : tab === "checks"
                             ? "Check dated"
                             : "Received"}{" "}
-                      <time dateTime={date}>{date}</time>
+                      <time dateTime={date}>{formatDate(date)}</time>
                     </p>
                   )}
                   <MoneyFacts
@@ -741,8 +752,9 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
                             paidTo: item.payeeName,
                             paidBy:
                               item.paidByKind === "party"
-                                ? `Party ${scalar(item.paidByPartyId)}`
-                                : "Local operator",
+                                ? (payers.data?.get(scalar(item.paidByPartyId)) ??
+                                  (payers.error ? "Payer name unavailable" : "Loading payer…"))
+                                : "You",
                             evidence: Array.isArray(item.activeEvidence)
                               ? item.activeEvidence.length
                               : 0,
@@ -792,8 +804,9 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
                   />
                   {tab === "rent" && (
                     <p className="money-record-period">
-                      Due date: {scalar(item.dueOn)} · Covered period: {scalar(item.periodStartsOn)}{" "}
-                      – {scalar(item.periodEndsOn)}.{" "}
+                      Due date: {formatDate(scalar(item.dueOn))} · Covered period:{" "}
+                      {formatDate(scalar(item.periodStartsOn))} –{" "}
+                      {formatDate(scalar(item.periodEndsOn))}.{" "}
                       <Link to={moneyRecordUrl("expectation", id)}>
                         Review amounts and receipt allocations
                       </Link>
@@ -833,6 +846,13 @@ function MoneyDirectory({ tab }: { tab: Exclude<(typeof tabs)[number], "reportin
 
 export function MoneyScope() {
   const [params, setParams] = useSearchParams();
+  const { scope } = useWorkspace();
+  const ownerId = params.get("ownerId");
+  const owner = useQuery({
+    queryKey: scope.key("money-owner-name", ownerId),
+    enabled: !!ownerId,
+    queryFn: ({ signal }) => partyNames([ownerId!], signal),
+  });
   return (
     <>
       {["propertyId", "leaseId", "ownerId"].map(
@@ -843,7 +863,7 @@ export function MoneyScope() {
                 ? "Showing this property’s records."
                 : key === "leaseId"
                   ? "Showing this lease’s records."
-                  : `${key}: ${params.get(key)}`}{" "}
+                  : `Showing ${owner.data?.get(ownerId!) ?? "this owner"}’s records.`}{" "}
               <button
                 onClick={() => {
                   const next = new URLSearchParams(params);

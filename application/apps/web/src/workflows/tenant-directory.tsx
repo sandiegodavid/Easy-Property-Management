@@ -99,7 +99,7 @@ export function TenantDirectory() {
             const next = new URLSearchParams({ browse: "true" });
             if (archived) next.set("archived", "true");
             setEntry({ key: next.toString(), value: "" });
-            setParams(next, { preventScrollReset: true });
+            setParams(next, { preventScrollReset: true, replace: true });
           }}
         >
           Browse tenants

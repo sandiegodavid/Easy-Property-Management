@@ -126,7 +126,11 @@ test("Home Task actions reload current state, retain input on conflict, reconcil
   await page.locator(".parent-back-link").click();
   await expect(page.getByRole("heading", { name: task.title, exact: true })).toBeVisible();
   await page
-    .getByRole("link", { name: "Return to Home collection or preview", exact: true })
+    .locator(".workspace-toolbar")
+    .getByRole("link", {
+      name: /^← Back to (Home|Needs action|Waiting|Upcoming|Calendar and appointments|Information review|Property status)$/,
+      exact: true,
+    })
     .click();
   await expect(page).toHaveURL(homeUrl);
 });
@@ -186,7 +190,10 @@ test("grouped previews expose nested reminders and every linked Task through bou
   await page.getByLabel("I confirm this lifecycle change").check();
   await save(page, "Acknowledge reminder");
   await expect(
-    page.getByRole("link", { name: "Return to Home collection or preview", exact: true }),
+    page.locator(".workspace-toolbar").getByRole("link", {
+      name: /^← Back to (Home|Needs action|Waiting|Upcoming|Calendar and appointments|Information review|Property status)$/,
+      exact: true,
+    }),
   ).toBeVisible();
   const current = await get<Schema["IssueResponse"]>(
     request,
@@ -249,7 +256,11 @@ test("Home coverage action uses the source review receipt and preserves return c
   );
   expect(current.state).toBe("recorded");
   await page
-    .getByRole("link", { name: "Return to Home collection or preview", exact: true })
+    .locator(".workspace-toolbar")
+    .getByRole("link", {
+      name: /^← Back to (Home|Needs action|Waiting|Upcoming|Calendar and appointments|Information review|Property status)$/,
+      exact: true,
+    })
     .click();
   await expect(page).toHaveURL(
     new RegExp(`/home/collections/information_review\\?propertyId=${home.id}`),
@@ -339,7 +350,10 @@ test("Home lease review opens the source and records a renewal without implying 
   expect(current.renewalOptions).toHaveLength(1);
   expect(current.renewalOptions[0].status).toBe("open");
   await expect(
-    page.getByRole("link", { name: "Return to Home collection or preview", exact: true }),
+    page.locator(".workspace-toolbar").getByRole("link", {
+      name: /^← Back to (Home|Needs action|Waiting|Upcoming|Calendar and appointments|Information review|Property status)$/,
+      exact: true,
+    }),
   ).toBeVisible();
 });
 
@@ -359,7 +373,11 @@ test("a failed current-source read offers no lifecycle commands and keeps Home r
   await expect(page.getByRole("alert")).toContainText("Current issue unavailable");
   await expect(page.getByText("Actions", { exact: true })).toHaveCount(0);
   await page
-    .getByRole("link", { name: "Return to Home collection or preview", exact: true })
+    .locator(".workspace-toolbar")
+    .getByRole("link", {
+      name: /^← Back to (Home|Needs action|Waiting|Upcoming|Calendar and appointments|Information review|Property status)$/,
+      exact: true,
+    })
     .click();
   await expect(page.getByRole("button", { name: new RegExp(f.issue.summary) })).toBeVisible();
 });
@@ -404,7 +422,10 @@ test("Home payment uses current allocations and an interrupted response reconcil
   expect(receipts.items[0].allocations[0].expectationId).toBe(f.expectation.id);
   expect(calls).toBe(1);
   await expect(
-    page.getByRole("link", { name: "Return to Home collection or preview", exact: true }),
+    page.locator(".workspace-toolbar").getByRole("link", {
+      name: /^← Back to (Home|Needs action|Waiting|Upcoming|Calendar and appointments|Information review|Property status)$/,
+      exact: true,
+    }),
   ).toBeVisible();
 });
 
@@ -449,7 +470,11 @@ test("Home Owner review actions persist independently of Finance and linked foll
   expect(current.status).toBe("open");
   expect(current.followUpTasks).toHaveLength(1);
   await page
-    .getByRole("link", { name: "Return to Home collection or preview", exact: true })
+    .locator(".workspace-toolbar")
+    .getByRole("link", {
+      name: /^← Back to (Home|Needs action|Waiting|Upcoming|Calendar and appointments|Information review|Property status)$/,
+      exact: true,
+    })
     .click();
   const rows = await get<Schema["CollectionResponse"]>(
     request,

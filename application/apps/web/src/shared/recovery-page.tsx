@@ -37,7 +37,7 @@ export function RecoveryPage() {
       return result.data;
     },
   });
-  async function reconcile(id: string) {
+  async function changeRecord(id: string, discard = false) {
     setPending(true);
     setError(undefined);
     try {
@@ -46,7 +46,12 @@ export function RecoveryPage() {
         params: { path: { record_id: id } },
       });
       if (!current.data) throw new Error("This recovery record could not be loaded.");
-      if (current.data.status === "outcome_unknown")
+      if (discard && current.data.status === "active")
+        await recoveryApi.discard(id, {
+          expectedRevision: current.data.revision,
+          idempotencyKey: crypto.randomUUID(),
+        });
+      else if (!discard && current.data.status === "outcome_unknown")
         await recoveryApi.reconcile(id, {
           expectedRevision: current.data.revision,
           idempotencyKey: crypto.randomUUID(),
@@ -71,7 +76,9 @@ export function RecoveryPage() {
       {records.data && (
         <>
           <PageAsOf asOf={records.data.asOf} />
-          <p>{records.data.matchingTotal} forms</p>
+          <p>
+            {records.data.matchingTotal} {records.data.matchingTotal === 1 ? "form" : "forms"}
+          </p>
           {records.data.items.length === 0 && <p>No unfinished forms on this page.</p>}
           <ul className="result-card-list">
             {records.data.items.map((record) => {
@@ -95,17 +102,15 @@ export function RecoveryPage() {
                       <button
                         disabled={pending || !scope.canWrite}
                         onClick={() => {
-                          void reconcile(record.id);
+                          void changeRecord(record.id);
                         }}
                       >
                         Check submission
                       </button>
                     )}
-                    {record.formKey === "coverage.review" &&
-                      ["active", "outcome_unknown"].includes(record.status) && (
-                        <Link to={`/coverage/reviews/${record.id}`}>Resume: {title}</Link>
-                      )}
-                    {workflow && ["active", "outcome_unknown"].includes(record.status) ? (
+                    {record.formKey === "coverage.review" ? (
+                      <Link to={`/coverage/reviews/${record.id}`}>Resume: {title}</Link>
+                    ) : workflow ? (
                       <Link
                         to={`${workflowUrl(record.formKey, record.sourceId ?? undefined)}&resume=${record.id}`}
                       >
@@ -118,6 +123,21 @@ export function RecoveryPage() {
                           — Resume from the owning workflow when its editor is available.
                         </span>
                       )
+                    )}
+                    {record.status === "active" && (
+                      <button
+                        disabled={pending || !scope.canWrite}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Discard the unfinished ${title.toLowerCase()} form? This will not change the official record.`,
+                            )
+                          )
+                            void changeRecord(record.id, true);
+                        }}
+                      >
+                        Discard
+                      </button>
                     )}
                   </div>
                 </li>

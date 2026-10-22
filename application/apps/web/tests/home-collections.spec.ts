@@ -142,7 +142,11 @@ test("View all keeps preview capture and exact total, bounds pages and preserves
   await secondRow.click();
   await secondPage.getByRole("link", { name: "View", exact: true }).click();
   await page
-    .getByRole("link", { name: "Return to Home collection or preview", exact: true })
+    .locator(".workspace-toolbar")
+    .getByRole("link", {
+      name: /^← Back to (Home|Needs action|Waiting|Upcoming|Calendar and appointments|Information review|Property status)$/,
+      exact: true,
+    })
     .click();
   await expect(page.getByRole("navigation", { name: "Collection pages" })).toContainText("Page 2");
   await expect(secondPage.getByRole("button", { name: /Collection Task/ })).toHaveCount(5);
@@ -162,7 +166,11 @@ test("View all keeps preview capture and exact total, bounds pages and preserves
   await source.click();
   await expect(page).toHaveURL(/\/tasks\?record=task/);
   await page
-    .getByRole("link", { name: "Return to Home collection or preview", exact: true })
+    .locator(".workspace-toolbar")
+    .getByRole("link", {
+      name: /^← Back to (Home|Needs action|Waiting|Upcoming|Calendar and appointments|Information review|Property status)$/,
+      exact: true,
+    })
     .click();
   await expect(page).toHaveURL(returnUrl);
   await expect.poll(() => page.evaluate(() => scrollY)).toBeCloseTo(scroll, 0);
@@ -352,7 +360,12 @@ test("hidden destinations remain reachable from collection source links with a p
   const returnUrl = page.url();
   await action.getByRole("link", { name: "Review issue", exact: true }).click();
   await expect(page.getByRole("heading", { name: issue.summary, exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Return to Home collection or preview" }).click();
+  await page
+    .locator(".workspace-toolbar")
+    .getByRole("link", {
+      name: /^← Back to (Home|Needs action|Waiting|Upcoming|Calendar and appointments|Information review|Property status)$/,
+    })
+    .click();
   await expect(page).toHaveURL(returnUrl);
   await page.goto("/settings/navigation");
   await page.getByRole("checkbox", { name: "Maintenance", exact: true }).check();

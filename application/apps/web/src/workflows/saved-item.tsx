@@ -5,6 +5,7 @@ import { formatHomeTime } from "../shared/home-time";
 import { OfficialIdList } from "../shared/official-identification";
 import { cents } from "./money-presentation";
 import { label } from "./fields";
+import { formatDate, formatUsd } from "../shared/presentation";
 
 const hidden =
   /(?:^id$|Ids?$|revision|fingerprint|correlation|idempotency|sha256|credential|password|secret|api.?key|token|normalized|^asOf$|^effectiveLocalDate$|^schemaVersion$|^documentNumber$|^lastFour$|^operation|^provenance$|^storage|^location$|^confidence$)/i;
@@ -13,7 +14,7 @@ const headings: Record<string, string> = {
   profile: "Profile",
   item: "Saved details",
   task: "Task",
-  spaces: "Homes and units",
+  spaces: "Rental units",
   ownerships: "Owners",
   terms: "Rent terms",
   contactMethods: "Contact details",
@@ -42,7 +43,19 @@ function fieldLabel(key: string) {
 function text(key: string, value: string | number | boolean) {
   if (key === "sharePercent") return value === "Not recorded" ? value : `${Number(value)}%`;
   if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (/Minor$/.test(key) && /^-?\d+$/.test(String(value))) return `$${cents(value)}`;
+  if (/Minor$/.test(key) && /^-?\d+$/.test(String(value))) return formatUsd(cents(value));
+  if (
+    /(?:amount|balance|total|principal|refundDue)$/i.test(key) &&
+    typeof value === "string" &&
+    /^-?\d+\.\d{2}$/.test(value)
+  )
+    return formatUsd(value);
+  if (
+    /(?:On|Date|_on|_date)$/.test(key) &&
+    typeof value === "string" &&
+    /^\d{4}-\d\d-\d\d$/.test(value)
+  )
+    return formatDate(value);
   if (
     typeof value === "string" &&
     /^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(value) &&

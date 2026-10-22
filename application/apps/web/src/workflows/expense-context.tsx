@@ -10,6 +10,7 @@ import { CommandLoader } from "./command";
 import { readResult } from "./reads";
 import { ParentBackLink } from "../shared/home-navigation";
 import { moneyRecordUrl } from "./money-records";
+import { formatDate, formatUsd } from "../shared/presentation";
 
 export function ExpenseContext({
   values,
@@ -78,7 +79,8 @@ export function ExpenseContext({
           <h3>Review possible duplicate expenses</h3>
           {candidates.map((item) => (
             <p key={item.id}>
-              {item.paidOn} · {item.amount} USD · {item.payeeName} · {item.description}{" "}
+              {formatDate(item.paidOn)} · {formatUsd(item.amount)} · {item.payeeName} ·{" "}
+              {item.description}{" "}
               <Link to={moneyRecordUrl("expense", item.id)}>Open existing expense</Link>
             </p>
           ))}
@@ -218,8 +220,8 @@ export function ExpenseContext({
           Use a merchant label instead
         </button>
         <p>
-          Use exactly one saved Provider or the merchant label field. Party-funded spending requires
-          the existing payer Party ID.
+          Use exactly one saved Provider or the merchant label field. Spending paid by someone else
+          requires the person or business who paid.
         </p>
       </fieldset>
       {historical && (
@@ -333,8 +335,8 @@ export function ExpenseFilters() {
       {[
         ["spaceId", "Space ID"],
         ["categoryId", "Category ID"],
-        ["providerPartyId", "Provider Party ID"],
-        ["paidByPartyId", "Payer Party ID"],
+        ["providerPartyId", "Provider"],
+        ["paidByPartyId", "Payer"],
       ].map(([key, label]) => (
         <label key={key}>
           {label}
@@ -346,7 +348,7 @@ export function ExpenseFilters() {
         <select name="paidByKind" defaultValue={params.get("paidByKind") ?? ""}>
           <option value="">Any</option>
           <option value="local_operator">Local operator</option>
-          <option value="party">Party</option>
+          <option value="party">Person or business</option>
         </select>
       </label>
       <label>
