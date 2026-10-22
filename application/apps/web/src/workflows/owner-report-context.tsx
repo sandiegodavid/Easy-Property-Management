@@ -93,6 +93,10 @@ export function OwnerReportContext({
         ownership percentage, legal entitlement, statement or disbursement is inferred.
       </p>
       <p>
+        The recorded time is saved automatically. Received on is the date the owner received the
+        payment.
+      </p>
+      <p>
         Eligibility uses the payment date in the Property's time zone. Ended ownership and archived
         identity can be truthful historical context; Local operator uses ordinary Finance receipts,
         never a fabricated Owner Party.
@@ -145,6 +149,7 @@ export function OwnerReportContext({
             "ownerDisplayNameSnapshot",
             "currentOwnerState",
             "receivedOn",
+            "reportedAtUtc",
             "amountMinor",
             "paymentMethodKind",
             "paymentMethodLabel",
@@ -153,6 +158,7 @@ export function OwnerReportContext({
             "receiptLifecycleStatus",
             "financiallyEffective",
           ]}
+          labels={{ reportedAtUtc: "Recorded" }}
         />
       )}
       {mode === "create" && (

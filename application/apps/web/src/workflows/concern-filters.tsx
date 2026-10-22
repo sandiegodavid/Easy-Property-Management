@@ -371,7 +371,7 @@ export function ConcernFilters() {
         </select>
       </label>
       <label>
-        Raised from
+        Recorded from
         <input
           type="date"
           name="raisedLocalOnOrAfter"
@@ -379,7 +379,7 @@ export function ConcernFilters() {
         />
       </label>
       <label>
-        Raised through
+        Recorded through
         <input
           type="date"
           name="raisedLocalOnOrBefore"

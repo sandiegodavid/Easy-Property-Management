@@ -9,13 +9,20 @@ test("appointment pickers save a start-only visit, retain its zone and reschedul
   request,
 }) => {
   const f = await issue(request);
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto(`/maintenance?workflow=maintenance.appointment.create&target=${f.issue.id}`);
   const start = page.getByLabel("Starts at (required)", { exact: true });
   const end = page.getByLabel("Ends at", { exact: true });
   await expect(start).toHaveAttribute("type", "datetime-local");
+  await expect(start).toHaveAttribute("step", "60");
+  await expect(end).toHaveAttribute("step", "60");
   await expect(start).toHaveAttribute("required", "");
   await expect(end).not.toHaveAttribute("required", "");
   await page.getByLabel("Time zone", { exact: true }).selectOption("America/New_York");
+  await expect(page.getByLabel("Time zone", { exact: true }).locator("option:checked")).toHaveText(
+    "America/New_York",
+  );
   await start.fill("2027-05-01T10:30");
   await page.getByLabel("Purpose (required)").fill("Inspect the window");
   for (const width of [1280, 390]) {
@@ -40,6 +47,15 @@ test("appointment pickers save a start-only visit, retain its zone and reschedul
   expect(
     await post(request, `/api/maintenance-issues/${f.issue.id}/appointments`, payload),
   ).toEqual(created);
+  await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
+  const appointment = page.locator(`#appointment-${created.id}`);
+  await expect(appointment.getByRole("heading", { name: "Inspect the window" })).toBeVisible();
+  await expect(appointment.locator(".maintenance-appointment-times")).toContainText(
+    "EndsNot specified",
+  );
+  await expect(appointment.locator("time")).toHaveCount(1);
+  await expect(appointment.locator("time")).toHaveAttribute("datetime", created.startsAtUtc);
+  expect(pageErrors).toEqual([]);
   await page.goto(
     `/maintenance?workflow=maintenance.appointment.update&target=${f.issue.id}&child=${created.id}`,
   );
@@ -62,6 +78,9 @@ test("appointment pickers save a start-only visit, retain its zone and reschedul
   expect(changed.startsAtUtc).toBe("2027-05-02T16:00:00Z");
   expect(changed.endsAtUtc).toBe("2027-05-02T17:15:00Z");
   expect(changed.scheduledTimezone).toBe("America/Chicago");
+  await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
+  await expect(appointment.locator("time")).toHaveCount(2);
+  await expect(appointment.locator("time").nth(1)).toHaveAttribute("datetime", changed.endsAtUtc!);
   await page.goto(
     `/maintenance?workflow=maintenance.appointment.update&target=${f.issue.id}&child=${created.id}`,
   );
@@ -76,6 +95,12 @@ test("appointment pickers save a start-only visit, retain its zone and reschedul
   expect(
     ((await (await clear).json()) as Schema["AppointmentCommandResponse"]).endsAtUtc,
   ).toBeNull();
+  await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
+  await expect(appointment.locator(".maintenance-appointment-times")).toContainText(
+    "EndsNot specified",
+  );
+  await expect(appointment.locator("time")).toHaveCount(1);
+  expect(pageErrors).toEqual([]);
 });
 
 test("appointment pickers reject nonexistent local times without submitting", async ({
@@ -93,22 +118,50 @@ test("appointment pickers reject nonexistent local times without submitting", as
   });
   await page.goto(`/maintenance?workflow=maintenance.appointment.create&target=${f.issue.id}`);
   await page.getByLabel("Time zone", { exact: true }).selectOption("America/Los_Angeles");
+  await page.getByLabel("Starts at (required)").fill("2027-03-14T01:30");
   await page.getByLabel("Starts at (required)").fill("2027-03-14T02:30");
   await expect(page.getByRole("alert")).toContainText("does not exist");
   await expect(page.getByLabel("Starts at (required)")).toHaveAttribute("aria-invalid", "true");
+  const draftSave = page.waitForResponse(
+    (r) =>
+      r.request().method() === "PUT" &&
+      /\/api\/operator\/recovery\//.test(r.url()) &&
+      (r.request().postDataJSON() as { payload?: { purpose?: string } })?.payload?.purpose ===
+        "Review the repair",
+  );
   await page.getByLabel("Purpose (required)").fill("Review the repair");
+  const saved = await draftSave;
+  expect(saved.ok(), await saved.text()).toBe(true);
+  expect(
+    (saved.request().postDataJSON() as { payload: { startsAtUtc?: string } }).payload.startsAtUtc,
+  ).toBe("2027-03-14T09:30:00.000Z");
+  await expect(page.getByLabel("Starts at (required)")).toHaveValue("2027-03-14T02:30");
   await page.getByRole("button", { name: "Schedule appointment", exact: true }).click();
-  await expect(page.locator(".form-feedback")).toBeVisible();
+  await expect(page.getByLabel("Starts at (required)")).toBeFocused();
+  expect(
+    await page
+      .getByLabel("Starts at (required)")
+      .evaluate((input: HTMLInputElement) => input.validity.customError),
+  ).toBe(true);
   expect(writes).toHaveLength(0);
   await page.getByLabel("Starts at (required)").fill("2027-03-14T03:30");
   await expect(page.getByLabel("Starts at (required)")).toHaveAttribute("aria-invalid", "false");
 });
 
-test("Task due time accepts typed picker input and saves the selected zone", async ({ page }) => {
+test("Task due time accepts typed picker input and saves the selected zone", async ({
+  page,
+  request,
+}) => {
+  const f = await issue(request);
   await page.goto("/tasks?workflow=task.create");
   await page.getByLabel("Title (required)", { exact: true }).fill("Call after lunch");
   await page.getByLabel("No due date", { exact: true }).uncheck();
   await page.getByText("Optional Task details", { exact: true }).click();
+  await expect(page.getByLabel("Related entity id", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Related entity type", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/Choices are bounded/)).toHaveCount(0);
+  await page.getByLabel("Find a related record").fill(f.property.displayName);
+  await page.getByRole("button", { name: `Use ${f.property.displayName}`, exact: true }).click();
   await page.getByLabel("Due time zone", { exact: true }).selectOption("America/New_York");
   const due = page.getByLabel("Due at", { exact: true });
   await expect(due).toHaveAttribute("type", "datetime-local");
@@ -121,6 +174,25 @@ test("Task due time accepts typed picker input and saves the selected zone", asy
   expect(created.dueAtUtc).toBe("2027-05-01T17:45:00Z");
   expect(created.dueTimezone).toBe("America/New_York");
   expect(created.isAllDay).toBe(false);
+  expect(created.relatedEntityId).toBe(f.property.id);
+  expect(created.relatedEntityType).toBe("property");
+  expect(created.relatedLabel).toBe(f.property.displayName);
+  await page.goto(`/tasks?workflow=task.edit&target=${created.id}`);
+  await expect(page.getByLabel("Due at", { exact: true })).toHaveAttribute(
+    "type",
+    "datetime-local",
+  );
+  await expect(page.getByLabel("Due at", { exact: true })).toHaveValue("2027-05-01T13:45");
+  await page.getByLabel("Due time zone", { exact: true }).selectOption("America/Chicago");
+  await expect(page.getByLabel("Due at", { exact: true })).toHaveValue("2027-05-01T12:45");
+  await page.getByLabel("Due at", { exact: true }).fill("2027-05-02T10:15");
+  const edit = page.waitForResponse(
+    (r) => r.request().method() === "PATCH" && r.url().endsWith(`/api/tasks/${created.id}`),
+  );
+  await page.getByRole("button", { name: "Save task changes", exact: true }).click();
+  const changed = ((await (await edit).json()) as Schema["TaskMutationResponse"]).task;
+  expect(changed.dueAtUtc).toBe("2027-05-02T15:15:00Z");
+  expect(changed.dueTimezone).toBe("America/Chicago");
 });
 
 test("zoned picker conversion preserves repeated-hour instants and rejects daylight-saving gaps", () => {

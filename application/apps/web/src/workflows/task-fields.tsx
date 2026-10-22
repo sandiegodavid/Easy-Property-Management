@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { type RequestSchema, record } from "@epm/contracts/workflows";
 import { Fields, type Choices } from "./fields";
+import { TaskRelatedRecord } from "./task-related-record";
 import {
   browserTimeZone,
   TimeZoneSelect,
@@ -140,7 +141,13 @@ export function TaskCreateFields({
               Object.entries(schema.properties ?? {}).filter(
                 ([key]) =>
                   key !== "title" &&
-                  !["dueAtUtc", "dueTimezone"].includes(key) &&
+                  ![
+                    "dueAtUtc",
+                    "dueTimezone",
+                    "relatedEntityId",
+                    "relatedEntityType",
+                    "relatedLabel",
+                  ].includes(key) &&
                   (!noDate || key !== "isAllDay"),
               ),
             ),
@@ -150,6 +157,7 @@ export function TaskCreateFields({
           choices={choices}
           disabled={disabled}
         />
+        <TaskRelatedRecord value={value} onChange={onChange} disabled={disabled} />
       </details>
     </>
   );

@@ -22,7 +22,9 @@ test("tenant directory prompts for search or browse", async ({ page }) => {
   const directory = page.getByRole("region", { name: "Tenant directory", exact: true });
   await expect(directory.getByRole("heading", { name: "Tenants", exact: true })).toBeVisible();
   await expect(directory.getByRole("button", { name: "Create tenant", exact: true })).toBeVisible();
-  await expect(directory.getByRole("heading", { name: "Find a tenant", exact: true })).toBeVisible();
+  await expect(
+    directory.getByRole("heading", { name: "Find a tenant", exact: true }),
+  ).toBeVisible();
   await expect(
     directory.getByText(
       "Search by name or browse tenants to open contact details and preferences.",
@@ -37,7 +39,9 @@ test("tenant directory prompts for search or browse", async ({ page }) => {
   await expect(
     directory.getByRole("searchbox", { name: "Search tenants", exact: true }),
   ).toBeVisible();
-  await expect(directory.getByRole("button", { name: "Browse tenants", exact: true })).toBeVisible();
+  await expect(
+    directory.getByRole("button", { name: "Browse tenants", exact: true }),
+  ).toBeVisible();
   await expect(
     directory.getByRole("checkbox", { name: "Include archived tenants", exact: true }),
   ).toBeVisible();

@@ -6315,7 +6315,7 @@ export interface components {
             /** Occurredatutc */
             occurredAtUtc?: string | null;
             /** Occurredtimezone */
-            occurredTimezone: string;
+            occurredTimezone?: string | null;
             /** Participants */
             participants: components["schemas"]["ParticipantInputModel"][];
             /**
@@ -7663,7 +7663,7 @@ export interface components {
             /** Occurredatutc */
             occurredAtUtc?: string | null;
             /** Occurredtimezone */
-            occurredTimezone: string;
+            occurredTimezone?: string | null;
             /** Participants */
             participants: components["schemas"]["ParticipantInputModel"][];
             /** Subject */

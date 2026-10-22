@@ -29,6 +29,7 @@ class TaskForm(Contract):
         Literal["property", "space", "lease", "maintenance_issue", "owner_concern", "party"] | None
     ) = None
     relatedEntityId: UUID | None = None
+    relatedLabel: str | None = Field(None, max_length=255)
 
 
 class ReporterForm(Contract):

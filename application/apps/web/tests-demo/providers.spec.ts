@@ -148,16 +148,16 @@ test("opening a provider and returning to the directory", async ({ page }) => {
   await expect(record.getByText("Active provider · Business", { exact: true })).toBeVisible();
   // The Categories panel is an unnamed <section> (not an accessible region),
   // so scope to its heading instead.
-  await expect(
-    record.getByRole("heading", { name: "Categories", exact: true }),
-  ).toBeVisible();
+  await expect(record.getByRole("heading", { name: "Categories", exact: true })).toBeVisible();
   await expect(record.getByText("Plumbing", { exact: true })).toBeVisible();
 
   const back = record.getByRole("link", { name: "← Back to Providers", exact: true });
   await expect(back).toHaveAttribute("href", "/providers");
   await back.click();
   await expect(page).toHaveURL(/\/providers$/);
-  await expect(directory(page).getByText("20 providers on this page", { exact: true })).toBeVisible();
+  await expect(
+    directory(page).getByText("20 providers on this page", { exact: true }),
+  ).toBeVisible();
 });
 
 test("provider categories link opens the catalog", async ({ page }) => {

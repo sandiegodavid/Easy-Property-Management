@@ -181,6 +181,12 @@ test("property overview shares review cards, puts them first and identifies suit
     await expect(page.getByRole("region", { name: hidden, exact: true })).toHaveCount(0);
   }
   await expect(page.getByRole("region", { name: "Owners", exact: true })).toBeVisible();
+  const ownerDates = page
+    .getByRole("region", { name: "Owners", exact: true })
+    .locator(".context-row-facts")
+    .first();
+  await expect(ownerDates.getByText("From", { exact: true })).toBeVisible();
+  await expect(ownerDates).not.toContainText(/\d{4}-\d{2}-\d{2}/);
   await expect(
     page.getByRole("region", { name: "Property status summary", exact: true }),
   ).toContainText("2 active suites");

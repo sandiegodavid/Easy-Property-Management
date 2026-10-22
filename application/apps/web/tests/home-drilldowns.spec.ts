@@ -180,6 +180,19 @@ test("vacant and unknown totals open exact active-space views with frozen pages 
       kind === "unknown" ? "Needs occupancy classification" : "Vacant",
     );
     await expect(inventory.locator(".inventory-result-card h3")).toHaveText(home.displayName);
+    const localDate = inventory
+      .locator(".context-row-facts > div")
+      .filter({ has: page.getByText("Property-local date", { exact: true }) })
+      .locator("dd");
+    await expect(localDate).toHaveText(
+      await page.evaluate(
+        (date) =>
+          new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" }).format(
+            new Date(`${date}T12:00:00Z`),
+          ),
+        home.effectiveLocalDate,
+      ),
+    );
     const back = page.url();
     await inventory
       .getByRole("link", { name: "Review occupancy and leasing status", exact: true })
@@ -268,7 +281,7 @@ test("coverage resolves through the actual Space source and acknowledging review
   await page.getByRole("button", { name: "Add review note", exact: true }).click();
   await page.getByLabel("Review reason").fill("Acknowledged missing recorded classification");
   await page.getByRole("button", { name: "Record review", exact: true }).click();
-  await expect(page.getByText(/Original review .*missing required information/)).toBeVisible();
+  await expect(page.getByText(/Recorded review: missing required information/)).toBeVisible();
   await expect(
     page.getByRole("region", { name: "occupancy information review", exact: true }),
   ).toContainText("missing required information");

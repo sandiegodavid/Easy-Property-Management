@@ -870,7 +870,9 @@ test("Task creation uses original recovery identity and saved forms survive relo
   );
   await page.getByRole("button", { name: "Save unfinished form", exact: true }).click();
   const recovery = (await (await saved).json()) as Schemas["RecoveryResponse"];
-  await expect(page.getByText("Draft saved", { exact: false })).toBeVisible();
+  await expect(
+    page.getByRole("group", { name: "Form actions", exact: true }).getByRole("status"),
+  ).toContainText("Unfinished form saved");
   await page.goto(`/tasks?workflow=task.create&resume=${recovery.id}`);
   await expect(page.getByLabel("Title (required)", { exact: true })).not.toHaveValue("");
   await save(page, "Create task");
@@ -1225,7 +1227,10 @@ test("Reminder acknowledgement and Task completion are separate and recoverable"
 }) => {
   const original = await task(request);
   await openAction(page, "task.reminder.add", original.id);
-  await page.getByLabel("Remind at utc").fill(new Date(Date.now() + 3600000).toISOString());
+  await page.getByLabel("Reminder time zone", { exact: true }).selectOption("UTC");
+  await page
+    .getByLabel("Remind at (required)", { exact: true })
+    .fill(new Date(Date.now() + 3600000).toISOString().slice(0, 16));
   await save(page, "Add task reminder");
   const reminders = await get<Schemas["ReminderResponse"][]>(
     request,
@@ -1284,6 +1289,10 @@ test("Issue creation records attribution and related Property, not physical veri
   await expect(
     page.getByLabel("Reported at (include time-zone offset) (required)", { exact: true }),
   ).toHaveCount(0);
+  await expect(page.getByRole("note", { name: "Reporting guidance" })).toContainText(
+    "The time is recorded automatically when you save a new issue.",
+  );
+  await expect(page.getByText(/checked on the reported date/)).toHaveCount(0);
   await checkCreateLayout(page, testInfo, "maintenance-create");
   await save(page, "Report maintenance issue");
   await page
@@ -1294,6 +1303,12 @@ test("Issue creation records attribution and related Property, not physical veri
   await expect(page.getByRole("heading", { name: "Browser sink leak" })).toBeVisible();
   await expect(page.getByRole("link", { name: property.displayName, exact: true })).toBeVisible();
   await expect(page.locator(".issue-detail-facts")).toContainText("You");
+  await expect(page.locator(".issue-detail-facts dt", { hasText: /^Recorded$/ })).toBeVisible();
+  await expect(page.locator(".issue-detail-facts dt", { hasText: /^Reported$/ })).toHaveCount(0);
+  await page.goto(`/maintenance?propertyId=${property.id}`);
+  await expect(
+    page.locator(".maintenance-issue-card", { hasText: "Browser sink leak" }),
+  ).toContainText("Recorded");
 });
 
 test("Party owner reporter correction preserves originating communication and reporter filters", async ({
@@ -1342,7 +1357,7 @@ test("Party owner reporter correction preserves originating communication and re
   await page.getByLabel("Subject (required)").fill("Owner's original report");
   await page.getByLabel("Body (required)").fill("Owner contacted operator about leak");
   await expect(page.getByLabel("Occurred at utc (required)", { exact: true })).toHaveCount(0);
-  await page.getByLabel("Occurred timezone (required)").fill("America/Los_Angeles");
+  await expect(page.getByLabel(/Conversation time zone/)).toHaveCount(0);
   await page.getByLabel("Record", { exact: true }).check();
   await save(page, "Create conversation");
   await openAction(page, "maintenance.reporter.correct", issueId);
@@ -1538,11 +1553,11 @@ test("archived owner selection requires historical confirmation and preserves th
       exact: true,
     }),
   ).toHaveCount(0);
-  await page.getByLabel("Show archived identities for a backdated report").check();
+  await page.getByLabel("Show archived identities", { exact: true }).check();
   await page
     .getByRole("button", { name: `Use ${owner.displayName} as reporter (archived)`, exact: true })
     .click();
-  await expect(page.getByText(/Archived — backdated relationship/)).toBeVisible();
+  await expect(page.getByText(/Archived — must have a valid relationship/)).toBeVisible();
   await attribution.getByLabel("Historical selection confirmed", { exact: true }).check();
   await expect(
     page.getByRole("button", { name: "Save issue reporter correction", exact: true }),
@@ -1820,6 +1835,10 @@ test("Reported partial work and operator verification remain distinct from resol
   await expect(page.getByRole("region", { name: "Work journal", exact: true })).toContainText(
     "Partially completed",
   );
+  const journalTime = page.locator(".work-journal-timeline > li > article > time").first();
+  await expect(journalTime).toContainText(
+    await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone),
+  );
   await expect(page.getByRole("region", { name: "Work journal", exact: true })).toContainText(
     "Quoted earliest work start on",
   );
@@ -1869,15 +1888,24 @@ test("Journal correction retains evidence and reconciles a lost completion respo
   });
   expect(uploaded.status(), await uploaded.text()).toBe(201);
   const journalUrl = `**/api/maintenance-issues/${f.issue.id}/work-journal?*`;
+  const sourceZone = await page.evaluate(() =>
+    Intl.DateTimeFormat().resolvedOptions().timeZone === "Asia/Tokyo"
+      ? "America/New_York"
+      : "Asia/Tokyo",
+  );
   await page.route(journalUrl, async (route) => {
     const response = await route.fetch();
     const body = (await response.json()) as Schemas["WorkJournalPageResponse"];
     body.items[0].recordedAssignmentToWorkStartSeconds = 90061;
+    body.items[0].occurredTimezone = sourceZone;
     await route.fulfill({ response, json: body });
   });
   await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
   const timeline = page.locator(".work-journal-timeline");
   await expect(timeline).toContainText("1 day 1 hour 1 minute 1 second");
+  await expect(timeline.locator("article > time").first()).toContainText(
+    `Source time zone: ${sourceZone}`,
+  );
   await expect(timeline).not.toContainText(entry.id);
   await expect(timeline.locator(".evidence-item")).toContainText("completion.txt");
   await page.unroute(journalUrl);
@@ -2009,7 +2037,9 @@ test("Conversation draft, optional follow-up and correction retain separate orig
   await page.getByLabel("Subject (required)").fill("Owner called about leak");
   await page.getByLabel("Body (required)").fill("Asked about repair timing");
   await expect(page.getByLabel("Occurred at utc (required)", { exact: true })).toHaveCount(0);
-  await page.getByLabel("Occurred timezone (required)").fill("America/Los_Angeles");
+  await expect(page.getByLabel(/Conversation time zone/)).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Time zone", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Time zone", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Add participants entry" }).click();
   await page.getByLabel("Person or business (required)").fill(ownerId);
   await page
@@ -2025,6 +2055,7 @@ test("Conversation draft, optional follow-up and correction retain separate orig
   const draft = await get<Schemas["CommunicationResponse"]>(request, `/api/communications/${id}`);
   expect(draft.status).toBe("draft");
   expect(draft.occurredAtUtc).toBe(draft.createdAt);
+  expect(draft.occurredTimezone).toBe(f.property.timeZone);
   expect(draft.followUpTasks).toHaveLength(0);
   await page.goto(href);
   const detail = page.getByRole("region", { name: "Work record", exact: true });
@@ -2081,6 +2112,7 @@ test("Conversation draft, optional follow-up and correction retain separate orig
     `/api/communications/${prior.supersededByCommunicationId}`,
   );
   expect(replacement.occurredAtUtc).toBe(draft.occurredAtUtc);
+  expect(replacement.occurredTimezone).toBe(draft.occurredTimezone);
   expect(prior.followUpTasks).toHaveLength(1);
   expect(prior.body).toBe("Draft clarified repair timing");
   await page.goto(`/conversations?record=communication&id=${id}`);
@@ -2120,7 +2152,7 @@ test("manual outbound contact selection and local-date timeline filters preserve
   await page.getByLabel("Subject (required)").fill("Already emailed owner");
   await page.getByLabel("Body (required)").fill("Manual history only; no delivery requested");
   await expect(page.getByLabel("Occurred at utc (required)", { exact: true })).toHaveCount(0);
-  await page.getByLabel("Occurred timezone (required)").fill("America/Los_Angeles");
+  await expect(page.getByLabel(/Conversation time zone/)).toHaveCount(0);
   await page.getByLabel("Find participant by name").fill(owner.displayName);
   await page.getByRole("button", { name: "Search participants", exact: true }).click();
   await page
@@ -2143,6 +2175,12 @@ test("manual outbound contact selection and local-date timeline filters preserve
   await page.goto(href);
   const detail = page.getByRole("region", { name: "Work record", exact: true });
   await expect(detail.locator(".conversation-detail-time")).toContainText("America/Los_Angeles");
+  await expect(detail.locator(".conversation-detail-time")).toContainText("Recorded");
+  const additionalTimes = await detail
+    .locator(".conversation-record-details time")
+    .evaluateAll((times) => times.map((time) => Date.parse(time.getAttribute("datetime")!)));
+  expect(additionalTimes).not.toContain(Date.parse(stored.occurredAtUtc));
+  expect(new Set(additionalTimes).size).toBe(additionalTimes.length);
   await expect(detail.getByRole("list", { name: "Conversation participants" })).toContainText(
     "owner@example.test",
   );
@@ -2158,9 +2196,10 @@ test("manual outbound contact selection and local-date timeline filters preserve
     month: "2-digit",
     day: "2-digit",
   }).format(new Date(stored.occurredAtUtc));
-  await page.getByLabel("Occurred from (stored local date)").fill(localDate);
-  await page.getByLabel("Occurred to (stored local date)").fill(localDate);
+  await page.getByLabel("Recorded from (stored local date)").fill(localDate);
+  await page.getByLabel("Recorded to (stored local date)").fill(localDate);
   await expect(page.getByRole("link", { name: /Already emailed owner/ })).toBeVisible();
+  await expect(page.locator(".work-directory-facts dt", { hasText: /^Recorded$/ })).toBeVisible();
   await page.getByRole("combobox", { name: "Direction", exact: true }).selectOption("inbound");
   await expect(page.getByRole("link", { name: /Already emailed owner/ })).toHaveCount(0);
 });
@@ -2177,7 +2216,7 @@ test("lost manual recording response recovers one communication and one follow-u
   await page.getByLabel("Subject (required)").fill("Manual follow-up receipt");
   await page.getByLabel("Body (required)").fill("Operator spoke with owner");
   await expect(page.getByLabel("Occurred at utc (required)", { exact: true })).toHaveCount(0);
-  await page.getByLabel("Occurred timezone (required)").fill("America/Los_Angeles");
+  await expect(page.getByLabel(/Conversation time zone/)).toHaveCount(0);
   await page.getByRole("button", { name: "Add participants entry" }).click();
   await page.getByLabel("Person or business (required)").fill(ownerId);
   await page
@@ -2569,7 +2608,7 @@ test("Lost lifecycle response reconciles original receipt without another transi
   await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
   await page.getByRole("button", { name: "Check original result" }).click();
   await expect(
-    page.getByText("This is the original committed response.", { exact: true }),
+    page.getByRole("heading", { name: "Resolve maintenance issue — complete", exact: true }),
   ).toBeVisible();
   expect(writes).toBe(1);
   expect(
@@ -2776,6 +2815,9 @@ test("Owner concern create and edit use effective relationship validation", asyn
   await expect(
     page.getByLabel("Raised at (include time-zone offset) (required)", { exact: true }),
   ).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Owner concern review" })).toContainText(
+    "you cannot backdate it here",
+  );
   await checkCreateLayout(page, testInfo, "concern-create");
   await save(page, "Record owner concern");
   const id = new URL(
@@ -2803,6 +2845,7 @@ test("Owner concern create and edit use effective relationship validation", asyn
   await page.goto(`/maintenance?record=concern&id=${id}`);
   await expect(page.locator(".concern-detail-panel")).toContainText("Manual owner request");
   await expect(page.locator(".concern-detail-panel")).not.toContainText("Revision");
+  await expect(page.locator(".concern-detail-panel dt", { hasText: /^Recorded$/ })).toBeVisible();
   await page.getByText("Current property and lease information", { exact: true }).click();
   await expect(page.getByRole("region", { name: "Work record", exact: true })).not.toContainText(
     "do-not-show-source-internals",
@@ -3261,7 +3304,7 @@ test("Lost Task deletion can resume and reconcile after its source is unavailabl
   await expect(page.getByRole("alert")).toContainText("Current source unavailable");
   await page.getByRole("button", { name: "Check original result" }).click();
   await expect(
-    page.getByText("This is the original committed response.", { exact: true }),
+    page.getByRole("heading", { name: "Delete task — complete", exact: true }),
   ).toBeVisible();
   expect(writes).toBe(1);
 });

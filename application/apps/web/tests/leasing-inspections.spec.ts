@@ -68,7 +68,7 @@ test("lease end shows the last covered day while preserving the stored exclusive
 }) => {
   const boundary = `${new Date().getUTCFullYear() + 1}-05-01`;
   const f = await fixture(request, false, false, boundary);
-  const covered = `${boundary.slice(0, 4)}-04-30`;
+  const covered = `Apr 30, ${boundary.slice(0, 4)}`;
   await page.goto(`/leases/${f.lease.id}/details`);
   const milestones = page.getByRole("region", { name: "Lease milestones", exact: true });
   const back = page.getByRole("link", { name: "← Back to Leasing", exact: true });
@@ -105,6 +105,11 @@ test("property leases show tenant names with direct identity and lease links", a
   await page.goto(`/properties/${f.property.id}/leases`);
   const leases = page.getByRole("region", { name: "Leases", exact: true });
   await expect(leases.getByRole("link", { name: f.tenant.displayName, exact: true })).toBeVisible();
+  const tenantLine = leases
+    .locator("li")
+    .filter({ has: page.getByRole("link", { name: f.tenant.displayName, exact: true }) })
+    .first();
+  await expect(tenantLine).not.toContainText(/\d{4}-\d{2}-\d{2}/);
   await expect(leases.getByRole("link", { name: "View lease", exact: true })).toHaveAttribute(
     "href",
     `/leases/${f.lease.id}/details`,
@@ -219,12 +224,18 @@ test("Lease documents resume with original bytes and reconcile one committed upl
     documents.getByRole("link", { name: "Download signed-lease.txt", exact: true }),
   ).toBeVisible();
   expect(metadataReads).toBe(0);
+  const metadataRead = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === `/api/files/${lease.files[0].id}`,
+  );
   await documents
     .getByRole("link", { name: "Metadata and history: signed-lease.txt", exact: true })
     .click();
-  await expect(page.getByRole("region", { name: "Evidence metadata", exact: true })).toContainText(
-    lease.files[0].contentSha256,
-  );
+  const metadata = (await (await metadataRead).json()) as Schemas["FileMetadataResponse"];
+  expect(metadata.contentSha256).toBe(lease.files[0].contentSha256);
+  const evidence = page.getByRole("region", { name: "Evidence metadata", exact: true });
+  await expect(evidence).toContainText(attachment.name);
+  await expect(evidence).toContainText("Verified at");
+  await expect(evidence).not.toContainText(metadata.contentSha256);
   expect(metadataReads).toBe(1);
 });
 
@@ -265,6 +276,9 @@ test("termination documents and full proposal context preserve truthful occupanc
   expect(proposed.ok(), await proposed.text()).toBe(true);
   await page.goto(`/leases/${f.lease.id}/details`);
   const requests = page.getByRole("region", { name: "Termination requests", exact: true });
+  await expect(requests.locator(".record-pill").first()).toBeVisible();
+  for (const text of await requests.locator(".record-pill").allTextContents())
+    expect(text).toMatch(/^[A-Z]/);
   await expect(requests).toContainText("Moving for work");
   await expect(requests).toContainText("Clause 12");
   await expect(requests).toContainText("USD 205.00");
@@ -637,12 +651,18 @@ test("draft edits resume and execution uses independent Lease and Space revision
   );
   await save(page, "Edit lease draft");
   await page.goto(`/leasing?workflow=lease.execute&target=${f.lease.id}`);
-  await expect(page.getByText(/Space timeline revision:/)).toContainText(
-    String(f.property.spaces[0].revision),
-  );
   await page.getByLabel("Executed on (required)").fill(f.today);
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
+  const execution = page.waitForRequest(
+    (entry) =>
+      entry.method() === "POST" &&
+      new URL(entry.url()).pathname === `/api/leases/${f.lease.id}/execute`,
+  );
   await save(page, "Execute lease");
+  expect((await execution).postDataJSON()).toMatchObject({
+    expectedLeaseRevision: f.lease.leaseRevision + 1,
+    expectedRevision: f.property.spaces[0].revision,
+  });
   const latest = await request.get(`/api/leases/${f.lease.id}`);
   const item = (await latest.json()) as Schemas["LeaseResponse"];
   expect(item.status).toBe("executed");
@@ -1224,6 +1244,21 @@ test("inspection acknowledgments and finalization remain distinct from move-out"
 }) => {
   const f = await fixture(request),
     draft = await report(request, f);
+  await page.goto(`/leases/${f.lease.id}/details`);
+  const inspectionCard = page
+    .locator(".child-record-card")
+    .filter({ has: page.locator(`a[href="/inspections/${draft.id}"]`) });
+  await expect(inspectionCard.locator(".record-pill")).toHaveText("Draft");
+  await expect(inspectionCard.getByRole("heading")).not.toContainText(draft.walkthroughOn);
+  await expect(inspectionCard.getByRole("heading")).toContainText(
+    await page.evaluate(
+      (date) =>
+        new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" }).format(
+          new Date(`${date}T12:00:00Z`),
+        ),
+      draft.walkthroughOn,
+    ),
+  );
   await page.goto(`/leasing?workflow=inspection.report.acknowledge&target=${draft.id}`);
   await page.getByLabel("Status (required)").selectOption("not_requested");
   await save(page, "Record inspection acknowledgments");
@@ -1265,12 +1300,19 @@ test("draft evidence archival preserves contextual history and unavailable files
   expect(uploaded.status(), await uploaded.text()).toBe(201);
   const file = (await uploaded.json()) as Schemas["EvidenceCommandResponse"];
   await page.goto(`/inspections/${draft.id}`);
+  const metadataRead = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === `/api/files/${file.id}`,
+  );
   await page
     .getByRole("link", { name: "Metadata and history: archive-evidence.txt", exact: true })
     .click();
-  await expect(page.getByRole("region", { name: "Evidence metadata", exact: true })).toContainText(
-    file.contentSha256,
-  );
+  expect(
+    ((await (await metadataRead).json()) as Schemas["FileMetadataResponse"]).contentSha256,
+  ).toBe(file.contentSha256);
+  const evidence = page.getByRole("region", { name: "Evidence metadata", exact: true });
+  await expect(evidence).toContainText("archive-evidence.txt");
+  await expect(evidence).toContainText("Verified at");
+  await expect(evidence).not.toContainText(file.contentSha256);
   await page.route(`**/api/condition-reports/${draft.id}`, async (route) => {
     const response = await route.fetch();
     const data = (await response.json()) as Schemas["ReportResponse"];

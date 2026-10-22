@@ -222,7 +222,7 @@ test("lost response survives a process restart and encrypted restore with the or
     );
     await page.getByRole("button", { name: "Check original result" }).click();
     await expect(
-      page.getByText("This is the original committed response.", { exact: true }),
+      page.getByRole("heading", { name: "Start task — complete", exact: true }),
     ).toBeVisible();
     expect(writes).toBe(1);
     await stop();

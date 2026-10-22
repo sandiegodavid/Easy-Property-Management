@@ -102,7 +102,6 @@ const groups: Record<string, Group[]> = {
   ],
   "communication.create": [
     ["Conversation", ["subject", "body", "channel", "direction"]],
-    ["Time zone", ["occurredTimezone"]],
     ["People and related records", ["participants", "links"]],
     [
       "Record and follow up",

@@ -128,16 +128,14 @@ test("portfolio status counts link to matching property filters", async ({ page 
   ]) {
     await expect(page.getByRole("link", { name, exact: true })).toBeVisible();
   }
-  await expect(
-    page.getByRole("link", { name: "Alder House — Co-owned", exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Alder House — Co-owned", exact: true })).toHaveCount(
+    0,
+  );
 });
 
 test("review status filter isolates the property needing status review", async ({ page }) => {
   await page.goto("/properties");
-  await statusFilters(page)
-    .getByRole("link", { name: "Review status: 1", exact: true })
-    .click();
+  await statusFilters(page).getByRole("link", { name: "Review status: 1", exact: true }).click();
   await expect(page).toHaveURL(/needsAttention=true/);
   await expect(page.getByText("1 matching properties", { exact: true })).toBeVisible();
 

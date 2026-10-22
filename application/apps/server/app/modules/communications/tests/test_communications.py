@@ -7,6 +7,7 @@ import hashlib
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
@@ -84,7 +85,7 @@ class CommunicationWorkflowTests(unittest.TestCase):
         )
 
     def test_server_occurrence_time_is_assigned_once_and_correction_preserves_it(self):
-        command = self.command(record=True, occurred_at=None)
+        command = replace(self.command(record=True, occurred_at=None), occurred_timezone=None)
         key = str(uuid4())
         with patch(
             "app.modules.communications.application.service._now",
@@ -92,10 +93,14 @@ class CommunicationWorkflowTests(unittest.TestCase):
         ):
             created = self.service.create(command, key, 0)
         self.assertEqual(created["createdAt"], created["occurredAtUtc"])
+        self.assertEqual("UTC", created["occurredTimezone"])
         self.assertEqual(created, self.service.create(command, key, 0))
         corrected = self.service.correct(
             created["id"],
-            self.command(record=True, subject="Corrected", occurred_at=None),
+            replace(
+                self.command(record=True, subject="Corrected", occurred_at=None),
+                occurred_timezone=None,
+            ),
             "Fix wording",
             str(uuid4()),
             created["revision"],
@@ -871,26 +876,33 @@ class CommunicationWorkflowTests(unittest.TestCase):
             """),
                 {"id": property_id, "now": "2026-01-01T00:00:00+00:00"},
             )
+        command = CommunicationCommand(
+            "inbound",
+            "phone",
+            "Property update",
+            "Discussed the move.",
+            None,
+            None,
+            (ParticipantInput(PARTY_ID, "sender"),),
+            (LinkInput("property", property_id),),
+            record=False,
+        )
         created = self.service.create(
-            CommunicationCommand(
-                "inbound",
-                "phone",
-                "Property update",
-                "Discussed the move.",
-                "2026-01-01T12:00:00+00:00",
-                "America/Chicago",
-                (ParticipantInput(PARTY_ID, "sender"),),
-                (LinkInput("property", property_id),),
-                record=False,
-            ),
+            command,
             "21212121-2121-4121-8121-212121212121",
             0,
         )
+        self.assertEqual("America/Chicago", created["occurredTimezone"])
+        self.assertEqual(created["createdAt"], created["occurredAtUtc"])
         with immediate_transaction(engine) as connection:
             connection.execute(
                 text("UPDATE properties SET time_zone = 'America/New_York' WHERE id = :id"),
                 {"id": property_id},
             )
+        self.assertEqual(
+            created,
+            self.service.create(command, "21212121-2121-4121-8121-212121212121", 0),
+        )
         updated = self.service.patch(
             created["id"],
             PatchCommand(occurred_timezone="America/New_York"),

@@ -28,6 +28,7 @@ npm run test:web -- apps/web/tests/provider-ids.spec.ts && \
 npm run test:web -- apps/web/tests/recovery-page.spec.ts && \
 npm run test:web -- apps/web/tests/restart-restore.spec.ts && \
 npm run test:web -- apps/web/tests/saved-results.spec.ts && \
+npm run test:web -- apps/web/tests/schedule-pickers.spec.ts && \
 npm run test:web -- apps/web/tests/search-coverage.spec.ts && \
 npm run test:web -- apps/web/tests/shell.spec.ts && \
 npm run test:web -- apps/web/tests/tenant-directory.spec.ts && \

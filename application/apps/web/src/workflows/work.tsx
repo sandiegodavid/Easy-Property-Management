@@ -419,7 +419,7 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                 </label>
               ))}
               <label>
-                Occurred from (stored local date)
+                Recorded from (stored local date)
                 <input
                   type="date"
                   name="occurredOnOrAfter"
@@ -427,7 +427,7 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                 />
               </label>
               <label>
-                Occurred to (stored local date)
+                Recorded to (stored local date)
                 <input
                   type="date"
                   name="occurredOnOrBefore"
@@ -567,7 +567,7 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                         <span>{workLabel(item.category)}</span>
                       </div>
                       <p className="maintenance-issue-reported">
-                        Reported {formatHomeTime(item.reportedAtUtc)} · {item.reporter.displayName}
+                        Recorded {formatHomeTime(item.reportedAtUtc)} · {item.reporter.displayName}
                       </p>
                       <span className="maintenance-issue-action">
                         View issue <span aria-hidden="true">→</span>
@@ -653,14 +653,14 @@ function WorkDirectoryFacts({ kind, value }: { kind: WorkKind; value: Record<str
         ? [
             ["Channel", workLabel(scalar(value.channel))],
             ["Direction", workLabel(scalar(value.direction))],
-            ["Occurred", value.occurredAtUtc ? formatHomeTime(scalar(value.occurredAtUtc)) : ""],
+            ["Recorded", value.occurredAtUtc ? formatHomeTime(scalar(value.occurredAtUtc)) : ""],
           ]
         : [
             ["Property", scalar(value.propertyDisplayNameSnapshot)],
             ["Owner", scalar(value.ownerDisplayNameSnapshot)],
             ["Concern", workLabel(scalar(value.concernType))],
             ["Priority", workLabel(scalar(value.priority))],
-            ["Raised", value.raisedAtUtc ? formatHomeTime(scalar(value.raisedAtUtc)) : ""],
+            ["Recorded", value.raisedAtUtc ? formatHomeTime(scalar(value.raisedAtUtc)) : ""],
           ];
   return (
     <dl className="work-directory-facts">

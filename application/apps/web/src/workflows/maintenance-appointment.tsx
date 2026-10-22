@@ -19,7 +19,11 @@ export function MaintenanceAppointment({ item }: { item: Record<string, unknown>
           <div key={field}>
             <dt>{title}</dt>
             <dd>
-              <time dateTime={scalar(item[field])}>{formatHomeTime(scalar(item[field]))}</time>
+              {item[field] ? (
+                <time dateTime={scalar(item[field])}>{formatHomeTime(scalar(item[field]))}</time>
+              ) : (
+                "Not specified"
+              )}
             </dd>
           </div>
         ))}

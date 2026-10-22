@@ -34,7 +34,7 @@ All links validate target existence through application ports. Deleting/archivin
 
 ## Read and operator contract
 
-Legal matters live under Leasing and related property/lease contexts, not as a permanent MVP destination. A detail read includes status, next action/waiting facts, dated milestone timeline, evidence and source fact links, counsel, tasks, communications, costs, and closure outcome. It carries source availability/status rather than manufacturing empty values.
+Legal matters live under Leasing and related property/lease contexts, not as a permanent destination. A detail read includes status, next action/waiting facts, dated milestone timeline, evidence and source fact links, counsel, tasks, communications, costs, and closure outcome. It carries source availability/status rather than manufacturing empty values.
 
 The UI distinguishes an operator-entered deadline from a confirmed deadline and shows its stated source. It offers explicit actions to record facts, contact, task, milestone, evidence, or closure; it never offers “file now,” automatic notices, or compliance assessments. A reviewed export selects records/evidence explicitly and separates internal/legal notes from the packet.
 

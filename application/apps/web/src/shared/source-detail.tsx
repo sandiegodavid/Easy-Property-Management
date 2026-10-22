@@ -55,6 +55,7 @@ export function ConversationDetail({
     <>
       {showTitle && <h4 className="conversation-detail-subject">{item.subject}</h4>}
       <p className="conversation-detail-time">
+        Recorded{" "}
         <time dateTime={item.occurredAtUtc}>
           {formatHomeTemporal({ at: item.occurredAtUtc, timeZone: item.occurredTimezone })}
         </time>

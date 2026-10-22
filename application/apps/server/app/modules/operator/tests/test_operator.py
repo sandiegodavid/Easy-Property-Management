@@ -156,6 +156,14 @@ def test_invalid_preferences(foundation, order, hidden):
     [
         ("task.create", {"notes": "unfinished"}),
         (
+            "task.create",
+            {
+                "relatedEntityType": "property",
+                "relatedEntityId": str(uuid4()),
+                "relatedLabel": "Selected property",
+            },
+        ),
+        (
             "maintenance.issue.create",
             {"summary": "Leak", "reporter": {"subjectKind": "local_operator"}},
         ),
@@ -566,6 +574,7 @@ def test_oversized_recovery_is_413(foundation):
     [
         ("task.create", {"title": "a" * 241}, 413, "operator_payload_too_large"),
         ("task.create", {"notes": "a" * 10001}, 413, "operator_payload_too_large"),
+        ("task.create", {"relatedLabel": "a" * 256}, 413, "operator_payload_too_large"),
         ("communication.record", {"body": "a" * 10001}, 413, "operator_payload_too_large"),
         (
             "maintenance.issue.create",

@@ -36,6 +36,15 @@ function fieldLabel(key: string) {
     ownerKind: "Owner",
     technicalStatus: "Evidence status",
     availableOn: "Open for leasing from",
+    reportedAtUtc: "Recorded",
+    raisedAtUtc: "Recorded",
+    occurredAtUtc: "Recorded",
+    recordedAtUtc: "Recorded",
+    dueAtUtc: "Due",
+    dueTimezone: "Due time zone",
+    createdAtUtc: "Created",
+    updatedAtUtc: "Updated",
+    occurredTimezone: "Time zone",
   };
   return names[key] ?? label(key.replaceAll("_", " "));
 }

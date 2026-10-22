@@ -22,7 +22,7 @@ The coordination timeline references immutable COM-001 records and ordered opera
 
 Notices appear in the affected property context. Shared repairs appear once in DASH-001 and in every affected managed-property workspace, with one stable shared-case identity to prevent duplication. Summary fields are shared asset/scope, affected-unit count, HOA state, and next follow-up. Expanded/contextual detail shows coverage evidence, units, timeline, commitment, and actions to record contact, schedule follow-up, link contractor, or verify outcome.
 
-Both records contribute explicit next-action/follow-up facts to DASH-001. They never become a separate permanent HOA destination in MVP.
+Both records contribute explicit next-action/follow-up facts to DASH-001. They never become a separate permanent HOA destination.
 
 ## Deferred scope
 

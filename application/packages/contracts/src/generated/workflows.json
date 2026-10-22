@@ -909,6 +909,19 @@
           ],
           "title": "Relatedentitytype"
         },
+        "relatedLabel": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 255
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Related label"
+        },
         "title": {
           "maxLength": 240,
           "minLength": 1,
@@ -1691,10 +1704,6 @@
           "title": "Links",
           "type": "array"
         },
-        "occurredTimezone": {
-          "title": "Occurredtimezone",
-          "type": "string"
-        },
         "participants": {
           "items": {
             "additionalProperties": false,
@@ -1756,7 +1765,6 @@
         "channel",
         "subject",
         "body",
-        "occurredTimezone",
         "participants",
         "idempotencyKey"
       ],
@@ -1842,17 +1850,6 @@
             }
           ],
           "title": "Links"
-        },
-        "occurredTimezone": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Occurredtimezone"
         },
         "participants": {
           "anyOf": [
@@ -2165,10 +2162,6 @@
           "title": "Links",
           "type": "array"
         },
-        "occurredTimezone": {
-          "title": "Occurredtimezone",
-          "type": "string"
-        },
         "participants": {
           "items": {
             "additionalProperties": false,
@@ -2225,7 +2218,6 @@
         "channel",
         "subject",
         "body",
-        "occurredTimezone",
         "participants",
         "correctionReason",
         "idempotencyKey"

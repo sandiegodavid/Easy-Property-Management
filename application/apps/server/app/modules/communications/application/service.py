@@ -118,7 +118,7 @@ class CommunicationCommand:
     subject: str
     body: str
     occurred_at_utc: str | None
-    occurred_timezone: str
+    occurred_timezone: str | None
     participants: tuple[ParticipantInput, ...]
     links: tuple[LinkInput, ...] = ()
     follow_up: FollowUpInput | None = None
@@ -131,7 +131,8 @@ class CommunicationCommand:
         object.__setattr__(self, "body", _text(self.body, "body", 10_000))
         if self.occurred_at_utc is not None:
             _instant(self.occurred_at_utc, "occurredAtUtc")
-        _zone(self.occurred_timezone)
+        if self.occurred_timezone is not None:
+            _zone(self.occurred_timezone)
         if not isinstance(self.participants, tuple) or not self.participants:
             raise CommunicationError("At least one participant is required.")
         if any(not isinstance(item, ParticipantInput) for item in self.participants):
@@ -183,14 +184,14 @@ class CommunicationService:
         fingerprint = _digest(request)
         now = _now()
         correlation_id = str(uuid4())
-        communication = Communication(
+        candidate = Communication(
             str(uuid4()),
             command.direction,
             command.channel,
             command.subject,
             command.body,
             _utc(command.occurred_at_utc) if command.occurred_at_utc else now,
-            command.occurred_timezone,
+            command.occurred_timezone or "UTC",
             "recorded" if command.record else "draft",
             now if command.record else None,
             None,
@@ -207,7 +208,12 @@ class CommunicationService:
             if expected_revision != 0:
                 raise CommunicationStaleRevisionError(0)
             participants, links, zones = self._validated_children(
-                tx, communication.id, command.participants, command.links
+                tx, candidate.id, command.participants, command.links
+            )
+            communication = replace(
+                candidate,
+                occurred_timezone=command.occurred_timezone
+                or next((zone for zone in zones if zone), "UTC"),
             )
             self._validate_timezone(communication.occurred_timezone, zones)
             tx.insert_communication(communication)
@@ -518,7 +524,7 @@ class CommunicationService:
                 _utc(command.occurred_at_utc)
                 if command.occurred_at_utc
                 else source.occurred_at_utc,
-                command.occurred_timezone,
+                command.occurred_timezone or source.occurred_timezone,
                 "recorded",
                 now,
                 source.id,

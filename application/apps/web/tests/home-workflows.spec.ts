@@ -61,9 +61,8 @@ async function expanded(
   await row.click();
   return page.getByRole("region", { name: "Source workflow and grouped actions", exact: true });
 }
-async function action(page: Page, title: string, group = "Actions") {
-  await page.getByText(group, { exact: true }).click();
-  await page.getByRole("link", { name: title, exact: true }).click();
+async function action(page: Page, title: string) {
+  await page.getByRole("button", { name: title, exact: true }).click();
 }
 async function save(page: Page, title: string) {
   await test.step(title, async () => {
@@ -249,7 +248,7 @@ test("Home coverage action uses the source review receipt and preserves return c
   await page.getByRole("button", { name: "Review maintenance information", exact: true }).click();
   await page.getByLabel("Review reason").fill("Reviewed recorded maintenance responsibilities");
   await page.getByRole("button", { name: "Record review", exact: true }).click();
-  await expect(page.getByText(/Original review .*recorded/)).toBeVisible();
+  await expect(page.getByText(/Recorded review: recorded/)).toBeVisible();
   const current = await get<Schema["CoverageResult"]>(
     request,
     `/api/operator/coverage/property/${home.id}/maintenance`,

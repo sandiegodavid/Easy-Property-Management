@@ -96,8 +96,8 @@ export function ReporterContext({
       )}
       <p>
         For a manager or staff report, choose Local operator. For an owner or tenant, select the
-        person who reported the issue. Their relationship to the property is checked on the reported
-        date.
+        person who reported the issue. Their relationship to the property is checked on the date
+        recorded for the issue. New issues use the time you save; editing keeps the original time.
       </p>
       {reporter.subjectKind === "party" && (
         <>
@@ -120,7 +120,7 @@ export function ReporterContext({
               checked={historical}
               onChange={(event) => setHistorical(event.target.checked)}
             />
-            Show archived identities for a backdated report
+            Show archived identities
           </label>
           <p>
             At most 25 identities are shown. A name/role match is not proof of ownership or tenancy;
@@ -154,7 +154,7 @@ export function ReporterContext({
             <p>
               Selected identity: {party.data.displayName} ·{" "}
               {party.data.archivedAt
-                ? "Archived — backdated relationship, historical confirmation and reason required; no records will be restored"
+                ? "Archived — must have a valid relationship on the issue’s recorded date; historical confirmation and a reason are required"
                 : "Active"}
               . The server retains its name snapshot.
             </p>

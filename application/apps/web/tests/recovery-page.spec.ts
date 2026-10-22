@@ -115,10 +115,15 @@ test.describe("unfinished form presentation", () => {
         sourceKind: null,
         baseSourceRevision: null,
       }));
+      const terminal = (["reconciled", "discarded", "expired"] as const).map((status) => ({
+        ...records[0],
+        id: crypto.randomUUID(),
+        status,
+      }));
       await page.route("**/api/operator/recovery?*", (route) =>
         route.fulfill({
           json: {
-            items: records,
+            items: [...records, ...terminal],
             matchingTotal: records.length,
             nextCursor: null,
             asOf: instant,
@@ -127,6 +132,9 @@ test.describe("unfinished form presentation", () => {
         }),
       );
       await page.goto("/settings/recovery");
+      await expect(page.locator(".recovery-form-card")).toHaveCount(2);
+      for (const record of terminal)
+        await expect(page.locator(`a[href*="resume=${record.id}"]`)).toHaveCount(0);
       for (const [index, [status, text]] of states.entries()) {
         const row = page.locator("#workspace-content li").filter({ hasText: text });
         await expect(

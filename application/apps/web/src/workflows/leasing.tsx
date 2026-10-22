@@ -4,7 +4,7 @@ import { leaseLastCoveredOn } from "../shared/lease-dates";
 import { useParams, useSearchParams } from "react-router-dom";
 import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
-import { workflows, record, scalar } from "@epm/contracts/workflows";
+import { workflows, record } from "@epm/contracts/workflows";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks, CommandLoader } from "./command";
@@ -15,6 +15,7 @@ import { ReadableFacts } from "./readable-facts";
 import { LeaseDocuments } from "./lease-documents";
 import { MoneyFacts } from "./money-presentation";
 import { PageAsOf } from "../shared/page-as-of";
+import { useWorkflowRecovery } from "./use-workflow-recovery";
 
 type Lease = components["schemas"]["LeaseResponse"];
 export function LeasingWorkspace() {
@@ -566,7 +567,9 @@ function TerminationCases({ lease }: { lease: Lease }) {
           <article className="child-record-card termination-case" key={item.id}>
             <header className="child-record-heading">
               <h4>Requested end: {leaseDate(item.requestedTerminationOn)}</h4>
-              <span className="record-pill">{item.status.replaceAll("_", " ")}</span>
+              <span className="record-pill">
+                {item.status.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase())}
+              </span>
             </header>
             <ReadableFacts
               value={item}
@@ -607,7 +610,9 @@ function TerminationCases({ lease }: { lease: Lease }) {
               <section className="termination-proposal" key={p.id}>
                 <header className="child-record-heading">
                   <h5>Proposal {p.proposalVersion}</h5>
-                  <span className="record-pill">{p.status.replaceAll("_", " ")}</span>
+                  <span className="record-pill">
+                    {p.status.replaceAll("_", " ").replace(/^\w/, (letter) => letter.toUpperCase())}
+                  </span>
                 </header>
                 <MoneyFacts
                   value={p}
@@ -652,23 +657,7 @@ function LeaseCommand() {
   const target = params.get("target") ?? undefined;
   const { scope } = useWorkspace();
   const [session] = useState(() => crypto.randomUUID());
-  const resume = params.get("resume");
-  const recovery = useQuery({
-    queryKey: scope.key("workflow-recovery", resume),
-    enabled: !!resume,
-    queryFn: async ({ signal }) =>
-      readResult(
-        await api.GET("/api/operator/recovery/{record_id}", {
-          signal,
-          params: { path: { record_id: resume! } },
-        }),
-      ),
-  });
-  const child =
-    params.get("child") ??
-    (definition.childKey && recovery.data
-      ? scalar(recovery.data.payload[definition.childKey])
-      : undefined);
+  const { resume, recovery, child } = useWorkflowRecovery(definition);
   const source = useQuery({
     queryKey: scope.key("lease-command-source", session, target),
     enabled: !!target,

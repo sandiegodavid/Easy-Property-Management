@@ -48,6 +48,7 @@ import { AiDraftReview, AiGovernanceSettings } from "../workflows/ai-governance"
 import { Home } from "../shared/home";
 import { HomeCollectionPage } from "../shared/home-collection-page";
 import { HomeInventoryPage } from "../shared/home-inventory-page";
+import { usePropertyRecord } from "../shared/use-property-record";
 import {
   DirectoryParentReturn,
   HomeReturn,
@@ -289,17 +290,7 @@ function ContextWorkspace({ kind }: { kind: "property" | "owner" }) {
   const navigate = useNavigate();
   const { id = "" } = useParams();
   const { scope } = useWorkspace();
-  const property = useQuery({
-    queryKey: scope.key("portfolio-record", id),
-    enabled: kind === "property",
-    queryFn: async ({ signal }) =>
-      readResult(
-        await api.GET("/api/properties/{property_id}", {
-          signal,
-          params: { path: { property_id: id } },
-        }),
-      ),
-  });
+  const property = usePropertyRecord(id, kind === "property");
   const owner = useQuery({
     queryKey: scope.key("owner-identity", id),
     enabled: kind === "owner",

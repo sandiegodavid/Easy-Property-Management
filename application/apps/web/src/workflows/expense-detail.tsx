@@ -68,7 +68,7 @@ export function ExpenseDetail({ item }: { item: Record<string, unknown> }) {
             createdAt: formatHomeTime(scalar(item.createdAt)),
             updatedAt: formatHomeTime(scalar(item.updatedAt)),
           }}
-          fields={["createdAt", "updatedAt", "expenseRevision"]}
+          fields={["createdAt", "updatedAt"]}
         />
       </details>
     </>
@@ -95,12 +95,7 @@ export function ExpenseCategoryDetail({ item }: { item: Record<string, unknown> 
             updatedAt: formatHomeTime(scalar(item.updatedAt)),
             archivedAt: item.archivedAt ? formatHomeTime(scalar(item.archivedAt)) : null,
           }}
-          fields={[
-            "createdAt",
-            "updatedAt",
-            "revision",
-            ...(item.archivedAt ? ["archivedAt"] : []),
-          ]}
+          fields={["createdAt", "updatedAt", ...(item.archivedAt ? ["archivedAt"] : [])]}
         />
       </details>
     </section>

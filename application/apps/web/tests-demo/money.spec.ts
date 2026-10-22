@@ -101,8 +101,8 @@ test("birch townhome shows its unpaid rent expectations", async ({ page }) => {
   await expect(cards).toHaveCount(2);
   const first = cards.first();
   await expect(first.getByRole("heading", { name: "Rent due", exact: true })).toBeVisible();
-  await expect(first.getByText("unpaid", { exact: true }).first()).toBeVisible();
-  await expect(first.getByText("USD 1950.00", { exact: true }).first()).toBeVisible();
+  await expect(first.getByText("Unpaid", { exact: true }).first()).toBeVisible();
+  await expect(first.getByText("USD 1,950.00", { exact: true }).first()).toBeVisible();
 });
 
 test("willow house prepayment is a paid future expectation", async ({ page }) => {
@@ -119,7 +119,7 @@ test("willow house prepayment is a paid future expectation", async ({ page }) =>
   await expect(rent.getByRole("article")).toHaveCount(2);
   await rent.getByRole("combobox", { name: "Settlement", exact: true }).selectOption("paid");
   await expect(rent.getByRole("article")).toHaveCount(2);
-  await expect(rent.getByText("USD 2350.00", { exact: true }).first()).toBeVisible();
+  await expect(rent.getByText("USD 2,350.00", { exact: true }).first()).toBeVisible();
 
   await moneyViews(page).getByRole("link", { name: "Received rent", exact: true }).click();
   await expect(page).toHaveURL(/tab=receipts/);
@@ -136,8 +136,8 @@ test("expenses tab lists the seeded paid expenses", async ({ page }) => {
   await expect(records.getByRole("article")).toHaveCount(25);
   await expect(records.getByRole("combobox", { name: "Paid by", exact: true })).toBeVisible();
   const first = records.getByRole("article").first();
-  await expect(first.getByText("Local operator")).toBeVisible();
-  await expect(first.getByText(/USD \d+\.\d{2}/).first()).toBeVisible();
+  await expect(first.getByText("You", { exact: true })).toBeVisible();
+  await expect(first.getByText(/USD [\d,]+\.\d{2}/).first()).toBeVisible();
 
   await records.getByRole("combobox", { name: "Paid by", exact: true }).selectOption("party");
   await expect(page).toHaveURL(/paidByKind=party/);
@@ -150,7 +150,7 @@ test("deposits tab lists the funded security deposits", async ({ page }) => {
   await expect(records.getByRole("heading", { name: "Security deposit", exact: true })).toHaveCount(
     9,
   );
-  await expect(records.getByText("USD 2150.00", { exact: true }).first()).toBeVisible();
+  await expect(records.getByText("USD 2,150.00", { exact: true }).first()).toBeVisible();
 });
 
 test("scheduled checks tab is empty in the demo", async ({ page }) => {

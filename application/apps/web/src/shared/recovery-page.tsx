@@ -79,70 +79,74 @@ export function RecoveryPage() {
           <p>
             {records.data.matchingTotal} {records.data.matchingTotal === 1 ? "form" : "forms"}
           </p>
-          {records.data.items.length === 0 && <p>No unfinished forms on this page.</p>}
+          {!records.data.items.some((record) =>
+            ["active", "outcome_unknown"].includes(record.status),
+          ) && <p>No unfinished forms on this page.</p>}
           <ul className="result-card-list">
-            {records.data.items.map((record) => {
-              const workflow = workflows.find((workflow) => workflow.formKey === record.formKey);
-              const title =
-                workflow?.title ??
-                (record.formKey === "coverage.review" ? "Information review" : "Saved form");
-              return (
-                <li className="child-record-card recovery-form-card" key={record.id}>
-                  <header className="child-record-heading">
-                    <h3>{title}</h3>
-                    <span className="record-pill" data-status={record.status}>
-                      {statusLabels[record.status]}
-                    </span>
-                  </header>
-                  <p>
-                    Saved <time dateTime={record.savedAt}>{formatHomeTime(record.savedAt)}</time>
-                  </p>
-                  <div className="result-card-actions">
-                    {record.status === "outcome_unknown" && (
-                      <button
-                        disabled={pending || !scope.canWrite}
-                        onClick={() => {
-                          void changeRecord(record.id);
-                        }}
-                      >
-                        Check submission
-                      </button>
-                    )}
-                    {record.formKey === "coverage.review" ? (
-                      <Link to={`/coverage/reviews/${record.id}`}>Resume: {title}</Link>
-                    ) : workflow ? (
-                      <Link
-                        to={`${workflowUrl(record.formKey, record.sourceId ?? undefined)}&resume=${record.id}`}
-                      >
-                        Resume: {title}
-                      </Link>
-                    ) : (
-                      record.status === "active" && (
-                        <span>
-                          {" "}
-                          — Resume from the owning workflow when its editor is available.
-                        </span>
-                      )
-                    )}
-                    {record.status === "active" && (
-                      <button
-                        disabled={pending || !scope.canWrite}
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              `Discard the unfinished ${title.toLowerCase()} form? This will not change the official record.`,
+            {records.data.items
+              .filter((record) => ["active", "outcome_unknown"].includes(record.status))
+              .map((record) => {
+                const workflow = workflows.find((workflow) => workflow.formKey === record.formKey);
+                const title =
+                  workflow?.title ??
+                  (record.formKey === "coverage.review" ? "Information review" : "Saved form");
+                return (
+                  <li className="child-record-card recovery-form-card" key={record.id}>
+                    <header className="child-record-heading">
+                      <h3>{title}</h3>
+                      <span className="record-pill" data-status={record.status}>
+                        {statusLabels[record.status]}
+                      </span>
+                    </header>
+                    <p>
+                      Saved <time dateTime={record.savedAt}>{formatHomeTime(record.savedAt)}</time>
+                    </p>
+                    <div className="result-card-actions">
+                      {record.status === "outcome_unknown" && (
+                        <button
+                          disabled={pending || !scope.canWrite}
+                          onClick={() => {
+                            void changeRecord(record.id);
+                          }}
+                        >
+                          Check submission
+                        </button>
+                      )}
+                      {record.formKey === "coverage.review" ? (
+                        <Link to={`/coverage/reviews/${record.id}`}>Resume: {title}</Link>
+                      ) : workflow ? (
+                        <Link
+                          to={`${workflowUrl(record.formKey, record.sourceId ?? undefined)}&resume=${record.id}`}
+                        >
+                          Resume: {title}
+                        </Link>
+                      ) : (
+                        record.status === "active" && (
+                          <span>
+                            {" "}
+                            — Resume from the owning workflow when its editor is available.
+                          </span>
+                        )
+                      )}
+                      {record.status === "active" && (
+                        <button
+                          disabled={pending || !scope.canWrite}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                `Discard the unfinished ${title.toLowerCase()} form? This will not change the official record.`,
+                              )
                             )
-                          )
-                            void changeRecord(record.id, true);
-                        }}
-                      >
-                        Discard
-                      </button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
+                              void changeRecord(record.id, true);
+                          }}
+                        >
+                          Discard
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
           </ul>
           {records.data.nextCursor && (
             <button onClick={() => setCursor(records.data.nextCursor ?? undefined)}>

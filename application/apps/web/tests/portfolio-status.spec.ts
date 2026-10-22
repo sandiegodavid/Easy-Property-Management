@@ -1010,16 +1010,22 @@ test("property autosave keeps inputs stationary and focused", async ({ page }) =
   await name.fill("Stationary property form");
   const beforeSave = await name.boundingBox();
   await saveStarted;
+  const actions = page.getByRole("group", { name: "Form actions", exact: true });
+  const saveStatus = actions.getByRole("status");
   try {
     await expect(name).toBeFocused();
     expect((await name.boundingBox())?.y).toBe(beforeSave?.y);
-    await expect(page.getByText(/^(Saving unfinished form…|Unfinished form saved\.)$/)).toHaveCount(
-      0,
-    );
+    await expect(saveStatus).toHaveText("Saving unfinished form…");
+    await expect(
+      actions.getByRole("button", { name: "Saving unfinished form…", exact: true }),
+    ).toBeDisabled();
   } finally {
     releaseSave();
   }
   await saved;
+  await expect(saveStatus).toContainText("Unfinished form saved");
+  await expect(saveStatus.locator("time")).toHaveAttribute("datetime", /T/);
+  await expect(actions.getByRole("button", { name: "Saved", exact: true })).toBeDisabled();
   await expect(name).toBeFocused();
   await expect(name).toHaveValue("Stationary property form");
   expect((await name.boundingBox())?.y).toBe(beforeSave?.y);
@@ -1319,8 +1325,14 @@ test("scheduled occupancy reschedules and cancels without changing current statu
     page.getByRole("button", { name: "Reschedule occupancy", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText(later(property.effectiveLocalDate, 1), { exact: true }).first(),
+    page.getByRole("region", { name: "Scheduled occupancy", exact: true }).locator("time").first(),
   ).toBeVisible();
+  const scheduledTime = page
+    .getByRole("region", { name: "Scheduled occupancy", exact: true })
+    .locator("time")
+    .first();
+  await expect(scheduledTime).toHaveAttribute("datetime", later(property.effectiveLocalDate, 1));
+  await expect(scheduledTime).not.toHaveText(later(property.effectiveLocalDate, 1));
   await action(page, "portfolio.occupancy.reschedule", space.id, scheduled.scheduledOccupancy!.id);
   await page
     .getByRole("combobox", { name: "Occupancy status (required)", exact: true })

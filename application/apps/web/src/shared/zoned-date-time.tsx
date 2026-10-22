@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 export function browserTimeZone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -52,11 +52,13 @@ export function TimeZoneSelect({
   onChange,
   disabled = false,
   label = "Time zone",
+  required = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
   label?: string;
+  required?: boolean;
 }) {
   const id = useId();
   const zones = [
@@ -64,16 +66,21 @@ export function TimeZoneSelect({
   ];
   return (
     <div>
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>
+        {label}
+        {required ? " (required)" : ""}
+      </label>
       <select
         id={id}
+        name={label}
+        required={required}
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       >
         {zones.map((zone) => (
           <option key={zone} value={zone}>
-            {zone.replaceAll("_", " ")}
+            {zone || "Choose a time zone…"}
           </option>
         ))}
       </select>
@@ -97,8 +104,13 @@ export function ZonedDateTimeInput({
   disabled?: boolean;
 }) {
   const id = useId();
+  const input = useRef<HTMLInputElement>(null);
   const [edit, setEdit] = useState<{ value: string; wall: string; zone: string; error: string }>();
   const current = edit?.value === value && edit.zone === timeZone ? edit : undefined;
+  const error = current?.error ?? "";
+  useEffect(() => {
+    input.current?.setCustomValidity(error);
+  }, [error]);
   return (
     <div className="zoned-date-time-field">
       <label htmlFor={id}>
@@ -106,18 +118,19 @@ export function ZonedDateTimeInput({
         {required ? " (required)" : ""}
       </label>
       <input
+        ref={input}
         id={id}
         name={label}
         type="datetime-local"
-        step="1"
+        step="60"
         required={required}
         disabled={disabled}
-        value={current?.wall ?? zonedWallTime(value, timeZone)}
+        value={current?.wall ?? zonedWallTime(value, timeZone).slice(0, 16)}
         aria-describedby={current?.error ? `${id}-error` : undefined}
         aria-invalid={!!current?.error}
         onChange={(event) => {
           const wall = event.currentTarget.value;
-          let next = wall,
+          let next = value,
             error = "";
           try {
             next = zonedInstant(wall, timeZone, value);
@@ -126,7 +139,7 @@ export function ZonedDateTimeInput({
           }
           event.currentTarget.setCustomValidity(error);
           setEdit({ value: next, wall, zone: timeZone, error });
-          onChange(next);
+          if (!error) onChange(next);
         }}
       />
       {current?.error && (

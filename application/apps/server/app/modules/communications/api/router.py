@@ -67,7 +67,7 @@ class CommunicationInput(Contract):
     subject: str = Field(min_length=1, max_length=240)
     body: str = Field(min_length=1, max_length=10_000)
     occurredAtUtc: AwareDatetime | None = None
-    occurredTimezone: str
+    occurredTimezone: str | None = None
     participants: list[ParticipantInputModel] = Field(min_length=1)
     links: list[LinkInputModel] = Field(default_factory=list)
     followUp: FollowUpInputModel | None = None
@@ -108,7 +108,7 @@ class CorrectionInput(Contract):
     subject: str = Field(min_length=1, max_length=240)
     body: str = Field(min_length=1, max_length=10_000)
     occurredAtUtc: AwareDatetime | None = None
-    occurredTimezone: str
+    occurredTimezone: str | None = None
     participants: list[ParticipantInputModel] = Field(min_length=1)
     links: list[LinkInputModel] = Field(default_factory=list)
     followUp: FollowUpInputModel | None = None

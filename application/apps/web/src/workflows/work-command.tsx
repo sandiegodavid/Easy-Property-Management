@@ -481,6 +481,7 @@ export function WorkCommand() {
               "maintenance.issue.create",
               "owner_concern.create",
               "maintenance.issue.patch",
+              "task.create",
             ].includes(definition.formKey) && (
               <>
                 <p>

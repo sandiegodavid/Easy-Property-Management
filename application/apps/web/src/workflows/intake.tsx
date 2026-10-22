@@ -164,7 +164,10 @@ function SourceDirectory() {
       )}
       {!loaded.error && loaded.data && (
         <>
-          <p>{loaded.data.items.length} imported records on this page.</p>
+          <p>
+            {loaded.data.items.length} retained{" "}
+            {loaded.data.items.length === 1 ? "source" : "sources"} on this page.
+          </p>
           {!loaded.data.items.length && <p>No sources match these filters.</p>}
           <ul className="work-directory-grid">
             {loaded.data.items.map((item) => (

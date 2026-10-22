@@ -293,6 +293,44 @@ export function CommandLinks({
   );
 }
 
+type CommandHostBaseProps = {
+  definition: Workflow;
+  propertyTimeZone?: string;
+  sourceId?: string;
+  childId?: string;
+  revision: number;
+  choicesForValues?: (values: Record<string, unknown>) => Choices;
+  returnTo?: string;
+  onSaved?: () => void;
+  reviewSource?: () => Promise<{
+    revision: number;
+    value: unknown;
+    relatedRevisions?: Record<string, number>;
+  }>;
+  checkSource?: (values: Record<string, unknown>) => Promise<void>;
+  canSubmit?: (values: Record<string, unknown>) => boolean;
+  renderContext?: (
+    values: Record<string, unknown>,
+    locked: boolean,
+    onChange: (values: Record<string, unknown>) => void,
+  ) => ReactNode;
+};
+
+type CommandLoaderProps = CommandHostBaseProps & {
+  initial?: Record<string, unknown>;
+  choices?: Choices;
+  showParentLink?: boolean;
+  embedded?: boolean;
+};
+
+type CommandEditorProps = CommandHostBaseProps & {
+  initial: Record<string, unknown>;
+  choices: Choices;
+  recovered?: Recovery;
+  showParentLink: boolean;
+  embedded: boolean;
+};
+
 export function CommandLoader({
   definition,
   propertyTimeZone,
@@ -310,32 +348,7 @@ export function CommandLoader({
   checkSource,
   renderContext,
   canSubmit,
-}: {
-  definition: Workflow;
-  propertyTimeZone?: string;
-  sourceId?: string;
-  childId?: string;
-  revision: number;
-  initial?: Record<string, unknown>;
-  choices?: Choices;
-  choicesForValues?: (values: Record<string, unknown>) => Choices;
-  returnTo?: string;
-  showParentLink?: boolean;
-  embedded?: boolean;
-  onSaved?: () => void;
-  reviewSource?: () => Promise<{
-    revision: number;
-    value: unknown;
-    relatedRevisions?: Record<string, number>;
-  }>;
-  checkSource?: (values: Record<string, unknown>) => Promise<void>;
-  canSubmit?: (values: Record<string, unknown>) => boolean;
-  renderContext?: (
-    values: Record<string, unknown>,
-    locked: boolean,
-    onChange: (values: Record<string, unknown>) => void,
-  ) => ReactNode;
-}) {
+}: CommandLoaderProps) {
   const { scope } = useWorkspace();
   const [params] = useSearchParams();
   const recoveryId = params.get("resume");
@@ -405,33 +418,7 @@ function CommandEditor({
   checkSource,
   renderContext,
   canSubmit,
-}: {
-  definition: Workflow;
-  propertyTimeZone?: string;
-  sourceId?: string;
-  childId?: string;
-  revision: number;
-  initial: Record<string, unknown>;
-  choices: Choices;
-  choicesForValues?: (values: Record<string, unknown>) => Choices;
-  recovered?: Recovery;
-  returnTo?: string;
-  showParentLink: boolean;
-  embedded: boolean;
-  onSaved?: () => void;
-  reviewSource?: () => Promise<{
-    revision: number;
-    value: unknown;
-    relatedRevisions?: Record<string, number>;
-  }>;
-  checkSource?: (values: Record<string, unknown>) => Promise<void>;
-  canSubmit?: (values: Record<string, unknown>) => boolean;
-  renderContext?: (
-    values: Record<string, unknown>,
-    locked: boolean,
-    onChange: (values: Record<string, unknown>) => void,
-  ) => ReactNode;
-}) {
+}: CommandEditorProps) {
   const { scope } = useWorkspace();
   const location = useLocation();
   const addingContact = definition.formKey === "party.contact.add";
@@ -457,7 +444,7 @@ function CommandEditor({
       : removingContact
         ? "Remove contact details"
         : definition.formKey === "party.patch"
-          ? "Edit name"
+          ? "Edit name and identity"
           : definition.title;
   const editSubject = /^Edit (.+)$/i.exec(commandTitle)?.[1];
   const correctionSubject = /^Correct (.+)$/i.exec(commandTitle)?.[1];
@@ -467,6 +454,7 @@ function CommandEditor({
     );
   const [id] = useState(() => recovered?.id ?? crypto.randomUUID());
   const [error, setError] = useState<string>();
+  const [sourceCheckFailed, setSourceCheckFailed] = useState(false);
   const [feedbackAttempt, setFeedbackAttempt] = useState(0);
   const [review, setReview] = useState<{
     revision: number;
@@ -853,7 +841,8 @@ function CommandEditor({
                                   : (workflowIntroductions[definition.formKey] ??
                                     "Review the displayed record and make an explicit change. Saved input is an unfinished form, not an official record.")}
       </p>
-      {(state.command === "rejected" || state.draft === "conflicted") && currentSourceAction}
+      {(sourceCheckFailed || state.command === "rejected" || state.draft === "conflicted") &&
+        currentSourceAction}
       <FormFeedback
         focusKey={feedbackAttempt}
         message={
@@ -965,11 +954,18 @@ function CommandEditor({
               ...record(clean(definition.schema, values)),
               idempotencyKey: crypto.randomUUID(),
             });
-            if (checkSource)
-              await checkSource({
-                ...values,
-                ...(definition.childKey && childId ? { [definition.childKey]: childId } : {}),
-              });
+            if (checkSource) {
+              try {
+                await checkSource({
+                  ...values,
+                  ...(definition.childKey && childId ? { [definition.childKey]: childId } : {}),
+                });
+                setSourceCheckFailed(false);
+              } catch (cause) {
+                setSourceCheckFailed(true);
+                throw cause;
+              }
+            }
             await controller.submit(dispatch);
           });
         }}
@@ -1366,6 +1362,7 @@ function CommandEditor({
                 });
                 await controller.flush();
                 setReview(undefined);
+                setSourceCheckFailed(false);
               });
             }}
           >

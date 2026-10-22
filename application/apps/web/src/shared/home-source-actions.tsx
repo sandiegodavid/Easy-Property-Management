@@ -100,9 +100,8 @@ export function HomeSourceActions({ item }: { item: Item }) {
   return (
     <section aria-label="Source workflow and grouped actions">
       <p>
-        {words(item.provenance.owner)} · Source revision {item.sourceRevision}. Status and dates
-        above are from this capture. Open the owning workflow for current context, evidence and
-        permitted actions. No lifecycle change is made by expanding this row.
+        Status and dates above are from this capture. Open the record for current details, evidence
+        and available actions. Expanding this item does not change it.
       </p>
       {item.relatedSource && (
         <p>

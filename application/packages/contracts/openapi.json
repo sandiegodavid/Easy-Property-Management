@@ -3449,8 +3449,15 @@
             "title": "Occurredatutc"
           },
           "occurredTimezone": {
-            "title": "Occurredtimezone",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurredtimezone"
           },
           "participants": {
             "items": {
@@ -3478,7 +3485,6 @@
           "channel",
           "subject",
           "body",
-          "occurredTimezone",
           "participants",
           "idempotencyKey"
         ],
@@ -7413,8 +7419,15 @@
             "title": "Occurredatutc"
           },
           "occurredTimezone": {
-            "title": "Occurredtimezone",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurredtimezone"
           },
           "participants": {
             "items": {
@@ -7437,7 +7450,6 @@
           "channel",
           "subject",
           "body",
-          "occurredTimezone",
           "participants",
           "correctionReason",
           "idempotencyKey"

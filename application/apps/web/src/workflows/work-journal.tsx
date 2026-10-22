@@ -9,8 +9,7 @@ import { ReadableFacts } from "./readable-facts";
 import { EvidenceItem } from "./evidence-item";
 import { workflowUrl } from "./command";
 import { workUrl } from "./work-links";
-import { communicationLocalTime } from "./communication-context";
-import { formatHomeTime } from "../shared/home-time";
+import { formatHomeTime, formatHomeTemporal } from "../shared/home-time";
 
 function workDuration(seconds: number) {
   const units = [
@@ -130,7 +129,9 @@ export function WorkJournal({ id, provider = false }: { id: string; provider?: b
         {result.data?.items.map((item) => (
           <li key={item.id}>
             <article>
-              <time dateTime={item.occurredAtUtc}>{communicationLocalTime(item)}</time>
+              <time dateTime={item.occurredAtUtc}>
+                {formatHomeTemporal({ at: item.occurredAtUtc, timeZone: item.occurredTimezone })}
+              </time>
               <header className="child-record-heading">
                 <h4>{item.summary}</h4>
                 <span className="record-pill">

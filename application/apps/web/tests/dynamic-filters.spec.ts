@@ -146,7 +146,7 @@ test("Intake date pickers use browser time and send zoned instants", async ({ pa
     if (new URL(request.url()).pathname === "/api/intake/sources") requests.push(request.url());
   });
   await page.goto("/conversations?intake=true");
-  await expect(page.getByText(/^\d+ imported records on this page\.$/)).toBeVisible();
+  await expect(page.getByText(/^\d+ retained sources? on this page\.$/)).toBeVisible();
   const from = page.getByLabel("Received from", { exact: true });
   await expect(from).toHaveAttribute("type", "datetime-local");
   await expect(from).toHaveAccessibleDescription("Your time zone: America/Los_Angeles");
@@ -208,7 +208,7 @@ test("Maintenance property picker loads bounded pages and local dates become UTC
   expect(cursors).toEqual([null, "next-properties"]);
   await expect(picker).toHaveValue(second);
   await filters.getByText("More filters", { exact: true }).click();
-  const from = filters.getByLabel("Reported from", { exact: true });
+  const from = filters.getByLabel("Recorded from", { exact: true });
   await from.fill("2026-01-02T10:00");
   await expect(page).toHaveURL(/reportedFrom=2026-01-02T18%3A00%3A00.000Z/);
   await filters.getByRole("button", { name: "Clear filters" }).click();

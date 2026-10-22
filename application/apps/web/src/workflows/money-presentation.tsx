@@ -46,6 +46,7 @@ export function MoneyFacts({
   return (
     <dl className="workflow-facts">
       {[...new Set(fields)]
+        .filter((key) => key !== "amount" || item.amountMinor == null)
         .filter((key) => item[key] != null && !/(?:^id$|Ids?$|Revision$)/.test(key))
         .map((key) => {
           const display = factDisplay(key, item[key]);

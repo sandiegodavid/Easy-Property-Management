@@ -180,7 +180,7 @@ export function IdentityDetail({
           target={party.id}
           keys={party.archivedAt ? ["party.restore"] : ["party.patch"]}
           labels={{
-            "party.patch": "Edit name",
+            "party.patch": "Edit name and identity",
             "party.contact.add": "Add contact details",
             "party.restore": "Restore person or organization",
           }}
@@ -223,7 +223,7 @@ export function IdentityDetail({
               <CommandLinks
                 target={party.id}
                 keys={["tenant.profile.patch"]}
-                labels={{ "tenant.profile.patch": "Edit tenant profile" }}
+                labels={{ "tenant.profile.patch": "Edit tenant preferences" }}
                 title="Edit tenant preferences"
                 asButtons
                 collapsible={false}

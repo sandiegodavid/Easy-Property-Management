@@ -127,6 +127,10 @@ test("standalone maintenance issue and owner concern creation retain their saved
     const replay = await request.post(endpoint, { data: payload });
     expect(replay.ok(), await replay.text()).toBe(true);
     expect(await replay.json()).toEqual(created);
+    await expect(page.locator(".saved-item dt", { hasText: /^Recorded$/ })).not.toHaveCount(0);
+    await expect(page.locator(".saved-item")).not.toContainText(
+      /Reported at utc|Raised at utc|Occurred at utc/,
+    );
     await savedContract(
       page,
       `${concern ? "Owner concern" : "Maintenance issue"} saved`,

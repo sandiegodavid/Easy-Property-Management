@@ -3,6 +3,7 @@ import { useWorkspace } from "../app/workspace-gate";
 import { HomeBackLink, HomeSourceLink, SourceWorkflowLink, useHomeScroll } from "./home-navigation";
 import { useHomeInventory } from "./home-transport";
 import { formatHomeTime } from "./home-time";
+import { formatDate } from "./presentation";
 
 function InventoryPage({ occupancy }: { occupancy: "vacant" | "unknown" }) {
   const [params, setParams] = useSearchParams(),
@@ -63,7 +64,7 @@ function InventoryPage({ occupancy }: { occupancy: "vacant" | "unknown" }) {
                   <dl className="context-row-facts">
                     <div>
                       <dt>Property-local date</dt>
-                      <dd>{item.effectiveLocalDate}</dd>
+                      <dd>{formatDate(item.effectiveLocalDate)}</dd>
                     </div>
                     <div>
                       <dt>Time zone</dt>

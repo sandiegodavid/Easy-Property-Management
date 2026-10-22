@@ -34,8 +34,8 @@ export function ConcernOwnerSearch({
     <details className="maintenance-create-section">
       <summary>Find a former or different owner</summary>
       <p>
-        Search for an existing person or organization. Ownership at the raised time is checked when
-        you save.
+        Search for an existing person or organization. New concerns require a current owner;
+        ownership is checked when you save.
       </p>
       <label>
         Find owner by name
@@ -83,7 +83,7 @@ export function concernProblem(values: Record<string, unknown>) {
     values.historicalSelectionConfirmed === true &&
     !scalar(values.historicalSelectionReason, "").trim()
   )
-    return "Historical selection requires a backdated raised time and a reason.";
+    return "Give a reason for the historical selection. New concerns use the current time and cannot be backdated here.";
   if (values.duplicateConfirmed === true && !scalar(values.duplicateReason, "").trim())
     return "Give a reason for an independent concern; candidates are never merged automatically.";
   const follow = record(values.followUp);
@@ -140,9 +140,9 @@ export function ConcernContext({
     <section aria-label="Owner concern review" className="maintenance-create-section">
       <h3>Check the selected context</h3>
       <p>
-        Choose an owner of the property at the time the concern was raised. For a backdated concern
-        involving a former owner or tenant, confirm the historical selection and give a reason under
-        additional context.
+        Choose a current owner of the property. The time is recorded automatically when you save a
+        new concern; you cannot backdate it here. Editing keeps the original recorded time and
+        relationship context.
       </p>
       {property.data && (
         <p>

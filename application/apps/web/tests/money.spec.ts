@@ -1434,6 +1434,21 @@ test("owner report creation, correction and rejection remain claims rather than 
   expect(items.items).toHaveLength(1);
   expect(items.items[0].reportedAtUtc).toBe(items.items[0].createdAt);
   expect(items.items[0].receivedOn).toBe(f.today);
+  await page.route(`**/api/owner-rent-reports/${items.items[0].id}`, async (route) => {
+    const response = await route.fetch();
+    const report = (await response.json()) as Schemas["OwnerRentReportResponse"];
+    await route.fulfill({ response, json: { ...report, amount: "123.45" } });
+  });
+  await page.goto(`/money?record=report&id=${items.items[0].id}`);
+  await expect(page.getByRole("heading", { name: "Owner report", exact: true })).toBeVisible();
+  const facts = page
+    .locator(".workflow-facts")
+    .filter({ has: page.locator("dt", { hasText: /^Received on$/ }) })
+    .first();
+  await expect(facts.locator("dt", { hasText: /^Amount$/ })).toHaveCount(1);
+  await expect(facts.locator("dt", { hasText: /^Recorded$/ })).toHaveCount(1);
+  const labels = await facts.locator("dt").allTextContents();
+  expect(labels.indexOf("Received on")).toBeLessThan(labels.indexOf("Recorded"));
   await page.goto(`/money?workflow=owner_rent_report.patch&target=${items.items[0].id}`);
   await expect(page.getByLabel("Reported at utc", { exact: true })).toHaveCount(0);
   await page.getByLabel("Source note", { exact: true }).fill("Corrected source note");
@@ -1855,11 +1870,9 @@ test("deposit Party selection reviews duplicate receipts and retains void replac
   const f = await fixture(request),
     { account, receipt } = await depositFixture(request, f);
   await page.goto(`/money?workflow=finance.deposit_receipt.create&target=${account.id}`);
-  await page.getByLabel("Party search", { exact: true }).fill(f.tenant.displayName);
+  await page.getByLabel("Find a person or business", { exact: true }).fill(f.tenant.displayName);
   await page.getByRole("button", { name: "Search deposit Parties", exact: true }).click();
-  await page
-    .getByRole("button", { name: `Use Party ${f.tenant.displayName}`, exact: true })
-    .click();
+  await page.getByRole("button", { name: `Select ${f.tenant.displayName}`, exact: true }).click();
   await page.getByLabel("Received on (required)").fill(f.today);
   await page.getByLabel("Amount (required)").fill("400.00");
   const duplicate = page.getByRole("region", {
@@ -2178,8 +2191,18 @@ test("settlement evidence, child deletion recovery and partial refunds preserve 
   await page.goto("/settings/recovery");
   await page.getByRole("link", { name: "Resume: Delete settlement credit", exact: true }).click();
   await page.getByRole("button", { name: "Check original result" }).click();
-  await expect(page.getByText("This is the original committed response.")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Delete settlement credit — complete", exact: true }),
+  ).toBeVisible();
   expect(calls).toBe(1);
+  expect(
+    (
+      await get<Schemas["SettlementResponse"]>(
+        request,
+        `/api/security-deposit-settlements/${settlementId}`,
+      )
+    ).credits.some((credit) => credit.id === creditId),
+  ).toBe(false);
   await page.goto(
     `/money?workflow=finance.deposit_settlement.approve&target=${account.id}&child=${settlementId}`,
   );
@@ -2346,7 +2369,7 @@ test("lost check deposit response recovers the original correlated receipt witho
   await page.getByRole("button", { name: "Save deposit prepaid check", exact: true }).click();
   await page.getByRole("button", { name: "Check original result" }).click();
   await expect(
-    page.getByText("This is the original committed response.", { exact: true }),
+    page.getByRole("heading", { name: "Deposit prepaid check — complete", exact: true }),
   ).toBeVisible();
   expect(calls).toBe(1);
   const receipts = await get<Schemas["ReceiptPageResponse"]>(

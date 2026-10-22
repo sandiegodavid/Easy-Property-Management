@@ -61,10 +61,13 @@ export function InspectionList({ lease }: { lease: Lease }) {
           <header className="child-record-heading">
             <h4>
               <Link to={`/inspections/${report.id}`}>
-                {reportKindLabels[report.reportKind]} inspection · {report.walkthroughOn}
+                {reportKindLabels[report.reportKind]} inspection ·{" "}
+                {formatDate(report.walkthroughOn)}
               </Link>
             </h4>
-            <span className="record-pill">{report.status}</span>
+            <span className="record-pill">
+              {report.status.replace(/^\w/, (letter) => letter.toUpperCase())}
+            </span>
           </header>
           <ReadableFacts value={report} fields={["conductedBy", "finalizedAt"]} />
         </article>
@@ -103,7 +106,7 @@ function TemplateDirectory() {
       {templates.data?.map((item) => (
         <article key={item.id}>
           <h3>{item.displayName}</h3>
-          <Facts value={item} fields={["applicability", "revision", "notes", "archivedAt"]} />
+          <Facts value={item} fields={["applicability", "notes", "archivedAt"]} />
           {item.items.map((observation) => (
             <p key={observation.id}>
               {observation.areaDisplayName} · {observation.itemName}

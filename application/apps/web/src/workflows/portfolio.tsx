@@ -6,7 +6,7 @@ import {
   useSourceNavigationState,
 } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
-import { workflows, scalar } from "@epm/contracts/workflows";
+import { workflows } from "@epm/contracts/workflows";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
 import { CommandLinks, CommandLoader, workflowUrl } from "./command";
@@ -16,6 +16,8 @@ import { useState } from "react";
 import { PortfolioStatusSummary, statusLabel } from "./portfolio-status";
 import { PageAsOf } from "../shared/page-as-of";
 import { propertyUnitsLabel, rentableUnitLabel } from "../shared/property-labels";
+import { formatDate } from "../shared/presentation";
+import { useWorkflowRecovery } from "./use-workflow-recovery";
 
 type Space = components["schemas"]["SpaceStatusResponse"];
 export function PortfolioEntry() {
@@ -344,11 +346,11 @@ function SpaceRecord({
             <article key={period.id}>
               <p>
                 <strong>{statusLabel(period.occupancyStatus)}</strong> from{" "}
-                <time dateTime={period.startsOn}>{period.startsOn}</time>
+                <time dateTime={period.startsOn}>{formatDate(period.startsOn)}</time>
                 {period.endsOn && (
                   <>
                     {" "}
-                    until <time dateTime={period.endsOn}>{period.endsOn}</time>
+                    until <time dateTime={period.endsOn}>{formatDate(period.endsOn)}</time>
                   </>
                 )}
               </p>
@@ -386,23 +388,7 @@ export function PortfolioCommand() {
   const definition = workflows.find((item) => item.formKey === params.get("workflow"));
   const target = params.get("target") ?? undefined;
   const { scope } = useWorkspace();
-  const resume = params.get("resume");
-  const recovery = useQuery({
-    queryKey: scope.key("workflow-recovery", resume),
-    enabled: !!resume,
-    queryFn: async ({ signal }) =>
-      readResult(
-        await api.GET("/api/operator/recovery/{record_id}", {
-          signal,
-          params: { path: { record_id: resume! } },
-        }),
-      ),
-  });
-  const child =
-    params.get("child") ??
-    (definition?.childKey && recovery.data
-      ? scalar(recovery.data.payload[definition.childKey])
-      : undefined);
+  const { resume, recovery, child } = useWorkflowRecovery(definition);
   const [session] = useState(() => crypto.randomUUID());
   const source = useQuery({
     queryKey: scope.key("portfolio-command-source", session, definition?.sourceKind, target),

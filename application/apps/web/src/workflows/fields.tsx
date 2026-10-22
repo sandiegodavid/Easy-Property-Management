@@ -1,6 +1,14 @@
 import { fieldSchema, record, type RequestSchema } from "@epm/contracts/workflows";
+import { useState } from "react";
 import { leasingStatusLabels } from "../shared/leasing-status";
 import { OfficialIdFields } from "./official-id-fields";
+import {
+  browserTimeZone,
+  TimeZoneSelect,
+  ZonedDateTimeInput,
+  zonedInstant,
+  zonedWallTime,
+} from "../shared/zoned-date-time";
 
 export type Choice = { id: string; label: string; revision?: number; historical?: boolean };
 export type Choices = Record<string, Choice[]>;
@@ -84,6 +92,7 @@ export function Fields({
   compactChangeControls?: boolean;
   fieldLabels?: Record<string, string>;
 }) {
+  const [displayZones, setDisplayZones] = useState<Record<string, string>>({});
   const shape = fieldSchema(schema);
   if (shape.type !== "object") return null;
   const values = record(value);
@@ -317,6 +326,84 @@ export function Fields({
                 )}
             </>
           );
+          const zoneFields: Record<string, string> = {
+            dueTimezone: "Due time zone",
+            remindTimezone: "Reminder time zone",
+          };
+          const instantFields: Record<string, [string, string]> = {
+            dueAtUtc: ["Due at", "dueTimezone"],
+            remindAtUtc: ["Remind at", "remindTimezone"],
+          };
+          if (zoneFields[key])
+            return (
+              <div className="workflow-field" key={key}>
+                <TimeZoneSelect
+                  label={zoneFields[key]}
+                  value={typeof current === "string" ? current : ""}
+                  required={shape.required?.includes(key)}
+                  disabled={disabled}
+                  onChange={(next) => {
+                    if (
+                      key === "dueTimezone" &&
+                      values.isAllDay === true &&
+                      typeof values.dueAtUtc === "string" &&
+                      values.dueAtUtc !== ""
+                    ) {
+                      const day = zonedWallTime(
+                        values.dueAtUtc,
+                        typeof current === "string" && current ? current : browserTimeZone(),
+                      ).slice(0, 10);
+                      onChange({
+                        ...values,
+                        dueTimezone: next,
+                        dueAtUtc: zonedInstant(`${day}T00:00:00`, next),
+                      });
+                    } else update(next);
+                  }}
+                />
+                {changeOptions}
+              </div>
+            );
+          if (instantFields[key]) {
+            const [title, zoneKey] = instantFields[key];
+            const hasZoneField = !!shape.properties?.[zoneKey];
+            const timeZone =
+              typeof values[zoneKey] === "string" && values[zoneKey]
+                ? values[zoneKey]
+                : (displayZones[fieldPath] ?? browserTimeZone());
+            return (
+              <div className="workflow-field" key={key}>
+                <ZonedDateTimeInput
+                  label={title}
+                  value={typeof current === "string" ? current : ""}
+                  timeZone={timeZone}
+                  required={shape.required?.includes(key)}
+                  disabled={disabled}
+                  onChange={(next) =>
+                    onChange({
+                      ...values,
+                      [key]: next || (nullable ? null : undefined),
+                      ...(hasZoneField
+                        ? { [zoneKey]: next ? timeZone : nullable ? null : undefined }
+                        : {}),
+                      ...(key === "dueAtUtc" ? { isAllDay: false } : {}),
+                    })
+                  }
+                />
+                {!hasZoneField && (
+                  <TimeZoneSelect
+                    label={zoneFields[zoneKey]}
+                    value={timeZone}
+                    disabled={disabled}
+                    onChange={(next) =>
+                      setDisplayZones((zones) => ({ ...zones, [fieldPath]: next }))
+                    }
+                  />
+                )}
+                {changeOptions}
+              </div>
+            );
+          }
           return (
             <div className="workflow-field" key={key}>
               {childShape.type === "boolean" ? (

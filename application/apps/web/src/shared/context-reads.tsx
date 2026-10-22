@@ -14,11 +14,12 @@ import { statusLabel } from "../workflows/portfolio-status";
 import { PageAsOf } from "./page-as-of";
 import { leaseLastCoveredOn } from "./lease-dates";
 import { DisclosureHelp } from "./home-disclosure-help";
-import { readResult } from "../workflows/reads";
 import { propertyUnitsLabel } from "./property-labels";
 import { formatHomeTemporal } from "./home-time";
 import { ownershipShareLabel } from "./ownership-shares";
+import { formatDate } from "./presentation";
 import { CommandLinks } from "../workflows/command";
+import { usePropertyRecord } from "./use-property-record";
 
 type Schema = components["schemas"];
 type Kind = "property" | "owner";
@@ -583,8 +584,8 @@ function LeaseTenants({ lease }: { lease: Schema["LeaseItem"] }) {
                 <li key={`${tenant.partyId}:${index}`}>
                   <Link to={`/tenants?identity=${tenant.partyId}`}>{tenant.displayName}</Link>
                   {" · "}
-                  {label(tenant.participantRole)} · {tenant.startsOn} through{" "}
-                  {leaseLastCoveredOn(tenant.endsOn) ?? "ongoing"}
+                  {label(tenant.participantRole)} · {formatDate(tenant.startsOn)} through{" "}
+                  {tenant.endsOn ? formatDate(leaseLastCoveredOn(tenant.endsOn)!) : "ongoing"}
                 </li>
               ))}
             </ul>
@@ -667,8 +668,10 @@ function PropertyLeases({
                     {label(lease.leaseKind)}
                   </strong>
                   <p>
-                    Contract: {lease.contractStartsOn} through{" "}
-                    {leaseLastCoveredOn(lease.contractEndsOn) ?? "ongoing"}
+                    Contract: {formatDate(lease.contractStartsOn)} through{" "}
+                    {lease.contractEndsOn
+                      ? formatDate(leaseLastCoveredOn(lease.contractEndsOn)!)
+                      : "ongoing"}
                   </p>
                   {lease.actualMoveOutOn && <p>Move-out: {lease.actualMoveOutOn}</p>}
                   <LeaseTenants lease={lease} />
@@ -815,11 +818,11 @@ function SectionContents({
                 </div>
                 <div>
                   <dt>From</dt>
-                  <dd>{item.startsOn}</dd>
+                  <dd>{formatDate(item.startsOn)}</dd>
                 </div>
                 <div>
                   <dt>Through</dt>
-                  <dd>{item.endsOn ?? "Ongoing"}</dd>
+                  <dd>{item.endsOn ? formatDate(item.endsOn) : "Ongoing"}</dd>
                 </div>
               </dl>
             )}
@@ -1187,17 +1190,7 @@ function MoneyPeriodFilter({ query }: { query: ContextQuery }) {
 export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: string }) {
   const { id = "" } = useParams();
   const { scope } = useWorkspace();
-  const property = useQuery({
-    queryKey: scope.key("portfolio-record", id),
-    enabled: kind === "property",
-    queryFn: async ({ signal }) =>
-      readResult(
-        await api.GET("/api/properties/{property_id}", {
-          signal,
-          params: { path: { property_id: id } },
-        }),
-      ),
-  });
+  const property = usePropertyRecord(id, kind === "property");
   const unitNames = Object.fromEntries(
     (property.data?.spaces ?? []).map((unit) => [unit.id, unit.displayName]),
   );

@@ -4,18 +4,7 @@ import { api } from "@epm/contracts";
 import { record, scalar } from "@epm/contracts/workflows";
 import { useWorkspace } from "../app/workspace-gate";
 import { Facts, readResult } from "./reads";
-
-export function communicationLocalTime(value: Record<string, unknown>) {
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: scalar(value.occurredTimezone),
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(scalar(value.occurredAtUtc)));
-  } catch {
-    return "Local occurrence unavailable";
-  }
-}
+import { formatHomeTime } from "../shared/home-time";
 
 function ParticipantContact({
   participant,
@@ -118,12 +107,13 @@ export function CommunicationContext({
         creates a Task, not a message or automated reminder.
       </p>
       <p>
-        The time is recorded automatically when you save a new conversation. Choose the time zone
-        for the related property or lease. Editing or correcting a conversation keeps its original
-        recorded time. Source links reference retained evidence; they do not copy its contents or
-        automatically follow replacements.
+        The server records the time automatically using the linked property’s time zone (UTC when no
+        property is linked). Editing or correcting a conversation keeps its original recorded time.
+        Source links reference retained evidence; they do not copy its contents or automatically
+        follow replacements.
       </p>
-      <Facts value={source} fields={["status", "revision", "occurredAtUtc", "occurredTimezone"]} />
+      {!!source.occurredAtUtc && <p>Recorded {formatHomeTime(scalar(source.occurredAtUtc))}</p>}
+      <Facts value={source} fields={["status", "occurredTimezone"]} />
       {Array.isArray(values.participants) && (
         <>
           <label>

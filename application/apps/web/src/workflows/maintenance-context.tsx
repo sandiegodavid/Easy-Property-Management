@@ -56,8 +56,8 @@ export function MaintenanceContext({
           </p>
         )}
         <p>
-          Reported times are checked in the property’s time zone. Urgent priority records the issue;
-          it does not contact emergency services.
+          The time is recorded automatically when you save a new issue. Urgent priority records the
+          issue; it does not contact emergency services.
         </p>
       </div>
     );
@@ -77,9 +77,9 @@ export function MaintenanceContext({
           </p>
         )}
         <p>
-          Reported and appointment instants must include an offset. The Property IANA zone controls
-          local presentation, not your browser clock. Space selection must belong to that Property;
-          Property and Space cannot be moved by editing an issue.
+          Appointment times use the selected time zone. Saved times are displayed in your browser’s
+          local time. The selected home, unit or suite must belong to the property; editing an issue
+          cannot move it to another property.
         </p>
         <Facts
           value={source}
@@ -226,8 +226,8 @@ export function MaintenanceFilters() {
             </label>
           ))}
           {[
-            ["reportedFrom", "Reported from"],
-            ["reportedTo", "Reported through"],
+            ["reportedFrom", "Recorded from"],
+            ["reportedTo", "Recorded through"],
             ["appointmentFrom", "Appointment from"],
             ["appointmentTo", "Appointment through"],
           ].map(([key, title]) => (

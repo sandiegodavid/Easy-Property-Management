@@ -124,7 +124,9 @@ test("recorded money shows metrics and the money period", async ({ page }) => {
   const money = homeRegion(page, "Recorded money");
   await expect(money.getByText("Rent received", { exact: true })).toBeVisible();
   await expect(money.getByText("Expenses paid", { exact: true })).toBeVisible();
-  await expect(money.getByText(/Recorded money period: \d{4}-\d{2}-\d{2} through/)).toBeVisible();
+  await expect(
+    money.getByText(/Recorded money period: \w+ \d{1,2}, \d{4} through \w+ \d{1,2}, \d{4}/),
+  ).toBeVisible();
   await expect(
     money.getByText("These totals do not establish profit or owner entitlement."),
   ).toBeVisible();

@@ -83,6 +83,17 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
     queryFn: ({ signal }) => loadWorkRecord(kind, id, signal),
   });
   const value = result.data;
+  const conversationTimes = ["createdAt", "updatedAt", "recordedAt"].filter(
+    (key, index, keys) =>
+      value?.[key] &&
+      Date.parse(scalar(value[key])) !== Date.parse(scalar(value.occurredAtUtc)) &&
+      !keys
+        .slice(0, index)
+        .some(
+          (prior) =>
+            value[prior] && Date.parse(scalar(value[prior])) === Date.parse(scalar(value[key])),
+        ),
+  );
   const active = value && ["open", "in_progress"].includes(scalar(value.status));
   return (
     <section
@@ -293,31 +304,34 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                     </p>
                   ),
               )}
-              <details className="conversation-record-details">
-                <summary>Record details</summary>
-                <Facts value={value} fields={["revision"]} />
-                <dl className="conversation-detail-meta">
-                  {["createdAt", "updatedAt", "recordedAt"].map(
-                    (key) =>
-                      !!value[key] && (
-                        <div key={key}>
-                          <dt>
-                            {key === "createdAt"
-                              ? "Created"
-                              : key === "updatedAt"
-                                ? "Last updated"
-                                : "Recorded"}
-                          </dt>
-                          <dd>
-                            <time dateTime={scalar(value[key])}>
-                              {formatHomeTime(scalar(value[key]))}
-                            </time>
-                          </dd>
-                        </div>
-                      ),
-                  )}
-                </dl>
-              </details>
+              {conversationTimes.length > 0 && (
+                <details className="conversation-record-details">
+                  <summary>Record details</summary>
+                  <dl className="conversation-detail-meta">
+                    {conversationTimes.map(
+                      (key) =>
+                        !!value[key] &&
+                        Date.parse(scalar(value[key])) !==
+                          Date.parse(scalar(value.occurredAtUtc)) && (
+                          <div key={key}>
+                            <dt>
+                              {key === "createdAt"
+                                ? "Added to app"
+                                : key === "updatedAt"
+                                  ? "Last updated"
+                                  : "Saved to app"}
+                            </dt>
+                            <dd>
+                              <time dateTime={scalar(value[key])}>
+                                {formatHomeTime(scalar(value[key]))}
+                              </time>
+                            </dd>
+                          </div>
+                        ),
+                    )}
+                  </dl>
+                </details>
+              )}
             </>
           )}
           {kind === "concern" && (
@@ -536,7 +550,7 @@ function IssueDetails({ value, active }: { value: Record<string, unknown>; activ
             </dd>
           </div>
           <div>
-            <dt>Reported</dt>
+            <dt>Recorded</dt>
             <dd>{formatHomeTime(scalar(value.reportedAtUtc))}</dd>
           </div>
           <div>

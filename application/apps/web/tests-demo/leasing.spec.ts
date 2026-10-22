@@ -91,7 +91,7 @@ test("maple house lease shows terms and participants", async ({ page }) => {
   await expect(milestones.getByText("Signed on", { exact: true })).toBeVisible();
 
   const terms = page.getByRole("region", { name: "Rent terms", exact: true });
-  await expect(terms.getByText("USD 2150.00", { exact: true })).toHaveCount(2);
+  await expect(terms.getByText("USD 2,150.00", { exact: true })).toHaveCount(2);
   await expect(
     terms.getByRole("link", { name: "View rent and deposits →", exact: true }),
   ).toBeVisible();

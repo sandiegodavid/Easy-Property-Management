@@ -979,6 +979,12 @@ export function workflowContracts(openapi) {
               (key) => key !== serverTimeField,
             );
           }
+          if (definition.formKey.startsWith("communication.")) {
+            delete definition.schema.properties.occurredTimezone;
+            definition.schema.required = (definition.schema.required ?? []).filter(
+              (key) => key !== "occurredTimezone",
+            );
+          }
           if (definition.formKey.startsWith("intake.")) {
             const properties = definition.schema.properties;
             properties.expectedRevision = {
@@ -1014,7 +1020,11 @@ export function workflowContracts(openapi) {
           }
           if (definition.formKey === "task.create") {
             delete definition.schema.properties.status;
-            delete definition.schema.properties.relatedLabel;
+            definition.schema.properties.relatedLabel = {
+              anyOf: [{ type: "string", maxLength: 255 }, { type: "null" }],
+              default: null,
+              title: "Related label",
+            };
           }
           if (definition.formKey === "maintenance.appointment.finish") {
             definition.schema.properties.cancelled = { type: "boolean", default: false };

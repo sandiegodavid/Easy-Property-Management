@@ -24,6 +24,12 @@ export type MoneyKind =
   | "deposit"
   | "settlement"
   | "category";
+
+const receiptLabels = {
+  receiptLifecycleStatus: "Payment status",
+  financiallyEffective: "Counts toward received rent",
+};
+
 export function moneyRecordUrl(kind: MoneyKind, id: string) {
   return `/money?record=${kind}&id=${encodeURIComponent(id)}`;
 }
@@ -197,10 +203,9 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
           labels={{
             ownerDisplayNameSnapshot: "Owner",
             currentOwnerState: "Current owner status",
-            reportedAtUtc: "Reported",
+            reportedAtUtc: "Recorded",
             propertyTimezoneSnapshot: "Property time zone",
-            receiptLifecycleStatus: "Payment status",
-            financiallyEffective: "Counts toward received rent",
+            ...receiptLabels,
             agreedAmount: "Agreed deposit",
             activeReceivedAmount: "Deposits received",
             activeRefundedAmount: "Deposits refunded",
@@ -407,8 +412,7 @@ export function MoneyRecord({ kind, id }: { kind: MoneyKind; id: string }) {
                       fields={moneyChildFields[name]}
                       labels={{
                         amountMinor: name === "refunds" ? "Refund amount" : "Amount applied",
-                        receiptLifecycleStatus: "Payment status",
-                        financiallyEffective: "Counts toward received rent",
+                        ...receiptLabels,
                       }}
                     />
                     {name === "credits" && child.calculatorPrincipal != null && (

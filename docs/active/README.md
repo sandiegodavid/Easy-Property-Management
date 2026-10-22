@@ -6,8 +6,9 @@ The [agent triage design](agent-triage-design.md) is the accepted direction for 
 
 ## Remaining interface work
 
-- [UI-002 preliminary design](UI-002_DESIGN_preliminary.md): legal/HOA, spreadsheet intake and source-backed issue review.
+- [UI-002 preliminary design](UI-002_DESIGN_preliminary.md): spreadsheet intake and source-backed issue review.
 - [UI-003 preliminary design](UI-003_DESIGN_preliminary.md): task-based connected-assistant setup and health, after one transport qualifies.
+- [UI-004 preliminary design](UI-004_DESIGN_preliminary.md): post-MVP legal-matter and HOA workflows.
 
 ## Proposed domain and integration changes
 

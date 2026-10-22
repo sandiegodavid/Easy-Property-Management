@@ -211,7 +211,7 @@ test("identity contacts and Tenant preferences use their displayed source revisi
       await page.setViewportSize({ width, height: 900 });
       for (const [panel, title, action] of [
         [contacts, "Contact details", "Add contact details"],
-        [preferences, "Tenant preferences", "Edit tenant profile"],
+        [preferences, "Tenant preferences", "Edit tenant preferences"],
       ] as const) {
         const heading = await panel
           .getByRole("heading", { name: title, exact: true })
@@ -244,7 +244,7 @@ test("identity contacts and Tenant preferences use their displayed source revisi
   expect((await archive.boundingBox())!.y).toBeGreaterThan(
     (await preferences.boundingBox())!.y + (await preferences.boundingBox())!.height,
   );
-  await preferences.getByRole("button", { name: "Edit tenant profile", exact: true }).click();
+  await preferences.getByRole("button", { name: "Edit tenant preferences", exact: true }).click();
   await expect(page).toHaveURL(
     new RegExp(`/tenants\\?workflow=tenant.profile.patch&target=${identity.id}`),
   );
@@ -345,7 +345,7 @@ test("shared contacts allow multiple values per type, switch primary and retain 
     await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
     await page.getByRole("button", { name: "Remove contact details", exact: true }).click();
     await expect(
-      page.getByText("Contact details removed successfully. History retained.", { exact: true }),
+      page.getByRole("heading", { name: "Archive contact — complete", exact: true }),
     ).toBeVisible();
     await page.goto(addUrl);
     const list = page.getByRole("region", { name: "Contact details", exact: true });
@@ -364,7 +364,7 @@ test("shared contacts allow multiple values per type, switch primary and retain 
     await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
     await page.getByRole("button", { name: "Remove contact details", exact: true }).click();
     await expect(
-      page.getByText("Contact details removed successfully. History retained.", { exact: true }),
+      page.getByRole("heading", { name: "Archive contact — complete", exact: true }),
     ).toBeVisible();
   }
 });
@@ -831,7 +831,9 @@ test("saved forms resume after reload with the original fields", async ({ page, 
   await expect(
     page.getByRole("link", { name: `← Back to ${identity.displayName}`, exact: true }),
   ).toHaveAttribute("href", `/parties?identity=${identity.id}`);
-  await expect(page.getByRole("heading", { name: "Edit name", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Edit name and identity", exact: true }),
+  ).toBeVisible();
   await expect(page.locator(".command-form-actions button")).toHaveText([
     "Save name and identity",
     "Save unfinished form",

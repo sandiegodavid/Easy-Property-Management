@@ -291,7 +291,7 @@ test("audited detail failure withholds evidence and directory reads have no per-
     if (item.url().includes("/api/intake/sources")) reads.push(item.url());
   });
   await page.goto("/conversations?intake=true&channel=internal&hasDuplicate=false");
-  await expect(page.getByText("imported records on this page", { exact: false })).toBeVisible();
+  await expect(page.getByText(/retained sources? on this page/)).toBeVisible();
   const rows = page.locator(".work-directory-card");
   await expect(rows.first()).toBeVisible();
   await expect(rows.first()).not.toContainText("Source id");
@@ -437,14 +437,14 @@ test("source directory continuation preserves filters without gaps or detail req
     if (item.url().includes("/api/intake/sources")) reads.push(item.url());
   });
   await page.goto(`/conversations?intake=true&originSystem=${origin}&channel=internal`);
-  await expect(page.getByText(/^25 imported records on this page/)).toBeVisible();
+  await expect(page.getByText(/^25 retained sources on this page/)).toBeVisible();
   const first = await page
     .locator('a[href*="&source="]')
     .evaluateAll((links) =>
       links.map((link) => new URL((link as HTMLAnchorElement).href).searchParams.get("source")),
     );
   await page.getByRole("button", { name: "Next sources", exact: true }).click();
-  await expect(page.getByText(/^5 imported records on this page/)).toBeVisible();
+  await expect(page.getByText(/^5 retained sources on this page/)).toBeVisible();
   const second = await page
     .locator('a[href*="&source="]')
     .evaluateAll((links) =>
