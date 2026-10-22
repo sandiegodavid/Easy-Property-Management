@@ -118,7 +118,6 @@ def sample(form):
             "receivedOn": "2026-10-01",
             "amountMinor": 100,
             "paymentMethodKind": "cash",
-            "reportedAtUtc": "2026-10-01T12:00:00Z",
         },
         "owner_rent_report.patch": {"changes": {"sourceNote": None}},
         "owner_rent_report.verify": {

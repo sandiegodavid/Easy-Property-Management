@@ -66,7 +66,7 @@ class CommunicationInput(Contract):
     channel: Literal["phone", "email", "sms", "in_person", "letter", "other"]
     subject: str = Field(min_length=1, max_length=240)
     body: str = Field(min_length=1, max_length=10_000)
-    occurredAtUtc: AwareDatetime
+    occurredAtUtc: AwareDatetime | None = None
     occurredTimezone: str
     participants: list[ParticipantInputModel] = Field(min_length=1)
     links: list[LinkInputModel] = Field(default_factory=list)
@@ -107,7 +107,7 @@ class CorrectionInput(Contract):
     channel: Literal["phone", "email", "sms", "in_person", "letter", "other"]
     subject: str = Field(min_length=1, max_length=240)
     body: str = Field(min_length=1, max_length=10_000)
-    occurredAtUtc: AwareDatetime
+    occurredAtUtc: AwareDatetime | None = None
     occurredTimezone: str
     participants: list[ParticipantInputModel] = Field(min_length=1)
     links: list[LinkInputModel] = Field(default_factory=list)
@@ -234,7 +234,7 @@ def build_router(service: CommunicationService, runtime: WorkspaceRuntime) -> AP
             data.channel,
             data.subject,
             data.body,
-            data.occurredAtUtc.isoformat(),
+            data.occurredAtUtc.isoformat() if data.occurredAtUtc else None,
             data.occurredTimezone,
             tuple(
                 ParticipantInput(

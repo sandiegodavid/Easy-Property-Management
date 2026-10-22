@@ -38,7 +38,11 @@ class OwnerRentReportService:
         report_id = str(uuid4())
 
         def operation(tx, correlation):
-            context = self._validate_claim(tx, command, instant)
+            resolved = replace(
+                command,
+                reported_at_utc=command.reported_at_utc or instant.astimezone(UTC).isoformat(),
+            )
+            context = self._validate_claim(tx, resolved, instant)
             if command.replaces_report_id:
                 prior = _required(tx.report(command.replaces_report_id))
                 if prior.status == "pending":
@@ -62,7 +66,7 @@ class OwnerRentReportService:
                 command.payment_method_label,
                 command.masked_reference,
                 command.other_payment_method_note,
-                command.reported_at_utc,
+                resolved.reported_at_utc,
                 command.source_note,
                 "pending",
                 None,

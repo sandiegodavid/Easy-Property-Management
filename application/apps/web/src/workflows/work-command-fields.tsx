@@ -20,14 +20,6 @@ const groups: Record<string, Group[]> = {
       "Explain why this issue is being cancelled. Its records and history remain available.",
     ],
   ],
-  "maintenance.appointment.create": [
-    [
-      "Appointment",
-      ["purpose", "startsAtUtc", "endsAtUtc"],
-      "Include a time-zone offset in each time. Times are reviewed in the property's time zone.",
-    ],
-    ["Access and preparation", ["instructions"]],
-  ],
   "maintenance.quote.create": [
     ["Provider and offer", ["providerPartyId", "label", "receivedOn"]],
     [
@@ -110,7 +102,7 @@ const groups: Record<string, Group[]> = {
   ],
   "communication.create": [
     ["Conversation", ["subject", "body", "channel", "direction"]],
-    ["When it happened", ["occurredAtUtc", "occurredTimezone"]],
+    ["Time zone", ["occurredTimezone"]],
     ["People and related records", ["participants", "links"]],
     [
       "Record and follow up",

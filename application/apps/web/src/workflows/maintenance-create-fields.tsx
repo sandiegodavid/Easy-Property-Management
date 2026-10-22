@@ -29,10 +29,7 @@ export function MaintenanceCreateFields({
       concern ? "Concern details" : "Issue details",
       ["summary", "description", "category", "categoryDetail", "priority"],
     ],
-    [
-      concern ? "When it was raised" : "When and who reported it",
-      concern ? ["raisedAtUtc"] : ["reportedAtUtc", "reporter"],
-    ],
+    ...(!concern ? ([["Reported by", ["reporter"]]] as [string, string[]][]) : []),
   ];
   const used = new Set(groups.flatMap(([, keys]) => keys));
   const remaining = Object.keys(schema.properties ?? {}).filter(
@@ -60,8 +57,6 @@ export function MaintenanceCreateFields({
           ownerPartyId: "Owner",
           tenantPartyId: "Tenant",
           leaseId: "Lease",
-          reportedAtUtc: "Reported at (include time-zone offset)",
-          raisedAtUtc: "Raised at (include time-zone offset)",
           subjectKind: "Reported by",
           partyId: "Reporter",
           role: "Reporter role",

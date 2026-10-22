@@ -176,7 +176,9 @@ test("Home tabs retain details, filters are optional, and desktop cards show all
   const moneyBody = money.locator("div[aria-busy]");
   await expect(moneyBody.locator(":scope > :first-child")).toHaveJSProperty("tagName", "DL");
   const period = await money.getByText(/^Recorded money period:/).innerText();
-  const dateRange = period.match(/\d{4}-\d{2}-\d{2} through \d{4}-\d{2}-\d{2}/)![0];
+  const dateRange = period.match(/^Recorded money period: (.+? through .+?)\./)?.[1];
+  expect(period).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  if (!dateRange) throw new Error(`Missing readable money period: ${period}`);
   expect((await money.innerText()).split(dateRange)).toHaveLength(2);
   await expect(moneyBody.locator(":scope > p")).toHaveCount(1);
   await expect(moneyBody.locator(":scope > p")).toContainText(

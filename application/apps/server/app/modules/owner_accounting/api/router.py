@@ -61,7 +61,7 @@ class ReportInput(CommandInput):
     receivedOn: date
     amountMinor: StrictInt = Field(gt=0, le=9_999_999_999)
     paymentMethodKind: PaymentMethodKind
-    reportedAtUtc: AwareDatetime
+    reportedAtUtc: AwareDatetime | None = None
     idempotencyKey: UUID
     paymentMethodLabel: str | None = Field(None, max_length=100)
     maskedReference: str | None = Field(None, max_length=100)
@@ -267,7 +267,7 @@ def build_router(service: OwnerRentReportService, runtime):
                     data.amountMinor,
                     data.paymentMethodKind.value,
                     str(data.idempotencyKey),
-                    data.reportedAtUtc.isoformat(),
+                    data.reportedAtUtc.isoformat() if data.reportedAtUtc else None,
                     data.paymentMethodLabel,
                     data.maskedReference,
                     data.otherPaymentMethodNote,

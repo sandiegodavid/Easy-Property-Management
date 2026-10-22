@@ -2,7 +2,10 @@ npm run test:web -- apps/web/tests/acceptance.spec.ts && \
 npm run test:web -- apps/web/tests/ai-governance.spec.ts && \
 npm run test:web -- apps/web/tests/context-reads.spec.ts && \
 npm run test:web -- apps/web/tests/delivery.spec.ts && \
+npm run test:web -- apps/web/tests/detail-interactions.spec.ts && \
 npm run test:web -- apps/web/tests/dynamic-filters.spec.ts && \
+npm run test:web -- apps/web/tests/form-feedback.spec.ts && \
+npm run test:web -- apps/web/tests/form-focus.spec.ts && \
 npm run test:web -- apps/web/tests/home-cards.spec.ts && \
 npm run test:web -- apps/web/tests/home-collections.spec.ts && \
 npm run test:web -- apps/web/tests/home-drilldowns.spec.ts && \

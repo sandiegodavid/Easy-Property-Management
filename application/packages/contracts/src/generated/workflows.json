@@ -1691,11 +1691,6 @@
           "title": "Links",
           "type": "array"
         },
-        "occurredAtUtc": {
-          "format": "date-time",
-          "title": "Occurredatutc",
-          "type": "string"
-        },
         "occurredTimezone": {
           "title": "Occurredtimezone",
           "type": "string"
@@ -1761,7 +1756,6 @@
         "channel",
         "subject",
         "body",
-        "occurredAtUtc",
         "occurredTimezone",
         "participants",
         "idempotencyKey"
@@ -1848,18 +1842,6 @@
             }
           ],
           "title": "Links"
-        },
-        "occurredAtUtc": {
-          "anyOf": [
-            {
-              "format": "date-time",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Occurredatutc"
         },
         "occurredTimezone": {
           "anyOf": [
@@ -2183,11 +2165,6 @@
           "title": "Links",
           "type": "array"
         },
-        "occurredAtUtc": {
-          "format": "date-time",
-          "title": "Occurredatutc",
-          "type": "string"
-        },
         "occurredTimezone": {
           "title": "Occurredtimezone",
           "type": "string"
@@ -2248,7 +2225,6 @@
         "channel",
         "subject",
         "body",
-        "occurredAtUtc",
         "occurredTimezone",
         "participants",
         "correctionReason",
@@ -2328,11 +2304,6 @@
         "propertyId": {
           "format": "uuid",
           "title": "Propertyid",
-          "type": "string"
-        },
-        "reportedAtUtc": {
-          "format": "date-time",
-          "title": "Reportedatutc",
           "type": "string"
         },
         "reporter": {
@@ -2426,7 +2397,6 @@
         "summary",
         "description",
         "category",
-        "reportedAtUtc",
         "reporter"
       ],
       "title": "IssueInput",
@@ -2940,9 +2910,16 @@
       "additionalProperties": false,
       "properties": {
         "endsAtUtc": {
-          "format": "date-time",
-          "title": "Endsatutc",
-          "type": "string"
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Endsatutc"
         },
         "expectedRevision": {
           "minimum": 0,
@@ -2972,6 +2949,18 @@
           "title": "Purpose",
           "type": "string"
         },
+        "scheduledTimezone": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scheduledtimezone"
+        },
         "startsAtUtc": {
           "format": "date-time",
           "title": "Startsatutc",
@@ -2982,7 +2971,6 @@
         "expectedRevision",
         "idempotencyKey",
         "startsAtUtc",
-        "endsAtUtc",
         "purpose"
       ],
       "title": "AppointmentInput",
@@ -3663,9 +3651,16 @@
       "additionalProperties": false,
       "properties": {
         "endsAtUtc": {
-          "format": "date-time",
-          "title": "Endsatutc",
-          "type": "string"
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Endsatutc"
         },
         "expectedRevision": {
           "minimum": 0,
@@ -3707,6 +3702,18 @@
           ],
           "title": "Reschedulereason"
         },
+        "scheduledTimezone": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scheduledtimezone"
+        },
         "startsAtUtc": {
           "format": "date-time",
           "title": "Startsatutc",
@@ -3717,7 +3724,6 @@
         "expectedRevision",
         "idempotencyKey",
         "startsAtUtc",
-        "endsAtUtc",
         "purpose"
       ],
       "title": "AppointmentPatch",
@@ -4128,11 +4134,6 @@
           "title": "Propertyid",
           "type": "string"
         },
-        "raisedAtUtc": {
-          "format": "date-time",
-          "title": "Raisedatutc",
-          "type": "string"
-        },
         "replacesConcernId": {
           "anyOf": [
             {
@@ -4183,7 +4184,6 @@
         "concernType",
         "summary",
         "description",
-        "raisedAtUtc",
         "idempotencyKey"
       ],
       "title": "ConcernCreateRequest",
@@ -7347,11 +7347,6 @@
           ],
           "title": "Replacesreportid"
         },
-        "reportedAtUtc": {
-          "format": "date-time",
-          "title": "Reportedatutc",
-          "type": "string"
-        },
         "sourceNote": {
           "anyOf": [
             {
@@ -7372,7 +7367,6 @@
         "receivedOn",
         "amountMinor",
         "paymentMethodKind",
-        "reportedAtUtc",
         "idempotencyKey"
       ],
       "title": "ReportInput",
@@ -7492,18 +7486,6 @@
             }
           ],
           "title": "Receivedon"
-        },
-        "reportedAtUtc": {
-          "anyOf": [
-            {
-              "format": "date-time",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Reportedatutc"
         },
         "sourceNote": {
           "anyOf": [

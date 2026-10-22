@@ -92,6 +92,13 @@ class OwnerConcernTests(unittest.TestCase):
         values.update(overrides)
         return ConcernCreateCommand(**values)
 
+    def test_server_raised_time_is_assigned_once_and_replayed(self):
+        command = self._command(raised_at_utc=None)
+        created = self.service.create(command, expected_revision=0)
+        self.assertEqual(self.now.isoformat(), created["raisedAtUtc"])
+        self.now = self.now.replace(day=22)
+        self.assertEqual(created, self.service.create(command, expected_revision=0))
+
     def _current_concern_revision(self, concern_id):
         return self.service.get(concern_id)["revision"]
 

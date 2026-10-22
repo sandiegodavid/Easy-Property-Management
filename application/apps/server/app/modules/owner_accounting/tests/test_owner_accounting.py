@@ -648,6 +648,29 @@ class OwnerRentReportSQLiteIntegrationTests(unittest.TestCase):
         )
         return item
 
+    def test_server_report_time_is_assigned_once_and_patch_preserves_it(self):
+        command = OwnerRentReportCommand(
+            self.lease["id"],
+            self.owner_id,
+            self.now.astimezone(ZoneInfo("America/Los_Angeles")).date().isoformat(),
+            100,
+            "cash",
+            str(uuid4()),
+            None,
+        )
+        created = self.service.create(command, expected_revision=0)
+        self.assertEqual(self.now.isoformat(), created["reportedAtUtc"])
+        self.now += timedelta(minutes=1)
+        self.assertEqual(created, self.service.create(command, expected_revision=0))
+        updated = self.service.patch(
+            created["id"],
+            {"source_note": "Clarified claim"},
+            str(uuid4()),
+            expected_revision=created["reportRevision"],
+        )
+        self.assertEqual(created["reportedAtUtc"], updated["reportedAtUtc"])
+        validate_latest_schema(self.database)
+
     def test_create_and_zero_evidence_list_are_transactional_and_batched(self):
         for amount in (100, 101, 102):
             owner_command(

@@ -99,7 +99,7 @@ class ConcernCreateCommand:
     concern_type: str
     summary: str
     description: str
-    raised_at_utc: str
+    raised_at_utc: str | None
     idempotency_key: str
     space_id: str | None = None
     lease_id: str | None = None
@@ -138,7 +138,8 @@ class ConcernCreateCommand:
         object.__setattr__(
             self, "description", text(self.description, "Description", 10_000, required=True)
         )
-        object.__setattr__(self, "raised_at_utc", timestamp(self.raised_at_utc, "Raised time"))
+        if self.raised_at_utc is not None:
+            object.__setattr__(self, "raised_at_utc", timestamp(self.raised_at_utc, "Raised time"))
         for flag in ("historical_selection_confirmed", "duplicate_confirmed"):
             if type(getattr(self, flag)) is not bool:
                 raise OwnerConcernError(f"{flag} must be a boolean.")

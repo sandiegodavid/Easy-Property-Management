@@ -137,7 +137,6 @@ def create(ready, **changes):
             "concernType": "general_rental",
             "summary": "Concern",
             "description": "Details",
-            "raisedAtUtc": fixture.now.isoformat(),
             **changes,
         },
     )

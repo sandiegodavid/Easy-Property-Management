@@ -228,7 +228,10 @@ def deposit_request(action, source, payload, key):
 def owner_request(action, source, payload, key):
     if action == "create":
         request = asdict(
-            construct(OwnerRentReportCommand, {**values(payload), "idempotency_key": key})
+            construct(
+                OwnerRentReportCommand,
+                {"reported_at_utc": None, **values(payload), "idempotency_key": key},
+            )
         )
     elif action == "patch":
         request = {"values": values(payload.get("changes") or {})}

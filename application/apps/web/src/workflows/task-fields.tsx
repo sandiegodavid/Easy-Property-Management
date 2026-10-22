@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { type RequestSchema, record } from "@epm/contracts/workflows";
 import { Fields, type Choices } from "./fields";
+import {
+  browserTimeZone,
+  TimeZoneSelect,
+  ZonedDateTimeInput,
+  zonedInstant,
+} from "../shared/zoned-date-time";
 
 export function TaskCreateFields({
   schema,
@@ -16,7 +22,7 @@ export function TaskCreateFields({
   disabled: boolean;
 }) {
   const [noDate, setNoDate] = useState(!value.dueAtUtc && !value.dueTimezone);
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timeZone = typeof value.dueTimezone === "string" ? value.dueTimezone : browserTimeZone();
   let dueDate = "";
   if (typeof value.dueAtUtc === "string") {
     try {
@@ -80,7 +86,7 @@ export function TaskCreateFields({
                 if (!event.target.value) return;
                 onChange({
                   ...value,
-                  dueAtUtc: new Date(`${event.target.value}T00:00:00`).toISOString(),
+                  dueAtUtc: zonedInstant(`${event.target.value}T00:00:00`, timeZone),
                   dueTimezone: timeZone,
                   isAllDay: true,
                 });
@@ -88,13 +94,45 @@ export function TaskCreateFields({
             />
           </label>
           <p>
-            Date selection creates an all-day deadline in {timeZone}. Optional details allow an
-            exact time or another time zone.
+            Date selection creates an all-day deadline in {timeZone}. Open Optional Task details to
+            choose an exact time or another time zone.
           </p>
         </>
       )}
       <details>
         <summary>Optional Task details</summary>
+        {!noDate && (
+          <>
+            <ZonedDateTimeInput
+              label="Due at"
+              value={typeof value.dueAtUtc === "string" ? value.dueAtUtc : ""}
+              timeZone={timeZone}
+              disabled={disabled}
+              onChange={(next) =>
+                onChange({
+                  ...value,
+                  dueAtUtc: next || undefined,
+                  dueTimezone: next ? timeZone : undefined,
+                  isAllDay: false,
+                })
+              }
+            />
+            <TimeZoneSelect
+              label="Due time zone"
+              value={timeZone}
+              disabled={disabled}
+              onChange={(next) =>
+                onChange({
+                  ...value,
+                  dueTimezone: next,
+                  ...(value.isAllDay === true && dueDate
+                    ? { dueAtUtc: zonedInstant(`${dueDate}T00:00:00`, next) }
+                    : {}),
+                })
+              }
+            />
+          </>
+        )}
         <Fields
           schema={{
             ...schema,
@@ -102,7 +140,8 @@ export function TaskCreateFields({
               Object.entries(schema.properties ?? {}).filter(
                 ([key]) =>
                   key !== "title" &&
-                  (!noDate || !["dueAtUtc", "dueTimezone", "isAllDay"].includes(key)),
+                  !["dueAtUtc", "dueTimezone"].includes(key) &&
+                  (!noDate || key !== "isAllDay"),
               ),
             ),
           }}

@@ -142,6 +142,7 @@ class ReasonForm(ConfirmationForm):
 class AppointmentForm(RevisionForm):
     startsAtUtc: AwareDatetime | None = None
     endsAtUtc: AwareDatetime | None = None
+    scheduledTimezone: str | None = Field(None, max_length=100)
     purpose: str | None = Field(None, max_length=500)
     instructions: str | None = Field(None, max_length=4000)
 

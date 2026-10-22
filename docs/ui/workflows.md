@@ -12,6 +12,17 @@ Forms collect missing-field feedback with operator labels and move focus to the 
 
 Every recoverable form shows saving, saved or failed feedback beside its action row. **Unfinished form saved** includes the saved time; the draft-save button reads **Saved** until another edit needs saving. Date/time filters use browser-local controls and send zoned instants. Settings distinguishes the automatically saved Home refresh interval from appearance and navigation choices saved with **Save preferences**.
 
+New maintenance issues, owner concerns, conversations and owner rent reports use the owning service's UTC clock. Their browser forms omit **Reported at**, **Raised at** and **Occurred at**; owner reports still collect the payment's **Received on** date. Edits preserve the original event time, as do conversation corrections; a replacement owner report receives its own report time. Generated browser contracts also omit these fields when recovering saved input. Application/API integrations may still supply an explicit historical instant. Missing times remain `null` in canonical command identities and are resolved only for persistence, so retries recover the original timestamp rather than creating a new request identity.
+
+| Server-time validation boundary                                                            | Focused proof                                                                                             |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Inputs absent; new issue/concern times match recorded time; same-key replay                | `saved-results.spec.ts`; owning-module server-time tests                                                  |
+| Conversation create/edit/correction, lost-response recovery; journal event input unchanged | `work.spec.ts`; Communications server-time test                                                           |
+| Owner report create/edit/replacement; payment date unchanged                               | `money.spec.ts`; Owner-accounting server-time test                                                        |
+| Omitted timestamps through attempt preparation, retained validation and encrypted restore  | Operator `test_concern_recovery.py`, `test_financial_batches.py`; owning-module retained validation tests |
+
+This changes command defaults, not table schemas or content publication. Existing rollback, query-budget and attachment tests remain the authority for those unchanged boundaries.
+
 **Unfinished forms** lists only active drafts and submissions whose outcome is unknown. Drafts can be discarded directly; unknown submissions must be checked before further action. Reconciliation removes a finished submission from this queue without deleting its audit/recovery record. Original committed responses remain accessible through their owning record's History/recovery contracts, not a duplicate permanent receipt list here. Each form has one resume destination, including Information review.
 
 | Validation boundary | Focused proof |
@@ -25,7 +36,7 @@ Every recoverable form shows saving, saved or failed feedback beside its action 
 | Named payer choices and inspection participants; existing IDs preserved internally | `money.spec.ts`, `leasing-inspections.spec.ts` |
 | One tenant/provider profile action; ID editing/recovery unchanged | `tenant-ids.spec.ts`, `provider-ids.spec.ts` |
 
-No domain writes, receipt formats, lifecycle rules, schema or backup formats change. List filtering stays in SQL before pagination/counting, and added name lookups use the bounded batch-name port rather than one query per row.
+Presentation-only changes do not alter domain writes, receipt formats, lifecycle rules, schemas or backup formats; the server-time defaults above change command admission without changing storage formats. List filtering stays in SQL before pagination/counting, and added name lookups use the bounded batch-name port rather than one query per row.
 
 Presentation omits operation/record UUIDs, revisions, fingerprints and raw JSON. Instants use browser-local time; date-only values remain unchanged and minor-unit amounts are formatted as money. Official IDs use the shared masked/reveal presentation. Existing original-result APIs, persistence and backup contracts are unchanged. Superseded one-line success displays, Property redirects and Ownership confirmation-only editor branches are removed.
 

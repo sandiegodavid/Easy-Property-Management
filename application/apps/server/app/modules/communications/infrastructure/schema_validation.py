@@ -354,6 +354,16 @@ def _validate_receipt(connection, row, by_id) -> None:
             command = FollowUpInput(**value) if value is not None else None
         else:
             raise ValueError("action")
+        if action in {"created", "corrected"}:
+            payload = command[0] if action == "corrected" else command
+            if payload.occurred_at_utc is None:
+                occurrence = (
+                    by_id[row["target_communication_id"]]["occurred_at_utc"]
+                    if action == "corrected"
+                    else response["createdAt"]
+                )
+                if response["occurredAtUtc"] != occurrence:
+                    raise ValueError("server occurrence time")
         if (
             _request(action, request["target"], command, expected) != row["request_json"]
             or hashlib.sha256(row["request_json"].encode()).hexdigest()

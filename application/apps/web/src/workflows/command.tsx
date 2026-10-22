@@ -26,6 +26,7 @@ import { TaskCreateFields } from "./task-fields";
 import { MaintenanceCreateFields } from "./maintenance-create-fields";
 import { GroupedCommandFields } from "./grouped-command-fields";
 import { WorkCommandFields, hasWorkCommandFields } from "./work-command-fields";
+import { AppointmentFields } from "./appointment-fields";
 import { PropertyEditFields } from "./property-edit-fields";
 import { PropertyCreateFields } from "./property-create-fields";
 import { OwnershipFields } from "./ownership-fields";
@@ -1140,8 +1141,17 @@ function CommandEditor({
               ))}
             </>
           )}
-          {hasWorkCommandFields(definition.formKey) &&
-          (definition.formKey !== "file.upload" || values.entityType === "maintenance_issue") ? (
+          {["maintenance.appointment.create", "maintenance.appointment.update"].includes(
+            definition.formKey,
+          ) ? (
+            <AppointmentFields
+              schema={definition.schema}
+              value={values}
+              onChange={(next) => form.setValue("data", record(next))}
+              disabled={locked}
+            />
+          ) : hasWorkCommandFields(definition.formKey) &&
+            (definition.formKey !== "file.upload" || values.entityType === "maintenance_issue") ? (
             <WorkCommandFields
               formKey={definition.formKey}
               schema={definition.schema}

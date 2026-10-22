@@ -158,7 +158,7 @@ class IssueCreate:
     category: str
     category_detail: str | None
     priority: str
-    reported_at_utc: str
+    reported_at_utc: str | None
     reporter: ReporterAttribution
 
     def __post_init__(self):
@@ -169,7 +169,10 @@ class IssueCreate:
         object.__setattr__(
             self, "description", text(self.description, "description", 10_000, required=True)
         )
-        object.__setattr__(self, "reported_at_utc", instant(self.reported_at_utc, "reportedAtUtc"))
+        if self.reported_at_utc is not None:
+            object.__setattr__(
+                self, "reported_at_utc", instant(self.reported_at_utc, "reportedAtUtc")
+            )
         if self.category not in CATEGORIES or self.priority not in PRIORITIES:
             raise MaintenanceError("Category or priority is invalid.")
         detail = (
@@ -197,17 +200,20 @@ class ReporterCorrection:
 @dataclass(frozen=True)
 class AppointmentCreate:
     starts_at_utc: str
-    ends_at_utc: str
+    ends_at_utc: str | None
     purpose: str
     instructions: str | None = None
+    scheduled_timezone: str | None = None
 
     def __post_init__(self):
         start, end = (
             instant(self.starts_at_utc, "startsAtUtc"),
-            instant(self.ends_at_utc, "endsAtUtc"),
+            instant(self.ends_at_utc, "endsAtUtc") if self.ends_at_utc is not None else None,
         )
-        if end <= start:
+        if end is not None and end <= start:
             raise MaintenanceError("Appointment end must be after start.")
+        if self.scheduled_timezone is not None:
+            zone(self.scheduled_timezone)
         object.__setattr__(self, "starts_at_utc", start)
         object.__setattr__(self, "ends_at_utc", end)
         object.__setattr__(self, "purpose", text(self.purpose, "purpose", 500, required=True))

@@ -8,7 +8,7 @@ TASK-001 completion on October 12, 2026 passed twelve focused Task browser cases
 
 ## Current Playwright coverage inventory
 
-Inventory captured **October 21, 2026**, using test discovery for all four configurations below. Counts include parameterized cases, not just handwritten `test()` declarations. **Discovery is not execution:** these totals do not establish a current full-suite pass. The delivery evidence elsewhere on this page retains its original validation dates.
+Inventory captured **October 22, 2026**, using test discovery for all four configurations below. Counts include parameterized cases, not just handwritten `test()` declarations. **Discovery is not execution:** these totals do not establish a current full-suite pass. The delivery evidence elsewhere on this page retains its original validation dates.
 
 There is no configured Playwright line/branch or CSS coverage measurement, so no code-coverage percentage is available. Test counts also do not measure the percentage of backend API operations exercised.
 
@@ -16,17 +16,17 @@ There is no configured Playwright line/branch or CSS coverage measurement, so no
 
 | Group | Tests | Spec files | Execution boundary |
 | --- | ---: | ---: | --- |
-| [Packaged application](../../application/playwright.config.ts) | 369 | 37 | Compiled wheel assets with real backend routes and disposable ready/unavailable workspaces; selected scenarios intercept responses to exercise faults or synthetic contracts. |
+| [Packaged application](../../application/playwright.config.ts) | 373 | 38 | Compiled wheel assets with real backend routes and disposable ready/unavailable workspaces; selected scenarios intercept responses to exercise faults or synthetic contracts. |
 | [Shared components](../../application/playwright.components.config.ts) | 8 | 3 | Vite-backed component harness covering disclosures, async states, confirmation/focus, narrow layouts, reduced motion and Lease date presentation. Excludes the recovery spec. |
 | [Recovery integration](../../application/playwright.recovery.config.ts) | 6 | 1 | Recovery harness through Vite with a real disposable backend; autosave, two-tab conflicts, interrupted/cancelled requests, original-key replay and source changes. |
 | [Seeded demo](../../application/playwright.demo.config.ts) | 56 | 8 | Separately started synthetic demo server at port 8001; existing known records, read-only navigation/presentation by default. Not included in `test:web`. |
-| **Total** | **439** | **49** | All configurations currently use Chromium. |
+| **Total** | **443** | **50** | All configurations currently use Chromium. |
 
 The component and recovery configurations select disjoint spec files; their totals do not double-count `recovery.spec.ts`. Some component cases execute controller/date logic rather than a complete browser workflow. The seeded-demo suites are documented separately in their [README](../../application/apps/web/tests-demo/README.md).
 
 ### Packaged application workflow coverage
 
-The following groups partition the 369 discovered cases by spec file. A case can exercise several modules; these are navigation aids, not exhaustive feature-coverage percentages.
+The following groups partition the 373 discovered cases by spec file. A case can exercise several modules; these are navigation aids, not exhaustive feature-coverage percentages.
 
 | Area | Cases | Specs and principal checks |
 | --- | ---: | --- |
@@ -37,7 +37,7 @@ The following groups partition the 369 discovered cases by spec file. A case can
 | Provider categories and IDs | 5 | `provider-categories`, `provider-ids`: category administration/effective assignments, lost-response recovery and explicit reveal of optional full Provider ID numbers. |
 | Leasing and Inspections | 30 | `leasing-inspections`: drafts, terms, participants, execution, renewal, end/termination/void, independent Lease/Space revisions, documents, checklists, evidence, acknowledgment/finalization and original-result recovery. |
 | Money | 50 | `money`: reporting/scope/drill-down, expected and received rent, allocations/payment methods, expenses/categories/refunds, deposits/settlements, prepaid checks, owner reports, evidence and duplicate/stale/interrupted submissions. |
-| Maintenance, Tasks and Communications | 57 | `work`: issue/reporter edits, appointments, quotes/assignments, journal corrections, cost/Expense boundaries, Tasks/reminders/waiting/follow-ups, manual communications, owner concerns, lifecycle recovery, bounds and unavailable evidence. |
+| Maintenance, Tasks and Communications | 61 | `work`, `schedule-pickers`: issue/reporter edits, appointments, editable zoned schedule/deadline pickers, optional appointment ends, daylight-saving conversion, quotes/assignments, journal corrections, cost/Expense boundaries, Tasks/reminders/waiting/follow-ups, manual communications, owner concerns, lifecycle recovery, bounds and unavailable evidence. |
 | Intake | 8 | `intake`: admission/import, ordered attachment roles, saved-byte checks, correction/dismissal/reopening/supersession, fail-closed evidence disclosure, bounded lists and explicit communication links. |
 | AI Governance | 4 | `ai-governance`: settings/capability gates, governed input/draft review, bounded status pages, cloud disclosure, write-only credentials and uncertain external effects. Synthetic scenarios do not qualify production inference. |
 | Search and information review | 16 | `search-coverage`: bounded grouped metadata search, archived context, source-specific next steps, non-applicability/missing information, source revision conflicts, saved forms and review receipt recovery. |
@@ -45,7 +45,7 @@ The following groups partition the 369 discovered cases by spec file. A case can
 
 ### Seeded-demo coverage
 
-These **56 additional cases** are separate from the 369 packaged-application tests. They inspect the demo portfolio without submitting normal business mutations; create-workflow tests primarily check entry/navigation, not a successful create lifecycle.
+These **56 additional cases** are separate from the 373 packaged-application tests. They inspect the demo portfolio without submitting normal business mutations; create-workflow tests primarily check entry/navigation, not a successful create lifecycle.
 
 | Demo spec | Cases | Principal checks |
 | --- | ---: | --- |
@@ -61,7 +61,7 @@ These **56 additional cases** are separate from the 369 packaged-application tes
 ### Limits of the current evidence
 
 - **Browser engines:** Chromium only; no configured Firefox/WebKit matrix or real-device proof. Narrow desktop viewports are not equivalent to real mobile-browser qualification.
-- **Accessibility and layout:** 15 spec files invoke axe; 25 explicitly configure viewport sizes. These are selected checks, not complete WCAG or every-screen/device coverage.
+- **Accessibility and layout:** 15 spec files invoke axe; 26 explicitly configure viewport sizes. These are selected checks, not complete WCAG or every-screen/device coverage.
 - **Visual regression:** 17 spec files capture screenshots, but none uses `toHaveScreenshot` baseline comparisons. Screenshots support inspection; they do not automatically detect pixel regressions.
 - **Failure/recovery:** substantial workflow coverage exists, but browser scenarios do not replace owning-domain transaction, schema, concurrency and backup tests. One restart/restore spec does not prove every module's portability.
 - **External effects:** mocked/synthetic AI and injected failures verify UI contracts, not real provider transports, credentials, availability or model quality. The demo is not an external integration test.

@@ -97,29 +97,36 @@ test("standalone maintenance issue and owner concern creation retain their saved
       await page
         .getByRole("combobox", { name: "Concern type (required)", exact: true })
         .selectOption("general_rental");
-      await page
-        .getByRole("textbox", {
-          name: "Raised at (include time-zone offset) (required)",
-          exact: true,
-        })
-        .fill(home.asOf);
+      await expect(
+        page.getByLabel("Raised at (include time-zone offset) (required)", { exact: true }),
+      ).toHaveCount(0);
     } else {
       await page
         .getByRole("combobox", { name: "Category (required)", exact: true })
         .selectOption("plumbing");
-      await page
-        .getByRole("textbox", {
-          name: "Reported at (include time-zone offset) (required)",
-          exact: true,
-        })
-        .fill(home.asOf);
+      await expect(
+        page.getByLabel("Reported at (include time-zone offset) (required)", { exact: true }),
+      ).toHaveCount(0);
     }
     const text = concern ? "Owner asks about inspection" : "Kitchen tap needs repair";
     await page.getByRole("textbox", { name: "Summary (required)", exact: true }).fill(text);
     await page
       .getByRole("textbox", { name: "Description (required)", exact: true })
       .fill("Reported by the operator for review");
+    const endpoint = concern ? "/api/owner-concerns" : "/api/maintenance-issues";
+    const response = page.waitForResponse(
+      (item) => new URL(item.url()).pathname === endpoint && item.request().method() === "POST",
+    );
     await submit(page);
+    const posted = await response;
+    const payload: unknown = posted.request().postDataJSON();
+    const field = concern ? "raisedAtUtc" : "reportedAtUtc";
+    expect(payload).not.toHaveProperty(field);
+    const created = (await posted.json()) as Record<string, unknown>;
+    expect(created[field]).toBe(concern ? created.recordedAtUtc : created.createdAt);
+    const replay = await request.post(endpoint, { data: payload });
+    expect(replay.ok(), await replay.text()).toBe(true);
+    expect(await replay.json()).toEqual(created);
     await savedContract(
       page,
       `${concern ? "Owner concern" : "Maintenance issue"} saved`,

@@ -40,6 +40,15 @@ class MaintenanceCommandTests(TestCase):
             )
 
     def test_appointment_and_cost_invariants(self):
+        appointment = AppointmentCreate(
+            "2027-05-01T10:00:00-04:00", None, "visit", scheduled_timezone="America/New_York"
+        )
+        self.assertEqual("2027-05-01T14:00:00+00:00", appointment.starts_at_utc)
+        self.assertIsNone(appointment.ends_at_utc)
+        with self.assertRaises(MaintenanceError):
+            AppointmentCreate(
+                "2027-05-01T10:00:00Z", None, "visit", scheduled_timezone="not/a-zone"
+            )
         with self.assertRaises(MaintenanceError):
             AppointmentCreate("2026-09-20T10:00:00+00:00", "2026-09-20T10:00:00+00:00", "visit")
         self.assertEqual(

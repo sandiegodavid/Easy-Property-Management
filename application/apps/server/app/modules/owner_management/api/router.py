@@ -37,7 +37,7 @@ class ConcernCreateRequest(Contract):
     concernType: Literal["general_rental", "lease", "tenant", "vacancy"]
     summary: str = Field(min_length=1, max_length=240)
     description: str = Field(min_length=1, max_length=10_000)
-    raisedAtUtc: AwareDatetime
+    raisedAtUtc: AwareDatetime | None = None
     idempotencyKey: UUID
     spaceId: UUID | None = None
     leaseId: UUID | None = None
@@ -274,7 +274,7 @@ def build_router(service: OwnerConcernService, runtime: WorkspaceRuntime) -> API
             data.concernType,
             data.summary,
             data.description,
-            data.raisedAtUtc.isoformat(),
+            data.raisedAtUtc.isoformat() if data.raisedAtUtc else None,
             str(data.idempotencyKey),
             str(data.spaceId) if data.spaceId else None,
             str(data.leaseId) if data.leaseId else None,

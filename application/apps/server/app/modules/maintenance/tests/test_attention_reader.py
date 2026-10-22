@@ -126,7 +126,7 @@ def appointment(number, issue_number, start, end, **changes):
         id=identity(number),
         issue_id=identity(issue_number),
         starts_at_utc=start.isoformat(),
-        ends_at_utc=end.isoformat(),
+        ends_at_utc=end.isoformat() if end is not None else None,
         scheduled_timezone="America/Los_Angeles",
         purpose="PRIVATE PURPOSE",
         instructions="PRIVATE INSTRUCTIONS",
@@ -190,6 +190,21 @@ def seed(engine, issues, appointments=(), tasks=(), links=True):
 
 def window(source="maintenance_issue", collection="needs_action", **fields):
     return AttentionWindow(NOW, collection, source_kind=source, **fields)
+
+
+@pytest.mark.parametrize("hours", [-1, 0, 1])
+def test_start_only_appointments_remain_readable_and_use_start_for_outcome_review(database, hours):
+    engine, reader, _ = database
+    seed(engine, [issue(1)], appointments=[appointment(101, 1, NOW + timedelta(hours=hours), None)])
+    with engine.connect() as connection:
+        result = reader.attention(
+            connection,
+            window("maintenance_appointment", "needs_action" if hours <= 0 else "upcoming"),
+        )
+        assert result.matching_total == 1
+        item = result.candidates[0]
+        assert item.appointment_end is None
+        assert item.reasons[0].code == ("outcome_review" if hours <= 0 else "scheduled")
 
 
 def test_urgent_and_ordinary_issues_wait_only_through_explicit_active_followups(database):

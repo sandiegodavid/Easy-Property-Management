@@ -292,7 +292,6 @@ export function WorkCommand() {
         "summary",
         "description",
         "priority",
-        "raisedAtUtc",
         "historicalSelectionConfirmed",
         "historicalSelectionReason",
       ])
@@ -310,7 +309,6 @@ export function WorkCommand() {
         "summary",
         "description",
         "priority",
-        "raisedAtUtc",
       ])
         initial[key] = priorConcern.data[key] ?? undefined;
       initial.replacesConcernId = priorConcern.data.id;
@@ -407,7 +405,10 @@ export function WorkCommand() {
     const current = context.children.find((item) => item.id === child);
     if (current)
       initial = Object.fromEntries(
-        ["startsAtUtc", "endsAtUtc", "purpose", "instructions"].map((key) => [key, current[key]]),
+        ["startsAtUtc", "endsAtUtc", "scheduledTimezone", "purpose", "instructions"].map((key) => [
+          key,
+          current[key],
+        ]),
       );
   }
   const contextualParty = workChildren(context.value, "participants").map((item) => ({

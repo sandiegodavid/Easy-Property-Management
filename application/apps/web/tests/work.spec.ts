@@ -1101,10 +1101,8 @@ test("Task quick add preserves optional input and explicitly clears a deadline",
   await quick.getByLabel("Title (required)", { exact: true }).fill("Compact task");
   await quick.getByLabel("No due date", { exact: true }).uncheck();
   await quick.getByText("Optional Task details", { exact: true }).click();
-  await quick
-    .getByLabel("Due at utc", { exact: true })
-    .fill(new Date(Date.now() + 86400000).toISOString());
-  await quick.getByLabel("Due timezone", { exact: true }).fill("America/Los_Angeles");
+  await quick.getByLabel("Due at", { exact: true }).fill("2027-05-01T10:00");
+  await quick.getByLabel("Due time zone", { exact: true }).selectOption("America/Los_Angeles");
   await quick.getByLabel("Notes", { exact: true }).fill("Keep optional input");
   await quick.getByRole("combobox", { name: "Priority", exact: true }).selectOption("high");
   await quick.getByLabel("No due date", { exact: true }).check();
@@ -1283,9 +1281,9 @@ test("Issue creation records attribution and related Property, not physical veri
   await page.getByLabel("Summary (required)").fill("Browser sink leak");
   await page.getByLabel("Description (required)").fill("Water visible");
   await page.getByLabel("Category (required)").selectOption("plumbing");
-  await page
-    .getByLabel("Reported at (include time-zone offset) (required)")
-    .fill(new Date(Date.now() - 60000).toISOString());
+  await expect(
+    page.getByLabel("Reported at (include time-zone offset) (required)", { exact: true }),
+  ).toHaveCount(0);
   await checkCreateLayout(page, testInfo, "maintenance-create");
   await save(page, "Report maintenance issue");
   await page
@@ -1313,9 +1311,9 @@ test("Party owner reporter correction preserves originating communication and re
   await page.getByLabel("Summary (required)").fill("Owner attribution workflow");
   await page.getByLabel("Description (required)").fill("Owner observed a leak");
   await page.getByLabel("Category (required)").selectOption("plumbing");
-  await page
-    .getByLabel("Reported at (include time-zone offset) (required)")
-    .fill(new Date().toISOString());
+  await expect(
+    page.getByLabel("Reported at (include time-zone offset) (required)", { exact: true }),
+  ).toHaveCount(0);
   const reporter = page.getByRole("group", { name: "Reporter", exact: true });
   await reporter
     .getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ })
@@ -1343,7 +1341,7 @@ test("Party owner reporter correction preserves originating communication and re
   ).toHaveValue("reporter");
   await page.getByLabel("Subject (required)").fill("Owner's original report");
   await page.getByLabel("Body (required)").fill("Owner contacted operator about leak");
-  await page.getByLabel("Occurred at utc (required)").fill(new Date().toISOString());
+  await expect(page.getByLabel("Occurred at utc (required)", { exact: true })).toHaveCount(0);
   await page.getByLabel("Occurred timezone (required)").fill("America/Los_Angeles");
   await page.getByLabel("Record", { exact: true }).check();
   await save(page, "Create conversation");
@@ -1431,9 +1429,9 @@ test("tenant reporter is rejected for a draft lease and accepted after explicit 
     await page.getByLabel("Summary (required)").fill("Tenant leak report");
     await page.getByLabel("Description (required)").fill("Occupant reported the issue");
     await page.getByLabel("Category (required)").selectOption("plumbing");
-    await page
-      .getByLabel("Reported at (include time-zone offset) (required)")
-      .fill(new Date().toISOString());
+    await expect(
+      page.getByLabel("Reported at (include time-zone offset) (required)", { exact: true }),
+    ).toHaveCount(0);
     await page
       .getByRole("group", { name: "Reporter", exact: true })
       .getByRole("combobox", { name: /^(Role|Reporter role) \(required\)$/ })
@@ -1584,12 +1582,13 @@ test("Appointment completion does not resolve issue or establish completed work"
 }) => {
   const f = await issue(request);
   await openAction(page, "maintenance.appointment.create", f.issue.id);
+  await page.getByLabel("Time zone", { exact: true }).selectOption("UTC");
   await page
-    .getByLabel("Starts at utc (required)")
-    .fill(new Date(Date.now() + 3600000).toISOString());
+    .getByLabel("Starts at (required)")
+    .fill(new Date(Date.now() + 3600000).toISOString().slice(0, 19));
   await page
-    .getByLabel("Ends at utc (required)")
-    .fill(new Date(Date.now() + 7200000).toISOString());
+    .getByLabel("Ends at", { exact: true })
+    .fill(new Date(Date.now() + 7200000).toISOString().slice(0, 19));
   await page.getByLabel("Purpose (required)").fill("Inspect leak");
   await save(page, "Schedule appointment");
   const current = await get<Schemas["IssueResponse"]>(
@@ -1707,12 +1706,13 @@ test("appointment rescheduling and follow-up filtering preserve independent issu
     },
   );
   await openAction(page, "maintenance.appointment.update", f.issue.id, appointment.id);
+  await page.getByLabel("Time zone", { exact: true }).selectOption("UTC");
   await page
-    .getByLabel("Starts at utc (required)")
-    .fill(new Date(start.getTime() + 86400000).toISOString());
+    .getByLabel("Starts at (required)")
+    .fill(new Date(start.getTime() + 86400000).toISOString().slice(0, 19));
   await page
-    .getByLabel("Ends at utc (required)")
-    .fill(new Date(end.getTime() + 86400000).toISOString());
+    .getByLabel("Ends at", { exact: true })
+    .fill(new Date(end.getTime() + 86400000).toISOString().slice(0, 19));
   await page
     .getByRole("textbox", { name: "Reschedule reason", exact: true })
     .fill("Owner requested tomorrow");
@@ -1726,7 +1726,7 @@ test("appointment rescheduling and follow-up filtering preserve independent issu
   );
   expect(current.status).toBe("open");
   expect(current.tasks).toHaveLength(1);
-  expect(current.appointments[0].scheduledTimezone).toBe("America/Los_Angeles");
+  expect(current.appointments[0].scheduledTimezone).toBe("UTC");
   await page.goto(`/maintenance?record=issue&id=${f.issue.id}`);
   const followUpCard = page
     .getByRole("region", { name: "Follow-up tasks", exact: true })
@@ -2008,9 +2008,7 @@ test("Conversation draft, optional follow-up and correction retain separate orig
   );
   await page.getByLabel("Subject (required)").fill("Owner called about leak");
   await page.getByLabel("Body (required)").fill("Asked about repair timing");
-  await page
-    .getByLabel("Occurred at utc (required)")
-    .fill(new Date(Date.now() - 60000).toISOString());
+  await expect(page.getByLabel("Occurred at utc (required)", { exact: true })).toHaveCount(0);
   await page.getByLabel("Occurred timezone (required)").fill("America/Los_Angeles");
   await page.getByRole("button", { name: "Add participants entry" }).click();
   await page.getByLabel("Person or business (required)").fill(ownerId);
@@ -2026,6 +2024,7 @@ test("Conversation draft, optional follow-up and correction retain separate orig
   const id = new URL(href, "http://local").searchParams.get("id")!;
   const draft = await get<Schemas["CommunicationResponse"]>(request, `/api/communications/${id}`);
   expect(draft.status).toBe("draft");
+  expect(draft.occurredAtUtc).toBe(draft.createdAt);
   expect(draft.followUpTasks).toHaveLength(0);
   await page.goto(href);
   const detail = page.getByRole("region", { name: "Work record", exact: true });
@@ -2050,6 +2049,7 @@ test("Conversation draft, optional follow-up and correction retain separate orig
     );
   }
   await page.getByRole("button", { name: "Edit conversation draft", exact: true }).click();
+  await expect(page.getByLabel("Occurred at utc", { exact: true })).toHaveCount(0);
   await page
     .getByRole("textbox", { name: "Body", exact: true })
     .fill("Draft clarified repair timing");
@@ -2069,11 +2069,18 @@ test("Conversation draft, optional follow-up and correction retain separate orig
     "Call plumber",
   );
   await page.getByRole("button", { name: "Correct recorded conversation", exact: true }).click();
+  await expect(page.getByLabel("Occurred at utc (required)", { exact: true })).toHaveCount(0);
   await page.getByLabel("Subject (required)").fill("Owner asked for tomorrow");
   await page.getByLabel("Correction reason (required)").fill("Correct timing");
   await save(page, "Correct recorded conversation");
   const prior = await get<Schemas["CommunicationResponse"]>(request, `/api/communications/${id}`);
   expect(prior.status).toBe("superseded");
+  expect(prior.occurredAtUtc).toBe(draft.occurredAtUtc);
+  const replacement = await get<Schemas["CommunicationResponse"]>(
+    request,
+    `/api/communications/${prior.supersededByCommunicationId}`,
+  );
+  expect(replacement.occurredAtUtc).toBe(draft.occurredAtUtc);
   expect(prior.followUpTasks).toHaveLength(1);
   expect(prior.body).toBe("Draft clarified repair timing");
   await page.goto(`/conversations?record=communication&id=${id}`);
@@ -2105,7 +2112,6 @@ test("manual outbound contact selection and local-date timeline filters preserve
       value: "owner@example.test",
     },
   );
-  const occurred = new Date(Date.now() - 60000);
   await page.goto(
     `/conversations?workflow=communication.create&entityType=property&entityId=${f.property.id}`,
   );
@@ -2113,7 +2119,7 @@ test("manual outbound contact selection and local-date timeline filters preserve
   await page.getByLabel("Channel (required)").selectOption("email");
   await page.getByLabel("Subject (required)").fill("Already emailed owner");
   await page.getByLabel("Body (required)").fill("Manual history only; no delivery requested");
-  await page.getByLabel("Occurred at utc (required)").fill(occurred.toISOString());
+  await expect(page.getByLabel("Occurred at utc (required)", { exact: true })).toHaveCount(0);
   await page.getByLabel("Occurred timezone (required)").fill("America/Los_Angeles");
   await page.getByLabel("Find participant by name").fill(owner.displayName);
   await page.getByRole("button", { name: "Search participants", exact: true }).click();
@@ -2151,7 +2157,7 @@ test("manual outbound contact selection and local-date timeline filters preserve
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(occurred);
+  }).format(new Date(stored.occurredAtUtc));
   await page.getByLabel("Occurred from (stored local date)").fill(localDate);
   await page.getByLabel("Occurred to (stored local date)").fill(localDate);
   await expect(page.getByRole("link", { name: /Already emailed owner/ })).toBeVisible();
@@ -2170,9 +2176,7 @@ test("lost manual recording response recovers one communication and one follow-u
   );
   await page.getByLabel("Subject (required)").fill("Manual follow-up receipt");
   await page.getByLabel("Body (required)").fill("Operator spoke with owner");
-  await page
-    .getByLabel("Occurred at utc (required)")
-    .fill(new Date(Date.now() - 60000).toISOString());
+  await expect(page.getByLabel("Occurred at utc (required)", { exact: true })).toHaveCount(0);
   await page.getByLabel("Occurred timezone (required)").fill("America/Los_Angeles");
   await page.getByRole("button", { name: "Add participants entry" }).click();
   await page.getByLabel("Person or business (required)").fill(ownerId);
@@ -2769,7 +2773,9 @@ test("Owner concern create and edit use effective relationship validation", asyn
   await page.getByLabel("Concern type (required)").selectOption("general_rental");
   await page.getByLabel("Summary (required)").fill("Owner requests an update");
   await page.getByLabel("Description (required)").fill("Manual owner request");
-  await page.getByLabel("Raised at (include time-zone offset) (required)").fill(property.asOf);
+  await expect(
+    page.getByLabel("Raised at (include time-zone offset) (required)", { exact: true }),
+  ).toHaveCount(0);
   await checkCreateLayout(page, testInfo, "concern-create");
   await save(page, "Record owner concern");
   const id = new URL(
@@ -2824,7 +2830,9 @@ test("Owner concern duplicate review requires an independent reason and never me
   await page.getByLabel("Concern type (required)").selectOption("general_rental");
   await page.getByLabel("Summary (required)").fill("Independent owner request");
   await page.getByLabel("Description (required)").fill("A distinct rental question");
-  await page.getByLabel("Raised at (include time-zone offset) (required)").fill(property.asOf);
+  await expect(
+    page.getByLabel("Raised at (include time-zone offset) (required)", { exact: true }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "Record owner concern", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Possible duplicate concerns", exact: true }),
@@ -2852,7 +2860,7 @@ test("Owner concern duplicate review requires an independent reason and never me
   );
 });
 
-test("Archived Owner concern selection requires explicit backdated confirmation", async ({
+test("Server-timed concerns cannot claim a former owner through backdated confirmation", async ({
   page,
   request,
 }) => {
@@ -2897,9 +2905,9 @@ test("Archived Owner concern selection requires explicit backdated confirmation"
   await page.getByLabel("Concern type (required)").selectOption("general_rental");
   await page.getByLabel("Summary (required)").fill("Historical Owner question");
   await page.getByLabel("Description (required)").fill("Backdated client-owner context");
-  await page
-    .getByLabel("Raised at (include time-zone offset) (required)")
-    .fill(`${property.effectiveLocalDate}T20:00:00Z`);
+  await expect(
+    page.getByLabel("Raised at (include time-zone offset) (required)", { exact: true }),
+  ).toHaveCount(0);
   await expect(
     page.getByRole("region", { name: "Owner concern review", exact: true }),
   ).toContainText("Archived — historical selection required");
@@ -2911,13 +2919,13 @@ test("Archived Owner concern selection requires explicit backdated confirmation"
   await page
     .getByRole("textbox", { name: "Historical selection reason", exact: true })
     .fill("Raised while this Owner managed the Property");
-  await save(page, "Record owner concern");
+  await page.getByRole("button", { name: "Record owner concern", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText(/backdated|historical|owner/i);
   const concerns = await get<Schemas["ConcernPage"]>(
     request,
     `/api/owner-concerns?propertyId=${property.id}`,
   );
-  expect(concerns.items).toHaveLength(1);
-  expect(concerns.items[0].ownerPartyId).toBe(ownerId);
+  expect(concerns.items).toHaveLength(0);
 });
 
 test("Vacancy concern requires a matching Space and retains observed status rather than changing it", async ({
@@ -2935,7 +2943,9 @@ test("Vacancy concern requires a matching Space and retains observed status rath
   await page.getByLabel("Concern type (required)").selectOption("vacancy");
   await page.getByLabel("Summary (required)").fill("Owner asks about vacancy");
   await page.getByLabel("Description (required)").fill("Current vacancy context only");
-  await page.getByLabel("Raised at (include time-zone offset) (required)").fill(property.asOf);
+  await expect(
+    page.getByLabel("Raised at (include time-zone offset) (required)", { exact: true }),
+  ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Record owner concern", exact: true }),
   ).toBeDisabled();
@@ -2979,9 +2989,9 @@ test("Dismissed Owner concern target correction preserves its predecessor and or
   await expect(page.getByLabel("Summary (required)")).toHaveValue("Wrong property selected");
   await page.getByLabel("Property (required)").selectOption(correctedProperty.id);
   await page.getByLabel("Owner (required)").selectOption(correctedProperty.ownerships[0].partyId);
-  await page
-    .getByLabel("Raised at (include time-zone offset) (required)")
-    .fill(correctedProperty.asOf);
+  await expect(
+    page.getByLabel("Raised at (include time-zone offset) (required)", { exact: true }),
+  ).toHaveCount(0);
   await page.getByLabel("Summary (required)").fill("Correct property selected");
   await save(page, "Record owner concern");
   const current = await get<Schemas["ConcernResponse"]>(

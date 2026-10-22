@@ -344,7 +344,8 @@ class SQLiteMaintenanceAttentionReader:
         a, i = MaintenanceAppointmentModel.__table__, MaintenanceIssueModel.__table__
         p = self.locations.properties()
         captured = window.as_of.isoformat()
-        elapsed = func.maintenance_instant_compare(a.c.ends_at_utc, captured) <= 0
+        end_boundary = func.coalesce(a.c.ends_at_utc, a.c.starts_at_utc)
+        elapsed = func.maintenance_instant_compare(end_boundary, captured) <= 0
         future = func.maintenance_instant_compare(a.c.starts_at_utc, captured) >= 0
         within_horizon = (
             func.maintenance_instant_compare(
@@ -356,7 +357,7 @@ class SQLiteMaintenanceAttentionReader:
         ongoing_or_future = and_(~elapsed, within_horizon)
         next_change = func.min(
             func.coalesce(case((future, a.c.starts_at_utc)), REVIEW_BOUNDARY),
-            func.coalesce(case((~elapsed, a.c.ends_at_utc)), REVIEW_BOUNDARY),
+            func.coalesce(case((~elapsed, end_boundary)), REVIEW_BOUNDARY),
             func.maintenance_next_midnight(p.c.time_zone, captured),
         )
         # At the start itself, the next membership change is its end, not an
@@ -364,7 +365,12 @@ class SQLiteMaintenanceAttentionReader:
         next_change = case(
             (
                 func.maintenance_instant_compare(a.c.starts_at_utc, captured) == 0,
-                func.min(a.c.ends_at_utc, func.maintenance_next_midnight(p.c.time_zone, captured)),
+                func.min(
+                    func.coalesce(
+                        a.c.ends_at_utc, func.maintenance_next_midnight(p.c.time_zone, captured)
+                    ),
+                    func.maintenance_next_midnight(p.c.time_zone, captured),
+                ),
             ),
             else_=next_change,
         )
@@ -392,7 +398,7 @@ class SQLiteMaintenanceAttentionReader:
                 ongoing_or_future.label("in_agenda"),
                 literal(3 if window.collection == "needs_action" else 0).label("sort_priority"),
                 case((elapsed, "review"), else_="future").label("priority_band"),
-                case((elapsed, a.c.ends_at_utc), else_=a.c.starts_at_utc).label("sort_at"),
+                case((elapsed, end_boundary), else_=a.c.starts_at_utc).label("sort_at"),
                 next_change.label("next_transition"),
             )
             .select_from(
@@ -445,7 +451,9 @@ def _fact(row, children, window):
             else AttentionDate(
                 row["scheduled_timezone"],
                 at=datetime.fromisoformat(
-                    row["ends_at_utc"] if code == "outcome_review" else row["starts_at_utc"]
+                    (row["ends_at_utc"] or row["starts_at_utc"])
+                    if code == "outcome_review"
+                    else row["starts_at_utc"]
                 ),
             ),
         )
@@ -474,7 +482,9 @@ def _fact(row, children, window):
         children=tuple(children),
         child_count=row["child_count"] if issue else 0,
         source_deadline=deadline,
-        appointment_end=None if issue else datetime.fromisoformat(row["ends_at_utc"]),
+        appointment_end=None
+        if issue or row["ends_at_utc"] is None
+        else datetime.fromisoformat(row["ends_at_utc"]),
         related_source=None
         if issue
         else AttentionSourceContext(

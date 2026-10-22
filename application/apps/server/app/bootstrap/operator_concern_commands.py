@@ -26,6 +26,7 @@ def concern_fingerprint(action, source, payload, key):
         values = {name: value for name, value in payload.items() if name != "expectedRevision"}
         if action == "create":
             values = snake_fields(values)
+            values.setdefault("raised_at_utc", None)
             if values.get("follow_up") is not None:
                 values["follow_up"] = FollowUpInput(**snake_fields(values["follow_up"]))
             request = asdict(ConcernCreateCommand(idempotency_key=key, **values))

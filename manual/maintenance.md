@@ -11,7 +11,7 @@ Issue details show the property name, description, status, priority and reporter
 ## Report and triage a repair
 
 1. Open **Maintenance → Report maintenance issue**.
-2. Select property and optional rental unit, enter what happened, category, priority and report time.
+2. Select property and optional rental unit, enter what happened, category and priority. The report time is recorded automatically when you save; editing the issue keeps that original time.
 3. Identify the reporter and role explicitly. Self-reported operator context differs from a client owner or tenant. Historical attribution may require a reason/confirmation.
 4. Review existing issues to avoid duplicates, then save.
 5. Use **Edit issue** to change details or correct reporter attribution. A reporter change requires a correction reason. **Save changes** saves both together; if validation fails, neither change is saved. The report date, property and issue status stay unchanged.
@@ -35,7 +35,7 @@ A provider assignment does not send a booking or prove work is complete. Contact
 
 ## Appointments, follow-up and work history
 
-Schedule an appointment with actual start/end and purpose. Review displayed local zone/UTC context. Reschedule explicitly when plans change. **Finish appointment** records the offered completed/cancelled outcome; it does not resolve the issue.
+Schedule an appointment with a start and purpose; the end is optional. **Starts at** and **Ends at** offer calendar/time pickers that also accept typed values. Select the appointment's time zone from the dropdown; changing it displays the same instant in the new zone. Reschedule explicitly when plans change. **Finish appointment** records the offered completed/cancelled outcome; it does not resolve the issue. When the end is unknown, Home prompts for an outcome after the start instead of assuming a duration.
 
 Use **Create issue follow-up** for a linked Task, then set who/what is awaited and a follow-up instant. Existing deadlines and source urgency remain independent. If a provider does not respond, record the additional conversation and reschedule the follow-up rather than erasing the previous history.
 
@@ -56,7 +56,7 @@ Completing a Task/appointment or ending assignment does not resolve an issue. Re
 
 ## Owner concerns
 
-Use **Owners → Owner concerns** or the **Owner concerns** tab in Maintenance (`/maintenance?tab=concerns`) for a client owner's operational rental/lease/tenant/vacancy concern. Each Owner overview shows their concerns with **View all concerns** and **Record concern** actions; recording from an Owner preselects that owner. Record the Property, context, raised date and evidence; retain historical owner context only with required review.
+Use **Owners → Owner concerns** or the **Owner concerns** tab in Maintenance (`/maintenance?tab=concerns`) for a client owner's operational rental/lease/tenant/vacancy concern. Each Owner overview shows their concerns with **View all concerns** and **Record concern** actions; recording from an Owner preselects that owner. Record the property, context and evidence; the raised time is recorded automatically when you save. New concerns use the current owner relationship, not a backdated relationship.
 
 The primary filters are **Owner → Property → Suite → Concern type**. Search owners and properties by name; **Suite** appears only for an office property. Selecting **Lease** or **Tenant** as the concern type shows a **Lease period** dropdown with inclusive end dates, rental names and statuses. Lease choices use the selected property and, when chosen, the owner's current and former property relationships. **More lease periods** loads another bounded page; a page without matches may still have more periods. Changing the property, owner or suite clears dependent lease/tenant filters. A separate Tenant name search and status, priority and date filters are also available. Results update automatically; **Clear filters** removes all selections.
 

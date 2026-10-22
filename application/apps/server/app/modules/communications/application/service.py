@@ -117,7 +117,7 @@ class CommunicationCommand:
     channel: str
     subject: str
     body: str
-    occurred_at_utc: str
+    occurred_at_utc: str | None
     occurred_timezone: str
     participants: tuple[ParticipantInput, ...]
     links: tuple[LinkInput, ...] = ()
@@ -129,7 +129,8 @@ class CommunicationCommand:
             raise CommunicationError("Direction or channel is invalid.")
         object.__setattr__(self, "subject", _text(self.subject, "subject", 240))
         object.__setattr__(self, "body", _text(self.body, "body", 10_000))
-        _instant(self.occurred_at_utc, "occurredAtUtc")
+        if self.occurred_at_utc is not None:
+            _instant(self.occurred_at_utc, "occurredAtUtc")
         _zone(self.occurred_timezone)
         if not isinstance(self.participants, tuple) or not self.participants:
             raise CommunicationError("At least one participant is required.")
@@ -188,7 +189,7 @@ class CommunicationService:
             command.channel,
             command.subject,
             command.body,
-            _utc(command.occurred_at_utc),
+            _utc(command.occurred_at_utc) if command.occurred_at_utc else now,
             command.occurred_timezone,
             "recorded" if command.record else "draft",
             now if command.record else None,
@@ -514,7 +515,9 @@ class CommunicationService:
                 command.channel,
                 command.subject,
                 command.body,
-                _utc(command.occurred_at_utc),
+                _utc(command.occurred_at_utc)
+                if command.occurred_at_utc
+                else source.occurred_at_utc,
                 command.occurred_timezone,
                 "recorded",
                 now,

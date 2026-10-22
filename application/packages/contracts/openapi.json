@@ -709,9 +709,16 @@
             "type": "string"
           },
           "endsAtUtc": {
-            "format": "date-time",
-            "title": "Endsatutc",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endsatutc"
           },
           "id": {
             "format": "uuid",
@@ -846,9 +853,16 @@
         "additionalProperties": false,
         "properties": {
           "endsAtUtc": {
-            "format": "date-time",
-            "title": "Endsatutc",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endsatutc"
           },
           "expectedRevision": {
             "minimum": 0.0,
@@ -878,6 +892,18 @@
             "title": "Purpose",
             "type": "string"
           },
+          "scheduledTimezone": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduledtimezone"
+          },
           "startsAtUtc": {
             "format": "date-time",
             "title": "Startsatutc",
@@ -888,7 +914,6 @@
           "expectedRevision",
           "idempotencyKey",
           "startsAtUtc",
-          "endsAtUtc",
           "purpose"
         ],
         "title": "AppointmentInput",
@@ -898,9 +923,16 @@
         "additionalProperties": false,
         "properties": {
           "endsAtUtc": {
-            "format": "date-time",
-            "title": "Endsatutc",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endsatutc"
           },
           "expectedRevision": {
             "minimum": 0.0,
@@ -942,6 +974,18 @@
             ],
             "title": "Reschedulereason"
           },
+          "scheduledTimezone": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduledtimezone"
+          },
           "startsAtUtc": {
             "format": "date-time",
             "title": "Startsatutc",
@@ -952,7 +996,6 @@
           "expectedRevision",
           "idempotencyKey",
           "startsAtUtc",
-          "endsAtUtc",
           "purpose"
         ],
         "title": "AppointmentPatch",
@@ -983,9 +1026,16 @@
         "additionalProperties": false,
         "properties": {
           "endsAtUtc": {
-            "format": "date-time",
-            "title": "Endsatutc",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endsatutc"
           },
           "id": {
             "format": "uuid",
@@ -3387,9 +3437,16 @@
             "type": "array"
           },
           "occurredAtUtc": {
-            "format": "date-time",
-            "title": "Occurredatutc",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurredatutc"
           },
           "occurredTimezone": {
             "title": "Occurredtimezone",
@@ -3421,7 +3478,6 @@
           "channel",
           "subject",
           "body",
-          "occurredAtUtc",
           "occurredTimezone",
           "participants",
           "idempotencyKey"
@@ -4489,9 +4545,16 @@
             "type": "string"
           },
           "raisedAtUtc": {
-            "format": "date-time",
-            "title": "Raisedatutc",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raisedatutc"
           },
           "replacesConcernId": {
             "anyOf": [
@@ -4543,7 +4606,6 @@
           "concernType",
           "summary",
           "description",
-          "raisedAtUtc",
           "idempotencyKey"
         ],
         "title": "ConcernCreateRequest",
@@ -7339,9 +7401,16 @@
             "type": "array"
           },
           "occurredAtUtc": {
-            "format": "date-time",
-            "title": "Occurredatutc",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurredatutc"
           },
           "occurredTimezone": {
             "title": "Occurredtimezone",
@@ -7368,7 +7437,6 @@
           "channel",
           "subject",
           "body",
-          "occurredAtUtc",
           "occurredTimezone",
           "participants",
           "correctionReason",
@@ -10580,9 +10648,16 @@
             "type": "string"
           },
           "endsAtUtc": {
-            "format": "date-time",
-            "title": "Endsatutc",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endsatutc"
           },
           "files": {
             "default": [],
@@ -17288,9 +17363,16 @@
             "type": "string"
           },
           "reportedAtUtc": {
-            "format": "date-time",
-            "title": "Reportedatutc",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reportedatutc"
           },
           "reporter": {
             "$ref": "#/components/schemas/ReporterInput"
@@ -17321,7 +17403,6 @@
           "summary",
           "description",
           "category",
-          "reportedAtUtc",
           "reporter"
         ],
         "title": "IssueInput",
@@ -30095,9 +30176,16 @@
             "title": "Replacesreportid"
           },
           "reportedAtUtc": {
-            "format": "date-time",
-            "title": "Reportedatutc",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reportedatutc"
           },
           "sourceNote": {
             "anyOf": [
@@ -30119,7 +30207,6 @@
           "receivedOn",
           "amountMinor",
           "paymentMethodKind",
-          "reportedAtUtc",
           "idempotencyKey"
         ],
         "title": "ReportInput",

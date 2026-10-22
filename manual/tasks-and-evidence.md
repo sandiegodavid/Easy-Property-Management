@@ -4,7 +4,7 @@
 
 ## Create and work a Task
 
-Open **Tasks** from Home or work navigation. Quick add begins with a title and due-date/no-date choice. A date creates an all-day deadline in the displayed browser time zone; expand details for an exact time/zone, priority and related record.
+Open **Tasks** from Home or work navigation. Quick add begins with a title and due-date/no-date choice. A date creates an all-day deadline in the displayed time zone. Under **Optional Task details**, **Due at** offers an editable date/time picker and **Due time zone** selects its zone; choosing an exact time makes the deadline timed rather than all-day. Priority and related records are also optional.
 
 1. Enter a clear action, correct priority and deadline/context.
 2. Save; review the resulting Task rather than assuming saved input means creation.
@@ -29,7 +29,7 @@ Add a reminder with its own time. Acknowledge or dismiss the specific reminder w
 ## Record a conversation
 
 1. Open **Conversations** (`/conversations`) or the related record's conversation link.
-2. **Create conversation** with participants, channel, occurrence time, summary/details and correct Property/Lease/rent/issue context.
+2. **Create conversation** with participants, channel, time zone, summary/details and correct property/lease/rent/issue context. The time is recorded automatically when you save; editing or correcting the conversation keeps that original time.
 3. Edit a draft while it remains a draft.
 4. **Record conversation** when it represents a real completed/received contact.
 5. Use **Correct recorded conversation** with a reason for later correction; retain history.

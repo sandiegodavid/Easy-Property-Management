@@ -230,6 +230,8 @@ def _transition(command, state, previous, now):
         normalized.pop("idempotency_key")
         if normalized != payload:
             raise ValueError("Creation payload is not normalized.")
+        if normalized["raised_at_utc"] is None:
+            normalized["raised_at_utc"] = state["recordedAtUtc"]
         for name in (
             "owner_party_id",
             "property_id",

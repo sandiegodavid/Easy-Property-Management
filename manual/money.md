@@ -70,7 +70,7 @@ Delete a draft deduction/credit/source only through its matching action and conf
 ## Owner-reported rent
 
 1. Open **Owner reports → Record owner rent report** for the specific client owner, Lease and received-payment context.
-2. Record amount/date/method, reporter and evidence. Pending claims do not increase received income.
+2. Record amount, **Received on** date, payment method, reporter and evidence. The report time is recorded automatically when you save, including replacement reports; editing a pending report keeps its original report time. Pending claims do not increase received income.
 3. Edit a pending report or reject it with an explanation when appropriate.
 4. To verify, compare source evidence with Finance receipts. Explicitly adopt one compatible existing receipt or create one through verification with reviewed allocations.
 5. Review both report and ledger changes if a conflict appears. Verify the final Finance record is counted once.

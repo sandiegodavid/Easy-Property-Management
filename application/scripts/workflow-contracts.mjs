@@ -962,6 +962,23 @@ export function workflowContracts(openapi) {
           };
         })
         .map((definition) => {
+          // Browser event times are assigned by the source service, not by the operator.
+          // The API still permits explicit historical times for application integrations.
+          const serverTimeField = {
+            "maintenance.issue.create": "reportedAtUtc",
+            "owner_concern.create": "raisedAtUtc",
+            "communication.create": "occurredAtUtc",
+            "communication.patch": "occurredAtUtc",
+            "communication.correct": "occurredAtUtc",
+            "owner_rent_report.create": "reportedAtUtc",
+            "owner_rent_report.patch": "reportedAtUtc",
+          }[definition.formKey];
+          if (serverTimeField) {
+            delete definition.schema.properties[serverTimeField];
+            definition.schema.required = (definition.schema.required ?? []).filter(
+              (key) => key !== serverTimeField,
+            );
+          }
           if (definition.formKey.startsWith("intake.")) {
             const properties = definition.schema.properties;
             properties.expectedRevision = {

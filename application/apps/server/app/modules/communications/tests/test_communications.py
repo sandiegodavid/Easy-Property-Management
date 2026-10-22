@@ -7,6 +7,7 @@ import hashlib
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -82,12 +83,33 @@ class CommunicationWorkflowTests(unittest.TestCase):
             )
         )
 
+    def test_server_occurrence_time_is_assigned_once_and_correction_preserves_it(self):
+        command = self.command(record=True, occurred_at=None)
+        key = str(uuid4())
+        with patch(
+            "app.modules.communications.application.service._now",
+            return_value="2026-01-02T12:00:00+00:00",
+        ):
+            created = self.service.create(command, key, 0)
+        self.assertEqual(created["createdAt"], created["occurredAtUtc"])
+        self.assertEqual(created, self.service.create(command, key, 0))
+        corrected = self.service.correct(
+            created["id"],
+            self.command(record=True, subject="Corrected", occurred_at=None),
+            "Fix wording",
+            str(uuid4()),
+            created["revision"],
+        )
+        self.assertEqual(created["occurredAtUtc"], corrected["occurredAtUtc"])
+        with self.service.unit_of_work.engine.connect() as connection:
+            validate_communication_schema(connection)
+
     def command(
         self,
         *,
         record: bool = False,
         subject: str = "Repair update",
-        occurred_at: str = "2026-01-01T12:00:00+00:00",
+        occurred_at: str | None = "2026-01-01T12:00:00+00:00",
         follow_up: FollowUpInput | None = None,
     ) -> CommunicationCommand:
         return CommunicationCommand(

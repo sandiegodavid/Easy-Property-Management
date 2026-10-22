@@ -118,9 +118,10 @@ export function CommunicationContext({
         creates a Task, not a message or automated reminder.
       </p>
       <p>
-        Use the original occurrence instant and its IANA time zone. Typed Property, Space or Lease
-        links must agree with that zone. Source links reference retained evidence; they do not copy
-        its contents or automatically follow replacements.
+        The time is recorded automatically when you save a new conversation. Choose the time zone
+        for the related property or lease. Editing or correcting a conversation keeps its original
+        recorded time. Source links reference retained evidence; they do not copy its contents or
+        automatically follow replacements.
       </p>
       <Facts value={source} fields={["status", "revision", "occurredAtUtc", "occurredTimezone"]} />
       {Array.isArray(values.participants) && (

@@ -48,8 +48,10 @@ class OwnerConcernService:
             retry = start(tx, receipt, self._view)
             if retry is not None:
                 return retry
-            context = self._context(tx, command)
-            self._future_limit(command.raised_at_utc)
+            stamp = _stamp(self.now())
+            resolved = replace(command, raised_at_utc=command.raised_at_utc or stamp)
+            context = self._context(tx, resolved)
+            self._future_limit(resolved.raised_at_utc)
             if command.originating_communication_id and not tx.originating_communication(
                 command.originating_communication_id, command.owner_party_id, command.property_id
             ):
@@ -79,7 +81,6 @@ class OwnerConcernService:
                         "A replacement requires one dismissed concern without an existing replacement.",
                         "replacement_conflict",
                     )
-            stamp = _stamp(self.now())
             item = Concern(
                 str(uuid4()),
                 command.owner_party_id,
@@ -98,7 +99,7 @@ class OwnerConcernService:
                 command.description,
                 command.priority,
                 "open",
-                command.raised_at_utc,
+                resolved.raised_at_utc,
                 str(context["time_zone"]),
                 stamp,
                 stamp,

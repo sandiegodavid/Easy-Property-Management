@@ -1425,16 +1425,24 @@ test("owner report creation, correction and rejection remain claims rather than 
   await page.getByLabel("Received on (required)").fill(f.today);
   await page.getByLabel("Amount minor (required)").fill("12345");
   await page.getByLabel("Payment method kind (required)").selectOption("cash");
-  await page.getByLabel("Reported at utc (required)").fill(new Date().toISOString());
+  await expect(page.getByLabel("Reported at utc (required)", { exact: true })).toHaveCount(0);
   await save(page, "Record owner rent report");
   const items = await get<Schemas["OwnerRentReportPageResponse"]>(
     request,
     `/api/owner-rent-reports?leaseId=${f.lease.id}`,
   );
   expect(items.items).toHaveLength(1);
+  expect(items.items[0].reportedAtUtc).toBe(items.items[0].createdAt);
+  expect(items.items[0].receivedOn).toBe(f.today);
   await page.goto(`/money?workflow=owner_rent_report.patch&target=${items.items[0].id}`);
+  await expect(page.getByLabel("Reported at utc", { exact: true })).toHaveCount(0);
   await page.getByLabel("Source note", { exact: true }).fill("Corrected source note");
   await save(page, "Edit owner rent report");
+  const edited = await get<Schemas["OwnerRentReportResponse"]>(
+    request,
+    `/api/owner-rent-reports/${items.items[0].id}`,
+  );
+  expect(edited.reportedAtUtc).toBe(items.items[0].reportedAtUtc);
   await page.goto(`/money?workflow=owner_rent_report.reject&target=${items.items[0].id}`);
   await page.getByLabel("Reason (required)").fill("Owner withdrew the claim");
   await page.getByLabel("I confirm this lifecycle change", { exact: true }).check();
@@ -1448,7 +1456,7 @@ test("owner report creation, correction and rejection remain claims rather than 
   await expect(page.getByLabel("Owner party id (required)")).toHaveValue(f.owner);
   await expect(page.getByLabel("Received on (required)")).toHaveValue(f.today);
   await page.getByLabel("Amount minor (required)").fill("12300");
-  await page.getByLabel("Reported at utc (required)").fill(new Date().toISOString());
+  await expect(page.getByLabel("Reported at utc (required)", { exact: true })).toHaveCount(0);
   await save(page, "Record owner rent report");
   const replacement = (
     await get<Schemas["OwnerRentReportPageResponse"]>(
@@ -1457,6 +1465,7 @@ test("owner report creation, correction and rejection remain claims rather than 
     )
   ).items.find((item) => item.replacesReportId === items.items[0].id)!;
   expect(replacement.status).toBe("pending");
+  expect(replacement.reportedAtUtc).toBe(replacement.createdAt);
   await page.goto(`/money?record=report&id=${replacement.id}`);
   await expect(
     page.getByRole("link", { name: "Review report history", exact: true }),
@@ -1659,7 +1668,7 @@ test("Archived historical client owner can report a past payment without creatin
   ).toContainText("Archived identity — historical selection only");
   await page.getByLabel("Amount minor (required)").fill("12300");
   await page.getByLabel("Payment method kind (required)").selectOption("cash");
-  await page.getByLabel("Reported at utc (required)").fill(new Date().toISOString());
+  await expect(page.getByLabel("Reported at utc (required)", { exact: true })).toHaveCount(0);
   await save(page, "Record owner rent report");
   const reports = await get<Schemas["OwnerRentReportPageResponse"]>(
     request,

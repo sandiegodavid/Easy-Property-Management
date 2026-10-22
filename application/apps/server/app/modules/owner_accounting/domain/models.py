@@ -77,7 +77,7 @@ class OwnerRentReportCommand:
     amount_minor: int
     payment_method_kind: str
     idempotency_key: str
-    reported_at_utc: str
+    reported_at_utc: str | None
     payment_method_label: str | None = None
     masked_reference: str | None = None
     other_payment_method_note: str | None = None
@@ -92,7 +92,10 @@ class OwnerRentReportCommand:
         ):
             object.__setattr__(self, name, _uuid(getattr(self, name), label))
         object.__setattr__(self, "received_on", _date(self.received_on, "Received date"))
-        object.__setattr__(self, "reported_at_utc", _stamp(self.reported_at_utc, "Reported time"))
+        if self.reported_at_utc is not None:
+            object.__setattr__(
+                self, "reported_at_utc", _stamp(self.reported_at_utc, "Reported time")
+            )
         if type(self.amount_minor) is not int or not 1 <= self.amount_minor <= 9_999_999_999:
             raise OwnerReportError("Amount must be an integer between 1 and 9,999,999,999.")
         label, reference, other = _method(

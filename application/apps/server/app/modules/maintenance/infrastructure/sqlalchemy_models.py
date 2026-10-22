@@ -114,7 +114,7 @@ class MaintenanceAppointmentModel(LocalBase):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     issue_id: Mapped[str] = mapped_column(ForeignKey("maintenance_issues.id"), nullable=False)
     starts_at_utc: Mapped[str] = mapped_column(String, nullable=False)
-    ends_at_utc: Mapped[str] = mapped_column(String, nullable=False)
+    ends_at_utc: Mapped[str | None] = mapped_column(String, nullable=True)
     scheduled_timezone: Mapped[str] = mapped_column(String, nullable=False)
     purpose: Mapped[str] = mapped_column(String, nullable=False)
     instructions: Mapped[str | None] = mapped_column(String)
@@ -128,7 +128,7 @@ class MaintenanceAppointmentModel(LocalBase):
     created_at: Mapped[str] = mapped_column(String, nullable=False)
     updated_at: Mapped[str] = mapped_column(String, nullable=False)
     __table_args__ = (
-        CheckConstraint("ends_at_utc > starts_at_utc"),
+        CheckConstraint("ends_at_utc IS NULL OR ends_at_utc > starts_at_utc"),
         CheckConstraint("status IN ('scheduled','completed','cancelled')"),
         CheckConstraint(
             "(status='scheduled' AND completed_at IS NULL AND outcome_note IS NULL AND cancelled_at IS NULL AND cancellation_reason IS NULL) OR (status='completed' AND completed_at IS NOT NULL AND cancelled_at IS NULL AND cancellation_reason IS NULL) OR (status='cancelled' AND completed_at IS NULL AND outcome_note IS NULL AND cancelled_at IS NOT NULL AND cancellation_reason IS NOT NULL)"

@@ -61,7 +61,7 @@ class IssueInput(CommandInput):
     ]
     categoryDetail: str | None = Field(None, max_length=200)
     priority: Literal["low", "normal", "high", "urgent"] = "normal"
-    reportedAtUtc: AwareDatetime
+    reportedAtUtc: AwareDatetime | None = None
     reporter: ReporterInput
     idempotencyKey: UUID
 
@@ -103,7 +103,8 @@ class ReporterCorrectionInput(CommandInput):
 
 class AppointmentInput(CommandInput):
     startsAtUtc: AwareDatetime
-    endsAtUtc: AwareDatetime
+    endsAtUtc: AwareDatetime | None = None
+    scheduledTimezone: str | None = Field(None, max_length=100)
     purpose: str = Field(min_length=1, max_length=500)
     instructions: str | None = Field(None, max_length=4000)
     idempotencyKey: UUID
@@ -126,7 +127,8 @@ class ExpenseLinkInput(CommandInput):
 
 class AppointmentPatch(CommandInput):
     startsAtUtc: AwareDatetime
-    endsAtUtc: AwareDatetime
+    endsAtUtc: AwareDatetime | None = None
+    scheduledTimezone: str | None = Field(None, max_length=100)
     purpose: str = Field(min_length=1, max_length=500)
     instructions: str | None = Field(None, max_length=4000)
     rescheduleReason: str | None = Field(None, max_length=1000)
@@ -206,7 +208,7 @@ class AppointmentResponse(Contract):
     id: UUID
     issueId: UUID
     startsAtUtc: AwareDatetime
-    endsAtUtc: AwareDatetime
+    endsAtUtc: AwareDatetime | None
     scheduledTimezone: str
     purpose: str
     instructions: str | None
@@ -302,7 +304,7 @@ class ExpenseSummaryResponse(Contract):
 class AppointmentSummaryResponse(Contract):
     id: UUID
     startsAtUtc: AwareDatetime
-    endsAtUtc: AwareDatetime
+    endsAtUtc: AwareDatetime | None
     status: Literal["scheduled", "completed", "cancelled"]
 
 
@@ -652,7 +654,7 @@ def build_router(
                     data.category,
                     data.categoryDetail,
                     data.priority,
-                    data.reportedAtUtc.isoformat(),
+                    data.reportedAtUtc.isoformat() if data.reportedAtUtc else None,
                     ReporterAttribution(
                         reporter.role,
                         reporter.subjectKind,
@@ -962,9 +964,10 @@ def build_router(
                 str(issue_id),
                 AppointmentCreate(
                     data.startsAtUtc.isoformat(),
-                    data.endsAtUtc.isoformat(),
+                    data.endsAtUtc.isoformat() if data.endsAtUtc else None,
                     data.purpose,
                     data.instructions,
+                    data.scheduledTimezone,
                 ),
                 str(data.idempotencyKey),
                 expected_revision=data.expectedRevision,
@@ -1123,9 +1126,10 @@ def build_router(
                 str(appointment_id),
                 AppointmentCreate(
                     data.startsAtUtc.isoformat(),
-                    data.endsAtUtc.isoformat(),
+                    data.endsAtUtc.isoformat() if data.endsAtUtc else None,
                     data.purpose,
                     data.instructions,
+                    data.scheduledTimezone,
                 ),
                 data.rescheduleReason,
                 expected_revision=data.expectedRevision,

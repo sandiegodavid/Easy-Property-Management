@@ -5318,11 +5318,8 @@ export interface components {
              * Format: date-time
              */
             createdAt: string;
-            /**
-             * Endsatutc
-             * Format: date-time
-             */
-            endsAtUtc: string;
+            /** Endsatutc */
+            endsAtUtc: string | null;
             /**
              * Id
              * Format: uuid
@@ -5380,11 +5377,8 @@ export interface components {
         };
         /** AppointmentInput */
         AppointmentInput: {
-            /**
-             * Endsatutc
-             * Format: date-time
-             */
-            endsAtUtc: string;
+            /** Endsatutc */
+            endsAtUtc?: string | null;
             /** Expectedrevision */
             expectedRevision: number;
             /**
@@ -5396,6 +5390,8 @@ export interface components {
             instructions?: string | null;
             /** Purpose */
             purpose: string;
+            /** Scheduledtimezone */
+            scheduledTimezone?: string | null;
             /**
              * Startsatutc
              * Format: date-time
@@ -5404,11 +5400,8 @@ export interface components {
         };
         /** AppointmentPatch */
         AppointmentPatch: {
-            /**
-             * Endsatutc
-             * Format: date-time
-             */
-            endsAtUtc: string;
+            /** Endsatutc */
+            endsAtUtc?: string | null;
             /** Expectedrevision */
             expectedRevision: number;
             /**
@@ -5422,6 +5415,8 @@ export interface components {
             purpose: string;
             /** Reschedulereason */
             rescheduleReason?: string | null;
+            /** Scheduledtimezone */
+            scheduledTimezone?: string | null;
             /**
              * Startsatutc
              * Format: date-time
@@ -5443,11 +5438,8 @@ export interface components {
         };
         /** AppointmentSummaryResponse */
         AppointmentSummaryResponse: {
-            /**
-             * Endsatutc
-             * Format: date-time
-             */
-            endsAtUtc: string;
+            /** Endsatutc */
+            endsAtUtc: string | null;
             /**
              * Id
              * Format: uuid
@@ -6320,11 +6312,8 @@ export interface components {
             idempotencyKey: string;
             /** Links */
             links?: components["schemas"]["LinkInputModel"][];
-            /**
-             * Occurredatutc
-             * Format: date-time
-             */
-            occurredAtUtc: string;
+            /** Occurredatutc */
+            occurredAtUtc?: string | null;
             /** Occurredtimezone */
             occurredTimezone: string;
             /** Participants */
@@ -6724,11 +6713,8 @@ export interface components {
              * Format: uuid
              */
             propertyId: string;
-            /**
-             * Raisedatutc
-             * Format: date-time
-             */
-            raisedAtUtc: string;
+            /** Raisedatutc */
+            raisedAtUtc?: string | null;
             /** Replacesconcernid */
             replacesConcernId?: string | null;
             /** Spaceid */
@@ -7674,11 +7660,8 @@ export interface components {
             idempotencyKey: string;
             /** Links */
             links?: components["schemas"]["LinkInputModel"][];
-            /**
-             * Occurredatutc
-             * Format: date-time
-             */
-            occurredAtUtc: string;
+            /** Occurredatutc */
+            occurredAtUtc?: string | null;
             /** Occurredtimezone */
             occurredTimezone: string;
             /** Participants */
@@ -8878,11 +8861,8 @@ export interface components {
              * Format: date-time
              */
             createdAt: string;
-            /**
-             * Endsatutc
-             * Format: date-time
-             */
-            endsAtUtc: string;
+            /** Endsatutc */
+            endsAtUtc: string | null;
             /**
              * Files
              * @default []
@@ -11393,11 +11373,8 @@ export interface components {
              * Format: uuid
              */
             propertyId: string;
-            /**
-             * Reportedatutc
-             * Format: date-time
-             */
-            reportedAtUtc: string;
+            /** Reportedatutc */
+            reportedAtUtc?: string | null;
             reporter: components["schemas"]["ReporterInput"];
             /** Spaceid */
             spaceId?: string | null;
@@ -15665,11 +15642,8 @@ export interface components {
             receivedOn: string;
             /** Replacesreportid */
             replacesReportId?: string | null;
-            /**
-             * Reportedatutc
-             * Format: date-time
-             */
-            reportedAtUtc: string;
+            /** Reportedatutc */
+            reportedAtUtc?: string | null;
             /** Sourcenote */
             sourceNote?: string | null;
         };

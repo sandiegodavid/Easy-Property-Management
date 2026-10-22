@@ -230,6 +230,27 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             ),
         )
 
+    def test_server_report_time_is_assigned_once_and_replayed(self):
+        command = IssueCreate(
+            self.property_id,
+            None,
+            "Server-timed issue",
+            "Details",
+            "plumbing",
+            None,
+            "normal",
+            None,
+            ReporterAttribution("manager", "local_operator"),
+        )
+        key = str(uuid4())
+        stamp = datetime.now(UTC).isoformat()
+        with patch("app.modules.maintenance.application.service._stamp", return_value=stamp):
+            created = self.service.create_issue(command, key, expected_revision=0)
+        self.assertEqual(stamp, created["reportedAtUtc"])
+        self.assertEqual(stamp, created["createdAt"])
+        self.assertEqual(created, self.service.create_issue(command, key, expected_revision=0))
+        self.workspace.open()
+
     def test_lifecycle_parent_scoped_idempotency_and_projection(self) -> None:
         item = self.issue()
         self.assertEqual(item["status"], "open")
@@ -695,6 +716,17 @@ class MaintenanceWorkflowTests(unittest.TestCase):
     @fast_backup_encryption()
     def test_reporter_attribution_survives_backup_restore(self) -> None:
         issue = self.issue()
+        visit = self.service.create_appointment(
+            issue["id"],
+            AppointmentCreate(
+                (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+                None,
+                "Start-only visit",
+                scheduled_timezone="America/New_York",
+            ),
+            str(uuid4()),
+            expected_revision=self.issue_revision(issue["id"]),
+        )
         party_property = inventory_command(
             self.portfolio,
             "create_property",
@@ -782,6 +814,9 @@ class MaintenanceWorkflowTests(unittest.TestCase):
             )
         )
         detail = restored.detail(issue["id"])
+        self.assertEqual(visit["id"], detail["appointments"][0]["id"])
+        self.assertIsNone(detail["appointments"][0]["endsAtUtc"])
+        self.assertEqual("America/New_York", detail["appointments"][0]["scheduledTimezone"])
         self.assertEqual("Local operator", detail["reporter"]["displayName"])
         self.assertEqual(
             ["Backup repair call"], [item["subject"] for item in detail["communications"]]

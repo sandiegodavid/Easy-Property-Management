@@ -83,6 +83,8 @@ class MaintenanceService:
         def op(tx):
             uuid(idempotency_key, "idempotencyKey")
             fp = fingerprint("issue", command)
+            now = _stamp()
+            reported_at = command.reported_at_utc or now
             context = tx.issue_context(command.property_id, command.space_id)
             if not context:
                 raise MaintenanceNotFoundError("Property or space was not found.")
@@ -97,10 +99,9 @@ class MaintenanceService:
                 command.reporter,
                 command.property_id,
                 command.space_id,
-                command.reported_at_utc,
+                reported_at,
                 context["property"]["time_zone"],
             )
-            now = _stamp()
             item = {
                 "id": str(uuid4()),
                 "revision": 1,
@@ -112,7 +113,7 @@ class MaintenanceService:
                 "category_detail": command.category_detail,
                 "priority": command.priority,
                 "status": "open",
-                "reported_at_utc": command.reported_at_utc,
+                "reported_at_utc": reported_at,
                 "reported_timezone": context["property"]["time_zone"],
                 **reporter,
                 "resolution_summary": None,
@@ -435,7 +436,8 @@ class MaintenanceService:
                 "issue_id": issue_id,
                 "starts_at_utc": command.starts_at_utc,
                 "ends_at_utc": command.ends_at_utc,
-                "scheduled_timezone": context["property"]["time_zone"],
+                "scheduled_timezone": command.scheduled_timezone
+                or context["property"]["time_zone"],
                 "purpose": command.purpose,
                 "instructions": command.instructions,
                 "status": "scheduled",
@@ -628,13 +630,20 @@ class MaintenanceService:
                 **old,
                 "starts_at_utc": command.starts_at_utc,
                 "ends_at_utc": command.ends_at_utc,
+                "scheduled_timezone": command.scheduled_timezone or old["scheduled_timezone"],
                 "purpose": command.purpose,
                 "instructions": command.instructions,
                 "updated_at": _stamp(),
             }
             if all(
                 updated[k] == old[k]
-                for k in ("starts_at_utc", "ends_at_utc", "purpose", "instructions")
+                for k in (
+                    "starts_at_utc",
+                    "ends_at_utc",
+                    "scheduled_timezone",
+                    "purpose",
+                    "instructions",
+                )
             ):
                 return _dict(old)
             tx.replace_appointment(appointment_id, updated)
