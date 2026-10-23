@@ -4,7 +4,7 @@ Date: October 15, 2026
 
 Status: Recommendations for discussion and future design; not implemented capabilities or changes to approved backlog scope.
 
-This note reviews the [commercial Hosting Plan](../../biz/Hosting_Plan.md) and [Hosted Demo Design](HOSTED_DEMO_DESIGN.md). The largest opportunities are simplifying initial deployment and strengthening recovery and concurrent editing. Retain the proposed per-workspace SQLite/container architecture, then add infrastructure when measured demand or a feature requires it.
+This note reviews the [commercial Hosting Plan](Hosting_Plan.md) and [Hosted Demo Design](../HOSTED_DEMO_DESIGN.md). The largest opportunities are simplifying initial deployment and strengthening recovery and concurrent editing. Retain the proposed per-workspace SQLite/container architecture, then add infrastructure when measured demand or a feature requires it.
 
 ## Cost, performance and operator experience
 

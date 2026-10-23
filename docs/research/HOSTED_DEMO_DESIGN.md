@@ -35,7 +35,7 @@ Google's network allowances depend on tier and region; do not mix Standard and P
 
 ## Relationship to the hosting plan and current application
 
-The supplied [Hosting Plan](../../biz/Hosting_Plan.md) is a future commercial hosting proposal. Its per-customer SQLite isolation, portable deployment, and independent backups fit this demo. Its managed Postgres control plane, billing, relay pair, AI gateway, fleet placement, and availability targets are unnecessary for two synthetic workspaces. Its roughly $75/month starting estimate is therefore not a minimum demo cost. Its third-party incident statistics are not a sound basis for a current provider rejection without comparable first-party evidence.
+The supplied [Hosting Plan](hosting/Hosting_Plan.md) is a future commercial hosting proposal. Its per-customer SQLite isolation, portable deployment, and independent backups fit this demo. Its managed Postgres control plane, billing, relay pair, AI gateway, fleet placement, and availability targets are unnecessary for two synthetic workspaces. Its roughly $75/month starting estimate is therefore not a minimum demo cost. Its third-party incident statistics are not a sound basis for a current provider rejection without comparable first-party evidence.
 
 The current [architecture](../ARCHITECTURE.md), [product brief](../PRODUCT_BRIEF.md), and [security contract](../platform/security-and-audit.md) explicitly describe local single-operator use without authentication. SAAS-001, SEC-001 and SEC-002 in the [backlog](../FEATURE_BACKLOG.md) own future hosting/authentication/authorization. This proposal does not mark those capabilities delivered or expand the local MVP implicitly.
 
