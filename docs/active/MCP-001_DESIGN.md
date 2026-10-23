@@ -12,6 +12,14 @@ Qualify local STDIO with one actual desktop MCP client, recording exact client/a
 
 The first end-to-end capability is a bounded EPM-initiated `maintenance.follow_up_draft` request and its draft/error result. The MCP adapter exposes only registered request, response, receipt and authorized scoped-read tools needed for that action. It must not advertise mailbox scanning, maintenance issue submission, calendar access or outbound sending merely because the client supports MCP. Later ASST-INTAKE-001 registration may expose source evidence and proposal submission through ASST-001 when INGEST-002 review is ready.
 
+### Dependency and qualification handoff
+
+ASST-001 supplies the application ports and shared Settings before this adapter is implemented. Transport contract tests may use synthetic fixtures; enabling the first real follow-up also requires AI-DRAFT-001. Do not make ASST-001 depend back on MCP-001. The launcher/IPC path must authenticate the bound client session before entering the shared service; merely calling an internal port or reaching loopback does not authenticate a client.
+
+Record whether the selected client processes requests only during an interactive conversation or can demonstrably run unattended. For interactive clients, provide an explicit “Open your assistant to process this request” step; MCP support alone does not wake the client. Capability qualification binds client/adapter/action/contract-pack versions and must test the permitted scoped reads, result and receipt flow.
+
+Implement lifecycle, original-result and authorization behavior through ASST-001 rather than inventing protocol-specific rules. Its [fourteen proposed decisions](ASST-001_DESIGN.md#contradictions-and-missing-decisions), including deadline, pause cancellation and restart handling, must be settled before implementing the corresponding adapter behavior. Never expose operator grant/approval commands as assistant tools.
+
 ## Tool and authorization contract
 
 Every tool call resolves the bound principal, active grant, workspace, action and data-class/entity scope through ASST-001. Recheck pause, expiry, revocation, disclosure, bounds and source revisions before reads or result admission. Source-owned projections return bounded pages and opaque revisions; no SQL, arbitrary filesystem path, raw attachment tree or workspace archive tool exists. A request/result/proposal tool can alter the review queue, so it must not be described as read-only. Tool annotations inform the client; EPM authorization is server-enforced.

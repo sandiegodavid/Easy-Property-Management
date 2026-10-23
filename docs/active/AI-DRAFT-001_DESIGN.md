@@ -73,6 +73,12 @@ Keep generation state separate from review state. A completed run can yield an u
 
 Show Draft follow-up inside the expanded issue detail. Preview shows recipient role, purpose, selected facts and destination. Pending, canceled, interrupted, timed-out, unavailable and failed states each have an appropriate recovery action. Copying text does not record a send. A separate Record interaction action opens COM-001 with editable content and context, and requires its normal confirmation; approval alone does not create a Communication. Tasks and issue updates remain separately confirmed commands.
 
+### Connected-assistant extension boundary
+
+[ASST-001](ASST-001_DESIGN.md#technical-ownership-and-application-ports) consumes this action's closed schema, Maintenance-owned context/manifest and shared advisory editor. AI-DRAFT-001 remains independently deliverable with its hosted model; no assistant connection, grant or transport is added as a dependency. Its accepted 60-second model deadline does not define the connected-assistant deadline.
+
+ASST-001 owns the proposed transaction-aware external-result admission extension in AI Governance, assistant transport request identity and receipts. It must create one governed run/draft without a model call, not reuse model credential operations or build another review ledger. Connected selection/status controls are ASST-001 UI work; this item owns the reusable context preview, text editor and advisory/manual-communication boundary. The fourteen [ASST-001 recommendations](ASST-001_DESIGN.md#contradictions-and-missing-decisions), including a distinct connected deadline, remain proposed and do not amend this item's accepted model limits.
+
 ## UI delivery requirements
 
 These changes are part of AI-DRAFT-001 completion, including frontend implementation and browser acceptance. Follow the [current frontend architecture](../ui/frontend-architecture.md), existing `src/workflows` organization, generated API client and shared recovery components. No new permanent navigation destination is needed.

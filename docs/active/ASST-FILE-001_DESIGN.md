@@ -12,6 +12,14 @@ Versioned scoped exports (`config/`, `context/`), EPM request projections (`requ
 
 The assistant writes a temporary file and atomically renames it on the same filesystem, or uses another completion protocol proven to reject partial input. EPM accepts only bounded regular files with allowed names, no symlink/traversal escape, closed schemas and verified writer/grant. An OS watcher prompts scans; startup, resume and periodic reconciliation recover missed events. After a durable ASST-001 result commits, EPM moves or quarantines the submission and publishes a versioned receipt. A crash between commit and file projection repairs from the durable result without reapplying the action. A filename, mtime or claimed assistant name never authenticates a submission or fresh source coverage.
 
+### Shared-contract handoff
+
+Shared service/UI acceptance in ASST-001 uses non-production fixtures and does not require this adapter. This item's real connected follow-up qualification additionally requires AI-DRAFT-001. Verify interactive versus unattended processing and expose any required assistant-side action; file access alone proves neither scheduling nor trustworthy identity.
+
+The adapter publishes only committed ASST-001 projections. Receipt repair must recheck current disclosure authorization; knowing an old key does not authorize a revoked writer to read historical context. Repeated publication preserves request identity/version, and file deletion is not cancellation. Preserve the distinction between immutable admission receipts and later decision receipts. A received advisory draft is not a sent message or official issue update.
+
+The [ASST-001 proposed decisions](ASST-001_DESIGN.md#contradictions-and-missing-decisions) define the recommended deadline, pause/restart and grant-revision semantics; settle them before implementing this adapter. Its workspace archive extension preserves historical grant facts while excluding usable device/session authorization. This item still owns filesystem confinement, writer attribution, safe capture and quarantine; the shared boundary does not establish those properties on its behalf.
+
 ## One backup and careful restore
 
 Extend LOCAL-002's encrypted, consistent archive to include completed unadmitted inbox files and validated portable `state/` snapshots for this managed exchange. Ignore temporary files and regenerate cached exports, receipt projections and heartbeats from durable EPM state. Capture only complete regular files within the assigned folder; verify size/digest and reject symlink escapes. A racing or inconsistent capture fails the backup without publishing it as complete. There is no separate operator backup for the bridge. External mailboxes, account credentials, cloud memory and checkpoints an assistant does not export remain outside EPM's archive.

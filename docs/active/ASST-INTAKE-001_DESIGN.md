@@ -20,6 +20,14 @@ Show contact, poll success, source coverage and pending review separately. A liv
 
 After sleep, outage or restore, the assistant resumes from a durable checkpoint with pagination and overlap; the app reconciles received submissions and receipts. A checkpoint exported through the file adapter is verified against provider and EPM history, never blindly trusted. Missing external assistant state, expired provider retention or failed pages produce visible unknown intervals. Manual intake and direct Maintenance entry remain available.
 
+## Shared-service and decision integration
+
+ASST-001 implements the authenticated principal, connection/grant policy, replay namespace, receipt authority and governed external-result port. This item adds the source-specific admission coordinator: validate/retain exact Intake evidence, admit the registered INGEST-002 proposal, and persist the admission receipt/audit in one caller-owned transaction. Never invoke a model merely to admit an external proposal, and never reuse model credential/probe operations as source receipts.
+
+INGEST-002 owns the operator/domain decision. When an assistant submission is linked, inject the ASST-001 decision-receipt port so the final outcome receipt commits with that decision; transport publication follows commit and is repairable. Keep the original admission receipt immutable. No assistant identity is permitted to approve the draft. These integration extensions are delivered here without making INGEST-002's independent review workflow depend on an assistant transport.
+
+This item owns poll-report persistence, source checkpoints/coverage, requested versus acknowledged cadence and source reconnect UI. ASST-001 contact/compatibility health is insufficient evidence of a scan. One actual qualified transport is required; AI-DRAFT-001 is not a source-discovery business dependency, even if the chosen transport uses it for its initial follow-up qualification. Follow the shared design's settled policy; its [fourteen recommendations](ASST-001_DESIGN.md#contradictions-and-missing-decisions) are still proposed.
+
 ## Qualification and validation
 
 Qualify each actual source/client/version/filter combination with a disposable account where practical. Verify scheduling rather than trusting requested cadence; prove folder or MCP identity and scope, complete evidence transfer, per-source catch-up, pause/revoke, and receipt recovery. Source coverage is not enabled merely because a synthetic proposal succeeded. ASST-001 exposes shared connection setup; ASST-INTAKE-001 supplies per-source health and INGEST-002 supplies review; DASH-003 may aggregate only qualified source attention.
