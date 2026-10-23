@@ -31,3 +31,9 @@ Qualify a direct EPM-initiated work request first; scheduled source scanning is 
 | Persistence/schema | Closed manifests, bounded files and exact archived contents validated against connection identity. |
 | Backup/restore | Concurrent file write, changed digest, pending-file quarantine, revoked grants, portable/hidden checkpoint differences, source catch-up gaps. |
 | Query budget | Folder scan and receipt projection use bounded pages/counts; no per-file unbounded source hydration. |
+
+## Included operator interface delivery
+
+This UI is part of this functional backlog and its completion criteria. Reuse the delivered UI-001 shell, generated contracts, source-owned commands, Light/Dark themes, keyboard/focus behavior and recovery patterns. Validate real temporary-workspace reads/writes, stale revisions, lost responses, restart/restore and bounded queries; backend-only delivery is incomplete.
+
+Deliver managed exchange-folder permission handoff, writer/isolation qualification, version checks, synthetic file/result/receipt diagnostics and Retry test within ASST-001 Settings. Explain missing folder access or failed isolation and provide the manual alternative. Restore shows Setup required and quarantined pending exchange state; a heartbeat is not proof of filesystem isolation.

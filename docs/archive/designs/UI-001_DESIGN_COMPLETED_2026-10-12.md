@@ -243,7 +243,7 @@ UI-001 composes completed capabilities; it does not move domain policy into the 
 
 UI-001 delivers the React/Vite shell, generated contracts, bootstrap, navigation/appearance, core domain directories and workspaces, Tasks, coverage, search, drafts/recovery, and AI-GOV-001 built-in model/governance controls. It supplies Home layout/disclosure primitives and source-action adapters; DASH-001 owns the complete Home aggregation and its acceptance criteria. Until that contract is available, show an explicit unavailable/limited-preview state or hide unsupported queue sections.
 
-Legal/HOA workflows, Excel/Google Sheets intake, issue-proposal review, and connected-assistant setup are outside UI-001. Their retained decisions and implementation material are in [UI-002 preliminary design](../../active/UI-002_DESIGN_preliminary.md). Backend capability alone must not expose an undelivered UI workflow.
+Legal/HOA workflows, Excel/Google Sheets intake, issue-proposal review, and connected-assistant setup are outside UI-001. Their retained decisions and implementation material are in [UI-002 preliminary design](../../active/DATA-002_DESIGN.md). Backend capability alone must not expose an undelivered UI workflow.
 
 ### Authoritative feature designs
 

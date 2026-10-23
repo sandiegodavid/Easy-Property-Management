@@ -55,7 +55,7 @@ Consolidated October 11, 2026. Existing backlog status is preserved; source/mode
 | TEN-001_DESIGN.md | ✅ Done | [tenants.md](modules/tenants.md) | — | [TEN-001_DESIGN.md](archive/designs/TEN-001_DESIGN.md) |
 | UI-001_DESIGN.md | Core UI delivered; consolidated October 12, 2026 | [operator-experience.md](ui/operator-experience.md), [workflows.md](ui/workflows.md), [frontend-architecture.md](ui/frontend-architecture.md) | —; follow-ups in DASH-001/UI-002 | [Completed design](archive/designs/UI-001_DESIGN_COMPLETED_2026-10-12.md); earlier partial snapshot retained |
 | UI-001_IMPLEMENTATION_MATRIX.md | Backend/browser acceptance delivered through Slice 57 | [validation.md](ui/validation.md), module browser boundaries | —; follow-ups in DASH-001/UI-002 | [Completed matrix](archive/implementation-plans/UI-001_IMPLEMENTATION_MATRIX_COMPLETED_2026-10-12.md); earlier backend matrix retained |
-| UI-002_DESIGN_preliminary.md | Active proposal / see backlog | — | [UI-002_DESIGN_preliminary.md](active/UI-002_DESIGN_preliminary.md) | — |
+| DATA-002_DESIGN.md | Active proposal / see backlog | — | [DATA-002_DESIGN.md](active/DATA-002_DESIGN.md) | — |
 | UNIVERSAL_READER_RESEARCH.md | Research / exploratory proposal | — | [UNIVERSAL_READER_RESEARCH.md](research/UNIVERSAL_READER_RESEARCH.md) | — |
 | VEND-001_DESIGN.md | ✅ Done | [providers.md](modules/providers.md) | — | [Original design](archive/designs/VEND-001_DESIGN.md), [completed acceptance](archive/designs/VEND-001_DESIGN_COMPLETED_2026-10-12.md) |
 | VEND-002_DESIGN.md | ✅ Done | [providers.md](modules/providers.md) | — | [Original design](archive/designs/VEND-002_DESIGN.md), [completed acceptance](archive/designs/VEND-002_DESIGN_COMPLETED_2026-10-12.md) |

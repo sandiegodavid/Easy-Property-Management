@@ -4,11 +4,9 @@ This index lists active designs and remaining work. The [backlog](../FEATURE_BAC
 
 The [agent triage design](agent-triage-design.md) is the accepted direction for remaining assistant-related backlog. Its feature designs below own implementation details; the document does not describe shipped behavior.
 
-## Remaining interface work
+## Operator interface delivery
 
-- [UI-002 preliminary design](UI-002_DESIGN_preliminary.md): spreadsheet intake and source-backed issue review.
-- [UI-003 preliminary design](UI-003_DESIGN_preliminary.md): task-based connected-assistant setup and health, after one transport qualifies.
-- [UI-004 preliminary design](UI-004_DESIGN_preliminary.md): post-MVP legal-matter and HOA workflows.
+Each functional backlog includes its own UI and browser acceptance. DATA-002/003 own import; INGEST-002 owns issue review; ASST-001 owns shared assistant setup with MCP-001/ASST-FILE-001 transport diagnostics and ASST-INTAKE-001 source controls; AI-DRAFT-001 owns drafting; LEGAL-001 and HOA-001 own their post-MVP workflows. The former UI-002/003/004 plans are archived as superseded allocation history, not separate delivery gates.
 
 ## Proposed domain and integration changes
 

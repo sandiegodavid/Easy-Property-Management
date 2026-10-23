@@ -41,7 +41,7 @@ The implementation assessment below records the baseline reviewed on October 22,
 - `application/apps/server/app/modules/ai_governance/application/service.py` already reserves durable generation runs, fingerprints governed requests, calls the provider outside the write transaction and admits results through a separate write. Reuse those boundaries. Its `provider.generate()` call is synchronous: asynchronous HTTP admission, durable run lookup and cancellation cannot be assumed from it.
 - `application/apps/server/app/modules/ai_governance/api/router.py` exposes Settings, connections, limits, draft editing/approval/dismissal and command recovery. It does not expose this Maintenance context-preview/start/status/cancel workflow. Add typed feature contracts rather than exposing arbitrary candidate JSON as a public generation API.
 - Maintenance supplies issue, journal and appointment facts through its application boundary. Communications supplies only explicitly linked, operator-selected interactions. A generic history query or matching property address is not authorization to disclose a conversation.
-- Existing browser AI review provides a reusable draft detail and decision surface. AI-DRAFT-001 still owns the contextual trigger, preview, asynchronous request tracking and edited draft handoff. UI-002 and UI-003 are not prerequisites.
+- Existing browser AI review provides a reusable draft detail and decision surface. AI-DRAFT-001 still owns the contextual trigger, preview, asynchronous request tracking and edited draft handoff. Import and assistant setup are not prerequisites.
 
 ## Technical design
 
@@ -73,6 +73,59 @@ Keep generation state separate from review state. A completed run can yield an u
 
 Show Draft follow-up inside the expanded issue detail. Preview shows recipient role, purpose, selected facts and destination. Pending, canceled, interrupted, timed-out, unavailable and failed states each have an appropriate recovery action. Copying text does not record a send. A separate Record interaction action opens COM-001 with editable content and context, and requires its normal confirmation; approval alone does not create a Communication. Tasks and issue updates remain separately confirmed commands.
 
+## UI delivery requirements
+
+These changes are part of AI-DRAFT-001 completion, including frontend implementation and browser acceptance. Follow the [current frontend architecture](../ui/frontend-architecture.md), existing `src/workflows` organization, generated API client and shared recovery components. No new permanent navigation destination is needed.
+
+### Entry, setup and context preview
+
+- Add **Draft follow-up** inside the expanded Maintenance issue detail, never inside its non-editable summary bar. Collapsing the issue preserves input and stops view-owned polling without canceling server work.
+- Eligible open issues expose the action when its registered capability is ready. Otherwise show the specific reason and an appropriate Settings → Built-in AI link or manual composition option. Closed/archived issues allow historical draft reads but no new generation. Direct links use the same capability checks.
+- Extend existing Built-in AI Settings for the qualified action/model, disclosure and limits using registered server metadata. A connection test alone does not establish action readiness. Preserve return-to-issue context after setup; never start generation automatically on return.
+- The preparation form contains recipient role, purpose, optional instruction with a 2,000-character counter and explicit contextual-record selection. Show selected count out of ten. Optional source groups distinguish unavailable, empty and not selected; issue-only drafting remains usable.
+- **Preview context** displays the server-governed text, selected source links, missing/omitted facts, destination/model, external-disclosure explanation and preview expiry. Changing selection, instruction, recipient or destination invalidates the preview. **Generate draft** requires a current preview and server readiness; it is the explicit disclosure/dispatch action. Over-limit errors preserve selections and explain what to reduce.
+
+### Pending work and recovery
+
+| State | Operator presentation and action |
+| --- | --- |
+| Preparing/admitting | Keep the form visible, prevent duplicate submission and retain the original request key. |
+| Accepted/running | Show that generation is in progress, elapsed time and Cancel. Allow other navigation; provide a resume link to the issue/request. Do not show fabricated percentage progress. |
+| Lost response or status unavailable | Show “Checking whether the request started/completed.” Reconcile by the original key; provide explicit Check status if the read fails. Do not offer another consequential start while outcome is unknown. |
+| Cancel requested | Keep the request pending until its durable outcome is known. If completion won the race, show the completed draft with an accurate explanation. |
+| Canceled/timed out/interrupted | Show the terminal reason, preserved input, manual composition and a deliberate new-attempt action. Explain uncertain provider completion/cost when applicable. |
+| Paused, disclosure denied or model unavailable | Explain the blocking condition and offer the relevant setup/review path. No fallback or automatic regeneration. |
+| Completed | Open the editable draft in the issue context; preserve any unsaved text rather than replacing it on refresh. |
+
+Persist request identity through the existing supported recovery mechanism; never store disclosed context or provider credentials in browser storage. Scope status queries to workspace/runtime, issue and run. Stop polling terminal or hidden views; resume with a fresh status read on return. Workspace changes cancel obsolete browser reads and prevent results from appearing in another workspace.
+
+### Draft editor and acceptance
+
+The current generic AI review screen edits a JSON payload and uses generic approval messaging. Register an action-specific renderer for `maintenance.follow_up_draft`: labeled optional Subject and required Message fields, source references, warnings/placeholders, model provenance and last saved state. Operators must not edit schema JSON to use this feature. Reuse that renderer both in issue context and the existing `/ai/review/:draftId` route so saved links and the AI draft list reach the same workflow.
+
+Provide **Save edits**, **Approve draft**, **Dismiss**, and **Copy text** as distinct actions. Approval success says “Draft approved. Nothing has been sent.” Dismissal follows the owning command's reason requirements. Copy reports clipboard success only after the browser confirms it; on failure, preserve selectable text and explain how to copy manually. Copying has no approval or communication side effect, and an unapproved or stale draft remains visibly labeled when copied.
+
+Display stale context beside the editor with links to changed sources and **Refresh context**. Block approval until the source freshness requirements pass. Preserve text during refresh and regeneration, showing a replacement draft separately with its lineage. Later edits to an approved draft must use the owning revision/review lifecycle and cannot silently retain approval of changed text. An unresolved edit/approval outcome is reconciled before another mutation.
+
+**Record interaction** opens the existing COM-001 form with editable text and only supported, validated context fields. The operator supplies or confirms recipient, channel, occurrence time and actual interaction facts. Prefill is not a saved communication and must not claim automatic delivery. Return to the draft/issue after save and show the actual recorded result; lost responses use COM-001 original-result recovery. Never mark a draft sent merely because text was copied or approved.
+
+### Accessibility, layout and acceptance
+
+Use existing Light/Dark tokens, shared forms and disclosure patterns. Keep keyboard focus predictable when preview/result sections appear; announce pending, terminal and save states without moving focus on each poll. Label fields and selection controls, associate inline errors with inputs, retain an error summary, and provide a clear return focus target after dialogs. Narrow layouts stack evidence and editor without hiding the selected-context summary or recovery actions. Theme changes and collapse/reopen must preserve edits.
+
+Required focused browser acceptance covers:
+
+1. Open issue → preview → hosted-disclosure confirmation → generation → text editing → advisory approval → copy → separately confirmed COM-001 recording, with no implicit issue/Task/send mutation.
+2. Missing configuration, paused AI, unsupported action and closed/archived issue; manual composition remains available and historical drafts remain readable.
+3. Changed selected evidence, expired preview or changed destination; refresh preserves input and stale drafts cannot be approved.
+4. Double click, lost start response, cancel/completion race, timeout, restart and navigation away/back; the original request is reconciled without duplicate dispatch.
+5. Draft list/deep link and issue-context editor show the same saved revisions; concurrent edits preserve local input on conflict.
+6. Clipboard failure, COM-001 validation failure and unknown communication-save outcome; no false copied/sent/saved confirmation.
+7. Light/Dark appearance, narrow viewport, keyboard-only operation, focus/status announcements and collapse/reopen preservation.
+8. Real temporary-workspace persistence and encrypted restore; restored requests never dispatch automatically, and unavailable credentials produce truthful setup states.
+
+Backend-only completion or simulated browser fixtures do not satisfy this backlog. Generated contracts, focused browser tests and the repository-required frontend lint, formatting and type checks are part of delivery validation.
+
 ## Resolved design decisions
 
 Accepted October 22, 2026. The numbered decisions retain the original review numbering for traceability.
@@ -86,7 +139,7 @@ Accepted October 22, 2026. The numbered decisions retain the original review num
 7. **Disclosure preview and execution could diverge.** Decision: bind admission to the governed snapshot, destination/configuration revision and disclosure authorization; refresh the preview after any change. Never silently switch model or destination.
 8. **Limits, timeout and cost policy were unspecified.** Decision: apply the accepted bounds and 60-second deadline, apply existing per-action daily/token caps, and show unknown cost honestly. Reject oversized context rather than silently excluding selected evidence.
 9. **Restart and uncertain provider completion need an explicit rule.** Decision: interrupted requests require a new operator-triggered attempt; explain that the prior provider call may have incurred cost. Local idempotency prevents repeat dispatch of the same admitted request, not a guarantee of exactly-once external billing.
-10. **First-version UI ownership is implicit.** Decision: AI-DRAFT-001 includes its Maintenance UI and generated contracts using delivered UI-001 patterns. UI-003 adds the connected-agent execution path later; ASST-001, INGEST-002 and mailbox access are not blockers.
+10. **First-version UI ownership is implicit.** Decision: AI-DRAFT-001 includes its Maintenance UI and generated contracts using delivered UI-001 patterns. ASST-001 adds the connected-agent execution path later; ASST-001, INGEST-002 and mailbox access are not blockers.
 11. **“Malformed or invented response” cannot be mechanically guaranteed.** Decision: reject malformed schemas and invalid source references, use qualification examples to assess factuality, and retain mandatory operator review. Do not claim hallucination-free output.
 12. **Portable retention and edit recovery are underspecified.** Decision: retain governed input, output, edits and decision lineage with existing AI Governance history and encrypted backup policy; keep canceled/failed metadata without raw provider diagnostics. Validate action schemas during restore and use existing OPS recovery only for unfinished operator edits, never as an execution queue.
 
@@ -96,7 +149,7 @@ Accepted October 22, 2026. The numbered decisions retain the original review num
 2. Build Maintenance-owned bounded context preview and complete revision manifest using source ports; validate privacy and query budget.
 3. Register the action/redaction profile and one qualified adapter, including credentials, disclosure, token limits and availability checks.
 4. Extend the shared governed run lifecycle with admission, lookup, cancellation, deadline and restart handling; implement idempotent API contracts and retained-schema validation.
-5. Deliver contextual preview, pending/recovery, review/edit/copy and separate COM-001 handoff; regenerate API clients and register only qualified capabilities.
+5. Deliver all UI delivery requirements below the technical design: issue entry and Settings readiness, context selection/preview, asynchronous state/recovery, the action-specific editor shared with AI review, copy and separate COM-001 handoff, accessibility and responsive/theme behavior. Regenerate API clients and register only qualified capabilities.
 6. Verify the end-to-end real-provider path with synthetic property data, cancellation races, changed evidence, lost responses, rollback, restart and encrypted restore. Keep production availability disabled until this gate passes.
 
 The validation matrix above remains mandatory. Add explicit tests for preview/destination drift, changed child-source revisions, concurrent starts at capacity, cancel-versus-success ordering, duplicate request lookup after restart, no automatic restore dispatch, keyboard/focus recovery and the twelve-SELECT preview ceiling. Quality fixtures should include hostile instructions in correspondence, missing appointment confirmation and uncertain responsibility; evaluate factuality and useful drafting without allowing any domain write or outbound send.

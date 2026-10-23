@@ -24,7 +24,7 @@ Connection health reports authenticated client activity and test status. Schedul
 
 ## Delivery and validation
 
-Ship transport-specific instructions in the versioned assistant contract pack. UI-003 guides client choice, grant, setup preflight, client-side permission, synthetic request/result/receipt round trip, and failure recovery. Qualify the selected client in a disposable workspace with synthetic data. Unsupported clients remain unavailable with a reason; do not claim universal MCP compatibility or a five-minute setup guarantee.
+Ship transport-specific instructions in the versioned assistant contract pack. MCP-001, within ASST-001 Settings, guides client choice, grant, setup preflight, client-side permission, synthetic request/result/receipt round trip, and failure recovery. Qualify the selected client in a disposable workspace with synthetic data. Unsupported clients remain unavailable with a reason; do not claim universal MCP compatibility or a five-minute setup guarantee.
 
 | Area | Cases |
 | --- | --- |
@@ -35,3 +35,9 @@ Ship transport-specific instructions in the versioned assistant contract pack. U
 | Persistence/schema | Closed tool/action versions and original receipts survive restart and retained validation. |
 | Backup/restore | Preserve historical requests/results; exclude usable sessions and secrets; retest after reauthorization. |
 | Query budget | Bounded scoped reads, cursor/continuation behavior and no per-row domain hydration. |
+
+## Included operator interface delivery
+
+This UI is part of this functional backlog and its completion criteria. Reuse the delivered UI-001 shell, generated contracts, source-owned commands, Light/Dark themes, keyboard/focus behavior and recovery patterns. Validate real temporary-workspace reads/writes, stale revisions, lost responses, restart/restore and bounded queries; backend-only delivery is incomplete.
+
+Deliver client-specific MCP setup/permission instructions, version/compatibility preflight, synthetic request/result/receipt diagnostics and Retry test within ASST-001 Settings. Report stage-specific failures and enable only qualified capabilities. Reuse the shared grants, activity, pause/revoke and recovery UI; no separate destination.

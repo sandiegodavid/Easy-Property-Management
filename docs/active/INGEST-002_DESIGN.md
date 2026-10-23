@@ -34,7 +34,7 @@ INGEST-002 provides:
 - atomic coordination across Maintenance, AI Governance, Intake, and Audit;
 - bounded issue lookup for manual target selection when optional matching is unavailable;
 - retained-data, exact-schema, backup/restore, and audit validation; and
-- the feature-specific contract consumed later by UI-002, ASST-INTAKE-001, DASH-003, and separately scoped post-MVP source extensions.
+- the feature-specific contract consumed later by INGEST-002, ASST-INTAKE-001, DASH-003, and separately scoped post-MVP source extensions.
 
 INGEST-002 does not provide:
 
@@ -59,7 +59,7 @@ An operator may still record an issue directly through Maintenance when no retai
 | AUDIT-001 | Records correlated review, outcome, Intake, AI, and Maintenance events according to each owner's policy. Audit is not the source-to-result link or idempotency store. |
 | FILE-001 | Owns source file metadata, hashes, availability, and bytes. INGEST-002 reads source attachment projections; it does not copy file metadata or create issue file links automatically. |
 | ASST-001 / ASST-INTAKE-001 | Later authenticate the connection and qualify source-backed external proposal admission through the same registered payload and review contract. The assistant may propose property, space, reporter, or existing-issue candidates; INGEST-002 retains manual selection and review authority. MCP and file exchange are alternative transports; neither approves its own proposal. |
-| UI-002 | Delivers the comparison and decision workflow after the backend contracts are complete. |
+| INGEST-002 UI | Includes the comparison and decision workflow in this feature’s delivery. |
 | DASH-003 | Later composes unprocessed sources, live reviews, stale proposals, and ingestion failures through bounded read contracts. |
 
 This follows the modular-monolith rules in `ARCHITECTURE.md`: source modules expose neutral application protocols, the consuming domain owns policy, coordinated writes use one caller-owned immediate transaction, and no module imports another module's SQLAlchemy models or concrete repository.
@@ -271,9 +271,9 @@ Typed conflicts include:
 - `issue_intake_idempotency_conflict`; and
 - the existing Maintenance validation, reporter-eligibility, and context errors.
 
-## UI-002 handoff
+## Included review interface
 
-UI-002 renders INGEST-002 as a substantial review page, not a compact inline commit form. The page should:
+INGEST-002 renders INGEST-002 as a substantial review page, not a compact inline commit form. The page should:
 
 - show source evidence beside the editable proposal, with attachments and supported message content clearly identified;
 - show provider/model or assistant-connection provenance accurately;
@@ -335,7 +335,7 @@ Implementation starts only after the INGEST-001 readiness gate above is complete
 6. Refactor Maintenance policy behind an internal transaction-aware issue-review approval handler; keep the existing public Maintenance API behavior unchanged.
 7. Add domain-specific begin/edit/approve/dismiss endpoints, typed errors, idempotent response replay, and safe target lookup.
 8. Test create, link, selected update, no-issue dismissal, rework, stale source, integrity failure, stale target, two-tab edits, sibling drafts, lost responses, rollback at each write boundary, audit correlation, exact-schema tampering, and backup/restore.
-9. Run the full backend suite. This feature’s React workflow remains deferred to UI-002, reusing the UI-001 shell.
+9. Run the full backend suite. Deliver and validate this feature’s React workflow using the UI-001 shell.
 
 ## Validation test matrix
 
@@ -368,7 +368,7 @@ INGEST-002 backend/API scope is complete when:
 11. Review queues and issue provenance use bounded, set-based reads with fixed query budgets.
 12. Exact-schema/data validation and encrypted backup/restore preserve complete review and source-to-issue history with stable IDs.
 
-The overall operator workflow remains pending until UI-002 delivers the comparison and decision page. ASST-INTAKE-001 may then submit compatible proposals without changing approval semantics.
+The overall operator workflow remains pending until INGEST-002 delivers the comparison and decision page. ASST-INTAKE-001 may then submit compatible proposals without changing approval semantics.
 
 ## Resolved contradictions and decisions
 
@@ -382,7 +382,7 @@ One issue proposal cannot currently be registered honestly as create, update, an
 
 AI-GOV-001 intentionally registers no production issue-intake action. ISSUE-AI-001/002 are superseded, and ASST-INTAKE-001 follows INGEST-002. Therefore INGEST-002 can register and review the schema but cannot receive a production proposal until a later producer is enabled. The independent AI-DRAFT-001 follow-up action on an existing issue does not produce an INGEST-002 issue-intake proposal.
 
-**Decision:** keep direct MAINT-001 operator entry as the no-AI path; a manually authored source-backed draft is not part of INGEST-002 and must not be represented as an AI run. Implement INGEST-002 with deterministic contract tests and enable its queue only when a registered producer exists. UI-002 must show a truthful unavailable or empty state rather than implying extraction is active; UI-001 does not expose this review workflow. If a neutral source-backed manual-draft workflow is needed later, it requires its own domain owner and design.
+**Decision:** keep direct MAINT-001 operator entry as the no-AI path; a manually authored source-backed draft is not part of INGEST-002 and must not be represented as an AI run. Implement INGEST-002 with deterministic contract tests and enable its queue only when a registered producer exists. INGEST-002 must show a truthful unavailable or empty state rather than implying extraction is active; UI-001 does not expose this review workflow. If a neutral source-backed manual-draft workflow is needed later, it requires its own domain owner and design.
 
 ### 3. Link and update semantics are undefined
 
@@ -433,3 +433,40 @@ Reporter text and role from a source do not prove a Party, local-operator subjec
 Comparing evidence does not say whether source attachments become issue evidence. Automatically creating a second file link can imply operator endorsement and complicate later archival.
 
 **Decision:** retain attachments under the Intake source and expose them through source-to-issue provenance. Create a Maintenance file link only through a separate explicit evidence action.
+
+## Included operator interface delivery
+
+This UI is part of this functional backlog and its completion criteria. Reuse the delivered UI-001 shell, generated contracts, source-owned commands, Light/Dark themes, keyboard/focus behavior and recovery patterns. Validate real temporary-workspace reads/writes, stale revisions, lost responses, restart/restore and bounded queries; backend-only delivery is incomplete.
+
+- Implement and verify the INGEST-002 decision modes: create an issue, link
+  without mutation, update only explicitly selected mutable fields, dismiss as
+  no issue, and discard for rework. Follow the dedicated design's reporter,
+  target eligibility, reason and revision requirements.
+- Complete the feature-specific AI-GOV-001 approval modes and owning handlers,
+  Intake attention transitions and durable source-to-issue outcome. Validate
+  exact source/evidence and draft freshness, plus target issue revision where
+  applicable, on the caller-owned transaction. Maintenance effects, Intake
+  attention, AI review, outcome and correlated audits commit or roll back together.
+- Before registering issue-review OPS forms, deliver typed request/result/conflict
+  contracts, canonical fingerprints and immutable original-result ID/key recovery.
+  Reconciliation must return the original correlated outcome without re-running
+  approval, disclosing evidence through a metadata-only reader, or reconstructing
+  a receipt from current state. Preserve unresolved attempts until reconciled.
+- Reuse the delivered generic AI review and local-operator Intake contracts from
+  UI-001 Slices 29, 32 and 38. Those registrations do not establish readiness for
+  issue-specific approval or consumer-owned dismissal. Approve the exact new
+  OPS form batch before registration; no new mutation ledger or browser-owned
+  domain policy is introduced.
+- Enable retained-evidence comparison, operator edits, explicit decision controls
+  and correlated outcome presentation only after backend readiness and INGEST-002
+  route/action registration pass. Broader ingestion/voice/assistant attention
+  aggregation remains DASH-003.
+
+Validate all five decisions against real temporary workspaces, invalid/stale
+combinations, same-key replay and changed-payload conflicts, lost-response
+reconciliation, cross-module rollback, retained-schema integrity, encrypted
+backup/restore and bounded evidence/outcome reads. Evidence disclosure retains
+Intake's fail-closed read audit. Include keyboard/focus and UI-001 regression
+checks before enabling the workflow; backend receipts alone do not deliver its UI.
+
+Own `/ai/review/:draftId` issue-proposal presentation, retained evidence comparison, proposed versus edited fields, all five explicit decisions, original-result reconciliation and correlated Intake/Maintenance outcomes. Preserve edits on stale evidence/target conflicts and extend OPS recovery registration here. No assistant is required for synthetic end-to-end testing; real producer availability is separately qualified by ASST-INTAKE-001. No raw evidence enters metadata-only recovery reads.

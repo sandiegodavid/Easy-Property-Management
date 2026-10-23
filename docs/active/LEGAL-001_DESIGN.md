@@ -41,3 +41,21 @@ The UI distinguishes an operator-entered deadline from a confirmed deadline and 
 ## Verification and definition of done
 
 Test status/milestone independence, close/reopen audit history, property/lease consistency, immutable historical links, missing/deleted source handling, deadline provenance, link validation, no indirect lifecycle mutations, and bounded contextual reads. The feature is complete when a manual matter can be created, tracked, evidenced, followed up, closed, exported for review, and audited without any legal conclusion being inferred.
+
+## Included operator interface delivery
+
+This UI is part of this functional backlog and its completion criteria. Reuse the delivered UI-001 shell, generated contracts, source-owned commands, Light/Dark themes, keyboard/focus behavior and recovery patterns. Validate real temporary-workspace reads/writes, stale revisions, lost responses, restart/restore and bounded queries; backend-only delivery is incomplete.
+
+#### D37: Include manual eviction/legal-matter tracking after MVP
+
+This follow-up slice includes manual case tracking, evidence, attorney links, and reminders. Automated legal-rule interpretation is deferred. Record preparation and process facts without inferring legal eligibility, compliance, deadlines, or successful eviction. Use linked source records and separately confirmed milestones; actual move-out, rent, maintenance, and expense records retain their own lifecycles. D39–D40 define placement and lifecycle; the implementation boundaries below identify supporting work.
+
+Use a typed legal-matter record linked to the property, lease, relevant parties, and any attorney or law firm. Track preparation, source facts and evidence, notices and service evidence, court reference, milestones, attorney involvement, communications, tasks, costs, and outcome. Preserve original records and versioned evidence. Any recorded deadline includes its date, source, and confirmation state.
+
+Do not infer readiness to file, legal compliance, possession, move-out, collectible tenant charges, or automatic notice delivery. Legal expenses remain Finance-owned, and attorney engagement is distinct from a maintenance assignment. A reviewed export packet distinguishes selected evidence from internal or legal notes without treating an app privacy label as a determination of legal privilege.
+
+#### D40: Separate legal-matter status from milestones
+
+Use Preparing, Active, On hold, and Closed as broad manually controlled case statuses. Notice delivery, attorney engagement, filings, hearings, agreements, and outcomes are dated milestones with evidence, not a mandatory linear wizard. Each open matter displays its next action and waiting context. Closing requires an outcome and reason and never automatically ends the lease, changes occupancy, or changes financial records.
+
+Deliver contextual `/legal/:matterId` detail from Leasing, property, lease and owner contexts, with attorney engagement, evidence, milestones, Tasks, Communications, costs and explicit closure confirmation. Providers remain a shared directory; attorney engagement is not a Maintenance assignment. Register legal next-action/deadline targets in Home, bounded search and information review through source contracts. No permanent Legal destination. Test out-of-order milestones, on-hold/closure, preserved history and unchanged lease/occupancy/money unless separately acted on. UI-001 and DASH-001 are delivered foundations; this feature does not depend on HOA-001.

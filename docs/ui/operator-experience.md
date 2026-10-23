@@ -4,7 +4,7 @@
 
 The interface helps the operator recognize records, act deliberately and distinguish recorded information from missing or unavailable information. It uses warm neutral surfaces, restrained teal accents, readable typography and semantic Light/Dark tokens. Tables support comparison; contextual directories support recognition. Status always includes text, with color/icon as supporting cues. Theme changes preserve forms, focus, disclosures and query state.
 
-Core browser workflows are delivered. Home provides live Needs action, Waiting, Upcoming, appointments, information review, recorded-money totals and active vacant/unknown Space drill-downs. [DASH-001](../archive/designs/DASH-001_DESIGN_COMPLETED_2026-10-14.md) records completed aggregation; [UI-002](../active/UI-002_DESIGN_preliminary.md) owns legal/HOA, spreadsheet imports, issue-proposal review and connected assistants. Configurable AI controls do not imply registered production models/actions.
+Core browser workflows are delivered. Home provides live Needs action, Waiting, Upcoming, appointments, information review, recorded-money totals and active vacant/unknown Space drill-downs. [DASH-001](../archive/designs/DASH-001_DESIGN_COMPLETED_2026-10-14.md) records completed aggregation; [functional intake/review backlogs](../active/DATA-002_DESIGN.md) owns legal/HOA, spreadsheet imports, issue-proposal review and connected assistants. Configurable AI controls do not imply registered production models/actions.
 
 ## Navigation and scope
 

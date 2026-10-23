@@ -44,7 +44,7 @@ For a qualified scheduled connection, a suggested warning baseline is no valid c
 
 ## Delivery and validation
 
-Ship a versioned assistant-neutral contract pack and capability manifest, with transport-specific instructions. A connection is enabled for only the actions demonstrated in a synthetic round trip. UI-003 owns task-based setup, disclosure, test diagnostics, status, pause/revoke and recovery; it must not present source coverage before ASST-INTAKE-001 qualifies it. ASST-001 exposes typed operator APIs and internal adapter ports, not a public unauthenticated proposal route.
+Ship a versioned assistant-neutral contract pack and capability manifest, with transport-specific instructions. A connection is enabled for only the actions demonstrated in a synthetic round trip. ASST-001 owns task-based setup, disclosure, test diagnostics, status, pause/revoke and recovery; it must not present source coverage before ASST-INTAKE-001 qualifies it. ASST-001 exposes typed operator APIs and internal adapter ports, not a public unauthenticated proposal route.
 
 | Area | Cases |
 | --- | --- |
@@ -55,3 +55,30 @@ Ship a versioned assistant-neutral contract pack and capability manifest, with t
 | Persistence/schema | Closed action, grant, result and receipt versions; retained identity and scope consistency; bounded history and audit validation. |
 | Backup/restore | Retain history and pending status; invalidate usable grants/sessions; require fresh authorization and reconcile uncertain work. |
 | Query budget | Bounded scoped reads, request lists, receipts and health without per-row source or evidence reads. |
+
+## Included operator interface delivery
+
+This UI is part of this functional backlog and its completion criteria. Reuse the delivered UI-001 shell, generated contracts, source-owned commands, Light/Dark themes, keyboard/focus behavior and recovery patterns. Validate real temporary-workspace reads/writes, stale revisions, lost responses, restart/restore and bounded queries; backend-only delivery is incomplete.
+
+### Shared setup flow
+
+The entry question is **What would you like help with?** Offer bounded jobs such as drafting on an existing issue or watching a selected source. Show only the technical prerequisites of the chosen job: drafting does not request mailbox access; source watching does. Operators can use manual EPM workflows or choose any qualified capability without first enabling an unrelated tier. No channel access is default-on. An unqualified product/client/capability is unavailable with a reason and manual alternative, not silently substituted.
+
+Setup stays in Settings → AI assistance → Connected assistants, beside the independent Built-in AI card. It is task-specific:
+
+1. Choose actual assistant/client, transport and job; preview exact property/unit, data-class, source-account and action scope, disclosure and expiry.
+2. Preflight EPM's workspace, managed exchange when relevant, contract/action version, and proposed grant before switching apps. Show the single concrete assistant-side folder/account permission step, then return to EPM.
+3. Run a synthetic request/proposal and receipt round trip with no official business record. Show which stage failed—assistant unavailable, permission/isolation, grant, version, submission or receipt—and a specific **Retry test** action. A heartbeat or test file does not prove source scanning or filesystem isolation.
+4. Enable only the demonstrated capability. Source discovery separately verifies account/filter, schedule, catch-up and per-source reports under ASST-INTAKE-001. A draft test cannot label a mailbox “watched.”
+
+The normal issue page hosts connected draft requests, pending/error/timeout states and review. INGEST-002's normal queue hosts source-backed suggestions; there is no second agent approval queue. Paused/revoked connections leave already admitted drafts visible with provenance and current-source warnings. A model-generated draft labels its verified model/runtime and device/cloud destination; an assistant-proposed draft labels verified connection/transport separately from assistant-claimed model details. The operator sends externally and records any Communication separately.
+
+### Shared health and recovery
+
+Settings shows a plain-language **What this assistant can see now** receipt: granted entities, sources, roles, data classes, expiry, recent EPM-mediated exports/submissions/decisions, and pause/revoke. This does not claim to list everything the assistant can see through its independent channel accounts. Connection detail separates last authenticated contact, pack compatibility, pending submissions, oldest unacknowledged item and admission-receipt delay. Scheduled source detail additionally separates last fully successful scan, partial/failed polls, requested versus acknowledged cadence, unknown intervals and provider-retention catch-up limits. Interactive clients have no fabricated missed-poll alarm.
+
+A degraded/offline banner names the affected capability, last verified scan, and manual or reconnect path without promising unseen messages will later be found. **Reconnect source** opens product-specific permission guidance; **Update adapter** identifies the required version; **Retry test** checks the repair. EPM may republish a missing receipt or refresh a bounded export from durable state. It does not widen scope, repeat uncertain outbound work, or treat a fresh heartbeat as a completed scan. Restore marks connections Setup required; pending files cannot be admitted under a new grant automatically.
+
+Invitations to add assistance appear at moments of relevant work, can be dismissed with **Don't suggest this again** for that invitation type, and never block manual tasks. Early suggestions may need corrections; any accuracy/time-saved report card uses measured observations and never promises automatic learning. Technical JSON/path details belong only in advanced setup or diagnostics. Mobile review, keyboard/focus behavior, light/dark themes and UI-001's full-summary-bar disclosure remain intact.
+
+ASST-001 owns the shared Settings shell, grants/disclosure, capability inventory, scoped activity, pause/revoke, setup-required restore state and contextual connected-work-request controls. Source-specific selection/cadence/coverage and reconnect flows described above are delivered by ASST-INTAKE-001. MCP-001 and ASST-FILE-001 each supply their own permission handoff, diagnostics and round-trip qualification inside this shell; neither transport is a prerequisite for implementing the shell. A working connected capability requires at least one qualified transport. AI-DRAFT-001 supplies the shared draft editor and advisory review; qualifying the connected follow-up action requires it. Test manual-only operation, invalid grants, lost receipts, pause/revoke and restored setup state.

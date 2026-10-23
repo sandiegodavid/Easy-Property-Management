@@ -1,10 +1,12 @@
+> Historical allocation, superseded October 22, 2026. Functional backlog designs now own delivery and acceptance; this document is retained only for decision provenance.
+
 # UI-004 Preliminary Legal and HOA Operator Experience Design
 
 ## Status and delivery scope
 
-This post-MVP design preserves the LEGAL-001 and HOA-001 interaction decisions previously allocated to UI-002. It is a preliminary interface handoff, not an implementation-complete specification. The [backlog](../FEATURE_BACKLOG.md) owns phase and dependencies; [LEGAL-001](LEGAL-001_DESIGN.md) and [HOA-001](HOA-001_DESIGN.md) own domain policy. Original decision IDs and validation scenario numbers remain stable.
+This post-MVP design preserves the LEGAL-001 and HOA-001 interaction decisions previously allocated to UI-002. It is a preliminary interface handoff, not an implementation-complete specification. The [backlog](../../FEATURE_BACKLOG.md) owns phase and dependencies; [LEGAL-001](../../active/LEGAL-001_DESIGN.md) and [HOA-001](../../active/HOA-001_DESIGN.md) own domain policy. Original decision IDs and validation scenario numbers remain stable.
 
-UI-004 follows UI-001 and DASH-001, then delivers contextual legal matters and HOA violation/shared-repair workflows when both domain contracts are ready. It reuses the current shell, full-summary-bar disclosure, accessibility, recovery, Home composition, search and information-review patterns. Spreadsheet intake and issue-proposal review remain [UI-002](UI-002_DESIGN_preliminary.md); connected-assistant setup and health remain [UI-003](UI-003_DESIGN_preliminary.md).
+UI-004 follows UI-001 and DASH-001, then delivers contextual legal matters and HOA violation/shared-repair workflows when both domain contracts are ready. It reuses the current shell, full-summary-bar disclosure, accessibility, recovery, Home composition, search and information-review patterns. Spreadsheet intake and issue-proposal review remain [UI-002](../../active/DATA-002_DESIGN.md); connected-assistant setup and health remain [UI-003](../../active/ASST-001_DESIGN.md).
 
 ## Domain terms
 
@@ -74,15 +76,15 @@ Inside the expanded shared-repair case, show:
 
 Preparing the follow-up uses the selected correspondence and latest commitment to draft a message. Review shows the proposed content, supporting records, and intended changes together. Draft approval and message sending are distinct actions. Keep the next follow-up and unresolved repair visible until separately updated or physically verified; an assistant's work status never establishes repair completion.
 
-The actions sit inside expanded content per [UI-001 D35](../ui/operator-experience.md). AI-assisted preparation follows [UI-003's D46 connection boundary](UI-003_DESIGN_preliminary.md) when a connected assistant is used and the owning AI-DRAFT-001 action in either execution path; drafting availability is not guaranteed by UI-004 alone.
+The actions sit inside expanded content per [UI-001 D35](../../ui/operator-experience.md). AI-assisted preparation follows [UI-003's D46 connection boundary](../../active/ASST-001_DESIGN.md) when a connected assistant is used and the owning AI-DRAFT-001 action in either execution path; drafting availability is not guaranteed by UI-004 alone.
 
 ## Feature ownership and backend readiness
 
 | Backlog item | Dedicated design | Owns |
 | --- | --- | --- |
-| LEGAL-001 | [Manual Legal Matters](LEGAL-001_DESIGN.md) | Manual case facts, links, milestones, deadlines, closure, and safety boundaries. |
-| HOA-001 | [HOA Notice and Shared-Repair Coordination](HOA-001_DESIGN.md) | Violation notices and HOA coordination for a Maintenance-owned shared repair. |
-| HOA-002 | [Deferred Association Management](HOA-002_DESIGN.md) | Later association documents/profiles and approval workflows; not a UI-004 prerequisite. |
+| LEGAL-001 | [Manual Legal Matters](../../active/LEGAL-001_DESIGN.md) | Manual case facts, links, milestones, deadlines, closure, and safety boundaries. |
+| HOA-001 | [HOA Notice and Shared-Repair Coordination](../../active/HOA-001_DESIGN.md) | Violation notices and HOA coordination for a Maintenance-owned shared repair. |
+| HOA-002 | [Deferred Association Management](../../active/HOA-002_DESIGN.md) | Later association documents/profiles and approval workflows; not a UI-004 prerequisite. |
 
 #### HOA-001 — HOA coordination
 
@@ -173,11 +175,11 @@ Home says No actions due today, retaining counts for waiting, upcoming, and info
 
 ## Visual reference and sources
 
-The [operator experience prototype](../../demo/operator-experience.html) contains simulated legal/HOA and Home states. It does not prove backend or interface readiness.
+The [operator experience prototype](../../../demo/operator-experience.html) contains simulated legal/HOA and Home states. It does not prove backend or interface readiness.
 
-- [Feature backlog](../FEATURE_BACKLOG.md)
-- [Core operator experience](../ui/operator-experience.md)
-- [Architecture](../ARCHITECTURE.md)
+- [Feature backlog](../../FEATURE_BACKLOG.md)
+- [Core operator experience](../../ui/operator-experience.md)
+- [Architecture](../../ARCHITECTURE.md)
 - [California Courts eviction overview](https://selfhelp.courts.ca.gov/eviction), used to distinguish notices from court cases when structuring manual legal matters.
 - [California DRE common-interest-development guidance](https://www.dre.ca.gov/Newsroom/DRE_Updates/2026_08_21_Common_Interest_Dev.html), used to distinguish governing instruments, assessments, restrictions, and unresolved violation notices when bounding HOA scope.
 

@@ -27,3 +27,13 @@ The onboarding source-acquisition session shows Not authorized, Authorizing, Rea
 ## Verification and definition of done
 
 Test authorization denial, expired/revoked credentials, narrow source selection, read-only scope, snapshot stability after remote edits, no source writes, restore behavior, and DATA-002 duplicate/retry guarantees. DATA-003 is complete when a selected Sheet becomes a verified, immutable DATA-002 source snapshot with no ongoing sync or source mutation.
+
+## Included operator interface delivery
+
+This UI is part of this functional backlog and its completion criteria. Reuse the delivered UI-001 shell, generated contracts, source-owned commands, Light/Dark themes, keyboard/focus behavior and recovery patterns. Validate real temporary-workspace reads/writes, stale revisions, lost responses, restart/restore and bounded queries; backend-only delivery is incomplete.
+
+#### D44: Support Excel uploads and direct read-only Google Sheets import
+
+Support local Excel uploads and, during new-workspace onboarding, direct Google Sheets selection through temporary read-only authorization. Let the operator select the spreadsheet and worksheet and review a captured source snapshot before import. Import exactly the reviewed snapshot; rereading changed source values requires a new preview and fresh authorization if the prior session ended. Disconnect after source acquisition completes or is canceled; mapping, review and commit use the captured snapshot. Do not require a sheet to be published publicly, modify the source sheet, or introduce ongoing synchronization in MVP. Source authorization does not create an application user account; credentials follow existing local secure-storage boundaries.
+
+Own the onboarding Sheets authorization, spreadsheet/worksheet picker, acquisition progress, cancel/revoke and reauthorization UI. Hand the frozen snapshot to DATA-002’s shared review. Show authorization state independently of snapshot/import state. Test changing the remote sheet after capture: import exactly the reviewed snapshot or require a new preview; never silently refresh it.

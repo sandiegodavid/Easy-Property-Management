@@ -1,12 +1,14 @@
+> Historical allocation, superseded October 22, 2026. Functional backlog designs now own delivery and acceptance; this document is retained only for decision provenance.
+
 # UI-002 Preliminary Operator Experience Design
 
 ## Status and delivery scope
 
-This preliminary design preserves the confirmed spreadsheet-intake and source-backed issue-review decisions moved from UI-001. It is the working MVP design for UI-002, not an implementation-complete specification. Decision IDs and original validation scenario numbers remain stable. Dedicated domain designs own backend policy; [ARCHITECTURE.md](../ARCHITECTURE.md) governs the stack and trust boundaries.
+This preliminary design preserves the confirmed spreadsheet-intake and source-backed issue-review decisions moved from UI-001. It is the working MVP design for UI-002, not an implementation-complete specification. Decision IDs and original validation scenario numbers remain stable. Dedicated domain designs own backend policy; [ARCHITECTURE.md](../../ARCHITECTURE.md) governs the stack and trust boundaries.
 
-UI-002 follows UI-001. Its prerequisites are DATA-002, DATA-003, and INGEST-002. Deliver Excel/Google Sheets onboarding intake and retained-evidence issue-proposal review. LEGAL-001 and HOA-001, including their Home and contextual workflows, move after MVP to [UI-004](UI-004_DESIGN_preliminary.md). Connected-assistant setup and health belong to UI-003; an EPM-invoked Draft follow-up can be delivered independently by AI-DRAFT-001. DASH-003 retains broader intake/assistant attention aggregation.
+UI-002 follows UI-001. Its prerequisites are DATA-002, DATA-003, and INGEST-002. Deliver Excel/Google Sheets onboarding intake and retained-evidence issue-proposal review. LEGAL-001 and HOA-001, including their Home and contextual workflows, move after MVP to [UI-004](../../active/HOA-001_DESIGN.md). Connected-assistant setup and health belong to UI-003; an EPM-invoked Draft follow-up can be delivered independently by AI-DRAFT-001. DASH-003 retains broader intake/assistant attention aggregation.
 
-Reuse [UI-001's shell, navigation, components, accessibility, client architecture, and recovery contracts](../ui/frontend-architecture.md). Do not duplicate that specification or implement domain policy in the browser. Backend readiness and UI delivery registration must both permit a route. Unsupported deep links explain the missing capability and offer a safe return. Do not claim import capability before its UI is delivered or source-review availability before a proposal producer and the INGEST-002 workflow qualify.
+Reuse [UI-001's shell, navigation, components, accessibility, client architecture, and recovery contracts](../../ui/frontend-architecture.md). Do not duplicate that specification or implement domain policy in the browser. Backend readiness and UI delivery registration must both permit a route. Unsupported deep links explain the missing capability and offer a safe return. Do not claim import capability before its UI is delivered or source-review availability before a proposal producer and the INGEST-002 workflow qualify.
 
 ## Confirmed product and interaction decisions
 
@@ -30,7 +32,7 @@ MVP imports create new valid records or explicitly link/skip existing ones after
 
 ### Assistant boundary with UI-003
 
-Connected-assistant setup, grants, preflight, health and recovery belong to [UI-003](UI-003_DESIGN_preliminary.md). UI-002 provides the same source-backed INGEST-002 review for any qualified producer; no proposal bypasses its five operator decisions. No connected assistant is required to implement and test the review contract with synthetic proposals.
+Connected-assistant setup, grants, preflight, health and recovery belong to [UI-003](../../active/ASST-001_DESIGN.md). UI-002 provides the same source-backed INGEST-002 review for any qualified producer; no proposal bypasses its five operator decisions. No connected assistant is required to implement and test the review contract with synthetic proposals.
 
 ## Feature ownership and backend readiness
 
@@ -38,9 +40,9 @@ Dedicated contracts take precedence over product descriptions where they provide
 
 | Backlog item | Dedicated design | Owns |
 | --- | --- | --- |
-| DATA-002 | [Spreadsheet Intake](DATA-002_DESIGN.md) | Excel snapshot intake, create/link/skip decisions, commits, and outcomes. |
-| DATA-003 | [Read-Only Google Sheets Intake](DATA-003_DESIGN.md) | Google Sheets authorization and immutable source snapshots. |
-| INGEST-002 | [Issue Proposal Review](INGEST-002_DESIGN.md) | Retained-evidence comparison, operator decisions, and atomic issue-review outcomes. |
+| DATA-002 | [Spreadsheet Intake](../../active/DATA-002_DESIGN.md) | Excel snapshot intake, create/link/skip decisions, commits, and outcomes. |
+| DATA-003 | [Read-Only Google Sheets Intake](../../active/DATA-003_DESIGN.md) | Google Sheets authorization and immutable source snapshots. |
+| INGEST-002 | [Issue Proposal Review](../../active/INGEST-002_DESIGN.md) | Retained-evidence comparison, operator decisions, and atomic issue-review outcomes. |
 
 DATA-003 owns temporary read-only Sheets authorization during onboarding intake. DATA-001 retains broader later import/update scope. Moving a UI workflow does not mark a backend feature implemented.
 
@@ -128,9 +130,9 @@ Before each workflow is enabled, verify initial/empty/unavailable/stale states, 
 
 ## Visual reference and sources
 
-The [operator experience prototype](../../demo/operator-experience.html) contains simulated Home/integration states and fictional data. It does not prove integration readiness or define domain contracts; feature designs and this delivery allocation govern deferred workflows.
+The [operator experience prototype](../../../demo/operator-experience.html) contains simulated Home/integration states and fictional data. It does not prove integration readiness or define domain contracts; feature designs and this delivery allocation govern deferred workflows.
 
-- [Feature backlog](../FEATURE_BACKLOG.md)
-- [Core operator experience](../ui/operator-experience.md)
-- [Architecture](../ARCHITECTURE.md)
-- [AI integration research](../research/AI_INTEGRATION_RESEARCH.md)
+- [Feature backlog](../../FEATURE_BACKLOG.md)
+- [Core operator experience](../../ui/operator-experience.md)
+- [Architecture](../../ARCHITECTURE.md)
+- [AI integration research](../../research/AI_INTEGRATION_RESEARCH.md)

@@ -5,7 +5,7 @@ Status: backend readiness Slices 41–43 and frontend Slices 44–51 delivered �
 Scope alignment — October 9, 2026: INGEST-002 issue-proposal review and its
 feature-specific AI approval modes, Intake attention consequences, coordinated
 Maintenance writes and OPS recovery registration belong to UI-002. The former
-planned Slice 40 is tracked in [UI-002's preliminary design](../../active/UI-002_DESIGN_preliminary.md#ingest-002--issue-review-readiness-and-recovery-former-slice-40).
+planned Slice 40 is tracked in [UI-002's preliminary design](../../active/DATA-002_DESIGN.md#ingest-002--issue-review-readiness-and-recovery-former-slice-40).
 None of that work gates UI-001. Delivered generic AI-governance and local-operator
 Intake contracts remain in this matrix; their delivery does not enable INGEST-002.
 The recorded backend readiness gate and React scaffold are complete; browser workflow delivery follows the ordered UI slices below.
@@ -318,7 +318,7 @@ that a browser control is ready.
 ### Scope boundaries
 
 Slice 40 remains assigned to
-[UI-002 issue-review readiness](../../active/UI-002_DESIGN_preliminary.md#ingest-002--issue-review-readiness-and-recovery-former-slice-40);
+[UI-002 issue-review readiness](../../active/DATA-002_DESIGN.md#ingest-002--issue-review-readiness-and-recovery-former-slice-40);
 do not reuse its number. INGEST-002 approval modes, consumer-owned dismissal,
 Intake/Maintenance consequences and issue-review OPS forms do not gate UI-001.
 Generic AI review and local-operator Intake registrations remain available in

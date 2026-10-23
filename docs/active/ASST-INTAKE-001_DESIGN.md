@@ -22,7 +22,7 @@ After sleep, outage or restore, the assistant resumes from a durable checkpoint 
 
 ## Qualification and validation
 
-Qualify each actual source/client/version/filter combination with a disposable account where practical. Verify scheduling rather than trusting requested cadence; prove folder or MCP identity and scope, complete evidence transfer, per-source catch-up, pause/revoke, and receipt recovery. Source coverage is not enabled merely because a synthetic proposal succeeded. UI-003 exposes connection setup and per-source health; UI-002 supplies the INGEST-002 review; DASH-003 may aggregate only qualified source attention.
+Qualify each actual source/client/version/filter combination with a disposable account where practical. Verify scheduling rather than trusting requested cadence; prove folder or MCP identity and scope, complete evidence transfer, per-source catch-up, pause/revoke, and receipt recovery. Source coverage is not enabled merely because a synthetic proposal succeeded. ASST-001 exposes shared connection setup; ASST-INTAKE-001 supplies per-source health and INGEST-002 supplies review; DASH-003 may aggregate only qualified source attention.
 
 | Area | Cases |
 | --- | --- |
@@ -33,3 +33,9 @@ Qualify each actual source/client/version/filter combination with a disposable a
 | Persistence/schema | Source identity, scan/disposition/checkpoint reports, proposal/evidence and audit remain consistent and bounded. |
 | Backup/restore | EPM history survives, grants are invalidated, restored pending files are quarantined, external account/checkpoint gaps are disclosed. |
 | Query budget | Review and health lists use bounded source-owned projections; no per-message evidence fetch in a collection read. |
+
+## Included operator interface delivery
+
+This UI is part of this functional backlog and its completion criteria. Reuse the delivered UI-001 shell, generated contracts, source-owned commands, Light/Dark themes, keyboard/focus behavior and recovery patterns. Validate real temporary-workspace reads/writes, stale revisions, lost responses, restart/restore and bounded queries; backend-only delivery is incomplete.
+
+Deliver task-specific source-account/filter selection, scope/disclosure confirmation, requested versus acknowledged schedule, catch-up setup and reconnect guidance in ASST-001 Settings. Show per-source last fully successful scan, partial/failed polls, unknown intervals, retention limits and overlap conflicts separately from authenticated contact. Link admitted suggestions to INGEST-002 review; no second approval queue. Show capability-specific degraded/offline states and manual recovery without promising unseen messages will be found. Test denial, partial coverage, overlapping sources, restore and failed catch-up. Broader Home aggregation remains DASH-003.

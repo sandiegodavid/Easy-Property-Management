@@ -33,8 +33,26 @@ Each created/link decision and batch transition produces AUDIT-001 events. The b
 
 ## APIs and UI handoff
 
-Provide typed endpoints for source upload/select, snapshot preview, mapping/validation, decisions, confirmation, status, and result download/read. Responses include `asOf`, snapshot revision/digest, complete counts by outcome, bounded row cursors, and availability/error status. The UI entry points are the Properties, Owners, and Providers directories plus Settings → Import data; UI-002 renders the shared Excel/Google Sheets import flow but owns no import policy.
+Provide typed endpoints for source upload/select, snapshot preview, mapping/validation, decisions, confirmation, status, and result download/read. Responses include `asOf`, snapshot revision/digest, complete counts by outcome, bounded row cursors, and availability/error status. The UI entry points are the Properties, Owners, and Providers directories plus Settings → Import data; DATA-002 delivers the shared import UI; DATA-003 supplies Sheets acquisition.
 
 ## Security and verification
 
 Reject unsupported/encrypted/corrupt files with actionable errors, enforce file/row/column bounds, never execute macros, never trust formula text as an instruction, and keep file paths and local secrets out of responses. Test missing requirements, duplicate/ambiguous matches, relationship ordering, link/skip immutability, partial commit/retry, lost response idempotency, row provenance, and source snapshot stability. DATA-002 is complete when no valid import can silently merge or overwrite an existing record.
+
+## Included operator interface delivery
+
+This UI is part of this functional backlog and its completion criteria. Reuse the delivered UI-001 shell, generated contracts, source-owned commands, Light/Dark themes, keyboard/focus behavior and recovery patterns. Validate real temporary-workspace reads/writes, stale revisions, lost responses, restart/restore and bounded queries; backend-only delivery is incomplete.
+
+#### D43: Import properties, owners, and providers from spreadsheets
+
+Importing properties, owners, and providers from Excel and Google Sheets is a focused follow-up MVP intake capability, separate from DATA-001's broader later import of leases, balances, and operational history. D44 and D45 define source access and existing-record behavior.
+
+Provide Import in each of the three directories and Settings → Import data. The proposed shared flow is Select source, Choose sheet, Map columns, Validate and review, Confirm import, Results. Offer templates with explicit property/owner relationship keys; preview source rows, field mappings, relationships, and intended operations before committing. Import owner identities before dependent property relationships within a coordinated batch. Reuse shared party identity for owners/providers rather than silently duplicating people or organizations.
+
+Never invent required fields, infer ownership shares, or silently merge ambiguous identities. Unknown optional information stays unknown. Rows with missing required values or unresolved relationships cannot be committed as valid records. Use create/link/skip with explicit duplicate review per D45; general overwrite/update imports are outside MVP. Produce a row-level outcome report and recoverable import history; retries must not duplicate successfully imported records. Preview source values as a snapshot and avoid executing spreadsheet macros or treating formulas as app instructions.
+
+#### D45: Create, link, or skip; never silently overwrite
+
+MVP imports create new valid records or explicitly link/skip existing ones after duplicate review. Linking means reusing the selected identity or record to satisfy a relationship; it does not authorize changing its existing fields or merging identities. Conflicting or ambiguous matches require resolution before affected rows can commit. Preserve property-to-owner relationships through explicit mapping. Present row-level validation errors and final import results, including created, linked, skipped, and failed outcomes. Retry only unfinished work without duplicating successful writes. General existing-record overwrite/update behavior is deferred.
+
+Deliver the shared import review at `/imports/:importId/review`, reached from Properties, Owners, Providers and Settings → Import data. Include source/sheet selection, mapping, relationship/category and duplicate resolution, validation, confirmation, progress, row-level outcomes and resumable unfinished-row retries. Show complete totals with bounded pagination; errors preserve mappings and choices. DATA-003 supplies the Sheets acquisition step. Test ambiguous matches, required fields, partial outcomes and duplicate-safe retries.
