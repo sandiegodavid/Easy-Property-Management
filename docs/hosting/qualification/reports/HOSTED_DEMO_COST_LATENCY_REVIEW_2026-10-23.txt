@@ -1,0 +1,87 @@
+HOSTED DEMO — COST AND LATENCY PLANNING BASIS
+Recorded October 23, 2026; editorial summary October 24, 2026.
+
+Purpose
+These accepted choices keep the two-operator demo small, recoverable and measurable.
+The current design owns numeric targets; the qualification register owns results.
+This record contains no live Google billing or public-network benchmark.
+
+1. Retain the existing compute baseline until measurement supports a change
+Keep the Oregon E2 medium, one tunnel, local workspace files and combined release.
+E2 medium exposes two vCPUs with one sustained fractional vCPU in aggregate;
+E2 small provides half that sustained allowance and half the memory. Keep active
+workspaces running. No Spot, managed Postgres, relay, AI gateway, Pages deployment,
+separate worker host or paid networking layer is needed for this experiment.
+Record gross compute, disk, IPv4, transfer, archive and domain costs, and decide
+funding before trial expiry. The dated external-IPv4 reference is about USD 3.65
+per 730-hour month; removing it requires a qualified cheaper egress path rather
+than adding Cloud NAT or losing tunnel/package connectivity.
+
+2. Measure the operator experience before resizing
+Separate cold assets, warm authenticated Home/API, email PIN delay, mutations and
+local shell feedback. Capture location/network, cache state, sample counts,
+p50/p95, request/byte counts, RSS, CPU throttling, lock waits and restarts.
+Use four visible sessions, then a bounded report and staggered backups. Report
+maintenance duration and the other workspace's latency. Keep Oregon unless actual
+user measurements justify a move; qualify memory limits and recovery before a
+2 GB resize. Preserve one-second bounded server reads and 100-ms shell-feedback
+targets, with distinct end-to-end hosted budgets defined in the design.
+
+3. Bound authentication work per request
+Verify assertions locally using a bounded trusted-key cache. Ordinary protected
+requests use one indexed local session/operator/generation/expiry projection,
+with no routine provider introspection or session last-seen update. Required
+sensitive-read Audit writes remain. Measure authorization separately from domain
+queries, and keep immediate revocation checks on every request.
+
+4. Keep R2 for complete encrypted archives
+The existing File adapter requires bucket versioning and exact VersionId behavior.
+R2 does not provide that contract. Keep live evidence on local persistent storage
+behind authorized File APIs. R2 Standard stores completed encrypted archives with
+unique names, full read-back, retention and restore verification. Direct browser
+presigned transfer is a later, separately qualified bearer-token/integrity/quota/
+authorization/recovery contract. The dated 10 GB-month free storage allowance is
+account-wide and must be checked against actual use.
+
+5. Keep time-based freshness independent of source revisions
+Focus/reconnect, periodic refresh and source nextTransitionAt must still run.
+Deadlines and property-local midnight can change obligations without a write.
+Visible-browser change polling starts at fifteen seconds with jitter/backoff and
+hidden-tab suspension; four browsers create 960 such checks per hour. Any future
+cache must include workspace/runtime, authorized scope, filters/period and source
+markers, with expiry at the next relevant time transition or bounded deadline.
+Introduce a cache only when measured hosted results justify it.
+
+6. Preserve acknowledged financial durability
+Keep WAL, deferred reads, immediate writes and the existing five-second busy
+timeout. Inspect actual connections/query plans before pool, mmap or cache tuning.
+synchronous=NORMAL changes power/OS-failure durability and requires an explicit
+product decision plus recovery tests; it is not the current default. Another
+canonical database writer is not a latency optimization for this architecture.
+
+7. Serve application assets and APIs from one origin
+Keep relative /api requests, existing cookies/CSRF and connect-src self in one
+combined release. Qualify Content-Encoding, browser reuse and Cloudflare cache
+eligibility/hits for approved fingerprinted public assets with Access enabled.
+Private HTML, APIs, errors, sessions and downloads remain no-store/non-shared.
+Do not use Cache Everything or an Access bypass to improve apparent speed.
+Any future Pages/Workers split needs its own exact routing/security/release
+contract and measured benefit.
+
+Current documents
+../HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md — qualification and remaining rollout
+../../design/HOSTED_DEMO_DESIGN.md — accepted cost/latency/security requirements
+../../Hosting_Plan.md — local/demo/hosted-MVP planning and dated cost example
+
+Provider and technical references (checked on the original review date)
+https://docs.cloud.google.com/compute/docs/general-purpose-machines
+https://cloud.google.com/products/compute/pricing/general-purpose
+https://cloud.google.com/vpc/network-pricing
+https://www.cloudflare.com/plans/zero-trust-services/
+https://developers.cloudflare.com/r2/api/s3/api/
+https://developers.cloudflare.com/r2/api/s3/presigned-urls/
+https://developers.cloudflare.com/r2/pricing/
+https://www.sqlite.org/pragma.html#pragma_synchronous
+
+The preserved original review is under archive/planning-and-reports-2026-10-24.
+These planning choices are not new price quotes or proof of deployment readiness.

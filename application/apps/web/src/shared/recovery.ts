@@ -2,6 +2,7 @@ import { api } from "@epm/contracts";
 import type { components } from "@epm/contracts/generated";
 import type { WorkspaceScope } from "../app/workspace-scope";
 import { canonicalRequest, mutation, MutationFailure, type ApiProblem } from "./mutations";
+import { hostedMode, hostedWritesAllowed } from "../app/hosted-session-state";
 
 export type Recovery = components["schemas"]["RecoveryResponse"];
 export type RecoveryInput = components["schemas"]["RecoveryInput"];
@@ -12,6 +13,7 @@ export type FormIdentity = Pick<
 type DraftState = "dirty" | "saving" | "saved" | "failed" | "conflicted";
 type CommandState = "editing" | "submitting" | "committed" | "rejected" | "outcome_unknown";
 type RecoverySnapshot = {
+  editAuthority?: "held" | "required";
   draft: DraftState;
   command: CommandState;
   record?: Recovery;
@@ -20,29 +22,36 @@ type RecoverySnapshot = {
 };
 
 export const recoveryApi = {
-  save: (id: string, body: RecoveryInput) =>
+  save: (id: string, body: RecoveryInput, lease?: string) =>
     mutation(() =>
-      api.PUT("/api/operator/recovery/{record_id}", { params: { path: { record_id: id } }, body }),
+      api.PUT("/api/operator/recovery/{record_id}", {
+        params: { path: { record_id: id } },
+        body,
+        headers: lease ? { "X-EPM-Draft-Lease": lease } : undefined,
+      }),
     ),
-  prepare: (id: string, body: components["schemas"]["AttemptInput"]) =>
+  prepare: (id: string, body: components["schemas"]["AttemptInput"], lease?: string) =>
     mutation(() =>
       api.POST("/api/operator/recovery/{record_id}/attempt", {
         params: { path: { record_id: id } },
         body,
+        headers: lease ? { "X-EPM-Draft-Lease": lease } : undefined,
       }),
     ),
-  reconcile: (id: string, body: components["schemas"]["MutationInput"]) =>
+  reconcile: (id: string, body: components["schemas"]["MutationInput"], lease?: string) =>
     mutation(() =>
       api.POST("/api/operator/recovery/{record_id}/reconcile", {
         params: { path: { record_id: id } },
         body,
+        headers: lease ? { "X-EPM-Draft-Lease": lease } : undefined,
       }),
     ),
-  discard: (id: string, body: components["schemas"]["MutationInput"]) =>
+  discard: (id: string, body: components["schemas"]["MutationInput"], lease?: string) =>
     mutation(() =>
       api.POST("/api/operator/recovery/{record_id}/discard", {
         params: { path: { record_id: id } },
         body,
+        headers: lease ? { "X-EPM-Draft-Lease": lease } : undefined,
       }),
     ),
 };
@@ -65,6 +74,17 @@ export class RecoveryController {
   private timer?: ReturnType<typeof setTimeout>;
   private disposed = false;
   private locked = false;
+  private leaseToken?: string;
+  private leaseExpires = 0;
+  private leaseRenewed = 0;
+  private lastInteraction = Date.now();
+  private leaseRequest?: Promise<void>;
+  private pendingClaim?: string;
+  private pauseLease = () => {
+    this.leaseToken = undefined;
+    this.pendingClaim = undefined;
+    this.publish({ editAuthority: this.snapshot.record ? "required" : undefined });
+  };
 
   constructor(
     private readonly scope: WorkspaceScope,
@@ -78,6 +98,7 @@ export class RecoveryController {
     this.payload = JSON.parse(this.initialPayload) as Record<string, unknown>;
     this.acknowledged = recovered ? canonicalRequest(recovered.payload) : "";
     this.snapshot = {
+      editAuthority: hostedMode() && recovered ? "required" : undefined,
       draft: recovered ? "saved" : "dirty",
       command:
         recovered?.status === "outcome_unknown"
@@ -90,6 +111,90 @@ export class RecoveryController {
   }
 
   getSnapshot = () => this.snapshot;
+  async claimEditing(takeover = false) {
+    this.scope.requireWrite();
+    if (this.leaseRequest) return this.leaseRequest;
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const token =
+      this.pendingClaim ??
+      btoa(String.fromCharCode(...bytes))
+        .replaceAll("+", "-")
+        .replaceAll("/", "_")
+        .replaceAll("=", "");
+    this.pendingClaim = token;
+    this.leaseRequest = this.updateLease(token, takeover, false).finally(() => {
+      this.leaseRequest = undefined;
+    });
+    return this.leaseRequest;
+  }
+  private async updateLease(token: string, takeover: boolean, renew: boolean) {
+    try {
+      const result = await mutation(() =>
+        api.POST("/api/hosted/drafts/{record_id}/lease", {
+          params: { path: { record_id: this.id } },
+          body: { token, expectedRevision: this.snapshot.record?.revision ?? 0, takeover, renew },
+        }),
+      );
+      this.scope.requireWrite();
+      if (this.disposed) return;
+      this.leaseToken = token;
+      this.leaseExpires = Date.parse(result.expiresAt);
+      this.leaseRenewed = Date.now();
+      if (!renew) this.lastInteraction = Date.now();
+      this.pendingClaim = undefined;
+      this.publish({ editAuthority: "held", error: undefined });
+    } catch (error) {
+      if (error instanceof MutationFailure && !error.outcomeUnknown) this.pendingClaim = undefined;
+      this.leaseToken = undefined;
+      this.publish({
+        editAuthority: "required",
+        error: error instanceof Error ? error.message : "Claim editing before saving.",
+      });
+      throw error;
+    }
+  }
+  async renewEditing() {
+    if (
+      !hostedMode() ||
+      !this.leaseToken ||
+      this.disposed ||
+      this.leaseRequest ||
+      !hostedWritesAllowed() ||
+      document.visibilityState !== "visible" ||
+      !document.hasFocus() ||
+      Date.now() - this.lastInteraction > 60_000 ||
+      Date.now() - this.leaseRenewed < 60_000
+    )
+      return;
+    if (Date.now() >= this.leaseExpires) {
+      this.leaseToken = undefined;
+      this.publish({ editAuthority: "required" });
+      return;
+    }
+    const token = this.leaseToken;
+    this.leaseRequest = this.updateLease(token, false, true).finally(() => {
+      this.leaseRequest = undefined;
+    });
+    await this.leaseRequest;
+  }
+  private async requireLease() {
+    if (!hostedMode()) return;
+    if (!this.leaseToken && !this.snapshot.record && this.snapshot.editAuthority !== "required")
+      await this.claimEditing();
+    if (!this.leaseToken || Date.now() >= this.leaseExpires) {
+      this.publish({ editAuthority: "required" });
+      throw new Error(
+        "Claim editing or explicitly take over this saved form before saving. Your input is retained.",
+      );
+    }
+  }
+  async reviewSavedForm() {
+    const result = await api.GET("/api/operator/recovery/{record_id}", {
+      params: { path: { record_id: this.id } },
+    });
+    if (!result.data || result.error) throw new Error("The latest saved form could not be read.");
+    this.reviewLatest(result.data, result.data.baseSourceRevision);
+  }
   get isPristine() {
     return (
       !this.snapshot.record &&
@@ -116,6 +221,7 @@ export class RecoveryController {
     this.publish({ record });
   }
   edit(payload: Record<string, unknown>, delay = 500) {
+    this.lastInteraction = Date.now();
     if (
       this.locked ||
       this.snapshot.command === "outcome_unknown" ||
@@ -160,7 +266,8 @@ export class RecoveryController {
       };
       this.publish({ draft: "saving", error: undefined });
       try {
-        const result = await this.transport.save(this.id, body);
+        await this.requireLease();
+        const result = await this.transport.save(this.id, body, this.leaseToken);
         this.accept(result);
         this.pendingSave = undefined;
         this.acknowledged = canonicalRequest(body.payload);
@@ -245,7 +352,8 @@ export class RecoveryController {
       this.publish({ command: "submitting", error: undefined });
       let prepared: Recovery;
       try {
-        prepared = await this.transport.prepare(this.id, this.pendingPrepare);
+        await this.requireLease();
+        prepared = await this.transport.prepare(this.id, this.pendingPrepare, this.leaseToken);
       } catch (error) {
         if (error instanceof MutationFailure && !error.outcomeUnknown)
           this.pendingPrepare = undefined;
@@ -282,8 +390,9 @@ export class RecoveryController {
   }
   private async reconcileAttempt() {
     this.scope.requireWrite();
+    await this.requireLease();
     if (this.pendingPrepare) {
-      this.accept(await this.transport.prepare(this.id, this.pendingPrepare));
+      this.accept(await this.transport.prepare(this.id, this.pendingPrepare, this.leaseToken));
       this.pendingPrepare = undefined;
     }
     const current = this.snapshot.record;
@@ -294,7 +403,7 @@ export class RecoveryController {
     };
     let result: Recovery;
     try {
-      result = await this.transport.reconcile(this.id, this.pendingReconcile);
+      result = await this.transport.reconcile(this.id, this.pendingReconcile, this.leaseToken);
     } catch (error) {
       if (error instanceof MutationFailure && !error.outcomeUnknown)
         this.pendingReconcile = undefined;
@@ -334,11 +443,12 @@ export class RecoveryController {
       await this.active;
       this.scope.requireWrite();
       if (this.snapshot.record) {
+        await this.requireLease();
         this.pendingDiscard ??= {
           expectedRevision: this.snapshot.record.revision,
           idempotencyKey: crypto.randomUUID(),
         };
-        this.accept(await this.transport.discard(this.id, this.pendingDiscard));
+        this.accept(await this.transport.discard(this.id, this.pendingDiscard, this.leaseToken));
         this.pendingDiscard = undefined;
       }
       this.acknowledged = canonicalRequest(this.payload);
@@ -362,8 +472,10 @@ export class RecoveryController {
   dispose() {
     this.disposed = true;
     clearTimeout(this.timer);
+    window.removeEventListener("epm-session-paused", this.pauseLease);
   }
   activate() {
     this.disposed = false;
+    window.addEventListener("epm-session-paused", this.pauseLease);
   }
 }

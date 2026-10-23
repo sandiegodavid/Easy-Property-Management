@@ -1,0 +1,23 @@
+{
+  "startedAt": "2026-10-24T19:40:30.694792+00:00",
+  "completedAt": "2026-10-24T19:40:34.498914+00:00",
+  "mode": "404-only; no DNS or application ingress changes",
+  "readyStatus": 200,
+  "haConnections": 4,
+  "readyElapsedSeconds": 3.109,
+  "restarts": 0,
+  "pid": 4426,
+  "memoryCurrentBytes": 18591744,
+  "finalState": "inactive",
+  "finalEnablement": "disabled",
+  "configUnchanged": true,
+  "configSha256": "8dd9df8a5771de7f39bff2b41d84348083a59564619dda4946393d20adc5f0c9",
+  "hostedServices": {
+    "a": "active",
+    "b": "active"
+  },
+  "limits": [
+    "Outbound connector/readiness proof only; no application DNS route, origin forwarding or real Access/PIN test.",
+    "Metrics and readiness measured through loopback. No public endpoint outage was tested."
+  ]
+}

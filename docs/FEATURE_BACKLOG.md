@@ -185,6 +185,8 @@ Current module guides describe implemented backend behavior. Some operator workf
 
 ## Future SaaS — Cloud, identity, and collaboration
 
+The [public-access plan for the Google Cloud demo](hosting/qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md) is an accepted bounded synthetic two-workspace experiment across SAAS-001, SEC-001, and SEC-002, with all design recommendations resolved October 23, 2026. Implementation and protected two-operator deployment are in qualification; general invitations and remaining acceptance gates are pending. Its included operator UI, cost/latency policy, deployment inputs and acceptance gates do not change the statuses or hard dependencies below or the local MVP's no-login scope.
+
 <div style="max-width: 100%; max-height: none; overflow-x: auto; overflow-y: hidden;">
 
 | Sequence | ID | Area | Outcome | Ordered hard dependencies | Status |

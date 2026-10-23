@@ -1,4 +1,5 @@
 import { DynamicFilterForm } from "../shared/dynamic-filter-form";
+import { FileDownload } from "../shared/file-download";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
@@ -205,7 +206,9 @@ function FileMetadata({ id }: { id: string }) {
             ]}
           />
           {file.data.storageState === "available" ? (
-            <a href={`/api/files/${id}/content`}>Download {file.data.originalName}</a>
+            <FileDownload fileId={id} name={file.data.originalName}>
+              Download {file.data.originalName}
+            </FileDownload>
           ) : (
             <p>Content unavailable; opening disabled.</p>
           )}

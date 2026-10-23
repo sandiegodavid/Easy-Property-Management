@@ -168,7 +168,11 @@ def upgrade() -> None:
         sa.CheckConstraint("length(trim(entity_id)) > 0"),
         sa.CheckConstraint("length(trim(action)) > 0"),
         sa.CheckConstraint(
-            "actor_kind IN ('local_operator', 'system', 'connector', 'ai_assistant')"
+            "actor_kind IN ('local_operator', 'hosted_operator', 'system', 'connector', 'ai_assistant')"
+        ),
+        sa.CheckConstraint(
+            "actor_kind != 'hosted_operator' OR "
+            "(actor_reference IS NOT NULL AND length(actor_reference) = 36)"
         ),
     )
     op.create_index(

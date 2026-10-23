@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-24",
+  "documents": [
+    {
+      "source": "docs/hosting/HOSTED_DEMO_DESIGN.md",
+      "archive": "HOSTED_DEMO_DESIGN.md",
+      "sourceSha256": "83cd29cc755336c81832a70e8476869f6c19afa05003f1284514e99408d4187a",
+      "archivedSha256": "e9c26665e1e0a9bcb734d231befadeb00481dc81952158ec629436e5d21d4b03",
+      "contentPreservedExceptLinkTargets": true
+    },
+    {
+      "source": "docs/hosting/GOOGLE_CLOUD_DEMO_DEPLOYMENT.md",
+      "archive": "GOOGLE_CLOUD_DEMO_DEPLOYMENT.md",
+      "sourceSha256": "ef5416f76fcea70c2d5a38eaabee913a448aabe80f0b1d31bdc9f5dc9d8738de",
+      "archivedSha256": "c7244fdae5d9719a5909b05a7c5f086caccdd79e40d5c4ce9c657a2ed453e972",
+      "contentPreservedExceptLinkTargets": true
+    },
+    {
+      "source": "docs/hosting/HOSTED_DEMO_OPERATOR_GUIDE.md",
+      "archive": "HOSTED_DEMO_OPERATOR_GUIDE.md",
+      "sourceSha256": "887e016bb81cd2ffd4daeff08b8720f86f214a7422be18e4ac431aa398ece135",
+      "archivedSha256": "a6e538cbdd926c02a2aebb6f75394bda545b02124aafb065b4ce421d635991fa",
+      "contentPreservedExceptLinkTargets": true
+    },
+    {
+      "source": "docs/hosting/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md",
+      "archive": "HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md",
+      "sourceSha256": "2595d386101777ac9ccee4ad686fb0d8e8d8628c34a13fb6b509c8489444f97c",
+      "archivedSha256": "5ffa734348b719c175f36d7eb9e586b6a491f409142aa8a9793606f72927c7ff",
+      "contentPreservedExceptLinkTargets": true
+    },
+    {
+      "source": "docs/hosting/CLOUDFLARE_OPERATIONS.md",
+      "archive": "CLOUDFLARE_OPERATIONS.md",
+      "sourceSha256": "471a767d7b6ed48b5cfbacc3639883368ca37e0435643d377f4e590a318365c8",
+      "archivedSha256": "7bfde7a0dc9ba78bee53add5f769b62d72bf6a3266e787adb26535a0be9279cb",
+      "contentPreservedExceptLinkTargets": true
+    },
+    {
+      "source": "docs/hosting/HOSTED_DEMO_OPERATIONS.md",
+      "archive": "HOSTED_DEMO_OPERATIONS.md",
+      "sourceSha256": "53407b038c30e83a861b43aea6a7cec485835f3bf2fabe0f9e47dd5099bed8be",
+      "archivedSha256": "5ebf4d2898d7591520fc1fcf90889fe27aa56fec047fbc91daf5ede7531cbc62",
+      "contentPreservedExceptLinkTargets": true
+    },
+    {
+      "source": "docs/hosting/HOSTED_DEMO_CONFIGURATION.md",
+      "archive": "HOSTED_DEMO_CONFIGURATION.md",
+      "sourceSha256": "285305a59cca7c84c1774b7977486759afdc92e45c7b6e2c692473de2b634dd6",
+      "archivedSha256": "f8ea36f201eed6745e98181f0dba8250c5f2ddcf06dd4270e16d4d1cdcb9e68a",
+      "contentPreservedExceptLinkTargets": true
+    }
+  ]
+}

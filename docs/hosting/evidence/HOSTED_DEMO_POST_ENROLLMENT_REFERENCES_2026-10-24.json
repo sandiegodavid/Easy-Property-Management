@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-24 America/Los_Angeles",
+  "status": "A/B post-enrollment encrypted reference recovery verified",
+  "reports": [
+    {
+      "instance": "a",
+      "workspaceId": "611d3445-0cce-4858-a10d-b5d5202d601a",
+      "objectKey": "epm/49fdb458-48a0-4029-9c4f-95e9710f8eb8/611d3445-0cce-4858-a10d-b5d5202d601a/references/1aa0c8f425b9ca50bb5361a9686f5e95796f4417af3f7aed76651a04dac8eea8.enc",
+      "size": 987,
+      "sha256": "1aa0c8f425b9ca50bb5361a9686f5e95796f4417af3f7aed76651a04dac8eea8",
+      "fullReadBack": true,
+      "independentDownload": true,
+      "decryptionVerified": true,
+      "retention": "manual; no objects deleted",
+      "deploymentMatches": true,
+      "freshEnrollmentRequired": true,
+      "approvedSubjectReferencePresent": true,
+      "approvedSubjectReferenceMatches": true,
+      "pendingSubjectReferencesMatch": true,
+      "pendingSubjectReferenceCount": 1,
+      "plaintextCustody": "root-only verification file on VM; no usable sessions or credentials"
+    },
+    {
+      "instance": "b",
+      "workspaceId": "facd33be-7ff7-4d91-bff1-9a3f85af658b",
+      "objectKey": "epm/485044ba-07d6-41fe-8448-3735033f6930/facd33be-7ff7-4d91-bff1-9a3f85af658b/references/176ec24ecfde99c23eeae9c599426b83e79ddbe6332c64bc904d6f08247466cb.enc",
+      "size": 987,
+      "sha256": "176ec24ecfde99c23eeae9c599426b83e79ddbe6332c64bc904d6f08247466cb",
+      "fullReadBack": true,
+      "independentDownload": true,
+      "decryptionVerified": true,
+      "retention": "manual; no objects deleted",
+      "deploymentMatches": true,
+      "freshEnrollmentRequired": true,
+      "approvedSubjectReferencePresent": true,
+      "approvedSubjectReferenceMatches": true,
+      "pendingSubjectReferencesMatch": true,
+      "pendingSubjectReferenceCount": 1,
+      "plaintextCustody": "root-only verification file on VM; no usable sessions or credentials"
+    }
+  ],
+  "limits": [
+    "Reports inspected; no passphrase or decrypted payload read by agent.",
+    "Reference restoration requires fresh enrollment; no usable sessions or provider credentials included.",
+    "Does not establish complete lost-host reprovisioning."
+  ]
+}

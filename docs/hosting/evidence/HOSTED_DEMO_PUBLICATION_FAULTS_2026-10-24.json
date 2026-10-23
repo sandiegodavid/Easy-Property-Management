@@ -1,0 +1,28 @@
+{
+  "startedAt": "2026-10-25T00:10:18.907632+00:00",
+  "completedAt": "2026-10-25T00:10:27.039908+00:00",
+  "status": "passed within scratch scope",
+  "scratchPrefix": "epm/53a9ef22-291b-499b-851b-5dabc569e9f1/29b77670-efe7-440e-83c5-b2e2d612d6cb",
+  "sourceBytes": 422727,
+  "sourceSha256": "18bd8fdc1743456c24b7302f0d81f7d420f49c4cfea37c86bfdf60a1e974eaec",
+  "retainedPoints": 7,
+  "actualScratchDeletes": 1,
+  "r2ListedObjectsMatchLedger": true,
+  "allRetainedFullReadbacksMatch": true,
+  "failedUploadLeavesLedgerUnchanged": true,
+  "missingObjectReadLeavesLedgerUnchanged": true,
+  "badChecksumLeavesLedgerUnchanged": true,
+  "failedLedgerSavePreventsPruning": true,
+  "failedRetentionKeepsOldAndNewAndFlagsAttention": true,
+  "retryRepairsRetention": true,
+  "sameDayRetryDoesNotInflatePoints": true,
+  "staleRecoveryPointFlagsAttention": true,
+  "businessLedgersUnchanged": true,
+  "limits": [
+    "Dates simulated over one already verified encrypted archive; not seven elapsed days.",
+    "Upload failure is refused loopback transport; no R2 outage or credential revocation.",
+    "Missing object is a real R2 not-found; checksum, ledger and delete failures injected.",
+    "No decryption repeated; ciphertext checked against prior recovery proof.",
+    "Seven encrypted scratch objects retained; no A/B object or ledger mutation."
+  ]
+}

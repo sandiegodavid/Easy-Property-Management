@@ -1,0 +1,58 @@
+{
+  "checkedAt": "2026-10-25T00:13:55.626030+00:00",
+  "status": "unauthenticated browser-header probes passed after provisional origin startup",
+  "probes": [
+    {
+      "host": "demo-a.epmdemo.xyz",
+      "path": "/sign-in",
+      "status": 302,
+      "redirectHost": "epmdemo.cloudflareaccess.com",
+      "redirectPath": "/cdn-cgi/access/login/demo-a.epmdemo.xyz",
+      "cacheControl": "private, max-age=0, no-store, no-cache, must-revalidate, post-check=0, pre-check=0"
+    },
+    {
+      "host": "demo-a.epmdemo.xyz",
+      "path": "/api/properties",
+      "status": 302,
+      "redirectHost": "epmdemo.cloudflareaccess.com",
+      "redirectPath": "/cdn-cgi/access/login/demo-a.epmdemo.xyz",
+      "cacheControl": "private, max-age=0, no-store, no-cache, must-revalidate, post-check=0, pre-check=0"
+    },
+    {
+      "host": "demo-a.epmdemo.xyz",
+      "path": "/api/tasks/creation-operations/qualification-unknown",
+      "status": 302,
+      "redirectHost": "epmdemo.cloudflareaccess.com",
+      "redirectPath": "/cdn-cgi/access/login/demo-a.epmdemo.xyz",
+      "cacheControl": "private, max-age=0, no-store, no-cache, must-revalidate, post-check=0, pre-check=0"
+    },
+    {
+      "host": "demo-b.epmdemo.xyz",
+      "path": "/sign-in",
+      "status": 302,
+      "redirectHost": "epmdemo.cloudflareaccess.com",
+      "redirectPath": "/cdn-cgi/access/login/demo-b.epmdemo.xyz",
+      "cacheControl": "private, max-age=0, no-store, no-cache, must-revalidate, post-check=0, pre-check=0"
+    },
+    {
+      "host": "demo-b.epmdemo.xyz",
+      "path": "/api/properties",
+      "status": 302,
+      "redirectHost": "epmdemo.cloudflareaccess.com",
+      "redirectPath": "/cdn-cgi/access/login/demo-b.epmdemo.xyz",
+      "cacheControl": "private, max-age=0, no-store, no-cache, must-revalidate, post-check=0, pre-check=0"
+    },
+    {
+      "host": "demo-b.epmdemo.xyz",
+      "path": "/api/tasks/creation-operations/qualification-unknown",
+      "status": 302,
+      "redirectHost": "epmdemo.cloudflareaccess.com",
+      "redirectPath": "/cdn-cgi/access/login/demo-b.epmdemo.xyz",
+      "cacheControl": "private, max-age=0, no-store, no-cache, must-revalidate, post-check=0, pre-check=0"
+    }
+  ],
+  "limits": [
+    "No real PIN or authenticated session tested.",
+    "No raw redirect query, token, cookie or PIN retained."
+  ]
+}

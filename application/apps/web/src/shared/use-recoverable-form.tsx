@@ -3,6 +3,7 @@ import { useForm, type DefaultValues, type FieldValues } from "react-hook-form";
 import { useBlocker } from "react-router-dom";
 import { useWorkspace } from "../app/workspace-gate";
 import { RecoveryController, type FormIdentity, type Recovery } from "./recovery";
+import { hostedMode } from "../app/hosted-session-state";
 
 /** Mount with key={workspace/runtime/form identity}. Background queries must not
  * reset defaultValues. Recovery projections explicitly select registered fields.
@@ -28,7 +29,13 @@ export function useRecoverableForm<T extends FieldValues>({
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   useEffect(() => {
     controller.activate();
-    return () => controller.dispose();
+    const timer = setInterval(() => {
+      void controller.renewEditing().catch(() => undefined);
+    }, 60_000);
+    return () => {
+      clearInterval(timer);
+      controller.dispose();
+    };
   }, [controller]);
   const navigationBlocked =
     !controller.isPristine && (state.draft !== "saved" || state.command === "submitting");
@@ -50,7 +57,7 @@ export function useRecoverableForm<T extends FieldValues>({
   return { form, controller, state, blocker };
 }
 
-export function RecoveryNavigation({
+function BlockedNavigation({
   controller,
   blocker,
 }: {
@@ -110,5 +117,74 @@ export function RecoveryNavigation({
         Keep editing
       </button>
     </section>
+  );
+}
+
+export function RecoveryNavigation(props: {
+  controller: RecoveryController;
+  blocker: ReturnType<typeof useBlocker>;
+}) {
+  const { scope } = useWorkspace();
+  const state = useSyncExternalStore(props.controller.subscribe, props.controller.getSnapshot);
+  const [busy, setBusy] = useState(false);
+  const claim = async (takeover: boolean) => {
+    setBusy(true);
+    try {
+      await props.controller.claimEditing(takeover);
+    } catch {
+      /* The controller retains input and publishes the typed conflict. */
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      {hostedMode() &&
+        scope.canWrite &&
+        (state.record || state.editAuthority === "required") &&
+        state.command !== "committed" && (
+          <section aria-label="Saved form edit authority">
+            <p>
+              {state.editAuthority === "held"
+                ? "This editor holds a temporary edit claim."
+                : "Claim editing before changing this shared saved form. Opening it does not take over another editor."}
+            </p>
+            <button type="button" disabled={busy} onClick={() => void claim(false)}>
+              Claim editing
+            </button>
+            {state.record?.status === "active" && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  void props.controller
+                    .reviewSavedForm()
+                    .catch(() => undefined)
+                    .finally(() => setBusy(false));
+                }}
+              >
+                Review latest saved form (keep my input)
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Take over this saved form? The previous editor's next save will be rejected; their input will not be erased.",
+                  )
+                )
+                  void claim(true);
+              }}
+            >
+              Take over editing
+            </button>
+            {state.error && <p role="alert">{state.error}</p>}
+          </section>
+        )}
+      <BlockedNavigation {...props} />
+    </>
   );
 }

@@ -1,0 +1,58 @@
+{
+  "startedAt": "2026-10-24T05:01:52.668330+00:00",
+  "phase": "complete",
+  "allocationChecks": [
+    {
+      "stage": "before formatting",
+      "imageBytes": 262144000,
+      "allocated512ByteBlocks": 512000
+    },
+    {
+      "stage": "after formatting",
+      "imageBytes": 262144000,
+      "allocated512ByteBlocks": 512008
+    },
+    {
+      "stage": "after first mount",
+      "imageBytes": 262144000,
+      "allocated512ByteBlocks": 512008
+    },
+    {
+      "stage": "after restored workspace validation and fresh administrative initialization",
+      "imageBytes": 262144000,
+      "allocated512ByteBlocks": 512008
+    },
+    {
+      "stage": "after unmount and loop detach",
+      "imageBytes": 262144000,
+      "allocated512ByteBlocks": 512008
+    },
+    {
+      "stage": "after second mount and complete retained validation",
+      "imageBytes": 262144000,
+      "allocated512ByteBlocks": 512008
+    }
+  ],
+  "hostRebooted": false,
+  "abBefore": {
+    "epm@a.service": "MainPID=8726\nActiveState=active\nActiveEnterTimestamp=Fri 2026-10-23 17:50:37 UTC",
+    "epm@b.service": "MainPID=8727\nActiveState=active\nActiveEnterTimestamp=Fri 2026-10-23 17:50:37 UTC"
+  },
+  "unprivilegedAvailableBytes": 141598720,
+  "rootReservedBytes": 31457280,
+  "freshAdministration": {
+    "approvedSubject": false,
+    "sessions": 0,
+    "draftLeases": 0,
+    "pendingEnrollments": 0,
+    "operatorActive": false,
+    "freshEnrollmentRequired": true
+  },
+  "workspaceId": "1eb0d18b-f130-45a0-a043-1cd3d27979cf",
+  "completedAt": "2026-10-24T05:01:58.439349+00:00",
+  "scratchUnmountedAndDetached": true,
+  "abAfter": {
+    "epm@a.service": "MainPID=8726\nActiveState=active\nActiveEnterTimestamp=Fri 2026-10-23 17:50:37 UTC",
+    "epm@b.service": "MainPID=8727\nActiveState=active\nActiveEnterTimestamp=Fri 2026-10-23 17:50:37 UTC"
+  }
+}

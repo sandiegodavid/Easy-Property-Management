@@ -1,0 +1,9 @@
+{
+  "fileBytes": 52428800,
+  "availableBefore": 195121152,
+  "passed": false,
+  "availableWhileFirstHeld": 193024000,
+  "availableAfter": 195084288,
+  "sampledMinimumAvailable": 40960,
+  "recordedAtUtc": "2026-10-24T03:58:42.013572+00:00"
+}

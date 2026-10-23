@@ -2,13 +2,14 @@
 
 import json
 import re
+from contextlib import nullcontext
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from pydantic import ValidationError
 
-from app.modules.operator.application.ports import OperatorUnitOfWork
+from app.modules.operator.application.ports import OperatorUnitOfWork, RecoveryEditAuthority
 from app.modules.operator.application.cursors import ReadCursor, decode_cursor, read_revision
 from app.modules.operator.application.recovery_schemas import validate_payload
 from app.modules.operator.domain.models import (
@@ -37,10 +38,17 @@ class OperatorService:
         now=lambda: datetime.now(UTC),
         capabilities=(),
         capability_checks: Mapping[str, Callable[[], bool]] | None = None,
+        recovery_authority: RecoveryEditAuthority | None = None,
     ):
         self.unit_of_work, self.runtime, self.now = unit_of_work, runtime, now
         self.capabilities = tuple(capabilities)
         self.capability_checks = capability_checks or {}
+        self.recovery_authority = recovery_authority
+
+    def _write_recovery(self, record_id, operation):
+        authority = self.recovery_authority
+        with authority.mutation(record_id) if authority else nullcontext():
+            return self.unit_of_work.write(operation)
 
     def instant(self):
         value = self.now()
@@ -53,6 +61,18 @@ class OperatorService:
         if identity.state != "ready" or (write and not identity.can_write):
             raise OperatorUnavailable("Open and validate the workspace before this operation.")
         return identity
+
+    def changes(self):
+        """Bounded change signal, not a time-sensitive Home freshness guarantee."""
+        identity = self.ready()
+        instant = self.instant()
+        marker = self.unit_of_work.read(lambda tx: tx.source_marker())
+        return {
+            "workspaceId": identity.workspace_id,
+            "runtimeEpoch": identity.epoch,
+            "sourceRevision": read_revision((identity.workspace_id, identity.epoch), marker),
+            "serverTimeUtc": instant.isoformat(),
+        }
 
     def bootstrap(self):
         identity = self.runtime()
@@ -250,7 +270,7 @@ class OperatorService:
                 instant,
             )
 
-        return self.unit_of_work.write(write)
+        return self._write_recovery(record_id, write)
 
     def recovery(self, record_id):
         self.ready()
@@ -390,7 +410,7 @@ class OperatorService:
                 instant,
             )
 
-        return self.unit_of_work.write(write)
+        return self._write_recovery(record_id, write)
 
     def expire_recovery(self, *, limit=100):
         self.ready(True)
@@ -472,7 +492,7 @@ class OperatorService:
                 instant,
             )
 
-        return self.unit_of_work.write(write)
+        return self._write_recovery(record_id, write)
 
     def operation(self, key):
         self.ready()

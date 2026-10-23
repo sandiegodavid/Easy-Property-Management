@@ -57,6 +57,7 @@ import {
   useSourceNavigationState,
 } from "../shared/home-navigation";
 import { readResult } from "../workflows/reads";
+import { hostedMode } from "./hosted-session-state";
 
 function NavigationIcon({ kind }: { kind: (typeof destinations)[number]["icon"] }) {
   const paths = {
@@ -366,6 +367,7 @@ function Layout() {
   useParentScroll();
   const { bootstrap, scope } = useWorkspace();
   const backup = useQuery({
+    enabled: !hostedMode(),
     queryKey: scope.key("sidebar-backup-status"),
     queryFn: async ({ signal }) => {
       const result = await api.GET("/api/workspace/backup-status", { signal });
@@ -422,29 +424,35 @@ function Layout() {
             Settings
           </NavLink>
           <div className="sidebar-status" aria-label="Workspace and backup status">
-            <p role="status">Local workspace connected.</p>
             <p role="status">
-              {backup.isError
-                ? "Backup status unavailable"
-                : !backup.data
-                  ? "Checking backup status…"
-                  : backup.data.needsAttention
-                    ? "Backup needs attention"
-                    : !backup.data.lastSuccessAt
-                      ? "No successful backup yet"
-                      : "Last backup"}
-              {backup.data?.lastSuccessAt && !backup.isError && (
-                <>
-                  {" · "}
-                  <time dateTime={backup.data.lastSuccessAt}>
-                    {new Date(backup.data.lastSuccessAt).toLocaleString(undefined, {
-                      dateStyle: "short",
-                      timeStyle: "short",
-                    })}
-                  </time>
-                </>
-              )}
+              {hostedMode() ? "Demo workspace connected." : "Local workspace connected."}
             </p>
+            {hostedMode() ? (
+              <p>Backups are managed by the administrator.</p>
+            ) : (
+              <p role="status">
+                {backup.isError
+                  ? "Backup status unavailable"
+                  : !backup.data
+                    ? "Checking backup status…"
+                    : backup.data.needsAttention
+                      ? "Backup needs attention"
+                      : !backup.data.lastSuccessAt
+                        ? "No successful backup yet"
+                        : "Last backup"}
+                {backup.data?.lastSuccessAt && !backup.isError && (
+                  <>
+                    {" · "}
+                    <time dateTime={backup.data.lastSuccessAt}>
+                      {new Date(backup.data.lastSuccessAt).toLocaleString(undefined, {
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })}
+                    </time>
+                  </>
+                )}
+              </p>
+            )}
           </div>
         </div>
       </aside>
@@ -521,7 +529,18 @@ export function ApplicationShell() {
                     {["appearance", "navigation"].map((section) => (
                       <Route key={section} path={section} element={<PreferenceSettings />} />
                     ))}
-                    <Route path="ai" element={<AiGovernanceSettings />} />
+                    <Route
+                      path="ai"
+                      element={
+                        hostedMode() ? (
+                          <p>
+                            AI connections are not enabled for this demo. Contact the administrator.
+                          </p>
+                        ) : (
+                          <AiGovernanceSettings />
+                        )
+                      }
+                    />
                     <Route path="provider-categories" element={<ProviderWorkspace catalogOnly />} />
                   </>
                 )}
@@ -573,7 +592,12 @@ export function ApplicationShell() {
           <Route path="conversations" element={<WorkWorkspace kind="communication" />} />
           <Route path="maintenance/issues/:id" element={<WorkWorkspace />} />
           <Route path="search" element={<MetadataSearch />} />
-          <Route path="ai/review/:id" element={<AiDraftReview />} />
+          <Route
+            path="ai/review/:id"
+            element={
+              hostedMode() ? <p>AI review is not enabled for this demo.</p> : <AiDraftReview />
+            }
+          />
           <Route path="coverage/:kind/:id/:area" element={<CoveragePage />} />
           <Route path="coverage/reviews/:id" element={<CoverageResume />} />
           <Route path="*" element={<Unavailable />} />

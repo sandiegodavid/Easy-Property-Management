@@ -44,9 +44,12 @@ class WorkspaceArchiveService:
         self,
         workspace_service: WorkspaceService,
         remote_materializer: RemoteMaterializer | None = None,
+        *,
+        staging_directory: Path | None = None,
     ) -> None:
         self.workspace_service = workspace_service
         self.remote_materializer = remote_materializer
+        self.staging_directory = staging_directory
 
     @property
     def paths(self) -> WorkspacePaths:
@@ -70,7 +73,7 @@ class WorkspaceArchiveService:
         archive_written = False
         try:
             with tempfile.TemporaryDirectory(
-                prefix="epm-package-", dir=self.paths.root.parent
+                prefix="epm-package-", dir=self.staging_directory or self.paths.root.parent
             ) as temporary_directory:
                 root = Path(temporary_directory)
                 payload = root / "payload"
@@ -113,7 +116,7 @@ class WorkspaceArchiveService:
     def validate_archive(self, archive_path: Path, passphrase: str) -> ArchiveContents:
         try:
             with tempfile.TemporaryDirectory(
-                prefix="epm-archive-validation-"
+                prefix="epm-archive-validation-", dir=self.staging_directory
             ) as temporary_directory:
                 root = Path(temporary_directory)
                 zip_path = root / "payload.zip"

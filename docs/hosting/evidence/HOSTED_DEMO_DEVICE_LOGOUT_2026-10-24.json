@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-24 America/Los_Angeles",
+  "evidenceType": "operator-reported browser checks plus local saved success flags",
+  "results": {
+    "a": {
+      "deviceSignOutHidesPrivateContent": true,
+      "refreshDoesNotAutomaticallyReopenHome": true,
+      "freshProviderSignInAndExplicitContinueReturnsHome": true
+    },
+    "b": {
+      "deviceSignOutHidesPrivateContent": true,
+      "refreshDoesNotAutomaticallyReopenHome": true,
+      "freshProviderSignInAndExplicitContinueReturnsHome": true
+    }
+  },
+  "readOnlyAdministrativeSnapshot": {
+    "a": {
+      "activeOperator": true,
+      "storedSessions": 3,
+      "currentEligibleSessions": 3
+    },
+    "b": {
+      "activeOperator": true,
+      "storedSessions": 2,
+      "currentEligibleSessions": 2
+    }
+  },
+  "services": "A, B and tunnel active; tunnel boot-disabled",
+  "limits": [
+    "Browser behavior reported by operator; no raw cookies/PINs collected.",
+    "Device-only logout does not revoke other sessions; retained eligible counts are not all-device revocation evidence.",
+    "Multi-device all-session sign-out/expiry remain separate checks."
+  ]
+}

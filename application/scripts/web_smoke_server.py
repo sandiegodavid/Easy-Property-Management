@@ -30,6 +30,26 @@ from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZon
 APPLICATION = Path(__file__).resolve().parents[1]
 
 
+def packaged_web(root: Path) -> Path:
+    """Require browser acceptance to use the current wheel's exact compiled assets."""
+    wheel = APPLICATION / "dist/easy_property_management-0.1.0-py3-none-any.whl"
+    web = root / "web_build"
+    with ZipFile(wheel) as archive:
+        for name in archive.namelist():
+            if not name.startswith("app/web_build/"):
+                continue
+            relative = Path(name).relative_to("app/web_build")
+            if ".." in relative.parts:
+                raise RuntimeError("Unsafe wheel asset")
+            destination = web / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            content = archive.read(name)
+            if content != (APPLICATION / "apps/web/dist" / relative).read_bytes():
+                raise RuntimeError("Wheel assets differ from the current Vite build")
+            destination.write_bytes(content)
+    return web
+
+
 class LeaseClock(BaseModel):
     days: int = Field(ge=0, le=2)
 
@@ -113,20 +133,7 @@ def main() -> None:
             config.write_text(json.dumps({"localWorkspacePath": str(root / "workspace")}))
             if args.state == "ready":
                 WorkspaceService.from_local_config(config).initialize()
-        wheel = APPLICATION / "dist/easy_property_management-0.1.0-py3-none-any.whl"
-        web = root / "web_build"
-        with ZipFile(wheel) as archive:
-            for name in archive.namelist():
-                if name.startswith("app/web_build/"):
-                    relative = Path(name).relative_to("app/web_build")
-                    if ".." in relative.parts:
-                        raise RuntimeError("Unsafe wheel asset")
-                    destination = web / relative
-                    destination.parent.mkdir(parents=True, exist_ok=True)
-                    content = archive.read(name)
-                    if content != (APPLICATION / "apps/web/dist" / relative).read_bytes():
-                        raise RuntimeError("Wheel assets differ from the current Vite build")
-                    destination.write_bytes(content)
+        web = packaged_web(root)
         app = create_app(config, web_build_path=web)
         register_historical_owner_fixture(app, config, args.state)
 

@@ -1,4 +1,5 @@
 import type { components } from "@epm/contracts/generated";
+import { FileDownload } from "../shared/file-download";
 import { SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { formatHomeTime } from "../shared/home-time";
 import { EvidenceItem } from "./evidence-item";
@@ -81,9 +82,9 @@ export function ImportedEvidence({
               <>
                 {!historical &&
                   (downloadsAllowed && entry.file.storage_state === "available" ? (
-                    <a href={`/api/files/${entry.file.file_id}/content`} download>
+                    <FileDownload fileId={entry.file.file_id} name={entry.file.original_name}>
                       Download {entry.file.original_name}
-                    </a>
+                    </FileDownload>
                   ) : (
                     <span>Content unavailable; opening is disabled.</span>
                   ))}

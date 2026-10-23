@@ -231,7 +231,9 @@ function ReportRecord({ id }: { id: string }) {
                       Metadata and history: {file.originalName}
                     </Link>{" "}
                     {file.available ? (
-                      <a href={`/api/files/${file.id}/content`}>Download {file.originalName}</a>
+                      <FileDownload fileId={file.id} name={file.originalName}>
+                        Download {file.originalName}
+                      </FileDownload>
                     ) : (
                       <span>Content unavailable; opening disabled.</span>
                     )}
@@ -643,3 +645,4 @@ function InspectionCommand() {
     </>
   );
 }
+import { FileDownload } from "../shared/file-download";

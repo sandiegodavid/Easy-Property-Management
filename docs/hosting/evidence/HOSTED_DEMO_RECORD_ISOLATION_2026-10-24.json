@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-24 America/Los_Angeles",
+  "evidenceType": "operator-reported real browser record checks plus independent read-only workspace-database inspection",
+  "results": {
+    "a": {
+      "ownSyntheticTaskVisibleAfterRefreshAndInSecondSession": true,
+      "otherWorkspaceSyntheticTaskRows": 0,
+      "ownSyntheticTaskRows": 1,
+      "creationReceiptRows": 1,
+      "creationAudit": { "action": "created", "actorKind": "hosted_operator", "rows": 1 },
+      "foreignSavedRecordRejectedInBrowser": true
+    },
+    "b": {
+      "ownSyntheticTaskVisibleAfterRefreshAndInSecondSession": true,
+      "otherWorkspaceSyntheticTaskRows": 0,
+      "ownSyntheticTaskRows": 1,
+      "creationReceiptRows": 1,
+      "creationAudit": { "action": "created", "actorKind": "hosted_operator", "rows": 1 },
+      "foreignSavedRecordRejectedInBrowser": true
+    }
+  },
+  "limits": [
+    "Browser persistence and foreign-record rejection were operator-reported; the database inspection independently confirms stored ownership, receipt, and audit facts only.",
+    "This covers synthetic Task records only; it does not establish File, receipt, search, bootstrap, audit-list, recovery, or cache isolation."
+  ]
+}

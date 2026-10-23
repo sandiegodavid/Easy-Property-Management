@@ -11,6 +11,7 @@ from app.modules.audit.domain.models import (
     AuditEvent,
     AuditSnapshotPolicy,
 )
+from app.platform.actor_context import current_operator_actor
 
 
 class AuditEventRepository(Protocol):
@@ -26,6 +27,7 @@ class AuditHistoryRepository(Protocol):
     def history(
         self, entity_type: str | None = None, entity_id: str | None = None, **filters: Any
     ) -> list[AuditEvent]: ...
+    def latest_event_id(self, entity_type: str, entity_id: str) -> str | None: ...
 
 
 class AuditRecorder:
@@ -53,6 +55,7 @@ class AuditRecorder:
         event_id: str | None = None,
         occurred_at: datetime | None = None,
     ) -> AuditEvent:
+        actor_kind, actor_reference = invocation_actor(actor_kind, actor_reference)
         event = AuditEvent.change(
             entity_type=entity_type,
             entity_id=entity_id,
@@ -83,22 +86,35 @@ class AuditRecorder:
         """Record a bounded bulk operation plus one event per affected record."""
         if len(changes) > 500:
             raise ValueError("An audit bulk operation may contain at most 500 record changes.")
-        events = [
-            AuditEvent.change(
-                correlation_id=correlation_id, snapshot_policy=self.snapshot_policy, **change
+        events = []
+        for change in changes:
+            kind, reference = invocation_actor(
+                change.get("actor_kind", "local_operator"), change.get("actor_reference")
             )
-            for change in changes
-        ]
+            events.append(
+                AuditEvent.change(
+                    **{**change, "actor_kind": kind, "actor_reference": reference},
+                    correlation_id=correlation_id,
+                    snapshot_policy=self.snapshot_policy,
+                )
+            )
+        kind, reference = invocation_actor("system", None)
         summary = AuditEvent.change(
             entity_type=summary_entity_type,
             entity_id=summary_entity_id,
             action="operation_summary",
             before_snapshot=None,
             after_snapshot={"changedRecordCount": len(events)},
-            actor_kind="system",
+            actor_kind=kind,
+            actor_reference=reference,
             reason=reason,
             correlation_id=correlation_id,
             snapshot_policy=self.snapshot_policy,
         )
         self.repository.append_many(connection, [*events, summary])
         return [*events, summary]
+
+
+def invocation_actor(kind: ActorKind, reference: str | None) -> tuple[ActorKind, str | None]:
+    actor = current_operator_actor()
+    return ("hosted_operator", actor.reference) if actor else (kind, reference)

@@ -4,7 +4,7 @@ Prepared October 15, 2026. Audience: the administrator installing a two-operator
 
 ## Scope and current release gate
 
-This runbook applies the [Hosted Demo Design](HOSTED_DEMO_DESIGN.md), [Hosting Plan Improvements](HOSTING_PLAN_IMPROVEMENTS.md), [commercial Hosting Plan](../../biz/Hosting_Plan.md), and [release-wheel deployment procedure](../../manual/deployment.md) to one Oracle ARM VM. It uses two Unix service accounts, two independent workspaces, one supervised application process per workspace, and encrypted off-host recovery points. Managed Postgres, billing, relays, managed AI, and database replication are not required for this experiment.
+This runbook applies the [Hosted Demo Design](../hosting/design/HOSTED_DEMO_DESIGN.md), [consolidated Hosting Plan](../hosting/Hosting_Plan.md), and [release-wheel deployment procedure](../../manual/deployment.md) to one Oracle ARM VM. It uses two Unix service accounts, two independent workspaces, one supervised application process per workspace, and encrypted off-host recovery points. Managed Postgres, billing, relays, managed AI, and database replication are not required for this experiment.
 
 **Provisioning and private administrator testing can proceed. Public browser access remains blocked on the hosted application changes in the Hosted Demo Design.** The current application has no hosted login, workspace membership enforcement, or hosted session/CSRF contract. Its [transport middleware](../../application/apps/server/app/platform/browser_transport.py) accepts loopback hosts and origins only, and its [CLI](../../application/apps/server/app/__main__.py) binds to `127.0.0.1`.
 

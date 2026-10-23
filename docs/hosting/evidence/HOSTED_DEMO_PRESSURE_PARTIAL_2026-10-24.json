@@ -1,0 +1,49 @@
+{
+  "date": "2026-10-24",
+  "status": "partial; recovery phase not complete",
+  "attempt1": {
+    "startedAt": "2026-10-24T22:00:07.520234+00:00",
+    "completedAt": "2026-10-24T22:00:17.885177+00:00",
+    "failure": "Root images directory created as 0700 under private umask; unprivileged image stat rejected before pressure",
+    "testMountsDetached": true
+  },
+  "attempt2": {
+    "startedAt": "2026-10-24T22:01:40.641713+00:00",
+    "completedAt": "2026-10-24T22:01:53.031625+00:00",
+    "directoryCorrection": "Root-owned images directory explicitly 0711; image stays root 0600",
+    "reached": "release frame after maintenance/read/logout/no-partial-write assertions",
+    "passedAssertions": {
+      "write": 503,
+      "code": "hosted_write_maintenance",
+      "partialTasks": 0,
+      "missingOperationReceipt": 404,
+      "read": 200,
+      "logout": 204
+    },
+    "failure": "Post-logout sign-in driver reused prior assertion; fresh proof correction prepared locally, not deployed/run",
+    "testMountsDetached": true,
+    "imagesRetained": true,
+    "productionRootFreeBytes": 22888321024
+  },
+  "testStorage": {
+    "outerImage": "/var/lib/epm-volumes/epm-pressure-host.ext4",
+    "outerBytes": 536870912,
+    "outerMount": "/var/lib/epm-pressure-host",
+    "innerImageInsideOuter": "images/workspace.ext4",
+    "innerBytes": 262144000,
+    "innerMount": "/var/lib/epm-scratch/pressure-volume"
+  },
+  "safety": {
+    "aAndB": "active; unchanged",
+    "tunnel": "inactive/disabled",
+    "filler": "removed by controller cleanup",
+    "fstab": "unchanged",
+    "publicRoutes": "none",
+    "mainVmFilesystemFilled": false
+  },
+  "limits": [
+    "Passed phase inferred from assertion-guarded child release message and driver log, not a complete success report.",
+    "No recovery write, same-key replay or receipt success is yet claimed.",
+    "Synthetic identity and in-process ASGI; OS filesystem pressure was real on the disposable disk."
+  ]
+}

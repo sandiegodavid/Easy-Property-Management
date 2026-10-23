@@ -10,6 +10,7 @@ import { api } from "@epm/contracts";
 import { Link } from "react-router-dom";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "./workspace-gate";
+import { hostedMode } from "./hosted-session-state";
 import { defaultOrder, destination } from "./destinations";
 import { mutation, MutationFailure } from "../shared/mutations";
 import { applyAppearance, preferredAppearance } from "./theme";
@@ -182,9 +183,11 @@ export function PreferenceSettings() {
           <li>
             <Link to="/settings/provider-categories">Provider categories</Link>
           </li>
-          <li>
-            <Link to="/settings/ai">AI assistance</Link>
-          </li>
+          {!hostedMode() && (
+            <li>
+              <Link to="/settings/ai">AI assistance</Link>
+            </li>
+          )}
         </ul>
       </nav>
       {!writable && (

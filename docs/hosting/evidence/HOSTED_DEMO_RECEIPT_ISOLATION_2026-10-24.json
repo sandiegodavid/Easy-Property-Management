@@ -1,0 +1,29 @@
+{
+  "date": "2026-10-24 America/Los_Angeles",
+  "evidenceType": "operator-reported real browser receipt checks plus independent read-only workspace-database inspection",
+  "results": {
+    "a": {
+      "ownReceiptDetailVisible": true,
+      "foreignReceiptUiRouteRejected": true,
+      "foreignReceiptApiReadRejected": true,
+      "receiptRows": 1,
+      "counterpartReceiptRows": 0,
+      "allocationRows": 1,
+      "recordedAudit": { "action": "recorded", "actorKind": "local_operator", "rows": 1 }
+    },
+    "b": {
+      "ownReceiptDetailVisible": true,
+      "foreignReceiptUiRouteRejected": true,
+      "foreignReceiptApiReadRejected": true,
+      "receiptRows": 1,
+      "counterpartReceiptRows": 0,
+      "allocationRows": 1,
+      "recordedAudit": { "action": "recorded", "actorKind": "local_operator", "rows": 1 }
+    }
+  },
+  "limits": [
+    "Browser outcomes are operator-reported; database row, allocation, and audit facts were independently read-only inspected.",
+    "The receipts predate hosted operator enrollment, so their retained local_operator audit provenance is expected and does not claim a hosted write.",
+    "This does not establish search, bootstrap, audit-list, recovery, cache, CSRF, uninvited-identity, or concurrency isolation."
+  ]
+}

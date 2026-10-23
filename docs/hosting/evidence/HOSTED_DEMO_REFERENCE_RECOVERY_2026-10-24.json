@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-24",
+  "instances": {
+    "a": {
+      "workspaceId": "611d3445-0cce-4858-a10d-b5d5202d601a",
+      "objectKey": "epm/49fdb458-48a0-4029-9c4f-95e9710f8eb8/611d3445-0cce-4858-a10d-b5d5202d601a/references/261a24af9e229d189ea25f4d09f4870ace43612048f397ffd0dc5af1291eaec0.enc",
+      "size": 915,
+      "sha256": "261a24af9e229d189ea25f4d09f4870ace43612048f397ffd0dc5af1291eaec0",
+      "fullReadBack": true,
+      "independentDownload": true,
+      "decryptionVerified": true,
+      "deploymentMatches": true,
+      "freshEnrollmentRequired": true,
+      "approvedSubjectReferencePresent": false,
+      "pendingSubjectReferenceCount": 0,
+      "retention": "manual; no objects deleted"
+    },
+    "b": {
+      "workspaceId": "facd33be-7ff7-4d91-bff1-9a3f85af658b",
+      "objectKey": "epm/485044ba-07d6-41fe-8448-3735033f6930/facd33be-7ff7-4d91-bff1-9a3f85af658b/references/543f20224626da4b712a57d4c13baeb95c45b550e08a041283b07afc9335428f.enc",
+      "size": 915,
+      "sha256": "543f20224626da4b712a57d4c13baeb95c45b550e08a041283b07afc9335428f",
+      "fullReadBack": true,
+      "independentDownload": true,
+      "decryptionVerified": true,
+      "deploymentMatches": true,
+      "freshEnrollmentRequired": true,
+      "approvedSubjectReferencePresent": false,
+      "pendingSubjectReferenceCount": 0,
+      "retention": "manual; no objects deleted"
+    }
+  },
+  "verification": "Operator completed wizard; agent read nonsecret root reports. No passphrase or plaintext reference was read by the agent.",
+  "limits": [
+    "Pre-enrollment references; refresh after enrollment or configuration changes.",
+    "Decrypted verification files remain root-private on the VM; only encrypted references are off-host.",
+    "This does not grant authority or prove complete lost-host re-provisioning."
+  ]
+}

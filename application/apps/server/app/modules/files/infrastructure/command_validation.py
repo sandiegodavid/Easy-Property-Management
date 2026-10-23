@@ -251,7 +251,10 @@ def _audit(connection, entity_type, entity_id, action, receipt, expected, before
         raise ValueError("Missing correlated command audit")
     after = json.loads(rows[0]["after_snapshot"])
     actual_before = json.loads(rows[0]["before_snapshot"]) if rows[0]["before_snapshot"] else None
-    if actual_before != before or rows[0]["actor_kind"] != "local_operator":
+    if actual_before != before or rows[0]["actor_kind"] not in {
+        "local_operator",
+        "hosted_operator",
+    }:
         raise ValueError("Invalid command audit before-state or actor")
     if any(after.get(k) != v for k, v in expected.items()):
         raise ValueError("Rewritten command audit")

@@ -24,6 +24,7 @@ These retain their complete design contracts. Capability availability and backlo
 - [ASST-FILE-001](ASST-FILE-001_DESIGN.md): proposed file transport and operator workflow, isolation/identity qualification, consistent exchange backup/restore, seven sequential slices and twelve open decisions.
 - [ASST-INTAKE-001](ASST-INTAKE-001_DESIGN.md): separately qualified scheduled source discovery and proposal admission.
 - [OBS-001](OBS-001_DESIGN.md): local diagnostics and opt-in, privacy-bounded product usage aggregation.
+- [Hosted demo public access](../hosting/qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md): accepted design decisions and implementation slices for the bounded Google Cloud A/B demo, including operator UI, authorization/sessions, cost/latency gates, recovery and Cloudflare deployment. Protected deployment is in qualification, with remaining acceptance gates and invitations pending; this does not mark SAAS-001/SEC-001/SEC-002 delivered.
 
 Universal Reader has a [UR-001 baseline technical design](UR-001_DESIGN.md), with seven implementation slices and twelve proposed decisions, supported by [research](../research/universal-reader/UNIVERSAL_READER_RESEARCH.md); its parallel work does not replace DATA scopes/dependencies. See [backlog](../FEATURE_BACKLOG.md) for all undesigned/planned features and hard dependencies.
 

@@ -22,6 +22,16 @@ class SQLiteAuditRepository:
     def append_many(self, connection: Any, events: list[AuditEvent]) -> None:
         connection.executemany(_INSERT, [_values(event) for event in events])
 
+    def latest_event_id(self, entity_type: str, entity_id: str) -> str | None:
+        uri = f"{self.database_path.resolve().as_uri()}?mode=ro"
+        with closing(sqlite3.connect(uri, uri=True)) as connection:
+            row = connection.execute(
+                "SELECT id FROM audit_events WHERE entity_type=? AND entity_id=? "
+                "ORDER BY rowid DESC LIMIT 1",
+                (entity_type, entity_id),
+            ).fetchone()
+        return row[0] if row else None
+
     def history(
         self,
         entity_type: str | None = None,

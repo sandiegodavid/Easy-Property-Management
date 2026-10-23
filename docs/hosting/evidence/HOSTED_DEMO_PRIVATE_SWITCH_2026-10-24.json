@@ -1,0 +1,60 @@
+{
+  "sourceRelease": "qual-c8aab474",
+  "unitSha256": "77e72153a5e9f5d3f06209ee1ce8e44a2b87dc55d34282a085568dab73ebbcad",
+  "instances": {
+    "a": {
+      "capturedAt": "2026-10-24T19:18:03.741794+00:00",
+      "workspaceId": "611d3445-0cce-4858-a10d-b5d5202d601a",
+      "pid": 2404,
+      "newService": "active/enabled",
+      "oldService": "inactive/masked",
+      "loopbackOnly": true,
+      "checks": {
+        "signIn": 200,
+        "/api/properties": 401,
+        "/api/hosted/session": 401,
+        "wrongHost": 403,
+        "protectedPage": 303,
+        "crossHost": 403,
+        "foreignOrigin": 403
+      },
+      "restarts": 0,
+      "memoryCurrentBytesAtStartupCheck": 196366336,
+      "authorization": {
+        "active": false,
+        "subjectBound": false,
+        "sessions": 0,
+        "pendingEnrollments": 0
+      }
+    },
+    "b": {
+      "capturedAt": "2026-10-24T19:18:30.764333+00:00",
+      "workspaceId": "facd33be-7ff7-4d91-bff1-9a3f85af658b",
+      "pid": 2621,
+      "newService": "active/enabled",
+      "oldService": "inactive/masked",
+      "loopbackOnly": true,
+      "checks": {
+        "signIn": 200,
+        "/api/properties": 401,
+        "/api/hosted/session": 401,
+        "wrongHost": 403,
+        "protectedPage": 303,
+        "crossHost": 403,
+        "foreignOrigin": 403
+      },
+      "restarts": 0,
+      "memoryCurrentBytesAtStartupCheck": 197287936,
+      "authorization": {
+        "active": false,
+        "subjectBound": false,
+        "sessions": 0,
+        "pendingEnrollments": 0
+      }
+    }
+  },
+  "tunnel": "inactive",
+  "publicRoutingEnabled": false,
+  "operatorActivated": false,
+  "fallbackDrill": "A original service restored after HTML probe omitted Accept; corrected probe and A retry passed before B switched."
+}

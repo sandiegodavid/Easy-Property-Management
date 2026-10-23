@@ -16,6 +16,14 @@ from app.platform.browser_transport import (
     TransportErrorResponse,
 )
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
+from app.bootstrap.hosted_access import compose_hosted_access
+from app.modules.hosted_access.api.router import build_session_router
+from app.modules.hosted_access.api.draft_leases import build_draft_lease_router
+from app.modules.hosted_access.infrastructure.configuration import (
+    HostedConfigurationError,
+    load_hosted_deployment,
+    validate_workspace_binding,
+)
 from app.bootstrap.file_link_policies import build_file_link_policy_registry
 from app.bootstrap.operator_support import compose_operator
 from app.bootstrap.operator_recovery import RecoverySourcePorts
@@ -205,9 +213,15 @@ def create_app(  # noqa: C901, PLR0915
     *,
     transport_policy: BrowserTransportPolicy | None = None,
     web_build_path: Path | None = None,
+    hosted_deployment_path: Path | None = None,
 ) -> FastAPI:
     """Create the local API without implicitly initializing a workspace."""
     service = WorkspaceService.from_local_config(config_path)
+    hosted = load_hosted_deployment(hosted_deployment_path) if hosted_deployment_path else None
+    if hosted is not None:
+        if transport_policy is not None:
+            raise HostedConfigurationError("Hosted and local transport cannot be combined.")
+        validate_workspace_binding(hosted, service)
     audit_repository = SQLiteAuditRepository(service.paths.database)
     recorder = AuditRecorder(audit_repository)
     runtime = WorkspaceRuntime(service)
@@ -492,9 +506,13 @@ def create_app(  # noqa: C901, PLR0915
         runtime.start()
         scheduler: asyncio.Task[None] | None = None
         try:
-            if runtime.ready:
+            if hosted is not None and not runtime.ready:
+                raise HostedConfigurationError(
+                    "Hosted workspace could not acquire its validated single-writer runtime."
+                )
+            if runtime.ready and hosted is None:
                 ai_generation.recover_interrupted()
-            if runtime.writer_lock_acquired:
+            if runtime.writer_lock_acquired and hosted is None:
                 scheduler = asyncio.create_task(_automatic_backup_scheduler(backups, runtime))
             elif runtime.error:
                 logger.warning("Workspace is not ready: %s", runtime.error)
@@ -513,6 +531,8 @@ def create_app(  # noqa: C901, PLR0915
                         )
             finally:
                 runtime.stop()
+                if hosted is not None:
+                    hosted_store.engine.dispose()
 
     app = FastAPI(
         title="Easy Property Management",
@@ -527,10 +547,20 @@ def create_app(  # noqa: C901, PLR0915
         service.paths.root.resolve().is_relative_to(web_root.resolve())
     ):
         raise ValueError("Packaged web assets must be separate from the workspace.")
-    app.add_middleware(PackagedWebMiddleware, root=web_root)
-    app.add_middleware(
-        BrowserTransportMiddleware, policy=transport_policy or BrowserTransportPolicy()
+    entry_metadata = (
+        {
+            "epm-deployment": "hosted_demo",
+            "epm-administrator-contact": hosted.administrator_contact,
+            "epm-demo-expires": hosted.expires_at.isoformat(),
+        }
+        if hosted is not None
+        else None
     )
+    app.add_middleware(PackagedWebMiddleware, root=web_root, entry_metadata=entry_metadata)
+    if hosted is None:
+        app.add_middleware(
+            BrowserTransportMiddleware, policy=transport_policy or BrowserTransportPolicy()
+        )
     register_api_error_handlers(app)
     app.state.backup_service = backups
     app.state.workspace_runtime = runtime
@@ -580,6 +610,7 @@ def create_app(  # noqa: C901, PLR0915
                 task_transaction_operations, SQLiteIntakeSourceReader()
             ),
         ),
+        allow_writes=hosted is None or "records.write" in hosted.capabilities,
     )
     app.state.operator_service = operator
     app.state.operator_directory_service = operator_directories
@@ -788,6 +819,11 @@ def create_app(  # noqa: C901, PLR0915
     app.include_router(
         build_ai_governance_router(ai_configuration, ai_generation, ai_drafts, runtime, ai_external)
     )
+    if hosted is not None:
+        hosted_store = compose_hosted_access(app, hosted, runtime)
+    else:
+        app.include_router(build_session_router())
+        app.include_router(build_draft_lease_router())
     return app
 
 

@@ -1,11 +1,12 @@
 """Restricted delivery of trusted, packaged UI assets, independent of workspace readiness."""
 
 from pathlib import Path
+from html import escape
 import re
 from uuid import UUID
 from unicodedata import category
 
-from starlette.responses import FileResponse, JSONResponse, RedirectResponse
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
 PACKAGED_WEB_ROOT = Path(__file__).parent.parent / "web_build"
 DETAIL_PARTS = 2
@@ -190,9 +191,10 @@ def _file(root: Path, relative: str) -> Path | None:
 
 
 class PackagedWebMiddleware:
-    def __init__(self, app, *, root: Path):
+    def __init__(self, app, *, root: Path, entry_metadata: dict[str, str] | None = None):
         self.app = app
         self.root = root.absolute()
+        self.entry_metadata = entry_metadata
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -201,7 +203,7 @@ class PackagedWebMiddleware:
         path = scope["path"]
         if path.startswith("/assets/"):
             response = self._asset(path, scope["method"])
-        elif browser_route(path):
+        elif browser_route(path) or (self.entry_metadata is not None and path == "/sign-in"):
             response = self._entry(path, scope)
         else:
             await self.app(scope, receive, send)
@@ -218,7 +220,21 @@ class PackagedWebMiddleware:
             return self._error(503, "web_build_unavailable")
         if path == "/":
             return RedirectResponse("/home", status_code=307, headers=self._headers())
+        if self.entry_metadata is not None:
+            return self._hosted_entry(entry)
         return FileResponse(entry, media_type="text/html", headers=self._headers())
+
+    def _hosted_entry(self, entry: Path):
+        content = entry.read_text(encoding="utf-8")
+        if "<head>" not in content:
+            return self._error(503, "web_build_unavailable")
+        metadata = "".join(
+            f'<meta name="{escape(key, quote=True)}" content="{escape(value, quote=True)}">'
+            for key, value in self.entry_metadata.items()
+        )
+        return HTMLResponse(
+            content.replace("<head>", "<head>" + metadata, 1), headers=self._headers()
+        )
 
     def _asset(self, path, method):
         if method not in {"GET", "HEAD"}:

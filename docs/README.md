@@ -46,6 +46,8 @@ For a specific change, read its owning module, relevant shared platform contract
 
 [Decisions](DECISIONS.md) preserves agreed rationale, including future product decisions. [Roadmap](ROADMAP.md) groups intended delivery. [Research](research/README.md) contains dated external investigations and experiments; findings need verification before implementing a changing provider/runtime capability.
 
+[Hosting](hosting) contains the [review index](hosting/README.md), consolidated local/demo/MVP planning, and the [Google Cloud demo deployment runbook](hosting/deployment/GOOGLE_CLOUD_DEMO_DEPLOYMENT.md). Proposed plans remain distinct from deployed capabilities.
+
 ## Historical material and traceability
 
 [Archive](archive/README.md) retains completed designs, superseded partial-design snapshots and delivery/validation records. [Document inventory](DOCUMENT_INVENTORY.md) maps every relocated source to its current guide, active work and historical record. Partial snapshots are explicitly not completed features.

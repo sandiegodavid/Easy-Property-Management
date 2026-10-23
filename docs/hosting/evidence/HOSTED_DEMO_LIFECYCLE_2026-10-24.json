@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-24",
+  "sourceRelease": "qual-c8aab474",
+  "scope": "new scratch-only lifecycle workspace; no A/B or public-route changes",
+  "checks": {
+    "keyTransportFailure": "Expired verifier cache plus injected fetch OSError denied business; request succeeded after fixture transport recovery",
+    "restoreGenerationFence": "Source-owned store marker change invalidated prior session and required new pending enrollment and approval; marker baseline restored before restart",
+    "operatorDisablement": "Previously valid session denied immediately after persistent disable/generation fence",
+    "failedResetPreparation": "Invalid encrypted input rejected; replacement absent; staging cleaned; source DB byte-identical and one acknowledged task retained",
+    "disabledAcrossApplicationRestart": "Prior cookie explicitly replayed after fresh app composition; denied with hosted_session_expired while operator remained disabled",
+    "sessionExpiry": "Nine-hour injected clock advance denied session with still-valid signed identity",
+    "demoExpiry": "Injected clock beyond configured window denied business with hosted_demo_expired"
+  },
+  "boundary": {
+    "application": "Installed qualified package through in-process ASGI/TestClient",
+    "storage": "Real dedicated Linux ext4 quota volume and SQLite",
+    "identity": "Real RSA signatures/claim verification; synthetic key transport",
+    "clock": "Application clock injected; VM clock unchanged"
+  },
+  "fixturePaths": {
+    "root": "/var/lib/epm-scratch/volume/lifecycle-20261024",
+    "deployment": "/etc/epm/hosted-lifecycle-scratch.json",
+    "administration": "/var/lib/epm-scratch/lifecycle-access-20261024/hosted-access.sqlite",
+    "driver": "/opt/epm/qualification/hosted-transition-20261024/lifecycle-check.py"
+  },
+  "finalState": "Fixture operator disabled; RSA private key and raw cookies existed only in process memory",
+  "limits": [
+    "Not a real Cloudflare network outage or real operator PIN proof.",
+    "Restore-generation check calls the owning store method; full archive restore separately proved by A/B and scratch recovery evidence.",
+    "Failed reset covers invalid-archive preparation before replacement publication, not every switch failure.",
+    "Host-pressure data in earlier unit tests is synthetic; physical disposable host-disk pressure test remains pending."
+  ]
+}

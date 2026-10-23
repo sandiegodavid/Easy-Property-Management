@@ -1,0 +1,222 @@
+HOSTED DEMO: COST AND LATENCY DESIGN REVIEW
+Review date: 2026-10-23
+
+Scope: Hosting_Plan.md, HOSTING_PLAN_IMPROVEMENTS.md,
+HOSTING_PLAN_MVP_OPTIONS.md, and HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md.
+Current implementation was inspected only to qualify the proposed optimizations.
+This is an initial document review, not a general source-code review or an
+implementation change. No live Google Cloud performance or billing was measured.
+
+PUBLIC ACCESS PLAN: COST AND ACCEPTANCE
+
+1. [P2] Add a post-trial cost envelope and measured right-sizing gate.
+
+References:
+docs/hosting/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md:111-116
+docs/hosting/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md:172
+docs/hosting/GOOGLE_CLOUD_DEMO_DEPLOYMENT.md:48-56
+
+The public-access plan records a trial-cost owner but does not specify the
+ongoing baseline or a decision before trial expiry. It also does not make the
+cost of changing instance size part of acceptance. A recommendation to use a
+smaller VM without this evidence could save compute while increasing latency
+or causing memory failures. E2 medium exposes two vCPUs but has one fractional
+vCPU of sustained shared-core capacity; E2 small has half that CPU allowance
+and half the memory. Neither is equivalent to two sustained dedicated vCPUs.
+
+Recommendation: keep the existing E2 medium during qualification, record the
+Oregon Console estimate and actual gross usage (compute, disk, IPv4, transfer,
+backup, and domain), and set an explicit trial-expiry decision. Retain one VM,
+one tunnel, local workspace files, and no managed Postgres, relay, AI gateway,
+Pages deployment, extra worker host, or paid networking service for this demo.
+Use Cloudflare's eligible free Access plan and an existing domain if available.
+Evaluate a 2 GB host only after four-browser plus report/backup measurements
+show sufficient CPU, memory and latency headroom. Resize service memory limits
+and rehearse recovery before downsizing. Do not sleep active demo workspaces
+or use Spot capacity solely for savings. Removing the external IPv4 saves
+about USD 3.65 per 730-hour month, but is not a net saving if it requires Cloud
+NAT or breaks package downloads/tunnel egress; keep it until an alternative
+egress path is explicitly qualified.
+
+Sources:
+https://docs.cloud.google.com/compute/docs/general-purpose-machines
+https://cloud.google.com/products/compute/pricing/general-purpose
+https://cloud.google.com/vpc/network-pricing
+https://www.cloudflare.com/plans/zero-trust-services/
+
+2. [P2] Add numeric latency gates and background-load scheduling before sizing.
+
+References:
+docs/hosting/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md:107
+docs/hosting/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md:156-160
+docs/hosting/HOSTING_PLAN_IMPROVEMENTS.md:13-20
+docs/ui/validation.md:299-309
+
+The plan requires real clients and bounded queries but has no hosted p95
+acceptance target or measurement protocol. This cannot determine whether a
+smaller host, extra caching, or a region change improves the operator's
+experience. The existing local Home acceptance passed with live reads and
+explicitly skipped snapshot infrastructure; those local figures are not hosted
+network or sustained-load evidence.
+
+Recommendation: separate cold asset load, warm authenticated Home/API reads,
+login/PIN delay, mutation completion, and shell navigation feedback. Record
+client location/network, sample counts, p50/p95, RSS, CPU throttling, lock waits,
+request counts and transferred bytes, including four visible browsers plus a
+report and staggered backup. Preserve the existing one-second server/read and
+100-ms shell-feedback targets as proposed starting gates where applicable;
+define a separate end-to-end hosted budget before claiming that they apply
+over the network. Keep Oregon until actual invited-user measurements justify
+moving it. Optimize bounded source queries and measured query plans before
+adding Home snapshots or changing database durability. Schedule backups one
+workspace at a time; use existing process supervision/resource controls for
+expensive maintenance rather than introducing another workspace writer.
+
+PUBLIC ACCESS PLAN: AUTHENTICATION AND ASSET HOT PATH
+
+3. [P2] Replace the per-record remote-auth prohibition with an explicit request budget.
+
+References:
+docs/hosting/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md:57-62
+docs/hosting/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md:156
+
+The matrix prohibits remote token introspection per record but leaves one
+remote call per HTTP request compatible with the stated budget. A page can
+make several authenticated reads and background checks, so this interpretation
+can add repeated network latency and an external availability dependency to
+ordinary navigation. A database update of session last-seen on every request
+would also introduce avoidable contention.
+
+Recommendation: verify assertions locally with bounded cached signing keys;
+only bounded key refresh should need provider network access. Specify one
+indexed local authorization/session projection per protected request, including
+operator status/generation/expiry, and no session-maintenance write on each
+ordinary read. Keep required owning sensitive-read audit writes unchanged.
+Use fixed/explicit expiry or bounded last-seen updates instead of sliding writes
+on every GET. Measure auth overhead separately from domain query budgets.
+Preserve current revocation checks on every request; do not trade immediate
+revocation for an unbounded cached allow decision.
+
+SOURCE PLAN: STORAGE COMPATIBILITY
+
+4. [P1] Do not adopt R2 live attachments as a drop-in S3 optimization.
+
+References:
+docs/hosting/HOSTING_PLAN_MVP_OPTIONS.md:19
+docs/hosting/HOSTING_PLAN_MVP_OPTIONS.md:36-38
+docs/hosting/HOSTING_PLAN_MVP_OPTIONS.md:76-78
+application/apps/server/app/modules/files/infrastructure/content_store.py:249-279
+application/apps/server/app/modules/files/infrastructure/content_store.py:314-321
+docs/hosting/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md:73
+
+The options document asserts that existing S3 support enables R2 attachments
+from day one. The current adapter requires enabled bucket versioning and a
+durable VersionId for exact reads and rollback. Cloudflare currently documents
+GetBucketVersioning and PutBucketVersioning as unsupported. Direct browser
+presigned transfers are also not supplied by this adapter and would require
+new publication, integrity, quota, authorization and recovery contracts.
+Presigned URLs are bearer credentials usable until expiry, which changes the
+current requirement to authorize each file read and revoke application access.
+
+Recommendation for the demo: retain local live files and authorized File APIs.
+Evaluate R2 Standard only as an independent destination for completed encrypted
+workspace archives, with unique object names, retention and a restore drill;
+that does not require selecting R2 as the workspace file provider. Its free
+10 GB-month storage allowance can cover a small synthetic retention set if
+actual archive sizes and account-wide operations remain within limits. Treat
+direct object transfer as a separately qualified future optimization after
+measuring file traffic. Do not weaken version/integrity checks for compatibility.
+
+Sources:
+https://developers.cloudflare.com/r2/api/s3/api/
+https://developers.cloudflare.com/r2/api/s3/presigned-urls/
+https://developers.cloudflare.com/r2/pricing/
+
+SOURCE PLAN: FRESHNESS AND DURABILITY
+
+5. [P1] Revision-only caching and polling do not detect time-based obligations.
+
+References:
+docs/hosting/HOSTING_PLAN_MVP_OPTIONS.md:58-60
+docs/hosting/HOSTING_PLAN_MVP_OPTIONS.md:84-86
+docs/hosting/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md:104-105
+application/apps/web/src/shared/home-transport.ts:170-176
+application/apps/web/src/shared/home-transport.ts:268-285
+
+The options document says revision polling covers time-based deadline refresh
+and recommends invalidating cached Home output only on writes. A follow-up can
+become due or a property can cross midnight without any write, so the revision
+can stay unchanged while attention/financial classifications change. Adopting
+this shortcut could leave a fast but stale all-clear on Home.
+
+Recommendation: retain focus/reconnect and source-declared nextTransitionAt/
+periodic time refresh. Start any new visible-browser change poll at a measured
+interval, such as the research proposal's 15 seconds, with jitter/backoff and
+hidden-tab suspension. Four browsers polling every 15 seconds already create
+960 checks per hour; response byte size alone does not establish negligible
+auth/query cost. Any future cache must include workspace/runtime, authorized
+scope, filters/period and source markers, and expire at the next relevant
+time transition or bounded refresh deadline. Keep the existing independently
+fresh attention checks; do not add a cache until hosted measurements justify it.
+
+6. [P2] synchronous=NORMAL changes durability; it is not a free latency improvement.
+
+References:
+docs/hosting/HOSTING_PLAN_MVP_OPTIONS.md:54-56
+application/apps/server/app/platform/sqlite_engine.py:17-28
+docs/hosting/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md:154-155
+
+The recommended pragma pack calls NORMAL safe under WAL without stating that
+committed transactions can roll back after OS/power failure. SQLite distinguishes
+consistency from durability here. For a system presenting receipts and financial
+commands as committed, this is a product durability choice, not a tuning default.
+The five-second busy timeout is already configured in the current engine, and
+ordinary reads already use deferred transactions; the source note's shared
+single-read-connection premise has not been established by measurement.
+
+Recommendation: preserve the existing durability contract, inspect actual
+connection settings and query plans, and benchmark before changing pool/cache/
+mmap settings. If NORMAL is proposed, record the acknowledged data-loss tradeoff
+and test its recovery semantics explicitly rather than describing it as safe
+without qualification. Do not add another server writer or background canonical
+database writer as a latency fix.
+
+Source:
+https://www.sqlite.org/pragma.html#pragma_synchronous
+
+SOURCE PLAN: EDGE DELIVERY
+
+7. [P2] Define same-origin asset routing instead of calling a separate API subdomain same-origin.
+
+References:
+docs/hosting/HOSTING_PLAN_MVP_OPTIONS.md:72-74
+docs/hosting/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md:69-73
+docs/hosting/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md:131
+application/apps/server/app/platform/web_delivery.py:8-17
+application/apps/server/app/platform/web_delivery.py:223-239
+docs/ui/frontend-architecture.md:33-35
+
+The options document moves the app bundle to Pages and describes an API on a
+proxied subdomain as same-origin. A different hostname is a different origin.
+The actual frontend uses relative /api requests and a connect-src 'self' CSP;
+a separate API host would need deliberate routing, cookie, CSRF and CORS/CSP
+changes. It also adds release-coordination work without evidence that origin
+static serving is the dominant latency cost for two users.
+
+Recommendation: retain the combined release and each workspace's public origin.
+First qualify compression and browser/Cloudflare caching for the approved
+fingerprinted assets already marked public/immutable by web_delivery.py. Keep
+private entry HTML, APIs, errors, sessions and downloads no-store/non-shared.
+Verify actual Content-Encoding, cache headers, cache eligibility and response
+behavior with Access enabled; an immutable header alone does not prove an edge
+hit. If Pages/Workers routing is considered later, specify an exact same-origin
+path routing/release contract and measure its benefit first. Do not use Cache
+Everything or an Access bypass for private responses to obtain apparent speed.
+
+VALIDATION AND SCOPE
+
+Primary provider/SQLite documentation was checked on the review date. No
+application tests, live VM benchmarks, provider changes or source implementation
+were performed. Target plans were not edited. This file records actionable
+findings for a later plan revision. The review does not approve any cost estimate,
+storage adapter, snapshot mechanism or public deployment.

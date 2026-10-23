@@ -2908,6 +2908,38 @@
         "title": "CategorySnapshotResponse",
         "type": "object"
       },
+      "ChangeResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "runtimeEpoch": {
+            "format": "uuid",
+            "title": "Runtimeepoch",
+            "type": "string"
+          },
+          "serverTimeUtc": {
+            "format": "date-time",
+            "title": "Servertimeutc",
+            "type": "string"
+          },
+          "sourceRevision": {
+            "title": "Sourcerevision",
+            "type": "string"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "title": "Workspaceid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspaceId",
+          "runtimeEpoch",
+          "sourceRevision",
+          "serverTimeUtc"
+        ],
+        "title": "ChangeResponse",
+        "type": "object"
+      },
       "ChildPreview": {
         "additionalProperties": false,
         "properties": {
@@ -11393,6 +11425,57 @@
           "draftPayload"
         ],
         "title": "DraftEditInput",
+        "type": "object"
+      },
+      "DraftLeaseInput": {
+        "additionalProperties": false,
+        "properties": {
+          "expectedRevision": {
+            "minimum": 0.0,
+            "title": "Expectedrevision",
+            "type": "integer"
+          },
+          "renew": {
+            "default": false,
+            "title": "Renew",
+            "type": "boolean"
+          },
+          "takeover": {
+            "default": false,
+            "title": "Takeover",
+            "type": "boolean"
+          },
+          "token": {
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "expectedRevision"
+        ],
+        "title": "DraftLeaseInput",
+        "type": "object"
+      },
+      "DraftLeaseResponse": {
+        "properties": {
+          "expiresAt": {
+            "format": "date-time",
+            "title": "Expiresat",
+            "type": "string"
+          },
+          "renewedAt": {
+            "format": "date-time",
+            "title": "Renewedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expiresAt",
+          "renewedAt"
+        ],
+        "title": "DraftLeaseResponse",
         "type": "object"
       },
       "DraftPageResponse": {
@@ -31982,6 +32065,82 @@
         "title": "ServiceResponse",
         "type": "object"
       },
+      "SessionGrantResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "csrfToken": {
+            "title": "Csrftoken",
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "title": "Expiresat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "csrfToken",
+          "expiresAt"
+        ],
+        "title": "SessionGrantResponse",
+        "type": "object"
+      },
+      "SessionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "administratorContact": {
+            "title": "Administratorcontact",
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "csrfToken": {
+            "title": "Csrftoken",
+            "type": "string"
+          },
+          "demoExpiresAt": {
+            "format": "date-time",
+            "title": "Demoexpiresat",
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "title": "Expiresat",
+            "type": "string"
+          },
+          "identityBinding": {
+            "title": "Identitybinding",
+            "type": "string"
+          },
+          "operatorId": {
+            "format": "uuid",
+            "title": "Operatorid",
+            "type": "string"
+          },
+          "workspaceId": {
+            "format": "uuid",
+            "title": "Workspaceid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "csrfToken",
+          "expiresAt",
+          "operatorId",
+          "workspaceId",
+          "identityBinding",
+          "demoExpiresAt",
+          "administratorContact",
+          "capabilities"
+        ],
+        "title": "SessionResponse",
+        "type": "object"
+      },
       "SettingsCommandResponse": {
         "additionalProperties": false,
         "properties": {
@@ -50372,6 +50531,170 @@
         ]
       }
     },
+    "/api/hosted/drafts/{record_id}/lease": {
+      "post": {
+        "operationId": "claimHostedDraftLease",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Record Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftLeaseInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftLeaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Claim"
+      }
+    },
+    "/api/hosted/session": {
+      "delete": {
+        "operationId": "endHostedSession",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          }
+        },
+        "summary": "End"
+      },
+      "get": {
+        "operationId": "getHostedSession",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          }
+        },
+        "summary": "Current"
+      },
+      "post": {
+        "operationId": "beginHostedSession",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionGrantResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          }
+        },
+        "summary": "Begin"
+      }
+    },
+    "/api/hosted/session/all": {
+      "delete": {
+        "operationId": "endAllHostedSessions",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          }
+        },
+        "summary": "End All"
+      }
+    },
     "/api/inspection-commands/by-key/{key}": {
       "get": {
         "operationId": "getInspectionCommandByKey",
@@ -56579,6 +56902,37 @@
           }
         },
         "summary": "Bootstrap",
+        "tags": [
+          "operator"
+        ]
+      }
+    },
+    "/api/operator/changes": {
+      "get": {
+        "operationId": "getOperatorChanges",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransportErrorResponse"
+                }
+              }
+            },
+            "description": "Local transport rejected."
+          }
+        },
+        "summary": "Changes",
         "tags": [
           "operator"
         ]

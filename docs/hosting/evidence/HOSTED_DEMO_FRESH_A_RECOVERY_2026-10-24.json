@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-24",
+  "timezone": "America/Los_Angeles",
+  "instance": "a",
+  "workspaceId": "611d3445-0cce-4858-a10d-b5d5202d601a",
+  "archiveBytes": 422727,
+  "archiveSha256": "18bd8fdc1743456c24b7302f0d81f7d420f49c4cfea37c86bfdf60a1e974eaec",
+  "independentR2Download": "matched ledger size and SHA-256; operator output",
+  "restoredWorkspace": "/var/lib/epm-a/volume/recovery-proof-20261024T190113Z/workspace",
+  "comparison": {
+    "tables": 105,
+    "identicalRetainedRows": 1432,
+    "sharedAuditEvents": 737,
+    "changedSharedAuditEvents": 0,
+    "fileCount": 0,
+    "sourceOnlyAuditEvents": [
+      "backup_operation/backup_created",
+      "backup_retention/evaluated"
+    ],
+    "restoredOnlyAuditEvents": [
+      "workspace_restore/restored"
+    ],
+    "sourceAuditCorrelationAndSnapshots": "verified exact first-point backup/retention outcome"
+  },
+  "scenarioVerifier": "passed on restored workspace: exact counts, shares, IDs, expense/deposit/rent totals, relationships, SQLite integrity/foreign keys/current schema",
+  "recoveryStatus": {
+    "lastVerifiedBackupAt": "2026-10-24T19:01:31.342562+00:00",
+    "needsAttention": false,
+    "retentionPending": false,
+    "recoveryAgeSecondsAtCheck": 154
+  },
+  "originalServices": "A and B active; unchanged",
+  "limits": [
+    "Fresh synthetic portfolio has no managed files; byte restoration is evidenced separately by the prior scratch drill.",
+    "B recovery not yet executed; original six-stage handoff superseded by B-only continuation.",
+    "No public routing, service switch, enrollment activation or boot qualification claimed."
+  ]
+}

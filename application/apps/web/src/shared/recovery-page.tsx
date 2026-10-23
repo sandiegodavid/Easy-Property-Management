@@ -10,6 +10,7 @@ import { workflows } from "@epm/contracts/workflows";
 import { workflowUrl } from "../workflows/command";
 import type { components } from "@epm/contracts/generated";
 import { formatHomeTime } from "./home-time";
+import { hostedMode } from "../app/hosted-session-state";
 
 const statusLabels: Record<components["schemas"]["RecoveryMetadata"]["status"], string> = {
   active: "Draft saved",
@@ -70,6 +71,12 @@ export function RecoveryPage() {
         Saved forms are not official records. Files and credentials must be selected again after
         restart. If a submission was interrupted, check its result before submitting again.
       </p>
+      {hostedMode() && (
+        <p>
+          Resume a saved form and explicitly claim editing before discarding it or checking its
+          submission.
+        </p>
+      )}
       {records.isPending && <p role="status">Loading unfinished forms…</p>}
       {records.error && <p role="alert">{records.error.message}</p>}
       {error && <p role="alert">{error}</p>}
@@ -102,7 +109,7 @@ export function RecoveryPage() {
                       Saved <time dateTime={record.savedAt}>{formatHomeTime(record.savedAt)}</time>
                     </p>
                     <div className="result-card-actions">
-                      {record.status === "outcome_unknown" && (
+                      {!hostedMode() && record.status === "outcome_unknown" && (
                         <button
                           disabled={pending || !scope.canWrite}
                           onClick={() => {
@@ -128,7 +135,7 @@ export function RecoveryPage() {
                           </span>
                         )
                       )}
-                      {record.status === "active" && (
+                      {!hostedMode() && record.status === "active" && (
                         <button
                           disabled={pending || !scope.canWrite}
                           onClick={() => {

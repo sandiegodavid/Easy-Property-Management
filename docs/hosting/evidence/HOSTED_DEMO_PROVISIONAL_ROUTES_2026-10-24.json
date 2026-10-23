@@ -1,0 +1,26 @@
+{
+  "checkedAt": "2026-10-25T00:12:29.326397+00:00",
+  "status": "provisional exact origin routes installed; real PIN/enrollment pending",
+  "matches": [
+    {
+      "hostname": "demo-a.epmdemo.xyz",
+      "service": "http://127.0.0.1:8001"
+    },
+    {
+      "hostname": "demo-b.epmdemo.xyz",
+      "service": "http://127.0.0.1:8002"
+    },
+    {
+      "hostname": "unmatched.epmdemo.xyz",
+      "service": "http_status:404"
+    }
+  ],
+  "configSha256": "aa081c7467fafe70adbc75e94b8af504a66a82083952e108398b200fe865d87e",
+  "tunnelActive": true,
+  "tunnelEnabledAtBoot": false,
+  "aAndBActive": true,
+  "operatorsActivated": false,
+  "hostOrOriginRewrites": false,
+  "readinessStatus": 200,
+  "rollbackConfig": "/opt/epm/qualification/public-routes-20261024/closed-config.yml"
+}

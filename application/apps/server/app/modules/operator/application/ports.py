@@ -1,6 +1,7 @@
 """OPS persistence and runtime ports; no database connection reaches use cases."""
 
 from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol, TypeVar, TypedDict, Unpack
@@ -17,6 +18,10 @@ from app.platform.coverage import CoverageSubject, CoverageFacts
 from app.platform.command_recovery import CommandRecoveryReader
 
 Result = TypeVar("Result")
+
+
+class RecoveryEditAuthority(Protocol):
+    def mutation(self, record_id: str) -> AbstractContextManager[None]: ...
 
 
 @dataclass(frozen=True)

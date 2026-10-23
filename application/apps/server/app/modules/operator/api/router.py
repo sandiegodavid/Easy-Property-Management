@@ -77,6 +77,13 @@ class MutationInput(Contract):
     idempotencyKey: UUID
 
 
+class ChangeResponse(Contract):
+    workspaceId: UUID
+    runtimeEpoch: UUID
+    sourceRevision: str
+    serverTimeUtc: AwareDatetime
+
+
 class PreferenceInput(MutationInput):
     appearance: Literal["light", "dark"]
     destinationOrder: list[str] = Field(max_length=len(DESTINATIONS))
@@ -291,6 +298,10 @@ def build_router(
 
 
 def register_recovery(router, service):
+    @router.get("/changes", response_model=ChangeResponse, operation_id="getOperatorChanges")
+    def changes():
+        return invoke(service.changes)
+
     @router.get("/recovery", response_model=RecoveryPage, operation_id="listOperatorRecovery")
     def recovery_records(
         limit: int = Query(50, ge=1, le=100), cursor: str | None = Query(None, max_length=4096)

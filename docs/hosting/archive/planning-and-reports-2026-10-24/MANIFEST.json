@@ -1,0 +1,44 @@
+[
+  {
+    "source": "Hosting_Plan.md",
+    "snapshot": "Hosting_Plan.md",
+    "sourceSha256": "f9786330b4fc50b1bf4bebf569c62223d69054275647f0fdead08cc1232670ad",
+    "snapshotSha256": "ba7cde5f599b591e3e415d5d868e2dd62576c3e74a879a6a8024995842cb26e1",
+    "changes": "Relative Markdown links only"
+  },
+  {
+    "source": "qualification/reports/HOSTED_DEMO_COST_LATENCY_REVIEW_2026-10-23.txt",
+    "snapshot": "HOSTED_DEMO_COST_LATENCY_REVIEW_2026-10-23.txt",
+    "sourceSha256": "7c35710f275706e585171ce0759b2072eb24b915681aaf3c3e37301e4b886690",
+    "snapshotSha256": "7c35710f275706e585171ce0759b2072eb24b915681aaf3c3e37301e4b886690",
+    "changes": "Relative Markdown links only"
+  },
+  {
+    "source": "qualification/reports/HOSTED_DEMO_INSTALLED_RELEASE_2026-10-23.md",
+    "snapshot": "HOSTED_DEMO_INSTALLED_RELEASE_2026-10-23.md",
+    "sourceSha256": "6a38851dc18dce073bbbd772d081e7dfcc3bcd4e55d18f6089991b363cc891b7",
+    "snapshotSha256": "ed2f522865dd4bef87f4bde984b684d6be23eafd88ba55c62e236460f7f9e1fe",
+    "changes": "Relative Markdown links only"
+  },
+  {
+    "source": "qualification/reports/HOSTED_DEMO_LINUX_QUOTA_2026-10-23.md",
+    "snapshot": "HOSTED_DEMO_LINUX_QUOTA_2026-10-23.md",
+    "sourceSha256": "d40590c2c7301ee1752edb9bdb81ef6aa8b82036a6d0cc84cd1e44f20859df87",
+    "snapshotSha256": "94e8d3c8131796eea7984a653f6013aa551119c92c1296304bc422d639893c02",
+    "changes": "Relative Markdown links only"
+  },
+  {
+    "source": "qualification/reports/HOSTED_DEMO_RECOVERY_2026-10-23.md",
+    "snapshot": "HOSTED_DEMO_RECOVERY_2026-10-23.md",
+    "sourceSha256": "3d4d28bd974bb97dbe282bcb846b5242339fa743763b541e28786bf3dd36d398",
+    "snapshotSha256": "de7b5626315adc923de7c2a82decf4460e04c11afbe5b949deb63962472c3190",
+    "changes": "Relative Markdown links only"
+  },
+  {
+    "source": "qualification/reports/HOSTED_DEMO_SYSTEMD_UPLOAD_2026-10-23.md",
+    "snapshot": "HOSTED_DEMO_SYSTEMD_UPLOAD_2026-10-23.md",
+    "sourceSha256": "24a733b81c1cfa70ec164ba7fd6596c3a0c39805d4ac0d1421aa2e13e95d4cfb",
+    "snapshotSha256": "a30668755509f5f9822150010fe0236105fb882cca78079328c60bbc10215085",
+    "changes": "Relative Markdown links only"
+  }
+]

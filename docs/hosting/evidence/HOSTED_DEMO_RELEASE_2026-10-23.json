@@ -1,0 +1,43 @@
+{
+  "startedAt": "2026-10-24T05:05:37.783950+00:00",
+  "phase": "complete",
+  "hostRebooted": false,
+  "abBefore": {
+    "epm@a.service": "MainPID=8726\nActiveState=active\nActiveEnterTimestamp=Fri 2026-10-23 17:50:37 UTC",
+    "epm@b.service": "MainPID=8727\nActiveState=active\nActiveEnterTimestamp=Fri 2026-10-23 17:50:37 UTC"
+  },
+  "release": {
+    "sourceCommit": "c8aab47415b42dba0dec3545b117143a95ce49ef",
+    "wheelSha256": "6adcfb4fea6d953c5a83697417c2a0c2a081e66d1cf4288ad781d8327297fa85",
+    "wheelBytes": 2982482,
+    "scope": "isolated scratch qualification; not A/B deployment"
+  },
+  "installationVerification": "Application version: 0.1.0\nInstalled Python package: /opt/epm/releases/qual-c8aab474/venv/lib/python3.14/site-packages/app\nCurrent schema revision: 0001_initial_schema\nInstalled resource checks passed; workspace/browser acceptance is still required.",
+  "installedPackage": "/opt/epm/releases/qual-c8aab474/venv/lib/python3.14/site-packages/app/__init__.py",
+  "stoppedUnit": "NRestarts=0\nExecMainStatus=0\nActiveState=inactive",
+  "scratchUnmountedAndDetached": true,
+  "abAfter": {
+    "epm@a.service": "MainPID=8726\nActiveState=active\nActiveEnterTimestamp=Fri 2026-10-23 17:50:37 UTC",
+    "epm@b.service": "MainPID=8727\nActiveState=active\nActiveEnterTimestamp=Fri 2026-10-23 17:50:37 UTC"
+  },
+  "initialStartupFailure": "Qualification helper used umask 077 for the code environment; systemd correctly rejected an inaccessible interpreter (203/EXEC). Only new release code read/execute modes were corrected.",
+  "readinessProbeCorrection": "Protected root correctly required identity; inactive units may be unloaded; fingerprinted assets use the designed immutable cache header. Final probes match these contracts.",
+  "readySeconds": 17.661,
+  "checks": {
+    "signInShell": 200,
+    "packagedAsset": 200,
+    "assetCacheControl": "public, max-age=31536000, immutable",
+    "assetBytesMatchWheel": true,
+    "protectedHtmlRedirect": 303,
+    "missingAssertion": 401,
+    "wrongHost": 403
+  },
+  "systemd": "MainPID=38244\nNRestarts=0\nExecStart={ path=/opt/epm/releases/qual-c8aab474/venv/bin/python ; argv[]=/opt/epm/releases/qual-c8aab474/venv/bin/python -m app --config /var/lib/epm-scratch/config.json serve-hosted --deployment /etc/epm/hosted-scratch.json --port ${EPM_PORT} ; ignore_errors=no ; start_time=[Sat 2026-10-24 05:09:53 UTC] ; stop_time=[n/a] ; pid=38244 ; code=(null) ; status=0/0 }\nMemoryCurrent=203776000\nMemoryPeak=204075008\nCPUQuotaPerSecUSec=900ms\nMemoryHigh=1073741824\nMemoryMax=1572864000\nUser=epm-scratch\nPrivateTmp=yes\nPrivateDevices=yes\nProtectSystem=strict\nNoNewPrivileges=yes\nActiveState=active",
+  "runtimeEnvironmentKeys": [
+    "TMPDIR=/var/lib/epm-scratch/volume/tmp",
+    "EPM_PORT=18003"
+  ],
+  "credentialsInServiceEnvironment": false,
+  "environmentFileMode": "0o600",
+  "completedAt": "2026-10-24T05:10:11.357391+00:00"
+}

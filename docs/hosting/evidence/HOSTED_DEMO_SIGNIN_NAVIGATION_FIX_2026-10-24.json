@@ -1,0 +1,34 @@
+{
+  "checkedAt": "2026-10-25T00:20:38.434438+00:00",
+  "release": "/opt/epm/releases/signin-nav-20261024",
+  "wheelSha256": "c57d4cfc5803d1ff2cd06b9d49c16bacf068b43b30232388009cd6d15633f95a",
+  "wheelBytes": 2982550,
+  "results": [
+    {
+      "instance": "a",
+      "crossSiteSignIn": 200,
+      "crossSiteApiAndFile": 403,
+      "foreignOrigin": 403,
+      "cacheControl": "no-store"
+    },
+    {
+      "instance": "b",
+      "crossSiteSignIn": 200,
+      "crossSiteApiAndFile": 403,
+      "foreignOrigin": 403,
+      "cacheControl": "no-store"
+    }
+  ],
+  "workspaceAndAuthorizationPathsChanged": false,
+  "scope": "Installed loopback probes; actual browser return still needs operator retry",
+  "validation": {
+    "focusedTestsPassed": 40,
+    "pythonLint": "passed using application/pyproject.toml from application directory",
+    "pythonFormat": "passed",
+    "wheelDifferencesFromQualified": [
+      "app/modules/hosted_access/api/middleware.py",
+      "easy_property_management-0.1.0.dist-info/RECORD"
+    ],
+    "frontendAssets": "byte-identical"
+  }
+}

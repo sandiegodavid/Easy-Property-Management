@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-24 America/Los_Angeles",
+  "evidenceType": "operator-reported Cloudflare application policy tester results",
+  "status": "all four expected decisions matched",
+  "decisions": [
+    {
+      "application": "Demo A",
+      "identity": "configured A operator",
+      "expected": "allowed",
+      "reported": "allowed"
+    },
+    {
+      "application": "Demo A",
+      "identity": "configured B operator",
+      "expected": "denied",
+      "reported": "denied"
+    },
+    {
+      "application": "Demo B",
+      "identity": "configured A operator",
+      "expected": "denied",
+      "reported": "denied"
+    },
+    {
+      "application": "Demo B",
+      "identity": "configured B operator",
+      "expected": "allowed",
+      "reported": "allowed"
+    }
+  ],
+  "supportingObservations": [
+    "Both intended identities previously reached assigned Home.",
+    "Operator reports no PIN delivered for either wrong-application email attempt."
+  ],
+  "limits": [
+    "Policy tester decisions reported by operator, not independently read through provider API.",
+    "Non-delivery alone is not used as denial proof.",
+    "Does not establish foreign-ID, cookie, API/file/receipt isolation, third uninvited identity or browser performance."
+  ]
+}

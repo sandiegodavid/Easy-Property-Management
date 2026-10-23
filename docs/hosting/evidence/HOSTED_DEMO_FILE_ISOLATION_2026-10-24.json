@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-24 America/Los_Angeles",
+  "evidenceType": "operator-reported real browser File checks plus independent read-only workspace-database and content-hash inspection",
+  "results": {
+    "a": {
+      "ownSyntheticFileMetadataAndDownload": true,
+      "foreignFileMetadataRejected": true,
+      "foreignFileContentRejectedWithoutBytes": true,
+      "ownResultByIdempotencyKey": true,
+      "ownResultByOperationId": true,
+      "foreignResultByIdempotencyKeyRejected": true,
+      "foreignResultByOperationIdRejected": true,
+      "fileRecordRows": 1,
+      "counterpartFileRecordRows": 0,
+      "activeLinkRows": 1,
+      "uploadReceiptRows": 1,
+      "storageState": "available",
+      "storedBytesMatchRetainedSha256": true,
+      "creationAudit": { "action": "created", "actorKind": "hosted_operator", "rows": 1 }
+    },
+    "b": {
+      "ownSyntheticFileMetadataAndDownload": true,
+      "foreignFileMetadataRejected": true,
+      "foreignFileContentRejectedWithoutBytes": true,
+      "ownResultByIdempotencyKey": true,
+      "ownResultByOperationId": true,
+      "foreignResultByIdempotencyKeyRejected": true,
+      "foreignResultByOperationIdRejected": true,
+      "fileRecordRows": 1,
+      "counterpartFileRecordRows": 0,
+      "activeLinkRows": 1,
+      "uploadReceiptRows": 1,
+      "storageState": "available",
+      "storedBytesMatchRetainedSha256": true,
+      "creationAudit": { "action": "created", "actorKind": "hosted_operator", "rows": 1 }
+    }
+  },
+  "limits": [
+    "Browser outcomes are operator-reported; database, link, receipt, audit, storage-state, and byte-hash facts were independently read-only inspected.",
+    "This covers two synthetic maintenance-issue evidence files and their upload-result endpoints only; it does not establish finance receipt, search, bootstrap, audit-list, recovery, cache, or concurrency isolation."
+  ]
+}

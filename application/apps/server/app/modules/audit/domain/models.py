@@ -10,8 +10,11 @@ from datetime import UTC, datetime
 from typing import Any, Literal, Mapping, Protocol, Sequence
 from uuid import UUID, uuid4
 
-ActorKind = Literal["local_operator", "system", "connector", "ai_assistant"]
-ACTOR_KINDS = frozenset({"local_operator", "system", "connector", "ai_assistant"})
+ActorKind = Literal["local_operator", "hosted_operator", "system", "connector", "ai_assistant"]
+ACTOR_KINDS = frozenset(
+    {"local_operator", "hosted_operator", "system", "connector", "ai_assistant"}
+)
+OPERATOR_ACTOR_KINDS = frozenset({"local_operator", "hosted_operator"})
 _SENSITIVE_FIELD = re.compile(
     r"(?:access|refresh|client)?_?(?:token|secret)|password|passphrase|api_?key|account_?number|credentials?",
     re.I,
@@ -136,6 +139,7 @@ class AuditEvent:
         snapshot_policy: AuditSnapshotPolicy = DEFAULT_SNAPSHOT_POLICY,
     ) -> "AuditEvent":
         _validate_classification(entity_type, entity_id, action, actor_kind)
+        validate_actor_reference(actor_kind, actor_reference)
         snapshot_policy.validate(before_snapshot)
         snapshot_policy.validate(after_snapshot)
         event_time = datetime.now(UTC) if occurred_at is None else _utc_datetime(occurred_at)
@@ -198,6 +202,18 @@ def changed_paths(before: Any, after: Any, prefix: str = "") -> tuple[str, ...]:
             )
         )
     return (prefix or "$",)
+
+
+def validate_actor_reference(actor_kind: str, actor_reference: str | None) -> None:
+    if actor_kind == "hosted_operator":
+        try:
+            valid = (
+                isinstance(actor_reference, str) and str(UUID(actor_reference)) == actor_reference
+            )
+        except ValueError:
+            valid = False
+        if not valid:
+            raise ValueError("Hosted audit actors require a canonical operator UUID.")
 
 
 def _validate_classification(

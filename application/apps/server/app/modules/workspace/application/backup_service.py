@@ -48,10 +48,18 @@ class BackupService:
         restored_audit_recorder: Callable[[Path], AuditRecorder],
         secret_store: BackupSecretStore | None = None,
         remote_materializer=None,
+        *,
+        archive_staging_directory: Path | None = None,
     ) -> None:
         self.workspace_service = workspace_service
         self.secret_store = secret_store or KeyringBackupSecretStore()
-        self.archives = WorkspaceArchiveService(workspace_service, remote_materializer)
+        if archive_staging_directory is not None:
+            BackupDestinationPolicy(workspace_service).validate_external(archive_staging_directory)
+            if not archive_staging_directory.is_dir() or archive_staging_directory.is_symlink():
+                raise BackupError("Archive staging must be an existing external directory.")
+        self.archives = WorkspaceArchiveService(
+            workspace_service, remote_materializer, staging_directory=archive_staging_directory
+        )
         self.destinations = BackupDestinationPolicy(workspace_service)
         self.locks = WorkspaceLockCoordinator(workspace_service.paths)
         self.state = BackupStateStore(workspace_service.paths.backups)
@@ -146,7 +154,8 @@ class BackupService:
         staging = destination.parent / f".{destination.name}.restoring.{uuid4().hex}"
         try:
             with tempfile.TemporaryDirectory(
-                prefix="epm-restore-archive-", dir=destination.parent
+                prefix="epm-restore-archive-",
+                dir=self.archives.staging_directory or destination.parent,
             ) as temporary:
                 zip_path = Path(temporary) / "payload.zip"
                 header = decrypt_archive_to_zip(

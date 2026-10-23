@@ -1,0 +1,25 @@
+{
+  "date": "2026-10-24",
+  "timezone": "America/Los_Angeles",
+  "instance": "b",
+  "workspaceId": "facd33be-7ff7-4d91-bff1-9a3f85af658b",
+  "archiveBytes": 421320,
+  "archiveSha256": "46ed79dbf29d40eb52bb8d04a0c20c413c6e917b7719fd5df35ca2d46fec93e0",
+  "objectKey": "epm/485044ba-07d6-41fe-8448-3735033f6930/facd33be-7ff7-4d91-bff1-9a3f85af658b/2026-10-24/46ed79dbf29d40eb52bb8d04a0c20c413c6e917b7719fd5df35ca2d46fec93e0.epm-backup",
+  "createdAt": "2026-10-24T19:05:11.337679Z",
+  "verifiedAt": "2026-10-24T19:05:26.560377Z",
+  "restoredWorkspace": "/var/lib/epm-b/volume/recovery-proof-20261024T190456Z/workspace",
+  "strictRowAuditFileComparison": "Operator reported B-only wizard completed; strict comparison precedes scenario verification and stops on failure.",
+  "restoredVerificationReport": "Independently read retained verification.json; all expected counts and financial/domain scenarios passed.",
+  "recoveryStatusAtCheck": {
+    "needsAttention": false,
+    "retentionPending": false,
+    "recoveryAgeSeconds": 79
+  },
+  "originalServices": "Both active, unchanged",
+  "limits": [
+    "No new remote download or decryption during this metadata verification.",
+    "Synthetic fresh dataset has no managed files; prior scratch drill supplies populated evidence-byte proof.",
+    "No service transition, reboot, mount installation, enrollment activation or public acceptance claimed."
+  ]
+}

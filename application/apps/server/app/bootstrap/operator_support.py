@@ -44,7 +44,7 @@ from app.modules.operator.application.home_service import HomeCompositionService
 from app.modules.operator.infrastructure.home_unit_of_work import SQLiteHomeUnitOfWork
 
 
-def compose_operator(workspace, runtime, recorder, sources):
+def compose_operator(workspace, runtime, recorder, sources, *, allow_writes=True):
     def identity():
         state = "ready" if runtime.ready else "unavailable"
         if runtime.startup_attempted and not runtime.writer_lock_acquired:
@@ -53,7 +53,7 @@ def compose_operator(workspace, runtime, recorder, sources):
             state,
             runtime.workspace_id if runtime.ready else None,
             runtime.read_epoch,
-            runtime.ready and runtime.can_write,
+            runtime.ready and runtime.can_write and allow_writes,
             runtime.reason_code,
         )
 

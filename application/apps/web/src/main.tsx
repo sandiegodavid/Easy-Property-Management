@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { WorkspaceGate } from "./app/workspace-gate";
+import { HostedSessionGate } from "./app/hosted-session";
 import { ApplicationShell } from "./app/shell";
 import { preferredAppearance } from "./app/theme";
 import "./style.css";
@@ -12,8 +13,10 @@ document.documentElement.dataset.theme = preferredAppearance(
 );
 createRoot(root).render(
   <StrictMode>
-    <WorkspaceGate>
-      <ApplicationShell />
-    </WorkspaceGate>
+    <HostedSessionGate>
+      <WorkspaceGate>
+        <ApplicationShell />
+      </WorkspaceGate>
+    </HostedSessionGate>
   </StrictMode>,
 );

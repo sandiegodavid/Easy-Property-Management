@@ -8,6 +8,8 @@ Audit retains append-only before/after evidence, changed fields, actor/source, t
 
 Business writes and required audit events share one transaction and fail closed. Database triggers reject ordinary update/delete/replacement of audit history. Sensitive evidence disclosure commits its read audit before returning data. Failed writes cannot emit successful business-change history.
 
+The bounded hosted demo adds `hosted_operator` with a canonical provisioned operator UUID as its portable actor reference, never an email, provider subject or session credential. A provider-neutral task-local invocation scope reaches synchronous application calls through the threadpool; Audit resolves that trusted scope for changes and bulk summaries. It is reset after the invocation and does not replace source-owned eligibility, revisions, idempotency or transaction checks. Local invocations retain their existing actor behavior. Replaying a receipt does not replace its original audit attribution. Current-baseline constraints and retained-data validation reject malformed hosted references.
+
 Registered contextual snapshot and global activity policies differ. Contextual history explains permitted prior values; global activity must not leak raw evidence, credentials, file locators, retained command requests or private notes. Use explicit field allowlists and secret rejection, with policy versions retained for portable history.
 
 ## Reads and portability

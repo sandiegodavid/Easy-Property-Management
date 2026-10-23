@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-24 America/Los_Angeles",
+  "evidenceType": "operator-reported real browser search/bootstrap checks plus independent read-only workspace manifest and database inspection",
+  "results": {
+    "a": {
+      "ownExactSyntheticTaskSearchVisible": true,
+      "foreignExactSyntheticTaskSearchAbsent": true,
+      "bootstrapBoundToOwnWorkspace": true,
+      "workspaceManifestIdMatchesConfiguredBinding": true,
+      "ownExactTaskRows": 1,
+      "counterpartExactTaskRows": 0
+    },
+    "b": {
+      "ownExactSyntheticTaskSearchVisible": true,
+      "foreignExactSyntheticTaskSearchAbsent": true,
+      "bootstrapBoundToOwnWorkspace": true,
+      "workspaceManifestIdMatchesConfiguredBinding": true,
+      "ownExactTaskRows": 1,
+      "counterpartExactTaskRows": 0
+    }
+  },
+  "limits": [
+    "Browser outcomes are operator-reported; distinct manifests and source-row ownership were independently read-only inspected.",
+    "This covers exact synthetic Task queries and bootstrap workspace binding only; it does not establish audit-list, recovery, CSRF, uninvited-identity, cache, or concurrency isolation."
+  ]
+}

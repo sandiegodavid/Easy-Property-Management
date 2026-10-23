@@ -45,8 +45,7 @@
 ## Backlog and design
 
 - When creating or revising a backlog item that affects or requires UI, include the UI work and its acceptance criteria in that item's scope and design. Completion requires the usable end-to-end operator workflow; defer its UI to a separate backlog only when the user explicitly requests that split.
-- When designing a backlog, if not already read, read [PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md), and [FEATURE_BACKLOG.md](docs/FEATURE_BACKLOG.md). If missing decisions are encountered, also read [DECISIONS.md](docs/DECISIONS.md).
-- When designing a UI backlog, if not already read, also read [UI-001_DESIGN.md](docs/active/UI-001_DESIGN.md).
+- When designing a backlog, if not already read, read [PRODUCT_BRIEF.md](docs/PRODUCT_BRIEF.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md), [UI-001_DESIGN.md](docs/active/UI-001_DESIGN.md) and [FEATURE_BACKLOG.md](docs/FEATURE_BACKLOG.md). If missing decisions are encountered, also read [DECISIONS.md](docs/DECISIONS.md).
 - When designing, do not write code.
 
 ## MVP greenfield scope

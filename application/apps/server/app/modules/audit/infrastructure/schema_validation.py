@@ -1,6 +1,7 @@
 """Current-format validation owned by the audit module."""
 
 from sqlalchemy import inspect
+from app.modules.audit.domain.models import validate_actor_reference
 
 from app.platform.migration_errors import MigrationSchemaError
 
@@ -59,10 +60,18 @@ def validate_audit_schema(connection) -> None:
         "lengthtrimentity_type>0",
         "lengthtrimentity_id>0",
         "lengthtrimaction>0",
-        "actor_kindin'local_operator','system','connector','ai_assistant'",
+        "actor_kindin'local_operator','hosted_operator','system','connector','ai_assistant'",
+        "actor_kind!='hosted_operator'oractor_referenceisnotnullandlengthactor_reference=36",
     }
     if checks != expected_checks:
         raise MigrationSchemaError("audit_events has incompatible constraints.")
+    for (reference,) in connection.exec_driver_sql(
+        "SELECT DISTINCT actor_reference FROM audit_events WHERE actor_kind='hosted_operator'"
+    ):
+        try:
+            validate_actor_reference("hosted_operator", reference)
+        except ValueError as error:
+            raise MigrationSchemaError("audit_events has an invalid hosted actor.") from error
     triggers = {
         name: _normalize(sql)
         for name, sql in connection.exec_driver_sql(

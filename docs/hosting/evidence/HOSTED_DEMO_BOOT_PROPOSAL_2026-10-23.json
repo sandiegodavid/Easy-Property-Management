@@ -1,0 +1,10 @@
+{
+  "installed": false,
+  "rebootRequested": false,
+  "proposedEntry": "/var/lib/epm-volumes/epm-scratch.ext4 /var/lib/epm-scratch/volume ext4 loop,rw,nodev,nosuid,noexec,nofail,X-fstrim.notrim 0 0",
+  "originalFstabSha256": "e96bfa6d0c08f685624799172653f08ad6dc3ef391e0d459f56bc9b356b96433",
+  "candidateSha256": "98c4a7d9397af04f1b3f47983f3552b00d494b0e852753099a11c9d75b45dc10",
+  "verificationExitCode": 0,
+  "verificationOutput": "/var/lib/epm-scratch/volume\n   [W] non-bind mount source /var/lib/epm-volumes/epm-scratch.ext4 is a directory or regular file\n\n0 parse errors, 0 errors, 1 warning\n",
+  "trimInvocation": "# /usr/lib/systemd/system/fstrim.service\n[Unit]\nDescription=Discard unused blocks on filesystems from /etc/fstab\nDocumentation=man:fstrim(8)\nConditionVirtualization=!container\n\n[Service]\nType=oneshot\nExecStart=/sbin/fstrim --listed-in /etc/fstab:/proc/self/mountinfo --verbose --quiet-unsupported\nPrivateDevices=no\nPrivateNetwork=yes\nPrivateUsers=no\nProtectKernelTunables=yes\nProtectKernelModules=yes\nProtectControlGroups=yes\nMemoryDenyWriteExecute=yes\nSystemCallFilter=@default @file-system @basic-io @system-service\n"
+}

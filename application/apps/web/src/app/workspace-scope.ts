@@ -1,10 +1,14 @@
 import { QueryClient } from "@tanstack/react-query";
 import type { components } from "@epm/contracts/generated";
+import { hostedWritesAllowed } from "./hosted-session-state";
 
 export type Bootstrap = components["schemas"]["BootstrapResponse"];
 
 export class BootstrapFailure extends Error {
-  constructor(public readonly network: boolean) {
+  constructor(
+    public readonly network: boolean,
+    public readonly explanation?: string,
+  ) {
     super(network ? "Local server connection failed." : "Local server response could not be used.");
   }
 }
@@ -26,6 +30,9 @@ export function queryClient() {
 export class WorkspaceScope {
   readonly client = queryClient();
   private active = true;
+  private pause = () => {
+    void this.client.cancelQueries();
+  };
   constructor(
     readonly workspaceId: string,
     readonly runtimeEpoch: string,
@@ -38,14 +45,17 @@ export class WorkspaceScope {
 
   activate() {
     this.active = true;
+    window.addEventListener("epm-session-paused", this.pause);
   }
 
   requireWrite() {
-    if (!this.active || !this.canWrite) throw new Error("Workspace writes are unavailable.");
+    if (!this.active || !this.canWrite || !hostedWritesAllowed())
+      throw new Error("Workspace writes are unavailable.");
   }
 
   dispose() {
     this.active = false;
+    window.removeEventListener("epm-session-paused", this.pause);
     void this.client.cancelQueries();
     this.client.clear();
   }

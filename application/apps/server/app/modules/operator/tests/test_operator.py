@@ -136,6 +136,34 @@ def test_preferences_replay_and_conflict(foundation):
     validate_latest_schema(workspace.paths.database)
 
 
+def test_change_signal_is_one_read_independent_of_record_count_and_clock(foundation):
+    _, uow, service = foundation
+    statements = []
+
+    def capture(_connection, _cursor, statement, *_args):
+        if statement != "BEGIN":
+            statements.append(statement)
+
+    event.listen(uow.engine, "before_cursor_execute", capture)
+    first = service.changes()
+    assert len(statements) == 1
+    assert statements[0].lstrip().upper().startswith("SELECT")
+    service.now = lambda: datetime(2026, 10, 8, 19, tzinfo=UTC)
+    statements.clear()
+    later = service.changes()
+    assert len(statements) == 1
+    assert first["sourceRevision"] == later["sourceRevision"]
+    assert first["serverTimeUtc"] != later["serverTimeUtc"]
+    for _ in range(5):
+        save(service)
+    statements.clear()
+    changed = service.changes()
+    assert len(statements) == 1
+    assert changed["sourceRevision"] != first["sourceRevision"]
+    assert changed["workspaceId"] == first["workspaceId"]
+    event.remove(uow.engine, "before_cursor_execute", capture)
+
+
 @pytest.mark.parametrize(
     "order,hidden",
     [

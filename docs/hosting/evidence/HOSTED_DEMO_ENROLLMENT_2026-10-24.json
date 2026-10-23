@@ -1,0 +1,23 @@
+{
+  "checkedAt": "2026-10-25T00:25:00.130004+00:00",
+  "results": [
+    {
+      "instance": "a",
+      "oneVerifiedPendingIdentity": true,
+      "emailMatchesConfiguration": true,
+      "activated": true
+    },
+    {
+      "instance": "b",
+      "oneVerifiedPendingIdentity": true,
+      "emailMatchesConfiguration": true,
+      "activated": true
+    }
+  ],
+  "sessionsCreatedByAdministrator": false,
+  "portableBusinessDataChanged": false,
+  "referenceRefreshRequired": true,
+  "realAuthenticatedBrowserAcceptancePending": true,
+  "operatorReportedCloudflareReturnFixed": true,
+  "method": "Application administrator activation as each owning Unix identity"
+}

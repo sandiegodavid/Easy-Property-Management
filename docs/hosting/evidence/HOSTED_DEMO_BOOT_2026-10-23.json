@@ -1,0 +1,60 @@
+{
+  "startedAt": "2026-10-24T05:11:34.230545+00:00",
+  "preBootId": "5579ac16-59e8-4f0b-ac52-1a25f1a510a8",
+  "approvedAction": "Install scratch-only persistent mount and reboot; A/B release/workspace unchanged.",
+  "originalFstabSha256": "e96bfa6d0c08f685624799172653f08ad6dc3ef391e0d459f56bc9b356b96433",
+  "installedFstabSha256": "98c4a7d9397af04f1b3f47983f3552b00d494b0e852753099a11c9d75b45dc10",
+  "entry": "/var/lib/epm-volumes/epm-scratch.ext4 /var/lib/epm-scratch/volume ext4 loop,rw,nodev,nosuid,noexec,nofail,X-fstrim.notrim 0 0",
+  "phase": "complete",
+  "mountByFstabValidated": true,
+  "preBootUnmounted": true,
+  "abBeforeReboot": {
+    "epm@a.service": "MainPID=8726\nActiveState=active\nActiveEnterTimestamp=Fri 2026-10-23 17:50:37 UTC",
+    "epm@b.service": "MainPID=8727\nActiveState=active\nActiveEnterTimestamp=Fri 2026-10-23 17:50:37 UTC"
+  },
+  "abBindingsBefore": {
+    "a": {
+      "pid": 8726,
+      "configSha256": "845471295ba28b20e85eca0a137edb4ccbb20293165194963a3b355ab4b1a761",
+      "unitSha256": "9c28b520ccb1b251be98455e3ee2770d20463a3468305d6b2b6bc49d8a2555b9",
+      "commandSha256": "96637d1e8bbbc26f25aa85e46d71b494570f761ca28264f26247b4c230835535",
+      "workspaceId": "0efb09a0-5af2-4e6f-904f-154a50ab9445"
+    },
+    "b": {
+      "pid": 8727,
+      "configSha256": "0e2c2ebc6f2b42f8138bcc9789bb6aac254dd2544588376f8bd91da0c428fea5",
+      "unitSha256": "9c28b520ccb1b251be98455e3ee2770d20463a3468305d6b2b6bc49d8a2555b9",
+      "commandSha256": "53171b9d70c93f59dd2680953d6e8573a3b554530a7b1b17e756ebf231755b3a",
+      "workspaceId": "3390ed71-0bd9-40f7-8e7f-702df257e880"
+    }
+  },
+  "rebootRequestedAt": "2026-10-24T05:12:25.782859+00:00",
+  "abBindingsAfter": {
+    "a": {
+      "pid": 572,
+      "configSha256": "845471295ba28b20e85eca0a137edb4ccbb20293165194963a3b355ab4b1a761",
+      "unitSha256": "9c28b520ccb1b251be98455e3ee2770d20463a3468305d6b2b6bc49d8a2555b9",
+      "commandSha256": "96637d1e8bbbc26f25aa85e46d71b494570f761ca28264f26247b4c230835535",
+      "workspaceId": "0efb09a0-5af2-4e6f-904f-154a50ab9445"
+    },
+    "b": {
+      "pid": 573,
+      "configSha256": "0e2c2ebc6f2b42f8138bcc9789bb6aac254dd2544588376f8bd91da0c428fea5",
+      "unitSha256": "9c28b520ccb1b251be98455e3ee2770d20463a3468305d6b2b6bc49d8a2555b9",
+      "commandSha256": "53171b9d70c93f59dd2680953d6e8573a3b554530a7b1b17e756ebf231755b3a",
+      "workspaceId": "3390ed71-0bd9-40f7-8e7f-702df257e880"
+    }
+  },
+  "postBootId": "50210b75-684f-4cb8-99ed-00a05e59d68b",
+  "scratchBootMountSource": "/dev/loop4",
+  "scratchImageBytes": 262144000,
+  "scratchAllocated512ByteBlocks": 512008,
+  "mountFlags": "rw,nosuid,nodev,noexec,relatime",
+  "scratchRemainedMountedAfterVerification": true,
+  "scratchHostedUnitEnabled": false,
+  "completedAt": "2026-10-24T05:14:02.784944+00:00",
+  "abPropertyReadsAfterBoot": {
+    "a": 200,
+    "b": 200
+  }
+}

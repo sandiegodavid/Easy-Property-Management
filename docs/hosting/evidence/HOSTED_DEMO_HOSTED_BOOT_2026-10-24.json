@@ -1,0 +1,52 @@
+{
+  "capturedAt": "2026-10-24T19:45:10.553154+00:00",
+  "previousBootId": "a240dc3f-7d1f-4fb4-a4b5-0966ad592726",
+  "bootId": "178f0700-e391-4974-a154-4b1947f6e488",
+  "fstabSha256": "f5e7e5b14e51c6def06ffda83e6998bc65b339746bed54415892e26dbf3ed8f7",
+  "unitSha256": "77e72153a5e9f5d3f06209ee1ce8e44a2b87dc55d34282a085568dab73ebbcad",
+  "instances": {
+    "a": {
+      "pid": 586,
+      "commandSha256": "297276a080295c441a7c838212d10c9280692d08a4a3f14dc3fc9e7c694428f3",
+      "configSha256": "4d7e0e09bf22c7cadd53e406875ee62572a0580dfb8eec51916b435ce6ffc5f6",
+      "deploymentSha256": "6921e34be9c1fedf93d8504e0a80569a5784c1d374eb372e4292640e70263f4f",
+      "portConfigSha256": "831e771b17a01eee2d8be7d9b58a254d9c82d4f438169d9c4222ca6b0d6ca44f",
+      "prePostHashesMatch": true,
+      "imageBytes": 262144000,
+      "allocated512ByteBlocks": 512008,
+      "mount": "/dev/loop4 /var/lib/epm-a/volume ext4 rw,nosuid,nodev,noexec,relatime",
+      "storageAndWorkspaceValidators": "passed",
+      "signInHttp": 200,
+      "unauthenticatedBusinessHttp": 401,
+      "authorizationActive": false,
+      "subjectBound": false,
+      "sessions": 0,
+      "pendingEnrollments": 0
+    },
+    "b": {
+      "pid": 587,
+      "commandSha256": "7803881c15d356e339ee2872622509259df0e39b9de3e81876ef7c63cf048756",
+      "configSha256": "cb3c438bcb54dd229bcd1c3a77b6c7b9a4444f86ab33e4008ac19c440d9ae7eb",
+      "deploymentSha256": "183b0dbbc8f5b4bbd5e1c833531d7663034c4d850e509ceee9f61a26c162a598",
+      "portConfigSha256": "ebc240f460f969b34a45e5f3dcee7ce253b310d4e085b64eeb3448f97983e2a9",
+      "prePostHashesMatch": true,
+      "imageBytes": 262144000,
+      "allocated512ByteBlocks": 512008,
+      "mount": "/dev/loop5 /var/lib/epm-b/volume ext4 rw,nosuid,nodev,noexec,relatime",
+      "storageAndWorkspaceValidators": "passed",
+      "signInHttp": 200,
+      "unauthenticatedBusinessHttp": 401,
+      "authorizationActive": false,
+      "subjectBound": false,
+      "sessions": 0,
+      "pendingEnrollments": 0
+    }
+  },
+  "oldUnits": "masked/inactive",
+  "newUnits": "active/enabled",
+  "tunnel": "inactive/disabled",
+  "limits": [
+    "No actual enrolled operator sessions existed; this proves inactive state and zero-session persistence, not revival prevention for a previously active real-user session.",
+    "No public routing or real Cloudflare PIN/browser test was performed."
+  ]
+}

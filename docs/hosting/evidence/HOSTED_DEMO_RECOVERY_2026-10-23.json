@@ -1,0 +1,54 @@
+{
+  "startedAt": "2026-10-24T04:59:23.775899+00:00",
+  "fixture": "synthetic scratch only",
+  "phase": "complete",
+  "remoteDeletes": 0,
+  "abBefore": {
+    "epm@a.service": "MainPID=8726\nActiveState=active\nActiveEnterTimestamp=Fri 2026-10-23 17:50:37 UTC",
+    "epm@b.service": "MainPID=8727\nActiveState=active\nActiveEnterTimestamp=Fri 2026-10-23 17:50:37 UTC"
+  },
+  "archiveSize": 120115,
+  "archiveSha256": "6b96dc774128fc1ccfabefe465c6592a5d567d83a6976bf8ea7559d3c697d5ce",
+  "publication": {
+    "key": "epm/44fb3d77-0ae8-4fab-a815-a8f528aa3c56/1eb0d18b-f130-45a0-a043-1cd3d27979cf/2026-10-24/6b96dc774128fc1ccfabefe465c6592a5d567d83a6976bf8ea7559d3c697d5ce.epm-backup",
+    "lastVerifiedBackupAt": "2026-10-24T04:59:26.787576+00:00",
+    "recoveryAgeSeconds": 5,
+    "needsAttention": false,
+    "retentionPending": false
+  },
+  "independentDownloadHashMatched": true,
+  "restoration": {
+    "validated": true,
+    "originalTableCount": 105,
+    "originalRowCount": 42,
+    "originalRowsUnchanged": true,
+    "originalFileCount": 2,
+    "originalFileBytes": 53477376,
+    "allFileHashesMatch": true,
+    "stableWorkspaceId": "1eb0d18b-f130-45a0-a043-1cd3d27979cf",
+    "runtimeAuthorityCopied": false,
+    "fixtureLimitation": "Sparse synthetic intake/file fixture; no populated finance or maintenance workflows."
+  },
+  "scratchUnmountedAndDetached": true,
+  "referenceBundle": {
+    "key": "epm/44fb3d77-0ae8-4fab-a815-a8f528aa3c56/1eb0d18b-f130-45a0-a043-1cd3d27979cf/references/40148c360df7ef9998ebaeaf70bb648281d2b5ad83d575a9faf6a9cb5a2b7fca.enc",
+    "sha256": "40148c360df7ef9998ebaeaf70bb648281d2b5ad83d575a9faf6a9cb5a2b7fca",
+    "size": 1008,
+    "independentDownloadHashMatched": true,
+    "freshEnrollmentRequired": true,
+    "containsRuntimeAuthority": false,
+    "approvedSyntheticSubjectReferencePreserved": true,
+    "exportRanAsDatabaseOwner": true,
+    "retention": "Separate manual reference object; not part of business archive retention ledger."
+  },
+  "dependencies": {
+    "boto3": "1.43.118",
+    "botocore": "1.43.118"
+  },
+  "initialReferenceExport": "Root invocation rejected by private database ownership guard; owning-user export passed.",
+  "completedAt": "2026-10-24T05:00:23.733319+00:00",
+  "abAfter": {
+    "epm@a.service": "MainPID=8726\nActiveState=active\nActiveEnterTimestamp=Fri 2026-10-23 17:50:37 UTC",
+    "epm@b.service": "MainPID=8727\nActiveState=active\nActiveEnterTimestamp=Fri 2026-10-23 17:50:37 UTC"
+  }
+}

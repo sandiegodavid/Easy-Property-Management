@@ -1,0 +1,34 @@
+{
+  "startedAt": "2026-10-25T00:08:50.602537+00:00",
+  "completedAt": "2026-10-25T00:09:03.740567+00:00",
+  "phase": "done",
+  "deniedWriteStatus": 503,
+  "deniedWriteCode": "hosted_write_maintenance",
+  "partialTasks": 0,
+  "prematureReceiptStatus": 404,
+  "readDuringPressure": 200,
+  "logoutDuringPressure": 204,
+  "recoveredWriteStatus": 201,
+  "sameKeyReplayOneEffect": true,
+  "initialHostAvailableBytes": 227225600,
+  "pressureHostAvailableBytes": 40869888,
+  "recoveredHostAvailableBytes": 227225600,
+  "testHostTotalBytes": 510873600,
+  "workspaceCapacityBytes": 262144000,
+  "testMountsDetached": true,
+  "imagesRetained": true,
+  "productionRootFreeBytes": 22850138112,
+  "date": "2026-10-24 America/Los_Angeles",
+  "status": "passed within isolated physical pressure scope",
+  "safety": {
+    "aAndB": "active; unchanged",
+    "tunnel": "inactive/disabled",
+    "publicRoutes": "none",
+    "vmRootFilled": false
+  },
+  "limits": [
+    "Real OS pressure on disposable outer filesystem, not VM root.",
+    "Synthetic signed identity and in-process HTTP; no public client evidence.",
+    "Receipt matched recovered result; same-key replay retained exactly one Task."
+  ]
+}

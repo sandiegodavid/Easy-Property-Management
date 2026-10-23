@@ -251,7 +251,7 @@ def _validate_coverage_reviews(connection):
         if (
             event is None
             or event["action"] != "recorded"
-            or event["actor_kind"] != "local_operator"
+            or event["actor_kind"] not in {"local_operator", "hosted_operator"}
             or event["correlation_id"] != row["correlation_id"]
             or event["occurred_at"] != row["created_at"]
             or event["before_snapshot"] is not None
@@ -494,7 +494,7 @@ def _validate_operation_audit(row, result, audit_by_operation, mutations):
     if (
         change is None
         or change["occurred_at"] != row["created_at"]
-        or change["actor_kind"] != "local_operator"
+        or change["actor_kind"] not in {"local_operator", "hosted_operator"}
     ):
         raise ValueError("Missing correlated record mutation.")
     expected = audit_metadata(result)

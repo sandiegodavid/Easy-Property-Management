@@ -3,6 +3,8 @@ import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { api } from "@epm/contracts";
 import { Page } from "@epm/ui";
 import { BootstrapFailure, queryClient, WorkspaceScope, type Bootstrap } from "./workspace-scope";
+import { HostedChanges } from "./hosted-changes";
+import { hostedMode } from "./hosted-session-state";
 
 const brandAssets = [
   {
@@ -25,7 +27,15 @@ async function loadBootstrap(signal: AbortSignal): Promise<Bootstrap> {
     if (signal.aborted) throw error;
     throw new BootstrapFailure(error instanceof TypeError);
   }
-  if (!result.data || result.error) throw new BootstrapFailure(false);
+  if (!result.data || result.error) {
+    if (hostedMode() && [503, 507].includes(result.response.status)) {
+      throw new BootstrapFailure(
+        false,
+        "Workspace storage or maintenance is preventing access. Contact the administrator; retry explicitly after it is resolved.",
+      );
+    }
+    throw new BootstrapFailure(false);
+  }
   const data = result.data;
   if (
     data.contractVersion !== 1 ||
@@ -64,7 +74,10 @@ function Admitted({ bootstrap, children }: { bootstrap: Bootstrap; children: Rea
   }, [scope]);
   return (
     <QueryClientProvider client={scope.client}>
-      <Workspace.Provider value={{ scope, bootstrap }}>{children}</Workspace.Provider>
+      <Workspace.Provider value={{ scope, bootstrap }}>
+        <HostedChanges scope={scope} />
+        {children}
+      </Workspace.Provider>
     </QueryClientProvider>
   );
 }
@@ -94,9 +107,11 @@ function Gate({ children }: { children: ReactNode }) {
     return (
       <>
         <p role="alert">
-          {bootstrap.error instanceof BootstrapFailure && bootstrap.error.network
-            ? "Cannot connect to the local server. Check that it is running."
-            : "The local server returned an unusable response. Workspace access is paused."}
+          {bootstrap.error instanceof BootstrapFailure && bootstrap.error.explanation
+            ? bootstrap.error.explanation
+            : bootstrap.error instanceof BootstrapFailure && bootstrap.error.network
+              ? "Cannot connect to the local server. Check that it is running."
+              : "The local server returned an unusable response. Workspace access is paused."}
         </p>
         <button onClick={retry}>Retry connection</button>
       </>

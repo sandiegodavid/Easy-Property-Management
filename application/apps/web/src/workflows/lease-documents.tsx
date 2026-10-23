@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { FileDownload } from "../shared/file-download";
 import type { components } from "@epm/contracts/generated";
 import { useWorkspace } from "../app/workspace-gate";
 import { workflowUrl } from "./command";
@@ -34,7 +35,9 @@ export function LeaseDocuments({
           <li key={file.linkId}>
             {file.originalName} · {file.purpose.replaceAll("_", " ")} · {file.storageState}
             {file.available ? (
-              <a href={`/api/files/${file.id}/content`}>Download {file.originalName}</a>
+              <FileDownload fileId={file.id} name={file.originalName}>
+                Download {file.originalName}
+              </FileDownload>
             ) : (
               <p>Content unavailable; opening disabled.</p>
             )}

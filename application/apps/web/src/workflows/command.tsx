@@ -793,7 +793,9 @@ function CommandEditor({
       </button>
       <button
         type="button"
-        disabled={addingOwner || state.draft === "saved" || state.draft === "saving"}
+        disabled={
+          !scope.canWrite || addingOwner || state.draft === "saved" || state.draft === "saving"
+        }
         onClick={() => {
           void action(() => controller.flush());
         }}

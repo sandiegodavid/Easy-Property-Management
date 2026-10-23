@@ -1,0 +1,32 @@
+{
+  "capturedAt": "2026-10-24T19:10:56.014930+00:00",
+  "beforeBootId": "50210b75-684f-4cb8-99ed-00a05e59d68b",
+  "afterBootId": "a240dc3f-7d1f-4fb4-a4b5-0966ad592726",
+  "fstabSha256": "f5e7e5b14e51c6def06ffda83e6998bc65b339746bed54415892e26dbf3ed8f7",
+  "instances": {
+    "a": {
+      "originalService": "active",
+      "pid": 585,
+      "originalBindingsUnchanged": true,
+      "privatePropertiesHttpStatus": 200,
+      "mount": "/dev/loop3 /var/lib/epm-a/volume ext4 rw,nosuid,nodev,noexec,relatime",
+      "imageBytes": 262144000,
+      "allocated512ByteBlocks": 512008,
+      "storageValidator": "passed",
+      "workspaceAndConfigValidator": "passed"
+    },
+    "b": {
+      "originalService": "active",
+      "pid": 586,
+      "originalBindingsUnchanged": true,
+      "privatePropertiesHttpStatus": 200,
+      "mount": "/dev/loop6 /var/lib/epm-b/volume ext4 rw,nosuid,nodev,noexec,relatime",
+      "imageBytes": 262144000,
+      "allocated512ByteBlocks": 512008,
+      "storageValidator": "passed",
+      "workspaceAndConfigValidator": "passed"
+    }
+  },
+  "publicRoutesChanged": false,
+  "hostedServicesSwitched": false
+}

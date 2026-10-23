@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-24 America/Los_Angeles",
+  "evidenceType": "operator-reported real multi-session browser checks plus saved success flags",
+  "results": {
+    "a": {
+      "twoIndependentSessionsRevokedWithin60Seconds": true,
+      "otherAccountUsableBeforeProviderRenewal": true,
+      "bothSessionsExplicitlyReopened": true
+    },
+    "b": {
+      "twoIndependentSessionsRevokedWithin60Seconds": true,
+      "otherAccountUsableBeforeProviderRenewal": true,
+      "bothSessionsExplicitlyReopened": true
+    }
+  },
+  "limits": [
+    "Reported observations, not automated browser telemetry.",
+    "Test accepts computer+phone or separate browsers/profiles; exact devices/network were not recorded.",
+    "Does not establish edit-lease takeover, stale mutations, file/receipt isolation or quantitative performance."
+  ]
+}

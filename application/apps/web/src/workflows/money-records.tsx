@@ -651,7 +651,7 @@ function MoneyEvidence({
                   Content availability must be verified before opening.
                 </p>
               )}
-              {available && <a href={`/api/files/${fileId}/content`}>Download evidence</a>}{" "}
+              {available && <FileDownload fileId={fileId}>Download evidence</FileDownload>}{" "}
               <Link to={`/money?file=${fileId}`}>Evidence metadata and history</Link>
               {allowArchive && !history && (
                 <Link
@@ -745,3 +745,4 @@ function DepositHistory({ id }: { id: string }) {
     </>
   );
 }
+import { FileDownload } from "../shared/file-download";

@@ -932,6 +932,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/hosted/drafts/{record_id}/lease": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Claim */
+        post: operations["claimHostedDraftLease"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/hosted/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current */
+        get: operations["getHostedSession"];
+        put?: never;
+        /** Begin */
+        post: operations["beginHostedSession"];
+        /** End */
+        delete: operations["endHostedSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/hosted/session/all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** End All */
+        delete: operations["endAllHostedSessions"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/inspection-commands/by-key/{key}": {
         parameters: {
             query?: never;
@@ -2023,6 +2076,23 @@ export interface paths {
         };
         /** Bootstrap */
         get: operations["getOperatorBootstrap"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/operator/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Changes */
+        get: operations["getOperatorChanges"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6049,6 +6119,26 @@ export interface components {
              */
             updatedAt: string;
         };
+        /** ChangeResponse */
+        ChangeResponse: {
+            /**
+             * Runtimeepoch
+             * Format: uuid
+             */
+            runtimeEpoch: string;
+            /**
+             * Servertimeutc
+             * Format: date-time
+             */
+            serverTimeUtc: string;
+            /** Sourcerevision */
+            sourceRevision: string;
+            /**
+             * Workspaceid
+             * Format: uuid
+             */
+            workspaceId: string;
+        };
         /** ChildPreview */
         ChildPreview: {
             /**
@@ -9117,6 +9207,36 @@ export interface components {
             operatorNote?: string | null;
             /** Version */
             version: number;
+        };
+        /** DraftLeaseInput */
+        DraftLeaseInput: {
+            /** Expectedrevision */
+            expectedRevision: number;
+            /**
+             * Renew
+             * @default false
+             */
+            renew: boolean;
+            /**
+             * Takeover
+             * @default false
+             */
+            takeover: boolean;
+            /** Token */
+            token: string;
+        };
+        /** DraftLeaseResponse */
+        DraftLeaseResponse: {
+            /**
+             * Expiresat
+             * Format: date-time
+             */
+            expiresAt: string;
+            /**
+             * Renewedat
+             * Format: date-time
+             */
+            renewedAt: string;
         };
         /** DraftPageResponse */
         DraftPageResponse: {
@@ -16220,6 +16340,47 @@ export interface components {
             partyId: string;
             /** Updatedat */
             updatedAt: string;
+        };
+        /** SessionGrantResponse */
+        SessionGrantResponse: {
+            /** Csrftoken */
+            csrfToken: string;
+            /**
+             * Expiresat
+             * Format: date-time
+             */
+            expiresAt: string;
+        };
+        /** SessionResponse */
+        SessionResponse: {
+            /** Administratorcontact */
+            administratorContact: string;
+            /** Capabilities */
+            capabilities: string[];
+            /** Csrftoken */
+            csrfToken: string;
+            /**
+             * Demoexpiresat
+             * Format: date-time
+             */
+            demoExpiresAt: string;
+            /**
+             * Expiresat
+             * Format: date-time
+             */
+            expiresAt: string;
+            /** Identitybinding */
+            identityBinding: string;
+            /**
+             * Operatorid
+             * Format: uuid
+             */
+            operatorId: string;
+            /**
+             * Workspaceid
+             * Format: uuid
+             */
+            workspaceId: string;
         };
         /** SettingsCommandResponse */
         SettingsCommandResponse: {
@@ -24119,6 +24280,166 @@ export interface operations {
             };
         };
     };
+    claimHostedDraftLease: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftLeaseInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftLeaseResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getHostedSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+        };
+    };
+    beginHostedSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionGrantResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+        };
+    };
+    endHostedSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+        };
+    };
+    endAllHostedSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+        };
+    };
     getInspectionCommandByKey: {
         parameters: {
             query?: never;
@@ -27976,6 +28297,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BootstrapResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+        };
+    };
+    getOperatorChanges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeResponse"];
                 };
             };
             /** @description Local transport rejected. */

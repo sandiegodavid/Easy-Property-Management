@@ -1,0 +1,83 @@
+{
+  "fileBytes": 52428800,
+  "availableBefore": 195117056,
+  "passed": true,
+  "availableWhileFirstHeld": 193019904,
+  "firstStatus": 200,
+  "secondStatus": 507,
+  "firstResult": {
+    "sourceId": "85b6c21c-7b5b-4563-a466-1b92112e8210",
+    "sourceKind": "operator_note",
+    "channel": "internal",
+    "revision": "8efc9d7f-3c68-4002-9b3c-5ccee770243e",
+    "sourceRevision": 1,
+    "evidenceRevisionId": "8efc9d7f-3c68-4002-9b3c-5ccee770243e",
+    "updatedAt": "2026-10-24T04:00:40.496103+00:00",
+    "fingerprint": "443a1400666ad863cf24f44d86650bfe28b1e04cfe77b00f5912758666a51b3b",
+    "technicalStatus": "ready",
+    "failureCode": null,
+    "attentionStatus": "unprocessed",
+    "occurredAtUtc": "2026-10-24T04:00:39.585707+00:00",
+    "receivedAtUtc": "2026-10-24T04:00:40.496103+00:00",
+    "supersedesSourceId": null,
+    "supersededBySourceId": null,
+    "provenance": {
+      "originSystem": "manual",
+      "accountIdentityState": "not_applicable",
+      "submitterKind": "local_operator"
+    },
+    "attachmentCount": 1,
+    "comparisonAvailable": true,
+    "operationId": "3d6a4dfc-e7d7-465e-8d4a-c5d7cad4e46b"
+  },
+  "secondResult": {
+    "detail": {
+      "code": "hosted_storage_quota_exceeded",
+      "message": "Workspace storage cannot admit this request safely. Keep your input and contact the administrator."
+    }
+  },
+  "firstReceiptStatus": 200,
+  "firstReceipt": {
+    "sourceId": "85b6c21c-7b5b-4563-a466-1b92112e8210",
+    "sourceKind": "operator_note",
+    "channel": "internal",
+    "revision": "8efc9d7f-3c68-4002-9b3c-5ccee770243e",
+    "sourceRevision": 1,
+    "evidenceRevisionId": "8efc9d7f-3c68-4002-9b3c-5ccee770243e",
+    "updatedAt": "2026-10-24T04:00:40.496103+00:00",
+    "fingerprint": "443a1400666ad863cf24f44d86650bfe28b1e04cfe77b00f5912758666a51b3b",
+    "technicalStatus": "ready",
+    "failureCode": null,
+    "attentionStatus": "unprocessed",
+    "occurredAtUtc": "2026-10-24T04:00:39.585707+00:00",
+    "receivedAtUtc": "2026-10-24T04:00:40.496103+00:00",
+    "supersedesSourceId": null,
+    "supersededBySourceId": null,
+    "provenance": {
+      "originSystem": "manual",
+      "accountIdentityState": "not_applicable",
+      "submitterKind": "local_operator"
+    },
+    "attachmentCount": 1,
+    "comparisonAvailable": true,
+    "operationId": "3d6a4dfc-e7d7-465e-8d4a-c5d7cad4e46b"
+  },
+  "secondReceiptStatus": 404,
+  "secondReceipt": {
+    "detail": {
+      "code": "intake_not_found",
+      "message": "Intake command receipt was not found."
+    }
+  },
+  "availableAfter": 142508032,
+  "sampledMinimumAvailable": 37646336,
+  "recordedAtUtc": "2026-10-24T04:00:41.662245+00:00",
+  "firstReceiptInitialStatus": 507,
+  "firstKey": "40fe9602-9177-4c8d-934d-d6d0cc4474e1",
+  "secondKey": "b40e474a-46b1-4a64-837e-c7f38862f962",
+  "downloadBytes": 52428800,
+  "downloadSha256": "8729453030852d9b0f3833ade105a67a3285dc69e3947ca4597fe5906fddc568",
+  "smallRetryStatus": 200,
+  "completedBy": "Explicit receipt read; original 50 MiB upload was not resubmitted",
+  "completedAtUtc": "2026-10-24T04:02:15.465170+00:00"
+}
