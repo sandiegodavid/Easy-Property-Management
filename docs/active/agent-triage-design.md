@@ -254,6 +254,8 @@ A candidate for scheduled intake must prove source discovery and catch-up, trust
 
 ## 7. Delivery order and validation
 
+The twelve [AI-DRAFT-001 decisions](AI-DRAFT-001_DESIGN.md#resolved-design-decisions) were accepted October 22, 2026. That feature owns the first hosted-model qualification, contextual UI and shared governed asynchronous run extensions. Its source manifest, disclosure binding and advisory-only review also govern the later connected follow-up action. Local models and optional context enrichment do not block the first delivery; assistant transport qualification remains separate.
+
 The original phased plan began with unsolicited message intake. A lower-risk first integration may be an operator-initiated request on an existing issue. This is a sequencing recommendation to validate with operators, not a dependency between the two capabilities:
 
 1. Register one bounded “Draft follow-up” action with its owning domain and AI Governance. Give it an operator trigger, governed context, draft/error result, review and manual-send path, cancellation, timeout, and retry tests. A qualified EPM-invoked model can provide the first version without an assistant connection, INGEST-002, or mailbox access.

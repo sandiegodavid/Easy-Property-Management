@@ -2,7 +2,7 @@
 
 ## Status and allocation
 
-Preliminary design, October 20, 2026. UI-003 extends the delivered UI-001 shell for the [shared assistant boundary](ASST-001_DESIGN.md) and the [agent triage design](agent-triage-design.md#1-what-the-operator-configures-and-sees). UI-002 continues to own INGEST-002 issue-review pages, legal/HOA and spreadsheet intake. AI-DRAFT-001 can put an EPM-invoked **Draft follow-up** on an issue before UI-003 or any assistant connection exists. UI-003 adds the connected alternative without creating another daily work surface or approval path.
+Preliminary design, October 20, 2026. UI-003 extends the delivered UI-001 shell for the [shared assistant boundary](ASST-001_DESIGN.md) and the [agent triage design](agent-triage-design.md#1-what-the-operator-configures-and-sees). UI-002 continues to own INGEST-002 issue-review pages and spreadsheet intake; post-MVP legal/HOA workflows belong to UI-004. AI-DRAFT-001 can put an EPM-invoked **Draft follow-up** on an issue before UI-003 or any assistant connection exists. UI-003 adds the connected alternative without creating another daily work surface or approval path.
 
 This carries UI-002's earlier D46 decision: Connected assistants appear beside, and remain independent of, Built-in AI in Settings. Choosing a model never grants assistant access; changing an assistant never changes the selected model or its disclosure destination.
 
@@ -41,3 +41,7 @@ UI-003 requires ASST-001 and at least one qualified transport before claiming a 
 | Backup/restore | History stays visible, authorization becomes Setup required, source catch-up remains qualified and pending submissions remain quarantined. |
 | Query budget | Bounded connection/health/activity pages and contextual draft summaries; no per-row evidence load. |
 | UI regression | Existing UI-001 and UI-002 navigation, manual paths, source review, keyboard operation and both themes still work. |
+
+## Accepted AI-DRAFT-001 handoff
+
+[AI-DRAFT-001](AI-DRAFT-001_DESIGN.md#resolved-design-decisions) owns the first Maintenance draft workflow, including context preview, pending/status/cancel recovery, editing, advisory approval, copy and separate COM-001 recording. UI-003 reuses that issue surface for a qualified connected-agent execution path. It adds explicit connection/grant and destination disclosure without silently switching from a model to an assistant. Preserve the complete source manifest and stale-context review, original-result recovery, operator edits and no-send semantics. Qualifying this action requires AI-DRAFT-001; generic assistant setup remains independently deliverable. Model execution deadlines do not establish a connected assistant scheduling guarantee; ASST-001 must expose its actual request expiry.
