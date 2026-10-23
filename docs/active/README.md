@@ -25,7 +25,7 @@ These retain their complete design contracts. Capability availability and backlo
 - [ASST-INTAKE-001](ASST-INTAKE-001_DESIGN.md): separately qualified scheduled source discovery and proposal admission.
 - [OBS-001](OBS-001_DESIGN.md): local diagnostics and opt-in, privacy-bounded product usage aggregation.
 
-Universal Reader is a separate experiment documented in [research](../research/UNIVERSAL_READER_RESEARCH.md); its parallel work does not replace DATA scopes/dependencies. See [backlog](../FEATURE_BACKLOG.md) for all undesigned/planned features and hard dependencies.
+Universal Reader has a [UR-001 baseline technical design](UR-001_DESIGN.md), with seven implementation slices and twelve proposed decisions, supported by [research](../research/universal-reader/UNIVERSAL_READER_RESEARCH.md); its parallel work does not replace DATA scopes/dependencies. See [backlog](../FEATURE_BACKLOG.md) for all undesigned/planned features and hard dependencies.
 
 ## Completing active work
 

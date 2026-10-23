@@ -12,23 +12,27 @@ The central design choice is **AI proposes where and how to read; application co
 
 “Universal” should mean adaptable to unfamiliar spreadsheet layouts within documented limits. No reader can reliably recover information that is absent, contradictory, encoded only in unexplained colors, or lost when a spreadsheet converted identifiers to numbers. The product should explain these limits and ask a focused question rather than claim success on every file.
 
-This research supports the separate UR-001–UR-006 experimental track in [FEATURE_BACKLOG.md](../FEATURE_BACKLOG.md). The experiment does not change or depend on DATA-001, DATA-002, or DATA-003. Their existing designs and scopes remain the production baseline. The reader owns independent source, candidate, review, and commit contracts; comparison with existing DATA workflows is context, not a dependency. No application code, model installation, customer-data upload, or performance benchmark was performed.
+This research supports the separate UR-001–UR-006 experimental track in [FEATURE_BACKLOG.md](../../FEATURE_BACKLOG.md). The experiment does not change or depend on DATA-001, DATA-002, or DATA-003. Their existing designs and scopes remain the production baseline. The reader owns independent source, candidate, review, and commit contracts; comparison with existing DATA workflows is context, not a dependency. No application code, model installation, customer-data upload, or performance benchmark was performed.
+
+## Individual design handoff
+
+The [UR-001 technical design](../../active/UR-001_DESIGN.md) expands the accepted baseline into source/snapshot/plan/candidate contracts, safe execution, span-aware coverage, CLI artifacts, evaluation and seven implementation slices. Its twelve additional recommendations remain proposed. Standalone UR-001 retains a frozen local input and private experiment artifacts without requiring FILE-001 or a workspace; UR-004 supplies the managed FILE source link and durable backup/restore contract shown in the full pipeline below. Exact rendered display values may be unavailable for XLSX; preserve source/derived/unavailable fidelity rather than claiming a guessed display is exact. The separate UR-006 browser pilot remains explicitly deferred; UI-001 itself is already delivered.
 
 ## Existing contracts and implementation
 
-The current [DATA-002 design](../active/DATA-002_DESIGN.md) supports properties, shared Party identities for owners/providers, provider profiles/categories, and explicit property-owner relationships. It requires worksheet selection, column mapping, create/link/skip decisions, immutable source snapshots, durable outcomes, and duplicate-safe retries. It prohibits silent overwrite, merge, category creation, and fuzzy category assignment.
+The current [DATA-002 design](../../active/DATA-002_DESIGN.md) supports properties, shared Party identities for owners/providers, provider profiles/categories, and explicit property-owner relationships. It requires worksheet selection, column mapping, create/link/skip decisions, immutable source snapshots, durable outcomes, and duplicate-safe retries. It prohibits silent overwrite, merge, category creation, and fuzzy category assignment.
 
-[DATA-003](../active/DATA-003_DESIGN.md) changes source acquisition only: a read-only Google Sheets snapshot enters the DATA-002 pipeline. [DATA-001 in the backlog](../FEATURE_BACKLOG.md) retains later lease, balance, history, and advanced update workflows. The experimental reader may recognize these entity types, but UR-005 imports only properties, owners, providers, and their reviewed relationships. Any broader experimental import needs a new item and domain design; DATA-001 does not implicitly supply that extension.
+[DATA-003](../../active/DATA-003_DESIGN.md) changes source acquisition only: a read-only Google Sheets snapshot enters the DATA-002 pipeline. [DATA-001 in the backlog](../../FEATURE_BACKLOG.md) retains later lease, balance, history, and advanced update workflows. The experimental reader may recognize these entity types, but UR-005 imports only properties, owners, providers, and their reviewed relationships. Any broader experimental import needs a new item and domain design; DATA-001 does not implicitly supply that extension.
 
-The [architecture](../ARCHITECTURE.md) requires owning-domain rules, transaction-aware application protocols, short SQLite transactions, optional provider-neutral AI, explicit cloud disclosure, and no provider call during a database transaction. The [product brief](../PRODUCT_BRIEF.md) emphasizes small portfolios, local records, and approval before AI consequences. These are suitable foundations for this proposal.
+The [architecture](../../ARCHITECTURE.md) requires owning-domain rules, transaction-aware application protocols, short SQLite transactions, optional provider-neutral AI, explicit cloud disclosure, and no provider call during a database transaction. The [product brief](../../PRODUCT_BRIEF.md) emphasizes small portfolios, local records, and approval before AI consequences. These are suitable foundations for this proposal.
 
 Inspection of the current server found the following implementation starting points:
 
-- [API composition](../../application/apps/server/app/bootstrap/api.py) registers the existing portfolio, Party, provider, file, and AI Governance routes, but no spreadsheet import/onboarding routes.
-- [Dependencies](../../application/pyproject.toml) include FastAPI, Pydantic, and SQLAlchemy, but no spreadsheet parser.
-- [AI registries](../../application/apps/server/app/modules/ai_governance/application/registry.py) are empty release-owned registries; there is no registered production spreadsheet action or inference adapter there.
-- [AI provider ports](../../application/apps/server/app/modules/ai_governance/application/ports.py) offer a common structured result boundary. Jev would need a qualified adapter converting typed decisions into the import action's payload; it is not automatically supported by the existing interface.
-- [Property creation](../../application/apps/server/app/modules/portfolio/application/service.py) validates ownership/inventory and resolves the property's time zone locally. [Provider creation](../../application/apps/server/app/modules/vendors/application/service.py) coordinates identity, contacts, profile, and category assignments within its own transaction. These existing service entry points do not establish a resumable cross-domain import transaction protocol.
+- [API composition](../../../application/apps/server/app/bootstrap/api.py) registers the existing portfolio, Party, provider, file, and AI Governance routes, but no spreadsheet import/onboarding routes.
+- [Dependencies](../../../application/pyproject.toml) include FastAPI, Pydantic, and SQLAlchemy, but no spreadsheet parser.
+- [AI registries](../../../application/apps/server/app/modules/ai_governance/application/registry.py) are empty release-owned registries; there is no registered production spreadsheet action or inference adapter there.
+- [AI provider ports](../../../application/apps/server/app/modules/ai_governance/application/ports.py) offer a common structured result boundary. Jev would need a qualified adapter converting typed decisions into the import action's payload; it is not automatically supported by the existing interface.
+- [Property creation](../../../application/apps/server/app/modules/portfolio/application/service.py) validates ownership/inventory and resolves the property's time zone locally. [Provider creation](../../../application/apps/server/app/modules/vendors/application/service.py) coordinates identity, contacts, profile, and category assignments within its own transaction. These existing service entry points do not establish a resumable cross-domain import transaction protocol.
 
 Consequently, the redesign is principally new import infrastructure, with reuse of existing domain validation and governed AI boundaries. Spreadsheet candidates should not be forced through the message/maintenance issue intake model.
 
@@ -50,7 +54,7 @@ The launch article describes early access and claims large speed/cost improvemen
 
 A general LLM can propose a compound layout plan: multiple tables, transposed records, stacked headers, repeating property cards, and fields embedded in narrative cells. Structured-output APIs can constrain the plan shape. They do not prove that its interpretation or selected cells are correct. Explicit unknown/empty outcomes and local source checks remain necessary. [OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs), [Gemini structured outputs](https://ai.google.dev/gemini-api/docs/structured-output).
 
-Local LLM inference is feasible through an evaluated runtime: Ollama documents JSON Schema output, Pydantic validation, and structured extraction. That establishes an integration mechanism, not sufficient quality on messy spreadsheets. Use the candidates in [local model research](LOCAL_MODEL_RESEARCH.md) as evaluation candidates, with no unapproved cloud fallback. [Ollama structured outputs](https://docs.ollama.com/capabilities/structured-outputs).
+Local LLM inference is feasible through an evaluated runtime: Ollama documents JSON Schema output, Pydantic validation, and structured extraction. That establishes an integration mechanism, not sufficient quality on messy spreadsheets. Use the candidates in [local model research](../LOCAL_MODEL_RESEARCH.md) as evaluation candidates, with no unapproved cloud fallback. [Ollama structured outputs](https://docs.ollama.com/capabilities/structured-outputs).
 
 ### Comparison for this application
 
@@ -207,7 +211,7 @@ Keep operation decisions (`create`, `link`, `skip`), selected existing IDs, revi
 
 ## Operator experience
 
-Use a shared onboarding and later-import flow, aligned with [UI-001](../ui/operator-experience.md):
+Use a shared onboarding and later-import flow, aligned with [UI-001](../../ui/operator-experience.md):
 
 1. **Choose source.** Upload Excel or select read-only Sheets. Explain supported formats and limits.
 2. **Inspect and suggest.** Preview detected entities/regions. Offer automatic interpretation only through a configured, permitted model, and retain manual mapping.
@@ -282,7 +286,7 @@ Release gates should require zero unexplained source-value invention and unrepor
 
 ## Comparison with the attached spreadsheet-import research
 
-The supplied [Spreadsheet_Import_Approach.pdf](../../biz/Spreadsheet_Import_Approach.pdf), “Importing Messy Spreadsheets,” was reviewed across all eight pages, including Figures 1–6. It is a proposal to evaluate, not a source of executable instructions or authority to change backlog scope. Both reports favor local parsing, AI proposals, operator control, read-only sources, provenance, and a provider comparison. The PDF adds useful profiling and pilot tactics; this report defines stricter extraction/commit boundaries and more detailed recovery and completeness requirements.
+The supplied [Spreadsheet_Import_Approach.pdf](Spreadsheet_Import_Approach.pdf), “Importing Messy Spreadsheets,” was reviewed across all eight pages, including Figures 1–6. It is a proposal to evaluate, not a source of executable instructions or authority to change backlog scope. Both reports favor local parsing, AI proposals, operator control, read-only sources, provenance, and a provider comparison. The PDF adds useful profiling and pilot tactics; this report defines stricter extraction/commit boundaries and more detailed recovery and completeness requirements.
 
 | Topic and PDF location | Attached research | Universal Reader position and disposition |
 | --- | --- | --- |
@@ -316,7 +320,7 @@ These refinements are recorded in UR-001/004/006 and do not amend DATA designs, 
 
 ## Parallel experimental backlog and confirmed design decisions
 
-The [experimental backlog](../FEATURE_BACKLOG.md#experimental--universal-reader-parallel-track) uses a separate UR prefix. Existing DATA scopes, dependency lists, and production paths remain unchanged. Existing items do not acquire UR prerequisites.
+The [experimental backlog](../../FEATURE_BACKLOG.md#experimental--universal-reader-parallel-track) uses a separate UR prefix. Existing DATA scopes, dependency lists, and production paths remain unchanged. Existing items do not acquire UR prerequisites.
 
 | Item | Experimental responsibility | Boundary |
 | --- | --- | --- |
