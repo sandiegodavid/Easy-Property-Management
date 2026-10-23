@@ -206,6 +206,12 @@ Poll only visible active request/test views, initially every two seconds with ba
 
 Browser acceptance includes manual-only operation, grant scope preview/amendment, failed qualification and retest, contextual request and shared review, pause/revoke while waiting, expired preview, lost start/cancel response, stale selected source, page navigation, server restart and restored Setup required. Verify keyboard/focus and status announcements, narrow layouts, both themes, permission-denied and unavailable states. Synthetic acceptance proves shared mechanics; real-client acceptance remains in the selected transport feature.
 
+## File-adapter implementation handoff
+
+[ASST-FILE-001](ASST-FILE-001_DESIGN.md) now specifies its proposed publication/capture, bounded worker, archive cutoff and operator diagnostics. Shared request/receipt authority stays here. Its file publication port must serialize publication with pause/revoke and runtime fencing, commit disclosure audit before release, and preserve an honest uncertain-publication result on failure. Already-published bytes cannot provide authorization on every subsequent read; revoke removes projections/permissions where possible but cannot retract copies. Real identity/confinement remains a transport qualification gate, not a property supplied by this service.
+
+The file trial initially enables only the bounded follow-up result contract. It reserves source/state kinds for ASST-INTAKE-001 without enabling arbitrary attachments or opaque checkpoints. Workspace capture includes pending complete files at an explicit cutoff and restores them privately without live authority. File-specific limits and twelve decisions remain proposed; they do not silently resolve this document's shared decisions.
+
 ## Contradictions and missing decisions
 
 The accepted direction settles operator approval, transport independence, workspace-contained file exchange and no automatic sending. The following implementation decisions remain open. Recommendations below are reflected in the proposed technical sections; they require confirmation before implementation.

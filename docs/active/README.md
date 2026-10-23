@@ -21,7 +21,7 @@ These retain their complete design contracts. Capability availability and backlo
 - [AI-DRAFT-001](AI-DRAFT-001_DESIGN.md): contextual draft from an EPM-invoked model, without assistant pairing.
 - [ASST-001](ASST-001_DESIGN.md): shared connected-assistant technical design and included UI, seven ordered slices and fourteen proposed decisions; real-client qualification remains transport-owned.
 - [MCP-001](MCP-001_DESIGN.md): local MCP transport.
-- [ASST-FILE-001](ASST-FILE-001_DESIGN.md): optional managed file-adapter qualification.
+- [ASST-FILE-001](ASST-FILE-001_DESIGN.md): proposed file transport and operator workflow, isolation/identity qualification, consistent exchange backup/restore, seven sequential slices and twelve open decisions.
 - [ASST-INTAKE-001](ASST-INTAKE-001_DESIGN.md): separately qualified scheduled source discovery and proposal admission.
 - [OBS-001](OBS-001_DESIGN.md): local diagnostics and opt-in, privacy-bounded product usage aggregation.
 

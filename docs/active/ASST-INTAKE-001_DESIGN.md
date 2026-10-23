@@ -28,6 +28,12 @@ INGEST-002 owns the operator/domain decision. When an assistant submission is li
 
 This item owns poll-report persistence, source checkpoints/coverage, requested versus acknowledged cadence and source reconnect UI. ASST-001 contact/compatibility health is insufficient evidence of a scan. One actual qualified transport is required; AI-DRAFT-001 is not a source-discovery business dependency, even if the chosen transport uses it for its initial follow-up qualification. Follow the shared design's settled policy; its [fourteen recommendations](ASST-001_DESIGN.md#contradictions-and-missing-decisions) are still proposed.
 
+## File transport extension required for source discovery
+
+The first [ASST-FILE-001 trial](ASST-FILE-001_DESIGN.md) qualifies bounded work-request results, not source attachment transfer. When choosing that transport here, define and qualify a separate closed evidence manifest and bounded blob publication/capture protocol against Intake and FILE-001 limits. Do not embed arbitrary attachment bytes in the shared 64 KiB control envelope, accept filesystem paths supplied by the assistant, or enable source discovery merely because a follow-up result succeeds. Exact relied-on evidence must be captured and validated before the atomic source/proposal admission; filesystem staging and cleanup remain outside its database transaction.
+
+Define a closed portable checkpoint schema and its links to provider/account/filter, captured pending submissions and committed receipts before enabling `state/`. Reject credentials and opaque agent-memory dumps. Extend file-adapter qualification and its cutoff-consistent backup inventory with these kinds; restored checkpoints are reconciliation inputs, never authorization or proof of coverage. This extension belongs to ASST-INTAKE-001 and creates no dependency back from the initial file trial to source discovery.
+
 ## Qualification and validation
 
 Qualify each actual source/client/version/filter combination with a disposable account where practical. Verify scheduling rather than trusting requested cadence; prove folder or MCP identity and scope, complete evidence transfer, per-source catch-up, pause/revoke, and receipt recovery. Source coverage is not enabled merely because a synthetic proposal succeeded. ASST-001 exposes shared connection setup; ASST-INTAKE-001 supplies per-source health and INGEST-002 supplies review; DASH-003 may aggregate only qualified source attention.
