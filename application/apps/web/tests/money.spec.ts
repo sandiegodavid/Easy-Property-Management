@@ -173,7 +173,11 @@ test("money editing, category details, expenses and reporting use readable respo
       ).not.toBeVisible();
     }
     if (item.key === "payment-create") {
-      for (const title of ["Payment received", "Payment method", "Apply payment to rent"])
+      for (const title of [
+        "Payment received",
+        "Apply payment to rent",
+        "Receipt allocation totals",
+      ])
         await expect(region.getByRole("region", { name: title, exact: true })).toBeVisible();
       await expect(region.getByLabel("Lease id (required)")).toHaveCount(0);
       await expect(
@@ -797,8 +801,8 @@ test("rent synchronization and a partial receipt keep allocations and remaining 
   await page.getByRole("button", { name: "Record payment", exact: true }).click();
   await page.getByLabel("Received on (required)").fill(f.today);
   await page.getByLabel("Payment method kind (required)").selectOption("cash");
-  await page.getByLabel("Amount (USD cents) (required)").nth(0).fill("40000");
-  await page.getByLabel("Amount (USD cents) (required)").nth(1).fill("40000");
+  await page.getByLabel("Amount (USD)", { exact: true }).fill("400");
+  await page.getByLabel(/^Allocation \(USD\) for/).fill("400");
   await save(page, "Record rent receipt");
   await page.goto(`/money?record=expectation&id=${expectation.id}`);
   await expect(page.getByText("USD 600.00", { exact: true })).toBeVisible();
@@ -889,15 +893,28 @@ for (const method of [
     const review = page.getByRole("region", { name: "Actual payment method review", exact: true });
     await expect(review).toContainText("does not collect, initiate, schedule or authorize");
     await expect(review).toContainText("No prior method is suggested");
+    if (method === "cash") {
+      const guidance = review.locator("details");
+      const disclosure = guidance.locator("summary");
+      await expect(guidance.getByRole("list")).not.toBeVisible();
+      await disclosure.focus();
+      await disclosure.press("Enter");
+      await expect(guidance.getByRole("listitem")).toHaveCount(4);
+      await expect(guidance.getByText("Check •••• 9182", { exact: true })).toBeVisible();
+      await expect(guidance).toContainText("Keep sensitive details out:");
+      await disclosure.press("Space");
+      await expect(guidance.getByRole("list")).not.toBeVisible();
+    }
     await page.getByLabel("Received on (required)").fill(f.today);
     await page.getByLabel("Payment method kind (required)").selectOption(method);
+    await page.getByText("Additional details", { exact: true }).click();
     await page.getByLabel("Payment method label", { exact: true }).fill(`Actual ${method}`);
     if (method !== "cash")
       await page.getByLabel("Masked reference", { exact: true }).fill("Check •••• 4321");
     if (method === "other") {
       await expect(
         page.getByRole("button", { name: "Record rent receipt", exact: true }),
-      ).toBeDisabled();
+      ).toBeEnabled();
       await page
         .getByLabel("Other payment method note", { exact: true })
         .fill("Confirmed money order received");
@@ -958,13 +975,14 @@ test("prior actual method remains editable and replacement keeps its own origina
   ).toContainText("Editable suggestion from the latest non-voided receipt");
   await page.getByLabel("Received on (required)").fill(f.today);
   await page.getByLabel("Payment method kind (required)").selectOption("bank_transfer");
+  await page.getByText("Additional details", { exact: true }).click();
   await expect(page.getByLabel("Other payment method note", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Masked reference", { exact: true })).toHaveValue("");
   await expect(page.getByLabel("Payment method label", { exact: true })).toHaveValue("");
   await page.getByLabel("Masked reference", { exact: true }).fill("4111111111111111");
   await expect(
     page.getByRole("button", { name: "Record rent receipt", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await page.getByLabel("Masked reference", { exact: true }).fill("Transfer **** 9876");
   await page.getByLabel("Payment method label", { exact: true }).fill("Current transfer");
   await save(page, "Record rent receipt");
@@ -988,6 +1006,7 @@ test("prior actual method remains editable and replacement keeps its own origina
     `/money?workflow=finance.rent_receipt.create&target=${f.lease.id}&child=${expectation.id}&replacesReceiptId=${changed.id}`,
   );
   await expect(page.getByLabel("Payment method kind (required)")).toHaveValue("bank_transfer");
+  await page.getByText("Additional details", { exact: true }).click();
   await expect(page.getByLabel("Masked reference", { exact: true })).toHaveValue(
     "Transfer **** 9876",
   );
@@ -1025,32 +1044,26 @@ test("receipt totals prevent unmatched money and allocate one payment across two
   await page.getByLabel("Payment method kind (required)").selectOption("cash");
   await page
     .getByRole("region", { name: "Payment received", exact: true })
-    .getByLabel("Amount (USD cents) (required)")
-    .fill("150000");
+    .getByLabel("Amount (USD)", { exact: true })
+    .fill("1,500");
   await page
     .getByRole("region", { name: "Apply payment to rent", exact: true })
-    .getByLabel("Amount (USD cents) (required)")
-    .fill("100000");
+    .getByLabel(/^Allocation \(USD\) for/)
+    .fill("1000");
   const totals = page.getByRole("region", { name: "Receipt allocation totals", exact: true });
-  await expect(totals).toContainText("USD 500.00");
+  await expect(totals).toContainText("USD 500.00 not yet allocated");
   await expect(
     page.getByRole("button", { name: "Record rent receipt", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Record rent receipt", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("allocate the full payment");
   expect(
     (await get<Schemas["ReceiptPageResponse"]>(request, `/api/rent-receipts?leaseId=${f.lease.id}`))
       .items,
   ).toHaveLength(0);
-  await page.getByRole("button", { name: "Add allocations entry", exact: true }).click();
-  await page
-    .getByRole("combobox", { name: "Rent period (required)", exact: true })
-    .nth(1)
-    .selectOption(second.id);
-  await page
-    .getByRole("region", { name: "Apply payment to rent", exact: true })
-    .getByLabel("Amount (USD cents) (required)")
-    .nth(1)
-    .fill("50000");
-  await expect(totals).toContainText("USD 0.00");
+  await page.getByRole("button", { name: /^Allocate remaining USD 500.00/ }).click();
+  await expect(page.getByLabel(/^Allocation \(USD\) for/).nth(1)).toHaveValue("500.00");
+  await expect(totals).toContainText("Fully allocated");
   await save(page, "Record rent receipt");
   const receipts = await get<Schemas["ReceiptPageResponse"]>(
     request,
@@ -1058,6 +1071,7 @@ test("receipt totals prevent unmatched money and allocate one payment across two
   );
   expect(receipts.items).toHaveLength(1);
   expect(receipts.items[0].allocations).toHaveLength(2);
+  expect(receipts.items[0].allocations.some((row) => row.expectationId === second.id)).toBe(true);
   await page.goto(`/money?tab=rent&leaseId=${f.lease.id}`);
   await page.getByRole("combobox", { name: "Settlement", exact: true }).selectOption("partial");
   await expect(
@@ -1100,6 +1114,119 @@ test("receipt totals prevent unmatched money and allocate one payment across two
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
   }
+});
+
+test("receipt dollar edits remain saveable and recoverable before allocation completeness", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  const synced = await schedule(request, f);
+  const expectation = synced.items[0];
+  await page.goto(
+    `/money?workflow=finance.rent_receipt.create&target=${f.lease.id}&child=${expectation.id}`,
+  );
+  const amount = page.getByLabel("Amount (USD)", { exact: true });
+  const allocation = page.getByLabel(/^Allocation \(USD\) for/);
+  const totals = page.getByRole("region", { name: "Receipt allocation totals", exact: true });
+  await expect(amount).toHaveValue("1,000.00");
+  await expect(page.getByLabel("Received on (required)")).toHaveValue(
+    f.property.effectiveLocalDate,
+  );
+  await page.getByLabel("Payment method kind (required)").selectOption("cash");
+  await amount.fill(".");
+  const draftResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      response.url().includes("/api/operator/recovery/") &&
+      response.ok(),
+  );
+  await page.getByRole("button", { name: "Save unfinished form", exact: true }).click();
+  const draft = (await (await draftResponse).json()) as Schemas["RecoveryResponse"];
+  expect(draft.payload.amountMinor).toBe(".");
+  await expect(allocation).toHaveValue("1,000.00");
+  await page.goto("/settings/recovery");
+  await page
+    .getByRole("link", { name: "Resume: Record rent receipt", exact: true })
+    .and(page.locator(`[href*="resume=${draft.id}"]`))
+    .click();
+  await expect(amount).toHaveValue(".");
+  await expect(allocation).toHaveValue("1,000.00");
+  await amount.fill("1,000.50");
+  await amount.blur();
+  await expect(amount).toHaveValue("1,000.50");
+  await expect(totals).toContainText("USD 0.50 not yet allocated");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await page.getByRole("button", { name: "Record rent receipt", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("allocate the full payment");
+  await expect(allocation).toHaveValue("1,000.00");
+  await amount.fill("400.50");
+  await allocation.fill("400.50");
+  const posted = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/rent-receipts",
+  );
+  await save(page, "Record rent receipt");
+  const response = await posted;
+  const body = response.request().postDataJSON() as {
+    amountMinor: number;
+    allocations: { amountMinor: number }[];
+  };
+  expect(body.amountMinor).toBe(40050);
+  expect(body.allocations[0].amountMinor).toBe(40050);
+  await expect(
+    page.getByRole("region", { name: "Rent after this payment", exact: true }),
+  ).toContainText("Still due USD 599.50");
+  await expect(page.locator(".saved-item")).not.toContainText(/Revision|Operation|Amount minor/);
+});
+
+test("receipt conflicts keep entered money visible and another payment starts a fresh ledger form", async ({
+  page,
+  request,
+}) => {
+  const f = await fixture(request);
+  const synced = await schedule(request, f);
+  await page.goto(
+    `/money?workflow=finance.rent_receipt.create&target=${f.lease.id}&child=${synced.items[0].id}`,
+  );
+  await page.getByLabel("Payment method kind (required)").selectOption("cash");
+  await page.getByLabel("Amount (USD)", { exact: true }).fill("200");
+  await page.getByLabel(/^Allocation \(USD\) for/).fill("200");
+  await save(page, "Record rent receipt");
+  await page.getByRole("link", { name: "Record another payment", exact: true }).click();
+  await expect(page.getByLabel("Amount (USD)", { exact: true })).toHaveValue("");
+  await page.getByRole("checkbox", { name: /USD 800.00 due/ }).check();
+  await page.getByLabel("Amount (USD)", { exact: true }).fill("300");
+  await page.getByLabel(/^Allocation \(USD\) for/).fill("300");
+  await save(page, "Record rent receipt");
+  await page.getByRole("link", { name: "Record another payment", exact: true }).click();
+  await expect(page.getByLabel("Amount (USD)", { exact: true })).toHaveValue("");
+  await page.getByRole("checkbox", { name: /USD 500.00 due/ }).check();
+  await page.route("**/api/operator/recovery/*", (route) =>
+    route.request().method() === "PUT"
+      ? route.fulfill({
+          status: 409,
+          json: {
+            detail: {
+              code: "operator_revision_conflict",
+              message: "This form changed elsewhere. Review the latest saved copy.",
+            },
+          },
+        })
+      : route.continue(),
+  );
+  await page.getByLabel("Amount (USD)", { exact: true }).fill("100");
+  await expect(
+    page.getByText("Your form changed elsewhere. Review the latest saved copy.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel(/^Allocation \(USD\) for/)).toHaveValue("500.00");
+  await expect(page.getByLabel("Amount (USD)", { exact: true })).toHaveValue(/^100(?:\.00)?$/);
+  const receipts = await get<Schemas["ReceiptPageResponse"]>(
+    request,
+    `/api/rent-receipts?leaseId=${f.lease.id}`,
+  );
+  expect(receipts.items).toHaveLength(2);
 });
 
 test("rent timeliness requires an explicit missed decision and retains its cleared history", async ({
@@ -2416,8 +2543,8 @@ test("rent receipt correction voids the predecessor and preserves one current re
   );
   await page.getByLabel("Received on (required)").fill(f.today);
   await page.getByLabel("Payment method kind (required)").selectOption("cash");
-  await page.getByLabel("Amount (USD cents) (required)").nth(0).fill("20000");
-  await page.getByLabel("Amount (USD cents) (required)").nth(1).fill("20000");
+  await page.getByLabel("Amount (USD)", { exact: true }).fill("200");
+  await page.getByLabel(/^Allocation \(USD\) for/).fill("200");
   await save(page, "Record rent receipt");
   const current = await get<Schemas["ReceiptPageResponse"]>(
     request,

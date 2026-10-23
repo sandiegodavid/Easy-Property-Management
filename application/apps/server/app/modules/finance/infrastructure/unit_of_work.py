@@ -448,6 +448,31 @@ class _Tx:
             )
         return projection
 
+    def receipt_period_outcomes(self, receipt_id):
+        # One set-based projection inside the committing transaction: these
+        # balances belong to the immutable receipt, not a later mutable read.
+        return [
+            dict(row)
+            for row in self.connection.execute(
+                text("""
+            SELECT e.id AS expectationId, e.period_starts_on AS periodStartsOn,
+                   e.period_ends_on AS periodEndsOn,
+                   e.expected_amount_minor - COALESCE(SUM(
+                       CASE WHEN r.voided_at IS NULL THEN a.amount_minor ELSE 0 END
+                   ), 0) AS outstandingAmountMinor
+            FROM rent_expectations e
+            LEFT JOIN rent_receipt_allocations a ON a.expectation_id = e.id
+            LEFT JOIN rent_receipts r ON r.id = a.receipt_id
+            WHERE e.id IN (
+                SELECT expectation_id FROM rent_receipt_allocations WHERE receipt_id = :receipt_id
+            )
+            GROUP BY e.id
+            ORDER BY e.period_starts_on, e.id
+        """),
+                {"receipt_id": receipt_id},
+            ).mappings()
+        ]
+
     def expectation_projection(self, expectation_ids):
         projection = {
             record_id: {"summaries": [], "timeline": [], "reviews": [], "activity": []}

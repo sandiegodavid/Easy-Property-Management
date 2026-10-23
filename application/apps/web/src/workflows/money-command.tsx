@@ -17,6 +17,7 @@ import { label, type Choices } from "./fields";
 import { partyNames } from "../shared/party-names";
 import { formatDate, formatUsd } from "../shared/presentation";
 import { cents } from "./money-presentation";
+import { ReceiptFields, receiptProblem, type ReceiptPeriods } from "./receipt-fields";
 import {
   DepositContext,
   InterestCreditReview,
@@ -27,7 +28,6 @@ import {
 } from "./deposit-context";
 import {
   RentScheduleContext,
-  ReceiptAllocationContext,
   PaymentMethodReview,
   paymentMethodProblem,
   receiptBalance,
@@ -41,6 +41,8 @@ type Source = {
   choices: Choices;
   ledgerRevision?: number;
   receiptSuggestion?: Record<string, unknown>;
+  receiptPeriods?: ReceiptPeriods;
+  receivedToday?: string;
 };
 async function commandSource(
   definition: Workflow,
@@ -70,7 +72,10 @@ async function commandSource(
     ]);
     source.revision = ledger.rentLedgerRevision;
     source.value = record(lease);
-    if (definition.formKey.startsWith("finance.prepaid_check.")) {
+    if (
+      definition.formKey.startsWith("finance.prepaid_check.") ||
+      definition.formKey === "finance.rent_receipt.create"
+    ) {
       const space = readResult(
         await api.GET("/api/spaces/{space_id}/status", {
           signal,
@@ -78,6 +83,10 @@ async function commandSource(
         }),
       );
       source.value.propertyId = space.propertyId;
+      if (definition.formKey === "finance.rent_receipt.create") {
+        source.receiptPeriods = expectations;
+        source.receivedToday = space.effectiveLocalDate;
+      }
     }
     source.choices.leaseTermId = lease.terms.map((term) => ({
       id: term.id,
@@ -444,6 +453,7 @@ export function MoneyCommand() {
     Object.assign(initial, state.receiptSuggestion);
     initial.leaseId = target;
     initial.currencyCode = "USD";
+    initial.receivedOn = state.receivedToday;
     if (priorReceipt.data) {
       for (const key of [
         "receivedOn",
@@ -692,6 +702,23 @@ export function MoneyCommand() {
           revision={state.revision}
           initial={initial}
           choices={state.choices}
+          renderFields={
+            definition.formKey === "finance.rent_receipt.create"
+              ? (values, locked, onChange) => (
+                  <ReceiptFields
+                    schema={definition.schema}
+                    values={values}
+                    locked={locked}
+                    onChange={onChange}
+                    choices={state.choices}
+                    leaseId={target!}
+                    periods={state.receiptPeriods!}
+                    selected={selected as components["schemas"]["ExpectationResponse"] | undefined}
+                    revision={state.revision}
+                  />
+                )
+              : undefined
+          }
           choicesForValues={(values) => ({
             ...state.choices,
             categoryId: (state.choices.categoryId ?? []).filter(
@@ -707,8 +734,7 @@ export function MoneyCommand() {
               : definition.formKey === "finance.rent_expectation.synchronize"
                 ? confirmedSchedule === scheduleKey(values)
                 : definition.formKey === "finance.rent_receipt.create"
-                  ? receiptBalance(values).remaining === 0n &&
-                    !paymentMethodProblem(values, definition.schema)
+                  ? true
                   : definition.formKey === "finance.deposit_credit.create" ||
                       definition.formKey === "finance.deposit_credit.update"
                     ? creditReady(values, confirmedInterest)
@@ -781,12 +807,10 @@ export function MoneyCommand() {
               </>
             ) : definition.formKey === "finance.rent_receipt.create" ? (
               <>
-                <ReceiptAllocationContext values={values} />
                 <PaymentMethodReview
                   values={values}
                   suggestion={priorReceipt.data ?? state.receiptSuggestion}
                   replacement={!!priorReceipt.data}
-                  schema={definition.schema}
                 />
               </>
             ) : null
@@ -812,7 +836,8 @@ export function MoneyCommand() {
               if (problem) throw new Error(problem);
             }
             if (definition.formKey === "finance.rent_receipt.create") {
-              const problem = paymentMethodProblem(values, definition.schema);
+              const problem =
+                receiptProblem(values) ?? paymentMethodProblem(values, definition.schema);
               if (problem) throw new Error(problem);
             }
             if (

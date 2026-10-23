@@ -163,10 +163,10 @@ test("lease draft saved screen contains the agreed rent and returns to the new d
   );
 });
 
-test("rent receipt saved screen confirms the payment once before returning to its receipt", async ({
+test("rent receipt defaults and saved screen confirm the payment once before returning to rent", async ({
   page,
   request,
-}) => {
+}, info) => {
   const f = await makeRent(request);
   let writes = 0;
   page.on("request", (entry) => {
@@ -176,17 +176,51 @@ test("rent receipt saved screen confirms the payment once before returning to it
   await page.goto(
     `/money?workflow=finance.rent_receipt.create&target=${f.lease.id}&child=${f.expectation.id}`,
   );
-  await page.getByLabel("Received on (required)").fill(f.today);
-  await page.getByLabel("Amount (USD cents) (required)").nth(0).fill("195000");
-  await page.getByLabel("Amount (USD cents) (required)").nth(1).fill("195000");
+  await expect(page.getByLabel("Received on (required)")).toHaveValue(
+    f.property.effectiveLocalDate,
+  );
+  await expect(page.getByLabel("Amount (USD)", { exact: true })).toHaveValue("1,950.00");
+  await expect(page.getByLabel(/^Allocation \(USD\) for/)).toHaveValue("1,950.00");
+  await expect(page.getByRole("checkbox", { name: /USD 1,950.00 due/ }).first()).toBeChecked();
+  await expect(page.getByLabel("Currency code (required)")).toHaveCount(0);
   await page.getByLabel("Payment method kind (required)").selectOption("cash");
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset.theme = value;
+    }, theme);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await page
+        .getByRole("region", { name: "Record rent receipt", exact: true })
+        .screenshot({ path: info.outputPath(`receipt-${theme}-${width}.png`) });
+    }
+  }
+  await page.evaluate(axe.source);
+  expect(
+    await page.evaluate(async () =>
+      (
+        await window.axe.run(".command-editor", {
+          runOnly: { type: "tag", values: ["wcag2a", "wcag2aa"] },
+        })
+      ).violations.map((item) => item.id),
+    ),
+  ).toEqual([]);
   await submit(page);
+  await expect(
+    page.getByRole("region", { name: "Rent after this payment", exact: true }),
+  ).toContainText("Paid in full");
+  await expect(
+    page.getByRole("link", { name: "Record another payment", exact: true }),
+  ).toHaveAttribute("href", `/money?workflow=finance.rent_receipt.create&target=${f.lease.id}`);
   await savedContract(
     page,
     "Rent receipt saved",
     "USD 1,950.00",
-    "Back to rent receipt",
-    /\/money\?record=receipt&id=/,
+    "Back to rent",
+    /\/money\?tab=rent&leaseId=/,
   );
   expect(writes).toBe(1);
 });

@@ -1,7 +1,7 @@
 """Explicit bounded incomplete inputs, never official drafts or dispatch commands."""
 
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import AwareDatetime, Field, StrictBool, StrictInt, field_validator
@@ -434,14 +434,19 @@ class TimelinessReviewForm(FinanceRevisionForm):
     confirmed: StrictBool | None = None
 
 
+# Browser drafts can contain a partially typed dollar amount. Official receipt
+# commands retain their strict positive integer-cent contracts.
+ReceiptDraftAmount = StrictInt | Annotated[str, Field(max_length=40, pattern=r"^[0-9,.\s-]*$")]
+
+
 class ReceiptAllocationForm(Contract):
     expectationId: UUID | None = None
-    amountMinor: StrictInt | None = Field(None, gt=0)
+    amountMinor: ReceiptDraftAmount | None = None
 
 
 class RentReceiptCreateForm(FinanceRevisionForm):
     receivedOn: date | None = None
-    amountMinor: StrictInt | None = Field(None, gt=0)
+    amountMinor: ReceiptDraftAmount | None = None
     currencyCode: Literal["USD"] | None = None
     allocations: list[ReceiptAllocationForm] = Field(
         default_factory=list, max_length=MAX_FINANCE_RECEIPT_ALLOCATIONS

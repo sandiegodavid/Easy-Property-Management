@@ -27566,6 +27566,39 @@
         "title": "ReceiptPageResponse",
         "type": "object"
       },
+      "ReceiptPeriodOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "expectationId": {
+            "format": "uuid",
+            "title": "Expectationid",
+            "type": "string"
+          },
+          "outstandingAmountMinor": {
+            "minimum": 0.0,
+            "title": "Outstandingamountminor",
+            "type": "integer"
+          },
+          "periodEndsOn": {
+            "format": "date",
+            "title": "Periodendson",
+            "type": "string"
+          },
+          "periodStartsOn": {
+            "format": "date",
+            "title": "Periodstartson",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expectationId",
+          "periodStartsOn",
+          "periodEndsOn",
+          "outstandingAmountMinor"
+        ],
+        "title": "ReceiptPeriodOutcome",
+        "type": "object"
+      },
       "ReceiptSummary": {
         "additionalProperties": false,
         "properties": {
@@ -42956,6 +42989,14 @@
               }
             ],
             "title": "Paymentmethodlabel"
+          },
+          "periodOutcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ReceiptPeriodOutcome"
+            },
+            "maxItems": 100,
+            "title": "Periodoutcomes",
+            "type": "array"
           },
           "receivedByPartyId": {
             "anyOf": [

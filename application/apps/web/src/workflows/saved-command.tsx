@@ -7,6 +7,7 @@ import { SourceWorkflowLink as Link } from "../shared/home-navigation";
 import type { Recovery } from "../shared/recovery";
 import { loadWorkflowResult } from "./workflow-result";
 import { SavedItem } from "./saved-item";
+import { SavedRentReceipt } from "./saved-rent-receipt";
 
 export function useSaveCompletion() {
   const location = useLocation();
@@ -204,15 +205,23 @@ export function SavedCommand({
   const lifecycle = !savesItem(definition.formKey);
   const summary = record(recovery.receipt?.result);
   const target = scalar(summary.targetId ?? summary.resultId ?? summary.id);
+  const rentReceipt = definition.formKey === "finance.rent_receipt.create";
   return (
     <SavedItem
       title={
         lifecycle ? `${definition.title} — complete` : `${name} ${edited ? "updated" : "saved"}`
       }
-      value={result.data}
+      value={rentReceipt ? undefined : result.data}
       embedded={embedded}
-      destination={destination(definition.formKey, result.data, target, sourceId, back)}
+      destination={
+        rentReceipt
+          ? { to: `/money?tab=rent&leaseId=${sourceId}`, label: "Back to rent" }
+          : destination(definition.formKey, result.data, target, sourceId, back)
+      }
     >
+      {rentReceipt && result.data !== undefined && (
+        <SavedRentReceipt value={result.data} leaseId={sourceId!} />
+      )}
       {result.isPending && <p role="status">Loading saved {name.toLowerCase()} details…</p>}
       {result.error && (
         <div role="alert">

@@ -1,6 +1,6 @@
 import { DynamicFilterForm } from "../shared/dynamic-filter-form";
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { api } from "@epm/contracts";
 import { record, scalar } from "@epm/contracts/workflows";
@@ -39,13 +39,23 @@ const tabLabels: Record<(typeof tabs)[number], string> = {
 };
 export function MoneyWorkspace() {
   const [params] = useSearchParams();
+  const location = useLocation();
   if (params.get("workflow") === "file.link.archive")
     return params.has("accountId") ? (
       <DepositEvidenceArchive key={params.toString()} />
     ) : (
       <ExpenseEvidenceArchive key={params.toString()} />
     );
-  if (params.has("workflow")) return <MoneyCommand key={params.toString()} />;
+  if (params.has("workflow"))
+    return (
+      <MoneyCommand
+        key={
+          params.get("workflow") === "finance.rent_receipt.create"
+            ? location.key
+            : params.toString()
+        }
+      />
+    );
   const kind = params.get("record") as MoneyKind | null;
   if (kind && params.get("id")) {
     if (

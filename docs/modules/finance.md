@@ -14,7 +14,9 @@ Expectations retain source term, dates, amount and generation decisions. Later c
 
 The read-only `POST /api/leases/{id}/rent-expectations/preview` shares synchronization's schedule planner. It returns up to 240 new/retained periods, exact rounded amounts and day fractions, term/responsibility boundaries, Property time zone and captured rent-ledger revision. Voided snapshots remain explicitly labeled. It writes no expectations, receipts or audit events. Synchronization rechecks the ledger revision and immutable schedule inside its normal write transaction.
 
-The browser requires an explicit term, preview and anchor/period confirmation; changed request inputs invalidate approval. Responsibility overrides require their own confirmation and reason. Rent lists provide settlement, timeliness and due-range filters with Expected, Money received and Still due labels and receipt-allocation drill-downs. Receipts expose date/recipient/replacement and void-history filters. Integer-cent allocation totals remain visible and submission is disabled until receipt and allocation totals match. A replacement prefills the voided predecessor without editing it; the last non-voided receipt supplies an editable actual-method suggestion. Expectation detail retains mark-missed/clear-missed reasons and dates; these are operational decisions, not legal determinations.
+The browser requires an explicit term, preview and anchor/period confirmation; changed request inputs invalidate approval. Responsibility overrides require their own confirmation and reason. Rent lists provide settlement, timeliness and due-range filters with Expected, Money received and Still due labels and receipt-allocation drill-downs. Receipts expose date/recipient/replacement and void-history filters. Receipt entry uses exact dollar-to-cent conversion, fixed USD, a property-local current-date default and a bounded period checklist. An expectation entry point prefills its outstanding balance and allocation once. Totals guide editing; incomplete amounts and mismatched totals remain saveable drafts, while submission enforces the strict financial command. A replacement prefills the voided predecessor without editing it; the last non-voided receipt supplies an editable actual-method suggestion. Expectation detail retains mark-missed/clear-missed reasons and dates; these are operational decisions, not legal determinations.
+
+New rent-receipt command results include `periodOutcomes`: each allocated period's dates and remaining balance captured in one set-based projection inside the write transaction. This presentation snapshot belongs to the immutable original command response, not a current ledger read; later payments/voids do not change the saved confirmation. Domain entities, allocation policies and database tables are unchanged. See [receipt workflow and focused validation](../ui/workflows.md#record-rent-receipt).
 
 Each receipt freezes the actual payment method: external automatic bank payment, transfer, check, cash, online or other, with safe masked references. The last receipt may provide an editable suggestion, not an expected method. Rent and prepaid-check mutations share the Lease rent-ledger revision, UUID keys and read-only command recovery.
 
@@ -62,13 +64,13 @@ Receipt/refund replacements prefill voided predecessors and retain both lineage 
 
 For an explicit inclusive property-local date range:
 
-| Metric | Authority |
-| --- | --- |
-| Rent received | Each current non-voided receipt once, on received date |
-| Expenses paid | Non-voided paid Expense on paid date |
-| Expense refunds | Active refund of an active Expense, on refund received date |
-| Net recorded expenses | Expenses paid minus refunds received |
-| Rent less net expenses | Rent received minus expenses paid plus refunds received |
+| Metric                 | Authority                                                   |
+| ---------------------- | ----------------------------------------------------------- |
+| Rent received          | Each current non-voided receipt once, on received date      |
+| Expenses paid          | Non-voided paid Expense on paid date                        |
+| Expense refunds        | Active refund of an active Expense, on refund received date |
+| Net recorded expenses  | Expenses paid minus refunds received                        |
+| Rent less net expenses | Rent received minus expenses paid plus refunds received     |
 
 These figures describe recorded activity, not bank balance, profit or owner entitlement. A February refund against January spending belongs to February; corrected source state can restate the original date. Scheduled checks and pending owner reports contribute nothing. Deposit activity is shown separately.
 
@@ -99,9 +101,9 @@ Money browser views separate Rent, Received rent, Expenses, Deposits, Scheduled 
 
 Persistence identities below are read from the current models. Column definitions, checks and indexes live in the linked models and the [current baseline](../../application/database/sqlite-migrations/versions/0001_initial_schema.py); update them together.
 
-| Tables | Model definitions |
-| --- | --- |
-| `finance_command_revisions`, `finance_command_operations` | [command_models.py](../../application/apps/server/app/modules/finance/infrastructure/command_models.py) |
+| Tables                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Model definitions                                                                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `finance_command_revisions`, `finance_command_operations`                                                                                                                                                                                                                                                                                                                                                                                                                                                        | [command_models.py](../../application/apps/server/app/modules/finance/infrastructure/command_models.py)       |
 | `rent_expectations`, `rent_expectation_timeliness_reviews`, `rent_receipts`, `rent_receipt_allocations`, `prepaid_checks`, `prepaid_check_operations`, `expense_categories`, `expense_category_command_operations`, `expenses`, `expense_refunds`, `security_deposit_accounts`, `security_deposit_receipts`, `security_deposit_settlements`, `security_deposit_settlement_receipts`, `security_deposit_deductions`, `security_deposit_deduction_sources`, `security_deposit_credits`, `security_deposit_refunds` | [sqlalchemy_models.py](../../application/apps/server/app/modules/finance/infrastructure/sqlalchemy_models.py) |
 
 ## Validation

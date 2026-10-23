@@ -252,6 +252,23 @@ def _rent_result(receipt, response, events):
                 or response["voidedAt"] is not None
             ):
                 raise ValueError("Receipt creation result is invalid.")
+            outcomes = response.get("periodOutcomes", [])
+            if "periodOutcomes" in response and (
+                len(outcomes) != len(response["allocations"])
+                or {item["expectationId"] for item in outcomes}
+                != {item["expectationId"] for item in response["allocations"]}
+                or any(
+                    (item["periodStartsOn"], item["periodEndsOn"])
+                    != (
+                        allocation["expectationPeriodStartsOn"],
+                        allocation["expectationPeriodEndsOn"],
+                    )
+                    for item in outcomes
+                    for allocation in response["allocations"]
+                    if item["expectationId"] == allocation["expectationId"]
+                )
+            ):
+                raise ValueError("Receipt period outcomes differ from its allocations.")
             expected = {("rent_receipt", response["id"], "recorded")} | {
                 ("rent_receipt_allocation", item["id"], "created")
                 for item in response["allocations"]

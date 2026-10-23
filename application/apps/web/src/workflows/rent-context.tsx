@@ -246,14 +246,11 @@ export function PaymentMethodReview({
   values,
   suggestion,
   replacement,
-  schema,
 }: {
   values: Record<string, unknown>;
   suggestion: Record<string, unknown> | undefined;
   replacement: boolean;
-  schema: RequestSchema;
 }) {
-  const problem = paymentMethodProblem(values, schema);
   return (
     <section aria-label="Actual payment method review">
       <h3>How was this rent actually received?</h3>
@@ -270,28 +267,35 @@ export function PaymentMethodReview({
             This is not an expected method or recurring instruction. Review and change it for this
             payment.
           </p>
-          <MoneyFacts
-            value={suggestion}
-            fields={[
-              "paymentMethodKind",
-              "paymentMethodLabel",
-              "maskedReference",
-              "otherPaymentMethodNote",
-            ]}
-          />
         </>
       ) : (
         <p>No prior method is suggested. Select the actual method explicitly.</p>
       )}
       <details>
         <summary>Payment method and reference guidance</summary>
+        <ul>
+          <li>
+            <strong>Automatic bank payment:</strong> Choose this for a payment arranged outside the
+            app. It does not connect to a bank or authorize a debit.
+          </li>
+          <li>
+            <strong>Method description (optional):</strong> Add a short label to help recognize the
+            payment, up to 100 characters.
+          </li>
+          <li>
+            <strong>Payment reference (optional):</strong> Leave it blank if not needed, especially
+            for cash. For a reference, use at least two • or * characters to hide the number and
+            show no more than its last four digits—for example, <strong>Check •••• 9182</strong>.
+            Any label before the masked number must use English letters and spaces only.
+          </li>
+          <li>
+            <strong>Changing the method:</strong> Clears the previous description, reference and
+            Other explanation. Add new details only if needed for this payment.
+          </li>
+        </ul>
         <p>
-          Automatic bank payment records an externally arranged payment, not a bank connection or
-          instruction to debit an account. Changing the method clears its label, reference and Other
-          explanation. Optional labels permit at most 100 characters. A reference is optional, and
-          is normally omitted for cash. Use at least two • or * mask characters and at most four
-          final digits, optionally preceded by a plain ASCII label, such as Check •••• 9182. Never
-          enter bank, card or routing details, passwords, tokens or processor credentials.
+          <strong>Keep sensitive details out:</strong> Never enter full bank account, card or
+          routing numbers, passwords, access tokens or payment-service credentials.
         </p>
       </details>
       {values.paymentMethodKind === "other" && (
@@ -299,7 +303,6 @@ export function PaymentMethodReview({
           Explain Other in the required 1–200 character note; it is retained with this receipt only.
         </p>
       )}
-      {problem && <p role="alert">{problem}</p>}
     </section>
   );
 }

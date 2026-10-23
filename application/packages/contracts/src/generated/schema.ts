@@ -14827,6 +14827,26 @@ export interface components {
             /** Nextcursor */
             nextCursor: string | null;
         };
+        /** ReceiptPeriodOutcome */
+        ReceiptPeriodOutcome: {
+            /**
+             * Expectationid
+             * Format: uuid
+             */
+            expectationId: string;
+            /** Outstandingamountminor */
+            outstandingAmountMinor: number;
+            /**
+             * Periodendson
+             * Format: date
+             */
+            periodEndsOn: string;
+            /**
+             * Periodstartson
+             * Format: date
+             */
+            periodStartsOn: string;
+        };
         /** ReceiptSummary */
         ReceiptSummary: {
             /** Id */
@@ -19972,6 +19992,8 @@ export interface components {
             paymentMethodKind: "automatic_bank_payment" | "bank_transfer" | "check" | "cash" | "online_payment" | "other";
             /** Paymentmethodlabel */
             paymentMethodLabel: string | null;
+            /** Periodoutcomes */
+            periodOutcomes?: components["schemas"]["ReceiptPeriodOutcome"][];
             /** Receivedbypartyid */
             receivedByPartyId: string | null;
             /**

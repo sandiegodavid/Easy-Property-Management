@@ -19,53 +19,34 @@ export function GroupedCommandFields({
   formKey: string;
   originalReporter?: unknown;
 }) {
-  const receipt = formKey === "finance.rent_receipt.create";
   const issue = formKey === "maintenance.issue.patch";
-  const groups: [string, string[], string?][] = receipt
+  const groups: [string, string[], string?][] = issue
     ? [
+        ["Issue details", ["summary", "description"]],
         [
-          "Payment received",
-          ["receivedOn", "amountMinor", "currencyCode"],
-          "Enter the amount in USD cents: 125.00 dollars is 12500 cents.",
+          "Category and priority",
+          ["category", ...(value.category === "other" ? ["categoryDetail"] : []), "priority"],
         ],
         [
-          "Payment method",
-          ["paymentMethodKind", "paymentMethodLabel", "maskedReference", "otherPaymentMethodNote"],
-        ],
-        [
-          "Apply payment to rent",
-          ["allocations"],
-          "Choose the rent periods covered by this payment. Allocations must add up to the payment amount.",
+          "Reporter",
+          [
+            "reporter",
+            ...(reporterChanged(value, originalReporter) ? ["reporterCorrectionReason"] : []),
+          ],
+          "Correct the person or role recorded for the original report. A changed reporter requires a reason.",
         ],
       ]
-    : issue
-      ? [
-          ["Issue details", ["summary", "description"]],
-          [
-            "Category and priority",
-            ["category", ...(value.category === "other" ? ["categoryDetail"] : []), "priority"],
-          ],
-          [
-            "Reporter",
-            [
-              "reporter",
-              ...(reporterChanged(value, originalReporter) ? ["reporterCorrectionReason"] : []),
-            ],
-            "Correct the person or role recorded for the original report. A changed reporter requires a reason.",
-          ],
-        ]
-      : [
-          [
-            "Category details",
-            ["displayName", "description", "displayOrder"],
-            "Use a clear name for grouping paid expenses. Display order controls its position in the category list.",
-          ],
-        ];
+    : [
+        [
+          "Category details",
+          ["displayName", "description", "displayOrder"],
+          "Use a clear name for grouping paid expenses. Display order controls its position in the category list.",
+        ],
+      ];
   const used = new Set([
     ...groups.flatMap(([, keys]) => keys),
     "expectedRevision",
     "idempotencyKey",
-    ...(receipt ? ["leaseId"] : []),
     ...(issue ? ["categoryDetail", "reporterCorrectionReason"] : []),
   ]);
   const remaining = Object.keys(schema.properties ?? {}).filter((key) => !used.has(key));
@@ -100,9 +81,6 @@ export function GroupedCommandFields({
         disabled={disabled}
         showChangeControls={!issue && formKey.endsWith(".patch")}
         compactChangeControls
-        fieldLabels={
-          receipt ? { amountMinor: "Amount (USD cents)", expectationId: "Rent period" } : {}
-        }
       />
     );
   }

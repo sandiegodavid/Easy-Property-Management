@@ -71,6 +71,17 @@ class FinanceCommandTests(unittest.TestCase):
     def test_original_receipt_replay_survives_later_void_and_source_changes(self):
         receipt = self.finance.record_receipt(self.command, expected_revision=1)
         self.assertEqual(receipt["rentLedgerRevision"], 2)
+        self.assertEqual(
+            receipt["periodOutcomes"],
+            [
+                {
+                    "expectationId": self.expectation["id"],
+                    "periodStartsOn": self.expectation["periodStartsOn"],
+                    "periodEndsOn": self.expectation["periodEndsOn"],
+                    "outstandingAmountMinor": 0,
+                }
+            ],
+        )
         voided = self.finance.void_receipt(
             receipt["id"],
             VoidCommand(True, "Recorded twice"),
@@ -92,6 +103,38 @@ class FinanceCommandTests(unittest.TestCase):
         self.assertEqual(
             self.finance.rent_ledger_revision(self.lease["id"])["rentLedgerRevision"], 3
         )
+        validate_latest_schema(self.workspace.paths.database)
+
+    def test_partial_receipt_outcome_is_frozen_after_a_later_payment(self):
+        amount = self.command.amount_minor // 3
+        partial = replace(
+            self.command,
+            amount_minor=amount,
+            allocations=(ReceiptAllocationCommand(self.expectation["id"], amount),),
+        )
+        statements = []
+
+        def capture(_connection, _cursor, statement, _parameters, _context, _many):
+            statements.append(statement)
+
+        event.listen(self.engine, "before_cursor_execute", capture)
+        try:
+            result = self.finance.record_receipt(partial, expected_revision=1)
+        finally:
+            event.remove(self.engine, "before_cursor_execute", capture)
+        self.assertEqual(sum("AS outstandingAmountMinor" in sql for sql in statements), 1)
+        remaining = self.command.amount_minor - amount
+        self.assertEqual(result["periodOutcomes"][0]["outstandingAmountMinor"], remaining)
+        self.finance.record_receipt(
+            replace(
+                self.command,
+                idempotency_key=str(uuid4()),
+                amount_minor=remaining,
+                allocations=(ReceiptAllocationCommand(self.expectation["id"], remaining),),
+            ),
+            expected_revision=2,
+        )
+        self.assertEqual(self.finance.record_receipt(partial, expected_revision=1), result)
         validate_latest_schema(self.workspace.paths.database)
 
     def test_changed_reuse_and_stale_revision_do_not_write(self):

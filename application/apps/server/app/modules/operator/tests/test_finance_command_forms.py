@@ -28,6 +28,29 @@ LEASE_ID, KEY = str(uuid4()), str(uuid4())
 REVISION = 4
 
 
+@pytest.mark.parametrize("amount", [0, "", ".", "2,600.", "2,600.501", "-5"])
+def test_receipt_drafts_preserve_incomplete_dollar_edits_without_creating_money(amount):
+    payload = {
+        "amountMinor": amount,
+        "allocations": [{"expectationId": LEASE_ID, "amountMinor": 10000}],
+    }
+    assert validate_payload("finance.rent_receipt.create", 1, payload) == payload
+    with pytest.raises(OperatorError):
+        require_complete_form("finance.rent_receipt.create", payload)
+
+
+def test_receipt_drafts_keep_mismatched_totals_and_bound_incomplete_input():
+    payload = {
+        "amountMinor": 260000,
+        "allocations": [{"expectationId": LEASE_ID, "amountMinor": "."}],
+    }
+    assert validate_payload("finance.rent_receipt.create", 1, payload) == payload
+    with pytest.raises(OperatorError):
+        validate_payload("finance.rent_receipt.create", 1, {"amountMinor": "1" * 41})
+    with pytest.raises(OperatorError):
+        validate_payload("finance.rent_receipt.create", 1, {"amountMinor": {"raw": "no"}})
+
+
 def test_receipt_recovery_rejects_raw_references_and_normalizes_safe_masks():
     for reference in (
         "123456789",

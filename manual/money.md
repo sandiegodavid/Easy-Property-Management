@@ -16,13 +16,13 @@ Future lease changes do not rewrite old expectations. Review changed terms and s
 
 ## Record actual rent received
 
-1. Expand the expectation and choose **Record rent receipt**.
-2. Confirm Lease, date received, amount, payer/recipient and actual payment method.
-3. Allocate the complete receipt amount across eligible expectations. Confirm the visible allocation sum equals the receipt; review each remaining balance.
+1. Open the rent period and choose **Record payment**. Its still-due amount and allocation are filled in for you.
+2. Confirm the amount in USD dollars, **Received on** date and payment method. The date starts at today in the property's time zone; change it for a different payment date.
+3. For a partial payment, edit both the payment and selected period's allocation. To cover more periods, check their boxes and adjust the amounts, or use **Allocate remaining…** when offered. The totals show anything not yet allocated. You can save an unfinished form before the totals match; the complete payment must be allocated before submitting.
 4. Inspect likely duplicates and existing receipts before confirming another receipt.
-5. Save, inspect the resulting receipt and current expectation balances, then attach supporting evidence if needed.
+5. Save and review the confirmation: amount, received date, method, and whether each period was paid in full or still had a balance after this payment. Choose **Back to rent** or **Record another payment**. Open the receipt from Received rent to add evidence or review later changes.
 
-“Automatic bank payment” describes an arrangement outside the app; it does not authorize a debit. A prior receipt may suggest an editable method. Enter only safe masked references, such as `Check •••• 9182`, not raw bank/account/check identifiers. Other payment method requires an explanation.
+“Automatic bank payment” describes an arrangement outside the app; it does not authorize a debit. A prior receipt may suggest an editable method. Optional method descriptions, references and notes are under **Additional details**. Enter only safe masked references, such as `Check •••• 9182`, not raw bank/account/check identifiers. Other payment method requires an explanation.
 
 An early payment actually received and allocated to a future expectation is received money. A scheduled undeposited check is not.
 
@@ -81,13 +81,13 @@ A verified report can retain historical verification even if its linked receipt 
 
 Choose an explicit inclusive From/Through period and scope, then open a metric to view its source records. Use the matching View all/source pages rather than summing only visible rows. Restart changed/expired views with filters retained.
 
-| Figure | Interpretation |
-| --- | --- |
-| Rent received | Current non-voided receipts dated in the selected period, each once |
-| Expenses paid | Paid non-voided expenses in the period |
-| Expense refunds | Active actual refunds received in the period |
-| Net recorded expenses | Expenses paid less refunds received |
-| Rent less net expenses | Recorded rent less paid expenses plus refunds; not profit or bank cash |
-| Deposit obligation | Current held-money reconciliation at capture, not a historical balance at the report end date |
+| Figure                 | Interpretation                                                                                |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| Rent received          | Current non-voided receipts dated in the selected period, each once                           |
+| Expenses paid          | Paid non-voided expenses in the period                                                        |
+| Expense refunds        | Active actual refunds received in the period                                                  |
+| Net recorded expenses  | Expenses paid less refunds received                                                           |
+| Rent less net expenses | Recorded rent less paid expenses plus refunds; not profit or bank cash                        |
+| Deposit obligation     | Current held-money reconciliation at capture, not a historical balance at the report end date |
 
 Archived properties may contribute retained history. For owner context, select a related Property when required; whole-property activity does not establish owner entitlement. Owner statements, management fees, payouts and bank reconciliation are separate scopes.

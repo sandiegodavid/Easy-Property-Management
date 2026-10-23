@@ -314,6 +314,11 @@ type CommandHostBaseProps = {
     locked: boolean,
     onChange: (values: Record<string, unknown>) => void,
   ) => ReactNode;
+  renderFields?: (
+    values: Record<string, unknown>,
+    locked: boolean,
+    onChange: (values: Record<string, unknown>) => void,
+  ) => ReactNode;
 };
 
 type CommandLoaderProps = CommandHostBaseProps & {
@@ -347,6 +352,7 @@ export function CommandLoader({
   reviewSource,
   checkSource,
   renderContext,
+  renderFields,
   canSubmit,
 }: CommandLoaderProps) {
   const { scope } = useWorkspace();
@@ -395,6 +401,7 @@ export function CommandLoader({
       reviewSource={reviewSource}
       checkSource={checkSource}
       renderContext={renderContext}
+      renderFields={renderFields}
       canSubmit={canSubmit}
     />
   );
@@ -417,6 +424,7 @@ function CommandEditor({
   reviewSource,
   checkSource,
   renderContext,
+  renderFields,
   canSubmit,
 }: CommandEditorProps) {
   const { scope } = useWorkspace();
@@ -950,11 +958,13 @@ function CommandEditor({
               throw new Error("Select the evidence file before submitting.");
             if (requiresRemovalConfirmation && !removalConfirmed)
               throw new Error("Confirm removal of this Lease participant.");
+            if (definition.formKey === "finance.rent_receipt.create" && checkSource)
+              await checkSource(values);
             validateForm(definition.schema, {
               ...record(clean(definition.schema, values)),
               idempotencyKey: crypto.randomUUID(),
             });
-            if (checkSource) {
+            if (checkSource && definition.formKey !== "finance.rent_receipt.create") {
               try {
                 await checkSource({
                   ...values,
@@ -1137,9 +1147,11 @@ function CommandEditor({
               ))}
             </>
           )}
-          {["maintenance.appointment.create", "maintenance.appointment.update"].includes(
-            definition.formKey,
-          ) ? (
+          {renderFields ? (
+            renderFields(values, locked, (next) => form.setValue("data", next))
+          ) : ["maintenance.appointment.create", "maintenance.appointment.update"].includes(
+              definition.formKey,
+            ) ? (
             <AppointmentFields
               schema={definition.schema}
               value={values}
@@ -1177,7 +1189,6 @@ function CommandEditor({
               "maintenance.issue.patch",
               "finance.expense_category.create",
               "finance.expense_category.patch",
-              "finance.rent_receipt.create",
             ].includes(definition.formKey) ? (
             <GroupedCommandFields
               schema={definition.schema}

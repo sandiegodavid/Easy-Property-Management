@@ -244,9 +244,17 @@ class ExpectationMutationResponse(ExpectationResponse):
     operationId: UUID
 
 
+class ReceiptPeriodOutcome(Contract):
+    expectationId: UUID
+    periodStartsOn: date
+    periodEndsOn: date
+    outstandingAmountMinor: StrictInt = Field(ge=0)
+
+
 class ReceiptMutationResponse(ReceiptResponse):
     rentLedgerRevision: StrictInt = Field(ge=0)
     operationId: UUID
+    periodOutcomes: list[ReceiptPeriodOutcome] = Field(default_factory=list, max_length=100)
 
 
 class SynchronizeResponse(Contract):

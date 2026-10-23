@@ -3757,6 +3757,27 @@ form[aria-label="Home filters"] select {
   width: 100%;
   min-height: 7rem;
 }
+.receipt-periods {
+  display: grid;
+  gap: 0.75rem;
+}
+.receipt-period {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}
+.receipt-period label {
+  margin: 0;
+}
+.receipt-period input[type="checkbox"] {
+  width: auto;
+  margin-inline-end: 0.5rem;
+}
 .tidy-command input,
 .tidy-command select,
 .tidy-command textarea {

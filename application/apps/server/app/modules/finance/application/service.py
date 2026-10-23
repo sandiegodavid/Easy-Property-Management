@@ -232,9 +232,9 @@ class FinanceService:
                 correlation_id=correlation,
                 audit_reason="Rent receipt recorded.",
             )
-            return FinanceCommandOutcome(
-                self._receipt_view(receipt, tx.receipt_projection([receipt.id])[receipt.id]), True
-            )
+            result = self._receipt_view(receipt, tx.receipt_projection([receipt.id])[receipt.id])
+            result["periodOutcomes"] = tx.receipt_period_outcomes(receipt.id)
+            return FinanceCommandOutcome(result, True)
 
         return self._command_write(
             operation,
