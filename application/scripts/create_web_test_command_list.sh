@@ -44,13 +44,14 @@ if [[ -z "$sorted_names" ]]; then
 fi
 
 spec_count="$(printf '%s\n' "$sorted_names" | wc -l | tr -d ' ')"
-command_count=$((spec_count + 3))
+command_count=$((spec_count + 4))
 while IFS= read -r test_name; do
   printf 'npm run test:web -- apps/web/tests/%s && \\\n' "$test_name"
 done <<< "$sorted_names" > "$output_file"
 {
   printf 'npm run test:components && \\\n'
   printf 'npm run test:recovery && \\\n'
+  printf 'npm run test:hosted && \\\n'
   printf 'npm run test:demo\n'
 } >> "$output_file"
 printf 'Wrote %s test commands to %s\n' "$command_count" "$output_file"

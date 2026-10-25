@@ -38,4 +38,5 @@ npm run test:web -- apps/web/tests/workflows.spec.ts && \
 npm run test:web -- apps/web/tests/workspace-gate.spec.ts && \
 npm run test:components && \
 npm run test:recovery && \
+npm run test:hosted && \
 npm run test:demo
