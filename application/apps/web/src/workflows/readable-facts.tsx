@@ -1,5 +1,5 @@
 import { record, scalar } from "@epm/contracts/workflows";
-import { formatHomeTime } from "../shared/home-time";
+import { formatRecordInstant } from "../shared/home-time";
 import { label } from "./fields";
 import { leasingStatusLabels } from "../shared/leasing-status";
 import { formatDate } from "../shared/presentation";
@@ -100,7 +100,7 @@ export function ReadableFacts({ value, fields }: { value: unknown; fields: strin
                     ? "Yes"
                     : "No"
                   : instant
-                    ? formatHomeTime(text)
+                    ? formatRecordInstant(text, key, values)
                     : /availabilityStatus$/i.test(key) && leasingStatusLabels[text]
                       ? leasingStatusLabels[text]
                       : enumeration

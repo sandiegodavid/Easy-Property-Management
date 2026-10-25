@@ -3,12 +3,12 @@ import { useState } from "react";
 import { leasingStatusLabels } from "../shared/leasing-status";
 import { OfficialIdFields } from "./official-id-fields";
 import {
-  browserTimeZone,
   TimeZoneSelect,
   ZonedDateTimeInput,
   zonedInstant,
   zonedWallTime,
 } from "../shared/zoned-date-time";
+import { useDefaultTimeZone } from "../shared/form-time-zone";
 
 export type Choice = { id: string; label: string; revision?: number; historical?: boolean };
 export type Choices = Record<string, Choice[]>;
@@ -92,6 +92,7 @@ export function Fields({
   compactChangeControls?: boolean;
   fieldLabels?: Record<string, string>;
 }) {
+  const defaultZone = useDefaultTimeZone();
   const [displayZones, setDisplayZones] = useState<Record<string, string>>({});
   const shape = fieldSchema(schema);
   if (shape.type !== "object") return null;
@@ -133,6 +134,8 @@ export function Fields({
           const fieldPath = path ? `${path}.${key}` : key;
           const update = (next: unknown) => {
             const replacement = { ...values };
+            if (key === "followUpAt" && next && !replacement.followUpTimezone)
+              replacement.followUpTimezone = defaultZone;
             if (key === "methodKind" && next !== "phone") delete replacement.extension;
             if (path === "reporter") {
               if (key === "partyId" && next !== current) {
@@ -329,6 +332,7 @@ export function Fields({
           const zoneFields: Record<string, string> = {
             dueTimezone: "Due time zone",
             remindTimezone: "Reminder time zone",
+            followUpTimezone: "Follow up timezone",
           };
           const instantFields: Record<string, [string, string]> = {
             dueAtUtc: ["Due at", "dueTimezone"],
@@ -339,7 +343,7 @@ export function Fields({
               <div className="workflow-field" key={key}>
                 <TimeZoneSelect
                   label={zoneFields[key]}
-                  value={typeof current === "string" ? current : ""}
+                  value={typeof current === "string" && current ? current : defaultZone}
                   required={shape.required?.includes(key)}
                   disabled={disabled}
                   onChange={(next) => {
@@ -351,7 +355,7 @@ export function Fields({
                     ) {
                       const day = zonedWallTime(
                         values.dueAtUtc,
-                        typeof current === "string" && current ? current : browserTimeZone(),
+                        typeof current === "string" && current ? current : defaultZone,
                       ).slice(0, 10);
                       onChange({
                         ...values,
@@ -370,7 +374,7 @@ export function Fields({
             const timeZone =
               typeof values[zoneKey] === "string" && values[zoneKey]
                 ? values[zoneKey]
-                : (displayZones[fieldPath] ?? browserTimeZone());
+                : (displayZones[fieldPath] ?? defaultZone);
             return (
               <div className="workflow-field" key={key}>
                 <ZonedDateTimeInput

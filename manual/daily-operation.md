@@ -27,6 +27,8 @@ Click anywhere on its non-editable summary bar, including the text or chevron. C
 
 ## Read Home correctly
 
+Home compares scheduled times in your browser's time zone. When a property's scheduling zone differs, the item also shows its source-local time. Detail pages use the saved scheduling zone; recorded and history timestamps use browser time. Date-only values keep their original dates.
+
 | Section | Meaning and next step |
 | --- | --- |
 | Needs action | Complete supported action list, including urgent repairs, due/late rent, due Tasks/follow-ups/reminders, ordinary unresolved work and reviews. Expand, inspect reasons and use the owning workflow. |

@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { createElement, useCallback, useState, type ReactNode } from "react";
 import { useWatch } from "react-hook-form";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -16,6 +16,7 @@ import {
 } from "@epm/contracts/workflows";
 import { useQuery } from "@tanstack/react-query";
 import { useWorkspace } from "../app/workspace-gate";
+import { FormTimeZone, useFormTimeZone } from "../shared/form-time-zone";
 import { useRecoverableForm, RecoveryNavigation } from "../shared/use-recoverable-form";
 import { mutation } from "../shared/mutations";
 import type { Recovery } from "../shared/recovery";
@@ -296,6 +297,7 @@ export function CommandLinks({
 type CommandHostBaseProps = {
   definition: Workflow;
   propertyTimeZone?: string;
+  timeZoneSource?: Record<string, unknown>;
   sourceId?: string;
   childId?: string;
   revision: number;
@@ -339,6 +341,7 @@ type CommandEditorProps = CommandHostBaseProps & {
 export function CommandLoader({
   definition,
   propertyTimeZone,
+  timeZoneSource,
   sourceId,
   childId,
   revision,
@@ -387,6 +390,7 @@ export function CommandLoader({
       key={`${scope.workspaceId}:${scope.runtimeEpoch}:${definition.formKey}:${sourceId}:${selectedChild}:${recoveryId}`}
       definition={definition}
       propertyTimeZone={propertyTimeZone}
+      timeZoneSource={timeZoneSource}
       sourceId={sourceId}
       childId={selectedChild}
       revision={revision}
@@ -410,6 +414,7 @@ export function CommandLoader({
 function CommandEditor({
   definition,
   propertyTimeZone,
+  timeZoneSource = {},
   sourceId,
   childId,
   revision,
@@ -518,7 +523,17 @@ function CommandEditor({
     project,
   });
   const values = useWatch({ control: form.control, name: "data" }) ?? {};
+  const defaultZone = useFormTimeZone(
+    values,
+    timeZoneSource,
+    /dueTimezone|remindAtUtc|scheduledTimezone|followUpTimezone/.test(
+      JSON.stringify(definition.schema),
+    ),
+    propertyTimeZone,
+  );
   const locked =
+    defaultZone.pending ||
+    !!defaultZone.error ||
     state.command === "submitting" ||
     state.command === "outcome_unknown" ||
     state.command === "committed" ||
@@ -815,8 +830,14 @@ function CommandEditor({
         onSaved={onSaved}
       />
     );
-  return (
+  return createElement(
+    FormTimeZone.Provider,
+    { value: defaultZone.timeZone },
     <section aria-label={commandTitle} className="command-editor">
+      {defaultZone.pending && <p role="status">Loading property time zone…</p>}
+      {defaultZone.error && (
+        <p role="alert">Could not load the property's time zone. Reload the form to try again.</p>
+      )}
       {showParentLink && !hasContextNavigation && <ParentBackLink to={back} />}
       <h2>{commandTitle}</h2>
       <p>
@@ -1384,7 +1405,7 @@ function CommandEditor({
         </section>
       )}
       <RecoveryNavigation controller={controller} blocker={blocker} />
-    </section>
+    </section>,
   );
 }
 

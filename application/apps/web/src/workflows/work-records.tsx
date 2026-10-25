@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { CoverageLinks } from "../shared/coverage";
 import { ParentBackLink, SourceWorkflowLink as Link } from "../shared/home-navigation";
 import { ConversationDetail } from "../shared/source-detail";
-import { formatHomeTime, formatHomeTemporal } from "../shared/home-time";
+import { formatHomeTime, formatScheduledTime } from "../shared/home-time";
+import { useFormTimeZone } from "../shared/form-time-zone";
 import { MoneyFacts } from "./money-presentation";
 import { QuoteComparison } from "./quote-context";
 import { MaintenanceAppointment } from "./maintenance-appointment";
@@ -29,7 +30,7 @@ function taskDeadlineLabel(value: Record<string, unknown>) {
       dateStyle: "long",
       timeZone: scalar(value.dueTimezone),
     }).format(new Date(scalar(value.dueAtUtc)));
-  return formatHomeTime(scalar(value.dueAtUtc));
+  return formatScheduledTime(scalar(value.dueAtUtc), scalar(value.dueTimezone, ""));
 }
 export async function loadWorkRecord(
   kind: WorkKind,
@@ -83,6 +84,7 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
     queryFn: ({ signal }) => loadWorkRecord(kind, id, signal),
   });
   const value = result.data;
+  const reminderZone = useFormTimeZone({}, value ?? {}, kind === "task" && !!value);
   const conversationTimes = ["createdAt", "updatedAt", "recordedAt"].filter(
     (key, index, keys) =>
       value?.[key] &&
@@ -209,7 +211,15 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                 }
               />
               <CommandLinks target={id} keys={["task.delete"]} title="Delete task" />
-              <TaskReminders id={id} active={!!active} />
+              <TaskReminders
+                id={id}
+                active={!!active}
+                timeZone={
+                  reminderZone.pending || reminderZone.error ? undefined : reminderZone.timeZone
+                }
+                pending={reminderZone.pending}
+                unavailable={!!reminderZone.error}
+              />
             </>
           )}
           {kind === "communication" && (
@@ -280,10 +290,10 @@ export function WorkRecord({ kind, id }: { kind: WorkKind; id: string }) {
                         {humanWorkLabel(item.status)}
                         {!!item.dueAtUtc && (
                           <p>
-                            {formatHomeTemporal({
-                              at: scalar(item.dueAtUtc),
-                              timeZone: scalar(item.dueTimezone, ""),
-                            })}
+                            {formatScheduledTime(
+                              scalar(item.dueAtUtc),
+                              scalar(item.dueTimezone, ""),
+                            )}
                           </p>
                         )}
                       </li>
@@ -898,7 +908,19 @@ function IssueProperty({ propertyId }: { propertyId: string }) {
     </p>
   );
 }
-function TaskReminders({ id, active }: { id: string; active: boolean }) {
+function TaskReminders({
+  id,
+  active,
+  timeZone,
+  pending,
+  unavailable,
+}: {
+  id: string;
+  active: boolean;
+  timeZone?: string;
+  pending: boolean;
+  unavailable: boolean;
+}) {
   const { scope } = useWorkspace();
   const result = useQuery({
     queryKey: scope.key("task-reminders", id),
@@ -922,7 +944,14 @@ function TaskReminders({ id, active }: { id: string; active: boolean }) {
       {result.data?.map((item) => (
         <article className="child-record-card task-reminder-card" key={item.id}>
           <header className="child-record-heading">
-            <h4>Reminder · {formatHomeTime(item.remindAtUtc)}</h4>
+            <h4>
+              Reminder ·{" "}
+              {pending
+                ? "Loading property time…"
+                : unavailable
+                  ? "Property time unavailable"
+                  : formatScheduledTime(item.remindAtUtc, timeZone)}
+            </h4>
             <span className="record-pill">{humanWorkLabel(item.status)}</span>
           </header>
           <ReadableFacts value={item} fields={["acknowledgedAtUtc", "dismissedAtUtc"]} />
@@ -933,7 +962,7 @@ function TaskReminders({ id, active }: { id: string; active: boolean }) {
               target={id}
               child={item.id}
               keys={["task.reminder.acknowledge", "task.reminder.dismiss"]}
-              title={`Reminder actions ${formatHomeTime(item.remindAtUtc)}`}
+              title="Reminder actions"
             />
           )}
         </article>

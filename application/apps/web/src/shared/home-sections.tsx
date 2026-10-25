@@ -6,7 +6,7 @@ import { collectionUrl, HomeSourceLink } from "./home-navigation";
 import { HomeSourceActions, homeActionLabel } from "./home-source-actions";
 import { useHomeCardItems } from "./home-card-items";
 import { DisclosureHelp } from "./home-disclosure-help";
-import { formatHomeTime, formatHomeTemporal as temporal } from "./home-time";
+import { formatHomeTime, formatHomeSchedule as temporal } from "./home-time";
 import { formatDate, formatUsd } from "./presentation";
 
 type Schema = components["schemas"];

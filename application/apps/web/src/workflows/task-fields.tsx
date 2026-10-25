@@ -2,12 +2,8 @@ import { useState } from "react";
 import { type RequestSchema, record } from "@epm/contracts/workflows";
 import { Fields, type Choices } from "./fields";
 import { TaskRelatedRecord } from "./task-related-record";
-import {
-  browserTimeZone,
-  TimeZoneSelect,
-  ZonedDateTimeInput,
-  zonedInstant,
-} from "../shared/zoned-date-time";
+import { TimeZoneSelect, ZonedDateTimeInput, zonedInstant } from "../shared/zoned-date-time";
+import { useDefaultTimeZone } from "../shared/form-time-zone";
 
 export function TaskCreateFields({
   schema,
@@ -23,7 +19,9 @@ export function TaskCreateFields({
   disabled: boolean;
 }) {
   const [noDate, setNoDate] = useState(!value.dueAtUtc && !value.dueTimezone);
-  const timeZone = typeof value.dueTimezone === "string" ? value.dueTimezone : browserTimeZone();
+  const defaultZone = useDefaultTimeZone();
+  const timeZone =
+    typeof value.dueTimezone === "string" && value.dueTimezone ? value.dueTimezone : defaultZone;
   let dueDate = "";
   if (typeof value.dueAtUtc === "string") {
     try {

@@ -79,13 +79,13 @@ Open the corresponding loopback URL, for example `http://127.0.0.1:8002/properti
 
 ## Included scenarios
 
-| Group                                    | Properties                                                      | Scenario/activity                                                                                                                             |
-| ---------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Local operator                           | 4: vacant cottage, rented home, rented office, two-suite office | 1 upcoming furnace issue/appointment, 2 communications, 12 expenses                                                                           |
-| Morgan Chen (Owner 1)                    | 2 rented homes                                                  | 1 unpaid rent expectation with follow-up Task, 1 communication, 8 expenses, 1 routine inspection appointment, 1 next-month rent prepayment    |
-| Sam Rivera (Owner 2)                     | 5: three condo units, rented home, rented office                | 2 urgent maintenance issues, 3 competing quotes per issue, 3 communications, 1 condition inspection draft, 20 expenses, 1 repair appointment  |
-| Local operator + Morgan + Sam            | Alder House — Co-owned                                          | Vacant home with three current owners; leasing status deliberately unclassified to demonstrate status review; no fabricated lease or expenses |
-| Morgan + Sam + Priya Shah + Elena Torres | Magnolia House — Four Owners                                    | Vacant home with four current client owners and no local-operator ownership; open for leasing now; no fabricated lease or expenses            |
+| Group                                    | Properties                                                      | Scenario/activity                                                                                                                                                         |
+| ---------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Local operator                           | 4: vacant cottage, rented home, rented office, two-suite office | 2 maintenance issues including 1 upcoming furnace appointment, 2 communications, 12 expenses                                                                              |
+| Morgan Chen (Owner 1)                    | 2 rented homes                                                  | 2 maintenance issues including 1 routine inspection appointment, 1 unpaid rent expectation with follow-up Task, 1 communication, 8 expenses, 1 next-month rent prepayment |
+| Sam Rivera (Owner 2)                     | 5: three condo units, rented home, rented office                | 5 maintenance issues including 2 urgent issues with 3 competing quotes each, 3 communications, 1 condition inspection draft, 20 expenses, 1 repair appointment            |
+| Local operator + Morgan + Sam            | Alder House — Co-owned                                          | Vacant home with three current owners; leasing status deliberately unclassified to demonstrate status review; no fabricated lease or expenses                             |
+| Morgan + Sam + Priya Shah + Elena Torres | Magnolia House — Four Owners                                    | Vacant home with four current client owners and no local-operator ownership; open for leasing now; no fabricated lease or expenses                                        |
 
 The generated workspace contains:
 
@@ -99,6 +99,7 @@ The generated workspace contains:
 | Providers                      |      20 |
 | Paid expenses                  |      40 |
 | Recorded communications        |       6 |
+| Maintenance issues             |       9 |
 | Appointments                   |       3 |
 | Quotes                         |       6 |
 | Condition reports              |       1 |
@@ -125,7 +126,20 @@ Office properties are included in the property totals. The three Riverbend condo
 
 Owner 1's inspection appointment belongs to a separate low-priority plumbing issue. The unpaid-rent scenario lives in Finance and Tasks rather than Maintenance. The condition report remains a reviewable pre-move-in draft, and quotes remain available for comparison without an automatic acceptance.
 
+Maintenance includes 1 issue in Portland, 3 in Austin, 3 in Princeton and 2 in New York, including the original issues. Austin adds office lighting and a dripping tap at Birch Townhome; Princeton adds a kitchen outlet at Spruce House and uneven office cooling; New York adds a slow drain at Riverbend Condo 103. These additions do not create extra appointments or quotes. Generate a fresh workspace to see the complete updated dataset; verification checks the persisted issue totals by city.
+
 ## Dates and repeatability
+
+The 14 properties use fictional street addresses in four cities. Property time zones are resolved by the application from their addresses:
+
+| Location      | Properties                                                                                 | Time zone           |
+| ------------- | ------------------------------------------------------------------------------------------ | ------------------- |
+| Portland, OR  | Sequoia House, Alder House, Magnolia House, Harbor Offices, Cedar Cottage, Maple House (6) | America/Los_Angeles |
+| Austin, TX    | Operator Office, Birch Townhome, Willow House (3)                                          | America/Chicago     |
+| Princeton, NJ | Spruce House, Owner 2 Office (2)                                                           | America/New_York    |
+| New York, NY  | Riverbend Condo 101, 102 and 103 (3)                                                       | America/New_York    |
+
+Verification checks this distribution, persisted addresses and resolved time zones. Seeded appointments, conversations and the rent follow-up use their property's time zone. The property, tenant, ownership and financial scenarios retain their existing counts. To apply these locations, generate a fresh workspace; resuming an existing journal preserves its original addresses.
 
 The first generation captures today's date in `America/Los_Angeles`. Resuming reuses that date, while the running application continues to use its real clock. Rent is scheduled through the following month: one current-month expectation remains unpaid and an actual prepayment is allocated to next month. On the first day of the month, current-month rent is due rather than late.
 

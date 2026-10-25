@@ -520,6 +520,7 @@ export function WorkCommand() {
         onSaved={onSaved}
         showParentLink={false}
         definition={definition}
+        timeZoneSource={context.value}
         sourceId={target}
         childId={child}
         revision={context.revision}

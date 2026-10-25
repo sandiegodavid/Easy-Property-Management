@@ -21,7 +21,7 @@ EXPECTED = {
     "lease_participants": 12,
     "expenses": 40,
     "communications": 6,
-    "maintenance_issues": 4,
+    "maintenance_issues": 9,
     "maintenance_quotes": 6,
     "maintenance_appointments": 3,
     "condition_reports": 1,
@@ -31,6 +31,18 @@ EXPECTED = {
 }
 OFFICE_SUITE_COUNT = 2
 VACANT_SPACE_COUNT = 6
+PROPERTY_LOCATIONS = {
+    ("Portland", "OR"): (6, "America/Los_Angeles"),
+    ("Austin", "TX"): (3, "America/Chicago"),
+    ("Princeton", "NJ"): (2, "America/New_York"),
+    ("New York", "NY"): (3, "America/New_York"),
+}
+ISSUES_BY_LOCATION = {
+    ("Portland", "OR"): 1,
+    ("Austin", "TX"): 3,
+    ("Princeton", "NJ"): 3,
+    ("New York", "NY"): 2,
+}
 
 
 def require(condition, message):
@@ -51,6 +63,15 @@ def database_checks(database):
             for table in EXPECTED
         }
         require(counts == EXPECTED, f"Unexpected counts: {counts}")
+        issue_locations = connection.execute(
+            "SELECT p.city, p.region, count(*) FROM maintenance_issues i "
+            "JOIN properties p ON p.id=i.property_id GROUP BY p.city, p.region"
+        ).fetchall()
+        require(
+            {(city, region): count for city, region, count in issue_locations}
+            == ISSUES_BY_LOCATION,
+            f"Maintenance issue location counts mismatch: {issue_locations}",
+        )
         expense_counts = connection.execute(
             "SELECT o.owner_kind, o.party_id, count(*) FROM expenses e "
             "JOIN property_ownerships o ON e.property_id=o.property_id "
@@ -122,6 +143,26 @@ def identity_checks(client, catalog):
         require(
             bool(provider["profile"]["officialIds"]), "A provider has no license or official ID"
         )
+
+
+def location_checks(client, catalog):
+    locations = Counter()
+    for row in catalog["properties"]:
+        record = read(client, f"/api/properties/{row['id']}")
+        location = (record["city"], record["region"])
+        require(location in PROPERTY_LOCATIONS, f"Unexpected property location: {row['key']}")
+        require(
+            all(record[field] == row[field] for field in ("city", "region", "postalCode"))
+            and record["addressLine1"] == row["address"]
+            and record["countryCode"] == "US"
+            and record["timeZone"] == PROPERTY_LOCATIONS[location][1],
+            f"Property address or time zone mismatch: {row['key']}",
+        )
+        locations[location] += 1
+    require(
+        locations == Counter({key: value[0] for key, value in PROPERTY_LOCATIONS.items()}),
+        f"Property location counts mismatch: {locations}",
+    )
 
 
 def api_checks(client, catalog):
@@ -247,6 +288,7 @@ def main():
     catalog = json.loads((runtime / "catalog.json").read_text())
     counts = database_checks(service.paths.database)
     with LocalApiClient(create_app(args.config)) as client:
+        location_checks(client, catalog)
         identity_checks(client, catalog)
         scenarios = api_checks(client, catalog)
     report = {"counts": counts, "scenarios": scenarios, "asOf": catalog["asOf"]}

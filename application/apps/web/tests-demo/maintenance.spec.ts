@@ -24,6 +24,11 @@ const ISSUE_SUMMARIES = [
   "Annual plumbing inspection",
   "Urgent under-sink leak",
   "Urgent loss of heating",
+  "Office entry lighting flickers",
+  "Bathroom tap drips after closing",
+  "Kitchen outlet needs inspection",
+  "Office cooling is uneven",
+  "Bathroom sink drains slowly",
 ];
 
 function workspace(page: Page) {
@@ -54,7 +59,7 @@ test("maintenance directory lists the seeded demo issues", async ({ page }) => {
   );
   await expect(views.getByRole("link", { name: "Owner concerns", exact: true })).toBeVisible();
 
-  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(4);
+  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(ISSUE_SUMMARIES.length);
   for (const summary of ISSUE_SUMMARIES) {
     await expect(page.getByRole("heading", { name: summary, exact: true })).toBeVisible();
   }
@@ -92,14 +97,20 @@ test("category and priority filters narrow the issue list", async ({ page }) => 
 
   await dir.getByRole("combobox", { name: "Issue category", exact: true }).selectOption("plumbing");
   await expect(page).toHaveURL(/category=plumbing/);
-  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(2);
-  for (const summary of ["Urgent under-sink leak", "Annual plumbing inspection"]) {
+  const plumbingIssues = [
+    "Urgent under-sink leak",
+    "Annual plumbing inspection",
+    "Bathroom tap drips after closing",
+    "Bathroom sink drains slowly",
+  ];
+  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(plumbingIssues.length);
+  for (const summary of plumbingIssues) {
     await expect(page.getByRole("heading", { name: summary, exact: true })).toBeVisible();
   }
 
   await dir.getByRole("button", { name: "Clear filters", exact: true }).click();
   await expect(page).toHaveURL(/\/maintenance$/);
-  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(4);
+  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(ISSUE_SUMMARIES.length);
 
   await dir.getByRole("combobox", { name: "Issue priority", exact: true }).selectOption("urgent");
   await expect(page).toHaveURL(/priority=urgent/);
@@ -157,7 +168,7 @@ test("opening an issue shows its quotes and returns to maintenance", async ({ pa
   await expect(back).toHaveAttribute("href", "/maintenance");
   await back.click();
   await expect(page).toHaveURL(/\/maintenance$/);
-  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(4);
+  await expect(page.locator("a.maintenance-issue-card")).toHaveCount(ISSUE_SUMMARIES.length);
 });
 
 test("owner concerns tab shows the empty state", async ({ page }) => {

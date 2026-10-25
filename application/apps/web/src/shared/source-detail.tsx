@@ -6,7 +6,7 @@ import { useWorkspace } from "../app/workspace-gate";
 import { normalizeApiError } from "./mutations";
 import { PageAsOf } from "./page-as-of";
 import { leaseLastCoveredOn } from "./lease-dates";
-import { formatHomeTemporal, formatHomeTime } from "./home-time";
+import { formatHomeTemporal, formatScheduledTime } from "./home-time";
 
 type Conversation = components["schemas"]["CommunicationResponse"];
 type Source = {
@@ -148,12 +148,12 @@ async function readSource(kind: string, id: string, signal: AbortSignal): Promis
           Status: readable(item.status),
           Priority: readable(item.priority),
           Notes: item.notes,
-          Deadline: item.dueAtUtc
-            ? formatHomeTemporal({ at: item.dueAtUtc, timeZone: item.dueTimezone })
-            : null,
+          Deadline: item.dueAtUtc ? formatScheduledTime(item.dueAtUtc, item.dueTimezone) : null,
           "Deadline status": item.taskDeadlineState ? readable(item.taskDeadlineState) : null,
           "Waiting for": item.waitingForLabel,
-          "Follow-up": item.followUpAt ? formatHomeTime(item.followUpAt) : null,
+          "Follow-up": item.followUpAt
+            ? formatScheduledTime(item.followUpAt, item.followUpTimezone)
+            : null,
           "Follow-up status": item.followUpState ? readable(item.followUpState) : null,
           "As of": item.asOf,
         },

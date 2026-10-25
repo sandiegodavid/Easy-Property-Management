@@ -1,5 +1,6 @@
 import { record, scalar, type RequestSchema } from "@epm/contracts/workflows";
-import { browserTimeZone, TimeZoneSelect, ZonedDateTimeInput } from "../shared/zoned-date-time";
+import { TimeZoneSelect, ZonedDateTimeInput } from "../shared/zoned-date-time";
+import { useDefaultTimeZone } from "../shared/form-time-zone";
 import { Fields } from "./fields";
 
 export function AppointmentFields({
@@ -13,7 +14,8 @@ export function AppointmentFields({
   onChange: (value: unknown) => void;
   disabled: boolean;
 }) {
-  const zone = scalar(value.scheduledTimezone, browserTimeZone());
+  const defaultZone = useDefaultTimeZone();
+  const zone = scalar(value.scheduledTimezone) || defaultZone;
   return (
     <div className="tidy-form-sections">
       <section className="tidy-form-section" aria-label="Appointment schedule">

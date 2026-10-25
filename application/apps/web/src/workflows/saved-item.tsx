@@ -1,7 +1,7 @@
 import { useId, type ReactNode } from "react";
 import { record, scalar } from "@epm/contracts/workflows";
 import { ItemReturnLink, SourceWorkflowLink } from "../shared/home-navigation";
-import { formatHomeTime } from "../shared/home-time";
+import { formatRecordInstant } from "../shared/home-time";
 import { OfficialIdList } from "../shared/official-identification";
 import { cents } from "./money-presentation";
 import { label } from "./fields";
@@ -49,7 +49,7 @@ function fieldLabel(key: string) {
   return names[key] ?? label(key.replaceAll("_", " "));
 }
 
-function text(key: string, value: string | number | boolean) {
+function text(key: string, value: string | number | boolean, context: Record<string, unknown>) {
   if (key === "sharePercent") return value === "Not recorded" ? value : `${Number(value)}%`;
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (/Minor$/.test(key) && /^-?\d+$/.test(String(value))) return formatUsd(cents(value));
@@ -70,7 +70,7 @@ function text(key: string, value: string | number | boolean) {
     /^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(value) &&
     Number.isFinite(Date.parse(value))
   )
-    return formatHomeTime(value);
+    return formatRecordInstant(value, key, context);
   const words: Record<string, string> = {
     local_operator: "You",
     single_space: "Whole home",
@@ -106,7 +106,9 @@ function SavedData({ value, depth = 0 }: { value: unknown; depth?: number }) {
           {facts.map(([key, entry]) => (
             <div key={key}>
               <dt>{key.endsWith("Minor") ? fieldLabel(key.slice(0, -5)) : fieldLabel(key)}</dt>
-              <dd>{text(key, (entry ?? "Not recorded") as string | number | boolean)}</dd>
+              <dd>
+                {text(key, (entry ?? "Not recorded") as string | number | boolean, record(value))}
+              </dd>
             </div>
           ))}
         </dl>
@@ -147,7 +149,7 @@ function SavedData({ value, depth = 0 }: { value: unknown; depth?: number }) {
                   {typeof row === "string" ||
                   typeof row === "number" ||
                   typeof row === "boolean" ? (
-                    <p>{text(key, row)}</p>
+                    <p>{text(key, row, record(value))}</p>
                   ) : (
                     <SavedData value={row} depth={depth + 1} />
                   )}

@@ -160,9 +160,9 @@ class Seeder:
                 "displayName": item["name"],
                 "addressLine1": item["address"],
                 "addressLine2": item.get("unit"),
-                "city": "Portland",
-                "region": "OR",
-                "postalCode": "97205",
+                "city": item["city"],
+                "region": item["region"],
+                "postalCode": item["postalCode"],
                 "countryCode": "US",
                 "propertyType": item["type"],
                 "inventoryLayout": "office_suites"
@@ -189,6 +189,7 @@ class Seeder:
         record = {
             **item,
             "id": result["id"],
+            "timeZone": result["timeZone"],
             "spaceId": result["spaces"][0]["id"],
             "spaceIds": [space["id"] for space in result["spaces"]],
         }
@@ -414,7 +415,7 @@ class Seeder:
                 "description": item["description"],
                 "category": item["category"],
                 "priority": item["priority"],
-                "reportedAtUtc": self.instant(-1),
+                "reportedAtUtc": self.instant(-1, zone=row["timeZone"]),
                 "reporter": {"role": "manager", "subjectKind": "local_operator"},
             },
             label=item["key"],
@@ -441,17 +442,19 @@ class Seeder:
                 f"/api/maintenance-issues/{result['id']}/appointments",
                 {
                     "expectedRevision": current["revision"],
-                    "startsAtUtc": self.instant(item["appointmentDays"]),
-                    "endsAtUtc": self.instant(item["appointmentDays"], hour=12),
+                    "startsAtUtc": self.instant(item["appointmentDays"], zone=row["timeZone"]),
+                    "endsAtUtc": self.instant(
+                        item["appointmentDays"], hour=12, zone=row["timeZone"]
+                    ),
                     "purpose": item["summary"],
                     "instructions": "Demo access confirmed; no actual visit.",
                 },
                 label=f"{item['key']}-appointment",
             )
 
-    def instant(self, days, *, hour=10):
+    def instant(self, days, *, hour=10, zone):
         local = datetime.combine(self.today + timedelta(days=days), datetime.min.time())
-        return local.replace(hour=hour, tzinfo=ZoneInfo(TIMEZONE)).astimezone(UTC).isoformat()
+        return local.replace(hour=hour, tzinfo=ZoneInfo(zone)).astimezone(UTC).isoformat()
 
     def communications(self, plan):
         for index, item in enumerate(plan["communications"]):
@@ -470,8 +473,8 @@ class Seeder:
                     "channel": "email",
                     "subject": item["subject"],
                     "body": item["body"],
-                    "occurredAtUtc": self.instant(-1),
-                    "occurredTimezone": TIMEZONE,
+                    "occurredAtUtc": self.instant(-1, zone=row["timeZone"]),
+                    "occurredTimezone": row["timeZone"],
                     "participants": [{"partyId": party, "role": "sender"}],
                     "links": links,
                     "record": True,
@@ -520,8 +523,8 @@ class Seeder:
                 "expectedRevision": 0,
                 "title": "Follow up unpaid rent — Birch Townhome",
                 "priority": "high",
-                "dueAtUtc": self.instant(0),
-                "dueTimezone": TIMEZONE,
+                "dueAtUtc": self.instant(0, zone=row["timeZone"]),
+                "dueTimezone": row["timeZone"],
                 "relatedEntityType": "lease",
                 "relatedEntityId": row["leaseId"],
                 "relatedLabel": row["name"],

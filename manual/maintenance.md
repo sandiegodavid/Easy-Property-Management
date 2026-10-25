@@ -35,7 +35,9 @@ A provider assignment does not send a booking or prove work is complete. Contact
 
 ## Appointments, follow-up and work history
 
-Schedule an appointment with a start and purpose; the end is optional. **Starts at** and **Ends at** offer calendar/time pickers that also accept typed values. Select the appointment's time zone from the dropdown; changing it displays the same instant in the new zone. Reschedule explicitly when plans change. **Finish appointment** records the offered completed/cancelled outcome; it does not resolve the issue. When the end is unknown, Home prompts for an outcome after the start instead of assuming a duration.
+Appointment details and saved confirmations show the saved scheduling zone, normally the property's zone. Home shows browser-local time first and the source-local time alongside it when different, so appointments across properties share one timeline. Recorded and history times remain in your browser's zone.
+
+Schedule an appointment with a start and purpose; the end is optional. **Starts at** and **Ends at** offer calendar/time pickers that also accept typed values. The time zone defaults to the property's zone for a new appointment; existing appointments keep their saved zone. Select another zone from the dropdown if needed; changing it displays the same instant in the new zone. Reschedule explicitly when plans change. **Finish appointment** records the offered completed/cancelled outcome; it does not resolve the issue. When the end is unknown, Home prompts for an outcome after the start instead of assuming a duration.
 
 Use **Create issue follow-up** for a linked Task, then set who/what is awaited and a follow-up instant. Existing deadlines and source urgency remain independent. If a provider does not respond, record the additional conversation and reschedule the follow-up rather than erasing the previous history.
 

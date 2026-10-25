@@ -4,7 +4,9 @@
 
 ## Create and work a Task
 
-Open **Tasks** from Home or work navigation. Quick add begins with a title and due-date/no-date choice. A date creates an all-day deadline in the displayed time zone. Under **Optional Task details**, **Due at** offers an editable date/time picker and **Due time zone** selects its zone; choosing an exact time makes the deadline timed rather than all-day. Priority and related records are also optional.
+Task details show deadlines and follow-ups in their saved scheduling zone, normally the property's zone. Reminder details use the related property's zone; unlinked reminders use your browser's zone. Home's combined schedule uses your browser's time and also shows source-local time when different. Recorded, updated and history times use your browser's zone. All-day dates stay on their original calendar day.
+
+Open **Tasks** from Home or work navigation. Quick add begins with a title and due-date/no-date choice. A date creates an all-day deadline in the displayed time zone. Under **Optional Task details**, **Due at** offers an editable date/time picker and **Due time zone** selects its zone; choosing an exact time makes the deadline timed rather than all-day. Priority and related records are also optional. New deadline, reminder and follow-up time inputs default to the related property's time zone, including links through a rental unit, lease or maintenance issue. Without one related property, they use your browser's time zone. Saved or explicitly selected zones stay unchanged when editing or resuming a form.
 
 1. Enter a clear action, correct priority and deadline/context.
 2. Save; review the resulting Task rather than assuming saved input means creation.

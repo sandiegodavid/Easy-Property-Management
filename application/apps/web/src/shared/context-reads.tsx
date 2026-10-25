@@ -15,7 +15,7 @@ import { PageAsOf } from "./page-as-of";
 import { leaseLastCoveredOn } from "./lease-dates";
 import { DisclosureHelp } from "./home-disclosure-help";
 import { propertyUnitsLabel } from "./property-labels";
-import { formatHomeTemporal } from "./home-time";
+import { formatHomeTemporal, formatScheduledTime } from "./home-time";
 import { ownershipShareLabel } from "./ownership-shares";
 import { formatDate } from "./presentation";
 import { CommandLinks } from "../workflows/command";
@@ -691,6 +691,7 @@ function SectionContents({
   unitNames,
   rentalUnits = [],
   canStartLeases = false,
+  timeZone,
 }: {
   section: Section;
   currentPropertyOwners?: boolean;
@@ -698,6 +699,7 @@ function SectionContents({
   unitNames?: Record<string, string>;
   rentalUnits?: RentalUnit[];
   canStartLeases?: boolean;
+  timeZone?: string;
 }) {
   if (section.kind === "leases" && propertyContext) {
     return <PropertyLeases section={section} units={rentalUnits} canStart={canStartLeases} />;
@@ -897,7 +899,7 @@ function SectionContents({
                   <dd>
                     {item.dueAtUtc ? (
                       <time dateTime={item.dueAtUtc}>
-                        {formatHomeTemporal({ at: item.dueAtUtc })}
+                        {formatScheduledTime(item.dueAtUtc, item.dueTimezone || timeZone)}
                       </time>
                     ) : (
                       "No deadline"
@@ -915,7 +917,7 @@ function SectionContents({
                     <dt>Follow-up</dt>
                     <dd>
                       <time dateTime={item.followUpAtUtc}>
-                        {formatHomeTemporal({ at: item.followUpAtUtc })}
+                        {formatScheduledTime(item.followUpAtUtc, item.followUpTimezone || timeZone)}
                       </time>
                     </dd>
                   </div>
@@ -968,6 +970,7 @@ function OverviewSection({
   unitsLabel = "Units",
   canManageProperty = false,
   rentalUnits,
+  timeZone,
 }: {
   initial: Section;
   kind: Kind;
@@ -977,6 +980,7 @@ function OverviewSection({
   unitsLabel?: string;
   canManageProperty?: boolean;
   rentalUnits?: RentalUnit[];
+  timeZone?: string;
 }) {
   const { scope } = useWorkspace();
   const [page, setPage] = useState<{ cursor?: string } | null>(null);
@@ -1088,6 +1092,7 @@ function OverviewSection({
               unitNames={unitNames}
               rentalUnits={rentalUnits}
               canStartLeases={canManageProperty}
+              timeZone={timeZone}
             />
           </AsyncRegion>
           {"nextCursor" in section && section.nextCursor && (
@@ -1329,6 +1334,7 @@ export function ContextOverview({ kind, tab = "overview" }: { kind: Kind; tab?: 
                 query={query}
                 unitNames={unitNames}
                 rentalUnits={property.data?.spaces}
+                timeZone={property.data?.timeZone}
                 canManageProperty={kind === "property" && property.data?.status === "active"}
                 unitsLabel={
                   property.data ? propertyUnitsLabel(property.data.inventoryLayout) : "Units"

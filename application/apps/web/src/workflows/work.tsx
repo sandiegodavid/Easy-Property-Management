@@ -20,7 +20,7 @@ import { WorkCommand } from "./work-command";
 import { WorkRecord } from "./work-records";
 import { workUrl, type WorkKind } from "./work-links";
 import { IntakeWorkspace } from "./intake";
-import { formatHomeTime, formatHomeTemporal } from "../shared/home-time";
+import { formatHomeTime, formatHomeSchedule, formatScheduledTime } from "../shared/home-time";
 
 export function WorkWorkspace({ kind = "issue" }: { kind?: WorkKind }) {
   const [params] = useSearchParams();
@@ -523,17 +523,21 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                   <>
                     <p>
                       Follow-up:{" "}
-                      {formatHomeTemporal({
-                        at: scalar(record(item).followUpAt, ""),
-                        timeZone: scalar(record(item).followUpTimezone, ""),
-                      }) || "Not scheduled"}
+                      {record(item).followUpAt
+                        ? formatScheduledTime(
+                            scalar(record(item).followUpAt),
+                            scalar(record(item).followUpTimezone, ""),
+                          )
+                        : "Not scheduled"}
                     </p>
                     <p>
                       Task deadline:{" "}
-                      {formatHomeTemporal({
-                        at: scalar(record(item).dueAtUtc, ""),
-                        timeZone: scalar(record(item).dueTimezone, ""),
-                      }) || "Not recorded"}
+                      {record(item).dueAtUtc
+                        ? formatScheduledTime(
+                            scalar(record(item).dueAtUtc),
+                            scalar(record(item).dueTimezone, ""),
+                          )
+                        : "Not recorded"}
                     </p>
                     <p>Priority: {workLabel(scalar(record(item).priority))}</p>
                     <p>Waiting does not resolve the original source or change its deadline.</p>
@@ -595,7 +599,10 @@ function WorkDirectory({ kind }: { kind: WorkKind }) {
                               <p>
                                 Task deadline:{" "}
                                 {record(item).dueAtUtc
-                                  ? formatHomeTime(scalar(record(item).dueAtUtc))
+                                  ? formatScheduledTime(
+                                      scalar(record(item).dueAtUtc),
+                                      scalar(record(item).dueTimezone, ""),
+                                    )
                                   : "No due date"}
                               </p>
                               <TaskCompletion value={record(item)} />
@@ -646,7 +653,12 @@ function WorkDirectoryFacts({ kind, value }: { kind: WorkKind; value: Record<str
     kind === "task"
       ? [
           ["Priority", workLabel(scalar(value.priority))],
-          ["Due", value.dueAtUtc ? formatHomeTime(scalar(value.dueAtUtc)) : "No due date"],
+          [
+            "Due",
+            value.dueAtUtc
+              ? formatScheduledTime(scalar(value.dueAtUtc), scalar(value.dueTimezone, ""))
+              : "No due date",
+          ],
           ["Related to", scalar(value.relatedLabel)],
         ]
       : kind === "communication"
@@ -743,7 +755,7 @@ function TaskSummary() {
                 <span className="record-pill">Due</span>
               </header>
               <time dateTime={item.remindAtUtc}>
-                {formatHomeTemporal({ at: item.remindAtUtc })}
+                {formatHomeSchedule({ at: item.remindAtUtc })}
               </time>
             </article>
           ))}
@@ -763,7 +775,7 @@ function taskAttentionItem(item: components["schemas"]["TaskResponse"]): Attenti
       <>
         <p>
           Task deadline:{" "}
-          {formatHomeTemporal({ at: item.dueAtUtc, timeZone: item.dueTimezone }) || "Not scheduled"}
+          {formatHomeSchedule({ at: item.dueAtUtc, timeZone: item.dueTimezone }) || "Not scheduled"}
         </p>
         <p>Completing this Task does not resolve its related issue or verify physical work.</p>
         <TaskCompletion value={item} />

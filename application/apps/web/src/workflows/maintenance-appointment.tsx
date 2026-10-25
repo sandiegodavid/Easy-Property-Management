@@ -1,8 +1,7 @@
 import { scalar } from "@epm/contracts/workflows";
-import { formatHomeTime } from "../shared/home-time";
+import { formatScheduledTime } from "../shared/home-time";
 
 export function MaintenanceAppointment({ item }: { item: Record<string, unknown> }) {
-  const operatorZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return (
     <div className="maintenance-appointment">
       <header>
@@ -20,7 +19,9 @@ export function MaintenanceAppointment({ item }: { item: Record<string, unknown>
             <dt>{title}</dt>
             <dd>
               {item[field] ? (
-                <time dateTime={scalar(item[field])}>{formatHomeTime(scalar(item[field]))}</time>
+                <time dateTime={scalar(item[field])}>
+                  {formatScheduledTime(scalar(item[field]), scalar(item.scheduledTimezone, ""))}
+                </time>
               ) : (
                 "Not specified"
               )}
@@ -28,9 +29,6 @@ export function MaintenanceAppointment({ item }: { item: Record<string, unknown>
           </div>
         ))}
       </dl>
-      {item.scheduledTimezone !== operatorZone && (
-        <p className="ui-muted">Scheduled time zone: {scalar(item.scheduledTimezone)}</p>
-      )}
       {!!item.instructions && (
         <p>
           <strong>Instructions:</strong> {scalar(item.instructions)}

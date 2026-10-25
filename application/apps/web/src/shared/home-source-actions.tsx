@@ -1,6 +1,6 @@
 import type { components } from "@epm/contracts/generated";
 import { HomeSourceLink } from "./home-navigation";
-import { formatHomeTemporal } from "./home-time";
+import { formatHomeSchedule } from "./home-time";
 import { formatUsd } from "./presentation";
 import { cents } from "../workflows/money-presentation";
 
@@ -57,7 +57,7 @@ function ChildActions({ child }: { child: Schema["ChildPreview"] }) {
         {child.reasons.map((reason, index) => (
           <li key={index}>
             {words(reason.code)}
-            {reason.at || reason.on ? ` · ${formatHomeTemporal(reason)}` : ""}
+            {reason.at || reason.on ? ` · ${formatHomeSchedule(reason)}` : ""}
           </li>
         ))}
       </ul>
