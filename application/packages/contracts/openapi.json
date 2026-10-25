@@ -50595,12 +50595,7 @@
       "delete": {
         "operationId": "endHostedSession",
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
+          "204": {
             "description": "Successful Response"
           },
           "403": {
@@ -50673,12 +50668,7 @@
       "delete": {
         "operationId": "endAllHostedSessions",
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
+          "204": {
             "description": "Successful Response"
           },
           "403": {

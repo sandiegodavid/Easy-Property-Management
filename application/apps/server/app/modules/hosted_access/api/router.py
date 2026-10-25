@@ -73,14 +73,14 @@ def build_session_router(service: HostedAccessService | None = None) -> APIRoute
             "csrfToken": session_csrf(request.cookies[SESSION_COOKIE]),
         }
 
-    @router.delete("/session", operation_id="endHostedSession")
+    @router.delete("/session", operation_id="endHostedSession", status_code=204)
     def end(request: Request) -> Response:
         active_service().logout(request.state.hosted_actor, request.state.hosted_identity)
         response = Response(status_code=204)
         response.delete_cookie(SESSION_COOKIE, secure=True, httponly=True, samesite="lax", path="/")
         return response
 
-    @router.delete("/session/all", operation_id="endAllHostedSessions")
+    @router.delete("/session/all", operation_id="endAllHostedSessions", status_code=204)
     def end_all(request: Request) -> Response:
         active_service().logout(
             request.state.hosted_actor, request.state.hosted_identity, all_devices=True

@@ -406,6 +406,13 @@ def test_deterministic_explicit_ids_and_concrete_success_contracts(contract_app)
     } <= set(ids)
 
 
+@pytest.mark.parametrize("path", ["/api/hosted/session", "/api/hosted/session/all"])
+def test_hosted_logout_advertises_no_content(contract_app, path):
+    responses = contract_app.openapi()["paths"][path]["delete"]["responses"]
+    assert set(code for code in responses if code.startswith("2")) == {"204"}
+    assert "content" not in responses["204"]
+
+
 @pytest.mark.parametrize(
     ("operation_id", "required", "revision"),
     [
