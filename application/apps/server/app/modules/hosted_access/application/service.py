@@ -104,5 +104,13 @@ class HostedAccessService:
             datetime.fromtimestamp(row["expires_at"], UTC),
         )
 
-    def logout(self, actor: HostedActor, *, all_devices: bool = False) -> None:
-        self.store.revoke(actor.session_reference, self.now(), all_devices=all_devices)
+    def logout(
+        self, actor: HostedActor, identity: VerifiedIdentity, *, all_devices: bool = False
+    ) -> None:
+        self.store.revoke(
+            actor.session_reference,
+            self.now(),
+            assertion_hash=identity.fingerprint,
+            assertion_expiry=identity.expires_at.timestamp(),
+            all_devices=all_devices,
+        )

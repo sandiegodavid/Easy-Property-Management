@@ -30,6 +30,7 @@ from app.modules.hosted_access.application.storage_budget import HostedStorageBu
 from app.modules.hosted_access.application.service import HostedAccessService
 from app.modules.hosted_access.infrastructure.cloudflare_identity import CloudflareIdentityVerifier
 from app.modules.hosted_access.infrastructure.session_store import SQLiteHostedSessionStore
+from app.modules.hosted_access.infrastructure.draft_leases import SQLiteDraftLeaseStore
 from app.modules.workspace.application.service import WorkspaceService
 from app.platform.sqlite_engine import immediate_transaction
 from web_smoke_server import packaged_web
@@ -172,6 +173,13 @@ def controls(product, store, identity, deployment):
     def expire():
         with immediate_transaction(store.engine) as connection:
             connection.execute(update(store.sessions).values(expires_at=0))
+        return {"expired": True}
+
+    @harness.post("/__test__/expire-draft-leases")
+    def expire_draft_leases():
+        leases = SQLiteDraftLeaseStore(store)
+        with immediate_transaction(store.engine) as connection:
+            connection.execute(update(leases.table).values(expires_at=0))
         return {"expired": True}
 
     @harness.post("/__test__/availability")

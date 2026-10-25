@@ -83,7 +83,10 @@ export class RecoveryController {
   private pauseLease = () => {
     this.leaseToken = undefined;
     this.pendingClaim = undefined;
-    this.publish({ editAuthority: this.snapshot.record ? "required" : undefined });
+    this.publish({
+      editAuthority:
+        this.snapshot.record || this.pendingSave || this.pendingPrepare ? "required" : undefined,
+    });
   };
 
   constructor(
@@ -122,17 +125,32 @@ export class RecoveryController {
         .replaceAll("/", "_")
         .replaceAll("=", "");
     this.pendingClaim = token;
-    this.leaseRequest = this.updateLease(token, takeover, false).finally(() => {
+    this.leaseRequest = this.claimLease(token, takeover).finally(() => {
       this.leaseRequest = undefined;
     });
     return this.leaseRequest;
   }
-  private async updateLease(token: string, takeover: boolean, renew: boolean) {
+  private async claimLease(token: string, takeover: boolean) {
+    // A lost response may have advanced the durable revision. Read only the
+    // authority revision; never replace/rebase an immutable pending operation.
+    let revision = this.snapshot.record?.revision ?? 0;
+    if (this.pendingSave || this.pendingPrepare) {
+      const result = await this.readSavedForm();
+      revision = result?.revision ?? 0;
+    }
+    await this.updateLease(token, takeover, false, revision);
+  }
+  private async updateLease(
+    token: string,
+    takeover: boolean,
+    renew: boolean,
+    expectedRevision = this.snapshot.record?.revision ?? 0,
+  ) {
     try {
       const result = await mutation(() =>
         api.POST("/api/hosted/drafts/{record_id}/lease", {
           params: { path: { record_id: this.id } },
-          body: { token, expectedRevision: this.snapshot.record?.revision ?? 0, takeover, renew },
+          body: { token, expectedRevision, takeover, renew },
         }),
       );
       this.scope.requireWrite();
@@ -142,7 +160,11 @@ export class RecoveryController {
       this.leaseRenewed = Date.now();
       if (!renew) this.lastInteraction = Date.now();
       this.pendingClaim = undefined;
-      this.publish({ editAuthority: "held", error: undefined });
+      this.publish({
+        editAuthority: "held",
+        error: undefined,
+        ...(this.pendingSave && this.snapshot.draft === "conflicted" ? { draft: "failed" } : {}),
+      });
     } catch (error) {
       if (error instanceof MutationFailure && !error.outcomeUnknown) this.pendingClaim = undefined;
       this.leaseToken = undefined;
@@ -188,12 +210,27 @@ export class RecoveryController {
       );
     }
   }
-  async reviewSavedForm() {
+  private async readSavedForm() {
     const result = await api.GET("/api/operator/recovery/{record_id}", {
       params: { path: { record_id: this.id } },
     });
+    this.scope.requireWrite();
+    if (this.disposed) throw new Error("Form was closed. Reload its recovery record.");
+    if (result.response.status === 404) return undefined;
     if (!result.data || result.error) throw new Error("The latest saved form could not be read.");
-    this.reviewLatest(result.data, result.data.baseSourceRevision);
+    return result.data;
+  }
+  async reviewSavedForm() {
+    const record = await this.readSavedForm();
+    if (this.pendingSave || this.pendingPrepare) {
+      this.publish({
+        error:
+          "Claim editing, then retry the original save or check submission. Your input is retained.",
+      });
+      return;
+    }
+    if (!record) throw new Error("The latest saved form could not be read.");
+    this.reviewLatest(record, record.baseSourceRevision);
   }
   get isPristine() {
     return (

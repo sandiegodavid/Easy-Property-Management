@@ -86,7 +86,7 @@ def test_current_logout_preserves_other_device_but_blocks_old_assertion_bootstra
     service, _store, proof, _clock = context
     first = approve(context)
     second = service.begin_session(proof)
-    service.logout(service.authenticate(proof, first.token))
+    service.logout(service.authenticate(proof, first.token), proof)
     with pytest.raises(HostedAccessError):
         service.authenticate(proof, first.token)
     service.authenticate(proof, second.token)
@@ -98,7 +98,7 @@ def test_all_device_logout_survives_restart_and_needs_new_identity_proof(context
     service, store, proof, clock = context
     first = approve(context)
     second = service.begin_session(proof)
-    service.logout(service.authenticate(proof, first.token), all_devices=True)
+    service.logout(service.authenticate(proof, first.token), proof, all_devices=True)
     restarted = SQLiteHostedSessionStore(service.deployment)
     try:
         service = HostedAccessService(service.deployment, restarted, now=lambda: clock[0])
@@ -113,6 +113,36 @@ def test_all_device_logout_survives_restart_and_needs_new_identity_proof(context
     finally:
         restarted.engine.dispose()
     assert store.deployment.workspace_id == service.deployment.workspace_id
+
+
+def test_logout_blocks_both_bootstrap_and_refreshed_assertions_atomically(context):
+    service, store, proof, _clock = context
+    first = approve(context)
+    other = service.begin_session(proof)
+    refreshed = replace(proof, fingerprint=sha256(b"refreshed").hexdigest())
+    actor = service.authenticate(refreshed, first.token)
+
+    def fail_current_block(_c, _cursor, sql, parameters, _ctx, _many):
+        if (
+            sql.startswith("INSERT INTO hosted_blocked_assertion")
+            and refreshed.fingerprint in parameters
+        ):
+            raise RuntimeError("block failed")
+
+    event.listen(store.engine, "before_cursor_execute", fail_current_block)
+    try:
+        with pytest.raises(RuntimeError, match="block failed"):
+            service.logout(actor, refreshed)
+    finally:
+        event.remove(store.engine, "before_cursor_execute", fail_current_block)
+    service.authenticate(refreshed, first.token)
+    with store.engine.connect() as connection:
+        assert connection.execute(select(store.blocked)).all() == []
+    service.logout(actor, refreshed)
+    service.authenticate(refreshed, other.token)
+    for identity in (proof, refreshed):
+        with pytest.raises(HostedAccessError, match="Fresh sign-in"):
+            service.begin_session(identity)
 
 
 def test_session_expiry_csrf_identity_disable_and_no_implicit_rebinding(context):

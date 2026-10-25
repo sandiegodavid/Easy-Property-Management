@@ -283,7 +283,15 @@ class SQLiteHostedSessionStore:
                 .one_or_none()
             )
 
-    def revoke(self, token_hash: str, now: datetime, *, all_devices: bool) -> None:
+    def revoke(
+        self,
+        token_hash: str,
+        now: datetime,
+        *,
+        assertion_hash: str,
+        assertion_expiry: float,
+        all_devices: bool,
+    ) -> None:
         with immediate_transaction(self.engine) as connection:
             row = (
                 connection.execute(
@@ -299,17 +307,25 @@ class SQLiteHostedSessionStore:
                 .where(self.sessions.c.token_hash == token_hash)
                 .values(revoked=True)
             )
-            existing = connection.scalar(
-                select(self.blocked.c.fingerprint).where(
-                    self.blocked.c.fingerprint == row["assertion_hash"]
-                )
-            )
-            if existing is None:
-                connection.execute(
-                    self.blocked.insert().values(
-                        fingerprint=row["assertion_hash"], expires_at=row["assertion_expiry"]
+            for fingerprint, expiry in (
+                (row["assertion_hash"], row["assertion_expiry"]),
+                (assertion_hash, assertion_expiry),
+            ):
+                existing = connection.scalar(
+                    select(self.blocked.c.expires_at).where(
+                        self.blocked.c.fingerprint == fingerprint
                     )
                 )
+                if existing is None:
+                    connection.execute(
+                        self.blocked.insert().values(fingerprint=fingerprint, expires_at=expiry)
+                    )
+                elif expiry > existing:
+                    connection.execute(
+                        update(self.blocked)
+                        .where(self.blocked.c.fingerprint == fingerprint)
+                        .values(expires_at=expiry)
+                    )
             if all_devices:
                 connection.execute(
                     update(self.operator).values(

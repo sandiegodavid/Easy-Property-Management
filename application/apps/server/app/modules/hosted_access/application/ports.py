@@ -13,4 +13,12 @@ class IdentityVerifier(Protocol):
 class HostedSessionStore(Protocol):
     def begin_session(self, values: Mapping[str, object]) -> None: ...
     def session(self, token_hash: str) -> Mapping[str, object] | None: ...
-    def revoke(self, token_hash: str, now: datetime, *, all_devices: bool) -> None: ...
+    def revoke(
+        self,
+        token_hash: str,
+        now: datetime,
+        *,
+        assertion_hash: str,
+        assertion_expiry: float,
+        all_devices: bool,
+    ) -> None: ...

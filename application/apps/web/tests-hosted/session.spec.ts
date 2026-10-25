@@ -73,10 +73,17 @@ test("packaged deep link, real enrollment, secure cookie, CSRF, expiry and expli
   await page.getByRole("button", { name: "Create task", exact: true }).click();
   expect((await created).status()).toBe(201);
   expect(commands).toBe(1);
+  // Cloudflare can refresh its assertion while the application session stays live.
+  await proof(page.context());
   await page.getByRole("button", { name: "Sign out this device" }).click();
   await expect(title).toHaveCount(0);
   await expect(page.getByRole("alert")).toContainText("Signed out");
   expect(await page.evaluate(async () => (await fetch("/api/operator/recovery")).status)).toBe(401);
+  expect(
+    await page.evaluate(
+      async () => (await fetch("/api/hosted/session", { method: "POST" })).status,
+    ),
+  ).toBe(403);
 });
 
 test("wrong email and invalid proof fail closed in the real packaged application", async ({
@@ -548,3 +555,101 @@ test("storage maintenance preserves input and full storage has an accessible exp
     await control(page.context(), "storage?mode=ready");
   }
 });
+
+for (const operation of ["save", "prepare"] as const) {
+  for (const expiry of ["session", "lease"] as const) {
+    test(`lost ${operation} response recovers its original key after ${expiry} expiry`, async ({
+      page,
+    }) => {
+      await signIn(page);
+      const title = page.getByLabel("Title (required)", { exact: true });
+      const saved = page.waitForResponse(
+        (response) =>
+          response.request().method() === "PUT" &&
+          response.url().includes("/api/operator/recovery/"),
+      );
+      await title.fill(`Retain ${operation} ${expiry}`);
+      const original = (await (await saved).json()) as { id: string };
+      const requests: string[] = [];
+      const pattern =
+        operation === "save"
+          ? `**/api/operator/recovery/${original.id}`
+          : `**/api/operator/recovery/${original.id}/attempt`;
+      let lose = true;
+      await page.route(pattern, async (route) => {
+        if (route.request().method() !== (operation === "save" ? "PUT" : "POST"))
+          return route.continue();
+        requests.push(route.request().postData() ?? "");
+        if (!lose) return route.continue();
+        lose = false;
+        const committed = await route.fetch({
+          url: `https://127.0.0.1:18748${new URL(route.request().url()).pathname}`,
+          headers: { ...route.request().headers(), host: "demo.epm.test" },
+          maxRedirects: 0,
+        });
+        expect(committed.ok()).toBe(true);
+        await route.abort("failed");
+      });
+      if (operation === "save") {
+        await title.fill(`Preserved ${operation} ${expiry}`);
+        await expect(
+          page.getByRole("button", { name: "Retry saving unfinished form", exact: true }),
+        ).toBeVisible();
+      } else {
+        await page.getByRole("button", { name: "Create task", exact: true }).click();
+        await expect(
+          page.getByRole("button", { name: "Check original result", exact: true }),
+        ).toBeVisible();
+      }
+      if (expiry === "session") {
+        await control(page.context(), "expire");
+        await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+        await expect(
+          page.getByRole("heading", { name: "Sign in to your demo workspace" }),
+        ).toBeVisible();
+        await proof(page.context());
+        await page.getByRole("button", { name: "Continue to workspace" }).click();
+      } else {
+        await control(page.context(), "expire-draft-leases");
+        await page.clock.install();
+        await page.clock.fastForward(301_000);
+        await page
+          .getByRole("button", {
+            name: operation === "save" ? "Retry saving unfinished form" : "Check original result",
+            exact: true,
+          })
+          .click();
+      }
+      await expect(title).toHaveValue(
+        `${operation === "save" ? "Preserved" : "Retain"} ${operation} ${expiry}`,
+      );
+      if (expiry === "lease") await page.clock.setSystemTime(new Date());
+      if (operation === "save")
+        await page
+          .getByRole("button", { name: "Review latest saved form (keep my input)", exact: true })
+          .click();
+      page.once("dialog", (dialog) => dialog.accept());
+      await page.getByRole("button", { name: "Take over editing", exact: true }).click();
+      await expect(page.getByRole("region", { name: "Saved form edit authority" })).toContainText(
+        "holds a temporary",
+      );
+      await page
+        .getByRole("button", {
+          name: operation === "save" ? "Retry saving unfinished form" : "Check original result",
+          exact: true,
+        })
+        .click();
+      // Lease loss is discovered by an explicit rejected retry before takeover.
+      await expect.poll(() => requests.length).toBe(expiry === "lease" ? 3 : 2);
+      expect(new Set(requests).size).toBe(1);
+      const retained = (await page.evaluate(
+        async (id) => (await (await fetch(`/api/operator/recovery/${id}`)).json()) as unknown,
+        original.id,
+      )) as { payload: { title: string }; status: string };
+      expect(retained.payload.title).toBe(
+        `${operation === "save" ? "Preserved" : "Retain"} ${operation} ${expiry}`,
+      );
+      expect(retained.status).toBe(operation === "save" ? "active" : "outcome_unknown");
+    });
+  }
+}

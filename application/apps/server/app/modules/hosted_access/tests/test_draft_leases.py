@@ -112,10 +112,10 @@ def test_takeover_waits_for_whole_owning_transaction_and_guard_rolls_back(leases
 
 def test_revocation_and_restore_remove_effective_authority(leases, context):
     application, adapter, actors, clock, _ = leases
-    service, sessions, _proof, _ = context
+    service, sessions, proof, _ = context
     record, token = str(uuid4()), secrets.token_urlsafe(32)
     claim(application, actors[0], record, token)
-    service.logout(actors[0])
+    service.logout(actors[0], proof)
     with pytest.raises(HostedAccessError):
         with adapter.guard(record, actors[0].session_reference, token, clock[0]):
             pytest.fail("Revoked session entered mutation")

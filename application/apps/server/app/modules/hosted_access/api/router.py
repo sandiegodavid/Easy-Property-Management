@@ -75,14 +75,16 @@ def build_session_router(service: HostedAccessService | None = None) -> APIRoute
 
     @router.delete("/session", operation_id="endHostedSession")
     def end(request: Request) -> Response:
-        active_service().logout(request.state.hosted_actor)
+        active_service().logout(request.state.hosted_actor, request.state.hosted_identity)
         response = Response(status_code=204)
         response.delete_cookie(SESSION_COOKIE, secure=True, httponly=True, samesite="lax", path="/")
         return response
 
     @router.delete("/session/all", operation_id="endAllHostedSessions")
     def end_all(request: Request) -> Response:
-        active_service().logout(request.state.hosted_actor, all_devices=True)
+        active_service().logout(
+            request.state.hosted_actor, request.state.hosted_identity, all_devices=True
+        )
         response = Response(status_code=204)
         response.delete_cookie(SESSION_COOKIE, secure=True, httponly=True, samesite="lax", path="/")
         return response
