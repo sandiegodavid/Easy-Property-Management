@@ -83,7 +83,11 @@ def test_bulk_summary_is_attributed_and_local_mode_remains_local(ledger):
         assert local.actor_kind == "local_operator" and local.actor_reference is None
 
 
-@pytest.mark.parametrize("reference", [None, "email@example.com", "A" * 36, str(uuid4()).upper()])
+@pytest.mark.parametrize(
+    "reference",
+    [None, "email@example.com", "A" * 36, "BDF3AF38-589C-45B2-ABDF-5912F85CEE03"],
+    ids=["none", "email", "36-character-non-uuid", "uppercase-uuid"],
+)
 def test_hosted_actor_requires_canonical_uuid(reference):
     with pytest.raises(ValueError, match="canonical"):
         AuditEvent.change(

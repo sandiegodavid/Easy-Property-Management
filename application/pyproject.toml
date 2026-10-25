@@ -43,6 +43,7 @@ app = ["web_build/index.html", "web_build/assets/*.js", "web_build/assets/*.css"
 
 [tool.pytest.ini_options]
 testpaths = ["apps/server/app"]
+addopts = ["--import-mode=importlib"]
 
 [tool.ruff]
 # Target environment details
