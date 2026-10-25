@@ -30,6 +30,7 @@ export function queryClient() {
 export class WorkspaceScope {
   readonly client = queryClient();
   private active = true;
+  private listenerTarget: Window | null = null;
   private pause = () => {
     void this.client.cancelQueries();
   };
@@ -45,7 +46,8 @@ export class WorkspaceScope {
 
   activate() {
     this.active = true;
-    window.addEventListener("epm-session-paused", this.pause);
+    this.listenerTarget = window;
+    this.listenerTarget.addEventListener("epm-session-paused", this.pause);
   }
 
   requireWrite() {
@@ -55,7 +57,8 @@ export class WorkspaceScope {
 
   dispose() {
     this.active = false;
-    window.removeEventListener("epm-session-paused", this.pause);
+    this.listenerTarget?.removeEventListener("epm-session-paused", this.pause);
+    this.listenerTarget = null;
     void this.client.cancelQueries();
     this.client.clear();
   }

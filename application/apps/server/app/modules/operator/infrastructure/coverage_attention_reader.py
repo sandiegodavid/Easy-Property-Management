@@ -56,52 +56,60 @@ class SQLiteCoverageAttentionReader:
         )
         latest = select(ranked).where(ranked.c.position == 1).subquery()
         register_json_function(connection, "coverage_review_projection", 8, _projection)
-        selections = []
-        for area in ("maintenance", "occupancy", "lease", "rent", "deposit"):
-            review = case(
-                (
-                    latest.c.id.is_not(None),
-                    json_fields(latest.c, ("evidence_revision", "next_review_on", "created_at")),
+        # Expand the five areas from a tiny relation, rather than nesting the
+        # entire source graph beneath five compound-select branches.
+        areas = union_all(
+            *(
+                select(
+                    literal(area).label("area"),
+                    literal("property" if area == "maintenance" else "space").label("subject_kind"),
                 )
+                for area in ("maintenance", "occupancy", "lease", "rent", "deposit")
             )
-            source = financial.outerjoin(
-                maintenance, maintenance.c.property_id == financial.c.property_id
-            ).outerjoin(
+        ).cte("coverage_areas")
+        review = case(
+            (
+                latest.c.id.is_not(None),
+                json_fields(latest.c, ("evidence_revision", "next_review_on", "created_at")),
+            )
+        )
+        source = (
+            financial.join(areas, areas.c.subject_kind == financial.c.subject_kind)
+            .outerjoin(maintenance, maintenance.c.property_id == financial.c.property_id)
+            .outerjoin(
                 latest,
                 and_(
                     latest.c.subject_kind == financial.c.subject_kind,
                     latest.c.subject_id == financial.c.id,
-                    latest.c.area == area,
+                    latest.c.area == areas.c.area,
                 ),
             )
-            view = func.coverage_review_projection(
-                func.json_quote(area),
-                financial.c.location,
-                financial.c.lease_context,
-                financial.c.finance_facts,
-                maintenance.c.revision,
-                review,
-                func.json_quote(window.as_of.isoformat()),
-                func.json_quote(financial.c.id),
+        )
+        view = func.coverage_review_projection(
+            func.json_quote(areas.c.area),
+            financial.c.location,
+            financial.c.lease_context,
+            financial.c.finance_facts,
+            maintenance.c.revision,
+            review,
+            func.json_quote(window.as_of.isoformat()),
+            func.json_quote(financial.c.id),
+        )
+        views = (
+            select(
+                financial.c.id,
+                financial.c.subject_kind,
+                financial.c.property_id,
+                financial.c.property_state,
+                financial.c.title,
+                financial.c.time_zone,
+                financial.c.next_transition,
+                areas.c.area,
+                view.label("view"),
             )
-            selections.append(
-                select(
-                    financial.c.id,
-                    financial.c.subject_kind,
-                    financial.c.property_id,
-                    financial.c.property_state,
-                    financial.c.title,
-                    financial.c.time_zone,
-                    financial.c.next_transition,
-                    literal(area).label("area"),
-                    view.label("view"),
-                )
-                .select_from(source)
-                .where(
-                    financial.c.subject_kind == ("property" if area == "maintenance" else "space")
-                )
-            )
-        views = union_all(*selections).cte("portfolio_coverage_views")
+            .select_from(source)
+            .cte("portfolio_coverage_views")
+        )
         return select(
             views,
             func.json_extract(views.c.view, "$.state").label("state"),
