@@ -2,6 +2,10 @@
 
 [Manual contents](README.md) · [Build from a checkout](installation.md)
 
+For updates to the already-configured Google Cloud hosted demo, use the
+[ongoing Google Cloud runbook](../docs/hosting/operations/GOOGLE_CLOUD_ONGOING_RUNBOOK.md).
+The installation below describes a new local-mode VM, not that hosted service.
+
 This guide starts with a built release wheel and a clean VM. It is for the installer, not the daily operator. The commands below use a **Linux VM with Ubuntu 24.04**, a normal login user with sudo rights, and network access to install Python dependencies. Other supported hosts need equivalent Python/virtual-environment provisioning.
 
 The application remains a single-operator local application. Use a browser in the VM's desktop session through your VM console/approved desktop access. The server binds to `127.0.0.1`; this guide does not publish it as a remote website. A headless VM without a way to use a browser in that environment needs a separately approved access arrangement.

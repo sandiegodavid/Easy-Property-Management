@@ -4,6 +4,7 @@ Choose the document for your role and task:
 
 | Document | Use it for |
 | --- | --- |
+| [Ongoing Google Cloud runbook](GOOGLE_CLOUD_ONGOING_RUNBOOK.md) | After setup: routine checks, build/upload/install a replacement release, switch A/B and roll back |
 | [Operator guide](HOSTED_DEMO_OPERATOR_GUIDE.md) | Assigned sign-in, saving work, multiple devices, logout and recovery feedback |
 | [Administrator runbook](HOSTED_DEMO_OPERATIONS.md) | Daily inspection, verified backups, credentials, disable/renew/reset and host recovery |
 | [Deployment record](CLOUDFLARE_OPERATIONS.md) | Exact installed inventory and dated setup/verification results; append future operations here |

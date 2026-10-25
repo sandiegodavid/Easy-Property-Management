@@ -1,6 +1,8 @@
 # Hosted demo administrator runbook
 
 Consolidated October 24, 2026. Use this for recurring operation of the recorded deployment.
+For the short routine-operation and release-update sequence, use the
+[ongoing Google Cloud runbook](GOOGLE_CLOUD_ONGOING_RUNBOOK.md).
 [Deployment/setup](../deployment/GOOGLE_CLOUD_DEMO_DEPLOYMENT.md),
 [configuration](../deployment/HOSTED_DEMO_CONFIGURATION.md),
 [evidence/status](../qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md) and [deployment

@@ -34,6 +34,7 @@ product scope; no additional data-residency requirement is imposed.
 | [Deployment guide](deployment/GOOGLE_CLOUD_DEMO_DEPLOYMENT.md) | Google VM/IAP, reproducible release, volumes, Cloudflare and enrollment setup; new-resource commands |
 | [Configuration contract](deployment/HOSTED_DEMO_CONFIGURATION.md) | JSON fields, route/capability inventory, owner CLI, session and edit-lease rules |
 | [Administrator runbook](operations/HOSTED_DEMO_OPERATIONS.md) | Daily inspection/backups, credentials, disable/renew/reset, host-loss recovery and rollback |
+| [Ongoing Google Cloud runbook](operations/GOOGLE_CLOUD_ONGOING_RUNBOOK.md) | After-setup quick reference and replacement-release build/upload/switch/rollback sequence |
 | [Operator guide](operations/HOSTED_DEMO_OPERATOR_GUIDE.md) | Assigned sign-in, session controls, multiple devices, saved forms and safe recovery |
 | [Qualification and rollout plan](qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md) | **Single current checkpoint**, passed scope, remaining gates, test matrix and completion criteria |
 | [Cloudflare/VM operations record](operations/CLOUDFLARE_OPERATIONS.md) | Current exact inventory, completed setup sequence and cumulative future operation entries |

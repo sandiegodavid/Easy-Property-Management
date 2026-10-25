@@ -1,5 +1,8 @@
 # Google Cloud and Cloudflare deployment guide
 
+For an already-configured host, use the [ongoing operation and release-update
+runbook](../operations/GOOGLE_CLOUD_ONGOING_RUNBOOK.md).
+
 Administrator procedure; consolidated October 24, 2026. This describes the accepted hosted
 installation. Provisioning sections apply to a **new** host, empty release directory or
 empty destination; inspect existing resources before creating them. For current identifiers
