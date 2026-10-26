@@ -10,6 +10,83 @@ For ordinary inspection, backups and recovery, use the shortcuts below. For a
 code update, follow steps 1–6. Do not repeat VM, Cloudflare, enrollment or workspace
 initialization. The wheel **and matching schema resources** form the release.
 
+## Interactive wizards (recommended)
+
+On the **Mac**, from the repository root:
+
+```bash
+bash application/scripts/epm-release-mac.sh
+```
+
+The [Mac wizard](../../../application/scripts/epm-release-mac.sh) asks for a new
+release ID, Google destination and test evidence, builds the wheel/SPA, bundles
+matching schema resources without macOS metadata, and uploads through IAP. It prints
+the exact SSH and VM-wizard commands. Keep the SHA-256 it displays for independent
+comparison on the VM. It never changes VM services or workspace data.
+
+On the **VM**, run the exact command printed by the Mac wizard. Its filename uses
+the release ID you selected; it changes for each release. Alternatively, enter
+that same ID when prompted:
+
+```bash
+read -r -p "Release ID used in the Mac wizard: " release
+bash "$HOME/${release:?Release ID is required}-vm.sh"
+```
+
+The uploaded [VM wizard](../../../application/scripts/epm-release-vm.sh) offers:
+
+| Action | Use it for |
+| --- | --- |
+| `inspect` | Read-only service, mount, disk, memory and recent-log inspection |
+| `install` | Verify the archive against the Mac hash; install beside current releases using an effective hosted runtime's Python/dependencies; verify resources |
+| `deploy` | Update one instance: record rollback state, disable/stop, back up, validate, generate its exact override, wait for readiness, reactivate its verified subject, and confirm browser acceptance |
+| `resume` | Complete an interrupted deployment after its backup and override switch; select its saved record, check/start the selected release, reactivate and finish acceptance |
+| `rollback` | Explicitly fence/stop an instance, check old-release compatibility, restore only the saved release override, then reactivate and verify |
+
+Choose **install → deploy A → deploy B**, running the wizard again for each action.
+Accept A before B. Installation uses constraints **and requirements** from the
+selected hosted environment so optional installed dependencies such as boto3 remain
+available. Dependency/Python changes still need separate review. Stop on failures;
+do not remove constraints to bypass them.
+
+The scripts pause before upload, service interruption, switching and activation.
+Backups use the application's own passphrase prompt; the wizard does not capture
+or save secrets. Only selections are remembered in the Mac's
+`~/Library/Application Support/EPM/release-wizard/mac.env` and the VM's
+`~/.local/state/epm-release-wizard/vm.env`; these files are read as values, never
+executed. Subject approval is explicit and is not saved as a wizard default.
+Root-private deployment/rollback records live under the new release's
+`wizard-state/` directory; failed commands never trigger automatic rollback,
+repeated uploads or automatic reactivation. Rejected browser acceptance explicitly
+disables and stops the instance. An interrupted install requires a new release ID;
+`resume` applies only after a successful deployment backup and override switch.
+
+The wizards do not initialize workspaces, reset enrollment, restore data, publish
+backups to R2 or delete old releases. Continue to use the recovery procedures below
+for off-host publication and incompatible-data recovery. Record final acceptance
+and release details in the deployment record. Manual equivalents follow.
+
+### Wizard verification
+
+From `application/`, run
+`node scripts/python.mjs -m pytest scripts/tests/test_release_wizards.py -q`.
+The focused tests execute only isolated guards with temporary files and mocked
+service calls; they never deploy or open a live workspace.
+
+| Area | Automated checks / remaining operator proof |
+| --- | --- |
+| Happy path and inputs | Shell syntax/help, release IDs, A/B paths and ports, effective hosted commands, valid archive scanning |
+| Invalid combinations | Wrong-instance configuration, local-only CLI, invalid paths, metadata/null-byte corruption, traversal and archive links are rejected |
+| Retry and failure | Stopped `failed` state requires PID zero; transient readiness restarts are rejected; Resume avoids repeating the deployment backup/switch |
+| Rollback | Private original override is retained; rejected browser acceptance disables/stops the writer; actual Linux rollback and old-schema compatibility require host acceptance |
+| Backup/restore | Production `hosted-backup` creates and validates the pre-release archive; off-host read-back and a separate restore trial remain administrator recovery work |
+| Persistence | New-release workspace and hosted-binding validation precede switching; no migrations or workspace initialization are performed |
+| Query budgets | Not applicable to these operational scripts; they add no domain projections |
+
+Script syntax and focused guards are not evidence of a successful VM cutover,
+real Cloudflare renewal, encrypted backup or restore. Record those results only
+after the corresponding operator checks pass.
+
 ## Routine operation
 
 Connect from the **Mac**:
@@ -147,7 +224,8 @@ sudo chmod -R u=rwX,go=rX "$next"
 sudo "$previous/venv/bin/python" -m pip freeze --exclude easy-property-management \
   | sudo tee "$next/constraints.txt" > /dev/null
 sudo "$previous/venv/bin/python" -m venv "$next/venv"
-sudo "$next/venv/bin/python" -m pip install --constraint "$next/constraints.txt" \
+sudo "$next/venv/bin/python" -m pip install --requirement "$next/constraints.txt" \
+  --constraint "$next/constraints.txt" \
   "$next/easy_property_management-0.1.0-py3-none-any.whl"
 sudo "$next/venv/bin/python" -m pip check
 sudo "$next/venv/bin/python" "$next/stage_schema_resources.py" "$next/schema-resources"

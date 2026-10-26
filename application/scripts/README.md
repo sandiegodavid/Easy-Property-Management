@@ -70,6 +70,19 @@ Use this for [checkout-based serving](../../manual/installation.md), not release
 
 ## Installation and workspace selection
 
+### Google Cloud ongoing-release wizards
+
+From the repository root on the Mac, run
+`bash application/scripts/epm-release-mac.sh`. It builds/checksums the release and
+uploads it plus a standalone VM wizard through IAP, then prints the exact VM command.
+On the VM choose `install`, then `deploy` A, then `deploy` B after acceptance.
+The VM wizard also supports `inspect`, `resume` and explicit `rollback`.
+
+Sources: [Mac](epm-release-mac.sh), [VM](epm-release-vm.sh).
+Use the [ongoing runbook](../../docs/hosting/operations/GOOGLE_CLOUD_ONGOING_RUNBOOK.md#interactive-wizards-recommended)
+for prerequisites, saved selections, safeguards and recovery limitations. Both scripts
+accept `--help`. Do not run them through a pipe or run the VM wizard as root.
+
 ### `stage_schema_resources.py`
 
 [Source](stage_schema_resources.py). Stages a matching release's `alembic.ini` and
