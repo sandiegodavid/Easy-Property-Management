@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-26",
+  "release": "release-20261025-03",
+  "evidence": "Operator-reported console results for both signed-in demo origins",
+  "probe": "Same-origin POST /api/tasks with JSON {} and existing browser credentials; no CSRF header, then a fixed invalid CSRF header",
+  "instances": {
+    "a": {"missingCsrf": {"status": 403, "code": "hosted_csrf_rejected"}, "invalidCsrf": {"status": 403, "code": "hosted_csrf_rejected"}},
+    "b": {"missingCsrf": {"status": 403, "code": "hosted_csrf_rejected"}, "invalidCsrf": {"status": 403, "code": "hosted_csrf_rejected"}}
+  },
+  "limits": [
+    "Operator response interpreted as confirmation of the specified observed results; no raw browser output captured.",
+    "No actual sibling-session CSRF value was copied or tested; fixed invalid token only.",
+    "Does not establish foreign-Origin rejection, uninvited-identity denial, all mutation routes or an independent database no-write assertion.",
+    "Empty JSON was intentionally invalid Task data; no valid business mutation was requested."
+  ]
+}

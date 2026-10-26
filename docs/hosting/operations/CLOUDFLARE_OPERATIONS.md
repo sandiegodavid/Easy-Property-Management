@@ -26,6 +26,40 @@ isolation, B renewal and B Task audit isolation. It records pass flags only; it 
 been executed by the agent and no browser pass is claimed. Recovery-list, CSRF, broader
 isolation, concurrency, cache/load and final recovery/boot gates remain open.
 
+The operator subsequently reported both renewal and Task audit checks passed. Inspection
+of the wizard result file confirmed four yes flags: A/B renewal and A/B Task audit.
+Each renewal included device logout, provider renewal, explicit Continue and own Home.
+Own Task creation history was visible; foreign contextual history disclosed no event or
+snapshot, and the inspected filtered activity page contained no foreign Task event.
+See [scoped browser evidence](../evidence/HOSTED_DEMO_RENEWAL_AUDIT_2026-10-26.json).
+Read-only recovery metadata inspection found active forms in both workspaces, permitting
+the next browser probes without adding drafts. An A outcome-unknown form was observed;
+its payload was not read and no retry, reconciliation or discard was attempted.
+
+The operator subsequently reported both recovery-isolation checks passed; A/B saved
+success flags were inspected. Each own active property-create recovery detail returned;
+foreign detail explicitly rejected without disclosure. Each recovery list included its own
+probe and excluded the counterpart, with no next cursor at limit 100. No form was edited,
+submitted or discarded. [Scoped recovery evidence](../evidence/HOSTED_DEMO_RECOVERY_ISOLATION_2026-10-26.json)
+does not qualify recovery mutations, leases, retries or all form/status combinations.
+The operator confirmed a controlled third uninvited account is available for the later
+Access check; no address was requested or stored.
+
+The operator reported the expected `403 hosted_csrf_rejected` result for missing and
+fixed-invalid CSRF headers on both A/B origins. The same-origin console probes posted
+empty invalid Task JSON using existing browser credentials; no token/cookie was printed
+or copied. [Scoped CSRF evidence](../evidence/HOSTED_DEMO_CSRF_2026-10-26.json) records
+the interpretation of the operator response and does not claim foreign-Origin or actual
+sibling-token testing. Additional uninvited-account checks remain pending.
+
+The operator reported explicit policy-tester denial of the controlled third uninvited
+account for both applications. Four direct live-listener requests (A/B, missing/foreign
+Origin, exact public Host, POST empty invalid Task JSON, no credentials) independently
+returned `403 hosted_origin_rejected`. No service or policy changes were made.
+[Evidence and limits](../evidence/HOSTED_DEMO_UNINVITED_ORIGIN_2026-10-26.json) distinguish
+policy evaluation/direct-origin guards from real third-account browser or authenticated
+cross-site edge behavior. Shared editing/takeover remains the next workflow gate.
+
 ## Human review guide — October 24, 2026
 
 Two independent synthetic portfolios run on authenticated hosted processes. Both intended

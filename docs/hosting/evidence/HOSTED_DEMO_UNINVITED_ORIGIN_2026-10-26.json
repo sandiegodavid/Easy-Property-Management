@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-26",
+  "release": "release-20261025-03",
+  "uninvitedIdentity": {
+    "method": "Cloudflare application policy tester with a third operator-controlled account, address not retained",
+    "a": "explicitly denied, operator-reported",
+    "b": "explicitly denied, operator-reported",
+    "limit": "Policy evaluation only; no third-identity browser authentication or real edge denial claimed"
+  },
+  "originProbes": {
+    "method": "Python urllib POST to each live loopback listener, exact public Host, empty JSON, no credentials",
+    "aMissingOrigin": {"status": 403, "code": "hosted_origin_rejected"},
+    "aForeignOrigin": {"status": 403, "code": "hosted_origin_rejected"},
+    "bMissingOrigin": {"status": 403, "code": "hosted_origin_rejected"},
+    "bForeignOrigin": {"status": 403, "code": "hosted_origin_rejected"},
+    "foreignOrigin": "https://qualification.example.invalid",
+    "limit": "Direct origin guard before authentication; not an authenticated cross-site browser or Cloudflare edge probe"
+  },
+  "limits": ["No service or policy edits made", "No valid business payload submitted", "No actual sibling-session CSRF value tested"]
+}

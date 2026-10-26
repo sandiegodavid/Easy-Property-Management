@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-26",
+  "release": "release-20261025-03",
+  "evidence": "Operator reported both renewal and Task audit checks passed; all four saved wizard flags inspected and equal yes",
+  "instances": {
+    "a": {"deviceLogoutProviderRenewalExplicitContinueHome": "passed", "ownTaskCreationHistory": "passed", "foreignTaskHistoryNoDisclosure": "passed", "filteredActivityPageNoForeignTask": "passed"},
+    "b": {"deviceLogoutProviderRenewalExplicitContinueHome": "passed", "ownTaskCreationHistory": "passed", "foreignTaskHistoryNoDisclosure": "passed", "filteredActivityPageNoForeignTask": "passed"}
+  },
+  "limits": [
+    "Browser observations are operator-reported; no raw responses or credentials collected.",
+    "Task contextual audit and one filtered activity page per instance only; no all-pagination claim.",
+    "Does not establish current all-device logout, recovery isolation, CSRF rejection, cache, expiry, concurrency or performance."
+  ]
+}

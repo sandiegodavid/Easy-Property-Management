@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-26",
+  "release": "release-20261025-03",
+  "evidence": "Operator reported both recovery isolation checks passed; saved A/B success flags inspected",
+  "instances": {
+    "a": {"ownRecoveryDetail": "passed", "foreignRecoveryDetailRejectedWithoutDisclosure": "passed", "listIncludesOwnExcludesForeign": "passed", "nextCursorNull": "passed"},
+    "b": {"ownRecoveryDetail": "passed", "foreignRecoveryDetailRejectedWithoutDisclosure": "passed", "listIncludesOwnExcludesForeign": "passed", "nextCursorNull": "passed"}
+  },
+  "scope": "One existing active portfolio.property.create recovery record per workspace; list limit 100 with no next cursor, per operator confirmation",
+  "limits": [
+    "Read-only browser probes; no draft payloads retained in evidence.",
+    "Does not test recovery mutation authorization, edit leases, retries, concurrency or every status/form type.",
+    "An existing outcome-unknown form in A was left untouched."
+  ]
+}

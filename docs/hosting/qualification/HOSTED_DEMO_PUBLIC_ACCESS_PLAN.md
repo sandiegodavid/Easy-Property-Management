@@ -48,6 +48,40 @@ In particular, repository changes since the baseline affect hosted sign-in renew
 navigation and form/recovery behavior. Establish which changes are installed, then repeat
 the affected acceptance checks; do not infer deployment from a repository commit.
 
+## Current browser checkpoint — October 26, 2026
+
+[Operator-reported renewal and Task audit checks](../evidence/HOSTED_DEMO_RENEWAL_AUDIT_2026-10-26.json)
+passed for both instances on release 03; all four saved wizard flags were inspected.
+Each operator signed out this device, renewed Cloudflare sign-in, explicitly continued
+and reached the correct Home. Own Task creation history was visible; foreign Task
+history revealed no events/snapshots, and one filtered activity page contained no foreign
+Task event. This closes the scoped Task audit check, not all audit pagination/entities.
+
+[Recovery detail/list isolation](../evidence/HOSTED_DEMO_RECOVERY_ISOLATION_2026-10-26.json)
+also passed for both instances. Existing active property-create saved forms were used:
+own detail returned, foreign detail rejected without disclosure, and each list included its
+own probe/excluded the foreign probe with no next cursor. Both saved pass flags were
+inspected. This covers reads of the selected records, not mutation/lease authorization.
+
+[Missing/invalid CSRF checks](../evidence/HOSTED_DEMO_CSRF_2026-10-26.json) were reported
+as `403 hosted_csrf_rejected` for both probes on both origins. The probes used same-origin
+POST `/api/tasks` with invalid empty JSON and no CSRF header or a fixed invalid value.
+No actual sibling-session token was copied; foreign-Origin coverage remains open.
+
+[Uninvited-account policy and live Origin probes](../evidence/HOSTED_DEMO_UNINVITED_ORIGIN_2026-10-26.json)
+passed within scope: the policy tester explicitly denied the controlled third account for
+both apps. Live A/B listeners rejected missing and foreign Origin with
+`403 hosted_origin_rejected`, using exact public Host and invalid empty Task JSON before
+authentication. This is policy-test/direct-origin evidence, not third-account browser
+authentication or an authenticated cross-site edge test.
+
+**Next:** real shared-form claim/takeover, stale revisions and independent drafts.
+Third-account browser denial and actual sibling-token testing remain unproven; the scoped
+policy and origin checks above must not be expanded into those claims.
+No draft payloads or credentials are collected. An existing
+A form has `outcome_unknown` status; leave it untouched and reconcile its original attempt
+separately before retrying it.
+
 ## Historical acceptance checkpoint — October 24, 2026
 
 Both intended operators are enrolled/active and can use their assigned Home pages.
@@ -126,6 +160,10 @@ byte-identical/unchanged for that historical comparison. These totals do not qua
 | Boundary | Evidence and result | Scope / remaining work |
 | --- | --- | --- |
 | Real identity and Home | [Enrollment](../evidence/HOSTED_DEMO_ENROLLMENT_2026-10-24.json), operator confirms both Homes | Does not alone prove all protected endpoints or client workflows |
+| Current renewal and Task audit | [October 26 checks](../evidence/HOSTED_DEMO_RENEWAL_AUDIT_2026-10-26.json): logout/renew/Continue/Home and own/foreign Task history plus filtered activity passed for A/B | Operator-reported; one filtered page only; recovery, CSRF, wider entity/pagination coverage and current all-device logout remain |
+| Current recovery reads | [October 26 checks](../evidence/HOSTED_DEMO_RECOVERY_ISOLATION_2026-10-26.json): A/B own detail/list success and foreign detail/list no disclosure | Existing active property-create records only; no pagination remaining at check; mutations, leases, retries and other statuses remain |
+| Current CSRF probes | [October 26 checks](../evidence/HOSTED_DEMO_CSRF_2026-10-26.json): missing and fixed invalid header both return 403 hosted_csrf_rejected on A/B | Operator-reported, same-origin Task route and invalid payload only; foreign Origin and actual sibling-token probe not established |
+| Current uninvited policy / Origin | [October 26 checks](../evidence/HOSTED_DEMO_UNINVITED_ORIGIN_2026-10-26.json): controlled third account explicitly denied by both policy testers; live A/B missing/foreign Origin requests return 403 hosted_origin_rejected | Policy evaluation and direct unauthenticated origin guard only; real third-account browser denial / authenticated cross-site edge not established |
 | Email restrictions | [All four application policy decisions](../evidence/HOSTED_DEMO_ACCESS_POLICY_2026-10-24.json) match, operator-reported | OTP non-delivery is supporting only; additional uninvited identity remains |
 | Device sessions | [Logout/refresh/fresh login](../evidence/HOSTED_DEMO_DEVICE_LOGOUT_2026-10-24.json) and [multi-session revocation](../evidence/HOSTED_DEMO_MULTISESSION_LOGOUT_2026-10-24.json) passed | Exact browser/device/network not captured; expiry during editing/download and active-session restart remain |
 | Task ownership and foreign IDs | [Task persistence/foreign-record check](../evidence/HOSTED_DEMO_RECORD_ISOLATION_2026-10-24.json): each owning workspace has one Task/receipt/hosted-operator creation audit; no counterpart Task row; operator reported foreign saved-record rejection | Synthetic Task scope only; File, receipts, search, bootstrap, audit-list, recovery and cache boundaries remain |
@@ -151,8 +189,13 @@ byte-identical/unchanged for that historical comparison. These totals do not qua
    sign-in renewal, device/all-device logout and Task/File/receipt/search/bootstrap isolation
    wherever installed changes affect them. Include create/update and unfinished-form recovery
    if the new workflow is installed. Preserve prior passes as dated evidence.
-1. Qualify audit-list/recovery boundaries, missing/foreign CSRF and an additional uninvited
-   identity. Do not collect or publish raw PINs, tokens or session cookies.
+1. Task contextual audit and one filtered activity page passed on October 26 for A/B.
+   Recovery detail/list reads also passed for the selected A/B active property-create
+   records, with no next cursor. Qualify remaining mutation/lease boundaries and audit
+   entities/pagination as applicable, foreign-Origin/CSRF and an additional uninvited
+   identity. Missing/fixed-invalid CSRF, uninvited-account policy tests and live direct
+   missing/foreign-Origin probes passed for A/B on October 26 within their documented scope.
+   Do not collect or publish raw PINs, tokens or session cookies.
 2. Exercise real shared-form claim/takeover, stale revisions, independent drafts,
    interrupted financial response/original-key recovery, expiry while editing or
    downloading, visible/hidden polling and property-local time transitions.
