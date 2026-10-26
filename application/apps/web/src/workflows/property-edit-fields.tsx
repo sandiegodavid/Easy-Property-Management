@@ -46,6 +46,7 @@ export function PropertyEditFields({
                 <div key={key} className="workflow-field">
                   <TimeZoneSelect
                     label="Property time zone (optional override)"
+                    emptyOption="Determine from address"
                     value={current}
                     disabled={disabled}
                     onChange={(next) =>

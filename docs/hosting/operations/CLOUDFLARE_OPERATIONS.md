@@ -6,6 +6,26 @@ one current resume action in the [qualification
 plan](../qualification/HOSTED_DEMO_PUBLIC_ACCESS_PLAN.md). Dates are America/Los_Angeles
 unless explicitly UTC. Recorded values are snapshots, not live monitoring.
 
+## Follow-up operations — October 26, 2026
+
+Read-only release reconciliation identified A/B running `release-20261025-03`, declared
+source `c96709f4`. All bundle checksums and the installed-resource check passed; all 539
+installed application files matched the verified wheel, including seven frontend files.
+Installed releases 01/02 declare `369410f3`/`2d344902`. No release-03 wizard-state directory
+was present, so prior browser acceptance/rollback records and the fourth reported deployment
+remain unconfirmed. Current checkout form-recovery changes postdate the installed build.
+The actual tunnel unit `epm-cloudflared.service` is active/boot-disabled with zero automatic
+restarts. A/B are active with zero automatic restarts; old local units remain masked.
+Read-only database queries found the expected synthetic acceptance Task in each workspace.
+New local pre-release archives are present (A 497300 bytes, B 436418 bytes); off-host
+publication/restore was not established. No service, authorization, routing or business-data
+changes were made. See [sanitized evidence](../evidence/HOSTED_DEMO_RELEASE_RECONCILIATION_2026-10-26.json).
+
+Prepared a Mac-only ephemeral four-stage browser wizard for A renewal, A Task audit
+isolation, B renewal and B Task audit isolation. It records pass flags only; it has not
+been executed by the agent and no browser pass is claimed. Recovery-list, CSRF, broader
+isolation, concurrency, cache/load and final recovery/boot gates remain open.
+
 ## Human review guide — October 24, 2026
 
 Two independent synthetic portfolios run on authenticated hosted processes. Both intended
@@ -29,7 +49,7 @@ qualification plan.
 | Domain | `epmdemo.xyz`, Cloudflare Full DNS / Free; Porkbun remains registrar | Operator screenshot showed Active after delegation to `bonnie.ns.cloudflare.com` and `vasilii.ns.cloudflare.com` |
 | Public application origins | Exact `https://demo-a.epmdemo.xyz` and `https://demo-b.epmdemo.xyz` | Provisional routes active; approved operators reached Home; broader acceptance pending |
 | Identity | Team `epmdemo.cloudflareaccess.com`; two distinct Access audiences; separate supplied A/B sign-in emails | Inputs privately captured; operator confirmed exact-host, single-email Allow, PIN-only login, eight-hour duration, no broad/Bypass grant; real sign-in passed per operator |
-| Current release | `/opt/epm/releases/signin-nav-20261024/venv`; package 0.1.0, Python 3.14.9; qualified baseline plus narrow sign-in navigation fix | [Fix and verification](../evidence/HOSTED_DEMO_SIGNIN_NAVIGATION_FIX_2026-10-24.json); wheel SHA-256 `c57d4cfc5803d1ff2cd06b9d49c16bacf068b43b30232388009cd6d15633f95a`; frontend/schema/dependencies unchanged |
+| Current release | `/opt/epm/releases/release-20261025-03/venv`; declared source `c96709f4`, package 0.1.0 | [October 26 reconciliation](../evidence/HOSTED_DEMO_RELEASE_RECONCILIATION_2026-10-26.json): bundle checksums/resources pass, 539 installed app files match wheel; browser qualification remains open |
 | Current processes | `epm-hosted@a.service` and `epm-hosted@b.service`, active/enabled; Unix users `epm-a` / `epm-b`; listeners only `127.0.0.1:8001` / `8002` | [Private switch evidence](../evidence/HOSTED_DEMO_PRIVATE_SWITCH_2026-10-24.json); one writer per workspace |
 | Current workspace locators | `/var/lib/epm-a/hosted-local.json` and `/var/lib/epm-b/hosted-local.json` | Use these in current hosted administration/backup commands |
 | Current business data | `/var/lib/epm-a/volume/workspace` and `/var/lib/epm-b/volume/workspace` | Fresh current-format synthetic portfolios; IDs below |
@@ -59,10 +79,10 @@ enforced, and documentation does not silently renew it.
 | --- | --- |
 | Initial local release | `demo-001`, source f5c1518b7d97a309660e642964c45244516c0a54; original Mac Python 3.14.8, VM 3.14.9; retained masked/private only |
 | Qualified hosted baseline | c8aab47415b42dba0dec3545b117143a95ce49ef; wheel 2982482 bytes, SHA-256 6adcfb4fea6d953c5a83697417c2a0c2a081e66d1cf4288ad781d8327297fa85 |
-| Current installed release | `signin-nav-20261024`; source baseline c18869c257143060369cefdd134a350ce356b23e plus recorded navigation patch; wheel 2982550 bytes, SHA-256 c57d4cfc5803d1ff2cd06b9d49c16bacf068b43b30232388009cd6d15633f95a |
-| Wheel content delta | Only hosted middleware and RECORD differ from qualified wheel; frontend/schema/dependencies unchanged |
+| Current installed release | `release-20261025-03`; declared source c96709f45bbd955bf7f93db1ee0834115ce80ab8; wheel 2985355 bytes, SHA-256 366cb668df59ad9fc6f42ca9984cb72b9fba50a643a2d2e1eaaec5969c9be7cf |
+| Historical navigation release | `signin-nav-20261024`; wheel c57d4cfc5803d1ff2cd06b9d49c16bacf068b43b30232388009cd6d15633f95a; its middleware-only delta statement applies only to that release |
 | Linux runtime | CPython 3.14.9, SQLite 3.53.1, SQLAlchemy 2.1.6, Pydantic 2.14.1, cryptography 46.0.7; boto3/botocore 1.43.118; exact constraints retained with qualified release |
-| Effective service override | `/etc/systemd/system/epm-hosted@{a,b}.service.d/20-signin-navigation.conf`; template retains baseline, override pins current interpreter |
+| Effective service override | `/etc/systemd/system/epm-hosted@{a,b}.service.d/90-release.conf`; effective A/B commands select release 03; earlier `20-signin-navigation.conf` files remain |
 | cloudflared | 2026.10.3 Linux AMD64 SHA-256 053b80b0a23031a038fdbf3c073f59f82b8f1f152aa67971d7383ffafc0dbab0 |
 | Current ingress SHA-256 | aa081c7467fafe70adbc75e94b8af504a66a82083952e108398b200fe865d87e |
 | Closed-ingress fallback | `/opt/epm/qualification/public-routes-20261024/closed-config.yml`; SHA-256 8dd9df8a5771de7f39bff2b41d84348083a59564619dda4946393d20adc5f0c9 |

@@ -143,7 +143,7 @@ export class RecoveryController {
     // A lost response may have advanced the durable revision. Read only the
     // authority revision; never replace/rebase an immutable pending operation.
     let revision = this.snapshot.record?.revision ?? 0;
-    if (this.pendingSave || this.pendingPrepare) {
+    if (this.pendingSave || this.pendingPrepare || this.pendingReturn) {
       const result = await this.readSavedForm();
       revision = result?.revision ?? 0;
     }
@@ -231,7 +231,7 @@ export class RecoveryController {
   }
   async reviewSavedForm() {
     const record = await this.readSavedForm();
-    if (this.pendingSave || this.pendingPrepare) {
+    if (this.pendingSave || this.pendingPrepare || this.pendingReturn) {
       this.publish({
         error:
           "Claim editing, then retry the original save or check submission. Your input is retained.",
@@ -272,7 +272,12 @@ export class RecoveryController {
   private accept(record: Recovery) {
     this.scope.requireWrite();
     if (this.disposed) throw new Error("Form was closed. Reload its recovery record.");
-    this.scope.client.setQueryData(this.scope.key("recovery", this.id), record);
+    for (const family of ["recovery", "workflow-recovery", "coverage-resume"]) {
+      const queryKey = this.scope.key(family, this.id);
+      // An older in-flight read must not overwrite an acknowledged write.
+      void this.scope.client.cancelQueries({ queryKey, exact: true });
+      this.scope.client.setQueryData(queryKey, record);
+    }
     this.publish({ record });
   }
   edit(payload: Record<string, unknown>, delay = 500) {
@@ -350,6 +355,7 @@ export class RecoveryController {
     if (
       this.pendingSave ||
       this.pendingPrepare ||
+      this.pendingReturn ||
       record.status !== "active" ||
       record.reuseState !== "available"
     )
@@ -471,11 +477,13 @@ export class RecoveryController {
       expectedRevision: current.revision,
       idempotencyKey: crypto.randomUUID(),
     };
-    const result = await this.transport.returnToEditing(
-      this.id,
-      this.pendingReturn,
-      this.leaseToken,
-    );
+    let result: Recovery;
+    try {
+      result = await this.transport.returnToEditing(this.id, this.pendingReturn, this.leaseToken);
+    } catch (error) {
+      this.checkAuthority(error);
+      throw error;
+    }
     this.accept(result);
     this.pendingReturn = undefined;
     this.pendingPrepare = undefined;

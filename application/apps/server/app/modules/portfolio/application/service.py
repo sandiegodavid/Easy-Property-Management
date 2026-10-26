@@ -28,6 +28,7 @@ from app.modules.portfolio.application.ports import (
 )
 from app.modules.portfolio.application.inventory_commands import (
     InventoryCommand,
+    address_time_zone_changed,
     canonical_json,
     fingerprint,
     receipt_audit,
@@ -787,15 +788,8 @@ class PortfolioService:
                 except (ValueError, KeyError, TypeError) as error:
                     raise PortfolioError("Choose a valid IANA time zone.") from error
                 time_zone = changes["timeZone"]
-            elif "timeZone" in changes or any(
-                field in changes
-                for field in (
-                    "addressLine1",
-                    "city",
-                    "region",
-                    "postalCode",
-                    "countryCode",
-                )
+            elif "timeZone" in changes or address_time_zone_changed(
+                asdict(current), asdict(command)
             ):
                 time_zone = self._time_zone_for(command)
             updated = replace(

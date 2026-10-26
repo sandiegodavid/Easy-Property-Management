@@ -1,0 +1,127 @@
+Commit: ac8824b319c288bf31896e534587facd0e2b8837
+Review date: 2026-10-26
+Scope: create/update forms and unfinished-form changes in this commit only.
+
+RESOLVED SPECIFICATION FINDINGS
+Resolution verification date: 2026-10-26
+No findings remain open.
+
+Unfinished-form persistence and recovery
+
+1. [resolved 2026-10-26] [P1] Save and close can reopen older input after an acknowledged save.
+   File: application/apps/web/src/workflows/command.tsx:832-833
+   Related: application/apps/web/src/shared/recovery.ts:272-276;
+   application/apps/web/src/workflows/command.tsx:364-400
+
+   Save a form, resume it, change its name, Save and close again, then resume it
+   without reloading the browser. The directory shows the newly saved name, but
+   the editor restores the earlier name. RecoveryController.accept updates the
+   "recovery" query while the loaders use "workflow-recovery". The editor mounts
+   from that stale cache and its one-time initialization ignores the later fresh
+   response. This violates the acknowledged-save/resume contract and can lose
+   newer fields in subsequent edits. Synchronize the loader cache on successful
+   writes or ensure a fresh acknowledged representation before mounting a resumed
+   editor; do not reset an already edited form on a background refetch.
+   Verification: reproduced with an isolated two-save/two-resume browser test.
+
+   Resolution: RecoveryController.accept synchronizes the recovery,
+   workflow-recovery, and coverage-resume caches and cancels older in-flight reads
+   before publishing the acknowledged record. Existing editors keep their local
+   values; background responses do not reinitialize the form.
+   Implementation: application/apps/web/src/shared/recovery.ts:272-281.
+   Regression: application/apps/web/tests/unfinished-forms.spec.ts,
+   "save and close resumes the latest acknowledged input across repeated visits".
+   Result: passed.
+
+2. [resolved 2026-10-26] [P2] A lost return-to-editing response cannot regain hosted edit authority
+   after lease expiry.
+   File: application/apps/web/src/shared/recovery.ts:470-478
+   Related: application/apps/web/src/shared/recovery.ts:142-150
+
+   When /return commits but its response is lost, pendingReturn retains the
+   original operation key while the controller still holds the preceding revision
+   and outcome_unknown status. After lease expiry, Continue editing and Take over
+   editing both claim using that stale revision: claimLease refreshes the revision
+   only for pendingSave/pendingPrepare. Both claims are rejected, and Review saved
+   changes is unavailable for the local outcome_unknown record. The operator must
+   reload instead of retrying the retained operation as documented. Include
+   pendingReturn in authority-revision recovery while preserving its immutable
+   operation key and expected revision for the original /return retry.
+   Verification: traced the pending-return, lease-claim and server revision-check
+   paths; the existing hosted tests do not cover this lost-response combination.
+
+   Resolution: Lease claims read the current authority revision when a return
+   operation is pending, without changing its retained key or expected revision.
+   A rejected return invalidates the stale local lease, exposing claim/takeover.
+   Pending returns cannot be overwritten by explicit saved-form review.
+   Implementation: application/apps/web/src/shared/recovery.ts:142-150, 470-492.
+   Regression: application/apps/web/tests-hosted/session.spec.ts,
+   both "lost return response retains its operation after lease expiry" cases.
+   Result: claim and takeover passed; retries retained identical operation bodies
+   and replayed the committed return revision without advancing it again.
+
+Property time-zone overrides
+
+3. [resolved 2026-10-26] [P2] The optional time-zone override cannot be cleared after selection.
+   File: application/apps/web/src/workflows/property-edit-fields.tsx:47-54
+   Related: application/apps/web/src/shared/zoned-date-time.tsx:64-85
+
+   TimeZoneSelect includes the empty option only when its current value is empty.
+   Selecting any zone removes that option, so the operator cannot return to the
+   advertised address-derived behavior. This also affects a recovered form with
+   an override. Give this optional selector a persistent "Determine from address"
+   option that invokes the existing undefined/null clearing path.
+   Verification: an isolated browser test confirmed that option[value=""]
+   disappears immediately after selecting America/Juneau.
+
+   Resolution: Property overrides opt into a persistent empty option labelled
+   "Determine from address". Create forms omit the override on clearing; edit
+   forms retain the existing explicit-null clearing contract.
+   Implementation: application/apps/web/src/workflows/property-edit-fields.tsx:47;
+   application/apps/web/src/shared/zoned-date-time.tsx:50-93.
+   Regression: application/apps/web/tests/unfinished-forms.spec.ts,
+   "property overrides can be cleared, including after draft recovery".
+   Result: passed; final creation resolved the address-derived Pacific zone.
+
+4. [resolved 2026-10-26] [P2] Unrelated edits to a manually zoned property repeat the failed lookup.
+   File: application/apps/server/app/bootstrap/operator_inventory_commands.py:42-49
+   Related: application/apps/web/src/workflows/portfolio.tsx:432-441
+
+   A property created for an unsupported address with an explicit time zone can
+   be saved, but its edit form does not initialize timeZone from the saved property.
+   The form sends the unchanged address fields alongside a name/notes edit, and
+   the new preflight treats their presence as an address change and reruns the
+   lookup without the retained zone. The edit is rejected until the operator
+   selects the zone again, despite changing no address or scheduling context.
+   Preserve the saved zone for unchanged addresses, distinguish effective address
+   changes from fields merely present in the patch, and honor explicit clearing.
+   Verification: created an unsupported Alaska address with America/Juneau, then
+   prepared a browser-shaped notes edit with unchanged address fields; preparation
+   raised the time-zone lookup error.
+
+   Resolution: Preparation and final writes compare normalized lookup inputs,
+   rather than checking whether address fields are merely present. Unchanged
+   addresses retain the saved zone without requiring the optional override to be
+   selected again. Effective address changes and explicit clearing run the lookup;
+   a failed explicit clear leaves both the saved zone and revision unchanged.
+   Implementation: application/apps/server/app/bootstrap/operator_inventory_commands.py:57-67;
+   application/apps/server/app/modules/portfolio/application/inventory_commands.py:24;
+   application/apps/server/app/modules/portfolio/application/service.py:791-794.
+   Regression: application/apps/server/app/modules/operator/tests/test_inventory_recovery.py
+   (unchanged normalized address, effective change, clearing, and rollback cases);
+   application/apps/web/tests/unfinished-forms.spec.ts,
+   "notes edits retain a saved zone for an unsupported property address".
+   Result: passed through real preparation and HTTP write boundaries.
+
+Validation summary (2026-10-26)
+- Operator inventory recovery and Portfolio inventory readiness: 43 passed.
+  Includes existing idempotency, rollback, schema validation and encrypted
+  backup/restore checks. No persistence schema changes; property preparation
+  reuses its existing source read.
+- Unfinished-form browser suite: 10 passed.
+- Hosted lost-return regressions: 2 passed (claim and takeover).
+- Shared recovery component suite: 6 passed.
+- npm run lint, npm run format:check, npm run typecheck: passed (192 source files).
+- Ruff check and format --check on all four changed Python files: passed.
+- Production build, contract reproducibility check and frontend packaging: passed.
+- Full test suite was not run; validation was focused on the four findings.

@@ -503,3 +503,123 @@ def test_all_registered_attempts_have_a_source_owned_receipt_namespace(ready):
     for table_name in compose_attempt_namespaces().values():
         assert table_name in LocalBase.metadata.tables
         assert "idempotency_key" in LocalBase.metadata.tables[table_name].c
+
+
+def test_unchanged_address_patch_retains_manual_zone_in_preflight_and_final_write(ready):
+    payload = valid_property_input(
+        city="Cold City", region="AK", postalCode="99928", timeZone="America/Juneau"
+    )
+    original, _, _ = run(ready, "portfolio.property.create", ("POST", "/api/properties"), payload)
+    changes = {
+        key: payload[key] for key in ("addressLine1", "city", "region", "postalCode", "countryCode")
+    }
+    changes.update(notes="Notes only", displayName="Renamed property")
+    # Normalization also makes whitespace-only lookup changes ineffective.
+    changes["city"] = " Cold City "
+    changes["countryCode"] = "us"
+    patched, _, _ = run(
+        ready,
+        "portfolio.property.patch",
+        ("PATCH", f"/api/properties/{original['id']}"),
+        {"expectedPropertyRevision": original["propertyRevision"], "changes": changes},
+        source=original["id"],
+    )
+    assert patched["timeZone"] == "America/Juneau"
+    assert patched["notes"] == "Notes only"
+    direct = ready.client.patch(
+        f"/api/properties/{original['id']}",
+        json={
+            "expectedPropertyRevision": patched["propertyRevision"],
+            "idempotencyKey": str(uuid4()),
+            **changes,
+            "notes": "Direct notes",
+        },
+    )
+    assert direct.status_code == 200, direct.text
+    assert direct.json()["timeZone"] == "America/Juneau"
+    validate_latest_schema(ready.case.workspace.paths.database)
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"city": "Portland", "region": "OR", "postalCode": "97205"},
+        {"city": "Portland", "region": "OR", "postalCode": "97205", "timeZone": None},
+    ],
+)
+def test_effective_address_change_resolves_zone_with_or_without_explicit_clear(ready, changes):
+    original, _, _ = run(
+        ready,
+        "portfolio.property.create",
+        ("POST", "/api/properties"),
+        valid_property_input(
+            city="Cold City", region="AK", postalCode="99928", timeZone="America/Juneau"
+        ),
+    )
+    result, _, _ = run(
+        ready,
+        "portfolio.property.patch",
+        ("PATCH", f"/api/properties/{original['id']}"),
+        {"expectedPropertyRevision": original["propertyRevision"], "changes": changes},
+        source=original["id"],
+    )
+    assert result["timeZone"] == "America/Los_Angeles"
+
+
+def test_explicit_zone_clear_looks_up_unchanged_address_and_invalid_clear_rolls_back(ready):
+    supported, _, _ = run(
+        ready,
+        "portfolio.property.create",
+        ("POST", "/api/properties"),
+        valid_property_input(timeZone="America/Juneau"),
+    )
+    cleared, _, _ = run(
+        ready,
+        "portfolio.property.patch",
+        ("PATCH", f"/api/properties/{supported['id']}"),
+        {"expectedPropertyRevision": supported["propertyRevision"], "changes": {"timeZone": None}},
+        source=supported["id"],
+    )
+    assert cleared["timeZone"] == "America/Los_Angeles"
+    unsupported, _, _ = run(
+        ready,
+        "portfolio.property.create",
+        ("POST", "/api/properties"),
+        valid_property_input(
+            city="Cold City", region="AK", postalCode="99928", timeZone="America/Juneau"
+        ),
+    )
+    record = str(uuid4())
+    payload = {
+        "expectedPropertyRevision": unsupported["propertyRevision"],
+        "changes": {"timeZone": None, "notes": "Must not persist"},
+    }
+    ready.ops.save_recovery(
+        record,
+        form_key="portfolio.property.patch",
+        schema_version=1,
+        payload=payload,
+        source_id=unsupported["id"],
+        source_kind="property",
+        base_source_revision=str(unsupported["propertyRevision"]),
+        expected_revision=0,
+        idempotency_key=str(uuid4()),
+    )
+    with pytest.raises(OperatorError, match="choose a time zone manually"):
+        ready.ops.prepare_attempt(
+            record, attempt_key=str(uuid4()), expected_revision=1, idempotency_key=str(uuid4())
+        )
+    assert ready.ops.recovery(record)["status"] == "active"
+    failed = ready.client.patch(
+        f"/api/properties/{unsupported['id']}",
+        json={
+            "expectedPropertyRevision": payload["expectedPropertyRevision"],
+            **payload["changes"],
+            "idempotencyKey": str(uuid4()),
+        },
+    )
+    assert failed.status_code == 400, failed.text
+    retained = ready.case.service.get_property(unsupported["id"])
+    assert retained["timeZone"] == "America/Juneau"
+    assert retained["propertyRevision"] == unsupported["propertyRevision"]
+    assert retained["notes"] is None

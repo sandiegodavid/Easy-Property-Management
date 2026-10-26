@@ -21,6 +21,14 @@ InventoryAction = Literal[
 INVENTORY_ACTIONS = frozenset(InventoryAction.__args__)
 
 
+def address_time_zone_changed(current, proposed):
+    """Compare normalized lookup inputs; address line 2 does not select a zone."""
+    return any(
+        current[field] != proposed[field]
+        for field in ("address_line_1", "city", "region", "postal_code", "country_code")
+    )
+
+
 def canonical_json(value: object) -> str:
     return dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 

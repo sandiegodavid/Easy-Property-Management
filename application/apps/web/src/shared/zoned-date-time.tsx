@@ -53,16 +53,24 @@ export function TimeZoneSelect({
   disabled = false,
   label = "Time zone",
   required = false,
+  emptyOption,
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
   label?: string;
   required?: boolean;
+  emptyOption?: string;
 }) {
   const id = useId();
   const zones = [
-    ...new Set([value, browserTimeZone(), "UTC", ...Intl.supportedValuesOf("timeZone")]),
+    ...new Set([
+      ...(emptyOption ? [""] : []),
+      value,
+      browserTimeZone(),
+      "UTC",
+      ...Intl.supportedValuesOf("timeZone"),
+    ]),
   ];
   return (
     <div>
@@ -80,7 +88,7 @@ export function TimeZoneSelect({
       >
         {zones.map((zone) => (
           <option key={zone} value={zone}>
-            {zone || "Choose a time zone…"}
+            {zone || emptyOption || "Choose a time zone…"}
           </option>
         ))}
       </select>

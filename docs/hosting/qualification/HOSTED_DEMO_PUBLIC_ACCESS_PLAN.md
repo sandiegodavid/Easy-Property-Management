@@ -18,10 +18,22 @@ four subsequent release identities or their acceptance, so reconcile the deploym
 before assigning source revisions, package hashes or test results to the running build.
 Current repository HEAD is not proof of the installed source revision.
 
-Both hosted units remain enabled. A lookup of the unsuffixed `cloudflared` unit returned
-`not-found`; discover the actual tunnel unit and verify its state rather than carrying
-forward the old boot-disabled claim. No restart, deployment or browser acceptance was
-performed during this review.
+Follow-up [release reconciliation](../evidence/HOSTED_DEMO_RELEASE_RECONCILIATION_2026-10-26.json)
+identified bundle-declared commits `369410f3` (01), `2d344902` (02) and `c96709f4` (03).
+All active bundle checksums passed; installed resource verification passed as `epm-a`,
+and all 539 installed application files matched the wheel, including seven frontend files.
+The current wheel SHA-256 is
+`366cb668df59ad9fc6f42ca9984cb72b9fba50a643a2d2e1eaaec5969c9be7cf`.
+This confirms installed artifact integrity, not a reproducible clean-source build or browser
+acceptance. The fourth reported subsequent deployment remains unidentified. No wizard-state
+directory exists in release 03; deployment acceptance and compatible rollback evidence need
+separate records. The current checkout's unfinished-form redesign postdates installed commit
+`c96709f4`; its new workflow must not be assumed available on the VM.
+
+Both hosted units remain enabled. The actual tunnel unit is `epm-cloudflared.service`:
+active, disabled at boot, zero automatic restarts. Both hosted units are active with zero
+automatic restarts; old `epm@a` and `epm@b` units remain masked. No restart, deployment or
+browser acceptance was performed during this review.
 
 New local pre-release archives exist for A and B at
 `/var/backups/epm-{a,b}/before-release-20261025-03.epm-backup`, dated October 25 local time
@@ -60,7 +72,7 @@ Exact synthetic Task searches returned only the owning workspace's Task. Each bo
 response reported its own workspace binding, and read-only manifests/source-row inspection
 confirmed distinct A/B UUIDs with one own and no counterpart Task row per workspace.
 
-**Next pending action:** qualify audit-list/recovery isolation, missing/foreign CSRF and an
+**October 24 next action (still open):** qualify audit-list/recovery isolation, missing/foreign CSRF and an
 additional uninvited identity. The synthetic Tasks and Files are retained as evidence.
 Create a new verified business recovery point after the next approved edits; the existing
 points predate these records.
@@ -144,7 +156,8 @@ byte-identical/unchanged for that historical comparison. These totals do not qua
 2. Exercise real shared-form claim/takeover, stale revisions, independent drafts,
    interrupted financial response/original-key recovery, expiry while editing or
    downloading, visible/hidden polling and property-local time transitions.
-3. Discover the current tunnel service and boot configuration. Record final-release
+3. Current tunnel discovery is complete: `epm-cloudflared.service`, active/boot-disabled.
+   Record final-release
    active-session restart/reboot and tunnel outage/recovery
    behavior; use approved interruption windows. Distinguish injected provider
    faults from physical/provider outages and retain limits for untested cases.

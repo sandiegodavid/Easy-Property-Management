@@ -677,3 +677,69 @@ for (const operation of ["save", "prepare"] as const) {
     });
   }
 }
+
+for (const takeover of [false, true]) {
+  test(`lost return response retains its operation after lease expiry and ${takeover ? "takeover" : "claim"}`, async ({
+    page,
+  }) => {
+    await signIn(page);
+    const title = page.getByLabel("Title (required)", { exact: true });
+    await title.fill(`Retained return ${takeover}`);
+    await page.route("**/api/tasks", (route) =>
+      route.request().method() === "POST" ? route.abort("failed") : route.continue(),
+    );
+    await page.getByRole("button", { name: "Create task", exact: true }).click();
+    await expect(
+      page.getByRole("region", { name: "Submission needs checking", exact: true }),
+    ).toBeVisible();
+    const returns: string[] = [];
+    let originalRevision = 0;
+    await page.route("**/api/operator/recovery/*/return", async (route) => {
+      returns.push(route.request().postData() ?? "");
+      if (returns.length > 1) return route.continue();
+      const committed = await route.fetch({
+        url: `https://127.0.0.1:18748${new URL(route.request().url()).pathname}`,
+        headers: { ...route.request().headers(), host: "demo.epm.test" },
+        maxRedirects: 0,
+      });
+      expect(committed.ok()).toBe(true);
+      originalRevision = ((await committed.json()) as { revision: number }).revision;
+      await route.abort("failed");
+    });
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Fix and continue", exact: true }).click();
+    await expect.poll(() => returns.length).toBe(1);
+    await expect(page.getByRole("button", { name: "Fix and continue", exact: true })).toBeEnabled();
+    await control(page.context(), "expire-draft-leases");
+    await page.clock.install();
+    await page.clock.fastForward(301_000);
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "Fix and continue", exact: true }).click();
+    const authority = page.getByRole("region", { name: "Saved form edit authority", exact: true });
+    await expect(
+      authority.getByRole("button", { name: "Continue editing", exact: true }),
+    ).toBeVisible();
+    const beforeRetry = returns.length;
+    await page.clock.setSystemTime(new Date());
+    if (takeover) page.once("dialog", (dialog) => dialog.accept());
+    await authority
+      .getByRole("button", {
+        name: takeover ? "Take over editing" : "Continue editing",
+        exact: true,
+      })
+      .click();
+    await expect(authority).toContainText("You can edit");
+    page.once("dialog", (dialog) => dialog.accept());
+    const retried = page.waitForResponse(
+      (response) => response.request().method() === "POST" && response.url().endsWith("/return"),
+    );
+    await page.getByRole("button", { name: "Fix and continue", exact: true }).click();
+    const result = await retried;
+    expect(result.ok()).toBe(true);
+    expect(((await result.json()) as { revision: number }).revision).toBe(originalRevision);
+    expect(returns).toHaveLength(beforeRetry + 1);
+    expect(new Set(returns).size).toBe(1);
+    await expect(title).toBeEnabled();
+    await expect(title).toHaveValue(`Retained return ${takeover}`);
+  });
+}

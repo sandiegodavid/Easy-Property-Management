@@ -154,3 +154,66 @@ test("fix and continue retains input and closes a never-delivered submission", a
   await page.getByRole("button", { name: "Create property", exact: true }).click();
   await expect(page.locator(".saved-item")).toContainText("Corrected property");
 });
+
+test("save and close resumes the latest acknowledged input across repeated visits", async ({
+  page,
+}) => {
+  await page.goto("/properties?workflow=portfolio.property.create");
+  const name = page.getByLabel("Display name (required)", { exact: true });
+  const street = page.getByLabel("Address line1 (required)", { exact: true });
+  await name.fill("First saved name");
+  await page.getByRole("button", { name: "Save and close", exact: true }).click();
+  await page
+    .locator(".recovery-form-card")
+    .filter({ hasText: "First saved name" })
+    .getByRole("link", { name: /Continue editing/ })
+    .click();
+  await expect(name).toHaveValue("First saved name");
+  await name.fill("Latest saved name");
+  await street.fill("42 Retained Street");
+  await page.getByRole("button", { name: "Save and close", exact: true }).click();
+  await page
+    .locator(".recovery-form-card")
+    .filter({ hasText: "Latest saved name" })
+    .getByRole("link", { name: /Continue editing/ })
+    .click();
+  await expect(name).toHaveValue("Latest saved name");
+  await expect(street).toHaveValue("42 Retained Street");
+});
+
+test("property overrides can be cleared, including after draft recovery", async ({ page }) => {
+  await propertyForm(page);
+  await page.getByLabel("Display name (required)", { exact: true }).fill("Clearable override");
+  const zone = page.getByLabel("Property time zone (optional override)");
+  await zone.selectOption("America/Juneau");
+  await zone.selectOption({ label: "Determine from address" });
+  await expect(zone).toHaveValue("");
+  await zone.selectOption("America/Juneau");
+  await page.getByRole("button", { name: "Save and close", exact: true }).click();
+  await page
+    .locator(".recovery-form-card")
+    .filter({ hasText: "Clearable override" })
+    .getByRole("link", { name: /Continue editing/ })
+    .click();
+  await expect(zone).toHaveValue("America/Juneau");
+  await zone.selectOption({ label: "Determine from address" });
+  await page.getByRole("button", { name: "Create property", exact: true }).click();
+  await expect(page.locator(".saved-item")).toContainText("America/Los_Angeles");
+});
+
+test("notes edits retain a saved zone for an unsupported property address", async ({ page }) => {
+  await propertyForm(page, "AK");
+  await page.getByLabel("Property time zone (optional override)").selectOption("America/Juneau");
+  const created = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === "/api/properties",
+  );
+  await page.getByRole("button", { name: "Create property", exact: true }).click();
+  const property = (await (await created).json()) as { id: string };
+  await page.goto(`/properties?workflow=portfolio.property.patch&target=${property.id}`);
+  await page.getByLabel("Notes", { exact: true }).fill("Updated notes with the same address");
+  await page.getByRole("button", { name: "Save property changes", exact: true }).click();
+  await expect(page.locator(".saved-item")).toContainText("America/Juneau");
+  await expect(page.locator(".saved-item")).toContainText("Updated notes with the same address");
+});

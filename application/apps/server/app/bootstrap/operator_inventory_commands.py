@@ -4,13 +4,18 @@ from dataclasses import asdict
 
 from app.modules.operator.application.ports import RecoveryBinding
 from app.modules.operator.domain.models import OperatorError
-from app.modules.portfolio.application.inventory_commands import InventoryCommand, fingerprint
+from app.modules.portfolio.application.inventory_commands import (
+    InventoryCommand,
+    fingerprint,
+    address_time_zone_changed,
+)
 from app.modules.portfolio.application.service import (
     AvailabilityCommand,
     OccupancyCommand,
     OwnershipInput,
     PartyCreateCommand,
     PropertyCreateCommand,
+    PropertyUpdateCommand,
     PortfolioError,
     SpaceCreateCommand,
 )
@@ -49,6 +54,17 @@ def inventory_preflight(connection, source, payload):
             **changes,
         }
     try:
+        if source is not None and "timeZone" not in changes:
+            proposed = PropertyUpdateCommand(
+                display_name="Time-zone preflight",
+                address_line_1=address["addressLine1"],
+                city=address["city"],
+                region=address.get("region"),
+                postal_code=address.get("postalCode"),
+                country_code=address["countryCode"],
+            )
+            if not address_time_zone_changed(state, asdict(proposed)):
+                return
         if address.get("timeZone"):
             ZoneInfo(address["timeZone"])
             return

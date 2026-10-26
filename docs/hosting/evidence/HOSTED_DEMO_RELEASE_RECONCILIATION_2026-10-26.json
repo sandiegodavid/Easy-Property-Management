@@ -1,0 +1,34 @@
+{
+  "reviewDate": "2026-10-26",
+  "scope": "Read-only VM inspection; no deployment, restart or authenticated browser acceptance",
+  "activeRelease": "release-20261025-03",
+  "declaredSourceCommit": "c96709f45bbd955bf7f93db1ee0834115ce80ab8",
+  "wheelSha256": "366cb668df59ad9fc6f42ca9984cb72b9fba50a643a2d2e1eaaec5969c9be7cf",
+  "constraintsSha256": "5185c6e3082cc246d6e110c1f1872064c47cd5fce2cf44dce400f84fdde773c6",
+  "schemaSha256": "d1c798449ae71e478686bb5ec93964ef073eee8288478bda49942b761d78510f",
+  "bundleChecksumVerification": "all listed files passed",
+  "installedResourceVerification": "passed as epm-a; version 0.1.0; schema revision 0001_initial_schema",
+  "installedAppFilesCompared": 539,
+  "installedAppMismatches": 0,
+  "frontendFilesCompared": 7,
+  "services": {
+    "a": {"active": true, "automaticRestarts": 0},
+    "b": {"active": true, "automaticRestarts": 0},
+    "oldLocalUnits": "both masked",
+    "tunnel": {"unit": "epm-cloudflared.service", "active": true, "bootEnabled": false, "automaticRestarts": 0}
+  },
+  "earlierInstalledReleases": [
+    {"release": "release-20261025-01", "declaredSourceCommit": "369410f3dd9fd32f71bc9aef115a0efa2a8bea82", "wheelSha256": "8b183dba7e1415d0c66ca7ad23030f2555dbae995e26f5e80bdc41912a746156"},
+    {"release": "release-20261025-02", "declaredSourceCommit": "2d34490240266a11b7980fcf591a8517f3b6be05", "wheelSha256": "8f1550f2320e948f93c087df1e8e5a598545cda8ce5d924e6d5bb9cdf07172a5"}
+  ],
+  "localPreReleaseBackupBytes": {"a": 497300, "b": 436418},
+  "syntheticAcceptanceTasks": "one expected Task found in each owning database using read-only queries",
+  "limits": [
+    "Source commit is bundle-declared; clean-source build reproducibility not established.",
+    "Three post-baseline installed directories identified; fourth reported subsequent deployment not identified.",
+    "No wizard-state directory exists in the active release; prior deployment acceptance/rollback records not established.",
+    "Local backup existence does not establish off-host publication, restore success or coverage of later writes.",
+    "Current checkout form-recovery redesign is newer than the deployed commit and is outside this installed baseline.",
+    "No new browser, reboot, outage, load or recovery acceptance claimed."
+  ]
+}
