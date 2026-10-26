@@ -1747,10 +1747,10 @@ test("appointment rescheduling and follow-up filtering preserve independent issu
   await page.getByLabel("Time zone", { exact: true }).selectOption("UTC");
   await page
     .getByLabel("Starts at (required)")
-    .fill(new Date(start.getTime() + 86400000).toISOString().slice(0, 19));
+    .fill(new Date(start.getTime() + 86400000).toISOString().slice(0, 16));
   await page
     .getByLabel("Ends at", { exact: true })
-    .fill(new Date(end.getTime() + 86400000).toISOString().slice(0, 19));
+    .fill(new Date(end.getTime() + 86400000).toISOString().slice(0, 16));
   await page
     .getByRole("textbox", { name: "Reschedule reason", exact: true })
     .fill("Owner requested tomorrow");
