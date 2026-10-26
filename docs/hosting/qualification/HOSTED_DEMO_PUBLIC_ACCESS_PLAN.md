@@ -1,13 +1,42 @@
 # Hosted demo qualification and remaining rollout plan
 
-Recorded state as of October 24, 2026. Requirements live in the
+Recorded state reviewed October 26, 2026. Requirements live in the
 [design](../design/HOSTED_DEMO_DESIGN.md); procedures in
 [deployment](../deployment/GOOGLE_CLOUD_DEMO_DEPLOYMENT.md) and
 [operations](../operations/HOSTED_DEMO_OPERATIONS.md); exact deployment artifacts in the
 [Cloudflare/VM record](../operations/CLOUDFLARE_OPERATIONS.md). This is the sole current
 checkpoint.
 
-## Resume checkpoint — October 24, 2026
+## Release reconciliation — October 26, 2026
+
+Read-only VM inspection found both hosted services active with effective interpreter
+`/opt/epm/releases/release-20261025-03/venv/bin/python`. The installed release directories
+include `signin-nav-20261024`, `release-20261025-01`, `release-20261025-02` and
+`release-20261025-03`; the first was already the October 24 qualification baseline.
+The operator reports four newer deployments. Directory inventory alone does not establish
+four subsequent release identities or their acceptance, so reconcile the deployment records
+before assigning source revisions, package hashes or test results to the running build.
+Current repository HEAD is not proof of the installed source revision.
+
+Both hosted units remain enabled. A lookup of the unsuffixed `cloudflared` unit returned
+`not-found`; discover the actual tunnel unit and verify its state rather than carrying
+forward the old boot-disabled claim. No restart, deployment or browser acceptance was
+performed during this review.
+
+New local pre-release archives exist for A and B at
+`/var/backups/epm-{a,b}/before-release-20261025-03.epm-backup`, dated October 25 local time
+(October 26 UTC), respectively 497300 and 436418 bytes. Their presence does not prove
+off-host publication, restore validation or coverage of subsequent writes. The October 24
+R2 restore proofs remain historical evidence.
+
+The remaining security, recovery, concurrency and performance gates still apply. Releases
+do not close them automatically. Retain the October 24 results below with their original
+scope; check affected boundaries against the installed build before treating them as current.
+In particular, repository changes since the baseline affect hosted sign-in renewal, workspace
+navigation and form/recovery behavior. Establish which changes are installed, then repeat
+the affected acceptance checks; do not infer deployment from a repository commit.
+
+## Historical acceptance checkpoint — October 24, 2026
 
 Both intended operators are enrolled/active and can use their assigned Home pages.
 Cloudflare's application policy tester returned all four intended A/B email decisions.
@@ -36,16 +65,17 @@ additional uninvited identity. The synthetic Tasks and Files are retained as evi
 Create a new verified business recovery point after the next approved edits; the existing
 points predate these records.
 
-Tunnel is active but disabled at boot. A/B hosted units are active/enabled; old local-mode
-units remain masked. General invitations and completion remain pending.
+At that checkpoint the tunnel was active but disabled at boot, A/B hosted units were
+active/enabled, and old local-mode units were masked. Current tunnel/old-unit state needs
+reconciliation as described above. General invitations and completion remain pending.
 
 ## Path to completion
 
 ```mermaid
 flowchart LR
     Done["Recorded passes<br/>Sign-in, policy and sessions<br/>Scoped recovery and storage"]
-    Current["Next<br/>Task persistence and<br/>foreign-record access"]
-    Workflows["Remaining<br/>Files, receipts, shared editing<br/>and session interruption"]
+    Current["Next<br/>Reconcile deployed build<br/>and affected evidence"]
+    Workflows["Remaining<br/>Audit/recovery isolation, shared editing<br/>and session interruption"]
     Platform["Remaining<br/>Final boot, outage, cache<br/>and measured workload"]
     Release["Final review<br/>Recovery age, funding,<br/>dates and invitations"]
     Done --> Current --> Workflows --> Platform --> Release
@@ -73,10 +103,11 @@ supporting reports.
 
 Storage and request-body handling passed 225 focused backend checks (one local Linux-only
 skip supplemented by real VM proofs). Earlier source run: 266 checks/one local Linux skip,
-twelve packaged HTTPS browser and ten local-shell regressions. Current installed release: 40
+twelve packaged HTTPS browser and ten local-shell regressions. October 24 navigation release: 40
 focused transport/composition tests and three-file Ruff checks passed; wheel differs from
 qualified baseline only in middleware and RECORD. Frontend/schema/dependencies are
-byte-identical/unchanged.
+byte-identical/unchanged for that historical comparison. These totals do not qualify
+`release-20261025-03`; its source/build and check records still need reconciliation.
 
 ## Deployed acceptance register
 
@@ -102,12 +133,19 @@ byte-identical/unchanged.
 
 ## Remaining gates, in execution order
 
+0. Reconcile the four reported deployments with installed release/build records and the
+   effective A/B commands. Record source/package/frontend/schema/dependency identities,
+   previous compatible release/data pair, and actual acceptance evidence. Recheck own Home,
+   sign-in renewal, device/all-device logout and Task/File/receipt/search/bootstrap isolation
+   wherever installed changes affect them. Include create/update and unfinished-form recovery
+   if the new workflow is installed. Preserve prior passes as dated evidence.
 1. Qualify audit-list/recovery boundaries, missing/foreign CSRF and an additional uninvited
    identity. Do not collect or publish raw PINs, tokens or session cookies.
 2. Exercise real shared-form claim/takeover, stale revisions, independent drafts,
    interrupted financial response/original-key recovery, expiry while editing or
    downloading, visible/hidden polling and property-local time transitions.
-3. Record final-release active-session restart/reboot and tunnel outage/recovery
+3. Discover the current tunnel service and boot configuration. Record final-release
+   active-session restart/reboot and tunnel outage/recovery
    behavior; use approved interruption windows. Distinguish injected provider
    faults from physical/provider outages and retain limits for untested cases.
 4. Measure authenticated private no-store/cache bypass, approved hashed-asset
@@ -118,7 +156,9 @@ byte-identical/unchanged.
    bytes/requests, p50/p95, CPU/memory/headroom/lock waits/restarts, maintenance
    interruption and other-workspace impact. No smaller-instance or cache redesign
    without evidence justifying it.
-6. Review current backup age/custody, actual gross costs/funding, intended expiry,
+6. Verify the newer A/B pre-release backups, publish/read back and restore a current
+   recovery point including the retained Tasks/Files and later edits. Review current
+   backup age/custody, actual gross costs/funding, intended expiry,
    rollback pair, contact and all gate evidence; qualify final tunnel boot enablement
    before general invitations. Keep failed paths closed instead of weakening auth.
 
