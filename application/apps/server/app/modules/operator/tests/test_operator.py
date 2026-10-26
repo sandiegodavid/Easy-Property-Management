@@ -563,26 +563,41 @@ def test_cursor_expiry_and_runtime_epoch(foundation):
 
 def test_recovery_capacity_and_query_budget(foundation):
     workspace, uow, service = foundation
+    title = "Call owner " + "x" * 180
     for _ in range(100):
-        save(service)
+        save(service, payload={"title": title, "notes": "Private unfinished input"})
     with pytest.raises(OperatorConflict):
         save(service)
     statements = []
+    projected_columns = set()
 
     def listener(*args):
         statements.append(args[2])
+        if args[1].description:
+            projected_columns.update(column[0] for column in args[1].description)
 
-    event.listen(uow.engine, "before_cursor_execute", listener)
-    first = service.recovery_page(limit=1)
-    one_count = len(statements)
-    statements.clear()
-    full = service.recovery_page(limit=100)
+    event.listen(uow.engine, "after_cursor_execute", listener)
+    try:
+        first = service.recovery_page(limit=1)
+        one_count = len(statements)
+        statements.clear()
+        full = service.recovery_page(limit=100)
+    finally:
+        event.remove(uow.engine, "after_cursor_execute", listener)
     assert first["matchingTotal"] == full["matchingTotal"] == 100
     assert len(statements) == one_count <= 4
     assert len(full["items"]) == 100
     assert all("payload" not in item for item in full["items"])
-    assert not any("payload_json" in sql for sql in statements)
-    event.remove(uow.engine, "before_cursor_execute", listener)
+    assert all(item["label"] == title[:160] for item in full["items"])
+    assert "Private unfinished input" not in json.dumps(full)
+    # SQL may extract bounded recognition labels without returning the full JSON.
+    assert "label" in projected_columns
+    assert not projected_columns & {
+        "payload_json",
+        "receipt_json",
+        "attempt_key",
+        "request_fingerprint",
+    }
     service.discard_recovery(
         full["items"][0]["id"], expected_revision=1, idempotency_key=str(uuid4())
     )
