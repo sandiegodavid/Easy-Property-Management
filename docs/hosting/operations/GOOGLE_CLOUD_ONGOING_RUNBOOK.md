@@ -68,18 +68,24 @@ git rev-parse HEAD > "$bundle/SOURCE_COMMIT.txt"
 ```
 
 Substitute the actual wheel filename if its version changes. Include only the
-matching source resources; exclude Python caches from the transfer:
+matching source resources; exclude Python caches and macOS metadata from the transfer:
 
 ```bash
 cd "$bundle"
-find . -type f ! -path '*/__pycache__/*' ! -name '*.pyc' ! -name SHA256SUMS \
+find . -type f ! -path '*/__pycache__/*' ! -name '*.pyc' \
+  ! -name '._*' ! -name '.DS_Store' ! -name SHA256SUMS \
   -exec shasum -a 256 {} \; > SHA256SUMS
-tar --exclude='__pycache__' --exclude='*.pyc' -czf "../$release.tar.gz" .
+COPYFILE_DISABLE=1 tar --disable-copyfile --exclude='._*' --exclude='.DS_Store' \
+  --exclude='__pycache__' --exclude='*.pyc' -czf "../$release.tar.gz" .
 shasum -a 256 "../$release.tar.gz"
 ```
 
 Keep the archive hash, source commit and test results in your release record.
 Never bundle workspace data, configuration, credentials or a Mac virtual environment.
+The Mac-specific `--disable-copyfile` prevents tar from generating AppleDouble
+`._` sidecars for extended attributes. A sidecar named `._0001_initial_schema.py`
+is binary metadata, but Alembic tries to load it as Python and reports
+`source code string cannot contain null bytes`.
 
 ## 2. Upload from the Mac
 
@@ -113,6 +119,22 @@ next="/opt/epm/releases/$release"
 sha256sum "$HOME/$release.tar.gz"
 ```
 
+Check that `previous` matches A's effective `ExecStart`, including any drop-ins;
+do not select the retained local-only `demo-001` environment. Confirm its CLI
+before using it for backup:
+
+```bash
+printf 'Previous release: %s\n' "$previous"
+"$previous/venv/bin/python" -m app --help
+```
+
+The commands must include `hosted-backup`, `hosted-admin` and
+`validate-hosted-config`. If they do not, stop and compare the interpreter with
+`systemctl show ... -p ExecStart` above. Check `PYTHONPATH`/`PYTHONHOME` and the
+imported `app` location if the interpreter matches but loads the wrong package;
+do not substitute the local `backup` command for hosted recovery. If A and B use
+different releases, record and use each instance's own previous interpreter.
+
 Compare the archive hash with the Mac's value before extraction. Use an unused
 release directory; stop on any failed command:
 
@@ -138,16 +160,71 @@ needs different dependencies or Python, qualify those deliberately using the
 do not discard constraints just to get pip to succeed. Keep code root-owned and
 service-readable; configuration and data retain their existing private permissions.
 
+### If installation verification reports null bytes
+
+Do not switch services. On the VM, inspect the new release's schema copies for
+macOS sidecars (the staging script reports the installed root, currently `venv/lib`):
+
+```bash
+sudo find "$next/schema-resources" "$next/venv/lib/database/sqlite-migrations" \
+  -type f -name '._*' -print
+```
+
+If those are the unwanted metadata files, remove only these sidecars and retry:
+
+```bash
+sudo find "$next/schema-resources" "$next/venv/lib/database/sqlite-migrations" \
+  -type f -name '._*' -delete
+sudo "$next/venv/bin/python" "$next/verify_installation.py"
+```
+
+This does not touch the running release, configuration or workspace. Record the
+removed paths in the release evidence. Rebuild a clean archive with a new release
+identifier using step 1 before treating it as a reproducible distributable; do not
+overwrite the original checksum record. If no sidecars exist or verification still
+fails, obtain the traceback to identify the damaged source file:
+
+```bash
+sudo "$next/venv/bin/python" -c \
+  'from app.platform.product_migrations import current_revision; print(current_revision())'
+```
+
+Do not strip null bytes from actual source files or bypass installation validation.
+
 ## 4. Protect and validate one instance
 
 Deploy **A first**, then repeat for B after acceptance. Ask the operator to save
-and reconcile work. Follow the existing [manual recovery-point procedure](HOSTED_DEMO_OPERATIONS.md#daily-manual-recovery-points)
-to disable access, stop the owning writer and make a verified encrypted backup.
-Keep A stopped during the following checks; do not start it with the old release
-between backup and switching. Preserve the backup and the previous release.
+and reconcile work. Using `previous` from step 3, explicitly disable access and
+stop the owning writer:
 
 ```bash
+sudo -u epm-a env TMPDIR=/var/lib/epm-a/volume/tmp \
+  "$previous/venv/bin/python" -m app --config /var/lib/epm-a/hosted-local.json \
+  hosted-admin /etc/epm/hosted-a.json disable
+sudo systemctl stop epm-hosted@a.service
 sudo systemctl is-active epm-hosted@a.service
+```
+
+The last command must report `inactive` (its nonzero exit is expected). If it
+reports `active` or `deactivating`, do not proceed to backup or validation.
+
+Create the pre-release backup using the existing service-private backup/staging
+directories and a new output filename. See the [manual recovery-point procedure](HOSTED_DEMO_OPERATIONS.md#daily-manual-recovery-points)
+for directory preparation, passphrase custody and verified off-host publication.
+
+```bash
+sudo -u epm-a env TMPDIR=/var/lib/epm-a/volume/tmp \
+  "$previous/venv/bin/python" -m app --config /var/lib/epm-a/hosted-local.json \
+  hosted-backup /etc/epm/hosted-a.json \
+  --output "/var/backups/epm-a/before-$release.epm-backup" \
+  --staging-directory /var/backups/epm-a/staging
+```
+
+Enter the backup passphrase at the prompt. Stop if backup fails; do not overwrite
+an existing archive on retry. Keep A stopped during the following checks and
+through switching. Preserve the successful backup and the previous release.
+
+```bash
 sudo -u epm-a env TMPDIR=/var/lib/epm-a/volume/tmp \
   "$next/venv/bin/python" -m app --config /var/lib/epm-a/hosted-local.json workspace-status
 sudo -u epm-a env TMPDIR=/var/lib/epm-a/volume/tmp \
@@ -155,8 +232,7 @@ sudo -u epm-a env TMPDIR=/var/lib/epm-a/volume/tmp \
   validate-hosted-config /etc/epm/hosted-a.json
 ```
 
-The first command must report `inactive` (its nonzero exit is expected). If workspace
-or hosted validation fails, stop. This greenfield project has no compatibility
+If workspace or hosted validation fails, stop. This greenfield project has no compatibility
 migration procedure: do not initialize, rewrite or reset existing records to make
 a new release fit. Use the separate reviewed restore/reset procedure if needed.
 
