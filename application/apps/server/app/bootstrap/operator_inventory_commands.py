@@ -20,6 +20,50 @@ from app.modules.portfolio.infrastructure.inventory_recovery_reader import (
 from app.platform.command_recovery import CommandRecoveryReader
 from app.modules.parties.application.service import ContactMethodCommand, PartyValidationError
 from app.modules.portfolio.domain.models import ownership_share_basis_points
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from app.modules.portfolio.infrastructure.time_zone import BundledAddressTimeZoneResolver
+
+
+def inventory_preflight(connection, source, payload):
+    """Resolve address evidence without creating or changing a property."""
+    if source is None:
+        address = payload
+    else:
+        changes = payload.get("changes", {})
+        if not set(changes) & {
+            "addressLine1",
+            "city",
+            "region",
+            "postalCode",
+            "countryCode",
+            "timeZone",
+        }:
+            return
+        state = SQLiteInventoryRecoveryReader().state(connection, source)
+        address = {
+            "addressLine1": state["address_line_1"],
+            "city": state["city"],
+            "region": state["region"],
+            "postalCode": state["postal_code"],
+            "countryCode": state["country_code"],
+            **changes,
+        }
+    try:
+        if address.get("timeZone"):
+            ZoneInfo(address["timeZone"])
+            return
+        BundledAddressTimeZoneResolver().resolve(
+            address_line_1=address["addressLine1"],
+            city=address["city"],
+            region=address.get("region"),
+            postal_code=address.get("postalCode"),
+            country_code=address["countryCode"],
+        )
+    except (PortfolioError, ZoneInfoNotFoundError, ValueError) as error:
+        raise OperatorError(
+            "We couldn't determine this property's time zone. Check the address or choose "
+            "a time zone manually; the bundled lookup has limited coverage."
+        ) from error
 
 
 def owners(items):
@@ -92,6 +136,7 @@ def property_command(payload):
         tuple(initial_space(item) for item in payload["spaces"])
         if payload.get("spaces") is not None
         else None,
+        time_zone=payload.get("timeZone"),
     )
 
 
@@ -171,6 +216,9 @@ def compose_inventory_forms():
                 action, source, payload, key
             ),
             "property",
+            preflight=inventory_preflight
+            if action in {"create_property", "patch_property"}
+            else None,
         )
         for form, action in actions.items()
     }

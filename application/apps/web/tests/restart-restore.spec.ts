@@ -198,7 +198,7 @@ test("lost response survives a process restart and encrypted restore with the or
     // Leave the saved editor through an explicit full load, preserving its durable form.
     await page.goto(`${origin}/tasks?workflow=task.start&target=${task.id}`);
     await page.getByRole("button", { name: "Save start task", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Check submission" })).toBeVisible();
     const attempts = (await (
       await api.get("/api/operator/recovery?limit=50")
     ).json()) as Schema["RecoveryPage"];
@@ -220,7 +220,7 @@ test("lost response survives a process restart and encrypted restore with the or
     await page.goto(
       `${origin}/tasks?workflow=task.start&target=${task.id}&resume=${interrupted.id}`,
     );
-    await page.getByRole("button", { name: "Check original result" }).click();
+    await page.getByRole("button", { name: "Check submission" }).click();
     await expect(
       page.getByRole("heading", { name: "Start task — complete", exact: true }),
     ).toBeVisible();

@@ -90,7 +90,7 @@ def validate_task_schema(connection):
     triggers = dict(
         connection.execute(
             text(
-                "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='task_waiting_operations'"
+                "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name NOT LIKE 'epm_closed_%' AND tbl_name='task_waiting_operations'"
             )
         ).all()
     )
@@ -104,7 +104,7 @@ def validate_task_schema(connection):
     creation_triggers = dict(
         connection.execute(
             text(
-                "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='task_creation_operations'"
+                "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name NOT LIKE 'epm_closed_%' AND tbl_name='task_creation_operations'"
             )
         ).all()
     )
@@ -118,7 +118,7 @@ def validate_task_schema(connection):
     mutation_triggers = dict(
         connection.execute(
             text(
-                "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='task_mutation_operations'"
+                "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name NOT LIKE 'epm_closed_%' AND tbl_name='task_mutation_operations'"
             )
         ).all()
     )

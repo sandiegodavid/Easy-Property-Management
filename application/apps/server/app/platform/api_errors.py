@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from app.platform.attempt_fences import ClosedCommandError
 
 from app.platform.validation_errors import is_size_limit_violation
 
@@ -40,6 +41,18 @@ def workspace_unavailable(message: str) -> HTTPException:
 
 def register_api_error_handlers(app: FastAPI) -> None:
     """Map schema bounds to 413 and all other request schema failures to 422."""
+
+    @app.exception_handler(ClosedCommandError)
+    async def closed_command(_: Request, error: ClosedCommandError) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": {
+                    "code": "submission_closed",
+                    "message": str(error),
+                }
+            },
+        )
 
     @app.exception_handler(RequestValidationError)
     async def request_validation_error(_: Request, error: RequestValidationError) -> JSONResponse:

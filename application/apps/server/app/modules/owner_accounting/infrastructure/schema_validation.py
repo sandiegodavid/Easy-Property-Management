@@ -93,7 +93,7 @@ def validate_owner_accounting_schema(connection):
     triggers = {
         name: _normalise(sql)
         for name, sql in connection.exec_driver_sql(
-            "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name='owner_rent_report_operations'"
+            "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name NOT LIKE 'epm_closed_%' AND tbl_name='owner_rent_report_operations'"
         )
     }
     expected = {

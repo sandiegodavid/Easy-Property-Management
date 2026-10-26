@@ -278,17 +278,17 @@ test("shared form requires explicit takeover and rejects stale saves without era
     await other.goto(`/tasks?workflow=task.create&resume=${record.id}`);
     const title = other.getByLabel("Title (required)", { exact: true });
     await expect(title).toHaveValue("First editor saved input");
-    expect(claims).toBe(0);
-    await other.getByRole("button", { name: "Claim editing", exact: true }).click();
+    await expect.poll(() => claims).toBe(1);
+    await expect(title).toBeDisabled();
     await expect(other.getByRole("region", { name: "Saved form edit authority" })).toContainText(
       "no longer owns",
     );
-    await title.fill("Second editor preserved input");
     other.once("dialog", (dialog) => dialog.accept());
     await other.getByRole("button", { name: "Take over editing", exact: true }).click();
     await expect(other.getByRole("region", { name: "Saved form edit authority" })).toContainText(
-      "holds a temporary",
+      "You can edit",
     );
+    await title.fill("Second editor preserved input");
     const updated = other.waitForResponse(
       (response) =>
         response.request().method() === "PUT" &&
@@ -314,16 +314,14 @@ test("shared form requires explicit takeover and rejects stale saves without era
       record.id,
     );
     expect(current.payload.title).toBe("Second editor preserved input");
-    await page
-      .getByRole("button", { name: "Review latest saved form (keep my input)", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Review saved changes", exact: true }).click();
     await expect(page.getByLabel("Title (required)", { exact: true })).toHaveValue(
       "Keep stale editor input",
     );
     page.once("dialog", (dialog) => dialog.accept());
     await page.getByRole("button", { name: "Take over editing", exact: true }).click();
     await expect(page.getByRole("region", { name: "Saved form edit authority" })).toContainText(
-      "holds a temporary",
+      "You can edit",
     );
     const reviewed = page.waitForResponse(
       (response) =>
@@ -531,11 +529,9 @@ test("lost financial response reconciles its original expense without a second d
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Record paid expense", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Check original result", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check submission", exact: true })).toBeVisible();
   expect(requests).toHaveLength(1);
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.getByRole("region", { name: "Expense saved", exact: true })).toContainText(
     "120.01",
   );
@@ -628,7 +624,7 @@ for (const operation of ["save", "prepare"] as const) {
       } else {
         await page.getByRole("button", { name: "Create task", exact: true }).click();
         await expect(
-          page.getByRole("button", { name: "Check original result", exact: true }),
+          page.getByRole("button", { name: "Check submission", exact: true }),
         ).toBeVisible();
       }
       if (expiry === "session") {
@@ -645,7 +641,7 @@ for (const operation of ["save", "prepare"] as const) {
         await page.clock.fastForward(301_000);
         await page
           .getByRole("button", {
-            name: operation === "save" ? "Retry saving unfinished form" : "Check original result",
+            name: operation === "save" ? "Retry saving unfinished form" : "Check submission",
             exact: true,
           })
           .click();
@@ -655,17 +651,15 @@ for (const operation of ["save", "prepare"] as const) {
       );
       if (expiry === "lease") await page.clock.setSystemTime(new Date());
       if (operation === "save")
-        await page
-          .getByRole("button", { name: "Review latest saved form (keep my input)", exact: true })
-          .click();
+        await page.getByRole("button", { name: "Review saved changes", exact: true }).click();
       page.once("dialog", (dialog) => dialog.accept());
       await page.getByRole("button", { name: "Take over editing", exact: true }).click();
       await expect(page.getByRole("region", { name: "Saved form edit authority" })).toContainText(
-        "holds a temporary",
+        "You can edit",
       );
       await page
         .getByRole("button", {
-          name: operation === "save" ? "Retry saving unfinished form" : "Check original result",
+          name: operation === "save" ? "Retry saving unfinished form" : "Check submission",
           exact: true,
         })
         .click();

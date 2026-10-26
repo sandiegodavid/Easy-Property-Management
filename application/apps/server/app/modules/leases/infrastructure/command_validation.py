@@ -122,7 +122,7 @@ def _schema(connection):
         raise ValueError("Lease command checks differ.")
     triggers = dict(
         connection.exec_driver_sql(
-            "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='lease_command_operations'"
+            "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name NOT LIKE 'epm_closed_%' AND tbl_name='lease_command_operations'"
         ).all()
     )
     if {key: _normalise(value) for key, value in triggers.items()} != {

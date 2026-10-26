@@ -141,7 +141,7 @@ def validate_inspection_commands(connection):
     triggers = dict(
         connection.execute(
             text(
-                "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name='inspection_command_operations'"
+                "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name NOT LIKE 'epm_closed_%' AND tbl_name='inspection_command_operations'"
             )
         ).all()
     )

@@ -334,9 +334,7 @@ test("interrupted edits do not confirm until recovery and retain the immutable s
     await route.abort("failed");
   });
   await submit(page);
-  await expect(
-    page.getByRole("button", { name: "Check original result", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check submission", exact: true })).toBeVisible();
   await expect(page.locator(".saved-item")).toHaveCount(0);
   const later = await request.patch(`/api/parties/${party.id}`, {
     data: { displayName: "Later name", expectedRevision: 2, idempotencyKey: crypto.randomUUID() },
@@ -352,7 +350,7 @@ test("interrupted edits do not confirm until recovery and retain the immutable s
         })
       : route.continue(),
   );
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   const result = page.locator(".saved-item");
   await expect(result).toContainText("was saved, but its details could not be loaded");
   await expect(page.locator("form")).toHaveCount(0);

@@ -114,7 +114,7 @@ test("manual source admission resumes a saved draft and reconciles a lost respon
   await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   await page.goto("/settings/recovery");
   await expect(page.getByText("Private source testimony", { exact: true })).toHaveCount(0);
-  await page.getByRole("link", { name: "Resume: Retain source", exact: true }).click();
+  await page.getByRole("link", { name: "Continue editing: Retain source", exact: true }).click();
   await expect(page.getByLabel("Body (required)")).toHaveValue("Private source testimony");
   await expect(page.getByLabel("Origin system (required)", { exact: true })).toHaveValue(
     originSystem,
@@ -128,10 +128,10 @@ test("manual source admission resumes a saved draft and reconciles a lost respon
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Retain source", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check submission" })).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume: Retain source", exact: true }).click();
-  await page.getByRole("button", { name: "Check original result" }).click();
+  await page.getByRole("link", { name: "View submission: Retain source", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission" }).click();
   await expect(page.locator(".saved-item")).toBeVisible();
   expect(writes).toBe(1);
   await page.getByRole("link", { name: "Back to retained source", exact: true }).click();
@@ -171,7 +171,9 @@ test("multipart import preserves ordered roles and rejects changed bytes after f
   await page.getByRole("button", { name: "Save unfinished form" }).click();
   await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume: Import source evidence", exact: true }).click();
+  await page
+    .getByRole("link", { name: "Continue editing: Import source evidence", exact: true })
+    .click();
   await page
     .getByLabel("Source attachment files", { exact: true })
     .setInputFiles([{ ...files[0], buffer: Buffer.from("Changed source") }, files[1]]);

@@ -24,6 +24,10 @@ def _drop_triggers(definitions: dict[str, str]) -> None:
 
 
 def upgrade() -> None:
+    from app.platform.attempt_fences import CommandAttemptFenceModel, FENCE_TRIGGERS
+
+    CommandAttemptFenceModel.__table__.create(op.get_bind())
+    _create_triggers(FENCE_TRIGGERS)
     from app.modules.parties.infrastructure.sqlalchemy_models import (
         PartyCommandOperationModel,
         PARTY_COMMAND_TRIGGERS,
@@ -953,6 +957,10 @@ def upgrade() -> None:
         ],
     )
 
+    from app.platform.attempt_fences import install_receipt_fences
+
+    install_receipt_fences(op.get_bind())
+
 
 def downgrade() -> None:
     from app.modules.ai_governance.infrastructure.sqlalchemy_models import EXTERNAL_TRIGGERS
@@ -1119,3 +1127,5 @@ def downgrade() -> None:
     op.execute("DROP TRIGGER audit_events_no_update")
     op.drop_table("audit_events")
     op.drop_table("workspace_metadata")
+
+    op.drop_table("command_attempt_fences")

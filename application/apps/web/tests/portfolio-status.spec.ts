@@ -144,6 +144,8 @@ test("ownership changes use named owner search and property-local date help", as
   await expect(page.locator(".command-form-actions button")).toHaveText([
     "Save ownership change",
     "Save unfinished form",
+    "Save and close",
+    "Discard…",
   ]);
   await page.getByRole("button", { name: "Add owner", exact: true }).click();
   await expect(
@@ -245,12 +247,10 @@ test("ownership confirmation waits for a known result after an interrupted save"
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Save ownership change", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Check original result", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check submission", exact: true })).toBeVisible();
   await expect(page.locator(".ownership-command form")).toHaveCount(1);
   await expect(page.getByRole("region", { name: "Ownership updated", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.getByRole("region", { name: "Ownership updated", exact: true })).toBeVisible();
   await expect(page.locator(".ownership-command form")).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Ownership updated", exact: true })).toContainText(
@@ -637,6 +637,8 @@ test("property edit groups and prefills details without changing ownership or re
     await expect(editor.locator(".command-form-actions").getByRole("button")).toHaveText([
       "Save property changes",
       "Save unfinished form",
+      "Save and close",
+      "Discard…",
     ]);
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
@@ -705,10 +707,10 @@ test("interrupted property edit returns to setup only after reconciliation", asy
   });
   await page.getByRole("button", { name: "Save property changes", exact: true }).click();
   await expect(
-    page.getByText("The outcome is unresolved. Check the original receipt before continuing."),
+    page.getByRole("region", { name: "Submission needs checking", exact: true }),
   ).toBeVisible();
   await expect(page).toHaveURL(/workflow=portfolio.property.patch/);
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await page.getByRole("link", { name: "Back to property", exact: true }).click();
   await expect(page).toHaveURL(`/properties/${property.id}/setup`);
   expect(writes).toBe(1);
@@ -1051,11 +1053,9 @@ test("interrupted property creation opens its original property only after recon
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Create property", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Check original result", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check submission", exact: true })).toBeVisible();
   await expect(page).toHaveURL(/workflow=portfolio.property.create/);
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await page.getByRole("link", { name: "Back to property", exact: true }).click();
   await expect(page).toHaveURL(`/properties/${createdId}/overview`);
   expect(writes).toBe(1);
@@ -1598,11 +1598,9 @@ test("stale availability retains edits and an interrupted write reconciles its o
     } else await route.continue();
   });
   await page.getByRole("button", { name: "Save change leasing status", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Check original result", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check submission", exact: true })).toBeVisible();
   const committed = await status(request, space.id);
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect((await status(request, space.id)).revision).toBe(committed.revision);
   expect(writes).toBe(1);

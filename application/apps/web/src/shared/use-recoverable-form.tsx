@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useForm, type DefaultValues, type FieldValues } from "react-hook-form";
-import { useBlocker } from "react-router-dom";
+import { useBlocker, useNavigate } from "react-router-dom";
 import { useWorkspace } from "../app/workspace-gate";
 import { RecoveryController, type FormIdentity, type Recovery } from "./recovery";
 import { hostedMode } from "../app/hosted-session-state";
@@ -39,7 +39,12 @@ export function useRecoverableForm<T extends FieldValues>({
   }, [controller]);
   const navigationBlocked =
     !controller.isPristine && (state.draft !== "saved" || state.command === "submitting");
-  const blocker = useBlocker(navigationBlocked);
+  const blocker = useBlocker(() => {
+    const current = controller.getSnapshot();
+    return (
+      !controller.isPristine && (current.draft !== "saved" || current.command === "submitting")
+    );
+  });
   useEffect(() => {
     return form.subscribe({
       formState: { values: true },
@@ -123,10 +128,26 @@ function BlockedNavigation({
 export function RecoveryNavigation(props: {
   controller: RecoveryController;
   blocker: ReturnType<typeof useBlocker>;
+  showActions?: boolean;
 }) {
   const { scope } = useWorkspace();
+  const navigate = useNavigate();
   const state = useSyncExternalStore(props.controller.subscribe, props.controller.getSnapshot);
   const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string>();
+  async function perform(operation: () => Promise<unknown>) {
+    setBusy(true);
+    setActionError(undefined);
+    try {
+      await operation();
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Could not complete this action.";
+      if (props.controller.getSnapshot().error !== message) setActionError(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const claim = async (takeover: boolean) => {
     setBusy(true);
     try {
@@ -139,6 +160,42 @@ export function RecoveryNavigation(props: {
   };
   return (
     <>
+      {props.showActions !== false && !["committed", "submitting"].includes(state.command) && (
+        <div className="result-card-actions">
+          {state.command !== "outcome_unknown" && (
+            <button
+              type="button"
+              disabled={busy || !scope.canWrite}
+              onClick={() => {
+                void perform(async () => {
+                  await props.controller.flush();
+                  await navigate("/settings/recovery");
+                });
+              }}
+            >
+              Save and close
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={busy || !scope.canWrite}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  "Discard this unfinished form? Existing official records will not be deleted.",
+                )
+              )
+                return;
+              void perform(async () => {
+                await props.controller.discard();
+                await navigate("/settings/recovery");
+              });
+            }}
+          >
+            Discard…
+          </button>
+        </div>
+      )}
       {hostedMode() &&
         scope.canWrite &&
         (state.record || state.editAuthority === "required") &&
@@ -146,12 +203,14 @@ export function RecoveryNavigation(props: {
           <section aria-label="Saved form edit authority">
             <p>
               {state.editAuthority === "held"
-                ? "This editor holds a temporary edit claim."
-                : "Claim editing before changing this shared saved form. Opening it does not take over another editor."}
+                ? "You can edit this saved form here."
+                : "Editing is unavailable here. Another tab or device may be using this form. Your input is retained."}
             </p>
-            <button type="button" disabled={busy} onClick={() => void claim(false)}>
-              Claim editing
-            </button>
+            {state.editAuthority !== "held" && (
+              <button type="button" disabled={busy} onClick={() => void claim(false)}>
+                Continue editing
+              </button>
+            )}
             {state.record?.status === "active" && (
               <button
                 type="button"
@@ -164,27 +223,30 @@ export function RecoveryNavigation(props: {
                     .finally(() => setBusy(false));
                 }}
               >
-                Review latest saved form (keep my input)
+                Review saved changes
               </button>
             )}
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Take over this saved form? The previous editor's next save will be rejected; their input will not be erased.",
+            {state.editAuthority !== "held" && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "Take over this saved form? The previous editor's next save will be rejected; their input will not be erased.",
+                    )
                   )
-                )
-                  void claim(true);
-              }}
-            >
-              Take over editing
-            </button>
+                    void claim(true);
+                }}
+              >
+                Take over editing
+              </button>
+            )}
             {state.error && <p role="alert">{state.error}</p>}
           </section>
         )}
-      <BlockedNavigation {...props} />
+      {actionError && <p role="alert">{actionError}</p>}
+      <BlockedNavigation controller={props.controller} blocker={props.blocker} />
     </>
   );
 }

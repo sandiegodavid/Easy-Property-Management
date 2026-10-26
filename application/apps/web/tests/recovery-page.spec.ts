@@ -17,7 +17,7 @@ test("packaged recovery route loads bounded metadata with reselection guidance",
           schemaVersion: 1,
           expectedRevision: 0,
           idempotencyKey: crypto.randomUUID(),
-          payload: { title: `Private draft ${index}` },
+          payload: { title: `Saved task ${index}` },
         }),
       });
       if (!result.ok) throw new Error("Fixture save failed.");
@@ -34,10 +34,10 @@ test("packaged recovery route loads bounded metadata with reselection guidance",
   await expect(page.getByText(/Files and credentials must be selected again/)).toBeVisible();
   for (const id of ids) {
     const resume = page.locator(`a[href*="resume=${id}"]`);
-    await expect(resume).toHaveText("Resume: Create task");
+    await expect(resume).toHaveText("Continue editing: Create task");
     await expect(resume).toHaveAttribute("href", `/tasks?workflow=task.create&resume=${id}`);
   }
-  await expect(page.getByText(/Private draft/)).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /Saved task/ })).toHaveCount(2);
   expect(reads).toHaveLength(1);
   expect(reads[0]).toContain("limit=50");
   const card = page
@@ -81,10 +81,9 @@ test("information review drafts have exactly one resume destination and can be d
   await expect(page.getByText("1 form", { exact: true })).toBeVisible();
   const card = page.locator(".recovery-form-card");
   await expect(card.getByRole("link")).toHaveCount(1);
-  await expect(card.getByRole("link", { name: "Resume: Information review" })).toHaveAttribute(
-    "href",
-    `/coverage/reviews/${id}`,
-  );
+  await expect(
+    card.getByRole("link", { name: "Continue editing: Information review" }),
+  ).toHaveAttribute("href", `/coverage/reviews/${id}`);
   await expect(card).not.toContainText("Resume from the owning workflow");
   await expect(card.getByRole("button", { name: "Discard", exact: true })).toBeVisible();
 });
@@ -147,7 +146,10 @@ test.describe("unfinished form presentation", () => {
         await expect(row).not.toContainText("maintenance.issue.create");
         await expect(row).not.toContainText(instant);
         const resume = row.getByRole("link", {
-          name: "Resume: Report maintenance issue",
+          name:
+            status === "outcome_unknown"
+              ? "View submission: Report maintenance issue"
+              : "Continue editing: Report maintenance issue",
           exact: true,
         });
         if (status === "active" || status === "outcome_unknown") {

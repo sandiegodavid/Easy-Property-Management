@@ -313,7 +313,9 @@ class OperatorService:
             selected = rows[:limit]
             # Lists contain metadata only; source revalidation occurs on load.
             return {
-                "items": [recovery_metadata(row) for row in selected],
+                "items": [
+                    {**recovery_metadata(row), "label": row.get("label")} for row in selected
+                ],
                 "matchingTotal": total,
                 "nextCursor": ReadCursor(
                     "recovery",
@@ -338,6 +340,65 @@ class OperatorService:
         return self._recovery_transition(
             record_id, "reconciled", expected_revision, idempotency_key
         )
+
+    def return_recovery(self, record_id, *, expected_revision, idempotency_key):
+        """Close an uncommitted identity before returning its retained input to editing."""
+        self.ready(True)
+        identifier(record_id)
+        concurrency(expected_revision, idempotency_key)
+        instant = self.instant()
+
+        def write(tx):
+            current = require_recovery(tx, record_id)
+            request = {
+                "kind": "recovery_returned",
+                "id": record_id,
+                "expectedRevision": expected_revision,
+            }
+            # Use the original recorded request for idempotent retries after state advanced.
+            existing = tx.operation(idempotency_key)
+            if existing is not None:
+                original = json.loads(existing["request_json"])
+                if any(original.get(key) != value for key, value in request.items()):
+                    raise OperatorConflict("This operation key belongs to another request.")
+                return json.loads(existing["result_json"])
+            check_revision(current["revision"], expected_revision)
+            if current["status"] != "outcome_unknown":
+                raise OperatorConflict("Only an unresolved submission can return to editing.")
+            receipt = tx.resolve_attempt(current)
+            if receipt is not None:
+                raise OperatorConflict(
+                    "This submission succeeded. Check submission to open its result."
+                )
+            request.update(
+                attemptKey=current["attempt_key"], requestFingerprint=current["request_fingerprint"]
+            )
+            tx.close_attempt(current, instant)
+            value = {
+                **current,
+                "revision": expected_revision + 1,
+                "status": "active",
+                "attempt_key": None,
+                "request_fingerprint": None,
+                "receipt_json": None,
+                "saved_at": instant.isoformat(),
+                "expires_at": (instant + timedelta(days=30)).isoformat(),
+            }
+            tx.save_recovery(value)
+            return record_operation(
+                tx,
+                idempotency_key,
+                request,
+                "operator_recovery",
+                record_id,
+                "saved",
+                expected_revision,
+                recovery_view(value, instant, tx.validate_recovery(value)),
+                recovery_metadata(current),
+                instant,
+            )
+
+        return self._write_recovery(record_id, write)
 
     def prepare_attempt(
         self,

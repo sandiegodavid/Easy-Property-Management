@@ -204,10 +204,8 @@ test("Lease documents resume with original bytes and reconcile one committed upl
     } else await route.continue();
   });
   await page.getByRole("button", { name: "Attach supporting evidence", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Check original result", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Check submission", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(writes).toBe(1);
   const response = await request.get(`/api/leases/${f.lease.id}`);
@@ -645,7 +643,10 @@ test("draft edits resume and execution uses independent Lease and Space revision
   await page.getByRole("button", { name: "Save unfinished form", exact: true }).click();
   await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume: Edit lease draft", exact: true }).last().click();
+  await page
+    .getByRole("link", { name: "Continue editing: Edit lease draft", exact: true })
+    .last()
+    .click();
   await expect(page.getByRole("textbox", { name: "Notes", exact: true })).toHaveValue(
     "Saved lease draft",
   );
@@ -817,8 +818,10 @@ test("removed participants resume original-result recovery without another remov
   await page.getByRole("button", { name: "Save remove lease participant", exact: true }).click();
   await expect(page.getByText("Submission needs checking", { exact: true })).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume: Remove lease participant", exact: true }).click();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page
+    .getByRole("link", { name: "View submission: Remove lease participant", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   const completion = page.locator(".saved-item");
   await expect(
     completion.getByRole("heading", { name: "Remove lease participant — complete", exact: true }),
@@ -1209,7 +1212,9 @@ test("inspection evidence resumes with original bytes and reconciles a lost resp
   await page.getByRole("button", { name: "Save unfinished form" }).click();
   await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume: Attach inspection evidence", exact: true }).click();
+  await page
+    .getByRole("link", { name: "Continue editing: Attach inspection evidence", exact: true })
+    .click();
   await page.getByLabel("Evidence file (required)").setInputFiles({
     name: "counter.txt",
     mimeType: "text/plain",
@@ -1228,8 +1233,8 @@ test("inspection evidence resumes with original bytes and reconciles a lost resp
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Attach inspection evidence", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
-  await page.getByRole("button", { name: "Check original result" }).click();
+  await expect(page.getByRole("button", { name: "Check submission" })).toBeVisible();
+  await page.getByRole("button", { name: "Check submission" }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(calls).toBe(1);
   const retained = await request.get(`/api/condition-observations/${observation.id}/report`);

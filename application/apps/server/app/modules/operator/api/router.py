@@ -140,6 +140,7 @@ class AttemptInput(MutationInput):
 
 
 class RecoveryMetadata(Contract):
+    label: str | None = None
     id: UUID
     formKey: str
     schemaVersion: StrictInt
@@ -298,6 +299,20 @@ def build_router(
 
 
 def register_recovery(router, service):
+    @router.post(
+        "/recovery/{record_id}/return",
+        response_model=RecoveryResponse,
+        operation_id="returnOperatorRecoveryToEditing",
+    )
+    def return_to_editing(record_id: UUID, data: MutationInput):
+        return invoke(
+            lambda: service.return_recovery(
+                str(record_id),
+                expected_revision=data.expectedRevision,
+                idempotency_key=str(data.idempotencyKey),
+            )
+        )
+
     @router.get("/changes", response_model=ChangeResponse, operation_id="getOperatorChanges")
     def changes():
         return invoke(service.changes)

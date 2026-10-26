@@ -400,6 +400,14 @@ class SQLiteOperatorTransaction:
                     t.c.source_kind,
                     t.c.source_id,
                     t.c.base_source_revision,
+                    func.substr(
+                        func.coalesce(
+                            func.json_extract(t.c.payload_json, "$.displayName"),
+                            func.json_extract(t.c.payload_json, "$.title"),
+                        ),
+                        1,
+                        160,
+                    ).label("label"),
                 )
                 .where(*predicates)
                 .order_by(t.c.saved_at.desc(), t.c.id.desc())
@@ -428,6 +436,30 @@ class SQLiteOperatorTransaction:
 
     def attempt_fingerprint(self, value, key):
         return self.references.attempt_fingerprint(value, key, connection=self.connection)
+
+    def close_attempt(self, value, instant):
+        from app.platform.attempt_fences import CommandAttemptFenceModel
+        from app.modules.operator.domain.models import OperatorConflict
+        from uuid import uuid4
+
+        binding = self.references.commands.get(value["form_key"])
+        if binding and binding.family == "ai_external":
+            raise OperatorConflict(
+                "This submission may have external effects. Check its result before discarding or editing."
+            )
+        if value["form_key"] in {"file.upload", "inspection.evidence.attach"}:
+            raise OperatorConflict("Check this file submission before discarding or editing.")
+        self.connection.execute(
+            CommandAttemptFenceModel.__table__.insert().values(
+                id=str(uuid4()),
+                attempt_key=value["attempt_key"],
+                receipt_table=self.references.attempt_namespace(value["form_key"]),
+                recovery_id=value["id"],
+                form_key=value["form_key"],
+                request_fingerprint=value["request_fingerprint"],
+                created_at=instant.isoformat(),
+            )
+        )
 
     def resolve_attempt(self, value):
         from app.modules.operator.application.command_forms import COMMAND_SCHEMAS

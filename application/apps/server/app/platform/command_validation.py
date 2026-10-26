@@ -65,7 +65,10 @@ def validate_receipt_schema(connection, table: Table, triggers: Mapping, *, insp
     _relations(inspector, table)
     actual = dict(
         connection.execute(
-            text("SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name=:table"),
+            text(
+                "SELECT name, sql FROM sqlite_master WHERE type='trigger' "
+                "AND name NOT LIKE 'epm_closed_%' AND tbl_name=:table"
+            ),
             {"table": table.name},
         ).all()
     )

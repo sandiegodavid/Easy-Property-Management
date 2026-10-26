@@ -153,6 +153,8 @@ test("identity contacts and Tenant preferences use their displayed source revisi
   await expect(page.locator(".command-form-actions button")).toHaveText([
     "Add contact details",
     "Save unfinished form",
+    "Save and close",
+    "Discard…",
   ]);
   await expect(page.getByRole("link", { name: "Return to current record" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Check latest contact record" })).toBeHidden();
@@ -428,10 +430,8 @@ test("shared contact primary edits recover interrupted results and preserve stal
     .getByRole("button", { name: "Keep my edits with this reviewed revision", exact: true })
     .click();
   await page.getByRole("button", { name: "Save contact details", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Check original result", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Check submission", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Contact details updated", exact: true }),
   ).toBeVisible();
@@ -837,6 +837,8 @@ test("saved forms resume after reload with the original fields", async ({ page, 
   await expect(page.locator(".command-form-actions button")).toHaveText([
     "Save name and identity",
     "Save unfinished form",
+    "Save and close",
+    "Discard…",
   ]);
   await expect(
     page.getByRole("button", { name: "Check latest contact record", exact: true }),
@@ -857,7 +859,7 @@ test("saved forms resume after reload with the original fields", async ({ page, 
   await page.getByRole("button", { name: "Save unfinished form" }).click();
   await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume: Edit identity", exact: true }).click();
+  await page.getByRole("link", { name: "Continue editing: Edit identity", exact: true }).click();
   await expect(page.getByLabel("Display name (required)")).toHaveValue(
     "Slice50 recovered identity",
   );
@@ -877,7 +879,9 @@ test("saved occupancy corrections recover their child context before timeline va
   await page.getByRole("button", { name: "Save unfinished form" }).click();
   await expect(page.getByText(/^Unfinished form saved/)).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume: Correct occupancy", exact: true }).click();
+  await page
+    .getByRole("link", { name: "Continue editing: Correct occupancy", exact: true })
+    .click();
   await expect(page.getByLabel("Reason (required)")).toHaveValue(
     "Clarify the original observation",
   );
@@ -923,8 +927,8 @@ test("an interrupted committed response reconciles without duplicating the Provi
   await page.goto(`/providers?workflow=provider.service.add&target=${id}`);
   await page.getByLabel("Display name (required)").fill("One retained service");
   await page.getByRole("button", { name: "Add service", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
-  await page.getByRole("button", { name: "Check original result" }).click();
+  await expect(page.getByRole("button", { name: "Check submission" })).toBeVisible();
+  await page.getByRole("button", { name: "Check submission" }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(writes).toBe(1);
   const response = await request.get(`/api/providers/${id}`);
@@ -1187,7 +1191,7 @@ test("reputation edits reconcile a lost response and reject unsafe or duplicate 
   );
   await page.getByRole("textbox", { name: "Notes", exact: true }).fill("Updated note after review");
   await page.getByRole("button", { name: "Save reputation link changes", exact: true }).click();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(writes).toBe(1);
   const current = (await (

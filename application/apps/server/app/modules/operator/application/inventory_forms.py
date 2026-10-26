@@ -51,6 +51,7 @@ class InventoryRevision(Contract):
 
 
 class PropertyChanges(Contract):
+    timeZone: str | None = Field(None, max_length=100)
     displayName: str | None = Field(None, max_length=240)
     addressLine1: str | None = Field(None, max_length=240)
     addressLine2: str | None = Field(None, max_length=240)

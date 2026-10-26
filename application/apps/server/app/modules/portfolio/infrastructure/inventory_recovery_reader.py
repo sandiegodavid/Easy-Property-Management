@@ -18,6 +18,11 @@ class SQLiteInventoryRecoveryReader:
                     PropertyModel.property_revision.label("revision"),
                     PropertyModel.status,
                     PropertyModel.inventory_layout,
+                    PropertyModel.address_line_1,
+                    PropertyModel.city,
+                    PropertyModel.region,
+                    PropertyModel.postal_code,
+                    PropertyModel.country_code,
                 ).where(PropertyModel.id == source_id)
             )
             .mappings()

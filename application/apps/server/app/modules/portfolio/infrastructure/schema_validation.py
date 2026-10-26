@@ -140,7 +140,7 @@ def _validate_retained_history(connection, inspector) -> None:
     receipt_triggers = {
         name: _normalise_sql(sql)
         for name, sql in connection.exec_driver_sql(
-            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' "
+            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND name NOT LIKE 'epm_closed_%' "
             "AND tbl_name = 'space_status_operations'"
         )
     }
@@ -156,7 +156,7 @@ def _validate_retained_history(connection, inspector) -> None:
         raise MigrationSchemaError("PORT-003 operation keys must be globally unique.")
     triggers = dict(
         connection.exec_driver_sql(
-            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' "
+            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND name NOT LIKE 'epm_closed_%' "
             "AND tbl_name = 'audit_events'"
         ).all()
     )

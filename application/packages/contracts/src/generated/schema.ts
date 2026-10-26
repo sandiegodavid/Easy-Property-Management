@@ -2443,6 +2443,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/operator/recovery/{record_id}/return": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Return To Editing */
+        post: operations["returnOperatorRecoveryToEditing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/operator/search": {
         parameters: {
             query?: never;
@@ -14240,6 +14257,8 @@ export interface components {
             region?: string | null;
             /** Spaces */
             spaces?: components["schemas"]["SpaceCreateRequest"][] | null;
+            /** Timezone */
+            timeZone?: string | null;
         };
         /** PropertyDirectoryPage */
         PropertyDirectoryPage: {
@@ -14412,6 +14431,8 @@ export interface components {
             postalCode?: string | null;
             /** Region */
             region?: string | null;
+            /** Timezone */
+            timeZone?: string | null;
         };
         /** PropertyQueryEcho */
         PropertyQueryEcho: {
@@ -15113,6 +15134,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Label */
+            label?: string | null;
             /** Revision */
             revision: number;
             /**
@@ -15190,6 +15213,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Label */
+            label?: string | null;
             /** Operationid */
             operationId?: string | null;
             /** Payload */
@@ -29359,6 +29384,50 @@ export interface operations {
         };
     };
     reconcileOperatorRecovery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MutationInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryResponse"];
+                };
+            };
+            /** @description Local transport rejected. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransportErrorResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    returnOperatorRecoveryToEditing: {
         parameters: {
             query?: never;
             header?: never;

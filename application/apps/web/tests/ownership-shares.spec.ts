@@ -133,7 +133,7 @@ test("share edits validate totals, survive draft recovery and reconcile one comm
   await expect(you).toHaveValue("50");
   await expect(owner).toHaveValue("50");
   await page.getByRole("button", { name: "Save ownership change", exact: true }).click();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.getByRole("region", { name: "Ownership updated", exact: true })).toContainText(
     "50%",
   );

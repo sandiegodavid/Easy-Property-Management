@@ -34,6 +34,11 @@ class RecoveryBinding:
     result_kind: str
     related_state: Callable[[object, str, str], Mapping | None] | None = None
     fingerprint_payload: Callable[[object, str, dict], dict] | None = None
+    preflight: Callable[[object, str | None, dict], None] | None = None
+
+    def validate_input(self, connection, source_id, payload):
+        if self.preflight is not None:
+            self.preflight(connection, source_id, payload)
 
     @property
     def receipt_action(self):
@@ -74,6 +79,7 @@ class RuntimeIdentity:
 
 
 class RecoveryReferences(Protocol):
+    def attempt_namespace(self, form_key: str) -> str: ...
     def validate(self, connection, value: Mapping) -> str: ...
     def attempt_fingerprint(self, value: Mapping, key: str, *, connection=None) -> str: ...
     def resolve_attempt(
@@ -88,6 +94,7 @@ class RecoveryReferences(Protocol):
 
 
 class OperatorTransaction(Protocol):
+    def close_attempt(self, value: Mapping, instant: datetime) -> None: ...
     def coverage_page(self, subject: PortfolioSubject, window: ReadWindow) -> ReadPage: ...
     def coverage_previews(
         self,

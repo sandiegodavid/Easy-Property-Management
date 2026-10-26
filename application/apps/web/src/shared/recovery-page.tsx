@@ -4,8 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@epm/contracts";
 import { useWorkspace } from "../app/workspace-gate";
 import { normalizeApiError } from "./mutations";
-import { recoveryApi } from "./recovery";
-import { Link } from "react-router-dom";
+import { RecoveryController } from "./recovery";
+import { Link, useNavigate } from "react-router-dom";
 import { workflows } from "@epm/contracts/workflows";
 import { workflowUrl } from "../workflows/command";
 import type { components } from "@epm/contracts/generated";
@@ -20,9 +20,16 @@ const statusLabels: Record<components["schemas"]["RecoveryMetadata"]["status"], 
   expired: "Expired",
 };
 
+function resumeUrl(record: components["schemas"]["RecoveryMetadata"]): string {
+  return record.formKey === "coverage.review"
+    ? `/coverage/reviews/${record.id}`
+    : `${workflowUrl(record.formKey, record.sourceId ?? undefined)}&resume=${record.id}`;
+}
+
 // Bounded metadata only. Feature editors load their own allowlisted payloads.
 export function RecoveryPage() {
   const { scope } = useWorkspace();
+  const navigate = useNavigate();
   const [cursor, setCursor] = useState<string>();
   const [error, setError] = useState<string>();
   const [pending, setPending] = useState(false);
@@ -47,16 +54,37 @@ export function RecoveryPage() {
         params: { path: { record_id: id } },
       });
       if (!current.data) throw new Error("This recovery record could not be loaded.");
-      if (discard && current.data.status === "active")
-        await recoveryApi.discard(id, {
-          expectedRevision: current.data.revision,
-          idempotencyKey: crypto.randomUUID(),
-        });
-      else if (!discard && current.data.status === "outcome_unknown")
-        await recoveryApi.reconcile(id, {
-          expectedRevision: current.data.revision,
-          idempotencyKey: crypto.randomUUID(),
-        });
+      const saved = current.data;
+      const controller = new RecoveryController(
+        scope,
+        id,
+        {
+          formKey: saved.formKey as components["schemas"]["RecoveryInput"]["formKey"],
+          schemaVersion: saved.schemaVersion,
+          sourceKind: saved.sourceKind as components["schemas"]["RecoveryInput"]["sourceKind"],
+          sourceId: saved.sourceId,
+          baseSourceRevision: saved.baseSourceRevision,
+        },
+        saved.payload,
+        saved,
+      );
+      try {
+        if (hostedMode()) await controller.claimEditing();
+        if (discard) await controller.discard();
+        else {
+          await controller.reconcile();
+          await navigate(resumeUrl(saved));
+          return;
+        }
+      } catch (cause) {
+        if (controller.getSnapshot().command === "committed") {
+          await navigate(resumeUrl(saved));
+          return;
+        }
+        throw cause;
+      } finally {
+        controller.dispose();
+      }
       await records.refetch();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Reconciliation failed.");
@@ -71,12 +99,6 @@ export function RecoveryPage() {
         Saved forms are not official records. Files and credentials must be selected again after
         restart. If a submission was interrupted, check its result before submitting again.
       </p>
-      {hostedMode() && (
-        <p>
-          Resume a saved form and explicitly claim editing before discarding it or checking its
-          submission.
-        </p>
-      )}
       {records.isPending && <p role="status">Loading unfinished forms…</p>}
       {records.error && <p role="alert">{records.error.message}</p>}
       {error && <p role="alert">{error}</p>}
@@ -89,72 +111,97 @@ export function RecoveryPage() {
           {!records.data.items.some((record) =>
             ["active", "outcome_unknown"].includes(record.status),
           ) && <p>No unfinished forms on this page.</p>}
-          <ul className="result-card-list">
-            {records.data.items
-              .filter((record) => ["active", "outcome_unknown"].includes(record.status))
-              .map((record) => {
-                const workflow = workflows.find((workflow) => workflow.formKey === record.formKey);
-                const title =
-                  workflow?.title ??
-                  (record.formKey === "coverage.review" ? "Information review" : "Saved form");
-                return (
-                  <li className="child-record-card recovery-form-card" key={record.id}>
-                    <header className="child-record-heading">
-                      <h3>{title}</h3>
-                      <span className="record-pill" data-status={record.status}>
-                        {statusLabels[record.status]}
-                      </span>
-                    </header>
-                    <p>
-                      Saved <time dateTime={record.savedAt}>{formatHomeTime(record.savedAt)}</time>
-                    </p>
-                    <div className="result-card-actions">
-                      {!hostedMode() && record.status === "outcome_unknown" && (
-                        <button
-                          disabled={pending || !scope.canWrite}
-                          onClick={() => {
-                            void changeRecord(record.id);
-                          }}
-                        >
-                          Check submission
-                        </button>
-                      )}
-                      {record.formKey === "coverage.review" ? (
-                        <Link to={`/coverage/reviews/${record.id}`}>Resume: {title}</Link>
-                      ) : workflow ? (
-                        <Link
-                          to={`${workflowUrl(record.formKey, record.sourceId ?? undefined)}&resume=${record.id}`}
-                        >
-                          Resume: {title}
-                        </Link>
-                      ) : (
-                        record.status === "active" && (
-                          <span>
-                            {" "}
-                            — Resume from the owning workflow when its editor is available.
+          {(["outcome_unknown", "active"] as const).map((group) => (
+            <section
+              key={group}
+              aria-label={group === "active" ? "Continue editing" : "Check submissions"}
+            >
+              <h3>{group === "active" ? "Continue editing" : "Check submissions"}</h3>
+              {!records.data.items.some((item) => item.status === group) && (
+                <p>No forms in this group on this page.</p>
+              )}
+              <ul className="result-card-list">
+                {records.data.items
+                  .filter((record) => record.status === group)
+                  .map((record) => {
+                    const workflow = workflows.find(
+                      (workflow) => workflow.formKey === record.formKey,
+                    );
+                    const title =
+                      workflow?.title ??
+                      (record.formKey === "coverage.review" ? "Information review" : "Saved form");
+                    return (
+                      <li className="child-record-card recovery-form-card" key={record.id}>
+                        <header className="child-record-heading">
+                          <h3>
+                            {title}
+                            {record.label ? ` · ${record.label}` : ""}
+                          </h3>
+                          <span className="record-pill" data-status={record.status}>
+                            {statusLabels[record.status]}
                           </span>
-                        )
-                      )}
-                      {!hostedMode() && record.status === "active" && (
-                        <button
-                          disabled={pending || !scope.canWrite}
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `Discard the unfinished ${title.toLowerCase()} form? This will not change the official record.`,
-                              )
+                        </header>
+                        <p>
+                          Saved{" "}
+                          <time dateTime={record.savedAt}>{formatHomeTime(record.savedAt)}</time>
+                        </p>
+                        <div className="result-card-actions">
+                          {record.status === "outcome_unknown" && (
+                            <button
+                              disabled={pending || !scope.canWrite}
+                              onClick={() => {
+                                void changeRecord(record.id);
+                              }}
+                            >
+                              Check submission
+                            </button>
+                          )}
+                          {record.formKey === "coverage.review" ? (
+                            <Link to={`/coverage/reviews/${record.id}`}>
+                              {record.status === "outcome_unknown"
+                                ? "View submission"
+                                : "Continue editing"}
+                              : {title}
+                            </Link>
+                          ) : workflow ? (
+                            <Link
+                              to={`${workflowUrl(record.formKey, record.sourceId ?? undefined)}&resume=${record.id}`}
+                            >
+                              {record.status === "outcome_unknown"
+                                ? "View submission"
+                                : "Continue editing"}
+                              : {title}
+                            </Link>
+                          ) : (
+                            record.status === "active" && (
+                              <span>
+                                {" "}
+                                — Resume from the owning workflow when its editor is available.
+                              </span>
                             )
-                              void changeRecord(record.id, true);
-                          }}
-                        >
-                          Discard
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-          </ul>
+                          )}
+                          {["active", "outcome_unknown"].includes(record.status) && (
+                            <button
+                              disabled={pending || !scope.canWrite}
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    `Discard this ${title.toLowerCase()} form? A pending submission will be checked and safely closed first. Existing official records will not be deleted.`,
+                                  )
+                                )
+                                  void changeRecord(record.id, true);
+                              }}
+                            >
+                              Discard
+                            </button>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+              </ul>
+            </section>
+          ))}
           {records.data.nextCursor && (
             <button onClick={() => setCursor(records.data.nextCursor ?? undefined)}>
               Next page

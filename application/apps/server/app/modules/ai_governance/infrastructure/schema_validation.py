@@ -573,7 +573,9 @@ def _validate_exact_schema(connection) -> None:
     triggers = {
         row["name"]: row["sql"]
         for row in connection.execute(
-            text("SELECT name, sql FROM sqlite_master WHERE type='trigger'")
+            text(
+                "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name NOT LIKE 'epm_closed_%'"
+            )
         ).mappings()
     }
     expected_triggers = {

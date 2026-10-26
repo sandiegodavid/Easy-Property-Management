@@ -716,7 +716,7 @@ test("Edit issue saves reporter and details atomically and recovers its original
     await route.abort("failed");
   });
   await submit.click();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.locator(".saved-item")).toBeVisible();
   expect(writes).toBe(1);
   const result = await get<Schemas["IssueResponse"]>(
@@ -868,7 +868,7 @@ test("Task creation uses original recovery identity and saved forms survive relo
   await page.goto("/tasks?workflow=task.create");
   await expect(
     page.getByRole("group", { name: "Form actions", exact: true }).getByRole("button"),
-  ).toHaveText(["Create task", "Save unfinished form"]);
+  ).toHaveText(["Create task", "Save unfinished form", "Save and close", "Discard…"]);
   await page
     .getByLabel("Title (required)", { exact: true })
     .fill(`Browser task ${crypto.randomUUID()}`);
@@ -1030,7 +1030,7 @@ test("Waiting reschedule lost response recovers one overdue follow-up without re
     await route.abort();
   });
   await page.getByRole("button", { name: "Save reschedule follow-up", exact: true }).click();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   const current = await get<Schemas["TaskResponse"]>(request, `/api/tasks/${original.id}`);
   expect(current.followUpState).toBe("overdue");
@@ -1971,7 +1971,7 @@ test("Journal correction retains evidence and reconciles a lost completion respo
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Record work journal entry", exact: true }).click();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(calls).toBe(1);
   const after = await get<Schemas["IssueResponse"]>(
@@ -2257,7 +2257,7 @@ test("lost manual recording response recovers one communication and one follow-u
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Create conversation", exact: true }).click();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.getByRole("region", { name: "Conversation saved", exact: true })).toBeVisible();
   expect(calls).toBe(1);
   expect(original?.followUpTasks).toHaveLength(1);
@@ -2628,8 +2628,8 @@ test("Lost lifecycle response reconciles original receipt without another transi
   await page.getByLabel("I confirm this lifecycle change").check();
   await page.getByLabel("Reason (required)").fill("Repair reviewed and accepted");
   await page.getByRole("button", { name: "Resolve issue", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
-  await page.getByRole("button", { name: "Check original result" }).click();
+  await expect(page.getByRole("button", { name: "Check submission" })).toBeVisible();
+  await page.getByRole("button", { name: "Check submission" }).click();
   await expect(
     page.getByRole("heading", { name: "Resolve maintenance issue — complete", exact: true }),
   ).toBeVisible();
@@ -2805,7 +2805,7 @@ test("avoided Provider direct assignment and lost-response reassignment preserve
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Assign provider", exact: true }).click();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Provider assignment saved", exact: true }),
   ).toBeVisible();
@@ -3096,7 +3096,7 @@ test("Lost concern follow-up recovers one Task while recorded conversation histo
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Save create concern follow-up", exact: true }).click();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(calls).toBe(1);
   const conversation = await post<Schemas["CommunicationReceiptResponse"]>(
@@ -3314,7 +3314,7 @@ test("Lost Task deletion can resume and reconcile after its source is unavailabl
   await openAction(page, "task.delete", original.id);
   await page.getByLabel("I confirm this lifecycle change").check();
   await page.getByRole("button", { name: "Save delete task", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check submission" })).toBeVisible();
   const recoveries = await get<Schemas["RecoveryPage"]>(
     request,
     "/api/operator/recovery?limit=100",
@@ -3325,7 +3325,7 @@ test("Lost Task deletion can resume and reconcile after its source is unavailabl
   expect(saved).toBeDefined();
   await page.goto(`/tasks?workflow=task.delete&target=${original.id}&resume=${saved.id}`);
   await expect(page.getByRole("alert")).toContainText("Current source unavailable");
-  await page.getByRole("button", { name: "Check original result" }).click();
+  await page.getByRole("button", { name: "Check submission" }).click();
   await expect(
     page.getByRole("heading", { name: "Delete task — complete", exact: true }),
   ).toBeVisible();

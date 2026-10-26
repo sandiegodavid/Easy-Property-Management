@@ -118,6 +118,7 @@ class PropertyCreateCommand:
     notes: str | None = None
     inventory_layout: str | None = None
     spaces: tuple["SpaceCreateCommand", ...] | None = None
+    time_zone: str | None = None
 
     def __post_init__(self) -> None:
         for field, value in _normalize_property_identity(self).items():
@@ -749,6 +750,7 @@ class PortfolioService:
     ) -> dict[str, object]:
         allowed = {
             "displayName",
+            "timeZone",
             "addressLine1",
             "addressLine2",
             "city",
@@ -779,11 +781,16 @@ class PortfolioService:
             }
             command = PropertyUpdateCommand(**values)
             time_zone = current.time_zone
-            if any(
+            if changes.get("timeZone") is not None:
+                try:
+                    ZoneInfo(changes["timeZone"])
+                except (ValueError, KeyError, TypeError) as error:
+                    raise PortfolioError("Choose a valid IANA time zone.") from error
+                time_zone = changes["timeZone"]
+            elif "timeZone" in changes or any(
                 field in changes
                 for field in (
                     "addressLine1",
-                    "addressLine2",
                     "city",
                     "region",
                     "postalCode",
@@ -828,6 +835,13 @@ class PortfolioService:
         )
 
     def _time_zone_for(self, command: PropertyCreateCommand | PropertyUpdateCommand) -> str:
+        override = getattr(command, "time_zone", None)
+        if override:
+            try:
+                ZoneInfo(override)
+            except (ValueError, KeyError) as error:
+                raise PortfolioError("Choose a valid IANA time zone.") from error
+            return override
         return self.time_zone_resolver.resolve(
             address_line_1=command.address_line_1,
             city=command.city,

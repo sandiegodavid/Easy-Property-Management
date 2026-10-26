@@ -115,7 +115,7 @@ test("Home Task actions reload current state, retain input on conflict, reconcil
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Save complete task", exact: true }).click();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(calls).toBe(1);
   const current = await get<Schema["TaskResponse"]>(request, `/api/tasks/${task.id}`);
@@ -411,7 +411,7 @@ test("Home payment uses current allocations and an interrupted response reconcil
     await route.abort();
   });
   await page.getByRole("button", { name: "Record rent receipt", exact: true }).click();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   const receipts = await get<Schema["ReceiptPageResponse"]>(
     request,

@@ -8,6 +8,7 @@ import unicodedata
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import URL, Engine
+from app.platform.attempt_fences import raise_closed_attempt
 
 
 def sqlite_url(database: Path) -> URL:
@@ -16,6 +17,8 @@ def sqlite_url(database: Path) -> URL:
 
 def create_sqlite_engine(database: Path) -> Engine:
     engine = create_engine(sqlite_url(database))
+
+    event.listen(engine, "handle_error", raise_closed_attempt)
 
     @event.listens_for(engine, "connect")
     def enable_foreign_keys(dbapi_connection, _connection_record) -> None:

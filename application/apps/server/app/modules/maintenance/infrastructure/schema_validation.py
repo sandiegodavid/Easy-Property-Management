@@ -140,7 +140,7 @@ def validate_maintenance_schema(connection) -> None:
     triggers = {
         name: _trigger_sql(sql)
         for name, sql in connection.exec_driver_sql(
-            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' "
+            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND name NOT LIKE 'epm_closed_%' "
             "AND tbl_name = 'maintenance_follow_up_operations'"
         )
     }
@@ -150,7 +150,7 @@ def validate_maintenance_schema(connection) -> None:
     journal_triggers = {
         name: _trigger_sql(sql)
         for name, sql in connection.exec_driver_sql(
-            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'maintenance_work_journal_entries'"
+            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND name NOT LIKE 'epm_closed_%' AND tbl_name = 'maintenance_work_journal_entries'"
         )
     }
     if journal_triggers != {name: _trigger_sql(sql) for name, sql in WORK_JOURNAL_TRIGGERS.items()}:
@@ -158,7 +158,7 @@ def validate_maintenance_schema(connection) -> None:
     receipt_triggers = {
         name: _trigger_sql(sql)
         for name, sql in connection.exec_driver_sql(
-            "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name='maintenance_command_receipts'"
+            "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name NOT LIKE 'epm_closed_%' AND tbl_name='maintenance_command_receipts'"
         )
     }
     if receipt_triggers != {

@@ -160,13 +160,15 @@ test("money, work, leasing, category and Intake forms share contextual action-ro
       await page.goto(url);
       const actions = page.getByRole("group", { name: "Form actions", exact: true });
       const buttons = actions.getByRole("button");
-      await expect(buttons).toHaveCount(2);
+      await expect(buttons).toHaveCount(4);
       await expect(buttons.nth(0)).toHaveText(label);
       await expect(buttons.nth(0)).toHaveAttribute("type", "submit");
       await expect(buttons.nth(1)).toHaveText(
         /^(Save unfinished form|Saved|Saving unfinished form…)$/,
       );
       await expect(buttons.nth(1)).toHaveAttribute("type", "button");
+      await expect(buttons.nth(2)).toHaveText("Save and close");
+      await expect(buttons.nth(3)).toHaveText("Discard…");
       for (const width of [1280, 390]) {
         await page.setViewportSize({ width, height: 900 });
         const primary = (await buttons.nth(0).boundingBox())!;

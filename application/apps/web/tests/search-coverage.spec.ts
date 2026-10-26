@@ -643,10 +643,17 @@ test("lost review response reconciles the original attempt after reload", async 
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Record review" }).click();
-  await expect(page.getByRole("button", { name: "Reconcile review" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check submission" })).toBeVisible();
   expect(recoveryId).toBeTruthy();
-  await page.goto(`/coverage/reviews/${recoveryId}`);
-  await page.getByRole("button", { name: "Reconcile review" }).click();
+  await page.goto("/settings/recovery");
+  await page
+    .locator(".recovery-form-card")
+    .filter({ hasText: "Information review" })
+    .getByRole("button", { name: "Check submission" })
+    .click();
+  await expect(page).toHaveURL(
+    `/coverage/property/${item.id}/maintenance?reviewResume=${recoveryId}`,
+  );
   await expect(page.getByText(/Recorded review: recorded/)).toBeVisible();
   const events = await request.get(
     `/api/audit/events/operator_coverage_review/${((await (await request.get(`/api/operator/recovery/${recoveryId}`)).json()) as Schema["RecoveryResponse"]).receipt?.receiptId}`,
@@ -717,7 +724,9 @@ test("stale review admission preserves edits and blocks a new attempt", async ({
     await route.fulfill({ response: await route.fetch() });
   });
   await page.getByRole("button", { name: "Record review" }).click();
-  await expect(page.getByRole("alert")).toContainText("Coverage evidence has changed");
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Coverage evidence has changed" }),
+  ).toBeVisible();
   await expect(page.getByLabel("Review reason")).toHaveValue("Retain my stale review");
   await expect(page.getByRole("button", { name: "Record review" })).toBeDisabled();
   const current = await request.get(`/api/operator/coverage/property/${item.id}/maintenance`);

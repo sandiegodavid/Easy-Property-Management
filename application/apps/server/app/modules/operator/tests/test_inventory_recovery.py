@@ -342,8 +342,15 @@ def test_indexed_single_query_on_caller_snapshot(ready):
 
 def test_ops_and_inventory_encrypted_portability_and_tampering(ready, tmp_path):
     original, _, body = create(ready)
+    closed_record, _ = begin(ready, "portfolio.property.create", valid_property_input())
+    ready.ops.return_recovery(closed_record, expected_revision=2, idempotency_key=str(uuid4()))
     database = ready.case.workspace.paths.database
-    tables = ("portfolio_inventory_operations", "operator_recovery_records", "operator_operations")
+    tables = (
+        "portfolio_inventory_operations",
+        "operator_recovery_records",
+        "operator_operations",
+        "command_attempt_fences",
+    )
 
     def rows(path):
         with sqlite3.connect(path) as connection:
@@ -380,3 +387,119 @@ def test_ops_and_inventory_encrypted_portability_and_tampering(ready, tmp_path):
     with pytest.raises(MigrationSchemaError):
         validate_latest_schema(database)
     assert original["id"] and body["idempotencyKey"]
+
+
+def valid_property_input(**changes):
+    return {
+        "expectedPropertyRevision": 0,
+        "displayName": "Retained property",
+        "addressLine1": "1 Synthetic Street",
+        "city": "Portland",
+        "region": "OR",
+        "postalCode": "97205",
+        "countryCode": "US",
+        "propertyType": "single_family_home",
+        "ownerships": [{"ownerKind": "local_operator"}],
+        **changes,
+    }
+
+
+def test_address_validation_precedes_attempt_and_manual_zone_is_explicit(ready):
+    record = str(uuid4())
+    payload = valid_property_input(city="Cold City", region="AK", postalCode="99928")
+    ready.ops.save_recovery(
+        record,
+        form_key="portfolio.property.create",
+        schema_version=1,
+        payload=payload,
+        expected_revision=0,
+        idempotency_key=str(uuid4()),
+    )
+    with pytest.raises(OperatorError, match="choose a time zone manually"):
+        ready.ops.prepare_attempt(
+            record, attempt_key=str(uuid4()), expected_revision=1, idempotency_key=str(uuid4())
+        )
+    saved = ready.ops.recovery(record)
+    assert saved["status"] == "active"
+    assert saved["attemptKey"] is None
+    payload["timeZone"] = "America/Juneau"
+    result, _, _ = run(ready, "portfolio.property.create", ("POST", "/api/properties"), payload)
+    assert result["timeZone"] == "America/Juneau"
+    patched, _, _ = run(
+        ready,
+        "portfolio.property.patch",
+        ("PATCH", f"/api/properties/{result['id']}"),
+        {
+            "expectedPropertyRevision": result["propertyRevision"],
+            "changes": {"addressLine2": "Unit 2"},
+        },
+        source=result["id"],
+    )
+    assert patched["timeZone"] == "America/Juneau"
+    validate_latest_schema(ready.case.workspace.paths.database)
+
+
+def test_return_to_editing_fences_delayed_request_and_is_replayable(ready):
+    payload = valid_property_input()
+    record, key = begin(ready, "portfolio.property.create", payload)
+    args = {"expected_revision": 2, "idempotency_key": str(uuid4())}
+    returned = ready.ops.return_recovery(record, **args)
+    assert returned["status"] == "active"
+    assert returned["attemptKey"] is None
+    assert returned["payload"] == payload
+    assert ready.ops.return_recovery(record, **args) == returned
+    response = ready.client.post("/api/properties", json={**payload, "idempotencyKey": key})
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["code"] == "submission_closed"
+    with sqlite3.connect(ready.case.workspace.paths.database) as connection:
+        assert connection.execute("SELECT count(*) FROM properties").fetchone()[0] == 0
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM audit_events WHERE entity_type='property'"
+            ).fetchone()[0]
+            == 0
+        )
+    validate_latest_schema(ready.case.workspace.paths.database)
+    ready.ops.discard_recovery(record, expected_revision=3, idempotency_key=str(uuid4()))
+    assert (
+        ready.client.post("/api/properties", json={**payload, "idempotencyKey": key}).status_code
+        == 409
+    )
+    validate_latest_schema(ready.case.workspace.paths.database)
+
+
+def test_successful_submission_cannot_return_to_editing(ready):
+    payload = valid_property_input()
+    record, key = begin(ready, "portfolio.property.create", payload)
+    response = ready.client.post("/api/properties", json={**payload, "idempotencyKey": key})
+    assert response.status_code == 201, response.text
+    with pytest.raises(OperatorConflict, match="succeeded"):
+        ready.ops.return_recovery(record, expected_revision=2, idempotency_key=str(uuid4()))
+    result = ready.ops.reconcile_recovery(record, expected_revision=2, idempotency_key=str(uuid4()))
+    assert result["receipt"]["sourceId"] == response.json()["id"]
+    validate_latest_schema(ready.case.workspace.paths.database)
+
+
+def test_closure_rolls_back_with_its_recovery_audit(ready):
+    payload = valid_property_input()
+    record, key = begin(ready, "portfolio.property.create", payload)
+    with patch.object(
+        ready.uow.recorder, "record_change", side_effect=RuntimeError("Audit failed")
+    ):
+        with pytest.raises(RuntimeError, match="Audit failed"):
+            ready.ops.return_recovery(record, expected_revision=2, idempotency_key=str(uuid4()))
+    assert ready.ops.recovery(record)["status"] == "outcome_unknown"
+    assert (
+        ready.client.post("/api/properties", json={**payload, "idempotencyKey": key}).status_code
+        == 201
+    )
+    validate_latest_schema(ready.case.workspace.paths.database)
+
+
+def test_all_registered_attempts_have_a_source_owned_receipt_namespace(ready):
+    from app.bootstrap.operator_recovery_composition import compose_attempt_namespaces
+    from app.platform.sqlalchemy_models import LocalBase
+
+    for table_name in compose_attempt_namespaces().values():
+        assert table_name in LocalBase.metadata.tables
+        assert "idempotency_key" in LocalBase.metadata.tables[table_name].c

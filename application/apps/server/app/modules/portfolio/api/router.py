@@ -93,6 +93,7 @@ class OwnershipRequest(ContractModel):
 
 
 class PropertyCreateRequest(InventoryRequest):
+    timeZone: str | None = Field(None, min_length=1, max_length=100)
     expectedPropertyRevision: StrictInt = Field(ge=0, le=0)
     displayName: str = Field(min_length=1, max_length=240)
     addressLine1: str = Field(min_length=1, max_length=240)
@@ -188,6 +189,7 @@ class SpacePatchRequest(InventoryRequest):
 
 
 class PropertyPatchRequest(InventoryRequest):
+    timeZone: str | None = Field(None, min_length=1, max_length=100)
     displayName: str | None = Field(None, min_length=1, max_length=240)
     addressLine1: str | None = Field(None, min_length=1, max_length=240)
     addressLine2: str | None = Field(None, max_length=240)
@@ -840,6 +842,7 @@ def _create(data: PropertyCreateRequest) -> PropertyCreateCommand:
         data.notes,
         data.inventoryLayout,
         None if data.spaces is None else tuple(_space(item) for item in data.spaces),
+        data.timeZone,
     )
 
 

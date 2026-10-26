@@ -2,6 +2,7 @@ import { fieldSchema, type RequestSchema } from "@epm/contracts/workflows";
 import { useId } from "react";
 import { label } from "./fields";
 import { usStateCode, usStates } from "../shared/us-states";
+import { TimeZoneSelect } from "../shared/zoned-date-time";
 
 export function PropertyEditFields({
   schema,
@@ -23,7 +24,7 @@ export function PropertyEditFields({
         { title: "Property name", fields: ["displayName"] },
         {
           title: "Address",
-          fields: ["addressLine1", "addressLine2", "city", "region", "postalCode"],
+          fields: ["addressLine1", "addressLine2", "city", "region", "postalCode", "timeZone"],
         },
         { title: "Notes", fields: ["notes"] },
       ].map((group) => (
@@ -40,6 +41,23 @@ export function PropertyEditFields({
                     ? null
                     : next,
               });
+            if (key === "timeZone")
+              return (
+                <div key={key} className="workflow-field">
+                  <TimeZoneSelect
+                    label="Property time zone (optional override)"
+                    value={current}
+                    disabled={disabled}
+                    onChange={(next) =>
+                      onChange({ ...value, timeZone: next || (creating ? undefined : null) })
+                    }
+                  />
+                  <p>
+                    Leave blank to determine the time zone from the address. Choose a zone manually
+                    when the lookup cannot resolve it. This does not verify that the address exists.
+                  </p>
+                </div>
+              );
             if (key === "region") {
               const selectedState = usStateCode(current);
               return (

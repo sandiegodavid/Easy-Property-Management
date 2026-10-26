@@ -1147,7 +1147,7 @@ test("receipt dollar edits remain saveable and recoverable before allocation com
   await expect(allocation).toHaveValue("1,000.00");
   await page.goto("/settings/recovery");
   await page
-    .getByRole("link", { name: "Resume: Record rent receipt", exact: true })
+    .getByRole("link", { name: "Continue editing: Record rent receipt", exact: true })
     .and(page.locator(`[href*="resume=${draft.id}"]`))
     .click();
   await expect(amount).toHaveValue(".");
@@ -1342,14 +1342,17 @@ test("lost expense response reconciles once and evidence failure leaves spending
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Record paid expense", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check submission" })).toBeVisible();
   await page.goto("/settings/recovery");
   expect(recoveryId).toBeTruthy();
   await page
-    .getByRole("link", { name: "Resume: Record paid expense", exact: true })
+    .getByRole("link", { name: "View submission: Record paid expense", exact: true })
     .and(page.locator(`a[href*="resume=${recoveryId}"]`))
     .click();
-  await page.getByRole("button", { name: "Check original result" }).click();
+  await page
+    .getByRole("region", { name: "Submission needs checking", exact: true })
+    .getByRole("button", { name: "Check submission", exact: true })
+    .click();
   const savedExpense = page.getByRole("region", { name: "Expense saved", exact: true });
   await expect(
     savedExpense.getByRole("heading", { name: "Expense saved", exact: true }),
@@ -1668,7 +1671,7 @@ test("Owner duplicate creation cannot add income; explicit adoption recovers its
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Save verify owner rent report", exact: true }).click();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(calls).toBe(1);
   const final = await get<Schemas["OwnerRentReportResponse"]>(
@@ -2314,10 +2317,15 @@ test("settlement evidence, child deletion recovery and partial refunds preserve 
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Save delete settlement credit", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Check original result" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check submission" })).toBeVisible();
   await page.goto("/settings/recovery");
-  await page.getByRole("link", { name: "Resume: Delete settlement credit", exact: true }).click();
-  await page.getByRole("button", { name: "Check original result" }).click();
+  await page
+    .getByRole("link", { name: "View submission: Delete settlement credit", exact: true })
+    .click();
+  await page
+    .getByRole("region", { name: "Submission needs checking", exact: true })
+    .getByRole("button", { name: "Check submission", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Delete settlement credit — complete", exact: true }),
   ).toBeVisible();
@@ -2494,7 +2502,10 @@ test("lost check deposit response recovers the original correlated receipt witho
     await route.abort("failed");
   });
   await page.getByRole("button", { name: "Save deposit prepaid check", exact: true }).click();
-  await page.getByRole("button", { name: "Check original result" }).click();
+  await page
+    .getByRole("region", { name: "Submission needs checking", exact: true })
+    .getByRole("button", { name: "Check submission", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Deposit prepaid check — complete", exact: true }),
   ).toBeVisible();
@@ -2624,7 +2635,7 @@ test("supporting evidence can be reselected after restart and metadata retains v
   const saved = (await (await savedResponse).json()) as Schemas["RecoveryResponse"];
   await page.goto("/settings/recovery");
   await page
-    .getByRole("link", { name: "Resume: Attach supporting evidence", exact: true })
+    .getByRole("link", { name: "Continue editing: Attach supporting evidence", exact: true })
     .and(page.locator(`[href*="resume=${saved.id}"]`))
     .click();
   await page.getByLabel("Evidence file (required)").setInputFiles(bytes);

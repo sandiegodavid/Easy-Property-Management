@@ -147,10 +147,8 @@ test("a lost category response recovers its original receipt without duplicating
     return route.abort();
   });
   await page.getByRole("button", { name: "Create provider category", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Check original result", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Check original result", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Check submission", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Check submission", exact: true }).click();
   await expect(page.locator('.saved-item, section[aria-label="Committed result"]')).toBeVisible();
   expect(dispatches).toBe(1);
   expect(

@@ -32,7 +32,7 @@ Search is bounded literal metadata matching with typed targets, independent sour
 
 Registered forms hold incomplete input before a domain draft/command exists, with source identity and schema version. Limits are 64 KiB serialized UTF-8, 100 active records and 30 days since acknowledged save. Credentials, raw file bytes and raw Intake evidence are excluded. Unresolved outcomes count toward capacity and cannot expire/discard automatically.
 
-The recovery directory, its total and active capacity count include only `active` and `outcome_unknown` records. Reconciled submissions retain their server-side receipt/audit evidence but leave the actionable queue and no longer consume draft capacity. Drafts may be discarded directly from the directory; an unknown outcome must be reconciled first. Existing pagination, retained-data and backup contracts are unchanged.
+The recovery directory, its total and active capacity count include only `active` and `outcome_unknown` records. Reconciled submissions retain their server-side receipt/audit evidence but leave the actionable queue and no longer consume draft capacity. Drafts may be discarded directly from the directory. An unknown outcome must be checked first: committed work opens its owning result; an uncommitted transactional request can be durably closed before returning to editing or discarding. External-effect workflows remain protected until their owning outcome is confirmed. Existing pagination, retained-data and backup contracts are unchanged.
 
 Save is acknowledged and revision-safe. Preparing an attempt validates complete fields and computes the source-owned semantic fingerprint; it does not dispatch the business command. Reconcile reads the owning immutable original receipt. Unknown outcomes retain the exact key before any new attempt. Domain drafts stay source-owned; attachment recovery retains metadata/hash and requires matching byte reselection.
 
@@ -98,3 +98,11 @@ OPS-001 acceptance completed October 13, 2026: **519 focused backend tests, 20 p
 - [test_synchronization_recovery.py](../../application/apps/server/app/modules/operator/tests/test_synchronization_recovery.py).
 
 Use the [shared validation matrix](../platform/persistence.md#validation-matrix) when changing this boundary. Core browser acceptance is recorded in [browser validation](../ui/validation.md); later capability acceptance remains in [active work](../active/README.md).
+
+## Closing unsuccessful submissions
+
+`POST /api/operator/recovery/{id}/return` checks the owning immutable receipt on the writer transaction. It refuses completed requests and external-effect workflows. Otherwise it records a portable, immutable `command_attempt_fences` entry and an audited `recovery_returned` transition, clears the old attempt from the active form, and preserves its business input. Retrying that transition uses the same operation key. The old request/key remains blocked in its owning receipt-table namespace, including changed-payload retries and delayed requests.
+
+Runtime-owned `epm_closed_*` SQLite triggers enforce this check inside receipt INSERT statements, so earlier business writes roll back atomically without additional SELECT round trips. Owning modules continue validating their own immutability triggers; product validation independently checks the exact runtime guard inventory and closure history in both directions. Closure records, guards and correlated history are included in schema validation and encrypted backup/restore. The latest greenfield baseline includes this format; no migration compatibility is provided.
+
+Preparation invokes registered source preflight checks before persisting an uncertain attempt. Property create/address changes resolve the address time zone at this gate, accepting an explicit validated IANA override. Final domain validation remains authoritative. The shared browser controller returns definitive transactional rejections to editing through the durable closure operation, while network/server failures retain the original immutable attempt for checking or same-key replay.

@@ -201,6 +201,8 @@ function ReviewEditor({
   const [id] = useState(() => recovered?.id ?? crypto.randomUUID());
   const [error, setError] = useState<string>();
   const [receipt, setReceipt] = useState<Coverage>();
+  const [showSubmitted, setShowSubmitted] = useState(false);
+  const [checking, setChecking] = useState(false);
   const payload = recovered?.payload;
   const { form, controller, state, blocker } = useRecoverableForm<ReviewValues>({
     id,
@@ -264,15 +266,71 @@ function ReviewEditor({
       await operation();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Review failed.");
+      refresh();
     }
   }
   const locked =
+    checking ||
+    state.editAuthority === "required" ||
     state.command === "submitting" ||
     state.command === "outcome_unknown" ||
     state.command === "committed";
   return (
     <section className="information-review-editor" aria-label="Information review form">
       <h3>Review {words(current.area)}</h3>
+      {state.command === "outcome_unknown" && (
+        <section aria-label="Submission needs checking">
+          <h4>Check whether your review was recorded</h4>
+          <p>
+            Your submitted information is saved and protected. Check its result before changing it.
+          </p>
+          <button
+            type="button"
+            disabled={checking || !scope.canWrite}
+            onClick={() => {
+              setChecking(true);
+              void action(() => controller.reconcile()).finally(() => setChecking(false));
+            }}
+          >
+            Check submission
+          </button>
+          <button
+            type="button"
+            disabled={checking || !scope.canWrite}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  "Close the old review submission before returning to editing? A completed review cannot be changed here.",
+                )
+              )
+                return;
+              setChecking(true);
+              void action(() => controller.returnToEditing()).finally(() => setChecking(false));
+            }}
+          >
+            Fix and continue
+          </button>
+          <button
+            type="button"
+            disabled={checking || !scope.canWrite}
+            onClick={() => {
+              setChecking(true);
+              void action(() => controller.replay(dispatch)).finally(() => setChecking(false));
+            }}
+          >
+            Retry same submission
+          </button>
+          <button
+            type="button"
+            aria-expanded={showSubmitted}
+            onClick={() => setShowSubmitted(!showSubmitted)}
+          >
+            View submitted information
+          </button>
+          <RecoveryNavigation controller={controller} blocker={blocker} />
+        </section>
+      )}
+
       <p className="information-review-intro">
         Record your review of the information shown above. This does not change the underlying
         records.
@@ -299,6 +357,7 @@ function ReviewEditor({
         </button>
       )}
       <form
+        hidden={state.command === "outcome_unknown" && !showSubmitted}
         onSubmit={(event) => {
           void form.handleSubmit(() => void action(() => controller.submit(dispatch)))(event);
         }}
@@ -354,17 +413,6 @@ function ReviewEditor({
         </div>
       </form>
       <FormFeedback message={error ?? state.error} />
-      {state.command === "outcome_unknown" && (
-        <>
-          <p>The outcome is unknown. Reconcile or replay the original attempt.</p>
-          <button onClick={() => void action(() => controller.reconcile())}>
-            Reconcile review
-          </button>
-          <button onClick={() => void action(() => controller.replay(dispatch))}>
-            Replay original review
-          </button>
-        </>
-      )}
       {receipt && (
         <p>
           Recorded review: {words(receipt.state ?? "unavailable")} ·{" "}
@@ -380,7 +428,9 @@ function ReviewEditor({
       {original.error && (
         <p role="alert">Original review receipt unavailable: {original.error.message}</p>
       )}
-      <RecoveryNavigation controller={controller} blocker={blocker} />
+      {state.command !== "outcome_unknown" && (
+        <RecoveryNavigation controller={controller} blocker={blocker} />
+      )}
     </section>
   );
 }

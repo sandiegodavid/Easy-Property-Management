@@ -124,7 +124,7 @@ def validate_intake_schema(connection) -> None:
     actual = {
         name: _sql(sql)
         for name, sql in connection.exec_driver_sql(
-            "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name='intake_source_operations'"
+            "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name NOT LIKE 'epm_closed_%' AND tbl_name='intake_source_operations'"
         )
     }
     expected = {name: _sql(sql) for name, sql in TRIGGERS.items()}

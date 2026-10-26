@@ -134,7 +134,7 @@ def validate_communication_schema(
     triggers = {
         name: _trigger_sql(sql)
         for name, sql in connection.exec_driver_sql(
-            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'communication_operations'"
+            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND name NOT LIKE 'epm_closed_%' AND tbl_name = 'communication_operations'"
         )
     }
     expected_triggers = {name: _trigger_sql(sql) for name, sql in OPERATION_TRIGGERS.items()}

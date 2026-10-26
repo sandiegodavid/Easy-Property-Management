@@ -41,14 +41,14 @@ test("cancelling inline draft-discard confirmation restores focus and retains th
   let prompts = 0;
   page.on("dialog", async (dialog) => {
     prompts++;
-    expect(dialog.message()).toContain("Discard the unfinished");
+    expect(dialog.message()).toContain("Discard this");
     await dialog.dismiss();
   });
   await discard.click();
   await expect(discard).toBeFocused();
   await expect(row).toBeVisible();
   expect(prompts).toBe(1);
-  await row.getByRole("link", { name: "Resume: Create task", exact: true }).click();
+  await row.getByRole("link", { name: "Continue editing: Create task", exact: true }).click();
   await expect(page.getByLabel("Title (required)", { exact: true })).toHaveValue(
     "Cancel this discard",
   );

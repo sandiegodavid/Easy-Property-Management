@@ -87,14 +87,15 @@ administrator to revoke access. Never share tokens or PINs.
 
 ## Multiple devices and shared forms
 
-Independent new forms have independent IDs. Resuming a saved form does not claim or silently
-take over editing. Choose **Claim editing**; if another editor owns it, use **Take over
+Independent new forms have independent IDs. Resuming a saved form automatically claims
+available editing authority. It never silently takes over another editor. If another editor
+owns it, use **Take over
 editing** only after reviewing the confirmation. Claims last five minutes and are renewed at
 most once a minute while visible, focused and actively edited. Idle/hidden editors can lose
 their claim.
 
 A replaced/expired claim rejects the previous editor's next save without erasing its input.
-Use **Review latest saved form (keep my input)**, review the owning record/source revision
+Use **Review saved changes**, review the owning record/source revision
 as appropriate, then claim or explicitly take over before saving. A source conflict or
 unresolved attempt still requires its original review/reconciliation workflow; a lease is
 not permission to bypass it. Sign-in, restore and runtime changes do not restore transient

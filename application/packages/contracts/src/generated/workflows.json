@@ -10826,6 +10826,19 @@
             }
           ],
           "title": "Spaces"
+        },
+        "timeZone": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Timezone"
         }
       },
       "required": [
@@ -10965,6 +10978,19 @@
             }
           ],
           "title": "Region"
+        },
+        "timeZone": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Timezone"
         }
       },
       "required": [

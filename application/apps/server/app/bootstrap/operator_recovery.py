@@ -32,6 +32,8 @@ from app.modules.parties.application.ports import PartyTransactionOperations
 from app.modules.portfolio.application.ports import PortfolioContextReader
 from app.modules.tasks.application.creation import TaskCreationReceiptReader
 
+from app.bootstrap.operator_recovery_composition import compose_attempt_namespaces
+
 
 @dataclass(frozen=True)
 class RecoverySourcePorts:
@@ -130,6 +132,7 @@ class OperatorRecoveryReferences:
         try:
             payload = json.loads(value["payload_json"])
             require_complete_form(value["form_key"], payload)
+            binding.validate_input(connection, value["source_id"], payload)
             if (
                 payload.get(
                     "expectedRevision",
@@ -150,6 +153,9 @@ class OperatorRecoveryReferences:
                 "Complete a valid owning command before starting an attempt."
             ) from error
         return calculated
+
+    def attempt_namespace(self, form_key):
+        return compose_attempt_namespaces(self.commands)[form_key]
 
     def _source_state(self, connection, value):
         kind, source_id = value["source_kind"], value["source_id"]

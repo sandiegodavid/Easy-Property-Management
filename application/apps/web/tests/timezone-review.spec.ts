@@ -142,7 +142,7 @@ test.describe("property-local saved reminder", () => {
       await route.abort();
     });
     await page.getByRole("button", { name: "Add task reminder", exact: true }).click();
-    await page.getByRole("button", { name: "Check original result", exact: true }).click();
+    await page.getByRole("button", { name: "Check submission", exact: true }).click();
     const confirmation = page.locator(".saved-item");
     const expectedTime = "May 1, 2027, 1:30 PM · America/New_York";
     await expect(confirmation).toContainText(expectedTime);

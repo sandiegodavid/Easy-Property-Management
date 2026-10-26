@@ -8,6 +8,7 @@ from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from sqlalchemy import text
+from app.platform.attempt_fences import validate_attempt_fences
 
 from app.bootstrap.communication_context import SQLiteCommunicationContextOperations
 from app.bootstrap.file_link_policies import build_file_link_policy_registry
@@ -46,7 +47,10 @@ from app.modules.operator.infrastructure.schema_validation import validate_opera
 from app.modules.operator.infrastructure.schema_validation import validate_coverage_targets
 from app.modules.operator.infrastructure.schema_validation import validate_command_recovery
 from app.modules.operator.infrastructure.coverage_recovery import validate_coverage_recovery
-from app.bootstrap.operator_recovery_composition import compose_recovery_bindings
+from app.bootstrap.operator_recovery_composition import (
+    compose_recovery_bindings,
+    compose_attempt_namespaces,
+)
 from app.bootstrap.operator_coverage import compose_coverage_sources
 from app.modules.portfolio.infrastructure.schema_validation import validate_portfolio_schema
 from app.modules.portfolio.infrastructure.unit_of_work import SQLitePortfolioLeaseOperations
@@ -96,9 +100,11 @@ def initialize_latest_schema(database_path: Path) -> None:
 
 def validate_latest_schema(database_path: Path) -> None:
     """Accept only the exact current Alembic revision and complete module schemas."""
+
     engine = create_sqlite_engine(database_path)
     try:
         with engine.connect() as connection:
+            validate_attempt_fences(connection, compose_attempt_namespaces())
             actual_tables = set(
                 connection.execute(
                     text(
@@ -108,6 +114,7 @@ def validate_latest_schema(database_path: Path) -> None:
                 ).scalars()
             )
             expected_tables = {
+                "command_attempt_fences",
                 "operator_preferences",
                 "operator_recovery_records",
                 "operator_operations",

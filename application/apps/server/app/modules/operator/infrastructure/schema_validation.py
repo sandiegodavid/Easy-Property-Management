@@ -87,7 +87,9 @@ def validate_operator_schema(connection):
             raise MigrationSchemaError("Operator references are incompatible.")
         triggers = dict(
             connection.execute(
-                text("SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name=:name"),
+                text(
+                    "SELECT name, sql FROM sqlite_master WHERE type='trigger' AND name NOT LIKE 'epm_closed_%' AND tbl_name=:name"
+                ),
                 {"name": table.name},
             ).all()
         )
@@ -287,12 +289,25 @@ def _validate_operations(connection, preferences, recovery):
     revisions = {}
     latest = {}
     recovery_history = {}
+    closures = {
+        (row["recovery_id"], row["attempt_key"]): row
+        for row in connection.execute(text("SELECT * FROM command_attempt_fences")).mappings()
+    }
     for row in operations:
         for key in ("id", "idempotency_key", "correlation_id"):
             identifier(row[key])
         utc(row["created_at"])
         request, result = portable_json(row["request_json"]), portable_json(row["result_json"])
         _validate_request_result(row, request, result)
+        if request.get("kind") == "recovery_returned":
+            fence = closures.pop((row["entity_id"], request["attemptKey"]), None)
+            if (
+                fence is None
+                or fence["recovery_id"] != row["entity_id"]
+                or fence["form_key"] != result["formKey"]
+                or fence["request_fingerprint"] != request["requestFingerprint"]
+            ):
+                raise ValueError("Returned input lost its durable command closure.")
         _validate_operation_result(row, request, result, recovery, preferences)
         entity = (row["entity_type"], row["entity_id"])
         # Creation-time ties are ordered by the revision, not random operation UUIDs.
@@ -302,6 +317,8 @@ def _validate_operations(connection, preferences, recovery):
         change = _validate_operation_audit(row, result, audit_by_operation, mutations)
         if row["entity_type"] == "operator_recovery":
             recovery_history.setdefault(row["entity_id"], []).append((row, request, result, change))
+    if closures:
+        raise ValueError("Command closure lost its recovery history.")
     if audit_by_operation:
         raise ValueError("Operator audit lost its receipt.")
     for entity, values in revisions.items():
@@ -342,6 +359,7 @@ def _validate_request_result(row, request, result):
         "preferences": "updated",
         "recovery_save": "saved",
         "recovery_attempt": "saved",
+        "recovery_returned": "saved",
         "recovery_discarded": "discarded",
         "recovery_reconciled": "reconciled",
         "recovery_expire": "expired",
@@ -369,6 +387,13 @@ def _validate_request_result(row, request, result):
             )
         ):
             raise ValueError("Recovery attempt differs from its receipt.")
+    elif request["kind"] == "recovery_returned":
+        if (
+            result["status"] != "active"
+            or result["attemptKey"] is not None
+            or result["receipt"] is not None
+        ):
+            raise ValueError("Returned form retained a closed attempt.")
     else:
         status = {"discarded": "discarded", "reconciled": "reconciled", "expired": "expired"}[
             row["action"]
@@ -545,6 +570,7 @@ def _validate_history_transition(row, request, state, previous):
             raise ValueError("Recovery transition has no saved predecessor.")
         permitted = {
             "recovery_attempt": {"active"},
+            "recovery_returned": {"outcome_unknown"},
             "recovery_reconciled": {"outcome_unknown"},
             "recovery_discarded": {"active", "reconciled"},
             "recovery_expire": {"active", "reconciled"},
@@ -552,7 +578,14 @@ def _validate_history_transition(row, request, state, previous):
         if previous["status"] not in permitted[kind]:
             raise ValueError("Illegal recovery lifecycle transition.")
         changed = {"revision", "status"}
-        if kind == "recovery_attempt":
+        if kind == "recovery_returned":
+            changed.update(("attemptKey", "requestFingerprint", "savedAt", "expiresAt"))
+            if (
+                request["attemptKey"] != previous["attemptKey"]
+                or request["requestFingerprint"] != previous["requestFingerprint"]
+            ):
+                raise ValueError("Closed attempt differs from its saved identity.")
+        elif kind == "recovery_attempt":
             changed.update(("attemptKey", "requestFingerprint"))
             identifier(state["attemptKey"])
             if (

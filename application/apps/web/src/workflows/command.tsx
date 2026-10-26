@@ -433,6 +433,9 @@ function CommandEditor({
   canSubmit,
 }: CommandEditorProps) {
   const { scope } = useWorkspace();
+  const navigate = useNavigate();
+  const [showSubmitted, setShowSubmitted] = useState(false);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
   const location = useLocation();
   const addingContact = definition.formKey === "party.contact.add";
   const editingContact = definition.formKey === "party.contact.update";
@@ -533,6 +536,8 @@ function CommandEditor({
     propertyTimeZone,
   );
   const locked =
+    recoveryBusy ||
+    state.editAuthority === "required" ||
     defaultZone.pending ||
     !!defaultZone.error ||
     state.command === "submitting" ||
@@ -818,6 +823,38 @@ function CommandEditor({
       >
         {draftSaveLabel(state.draft)}
       </button>
+      <button
+        type="button"
+        disabled={recoveryBusy || addingOwner || selecting || !scope.canWrite}
+        onClick={() => {
+          setRecoveryBusy(true);
+          void action(async () => {
+            await controller.flush();
+            await navigate("/settings/recovery");
+          }).finally(() => setRecoveryBusy(false));
+        }}
+      >
+        Save and close
+      </button>
+      <button
+        type="button"
+        disabled={recoveryBusy || !scope.canWrite}
+        onClick={() => {
+          if (
+            !window.confirm(
+              "Discard this saved form? This removes unfinished input, not an official record.",
+            )
+          )
+            return;
+          setRecoveryBusy(true);
+          void action(async () => {
+            await controller.discard();
+            await navigate("/settings/recovery");
+          }).finally(() => setRecoveryBusy(false));
+        }}
+      >
+        Discard…
+      </button>
     </>
   );
   if (state.command === "committed" && state.record?.receipt)
@@ -842,6 +879,73 @@ function CommandEditor({
       )}
       {showParentLink && !hasContextNavigation && <ParentBackLink to={back} />}
       <h2>{commandTitle}</h2>
+      <RecoveryNavigation controller={controller} blocker={blocker} showActions={false} />
+      {state.command === "outcome_unknown" && (
+        <section aria-label="Submission needs checking">
+          <p role="status">Submission needs checking</p>
+          <h3>Check whether your submission completed</h3>
+          <p>
+            Your submitted information is saved and protected. Check the result before changing it
+            or trying again.
+          </p>
+          <div className="result-card-actions">
+            <button
+              type="button"
+              disabled={recoveryBusy || !scope.canWrite}
+              onClick={() => {
+                setRecoveryBusy(true);
+                void action(() => controller.reconcile()).finally(() => setRecoveryBusy(false));
+              }}
+            >
+              {recoveryBusy ? "Checking submission…" : "Check submission"}
+            </button>
+            <button
+              type="button"
+              disabled={recoveryBusy || !scope.canWrite}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    "Discard this submission? We will check for a completed record first. If it has not committed, its old request will be closed before the saved input is discarded.",
+                  )
+                )
+                  return;
+                setRecoveryBusy(true);
+                void action(async () => {
+                  await controller.discard();
+                  await navigate("/settings/recovery");
+                }).finally(() => setRecoveryBusy(false));
+              }}
+            >
+              Discard…
+            </button>
+            <button
+              type="button"
+              disabled={recoveryBusy || !scope.canWrite}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    "Return to editing? The app will close the old request first so it cannot create a duplicate. A completed submission cannot be changed here.",
+                  )
+                )
+                  return;
+                setRecoveryBusy(true);
+                void action(() => controller.returnToEditing()).finally(() =>
+                  setRecoveryBusy(false),
+                );
+              }}
+            >
+              Fix and continue
+            </button>
+            <button
+              type="button"
+              aria-expanded={showSubmitted}
+              onClick={() => setShowSubmitted(!showSubmitted)}
+            >
+              View submitted information
+            </button>
+          </div>
+        </section>
+      )}
       <p>
         {addingContact
           ? "Choose email, phone number or mailing address, then enter the details. Add an optional label, such as Work or Mobile. The first contact of each type is automatically primary. These contact details are shared wherever this person or organization appears in the app."
@@ -969,6 +1073,7 @@ function CommandEditor({
         </section>
       )}
       <form
+        hidden={state.command === "outcome_unknown" && !showSubmitted}
         onSubmit={(event) => {
           event.preventDefault();
           if (
@@ -1301,7 +1406,7 @@ function CommandEditor({
             />
           </div>
         )}
-        {locked && (
+        {locked && state.command !== "outcome_unknown" && (
           <DraftSaveStatus
             draft={state.draft}
             command={state.command}
@@ -1311,20 +1416,13 @@ function CommandEditor({
       </form>
       {state.command === "outcome_unknown" && (
         <>
-          <p>The outcome is unresolved. Check the original receipt before continuing.</p>
           <button
-            onClick={() => {
-              void action(() => controller.reconcile());
-            }}
-          >
-            Check original result
-          </button>
-          <button
+            disabled={recoveryBusy || !scope.canWrite}
             onClick={() => {
               void action(() => controller.replay(dispatch));
             }}
           >
-            Retry original attempt
+            Retry same submission
           </button>
         </>
       )}
@@ -1406,7 +1504,6 @@ function CommandEditor({
           </button>
         </section>
       )}
-      <RecoveryNavigation controller={controller} blocker={blocker} />
     </section>,
   );
 }

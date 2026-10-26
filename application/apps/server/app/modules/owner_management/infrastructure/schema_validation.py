@@ -115,7 +115,7 @@ def validate_owner_concern_schema(connection):
     actual = {
         name: _sql(sql)
         for name, sql in connection.exec_driver_sql(
-            "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name IN ('owner_concern_follow_up_operations','owner_concern_command_operations')"
+            "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND name NOT LIKE 'epm_closed_%' AND tbl_name IN ('owner_concern_follow_up_operations','owner_concern_command_operations')"
         )
     }
     if actual != {name: _sql(sql) for name, sql in TRIGGERS.items()}:

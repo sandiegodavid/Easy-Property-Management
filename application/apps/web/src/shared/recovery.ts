@@ -46,6 +46,14 @@ export const recoveryApi = {
         headers: lease ? { "X-EPM-Draft-Lease": lease } : undefined,
       }),
     ),
+  returnToEditing: (id: string, body: components["schemas"]["MutationInput"], lease?: string) =>
+    mutation(() =>
+      api.POST("/api/operator/recovery/{record_id}/return", {
+        params: { path: { record_id: id } },
+        body,
+        headers: lease ? { "X-EPM-Draft-Lease": lease } : undefined,
+      }),
+    ),
   discard: (id: string, body: components["schemas"]["MutationInput"], lease?: string) =>
     mutation(() =>
       api.POST("/api/operator/recovery/{record_id}/discard", {
@@ -70,6 +78,7 @@ export class RecoveryController {
   private pendingPrepare?: components["schemas"]["AttemptInput"];
   private pendingReconcile?: components["schemas"]["MutationInput"];
   private pendingDiscard?: components["schemas"]["MutationInput"];
+  private pendingReturn?: components["schemas"]["MutationInput"];
   private active?: Promise<void>;
   private timer?: ReturnType<typeof setTimeout>;
   private disposed = false;
@@ -251,6 +260,15 @@ export class RecoveryController {
     this.snapshot = { ...this.snapshot, ...change };
     for (const listener of this.listeners) listener();
   }
+  private checkAuthority(error: unknown) {
+    if (
+      error instanceof MutationFailure &&
+      ["hosted_draft_lease_conflict", "hosted_draft_revision_conflict"].includes(error.problem.code)
+    ) {
+      this.leaseToken = undefined;
+      this.publish({ editAuthority: "required" });
+    }
+  }
   private accept(record: Recovery) {
     this.scope.requireWrite();
     if (this.disposed) throw new Error("Form was closed. Reload its recovery record.");
@@ -312,6 +330,7 @@ export class RecoveryController {
           draft: canonicalRequest(this.payload) === this.acknowledged ? "saved" : "dirty",
         });
       } catch (error) {
+        this.checkAuthority(error);
         if (error instanceof MutationFailure && error.outcomeUnknown) this.pendingSave = body;
         this.publish({
           draft:
@@ -401,7 +420,20 @@ export class RecoveryController {
       await dispatch(prepared);
       await this.reconcileAttempt();
     } catch (error) {
+      this.checkAuthority(error);
       // Once prepared, even a rejection stays locked until the owning receipt resolves it.
+      if (
+        error instanceof MutationFailure &&
+        !error.outcomeUnknown &&
+        [400, 404, 409, 412, 413, 422].includes(error.status) &&
+        this.snapshot.record?.status === "outcome_unknown"
+      ) {
+        try {
+          await this.returnToEditing();
+        } catch {
+          // Closing may itself have an unknown outcome. Keep the immutable request protected.
+        }
+      }
       this.publish({
         command:
           this.pendingPrepare || this.snapshot.record?.status === "outcome_unknown"
@@ -421,9 +453,35 @@ export class RecoveryController {
     this.locked = true;
     try {
       await this.reconcileAttempt();
+    } catch (error) {
+      this.checkAuthority(error);
+      throw error;
     } finally {
       this.locked = false;
     }
+  }
+
+  async returnToEditing() {
+    if (this.active) await this.active;
+    await this.requireLease();
+    const current = this.snapshot.record;
+    if (!current || current.status !== "outcome_unknown")
+      throw new Error("Check the current submission first.");
+    this.pendingReturn ??= {
+      expectedRevision: current.revision,
+      idempotencyKey: crypto.randomUUID(),
+    };
+    const result = await this.transport.returnToEditing(
+      this.id,
+      this.pendingReturn,
+      this.leaseToken,
+    );
+    this.accept(result);
+    this.pendingReturn = undefined;
+    this.pendingPrepare = undefined;
+    this.pendingReconcile = undefined;
+    this.acknowledged = canonicalRequest(result.payload);
+    this.publish({ command: "editing", draft: "saved", error: undefined, problem: undefined });
   }
   private async reconcileAttempt() {
     this.scope.requireWrite();
@@ -467,6 +525,17 @@ export class RecoveryController {
     }
   }
   async discard() {
+    if (this.snapshot.command === "outcome_unknown") {
+      try {
+        await this.reconcile();
+        throw new Error(
+          "This submission succeeded. Open its result; discarding input does not delete the record.",
+        );
+      } catch (error) {
+        if (!(error instanceof MutationFailure) || error.status !== 409) throw error;
+        await this.returnToEditing();
+      }
+    }
     if (
       this.locked ||
       this.pendingSave ||
@@ -514,5 +583,13 @@ export class RecoveryController {
   activate() {
     this.disposed = false;
     window.addEventListener("epm-session-paused", this.pauseLease);
+    if (
+      hostedMode() &&
+      this.snapshot.record &&
+      this.scope.canWrite &&
+      this.snapshot.command !== "committed"
+    ) {
+      void this.claimEditing().catch(() => undefined);
+    }
   }
 }

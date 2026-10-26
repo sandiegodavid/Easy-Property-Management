@@ -35,7 +35,7 @@ def validate_category_triggers(connection):
     actual = dict(
         connection.execute(
             text(
-                "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = 'expense_category_command_operations'"
+                "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND name NOT LIKE 'epm_closed_%' AND tbl_name = 'expense_category_command_operations'"
             )
         ).all()
     )
