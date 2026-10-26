@@ -100,7 +100,9 @@ function Gate({ children }: { children: ReactNode }) {
     refetchOnReconnect: true,
   });
   const retry = () => void bootstrap.refetch();
-  if (bootstrap.isFetching || bootstrap.isPending) {
+  // Background readiness checks must not unmount admitted forms and discard input.
+  // Errors and changed workspace identities are still handled below after the check.
+  if (bootstrap.isPending) {
     return <p role="status">Checking workspace readiness…</p>;
   }
   if (bootstrap.isError) {

@@ -3,6 +3,55 @@ import { post, type Schema } from "./helpers/workflow-contracts";
 
 test.use({ extraHTTPHeaders: { Origin: "http://127.0.0.1:18744" } });
 
+test("returning to a browser tab retains property input throughout readiness revalidation", async ({
+  page,
+}) => {
+  await page.goto("/properties?workflow=portfolio.property.create");
+  const name = page.getByLabel("Display name (required)", { exact: true });
+  await name.fill("Keep my property input");
+  await page.getByLabel("City (required)", { exact: true }).fill("New York");
+  await page.getByRole("combobox", { name: "State", exact: true }).selectOption("NY");
+  const original = await name.elementHandle();
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/api/operator/bootstrap", async (route) => {
+    await pending;
+    await route.continue();
+  });
+  // Headless tabs remain visible; deliver the same lifecycle events explicitly.
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
+  });
+  const checking = page.waitForRequest("**/api/operator/bootstrap");
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    document.dispatchEvent(new Event("visibilitychange", { bubbles: true }));
+  });
+  await checking;
+  const checked = page.waitForResponse("**/api/operator/bootstrap");
+  try {
+    await expect(name).toHaveValue("Keep my property input");
+    expect(await original.evaluate((node) => node.isConnected)).toBe(true);
+  } finally {
+    release();
+  }
+  await checked;
+  await expect(name).toHaveValue("Keep my property input");
+  await expect(page.getByLabel("City (required)", { exact: true })).toHaveValue("New York");
+  await expect(page.getByRole("combobox", { name: "State", exact: true })).toHaveValue("NY");
+  expect(await original.evaluate((node) => node.isConnected)).toBe(true);
+  await page.unroute("**/api/operator/bootstrap");
+  await page.route("**/api/operator/bootstrap", (route) =>
+    route.fulfill({ status: 503, json: { detail: "Unavailable" } }),
+  );
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event("visibilitychange", { bubbles: true })),
+  );
+  await expect(page.getByRole("button", { name: "Retry connection" })).toBeVisible();
+  await expect(name).toHaveCount(0);
+});
+
 test("property creation offers all states, recovers the selection and submits its abbreviation", async ({
   page,
 }) => {
