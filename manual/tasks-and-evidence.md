@@ -20,6 +20,8 @@ A completion checkbox inside expanded content opens the confirmed completion for
 
 Use **Set waiting context** on the Task. Name the person/event and, if useful, an exact follow-up time/zone. This replaces the complete waiting context; recheck every field before saving.
 
+**Follow up at** uses an editable calendar/time picker in the selected time zone. Changing the time zone shows the same instant in that zone; editing the displayed clock time changes the follow-up. Times skipped by daylight saving are rejected without losing your input.
+
 Use **Reschedule follow-up** to change the date or explicitly remove it. Date removal retains the label and shows Not scheduled. **Clear waiting context** removes waiting with confirmation; it does not acknowledge/dismiss reminders.
 
 Due follow-ups become actionable at their exact instant; a future time today remains scheduled. An overdue Task can remain overdue while waiting. Completing/cancelling clears waiting; reopening does not recreate old waiting/reminders.
@@ -27,6 +29,8 @@ Due follow-ups become actionable at their exact instant; a future time today rem
 ## Reminders
 
 Add a reminder with its own time. Acknowledge or dismiss the specific reminder when appropriate. Reminder state, Task deadline and waiting follow-up are three separate concepts. Deferring follow-up cannot erase an actual deadline. Current reminders require the application to be running; do not assume phone, email or closed-app alerts.
+
+The saved reminder confirmation and Task reminder details use the related property's time zone, even when the Task deadline uses a different zone. Reopening a checked submission uses the same display rule. Without a related property, they use your browser's zone.
 
 ## Record a conversation
 

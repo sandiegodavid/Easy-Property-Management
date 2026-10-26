@@ -526,9 +526,10 @@ function CommandEditor({
   const defaultZone = useFormTimeZone(
     values,
     timeZoneSource,
-    /dueTimezone|remindAtUtc|scheduledTimezone|followUpTimezone/.test(
-      JSON.stringify(definition.schema),
-    ),
+    definition.formKey.startsWith("task.reminder.") ||
+      /dueTimezone|remindAtUtc|scheduledTimezone|followUpTimezone/.test(
+        JSON.stringify(definition.schema),
+      ),
     propertyTimeZone,
   );
   const locked =
@@ -828,6 +829,7 @@ function CommandEditor({
         back={back}
         embedded={embedded}
         onSaved={onSaved}
+        scheduleZone={defaultZone}
       />
     );
   return createElement(

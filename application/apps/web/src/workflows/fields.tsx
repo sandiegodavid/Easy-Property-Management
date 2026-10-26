@@ -134,8 +134,6 @@ export function Fields({
           const fieldPath = path ? `${path}.${key}` : key;
           const update = (next: unknown) => {
             const replacement = { ...values };
-            if (key === "followUpAt" && next && !replacement.followUpTimezone)
-              replacement.followUpTimezone = defaultZone;
             if (key === "methodKind" && next !== "phone") delete replacement.extension;
             if (path === "reporter") {
               if (key === "partyId" && next !== current) {
@@ -337,6 +335,7 @@ export function Fields({
           const instantFields: Record<string, [string, string]> = {
             dueAtUtc: ["Due at", "dueTimezone"],
             remindAtUtc: ["Remind at", "remindTimezone"],
+            followUpAt: ["Follow up at", "followUpTimezone"],
           };
           if (zoneFields[key])
             return (

@@ -30,6 +30,14 @@ createRoot(document.getElementById("root")!).render(
           title="Appointment saved"
           value={{ startsAtUtc: instant, scheduledTimezone: zone, createdAt: instant }}
         />
+        <SavedItem
+          title="Reminder saved"
+          displayTimeZone={zone}
+          value={{
+            dueTimezone: "Asia/Tokyo",
+            reminders: [{ remindAtUtc: instant, createdAt: instant }],
+          }}
+        />
         <p data-testid="home-time">{formatHomeSchedule({ at: instant, timeZone: zone })}</p>
         <p data-testid="all-day">{formatHomeSchedule({ on: "2026-07-02", timeZone: zone })}</p>
       </section>

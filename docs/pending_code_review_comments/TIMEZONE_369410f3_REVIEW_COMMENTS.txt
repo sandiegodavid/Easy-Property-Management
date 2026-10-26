@@ -1,0 +1,38 @@
+Timezone input and display review — commit 369410f3
+Review date: 2026-10-25
+Scope: git diff 369410f3^ 369410f3. Current branch retained: main.
+
+Resolution date: 2026-10-25. Both reported findings are resolved; no broader review performed.
+
+SPECIFICATION — Follow-up input
+
+1. [P2] Connect the follow-up timestamp to its selected time zone.
+Status: resolved (2026-10-25)
+File: application/apps/web/src/workflows/fields.tsx:137-138
+Related: application/apps/web/src/workflows/fields.tsx:332-340
+
+The new code supplies followUpTimezone, but followUpAt is missing from instantFields. Set waiting context and Reschedule follow-up therefore still render a raw text input rather than ZonedDateTimeInput. With America/Los_Angeles selected, entering a local time such as 2027-05-01T10:30 submits that text unchanged; the server rejects it because FollowUpInstant requires an offset-bearing timestamp. Changing the selector also leaves the timestamp text unchanged. Consequently the new property-zone default does not actually govern follow-up time entry, unlike appointment and deadline entry.
+
+Add followUpAt to the shared zoned-input mapping, paired with followUpTimezone. Convert entered wall time into an instant and preserve existing instants when changing the display zone. Add tests that enter and submit a follow-up from a different browser zone, then reopen/reschedule it. The added property-time-zones tests currently assert only the follow-up selector's value, so they do not cover this failure.
+
+Resolution: followUpAt now uses ZonedDateTimeInput with followUpTimezone, and the obsolete raw-input defaulting code is removed. Cross-zone browser tests submit an offset-bearing instant, reopen and reschedule it, prove zone selection preserves the instant, and reject a daylight-saving gap without losing entered input or dispatching a write. Existing waiting/removal/lost-response tests now enter local wall times through the picker.
+
+SPECIFICATION — Saved reminder presentation
+
+2. [P2] Carry the property's display zone into saved reminder confirmations.
+Status: resolved (2026-10-25)
+File: application/apps/web/src/shared/home-time.ts:33-36
+Related: application/apps/web/src/workflows/saved-item.tsx:154
+Related: application/apps/web/src/workflows/command.tsx:822-835
+
+formatRecordInstant maps remindAtUtc to dueTimezone, but ReminderResponse has no such field. SavedData recursively formats the reminder using only that reminder's fields, so the saved confirmation falls back to browser time. The resolved property zone is not passed to SavedCommand, which also renders outside FormTimeZone.Provider. A New York property reminder at 2027-05-01T17:30:00Z consequently shows 10:30 AM America/Los_Angeles in a Pacific browser's saved confirmation and 1:30 PM America/New_York on the Task detail page. This makes the confirmation inconsistent with the new property-local input and reminder detail behavior.
+
+Pass the resolved related-property zone into saved reminder presentation as a display fallback, including recovered committed results. Do not substitute the Task's dueTimezone: an operator may have explicitly overridden the deadline zone. Add a cross-zone reminder-create test that checks the saved confirmation and subsequent Task detail agree. The focused formatter reproduction confirmed the two different displayed times; existing display fixtures do not cover a zone-less ReminderResponse.
+
+Resolution: CommandEditor passes its resolved property display zone to SavedCommand, SavedItem and every nested SavedData entry. Reminder formatting no longer consults dueTimezone. Committed and recovered confirmations wait for the zone lookup and report lookup failure without displaying a misleading browser-time fallback. Reminder acknowledgement/dismissal also resolve their property context. Tests use a Pacific browser, Eastern property and Tokyo deadline, lose the reminder response, reconcile and reopen the committed recovery, then compare the saved confirmation with Task detail while asserting exactly one reminder POST. Display fixtures cover nested zone-less reminders, conflicting deadline zones and unchanged browser-local system timestamps.
+
+Focused verification (2026-10-25):
+- 74 Playwright tests passed: timezone-review.spec.ts, property-time-zones.spec.ts, schedule-pickers.spec.ts and work.spec.ts.
+- 4 time-display.spec.ts component tests passed across Pacific/Tokyo browsers and winter/summer dates.
+- npm run lint, npm run format:check, npm run typecheck and npm run package:web passed.
+- No persistence/schema/backup format or transaction-owner changes; existing immutable receipts and UTC instants are retained.

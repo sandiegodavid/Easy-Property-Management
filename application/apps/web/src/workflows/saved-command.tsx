@@ -177,6 +177,7 @@ export function SavedCommand({
   back,
   embedded,
   onSaved,
+  scheduleZone,
 }: {
   definition: Workflow;
   recovery: Recovery;
@@ -184,6 +185,7 @@ export function SavedCommand({
   back: string;
   embedded: boolean;
   onSaved?: () => void;
+  scheduleZone?: { timeZone: string; pending: boolean; error: unknown };
 }) {
   useEffect(() => onSaved?.(), [onSaved]);
   const { scope } = useWorkspace();
@@ -211,7 +213,8 @@ export function SavedCommand({
       title={
         lifecycle ? `${definition.title} — complete` : `${name} ${edited ? "updated" : "saved"}`
       }
-      value={rentReceipt ? undefined : result.data}
+      value={rentReceipt || scheduleZone?.pending || scheduleZone?.error ? undefined : result.data}
+      displayTimeZone={scheduleZone?.timeZone}
       embedded={embedded}
       destination={
         rentReceipt
@@ -219,6 +222,13 @@ export function SavedCommand({
           : destination(definition.formKey, result.data, target, sourceId, back)
       }
     >
+      {scheduleZone?.pending && <p role="status">Loading scheduling time zone…</p>}
+      {!!scheduleZone?.error && (
+        <p role="alert">
+          Your change is saved, but the property's time zone could not be loaded. Reload this page
+          to retry displaying its details.
+        </p>
+      )}
       {rentReceipt && result.data !== undefined && (
         <SavedRentReceipt value={result.data} leaseId={sourceId!} />
       )}

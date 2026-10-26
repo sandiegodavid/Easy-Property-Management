@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext, type Page, type TestInfo } from "@playwright/test";
 import type { components } from "@epm/contracts/generated";
 import axe from "axe-core";
+import { zonedWallTime } from "../src/shared/zoned-date-time";
 
 type Schemas = components["schemas"];
 test("Task summary reminders use browser time and expanded follow-ups use their saved zone", async ({
@@ -904,10 +905,15 @@ test("Waiting preserves deadline and urgency; clearing is not completion", async
   await openAction(page, "task.waiting.set", original.id);
   await page.getByLabel("Waiting for kind").selectOption("organization");
   await page.getByLabel("Waiting for label").fill("Plumber reply");
+  await page.getByLabel("Follow up timezone", { exact: true }).selectOption("America/Los_Angeles");
   await page
     .getByLabel("Follow up at", { exact: true })
-    .fill(new Date(Date.now() + 3600000).toISOString());
-  await page.getByLabel("Follow up timezone", { exact: true }).selectOption("America/Los_Angeles");
+    .fill(
+      zonedWallTime(new Date(Date.now() + 3600000).toISOString(), "America/Los_Angeles").slice(
+        0,
+        16,
+      ),
+    );
   await save(page, "Set waiting context");
   const waiting = await get<Schemas["TaskResponse"]>(request, `/api/tasks/${original.id}`);
   expect(waiting.isWaiting).toBe(true);
@@ -946,10 +952,15 @@ test("Waiting replacement and date removal retain deadline, reminder and unsched
   await openAction(page, "task.waiting.set", original.id);
   await page.getByLabel("Waiting for kind").selectOption("organization");
   await page.getByLabel("Waiting for label").fill("Contractor response");
+  await page.getByLabel("Follow up timezone", { exact: true }).selectOption("America/Los_Angeles");
   await page
     .getByLabel("Follow up at", { exact: true })
-    .fill(new Date(Date.now() + 3600000).toISOString());
-  await page.getByLabel("Follow up timezone", { exact: true }).selectOption("America/Los_Angeles");
+    .fill(
+      zonedWallTime(new Date(Date.now() + 3600000).toISOString(), "America/Los_Angeles").slice(
+        0,
+        16,
+      ),
+    );
   await save(page, "Set waiting context");
   await page.goto(`/tasks?record=task&id=${original.id}`);
   await page.getByRole("button", { name: "Set waiting context", exact: true }).click();
@@ -1002,10 +1013,15 @@ test("Waiting reschedule lost response recovers one overdue follow-up without re
   await openAction(page, "task.waiting.reschedule", original.id);
   await page.getByRole("checkbox", { name: "Clear follow up at", exact: true }).uncheck();
   await page.getByRole("checkbox", { name: "Clear follow up timezone", exact: true }).uncheck();
+  await page.getByLabel("Follow up timezone", { exact: true }).selectOption("America/Los_Angeles");
   await page
     .getByLabel("Follow up at", { exact: true })
-    .fill(new Date(Date.now() - 3600000).toISOString());
-  await page.getByLabel("Follow up timezone", { exact: true }).selectOption("America/Los_Angeles");
+    .fill(
+      zonedWallTime(new Date(Date.now() - 3600000).toISOString(), "America/Los_Angeles").slice(
+        0,
+        16,
+      ),
+    );
   let dispatches = 0;
   await page.route(`**/api/tasks/${original.id}/waiting/follow-up`, async (route) => {
     dispatches++;

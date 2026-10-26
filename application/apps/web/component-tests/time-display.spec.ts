@@ -37,6 +37,11 @@ for (const browserZone of ["America/Los_Angeles", "Asia/Tokyo"]) {
           ]);
           await expect(section.locator(".saved-item-facts dd").first()).toHaveText(sourceTime);
           await expect(section.locator(".saved-item-facts dd").last()).toHaveText(browserTime);
+          await expect(
+            section
+              .getByRole("region", { name: "Reminder saved", exact: true })
+              .locator(".saved-item-entry .saved-item-facts dd"),
+          ).toHaveText([sourceTime, browserTime]);
           await expect(section.getByTestId("home-time")).toHaveText(
             zone === browserZone ? browserTime : `${browserTime} · Source time: ${sourceTime}`,
           );

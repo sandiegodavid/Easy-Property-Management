@@ -23,6 +23,7 @@ export function formatRecordInstant(
   instant: string,
   field: string,
   record: Record<string, unknown>,
+  displayTimeZone?: string,
 ) {
   const zoneField: Record<string, string> = {
     startsAtUtc: "scheduledTimezone",
@@ -30,9 +31,13 @@ export function formatRecordInstant(
     dueAtUtc: "dueTimezone",
     followUpAt: "followUpTimezone",
     followUpAtUtc: "followUpTimezone",
-    remindAtUtc: "dueTimezone",
   };
-  const zone = zoneField[field] ? record[zoneField[field]] : undefined;
+  const zone =
+    field === "remindAtUtc"
+      ? displayTimeZone
+      : zoneField[field]
+        ? record[zoneField[field]] || displayTimeZone
+        : undefined;
   return formatTime(instant, typeof zone === "string" ? zone : undefined);
 }
 

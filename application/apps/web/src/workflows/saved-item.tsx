@@ -49,7 +49,12 @@ function fieldLabel(key: string) {
   return names[key] ?? label(key.replaceAll("_", " "));
 }
 
-function text(key: string, value: string | number | boolean, context: Record<string, unknown>) {
+function text(
+  key: string,
+  value: string | number | boolean,
+  context: Record<string, unknown>,
+  displayTimeZone?: string,
+) {
   if (key === "sharePercent") return value === "Not recorded" ? value : `${Number(value)}%`;
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (/Minor$/.test(key) && /^-?\d+$/.test(String(value))) return formatUsd(cents(value));
@@ -70,7 +75,7 @@ function text(key: string, value: string | number | boolean, context: Record<str
     /^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(value) &&
     Number.isFinite(Date.parse(value))
   )
-    return formatRecordInstant(value, key, context);
+    return formatRecordInstant(value, key, context, displayTimeZone);
   const words: Record<string, string> = {
     local_operator: "You",
     single_space: "Whole home",
@@ -84,7 +89,15 @@ function text(key: string, value: string | number | boolean, context: Record<str
 }
 
 /** Render only saved business data, never technical identifiers or unrestricted JSON. */
-function SavedData({ value, depth = 0 }: { value: unknown; depth?: number }) {
+function SavedData({
+  value,
+  depth = 0,
+  displayTimeZone,
+}: {
+  value: unknown;
+  depth?: number;
+  displayTimeZone?: string;
+}) {
   if (depth > 5) return null;
   const entries = Object.entries(record(value)).filter(
     ([key, entry]) =>
@@ -107,7 +120,12 @@ function SavedData({ value, depth = 0 }: { value: unknown; depth?: number }) {
             <div key={key}>
               <dt>{key.endsWith("Minor") ? fieldLabel(key.slice(0, -5)) : fieldLabel(key)}</dt>
               <dd>
-                {text(key, (entry ?? "Not recorded") as string | number | boolean, record(value))}
+                {text(
+                  key,
+                  (entry ?? "Not recorded") as string | number | boolean,
+                  record(value),
+                  displayTimeZone,
+                )}
               </dd>
             </div>
           ))}
@@ -149,9 +167,9 @@ function SavedData({ value, depth = 0 }: { value: unknown; depth?: number }) {
                   {typeof row === "string" ||
                   typeof row === "number" ||
                   typeof row === "boolean" ? (
-                    <p>{text(key, row, record(value))}</p>
+                    <p>{text(key, row, record(value), displayTimeZone)}</p>
                   ) : (
-                    <SavedData value={row} depth={depth + 1} />
+                    <SavedData value={row} depth={depth + 1} displayTimeZone={displayTimeZone} />
                   )}
                 </div>
               ))}
@@ -169,12 +187,14 @@ export function SavedItem({
   destination,
   embedded = false,
   children,
+  displayTimeZone,
 }: {
   title: string;
   value?: unknown;
   destination?: { to: string; label: string };
   embedded?: boolean;
   children?: ReactNode;
+  displayTimeZone?: string;
 }) {
   const heading = useId();
   return (
@@ -182,7 +202,7 @@ export function SavedItem({
       <header className="saved-item-heading" role="status">
         {embedded ? <h3 id={heading}>{title}</h3> : <h2 id={heading}>{title}</h2>}
       </header>
-      {value !== undefined && <SavedData value={value} />}
+      {value !== undefined && <SavedData value={value} displayTimeZone={displayTimeZone} />}
       {children}
       {destination && (
         <footer className="saved-item-actions">
