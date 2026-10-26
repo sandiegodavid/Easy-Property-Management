@@ -86,6 +86,36 @@ test("packaged deep link, real enrollment, secure cookie, CSRF, expiry and expli
   ).toBe(403);
 });
 
+test("renewing Cloudflare sign-in returns to public sign-in and requires explicit continuation", async ({
+  page,
+}) => {
+  // Model the provider redirect only; the callback, shell and session endpoint
+  // remain real application requests. No live Cloudflare logout occurs here.
+  await page.route("**/cdn-cgi/access/logout", (route) =>
+    route.fulfill({
+      status: 302,
+      headers: { location: "https://demo.epm.test/?__cf_access_message=logged_out" },
+    }),
+  );
+  await page.goto("/sign-in");
+  let admissions = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/api/hosted/session") {
+      admissions++;
+    }
+  });
+  const callback = page.waitForResponse(
+    (response) => new URL(response.url()).search === "?__cf_access_message=logged_out",
+  );
+  await page.getByRole("link", { name: "Renew Cloudflare sign-in", exact: false }).click();
+  expect((await callback).status()).toBe(303);
+  await expect(page).toHaveURL("https://demo.epm.test/sign-in");
+  await expect(page.getByRole("heading", { name: "Sign in to your demo workspace" })).toBeVisible();
+  expect(admissions).toBe(0);
+  await signIn(page);
+  await expect(page.getByLabel("Title (required)", { exact: true })).toBeVisible();
+});
+
 test("wrong email and invalid proof fail closed in the real packaged application", async ({
   page,
 }) => {

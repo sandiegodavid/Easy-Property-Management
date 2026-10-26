@@ -79,7 +79,10 @@ downloaded files or promises to log out unrelated applications.
 
 Renew Cloudflare sign-in through the explicitly labelled link before starting a new session
 after logout; it can sign out broader Access sessions. Old assertions are deliberately
-refused. If logout cannot be confirmed, this browser still closes private content; ask the
+refused. The provider's logout return redirects to the public sign-in page; click
+**Continue to workspace** explicitly after completing email sign-in. The redirect
+does not approve enrollment or create an application session. If logout cannot be
+confirmed, this browser still closes private content; ask the
 administrator to revoke access. Never share tokens or PINs.
 
 ## Multiple devices and shared forms

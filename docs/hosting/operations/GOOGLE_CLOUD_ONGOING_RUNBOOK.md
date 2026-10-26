@@ -236,6 +236,32 @@ If workspace or hosted validation fails, stop. This greenfield project has no co
 migration procedure: do not initialize, rewrite or reset existing records to make
 a new release fit. Use the separate reviewed restore/reset procedure if needed.
 
+After A passes acceptance, repeat step 4 for B. Set `previous` to the release recorded
+for B in step 3; keep the same `$release` and `$next` values:
+
+```bash
+sudo -u epm-b env TMPDIR=/var/lib/epm-b/volume/tmp \
+  "$previous/venv/bin/python" -m app --config /var/lib/epm-b/hosted-local.json \
+  hosted-admin /etc/epm/hosted-b.json disable
+sudo systemctl stop epm-hosted@b.service
+sudo systemctl is-active epm-hosted@b.service
+
+sudo -u epm-b env TMPDIR=/var/lib/epm-b/volume/tmp \
+  "$previous/venv/bin/python" -m app --config /var/lib/epm-b/hosted-local.json \
+  hosted-backup /etc/epm/hosted-b.json \
+  --output "/var/backups/epm-b/before-$release.epm-backup" \
+  --staging-directory /var/backups/epm-b/staging
+
+sudo -u epm-b env TMPDIR=/var/lib/epm-b/volume/tmp \
+  "$next/venv/bin/python" -m app --config /var/lib/epm-b/hosted-local.json workspace-status
+sudo -u epm-b env TMPDIR=/var/lib/epm-b/volume/tmp \
+  "$next/venv/bin/python" -m app --config /var/lib/epm-b/hosted-local.json \
+  validate-hosted-config /etc/epm/hosted-b.json
+```
+
+The `is-active` command must report `inactive`; its nonzero exit is expected. Enter
+the backup passphrase at the prompt. Stop if backup or either validation fails.
+
 ## 5. Switch, then verify
 
 Before editing, preserve any existing `90-release.conf` in the new release's
@@ -279,6 +305,40 @@ Repeat steps 4–5 for B using `epm-b`, `hosted-b.json`, its local configuration
 `epm-hosted@b.service`, port `8002` and `https://demo-b.epmdemo.xyz`. Keep the
 per-instance previous command/override so either instance can be rolled back.
 Do not change Cloudflare routing, ports, mounts or enrollment bindings for a code-only release.
+
+For B, run these commands on the VM after B passes step 4. Preserve any existing
+B release drop-in in its rollback records before editing:
+
+```bash
+sudo mkdir -p /etc/systemd/system/epm-hosted@b.service.d
+sudoedit /etc/systemd/system/epm-hosted@b.service.d/90-release.conf
+```
+
+Enter the actual `$next` release path in the override (replace `RELEASE`):
+
+```ini
+[Service]
+ExecStart=
+ExecStart=/opt/epm/releases/RELEASE/venv/bin/python -m app --config /var/lib/epm-b/hosted-local.json serve-hosted --deployment /etc/epm/hosted-b.json --port 8002
+```
+
+Then run:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemd-analyze verify epm-hosted@b.service
+sudo systemctl show epm-hosted@b.service -p ExecStart
+sudo systemctl start epm-hosted@b.service
+sudo systemctl status epm-hosted@b.service --no-pager
+sudo journalctl -u epm-hosted@b.service --since '5 minutes ago' --no-pager
+```
+
+If an older release's **Renew Cloudflare sign-in** returns a 403 at
+`/?__cf_access_message=logged_out`, navigate directly to the assigned origin's
+`/sign-in` and continue explicitly. The corrected hosted middleware redirects that
+exact public HTML navigation to `/sign-in`; session creation and business requests
+still require their normal origin and identity checks. Include the middleware fix
+in the next release and verify renewal through the real Cloudflare flow after deployment.
 
 ## 6. Record the result or roll back
 

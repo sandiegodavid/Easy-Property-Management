@@ -213,13 +213,18 @@ class HostedTransportMiddleware:
         if not private_peer or headers.get("host") != expected:
             raise HostedAccessError("hosted_host_rejected", "Request host is not authorized.", 403)
         origin = headers.get("origin")
-        sign_in_navigation = (
-            path == "/sign-in"
-            and method == "GET"
+        public_navigation = (
+            method == "GET"
             and origin is None
             and headers.get("sec-fetch-mode") == "navigate"
             and headers.get("sec-fetch-dest") == "document"
             and accepts_html(scope["headers"])
+        )
+        sign_in_navigation = public_navigation and path == "/sign-in"
+        access_logout_return = (
+            public_navigation
+            and path == "/"
+            and scope.get("query_string") == b"__cf_access_message=logged_out"
         )
         if (
             origin is not None
@@ -227,7 +232,7 @@ class HostedTransportMiddleware:
             or method not in SAFE_METHODS
             and origin != self.service.deployment.public_origin
             or headers.get("sec-fetch-site") == "cross-site"
-            and not sign_in_navigation
+            and not (sign_in_navigation or access_logout_return)
         ):
             raise HostedAccessError(
                 "hosted_origin_rejected", "Request origin is not authorized.", 403
@@ -238,6 +243,20 @@ class HostedTransportMiddleware:
         if len(self.admissions) >= MAX_REQUESTS_PER_MINUTE:
             raise HostedAccessError("hosted_rate_limited", "Request limit reached; try later.", 429)
         self.admissions.append(tick)
+        if access_logout_return:
+            # Access may return through a cross-site navigation after logout.
+            # This public landing redirects only; it never admits a session.
+            response = RedirectResponse(
+                "/sign-in",
+                status_code=303,
+                headers={
+                    "Cache-Control": "no-store",
+                    "X-Content-Type-Options": "nosniff",
+                    "Vary": "Sec-Fetch-Dest, Sec-Fetch-Mode, Sec-Fetch-Site",
+                },
+            )
+            await response(scope, receive, send)
+            return
         try:
             size = int(headers.get("content-length", "0"))
         except ValueError as error:

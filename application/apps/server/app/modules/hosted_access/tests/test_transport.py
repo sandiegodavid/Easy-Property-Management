@@ -230,6 +230,79 @@ def test_cross_site_top_level_navigation_can_reach_public_sign_in(transport):
     assert calls == []
 
 
+def test_access_logout_return_redirects_without_identity_or_session_admission(transport):
+    client, store, calls, _ready = transport
+    del client.headers["cf-access-jwt-assertion"]
+    response = client.get(
+        "/?__cf_access_message=logged_out",
+        headers={
+            "accept": "text/html",
+            "sec-fetch-site": "cross-site",
+            "sec-fetch-mode": "navigate",
+            "sec-fetch-dest": "document",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/sign-in"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["vary"] == "Sec-Fetch-Dest, Sec-Fetch-Mode, Sec-Fetch-Site"
+    assert "set-cookie" not in response.headers
+    assert store.enrollments() == []
+    assert calls == []
+    # Following the fixed redirect can reach only the public sign-in route.
+    assert (
+        client.get(
+            response.headers["location"],
+            headers={
+                "accept": "text/html",
+                "sec-fetch-site": "cross-site",
+                "sec-fetch-mode": "navigate",
+                "sec-fetch-dest": "document",
+            },
+        ).status_code
+        == 404
+    )
+
+
+@pytest.mark.parametrize(
+    ("path", "method", "headers"),
+    [
+        ("/", "GET", {}),
+        ("/?__cf_access_message=other", "GET", {}),
+        ("/?__cf_access_message=logged_out&next=https://attacker.example", "GET", {}),
+        ("/api/tasks?__cf_access_message=logged_out", "GET", {}),
+        ("/api/hosted/session?__cf_access_message=logged_out", "POST", {}),
+        ("/?__cf_access_message=logged_out", "POST", {}),
+        ("/?__cf_access_message=logged_out", "GET", {"origin": "https://attacker.example"}),
+        ("/?__cf_access_message=logged_out", "GET", {"origin": "null"}),
+        ("/?__cf_access_message=logged_out", "GET", {"host": "attacker.example"}),
+        ("/?__cf_access_message=logged_out", "GET", {"sec-fetch-mode": "cors"}),
+        ("/?__cf_access_message=logged_out", "GET", {"sec-fetch-dest": "iframe"}),
+        ("/?__cf_access_message=logged_out", "GET", {"accept": "application/json"}),
+    ],
+)
+def test_access_logout_return_exception_is_narrow(transport, path, method, headers):
+    client, store, calls, _ready = transport
+    response = client.request(
+        method,
+        path,
+        headers={
+            "accept": "text/html",
+            "sec-fetch-site": "cross-site",
+            "sec-fetch-mode": "navigate",
+            "sec-fetch-dest": "document",
+            **headers,
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 403
+    assert "location" not in response.headers
+    assert store.enrollments() == []
+    assert calls == []
+
+
 @pytest.mark.parametrize(
     ("path", "method", "headers"),
     [
