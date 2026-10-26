@@ -1,6 +1,7 @@
 """Exercise wizard guards without executing build, cloud or service operations."""
 
 import io
+import hashlib
 import os
 from pathlib import Path
 import shlex
@@ -95,6 +96,25 @@ def check_b_command(value):
 
 def test_b_accepts_its_exact_effective_command():
     assert check_b_command(command()).returncode == 0
+
+
+def test_operator_approval_labels_subject_and_keeps_explicit_confirmation():
+    result = shell(
+        "instance=a\norigin=https://demo-a.example.com\ndeployment=/hosted-a.json\n"
+        'as_owner() { if [[ "$4" == enrollments ]]; then echo verified-subject; '
+        'else printf "approved:%s\\n" "$6"; fi; }\n'
+        'ask() { printf "%s\\n" "$2"; printf -v "$1" %s verified-subject; }\n'
+        'confirm() { printf "%s\\n" "$1"; }\n'
+        "activate_operator /release/python\n"
+        '[[ -z "${EPM_SUBJECT:-}" ]]'
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Enrollment subjects for instance a (https://demo-a.example.com)" in result.stdout
+    assert "Enrollment subject: verified-subject" in result.stdout
+    assert "not an email address or workspace ID" in result.stdout
+    assert "Paste the verified enrollment subject shown above" in result.stdout
+    assert "Approve enrollment subject verified-subject for instance a?" in result.stdout
+    assert "approved:verified-subject" in result.stdout
 
 
 @pytest.mark.parametrize("path", ["/usr/bin/python", "/opt/epm/releases/RELEASE/../bad/python"])
@@ -237,6 +257,57 @@ def test_wizard_libraries_remain_identical():
     assert mac == vm
 
 
+@pytest.mark.parametrize("corrupt", [False, True])
+def test_install_checksum_enters_private_release_as_root(tmp_path, corrupt):
+    release = tmp_path / "private release"
+    release.mkdir(mode=0o700)
+    (release / "item.txt").write_text("release payload\n")
+    digest = hashlib.sha256((release / "item.txt").read_bytes()).hexdigest()
+    (release / "SHA256SUMS").write_text(f"{digest}  item.txt\n")
+    if corrupt:
+        (release / "item.txt").write_text("corrupted")
+    script = (SCRIPTS / "epm-release-vm.sh").read_text()
+    line = next(line for line in script.splitlines() if "sha256sum --check SHA256SUMS" in line)
+    # Stand in for sudo; prove the directory change belongs to the privileged
+    # shell, with an intact quoted path, rather than to the caller's subshell.
+    result = shell(
+        f"next={shlex.quote(str(release))}\n"
+        "trap 'failed \"$?\"' ERR\n"
+        'sudo() { [[ "$1" == sh && "$2" == -c ]] || return 99; "$@"; }\n' + line
+    )
+    if corrupt:
+        assert result.returncode != 0
+        assert result.stderr.count("Operation failed") == 1
+    else:
+        assert result.returncode == 0
+        assert "item.txt: OK" in result.stdout
+
+
+@pytest.mark.parametrize("state", ["matching", "changed", "extra", "venv", "selected"])
+def test_partial_install_retry_requires_an_untouched_unused_extraction(tmp_path, state):
+    archive = tmp_path / "release.tar.gz"
+    make_archive(archive)
+    release = tmp_path / "private release"
+    release.mkdir(mode=0o700)
+    with tarfile.open(archive) as supplied:
+        supplied.extractall(release, filter="data")
+    if state == "changed":
+        (release / "SOURCE_COMMIT.txt").write_text("changed")
+    elif state == "extra":
+        (release / "unexpected").touch()
+    elif state == "venv":
+        (release / "venv").mkdir()
+    selected = str(release / "venv/bin/python") if state == "selected" else "/old/venv/bin/python"
+    result = shell(
+        f"next={shlex.quote(str(release))}\narchive={shlex.quote(str(archive))}\n"
+        f"previous_python={shlex.quote(sys.executable)}\n"
+        'sudo() { if [[ "$1" == systemctl ]]; then '
+        f'printf "%s\\n" {shlex.quote(selected)}; else "$@"; fi; }}\n'
+        "check_partial_extraction"
+    )
+    assert (result.returncode == 0) == (state == "matching")
+
+
 @pytest.mark.skipif(sys.platform != "darwin", reason="Tests the Mac system tar metadata flags")
 def test_mac_archive_does_not_generate_appledouble_sidecars(tmp_path):
     source = tmp_path / "source"
@@ -254,3 +325,130 @@ def test_mac_archive_does_not_generate_appledouble_sidecars(tmp_path):
     )
     with tarfile.open(archive) as contents:
         assert not any(Path(member.name).name.startswith("._") for member in contents)
+
+
+def test_mac_demo_exports_stay_outside_checkout_and_feed_upload_list(tmp_path):
+    application = tmp_path / "checkout" / "application"
+    application.mkdir(parents=True)
+    external = tmp_path / "external"
+    external.mkdir()
+    result = shell(
+        f"application={shlex.quote(str(application))}\n"
+        f"external={shlex.quote(str(external))}\n"
+        "release=release-20261026-02\nsource_commit=abc\npython_path=/unused\n"
+        "demo_files=()\n"
+        'mktemp() { command mktemp -d "$external/demo.XXXXXXXX"; }\n'
+        "node() {\n"
+        "  while [[ $# -gt 0 ]]; do\n"
+        '    case "$1" in\n'
+        "      export|--output)\n"
+        '        [[ "$2" == "$external/"* && "$2" != "$application/"* ]] || return 99\n'
+        '        touch "$2"; return;;\n'
+        "    esac\n"
+        "    shift\n"
+        "  done\n"
+        "}\n"
+        'prepare_demo_archives\nprintf "artifact:%s\\n" "${demo_files[@]}"',
+        "epm-release-mac.sh",
+    )
+    assert result.returncode == 0, result.stderr
+    artifacts = [
+        Path(line.removeprefix("artifact:"))
+        for line in result.stdout.splitlines()
+        if line.startswith("artifact:")
+    ]
+    assert [path.name for path in artifacts] == [
+        f"release-20261026-02-demo-{role}{suffix}"
+        for role in ("a", "b")
+        for suffix in (".epm-backup", ".json")
+    ]
+    assert all(path.is_file() and path.is_relative_to(external) for path in artifacts)
+    assert not (application / "dist").exists()
+
+
+@pytest.mark.parametrize("missing", ["archive", "descriptor", "both"])
+def test_reset_missing_inputs_stops_before_checkpoint_or_privileged_commands(tmp_path, missing):
+    for kind, suffix in (("archive", ".epm-backup"), ("descriptor", ".json")):
+        if missing not in (kind, "both"):
+            (tmp_path / f"release-20261026-02-demo-a{suffix}").touch()
+    result = shell(
+        f"HOME={shlex.quote(str(tmp_path))}\n"
+        "EPM_RELEASE=release-20261026-02\ninstance=a\n"
+        "current_python() { echo unexpected-interpreter; exit 99; }\n"
+        "sudo() { echo unexpected-privilege; exit 99; }\n"
+        "write_env() { echo unexpected-state-write; exit 99; }\nprepare_reset"
+    )
+    assert result.returncode != 0
+    assert "No reset checkpoint was created" in result.stderr
+    assert "unexpected-" not in result.stdout
+
+
+def test_interrupted_config_switch_never_dispatches_against_a_mixed_binding():
+    result = shell(
+        "reset_field() { echo switching; }\n"
+        "ensure_stopped() { echo stopped; }\n"
+        'as_owner() { die "unexpected authority command"; }\nfence_reset'
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "stopped"
+
+
+def test_reset_backup_retry_validates_existing_backup_instead_of_creating_another():
+    result = shell(
+        "deployment=/etc/epm/hosted-a.json\naccount=epm-a\n"
+        "reset_done() { return 1; }\n"
+        'reset_field() { case "$1" in backup) echo /old.epm-backup;; '
+        "old_python) echo /old/python;; esac; }\n"
+        'sudo() { [[ "$1" == test && "$2" == -f ]]; }\n'
+        'as_owner() { printf "owner: %s\\n" "$*"; }\n'
+        'reset_mark() { printf "marked: %s\\n" "$1"; }\nreset_backup'
+    )
+    assert result.returncode == 0
+    assert "owner: /old/python validate-archive /old.epm-backup" in result.stdout
+    assert "hosted-backup" not in result.stdout
+    assert "marked: backed_up" in result.stdout
+
+
+def test_new_authority_store_retry_never_reinitializes_and_sets_fresh_proof_cutoff():
+    result = shell(
+        "reset_done() { return 1; }\nreset_field() { echo /candidate; }\n"
+        'sudo() { [[ "$1" == test && "$2" == -e ]]; }\n'
+        'candidate_cli() { printf "candidate: %s\\n" "$*"; }\n'
+        'reset_mark() { printf "marked: %s\\n" "$1"; }\ninitialize_reset'
+    )
+    assert result.returncode == 0
+    assert "candidate: hosted-admin /candidate initialize\n" not in result.stdout
+    assert "candidate: hosted-admin /candidate enrollments" in result.stdout
+    assert "candidate: hosted-admin /candidate disable" in result.stdout
+    assert result.stdout.index("disable") < result.stdout.index("marked: initialized")
+
+
+def test_reset_resume_skips_completed_backup_restore_and_initialization():
+    result = shell(
+        "reset_done() { return 0; }\n"
+        'sudo() { die "unexpected system call"; }\n'
+        'as_owner() { die "unexpected backup"; }\n'
+        'candidate_cli() { die "unexpected restore/init"; }\n'
+        "reset_backup\nrestore_reset\ninitialize_reset"
+    )
+    assert result.returncode == 0
+
+
+@pytest.mark.parametrize("status", [1, 2, 126])
+def test_unreadable_reset_checkpoint_is_not_treated_as_an_unfinished_step(status):
+    result = shell(
+        f"demo_tool() {{ return {status}; }}\nrecord=/private\n"
+        "if reset_done restored; then echo done; else echo would-repeat; fi"
+    )
+    assert result.returncode != 0
+    assert "would-repeat" not in result.stdout
+    assert "no step will be repeated" in result.stderr
+
+
+def test_valid_missing_reset_checkpoint_is_distinct_from_read_failure():
+    result = shell(
+        "demo_tool() { return 3; }\nrecord=/private\n"
+        "if reset_done restored; then echo done; else echo pending; fi"
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "pending"

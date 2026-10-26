@@ -289,11 +289,14 @@ readiness() {
   die "Readiness failed. Do not activate access."
 }
 activate_operator() {
-  as_owner "$1" hosted-admin "$deployment" enrollments
-  say "Verify the subject against the intended operator. Do not reuse A's subject for B."
-  ask EPM_SUBJECT "Exact verified enrollment subject (not saved):"
+  say "Enrollment subjects for instance $instance ($origin):"
+  as_owner "$1" hosted-admin "$deployment" enrollments | sed 's/^/  Enrollment subject: /'
+  say "A subject is the sign-in account identifier, not an email address or workspace ID."
+  say "Copy the value after 'Enrollment subject:' for the intended operator who just requested approval."
+  say "If no subject appears, return to sign-in and request approval first. If unsure which is yours, stop; do not guess or copy another instance's value."
+  ask EPM_SUBJECT "Paste the verified enrollment subject shown above (not saved):"
   [[ "$EPM_SUBJECT" =~ ^[A-Za-z0-9_:@./-]+$ ]] || die "A verified subject is required."
-  confirm "Activate this verified subject for instance $instance?" || die "Left fenced; activation cancelled."
+  confirm "Approve enrollment subject $EPM_SUBJECT for instance $instance?" || die "Left fenced; activation cancelled."
   as_owner "$1" hosted-admin "$deployment" activate --subject "$EPM_SUBJECT"
   unset EPM_SUBJECT
   say "On your Mac, open $origin/sign-in."
@@ -341,6 +344,38 @@ with tarfile.open(sys.argv[1], "r:gz") as archive:
             raise SystemExit("Null bytes in Python source; rebuild on Mac.")
 PY
 }
+check_partial_extraction() {
+  sudo test -d "$next" && sudo test ! -L "$next" || die "Not a regular release directory."
+  sudo test ! -e "$next/venv" && sudo test ! -L "$next/venv" ||
+    die "A virtual environment already exists; inspect or use a new release ID."
+  local selected
+  selected="$(sudo systemctl show epm-hosted@a.service epm-hosted@b.service -p ExecStart --value)"
+  [[ "$selected" != *"$next/"* ]] || die "This release is selected by a service; do not reinstall."
+  sudo "$previous_python" - "$archive" "$next" <<'PY'
+import hashlib, sys, tarfile
+from pathlib import Path, PurePosixPath
+
+def digest(stream):
+    return hashlib.file_digest(stream, "sha256").digest()
+
+root = Path(sys.argv[2])
+with tarfile.open(sys.argv[1], "r:gz") as archive:
+    expected = {str(PurePosixPath(m.name)): m for m in archive.getmembers() if m.isfile()}
+    actual = set()
+    for path in root.rglob("*"):
+        if path.is_symlink() or not (path.is_dir() or path.is_file()):
+            raise SystemExit("Unsafe partial extraction; inspect before retrying.")
+        if path.is_file():
+            actual.add(path.relative_to(root).as_posix())
+    if actual != expected.keys():
+        raise SystemExit("Partial extraction has missing or extra files; use a new release ID.")
+    for name, member in expected.items():
+        with (root / name).open("rb") as retained, archive.extractfile(member) as supplied:
+            if digest(retained) != digest(supplied):
+                raise SystemExit("Partial extraction differs from archive; use a new release ID.")
+print("Existing pre-venv extraction exactly matches the verified archive.")
+PY
+}
 install_release() {
   stage "Choose the release and verify its independent checksum"
   select_release
@@ -354,14 +389,24 @@ install_release() {
   local digest
   digest="$(sha256sum "$archive")"; digest="${digest%% *}"
   [[ "$digest" == "$EPM_ARCHIVE_SHA256" ]] || die "Archive checksum mismatch."
-  [[ ! -e "$next" && ! -L "$next" ]] || die "Release already exists; use Deploy or a new ID."
   archive_check
+  local partial=false
+  if [[ -e "$next" || -L "$next" ]]; then
+    check_partial_extraction
+    partial=true
+  fi
 
   stage "Install a fresh release beside the running services"
   confirm "Install verified $EPM_RELEASE using the current hosted Python/dependency set?" || die "Installation cancelled."
-  sudo mkdir -m 0755 "$next"
-  sudo tar --no-same-owner -xzf "$archive" -C "$next"
-  ( cd "$next"; sudo sha256sum --check SHA256SUMS )
+  if [[ "$partial" == false ]]; then
+    sudo mkdir -m 0755 "$next"
+    sudo tar --no-same-owner -xzf "$archive" -C "$next"
+  else
+    say "Continuing the verified pre-venv extraction; no files will be overwritten."
+  fi
+  # The archive's '.' entry may restore the Mac bundle's private 0700 mode.
+  # Enter and verify as root, then normalize only the new release's permissions.
+  sudo sh -c 'cd "$1" && sha256sum --check SHA256SUMS' sh "$next"
   sudo chown -R root:root "$next"
   sudo chmod -R u=rwX,go=rX "$next"
   sudo "$previous_python" -m pip freeze --exclude easy-property-management |
@@ -527,6 +572,202 @@ rollback_release() {
   browser_acceptance "$previous_python"
   say "Record rollback and its checks; preserve failed release evidence and backups."
 }
+demo_tool() {
+  [[ -f "$next/release_demo.py" ]] || die "This release lacks reset tooling. Build/upload a release with the updated Mac wizard."
+  sudo "$next/venv/bin/python" "$next/release_demo.py" "$@"
+}
+reset_field() { demo_tool field --record "$record" "$1"; }
+reset_done() {
+  local status=0
+  demo_tool done --record "$record" "$1" || status=$?
+  case "$status" in
+    0) return 0 ;;
+    3) return 1 ;;
+    *) die "Reset checkpoint could not be read; no step will be repeated automatically." ;;
+  esac
+}
+reset_mark() { demo_tool mark --record "$record" "$1"; }
+candidate_cli() {
+  sudo -u "$account" env -u PYTHONPATH -u PYTHONHOME TMPDIR="/var/lib/$account/volume/tmp" \
+    "$next/venv/bin/python" -m app --config "$(reset_field candidate_local)" "$@"
+}
+select_reset() {
+  select_release
+  select_instance
+  [[ -x "$next/venv/bin/python" ]] || die "Install the release first."
+  if [[ "$instance" == b && "${EPM_ACTION:-}" == reset-demo ]]; then
+    confirm "Has A passed acceptance on this release?" || die "Accept A first."
+  fi
+  read_origin
+}
+prepare_reset() {
+  local archive="$HOME/$EPM_RELEASE-demo-$instance.epm-backup"
+  local descriptor="$HOME/$EPM_RELEASE-demo-$instance.json"
+  [[ -f "$archive" && -r "$archive" && -f "$descriptor" && -r "$descriptor" ]] ||
+    die "Fresh-demo archive and descriptor are required in $HOME. Prepare them on the Mac and upload both before reset-demo. No reset checkpoint was created."
+  current_python
+  ask EPM_DEMO_SHA256 "Independent Mac SHA-256 for this instance's demo archive:"
+  [[ "$EPM_DEMO_SHA256" =~ ^[a-f0-9]{64}$ ]] || die "Invalid demo archive checksum."
+  sudo install -d -m 0700 "$next/wizard-state"
+  record="$(sudo mktemp -d "$next/wizard-state/$instance.XXXXXXXX")"
+  write_env EPM_DEPLOY_RECORD "$record"
+  local incoming="/var/backups/$account/reset-$EPM_RELEASE-${record##*/}"
+  sudo install -d -o "$account" -g "$account" -m 0700 "$incoming"
+  sudo install -o "$account" -g "$account" -m 0600 \
+    "$archive" "$incoming/fresh.epm-backup"
+  sudo install -m 0600 "$descriptor" "$record/demo.json"
+  demo_tool plan --record "$record" --release "$EPM_RELEASE" --instance "$instance" \
+    --descriptor "$record/demo.json" --archive "$incoming/fresh.epm-backup" \
+    --checksum "$EPM_DEMO_SHA256" --old-python "$previous_python"
+  say "Reset checkpoint/rollback record: $record"
+}
+fence_reset() {
+  local phase python
+  phase="$(reset_field phase)"
+  [[ "$phase" != accepted && "$phase" != rolled_back && "$phase" != rolling_back &&
+    "$phase" != rollback_accepted ]] ||
+    die "Reset is complete or rolling back; inspect or choose rollback-reset."
+  if [[ "$phase" == switching ]]; then
+    ensure_stopped
+    return
+  fi
+  python="$(reset_field old_python)"
+  if [[ "$phase" == switched || "$phase" == activated ]] || reset_done switched; then
+    python="$next/venv/bin/python"
+  fi
+  confirm "Save/reconcile work, then disable and stop $unit? Old data stays preserved; fresh data will become active." || die "Reset cancelled."
+  as_owner "$python" hosted-admin "$deployment" disable
+  sudo systemctl stop "$unit"
+  ensure_stopped
+}
+reset_backup() {
+  if reset_done backed_up; then return; fi
+  local backup python
+  backup="$(reset_field backup)"
+  python="$(reset_field old_python)"
+  if sudo test -f "$backup"; then
+    say "A prior backup command may have completed; validate it instead of creating another."
+    as_owner "$python" validate-archive "$backup"
+  else
+    as_owner "$python" hosted-backup "$deployment" --output "$backup" \
+      --staging-directory "/var/backups/$account/staging"
+  fi
+  reset_mark backed_up
+}
+restore_reset() {
+  if reset_done restored; then return; fi
+  local workspace
+  workspace="$(reset_field workspace)"
+  if ! sudo test -e "$workspace"; then
+    sudo -u "$account" env -u PYTHONPATH -u PYTHONHOME TMPDIR="/var/lib/$account/volume/tmp" \
+      "$next/venv/bin/python" "$next/release_demo.py" storage \
+      --deployment "$(reset_field candidate_hosted)" --workspace "$(reset_field old_workspace)" \
+      --bytes "$(reset_field workspace_bytes)"
+    sudo -u "$account" env -u PYTHONPATH -u PYTHONHOME TMPDIR="/var/lib/$account/volume/tmp" \
+      "$next/venv/bin/python" -m app --config "$(reset_field bootstrap_local)" \
+      restore "$(reset_field archive)" "$workspace" --staging-directory "/var/backups/$account/staging"
+  fi
+  candidate_cli workspace-status
+  candidate_cli validate-hosted-config "$(reset_field candidate_hosted)"
+  reset_mark restored
+}
+initialize_reset() {
+  if reset_done initialized; then return; fi
+  if ! sudo test -e "$(reset_field administration_database)"; then
+    candidate_cli hosted-admin "$(reset_field candidate_hosted)" initialize
+  fi
+  # On interruption, validate an existing candidate store; never delete/reinitialize it.
+  candidate_cli hosted-admin "$(reset_field candidate_hosted)" enrollments
+  # Pin a fresh-proof cutoff in the NEW store before any browser can reach it.
+  candidate_cli hosted-admin "$(reset_field candidate_hosted)" disable
+  reset_mark initialized
+}
+reset_demo() {
+  stage "Select a fresh-demo reset and preserve its original binding"
+  select_reset
+  if [[ "$EPM_ACTION" == reset-demo ]]; then
+    confirm "Activate a NEW synthetic dataset for $instance, keeping current edits only in the old workspace and backup?" || die "Reset cancelled."
+    prepare_reset
+  else
+    select_record
+    demo_tool field --record "$record" phase
+  fi
+
+  stage "Fence access and stop the old writer"
+  fence_reset
+
+  stage "Back up the old schema with its compatible release"
+  reset_backup
+
+  stage "Restore and validate fresh current-format demo data"
+  restore_reset
+
+  stage "Initialize separate access administration"
+  initialize_reset
+
+  stage "Switch configuration and runtime while stopped"
+  ensure_stopped
+  if ! reset_done switched; then
+    confirm "Switch this instance to the fresh workspace, new access database and new release?" || die "Left stopped and fenced."
+    demo_tool switch --record "$record"
+  fi
+  sudo systemctl daemon-reload
+  sudo systemd-analyze verify "$unit"
+  check_exec "$(sudo systemctl show "$unit" -p ExecStart --value)" "$next/venv/bin/python"
+  sudo systemctl reset-failed "$unit"
+  sudo systemctl start "$unit"
+  readiness
+
+  stage "Fresh enrollment and explicit operator approval"
+  say "On the Mac open $origin/sign-in, renew email sign-in and Continue to request enrollment."
+  pause "After the browser says administrator approval is required, press Enter."
+  activate_operator "$next/venv/bin/python"
+  reset_mark activated
+
+  stage "Accept and record the reset"
+  browser_acceptance "$next/venv/bin/python"
+  reset_mark accepted
+  say "Accepted fresh demo for $instance. Old workspace, access store, release and backup were retained."
+  say "Checkpoint/rollback: $record. Record acceptance and create/publish a new verified recovery point."
+}
+rollback_reset() {
+  stage "Select the reset to roll back"
+  select_reset
+  select_record
+  local python phase
+  phase="$(reset_field phase)"
+  [[ "$phase" != rollback_accepted ]] || die "Rollback already accepted."
+  confirm "Stop this instance and restore its old workspace/configuration? New demo edits remain in the retained new workspace." || die "Rollback cancelled."
+  if [[ "$phase" != switching && "$phase" != rolling_back ]]; then
+    python="$(reset_field old_python)"
+    if [[ "$phase" == switched || "$phase" == activated || "$phase" == accepted ]] ||
+      reset_done switched; then python="$next/venv/bin/python"; fi
+    as_owner "$python" hosted-admin "$deployment" disable
+  fi
+  sudo systemctl stop "$unit"
+  ensure_stopped
+
+  stage "Restore the exact old configuration and release override"
+  if [[ "$phase" != rolled_back ]]; then demo_tool rollback --record "$record"; fi
+  python="$(reset_field old_python)"
+  validate_instance "$python"
+  sudo systemctl daemon-reload
+  sudo systemd-analyze verify "$unit"
+  check_exec "$(sudo systemctl show "$unit" -p ExecStart --value)" "$python"
+  sudo systemctl reset-failed "$unit"
+  sudo systemctl start "$unit"
+  readiness
+
+  stage "Reactivate and accept the old demo"
+  activate_operator "$python"
+  if sudo test -f "$record/browser-acceptance.txt" &&
+    sudo test ! -e "$record/accepted-reset-before-rollback.txt"; then
+    sudo cp -p "$record/browser-acceptance.txt" "$record/accepted-reset-before-rollback.txt"
+  fi
+  browser_acceptance "$python"
+  demo_tool accept-rollback --record "$record"
+  say "Old demo restored. Both datasets and access stores remain preserved; record the rollback."
+}
 inspect_host() {
   stage "Services and bounded workspace mounts"
   sudo systemctl status epm-hosted@a.service epm-hosted@b.service epm-cloudflared.service --no-pager || true
@@ -542,7 +783,7 @@ inspect_host() {
 }
 main() {
   if [[ "${1:-}" == --help ]]; then
-    printf 'Usage: bash epm-release-vm.sh\nInteractive menu: inspect, install, deploy, resume, or explicit rollback.\n'
+    printf 'Usage: bash epm-release-vm.sh\nActions: inspect, install, deploy, resume, rollback, reset-demo, resume-reset, rollback-reset.\n'
     return
   fi
   [[ $# == 0 && "$(uname -s)" == Linux ]] || die "Run on the Linux VM; use --help for usage."
@@ -555,7 +796,7 @@ main() {
   ENV_FILE="$HOME/.local/state/epm-release-wizard/vm.env"
   touch "$ENV_FILE"
   chmod 600 "$ENV_FILE"
-  say "Choose: inspect, install, deploy, resume, rollback. Installation never switches services."
+  say "Choose: inspect, install, deploy, resume, rollback, reset-demo, resume-reset, rollback-reset."
   ask EPM_ACTION "Action:"
   case "$EPM_ACTION" in
     inspect) TOTAL_STAGES=2 ;;
@@ -563,6 +804,8 @@ main() {
     deploy) TOTAL_STAGES=8 ;;
     resume) TOTAL_STAGES=3 ;;
     rollback) TOTAL_STAGES=3 ;;
+    reset-demo|resume-reset) TOTAL_STAGES=8 ;;
+    rollback-reset) TOTAL_STAGES=3 ;;
     *) die "Unknown action." ;;
   esac
   sudo -v
@@ -576,6 +819,8 @@ main() {
     deploy) deploy_release ;;
     resume) resume_release ;;
     rollback) rollback_release ;;
+    reset-demo|resume-reset) reset_demo ;;
+    rollback-reset) rollback_reset ;;
   esac
   finish
 }

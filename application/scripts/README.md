@@ -77,6 +77,11 @@ From the repository root on the Mac, run
 uploads it plus a standalone VM wizard through IAP, then prints the exact VM command.
 On the VM choose `install`, then `deploy` A, then `deploy` B after acceptance.
 The VM wizard also supports `inspect`, `resume` and explicit `rollback`.
+For incompatible demo schemas, opt into fresh-demo archives on the Mac, then use
+`install` once followed by `reset-demo` A and B. `resume-reset` and `rollback-reset`
+retain old data/configuration and use explicit checkpoints and enrollment.
+The bundled [release_demo.py](release_demo.py) helper manages descriptors, private
+checkpoints and stopped configuration switching; invoke it through the wizards.
 
 Sources: [Mac](epm-release-mac.sh), [VM](epm-release-vm.sh).
 Use the [ongoing runbook](../../docs/hosting/operations/GOOGLE_CLOUD_ONGOING_RUNBOOK.md#interactive-wizards-recommended)

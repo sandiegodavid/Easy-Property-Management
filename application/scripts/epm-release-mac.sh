@@ -185,12 +185,37 @@ finish() {
 # ──────────────────────────────────────────────────────────────────────────
 
 
-TOTAL_STAGES=6
+TOTAL_STAGES=7
 
 die() { printf '\nStopped: %s\n' "$*" >&2; exit 1; }
 require_value() { [[ -n "$2" && "$2" != *$'\n'* && "$2" != *$'\r'* ]] || die "Invalid $1."; }
 valid_release() { [[ "$1" =~ ^release-[0-9]{8}-[0-9]{2,}$ ]]; }
 need() { command -v "$1" >/dev/null 2>&1 || die "Required command missing: $1"; }
+
+prepare_demo_archives() {
+  local role staging locator output metadata
+  for role in a b; do
+    staging="$(mktemp -d "/private/tmp/epm-reset-$release-$role.XXXXXXXX")"
+    locator="$staging/demo-config.json"
+    output="$staging/$release-demo-$role.epm-backup"
+    metadata="$staging/$release-demo-$role.json"
+    [[ ! -e "$output" && ! -e "$metadata" ]] || die "Demo reset output already exists."
+    say "Preparing a separate synthetic demo for $role in $staging"
+    (
+      cd "$application"
+      EPM_PYTHON="$python_path" node scripts/python.mjs demo/seed.py \
+        --workspace "$staging/workspace" --local-config "$locator"
+      EPM_PYTHON="$python_path" node scripts/python.mjs demo/verify.py --config "$locator"
+      say "Choose an archive passphrase for $role; you will enter it again on the VM."
+      EPM_PYTHON="$python_path" node scripts/python.mjs -m app --config "$locator" export "$output"
+      EPM_PYTHON="$python_path" node scripts/python.mjs scripts/release_demo.py describe \
+        --config "$locator" --archive "$output" --release "$release" --instance "$role" \
+        --source "$source_commit" --output "$metadata"
+    )
+    demo_files+=("$output" "$metadata")
+    say "Retained synthetic preparation files: $staging (no live workspace was changed)."
+  done
+}
 
 main() {
   if [[ "${1:-}" == --help ]]; then
@@ -203,6 +228,7 @@ main() {
   unset PYTHONPATH PYTHONHOME
   umask 077
   local repo application state_dir release bundle archive digest source_commit wheel python_path
+  local demo_files=()
   repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
   application="$repo/application"
   state_dir="$HOME/Library/Application Support/EPM/release-wizard"
@@ -262,6 +288,7 @@ main() {
   cp -RX "$application/database/sqlite-migrations" "$bundle/schema-resources/database/"
   cp -X "$application/scripts/stage_schema_resources.py" "$application/scripts/verify_installation.py" "$bundle/"
   cp -X "$application/scripts/epm-release-vm.sh" "$bundle/release-vm.sh"
+  cp -X "$application/scripts/release_demo.py" "$bundle/release_demo.py"
   printf '%s\n' "$source_commit" > "$bundle/SOURCE_COMMIT.txt"
   printf '%s\n' "$EPM_TEST_EVIDENCE" > "$bundle/TEST_EVIDENCE.txt"
   (
@@ -279,6 +306,14 @@ main() {
   printf '%s  %s.tar.gz\n' "$digest" "$release" > "$application/dist/$release.tar.gz.sha256"
   write_env EPM_ARCHIVE_SHA256 "$digest"
 
+  stage "Optional fresh-demo reset archives"
+  say "Ordinary Deploy preserves compatible data. Reset-demo activates a NEW synthetic dataset."
+  if confirm "Prepare separate encrypted fresh-demo archives for A and B?"; then
+    prepare_demo_archives
+    [[ "$(git rev-parse HEAD)" == "$source_commit" && -z "$(git status --porcelain)" ]] ||
+      die "Source changed during demo preparation. Use a new recorded release."
+  fi
+
   stage "Upload through IAP"
   say "Destination: $EPM_PROJECT / $EPM_ZONE / $EPM_VM"
   say "Archive SHA-256: $digest"
@@ -288,6 +323,10 @@ main() {
   gcloud compute scp "$archive" "$application/dist/$release-vm.sh" \
     "$application/dist/$release.tar.gz.sha256" "$EPM_VM:" \
     --project="$EPM_PROJECT" --zone="$EPM_ZONE" --tunnel-through-iap
+  if [[ "${#demo_files[@]}" -gt 0 ]]; then
+    gcloud compute scp "${demo_files[@]}" "$EPM_VM:" \
+      --project="$EPM_PROJECT" --zone="$EPM_ZONE" --tunnel-through-iap
+  fi
 
   stage "VM handoff"
   say "Keep this independently computed SHA-256 for the VM wizard:"
@@ -297,6 +336,14 @@ main() {
   say "Then run on the VM:"
   printf '  bash "$HOME/%s-vm.sh"\n' "$release"
   say "Choose Install, then run the VM wizard again for Deploy A and Deploy B."
+  if [[ "${#demo_files[@]}" -gt 0 ]]; then
+    say "For incompatible demo schemas choose reset-demo A, then reset-demo B after acceptance."
+    say "Keep these independent demo archive checksums for the VM prompts:"
+    for value in "${demo_files[@]}"; do
+      if [[ "$value" == *.epm-backup ]]; then shasum -a 256 "$value"; fi
+    done
+    say "Passphrases are not saved by the wizard."
+  fi
   say "No VM service or workspace was changed by this Mac wizard."
   finish
 }
