@@ -247,6 +247,44 @@ class PortfolioTests(unittest.TestCase):
         )
         self.assertEqual(event.after_snapshot["timeZone"], "America/New_York")
 
+    def test_property_api_accepts_full_state_names_for_create_retry_and_edit(self) -> None:
+        config = Path(self.temp.name) / "state-config.json"
+        config.write_text(json.dumps({"localWorkspacePath": str(self.workspace.paths.root)}))
+        payload = {
+            "displayName": "NY property",
+            "addressLine1": "2345 Time Square Street",
+            "city": "New York",
+            "region": "New York",
+            "postalCode": "10005",
+            "countryCode": "US",
+            "propertyType": "townhome",
+            "ownerships": [{"ownerKind": "local_operator"}],
+            "expectedPropertyRevision": 0,
+            "idempotencyKey": str(uuid4()),
+        }
+        with TestClient(create_app(config)) as client:
+            created = client.post("/api/properties", json=payload)
+            self.assertEqual(created.status_code, 201, created.text)
+            original = created.json()
+            self.assertEqual(original["timeZone"], "America/New_York")
+            self.assertEqual(client.post("/api/properties", json=payload).json(), original)
+            changed = client.patch(
+                f"/api/properties/{original['id']}",
+                json={
+                    "city": "Austin",
+                    "region": "Texas",
+                    "postalCode": "78701",
+                    "expectedPropertyRevision": original["propertyRevision"],
+                    "idempotencyKey": str(uuid4()),
+                },
+            )
+            self.assertEqual(changed.status_code, 200, changed.text)
+            self.assertEqual(changed.json()["timeZone"], "America/Chicago")
+            self.assertEqual(
+                client.get(f"/api/properties/{original['id']}").json()["region"], "Texas"
+            )
+        self.workspace.open(integrity_check=True)
+
     def test_property_rejects_an_ambiguous_or_incomplete_address_time_zone(self) -> None:
         with self.assertRaises(PortfolioError):
             inventory_command(

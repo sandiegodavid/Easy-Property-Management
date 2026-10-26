@@ -13,6 +13,61 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from app.modules.portfolio.application.service import PortfolioError
 
 
+_US_STATE_CODES = {
+    "alabama": "AL",
+    "alaska": "AK",
+    "arizona": "AZ",
+    "arkansas": "AR",
+    "california": "CA",
+    "colorado": "CO",
+    "connecticut": "CT",
+    "delaware": "DE",
+    "district of columbia": "DC",
+    "florida": "FL",
+    "georgia": "GA",
+    "hawaii": "HI",
+    "idaho": "ID",
+    "illinois": "IL",
+    "indiana": "IN",
+    "iowa": "IA",
+    "kansas": "KS",
+    "kentucky": "KY",
+    "louisiana": "LA",
+    "maine": "ME",
+    "maryland": "MD",
+    "massachusetts": "MA",
+    "michigan": "MI",
+    "minnesota": "MN",
+    "mississippi": "MS",
+    "missouri": "MO",
+    "montana": "MT",
+    "nebraska": "NE",
+    "nevada": "NV",
+    "new hampshire": "NH",
+    "new jersey": "NJ",
+    "new mexico": "NM",
+    "new york": "NY",
+    "north carolina": "NC",
+    "north dakota": "ND",
+    "ohio": "OH",
+    "oklahoma": "OK",
+    "oregon": "OR",
+    "pennsylvania": "PA",
+    "rhode island": "RI",
+    "south carolina": "SC",
+    "south dakota": "SD",
+    "tennessee": "TN",
+    "texas": "TX",
+    "utah": "UT",
+    "vermont": "VT",
+    "virginia": "VA",
+    "washington": "WA",
+    "west virginia": "WV",
+    "wisconsin": "WI",
+    "wyoming": "WY",
+}
+
+
 class BundledAddressTimeZoneResolver:
     """Small offline address/postal candidate index for the local MVP."""
 
@@ -138,6 +193,8 @@ class BundledAddressTimeZoneResolver:
         """Return all local dataset candidates, without choosing among them."""
         country = _key(country_code).upper()
         region_key = None if region is None else _key(region).upper()
+        if country == "US" and region is not None:
+            region_key = _US_STATE_CODES.get(_key(region), region_key)
         city_key = _key(city)
         street_key = _key(address_line_1)
         postal_key = (

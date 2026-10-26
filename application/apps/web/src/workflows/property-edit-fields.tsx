@@ -1,5 +1,7 @@
 import { fieldSchema, type RequestSchema } from "@epm/contracts/workflows";
+import { useId } from "react";
 import { label } from "./fields";
+import { usStateCode, usStates } from "../shared/us-states";
 
 export function PropertyEditFields({
   schema,
@@ -14,6 +16,7 @@ export function PropertyEditFields({
   disabled: boolean;
   creating?: boolean;
 }) {
+  const stateId = useId();
   return (
     <div className="property-edit-groups">
       {[
@@ -37,10 +40,36 @@ export function PropertyEditFields({
                     ? null
                     : next,
               });
+            if (key === "region") {
+              const selectedState = usStateCode(current);
+              return (
+                <div key={key} className="workflow-field">
+                  <label htmlFor={stateId}>State</label>
+                  <select
+                    id={stateId}
+                    name="region"
+                    value={selectedState}
+                    disabled={disabled}
+                    autoComplete="address-level1"
+                    onChange={(event) => update(event.target.value)}
+                  >
+                    <option value="">Choose a state</option>
+                    {current && !usStates.some(([code]) => code === selectedState) && (
+                      <option value={current}>{current} (current value)</option>
+                    )}
+                    {usStates.map(([code, name]) => (
+                      <option key={code} value={code}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            }
             return (
               <div key={key} className="workflow-field">
                 <label>
-                  {key === "region" ? "State" : label(key)}
+                  {label(key)}
                   {creating && schema.required?.includes(key) && " (required)"}
                   {key === "notes" ? (
                     <textarea

@@ -233,7 +233,7 @@ test("standalone property creation and editing show saved data before returning 
   await page.getByLabel("Display name (required)", { exact: true }).fill("Confirmation house");
   await page.getByLabel("Address line1 (required)").fill("20 Maple Street");
   await page.getByLabel("City (required)").fill("Portland");
-  await page.getByLabel("State", { exact: true }).fill("OR");
+  await page.getByLabel("State", { exact: true }).selectOption("OR");
   const write = page.waitForResponse(
     (r) => r.url().endsWith("/api/properties") && r.request().method() === "POST",
   );

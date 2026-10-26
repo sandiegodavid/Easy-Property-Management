@@ -37,7 +37,7 @@ test("property creation records an explicit sole-owner share", async ({ page }) 
     .fill(`Whole ownership ${crypto.randomUUID()}`);
   await page.getByLabel("Address line1 (required)").fill("20 Maple Street");
   await page.getByLabel("City (required)").fill("Portland");
-  await page.getByLabel("State", { exact: true }).fill("OR");
+  await page.getByLabel("State", { exact: true }).selectOption("OR");
   const share = page.getByRole("spinbutton", { name: "Ownership share for You (%)", exact: true });
   await expect(share).toHaveValue("");
   await share.fill("100");

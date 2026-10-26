@@ -80,7 +80,7 @@ test("progressive property creation opens the new property overview", async ({ p
   await page.getByLabel("Address line1 (required)").fill("20 Maple Street");
   await page.getByLabel("City (required)").fill("Portland");
   await expect(page.getByLabel(/Country code/)).toHaveCount(0);
-  await page.getByLabel("State", { exact: true }).fill("OR");
+  await page.getByLabel("State", { exact: true }).selectOption("OR");
   await page.getByLabel("Postal code", { exact: true }).fill("97201");
   await expect(page.getByText("Form status and recovery details", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Create property", exact: true }).click();

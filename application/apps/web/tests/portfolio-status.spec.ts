@@ -622,12 +622,12 @@ test("property edit groups and prefills details without changing ownership or re
       ["Address line1", "10 Maple Street"],
       ["Address line2", "North building"],
       ["City", "Portland"],
-      ["State", "OR"],
       ["Postal code", "97201"],
       ["Notes", "Use the courtyard entrance."],
     ]) {
       await expect(editor.getByRole("textbox", { name, exact: true })).toHaveValue(value);
     }
+    await expect(editor.getByRole("combobox", { name: "State", exact: true })).toHaveValue("OR");
     await expect(page.getByText(/Displayed source revision:/)).not.toBeVisible();
     await expect(editor.getByLabel("Region", { exact: true })).toHaveCount(0);
     await expect(editor.getByLabel(/Country code/)).toHaveCount(0);
@@ -859,7 +859,7 @@ test("guided property creation supports suites, co-owners and shared owner searc
   await page.getByLabel("Display name (required)", { exact: true }).fill("Guided office create");
   await page.getByLabel("Address line1 (required)", { exact: true }).fill("22 Oak Street");
   await page.getByLabel("City (required)", { exact: true }).fill("Portland");
-  await page.getByLabel("State", { exact: true }).fill("OR");
+  await page.getByLabel("State", { exact: true }).selectOption("OR");
   await page.getByLabel("Postal code", { exact: true }).fill("97201");
   await page
     .getByRole("combobox", { name: "Property type (required)", exact: true })
@@ -937,7 +937,7 @@ test("US property drafts retain the shared owner form through recovery", async (
   await page.getByLabel("Display name (required)", { exact: true }).fill("Recovered US property");
   await page.getByLabel("Address line1 (required)", { exact: true }).fill("45 Cedar Street");
   await page.getByLabel("City (required)", { exact: true }).fill("Portland");
-  await page.getByLabel("State", { exact: true }).fill("OR");
+  await page.getByLabel("State", { exact: true }).selectOption("OR");
   await page.getByLabel("Postal code", { exact: true }).fill("97201");
   await page.getByRole("button", { name: "Add owner", exact: true }).click();
   await page.getByRole("button", { name: "Create a new owner", exact: true }).click();
@@ -1038,7 +1038,7 @@ test("interrupted property creation opens its original property only after recon
   await page.getByLabel("Display name (required)", { exact: true }).fill("Interrupted create");
   await page.getByLabel("Address line1 (required)").fill("55 Oak Street");
   await page.getByLabel("City (required)").fill("Portland");
-  await page.getByLabel("State", { exact: true }).fill("OR");
+  await page.getByLabel("State", { exact: true }).selectOption("OR");
   await page.getByLabel("Postal code", { exact: true }).fill("97201");
   let writes = 0;
   let createdId = "";
