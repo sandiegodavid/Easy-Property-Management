@@ -1226,6 +1226,19 @@ test("unknown Space review classifies independent occupancy and future availabil
     .getByLabel("Effective date (required)", { exact: true })
     .fill(property.effectiveLocalDate);
   await page.getByRole("button", { name: "Add leasing status", exact: true }).click();
+  const leasingChoice = page.getByRole("combobox", {
+    name: "Leasing status (required)",
+    exact: true,
+  });
+  const leasingDate = page.getByLabel("Open for leasing on", { exact: true });
+  await leasingChoice.selectOption("available_now");
+  await expect(leasingDate).toHaveCount(0);
+  await leasingChoice.selectOption("available_on");
+  await leasingDate.fill(later(property.effectiveLocalDate, 3));
+  await leasingChoice.selectOption("not_available");
+  await expect(leasingDate).toHaveCount(0);
+  await leasingChoice.selectOption("available_on");
+  await expect(leasingDate).toHaveValue("");
   await page
     .getByRole("combobox", { name: "Leasing status (required)", exact: true })
     .selectOption("available_on");

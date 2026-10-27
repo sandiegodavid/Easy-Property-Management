@@ -63,6 +63,9 @@ export function clean(schema: RequestSchema, value: unknown): unknown {
     return Object.fromEntries(
       Object.entries(record(value))
         .filter(([key]) => !!shape.properties?.[key])
+        .filter(
+          ([key]) => key !== "availableOn" || record(value).availabilityStatus === "available_on",
+        )
         .map(([key, child]) => [key, clean(shape.properties![key], child)])
         .filter(([, child]) => child !== undefined),
     );
@@ -109,6 +112,7 @@ export function Fields({
               ["partyId", "historicalSelectionConfirmed", "historicalSelectionReason"].includes(key)
             ) &&
             !(key === "otherPaymentMethodNote" && values.paymentMethodKind !== "other") &&
+            !(key === "availableOn" && values.availabilityStatus !== "available_on") &&
             ![
               "expectedRevision",
               "expectedLeaseRevision",
@@ -134,6 +138,8 @@ export function Fields({
           const fieldPath = path ? `${path}.${key}` : key;
           const update = (next: unknown) => {
             const replacement = { ...values };
+            if (key === "availabilityStatus" && next !== "available_on")
+              delete replacement.availableOn;
             if (key === "methodKind" && next !== "phone") delete replacement.extension;
             if (path === "reporter") {
               if (key === "partyId" && next !== current) {

@@ -139,7 +139,7 @@ class AvailabilityRequest(ContractModel):
     @model_validator(mode="after")
     def validate_date(self) -> "AvailabilityRequest":
         if (self.availabilityStatus == "available_on") != (self.availableOn is not None):
-            raise ValueError("availableOn is required only with available_on")
+            raise ValueError('A date is required only for "Open for leasing later".')
         return self
 
 

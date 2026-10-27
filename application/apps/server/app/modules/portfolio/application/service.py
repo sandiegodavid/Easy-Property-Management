@@ -185,13 +185,13 @@ class AvailabilityCommand:
             "not_available",
             "unknown",
         }:
-            raise PortfolioError("Availability status is invalid.")
+            raise PortfolioError("Leasing status is invalid.")
         if self.availability_status == "available_on":
             if self.available_on is None:
-                raise PortfolioError("An available-on status requires a date.")
+                raise PortfolioError('"Open for leasing later" requires a date.')
             object.__setattr__(self, "available_on", _date(self.available_on))
         elif self.available_on is not None:
-            raise PortfolioError("Only an available-on status may include a date.")
+            raise PortfolioError('Only "Open for leasing later" may include a date.')
         object.__setattr__(self, "note", _optional(self.note, "Availability note", 1000))
 
 
@@ -1880,7 +1880,7 @@ class PortfolioService:
                 return replay
             today = self._local_day(transaction, space, as_of)
             if command.available_on is not None and command.available_on < today:
-                raise PortfolioError("An availability date cannot be in the past.")
+                raise PortfolioError("A leasing date cannot be in the past.")
             if space.status != "active":
                 raise PortfolioError("Availability can only change for an active space.")
             current = transaction.availability(space_id)
@@ -2302,7 +2302,7 @@ class PortfolioService:
                 availability_command.available_on is not None
                 and availability_command.available_on < effective_on
             ):
-                raise PortfolioError("An availability date cannot be in the past.")
+                raise PortfolioError("A leasing date cannot be in the past.")
         availability_command = command.initial_availability or AvailabilityCommand("unknown")
         period = SpaceOccupancyPeriod(
             str(uuid4()),
@@ -2543,7 +2543,7 @@ def _validate_property_filters(
         "not_available",
         "unknown",
     }:
-        raise PortfolioError("Availability status is invalid.")
+        raise PortfolioError("Leasing status is invalid.")
 
 
 def _required(value: object, label: str, limit: int) -> str:

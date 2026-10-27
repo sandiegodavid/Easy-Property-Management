@@ -889,8 +889,10 @@ class PortfolioTests(unittest.TestCase):
     def test_availability_date_rules_and_property_summary(self) -> None:
         property = self._property([OwnershipInput("local_operator")])
         space_id = self.service.get_property(property.id)["spaces"][0]["id"]
-        with self.assertRaises(PortfolioError):
+        with self.assertRaisesRegex(PortfolioError, '"Open for leasing later" requires a date'):
             AvailabilityCommand("available_on")
+        with self.assertRaisesRegex(PortfolioError, 'Only "Open for leasing later" may include'):
+            AvailabilityCommand("available_now", "2099-01-01")
         with self.assertRaises(PortfolioError):
             self._change_availability(space_id, AvailabilityCommand("available_on", "2000-01-01"))
         self._change_availability(space_id, AvailabilityCommand("available_on", "2099-01-01"))
