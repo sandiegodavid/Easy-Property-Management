@@ -147,6 +147,24 @@ inputs.
 - Bootstrap verifies the signed Access assertion: allowlisted algorithm, signature, issuer, application audience, expiry, and applicable time claims. Use fixed trusted key-discovery endpoints, bounded timeouts, bounded key caching/refresh, and fail closed when verification cannot complete.
 - Bind the verified `(issuer, subject)` to the intended operator and workspace. Pre-provision the exact allowed email and workspace; first verified sign-in creates a pending enrollment without business access. The administrator confirms that verified subject before activation. Rebinding requires administrator disablement, revocation and explicit replacement; never silently rebind after an email/account change or authorize from a plain email header.
 - Keep one service-owned administrative SQLite store per process at `/var/lib/epm-a/access/hosted-access.sqlite` or `/var/lib/epm-b/access/hosted-access.sqlite`, outside each portable `workspace/` and its bounded volume. The `hosted_access` infrastructure owns its separate SQLAlchemy/Alembic schema and retained validation. Root-owned service-readable configuration under `/etc/epm/` pins deployment/origin/workspace identity; no remote request selects paths or edits this binding. Admin CLI operations use the owning application ports. Protect each store with private owner permissions and the existing service isolation. Keep only the current greenfield schema, without migration-compatibility work.
+
+```mermaid
+flowchart LR
+    Browser[Operator browser] -->|Cloudflare Access assertion| Edge[Private ingress]
+    Edge -->|HTTPS request| Service[Hosted EPM service<br/>one process per demo]
+    Config[Root-owned deployment config<br/>/etc/epm/hosted-a.json] -->|pins origin, operator,<br/>workspace and store path| Service
+    Service -->|verify assertion and session| AccessDB[(Administrative access database<br/>/var/lib/epm-a/access/hosted-access.sqlite)]
+    Service -->|authorized application requests| Workspace[(Portable workspace database<br/>and managed files)]
+    Admin[Administrator CLI<br/>as epm-a] -->|enroll, activate,<br/>disable or revoke| AccessDB
+    Backup[Portable backup or export] -. excludes .-> AccessDB
+    Backup -->|contains business records only| Workspace
+```
+
+The administrative access database controls who may use this hosted process. It is not
+part of the portable workspace, its backup archives, or workspace restore operations.
+An ordinary release can keep this store and its unexpired sessions; an explicit disable,
+revocation, or fresh-demo reset deliberately fences them.
+
 - Generate 256-bit random opaque session tokens, persist only SHA-256 token hashes, and use `__Host-epm_session` cookies with Secure, HttpOnly, Path `/` and SameSite=Lax. Use a random session-bound CSRF value for exact-origin unsafe operations. Do not store tokens in URLs, browser localStorage, workspace tables, recovery forms, logs, or portable archives.
 - On every protected request, require a valid Access assertion plus a valid application session and matching subject/host/workspace, active operator, session generation, and demo expiry. Bound application session expiry by the verified identity grant. Do not transparently renew a session solely because an old Access token remains valid.
 - Verify JWTs locally with a bounded trusted-key cache, a fifteen-minute maximum cache age, single-flight refresh and a two-second refresh timeout. Known unexpired cached keys may verify assertions during a provider outage; unknown/expired keys that cannot be refreshed fail closed. On every protected request perform one indexed local session/operator/generation/expiry projection. Do not call remote introspection or update session last-seen for ordinary reads. Fixed session expiry is the earlier of eight hours, the verified grant expiry, and demo expiry.
