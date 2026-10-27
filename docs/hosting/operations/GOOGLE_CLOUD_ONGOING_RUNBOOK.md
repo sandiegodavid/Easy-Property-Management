@@ -530,3 +530,48 @@ only if it still accepts the current data. Recheck private and public access bef
 reactivating an eligible subject. Do not use `systemctl revert`, which would remove
 unrelated instance overrides. If data is incompatible, leave access fenced and
 [restore the appropriate backup into a separate destination](HOSTED_DEMO_OPERATIONS.md#disable-renew-reset-and-rollback).
+
+## Clean up unused installed releases
+
+After both instances pass acceptance, use the separate cleanup wizard. On the
+**Mac**, from the repository root, upload both files together:
+
+```bash
+gcloud compute scp \
+  application/scripts/epm-release-cleanup-vm.sh \
+  application/scripts/release_cleanup.py \
+  epm-demo: \
+  --project=project-47b72bb7-ba90-42c9-910 \
+  --zone=us-west1-b \
+  --tunnel-through-iap
+```
+
+On the **VM**, run as your administrator login user, without `sudo bash`:
+
+```bash
+bash "$HOME/epm-release-cleanup-vm.sh"
+```
+
+The four stages retain an explicitly selected last known-good rollback release
+for each instance, inspect protections, confirm one exact deletion, then check
+remaining releases and service state. A and B may retain the same rollback release.
+Do not run deployments, resets or another cleanup concurrently. Check custom jobs
+and preserved old workspaces before confirming; standard systemd, cron and EPM
+configuration paths are scanned, not arbitrary home-directory scripts or remote jobs.
+
+The helper requires root to inspect protected records, rechecks references just
+before removal, and refuses service/process references, release aliases, nested
+mounts and deployment/reset checkpoint owners or references. Even accepted
+checkpoints remain protected: retiring their recovery history is a separate manual
+operation. It never removes workspace data, access databases, backups, uploaded
+archives or configuration. There is no force option or automatic pruning. If an
+inspection fails, fix that failure before retrying. An interrupted deletion may
+leave a partial unused release; inspect it before retrying.
+
+Focused validation covers current/rollback retention, configuration/job and live
+process references, checkpoint ownership and rollback references, aliases, unsafe
+names, unreadable input, nested mounts, protection rechecks, and deletion isolation
+including a symlink to external workspace data. Bash syntax and shared wizard
+library checks are automated. Actual Linux permissions, systemd/process inspection
+and interactive VM deletion still require on-host acceptance; tests use temporary
+fixtures and do not delete installed releases.

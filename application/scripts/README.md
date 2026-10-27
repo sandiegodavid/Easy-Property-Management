@@ -88,6 +88,19 @@ Use the [ongoing runbook](../../docs/hosting/operations/GOOGLE_CLOUD_ONGOING_RUN
 for prerequisites, saved selections, safeguards and recovery limitations. Both scripts
 accept `--help`. Do not run them through a pipe or run the VM wizard as root.
 
+### VM installed-release cleanup wizard
+
+[epm-release-cleanup-vm.sh](epm-release-cleanup-vm.sh) and its standard-library-only
+[release_cleanup.py](release_cleanup.py) helper remove one explicitly confirmed,
+unreferenced installed release at a time. Keep both files together on the VM and
+run the Bash script as the administrator login user. Current service commands,
+running processes, standard systemd/cron/EPM configuration references, checkpoint
+owners/references and explicitly retained rollback releases are protected.
+Checkpoint retirement is a separate manual decision; this wizard has no override
+for those protections. It does not delete workspace data, backups or uploaded
+artifacts. See the [cleanup runbook](../../docs/hosting/operations/GOOGLE_CLOUD_ONGOING_RUNBOOK.md#clean-up-unused-installed-releases)
+for upload and invocation commands, limits and validation.
+
 ### `stage_schema_resources.py`
 
 [Source](stage_schema_resources.py). Stages a matching release's `alembic.ini` and
