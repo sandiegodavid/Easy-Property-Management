@@ -1,0 +1,45 @@
+Hosted demo administration: workflow review
+Review date: 2026-10-27
+Scope: workflow design only; no implementation review.
+Resolution date: 2026-10-27
+All four findings are resolved in the design. No implementation or deployed qualification is claimed.
+
+Resolved findings
+
+Admission and qualification
+
+[P1] Define the private qualification path before blocking all third-instance allocation
+Status: resolved — 2026-10-27
+Location: docs/hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md:53; related:217-223,238-244
+The overview prohibits allocation until three operators are qualified, while qualification requires three running operators and six browsers. Isolated test roots are mentioned, but the procedure for moving from those tests to host capacity/reboot/recovery evidence is unspecified. The administrator reaches a blocked Add operator action without an executable way to satisfy its prerequisite. Specify a private qualification procedure with controlled test identities, resource reservations, evidence registration and explicit promotion of the ceiling. Keep general invitations blocked. Acceptance: starting with a ceiling of two, an administrator can follow documented private steps to qualify three without bypassing ordinary admission or inviting an unqualified user.
+Resolution: The overview now links to a private qualification plan. A six-step procedure authorizes exactly three controlled test instances with real capacity reservations while the ordinary ceiling remains two, preserves/stops A/B where needed, collects host/load/reboot/recovery evidence, retires test access, restores A/B and explicitly promotes the matching profile/ceiling. Ordinary C is then provisioned fresh through normal admission. Physical limits and verified identity are never bypassed. Commands/evidence support are included in Slice 3, execution in Slice 7, and qualification-bootstrap acceptance is explicit.
+Updated references: docs/hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md:53; :265-276; :291; :294; :313.
+
+Invitation and enrollment
+
+[P2] Include approval and start-time instructions in the invitation
+Status: resolved — 2026-10-27
+Location: docs/hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md:75; related:60,79-81
+The invitation is restricted to URL/email/data restriction/expiry/contact, although first use requires a separate administrator approval and setup permits a future start. A recipient can encounter expected denial or waiting without knowing when to return or that Continue to workspace must be selected again. Include the start time and timezone, the pending-approval explanation, and explicit return/continue instructions. Provide copyable post-approval instructions as a manual handoff; copying must remain distinct from delivery. Acceptance: a future-start invitee and a first-time pending invitee can each identify the next step from the supplied instructions without treating the state as a broken login.
+Resolution: Added Scheduled status, start/expiry with named zone and UTC offset, a complete copyable invitation explaining pre-start and pending-approval states, and separate Copy approval instructions directing the operator to return and Continue to workspace again. Both copies remain manual handoffs, never delivery confirmation. Slice 5 and acceptance include these cases.
+Updated references: docs/hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md:75-85; :144; :293; :314.
+
+Recovery completion
+
+[P2] Make recovery-pending onboarding an executable handoff
+Status: resolved — 2026-10-27
+Location: docs/hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md:83; related:128,208-211,231
+Onboarding requires a private encrypted recovery step and Mark onboarding complete, but the state-based primary actions omit recovery verification and the action contract has no onboarding-completion intent. The document says a completion reference is recorded without specifying how the administrator obtains it or how the console verifies it for the current binding. Add a recovery-pending primary action that presents the exact private runbook/instance identifiers, required evidence and a Check verification action. Define whether completion is an explicit audited action or an automatic transition after verified evidence. Acceptance: reloading during the terminal handoff preserves progress; stale evidence for an earlier binding cannot complete onboarding; successful read-back leads to a clear completed state.
+Resolution: Verify onboarding recovery opens a persistent instance-bound checklist with exact runbooks and a private helper handoff. The helper registers protected verifier evidence; Check verification checks current workspace/binding/configuration, post-approval reference, archive/read-back/restore and age results. Mark onboarding complete is a separate audited, revision-safe, idempotent action that revalidates recovery and acceptance records. Stale or browser-asserted evidence cannot satisfy it. Added read/check/action contracts, registry ownership, Slice 6 and acceptance.
+Updated references: docs/hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md:89-99; :144; :207; :243-245; :294; :315.
+
+Administrator session and job continuity
+
+[P2] Define reauthentication and reconnect behavior for interrupted admin work
+Status: resolved — 2026-10-27
+Location: docs/hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md:159-161; related:45,65,139-141
+Access changes require explicit reauthentication and sessions expire after 30 idle minutes, but only initial bootstrap login is described. A long provider/recovery handoff can therefore return the administrator to an expired session without a defined route back to the draft, operation or reviewed action. Distinguish ordinary session expiry, logout and revoked administrator authority when deciding whether a committed job continues or pauses. Specify how to obtain a fresh one-use grant, return to the same operation and revalidate the revision before an uncommitted action. Acceptance: expire the session or drop the IAP forward during setup and an approval response; reconnecting retrieves the original operation, preserves acknowledged draft input and never duplicates or silently replays approval.
+Resolution: Added action-bound one-use reauthentication through the existing IAP launcher, explicit confirmation after reauthentication, and a continuity table distinguishing connection loss, ordinary expiry/logout and durable administrator revocation. Committed work survives browser-session loss, while revoked identity generation fences consequential steps. Acknowledged drafts/operation keys belong to stable administrator identity; safe return routes and exact original-key lookup recover uncertain outcomes. Uncommitted changes revalidate current revision/intent before confirmation, with no sign-in-triggered approval replay. Added contracts, Slice 2 and continuity acceptance.
+Updated references: docs/hosting/design/HOSTED_DEMO_ADMIN_DESIGN.md:179-195; :203; :237; :247; :290; :316.
+
+Validation: Scoped design consistency review, local Markdown link/anchor checks and git diff --check. No runtime tests were run because only design and review text changed. The new private commands, APIs and workflows remain proposed implementation deliverables.
