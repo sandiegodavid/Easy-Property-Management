@@ -27,7 +27,15 @@ They may manage:
 
 From one dashboard, a user can see what money is due, what is vacant, what needs attention, and drill into the underlying property, tenant, transaction, lead, or repair.
 
-The MVP is a single-user application that runs locally for the operator. It requires no account or login, stores its records and attachments locally, and provides backup/export and restore. The product owner sets up each MVP user's local instance with operator-run setup scripts; self-service installation and update flows are not required. Authentication, shared cloud workspaces, and remote user access belong to a future SaaS offering.
+The MVP is a single-user application that runs locally for the operator. It requires no account or login, stores its records and attachments locally, and provides backup/export and restore. The product owner sets up each MVP user's local instance with operator-run setup scripts; self-service installation and update flows are not required. Hosted operator access has a separate qualification path. Planned hosted-only premium tenant rent payments are defined below; local operation remains single-user and requires no login.
+
+## Free operator offering and premium tenant payments
+
+Accepted October 27, 2026: existing local functionality and a bounded hosted operator workspace are free. The initial free hosted allowance is one operator, five rentable spaces and 250 MB of attachments; physical hosting admission and recovery capacity remain separate gates. Limits preserve reading, exporting and correcting existing records.
+
+[PAY-001](active/PAY-001_DESIGN.md) owns hosted-only premium tenant access, paid for by the operator: rent balance, one-time bank payments, capped fixed-amount autopay, history/receipts and payment help. Tenants have individual lease-scoped identities and no subscription charge. Recipient-paid processor fees are separately disclosed; EPM adds no transaction markup initially. One verified owner/operator receives each lease's payments directly through the processor. General tenant documents, messaging and maintenance remain later PORTAL-001 work.
+
+The feature includes its operator setup, authentication/authorization, dated pilot entitlements, notifications, reconciliation and recovery safeguards. Final premium pricing/capacity and automated subscription billing remain deferred. This accepted design does not establish deployed payment capability or authorize real funds in the synthetic demo.
 
 ## Local workspace design
 
@@ -99,17 +107,17 @@ Later phases may support users with little or no accounting or property-manageme
 12. **Reports** — occupancy, rent roll, delinquency, income/expenses, owner balances/disbursements, leasing funnel, and repair cost, all with drill-down.
 13. **AI-assisted documents and marketing** — maintain approved document templates; draft leases, addenda, notices, and listing copy; summarize obligations and missing information; and compare document versions, always subject to operator review.
 
-Because the MVP is local and single-user, the operator records or approves rent receipts and rental/property issues reported by owners or tenants and identifies who raised each item. Messages may arrive through connected external accounts, but owners and tenants do not sign in to the application. Direct application forms and portals belong to the future SaaS offering.
+Because the MVP is local and single-user, the operator records or approves rent receipts and rental/property issues reported by owners or tenants and identifies who raised each item. Messages may arrive through connected external accounts, but owners and tenants do not sign in to the application. The hosted-only PAY-001 exception adds the focused premium tenant payment area; broader forms and portals remain later scope.
 
 Connecting Gmail, Outlook.com/Hotmail, or an SMS provider uses that provider's authorization and does not create application user accounts. Connection credentials remain local, are excluded from portable backups, and must be reauthorized after restore or migration.
 
 Standalone voice notes may be recorded in the application or imported as audio files. The MVP does not record phone calls. After successful transcription, the source audio does not need to be retained. The application keeps the recording or import metadata, editable transcript, AI summary, confidence information, and operator decision.
 
-The MVP records payment methods, including externally arranged automatic bank payments, but does not initiate transfers or store online-banking credentials. A future-dated prepaid check covers one complete rent-expectation period, creates a property-local deposit reminder, and is not counted as received income until a confirmed correlated receipt/allocation handoff. Returned, voided, and replacement checks retain history without storing raw check or bank data.
+The current operator application records payment methods, including externally arranged automatic bank payments, without initiating transfers or storing online-banking credentials. Planned hosted PAY-001 adds processor-mediated collection through its separate tenant authorization boundary. A future-dated prepaid check covers one complete rent-expectation period, creates a property-local deposit reminder, and is not counted as received income until a confirmed correlated receipt/allocation handoff. Returned, voided, and replacement checks retain history without storing raw check or bank data.
 
 ## Explicit MVP boundaries
 
-The MVP does not include:
+The local operator offering does not include the following hosted or later capabilities. PAY-001 is the explicit hosted premium exception for tenant rent payments, individual tenant access and payment-specific transactional email; FIN-004 separately owns planned bank feeds/reconciliation.
 
 - Initiating online rent payments or autopay, bank feeds, or reconciliation. The MVP may record an externally arranged automatic-payment method.
 - Application authentication, multiple application users, shared cloud workspaces, application-hosted remote intake, or tenant/owner portals. External mailbox and SMS-provider authorization is permitted for ingestion.

@@ -1,6 +1,6 @@
 # Hosting plan: local use, two-operator demo, and hosted MVP
 
-Planning baseline; updated October 24, 2026.
+Planning baseline; tenant-payment scope alignment October 27, 2026.
 
 This plan defines how local use, the two-operator demonstration and the hosted MVP fit
 together. Detailed demo requirements, deployment procedures and acceptance status are
@@ -22,8 +22,9 @@ Cover three operating modes:
 | Two-operator demo | Two invited operators, each with a separate persistent synthetic portfolio and multiple devices | Existing Google Cloud VM, separate Unix users/processes/workspaces, qualified Cloudflare Access and tunnel boundary | Protected A/B access is active for acceptance; remaining release checks and general invitations are pending |
 | Hosted MVP | A bounded cohort of customers, with one operator per isolated customer workspace and access from multiple devices | Reuse the qualified application and operating pattern, with customer onboarding, isolation, recovery and support gates | Planned; the demo is not evidence of production readiness |
 
-A hosted MVP is an additional delivery stage, not a redefinition of the local MVP. Shared
-portfolios, multiple seats and enterprise infrastructure are outside this plan.
+A hosted MVP is an additional delivery stage. Local and bounded hosted operator functionality are free; the initial free hosted allowance is one operator, five rentable spaces and 250 MB of attachments. These are product allowances, not host capacity guarantees. Archive, database, audit and recovery capacity require separate headroom.
+
+[PAY-001](../active/PAY-001_DESIGN.md) adds the accepted hosted-only premium tenant rent-payment area, paid for by the operator. Its separate tenant identities and lease grants do not create additional operator seats or grant broad shared-workspace access. General team collaboration and enterprise infrastructure remain outside this plan. Tenant payments require their own identity, processor, real-data, capacity and recovery qualification; the A/B synthetic demo remains payment-disabled.
 
 The [product brief](../PRODUCT_BRIEF.md), [architecture](../ARCHITECTURE.md),
 [decisions](../DECISIONS.md), and [backlog](../FEATURE_BACKLOG.md) remain the product and
@@ -171,8 +172,7 @@ recovery. Preserve dirty input on conflicts, reject stale editors, and prevent
 cross-workspace/session cache reuse. Follow the explicit claim/takeover contract wherever
 devices share a saved draft.
 
-Do not imply self-service sign-up, billing, team roles or public owner/tenant portals.
-Customer onboarding remains administrator-run for the bounded cohort.
+Customer onboarding remains administrator-run for the bounded cohort. Do not imply deployed self-service sign-up, automated subscription billing, team roles or general owner/tenant portals. PAY-001 separately owns the planned premium tenant payment area and invitation flow; private administrators assign dated pilot entitlements. Historical receipt access, cancellation and reconciliation survive entitlement expiry. See its design for launch gates and lifecycle behavior.
 
 ### Admission to a real-data pilot
 

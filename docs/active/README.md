@@ -12,6 +12,7 @@ Each functional backlog includes its own UI and browser acceptance. DATA-002/003
 
 These retain their complete design contracts. Capability availability and backlog status govern when they can be implemented; older baseline observations are design-time context.
 
+- [PAY-001](PAY-001_DESIGN.md): accepted hosted premium tenant rent-payment design; tenant/operator UI, identity and entitlement, processor qualification, Finance extensions, lifecycle/recovery and nine ordered slices. Design only.
 - [DATA-002](DATA-002_DESIGN.md).
 - [DATA-003](DATA-003_DESIGN.md).
 - [HOA-001](HOA-001_DESIGN.md).

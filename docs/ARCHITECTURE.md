@@ -88,3 +88,11 @@ Research and planned feature designs separate an EPM-invoked draft action, a sha
 [Frontend architecture](ui/frontend-architecture.md) maps bootstrap, route/capability registry, server/form/recovery state and packaged delivery. The server serves trusted compiled assets and restricted HTML fallback on loopback. Development explicitly allows an exact loopback Vite origin. External workspace data never enters the public bundle or Git.
 
 A future hosted product requires tenant isolation, authentication, remote permissions, hosted storage and reauthorization. Those are planned capabilities, not current local access controls. Preserve portable stable identities and module ports without building speculative compatibility layers.
+
+## Planned hosted tenant payment boundary
+
+[PAY-001](active/PAY-001_DESIGN.md), accepted October 27, 2026, adds hosted-only premium tenant payments alongside free local and bounded hosted operator functionality. This is planned scope, not a change to current runtime capabilities. It owns the bounded tenant authentication, lease grants, entitlements, publication and real-data hosting qualification needed for its release; broader SaaS and role-platform work remains separate.
+
+A new Payments module owns processor intent/reservation, mandate, event inbox/outbox, reconciliation and payment-help workflows. Finance remains authoritative for received rent, allocations, fees and corrections through source-owned transactional ports. Payment confirmation and recipient payout are separate. Tenant actors and scoped read/API routes cannot reuse broad operator authority. Processor-hosted screens handle bank details; credentials and live hosted identity/execution authority remain outside portable business data.
+
+Payment initiation persists intent/reservation/audit before external calls, and uses stable provider keys and reconciliation for uncertain outcomes. Restore fences collection until independently reauthorized and reconciled. The design includes worker lifecycle, quota headroom, source-owned excess-funds handling and mandatory tenant/operator browser acceptance. The existing synthetic operator demo does not establish payment or tenant-access readiness.
