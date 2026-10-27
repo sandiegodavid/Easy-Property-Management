@@ -306,11 +306,14 @@ test("every collection has a deep link and missing readiness never dispatches a 
     await expect(page.getByRole("region", { name: "Home collection page" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Refresh collection" })).toBeEnabled();
   }
+  // Use a fresh page so requests from the preceding deep-link checks cannot
+  // be mistaken for requests made without the Home capability.
+  const unavailablePage = await page.context().newPage();
   let requests = 0;
-  page.on("request", (pending) => {
+  unavailablePage.on("request", (pending) => {
     if (pending.url().includes("/api/operator/home/items")) requests += 1;
   });
-  await page.route("**/api/operator/bootstrap", async (route) => {
+  await unavailablePage.route("**/api/operator/bootstrap", async (route) => {
     const response = await route.fetch();
     const data = (await response.json()) as Schema["BootstrapResponse"];
     await route.fulfill({
@@ -320,8 +323,10 @@ test("every collection has a deep link and missing readiness never dispatches a 
       },
     });
   });
-  await page.goto("/home/collections/needs_action");
-  await expect(page.getByRole("alert")).toContainText("Home collections are unavailable");
+  await unavailablePage.goto("/home/collections/needs_action");
+  await expect(unavailablePage.getByRole("alert")).toContainText(
+    "Home collections are unavailable",
+  );
   expect(requests).toBe(0);
 });
 

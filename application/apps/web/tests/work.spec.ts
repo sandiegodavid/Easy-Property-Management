@@ -1623,10 +1623,10 @@ test("Appointment completion does not resolve issue or establish completed work"
   await page.getByLabel("Time zone", { exact: true }).selectOption("UTC");
   await page
     .getByLabel("Starts at (required)")
-    .fill(new Date(Date.now() + 3600000).toISOString().slice(0, 19));
+    .fill(new Date(Date.now() + 3600000).toISOString().slice(0, 16));
   await page
     .getByLabel("Ends at", { exact: true })
-    .fill(new Date(Date.now() + 7200000).toISOString().slice(0, 19));
+    .fill(new Date(Date.now() + 7200000).toISOString().slice(0, 16));
   await page.getByLabel("Purpose (required)").fill("Inspect leak");
   await save(page, "Schedule appointment");
   const current = await get<Schemas["IssueResponse"]>(
